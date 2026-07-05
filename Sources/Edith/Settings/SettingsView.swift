@@ -33,6 +33,13 @@ struct SettingsView: View {
     @AppStorage("lastBackupAt") private var lastBackupAt = 0.0
     @AppStorage("musicBackup") private var musicBackup = false
     @AppStorage("lastMusicBackupAt") private var lastMusicBackupAt = 0.0
+    @AppStorage("backupSettings") private var backupSettings = true
+    @AppStorage("backupUsage") private var backupUsage = true
+    @AppStorage("backupLimits") private var backupLimits = true
+    @State private var showBackupDetail = false
+    @State private var settingsSize = ""
+    @State private var usageSize = ""
+    @State private var limitsSize = ""
     @ObservedObject private var backupService = SettingsBackup.shared
     @State private var musicSize = ""
     @AppStorage("limitsInMenuBar") private var limitsInMenuBar = true
@@ -320,22 +327,38 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(theme)
                 }
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Back up settings to iCloud")
-                            .font(.system(size: 13))
-                        Text(backupSubtitle)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) { showBackupDetail.toggle() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(showBackupDetail ? 90 : 0))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Back up to iCloud").font(.system(size: 13))
+                                    Text(backupSubtitle).font(.system(size: 10)).foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                        .buttonStyle(HoverButtonStyle())
+                        Spacer()
+                        Toggle("", isOn: $icloudBackup)
+                            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                            .tint(theme).pointerCursor().disabled(!AppData.cloudAvailable)
                     }
-                    Spacer()
-                    Toggle("", isOn: $icloudBackup)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .tint(theme)
-                        .pointerCursor()
-                        .disabled(!AppData.cloudAvailable)
+                    if showBackupDetail {
+                        Group {
+                            backupFileRow("Settings", file: "settings.json", size: settingsSize, isOn: $backupSettings)
+                            backupFileRow("Usage", file: "usage.json", size: usageSize, isOn: $backupUsage)
+                            backupFileRow("Session history", file: "limits-history.jsonl", size: limitsSize, isOn: $backupLimits)
+                        }
+                        .padding(.leading, 16)
+                        .disabled(!icloudBackup)
+                        .opacity(icloudBackup ? 1 : 0.45)
+                    }
                 }
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -357,12 +380,15 @@ struct SettingsView: View {
             }
             .card()
             .onChange(of: icloudBackup) {
-                if icloudBackup { SettingsBackup.shared.export() }
+                if icloudBackup { SettingsBackup.shared.export(); SettingsBackup.shared.syncData() }
             }
+            .onChange(of: backupSettings) { if icloudBackup { SettingsBackup.shared.export() } }
+            .onChange(of: backupUsage) { if icloudBackup { SettingsBackup.shared.syncData() } }
+            .onChange(of: backupLimits) { if icloudBackup { SettingsBackup.shared.syncData() } }
             .onChange(of: musicBackup) {
                 if musicBackup { SettingsBackup.shared.backupMusic() }
             }
-            .onAppear { computeMusicSize() }
+            .onAppear { computeMusicSize(); computeDataSizes() }
 
             HStack(spacing: 4) {
                 Text("Made with ❤️ by")
@@ -531,6 +557,34 @@ struct SettingsView: View {
         case "system": $systemEnabled
         case "calendar": $calendarEnabled
         default: .constant(false)
+        }
+    }
+
+    private func backupFileRow(_ title: String, file: String, size: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12))
+                Text(size.isEmpty ? file : "\(file) · \(size)")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                .tint(theme).pointerCursor()
+                .disabled(!AppData.cloudAvailable)
+        }
+    }
+
+    private func computeDataSizes() {
+        Task.detached(priority: .utility) {
+            let fmt = { (url: URL) -> String in
+                guard let n = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else { return "—" }
+                return ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file)
+            }
+            let s = fmt(AppData.supportDir.appendingPathComponent("settings.json"))
+            let u = fmt(Repo.usageJSON)
+            let l = fmt(LimitsHistory.url)
+            await MainActor.run { settingsSize = s; usageSize = u; limitsSize = l }
         }
     }
 
