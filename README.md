@@ -35,8 +35,12 @@ system controls) - a personal control center. Dark, minimal, built to run
   loaded), app-wide theme color, presenter view that blurs sensitive values
   for screen sharing; the pane scroll-caps at ~640pt, with detail rows
   (Limits, Notifications) tucked behind View more disclosures
-- **Settings backup** - mirrored to Application Support, optional iCloud
-  Drive sync across Macs (newest copy wins)
+- **Settings & data backup** - settings, `usage.json`, and the limits
+  history mirror to Application Support and, with the iCloud toggle on, to
+  iCloud Drive; the append-only limits log is *merged* (not overwritten), so
+  multiple Macs combine rather than clobber. Per-file toggles in Settings
+  (expand the Back-up-to-iCloud row). A fresh install adopts the backup out
+  of the box - it inherits the iCloud settings on first launch, no toggle
 - **Agent Usage** code lives in `Sources/Edith/Usage/`, **Music** in
   `Sources/Edith/Music/` - one folder per feature so future tabs slot in.
 
@@ -67,7 +71,9 @@ full Xcode install.
 
 - Usage data never leaves the machine: `dashboard/data/` and the generated
   `dashboard/dashboard.html` are gitignored; the template's data block is
-  empty. Refresh locally with `dashboard/cc-update`.
+  empty. Refresh locally with `dashboard/cc-update`. The two data files
+  (`usage.json`, `limits-history.jsonl`) can still be backed up to your own
+  iCloud Drive (`Settings` toggle) - the backup channel is iCloud, not git.
 - The app finds everything relative to this repo. If the repo moves:
   `defaults write com.pulkit.edith repoPath /new/path`
   (settings from the old com.pulkit.control-center id are imported once on
