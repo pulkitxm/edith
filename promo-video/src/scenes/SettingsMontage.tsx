@@ -7,7 +7,6 @@ import {Caption} from '../components/Caption';
 import {colors} from '../tokens';
 import {springIn} from '../animation';
 
-// Matches App.swift's allTabs registry, in its real default order.
 const ROWS = [
   {title: 'Agent Usage', subtitle: 'limit polling, usage stats'},
   {title: 'Music', subtitle: 'player, media keys'},

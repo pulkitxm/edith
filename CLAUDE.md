@@ -21,3 +21,4 @@ explaining, improve the name or the structure instead of adding prose.
 - `swift format lint --strict --recursive Sources Tests Package.swift` — Swift format + lint.
 - `bun run lint` — Biome format + lint for the dashboard.
 - `bun test dashboard/tests scripts` — JS tests.
+- `cd promo-video && npm ci && npx tsc --noEmit` — promo-video (Remotion) type-check.

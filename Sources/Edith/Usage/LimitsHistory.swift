@@ -87,11 +87,6 @@ struct LimitsHistory {
         return out.sorted { $0.date < $1.date }
     }
 
-    /// Union two limits JSONL texts: collapse exact-duplicate lines, keep only
-    /// lines with a parseable ts, sort ascending by ts (raw line as deterministic
-    /// tie-break). Never drops a valid line - the append-only log's whole point is
-    /// not losing data. Used by SettingsBackup to merge local <-> iCloud copies so
-    /// two Macs' account-wide histories combine instead of clobbering.
     static func merge(_ a: String, _ b: String) -> String {
         var seen = Set<String>()
         var rows: [(Date, String)] = []
@@ -101,7 +96,8 @@ struct LimitsHistory {
                 let line = String(sub)
                 if seen.contains(line) { continue }
                 guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)),
-                      let ts = UsageStore.parseISO(row.ts) else { continue }
+                    let ts = UsageStore.parseISO(row.ts)
+                else { continue }
                 seen.insert(line)
                 rows.append((ts, line))
             }

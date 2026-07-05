@@ -6,14 +6,12 @@ const timeLabel = (t: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-// Matches MusicView.swift's nowPlayingBar: scrubber+time row, then
-// thumb/title/visualizer/transport/volume in one row - no big centered player.
 export const MiniPlayer: React.FC<{
   title: string;
-  progress: number; // 0-1 scrubber position
-  duration: number; // seconds
+  progress: number; 
+  duration: number; 
   playing: boolean;
-  bars: number[]; // 0-1 heights
+  bars: number[]; 
 }> = ({title, progress, duration, playing, bars}) => {
   return (
     <div style={{display: 'flex', flexDirection: 'column', gap: 10, fontFamily}}>

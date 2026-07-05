@@ -14,7 +14,6 @@ export const StatRow: React.FC<{
 }> = ({label, value, suffix = '', cost, frame, fps, delay}) => {
   const p = springIn(frame, fps, delay);
   const shown = interpolate(p, [0, 1], [0, value]);
-  // matches Double.compactTokens in UsageView.swift: B keeps 2 decimals, M/K keep 1
   const decimals = suffix === 'B' ? 2 : suffix ? 1 : 0;
 
   return (

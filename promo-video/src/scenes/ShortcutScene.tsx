@@ -20,7 +20,6 @@ export const ShortcutScene: React.FC = () => {
   const cmd = pressedAt(frame, fps, 6);
   const e = pressedAt(frame, fps, 12);
 
-  // keys press, then fade/lift out of the way as the panel opens beneath them
   const keysOut = interpolate(frame, [38, 58], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',

@@ -1,8 +1,6 @@
 import React from 'react';
 import {colors} from '../tokens';
 
-// Stand-in 24h samples shaped like real usage: session resets every ~5h
-// (sawtooth), weekly climbs steadily. Stepped (stepEnd) like the real chart.
 const SESSION: number[] = [8, 22, 38, 55, 4, 18, 30, 46, 6, 20, 14];
 const WEEKLY: number[] = [18, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35];
 
@@ -45,7 +43,7 @@ export const LimitsChart: React.FC<{progress: number}> = ({progress}) => {
           strokeWidth={1}
         />
       ))}
-      {/* warn (60) / critical (85) threshold rules */}
+      {}
       <line
         x1={PAD_L}
         x2={W - PAD_R}

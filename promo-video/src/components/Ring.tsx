@@ -2,7 +2,6 @@ import React from 'react';
 import {useCurrentFrame, useVideoConfig} from 'remotion';
 import {colors} from '../tokens';
 
-// Matches UsageView.swift's countdown(from:to:) formatting exactly.
 const formatCountdown = (totalSeconds: number) => {
   const s = Math.max(0, Math.round(totalSeconds));
   const d = Math.floor(s / 86400);
@@ -16,7 +15,7 @@ const formatCountdown = (totalSeconds: number) => {
 
 export const Ring: React.FC<{
   percent: number;
-  progress: number; // 0-1
+  progress: number; 
   size?: number;
   label: string;
   startSeconds: number;

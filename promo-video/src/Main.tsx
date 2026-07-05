@@ -16,8 +16,6 @@ import {SettingsMontage} from './scenes/SettingsMontage';
 import {TrustScene} from './scenes/TrustScene';
 import {Outro} from './scenes/Outro';
 
-// A short crossfade between every beat so cuts read as intentional instead
-// of abrupt - each transition overlaps (and slightly shortens) its neighbors.
 const T = () => (
   <TransitionSeries.Transition
     presentation={fade()}

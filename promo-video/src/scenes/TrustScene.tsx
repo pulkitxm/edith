@@ -4,8 +4,6 @@ import {Background} from '../components/Background';
 import {colors, fontFamily} from '../tokens';
 import {springIn} from '../animation';
 
-// Genuine claims, not invented ones: README states usage data never leaves
-// the machine, and SettingsView.swift has real optional iCloud backup toggles.
 const ROWS = [
   'Free and open source',
   'Your data never leaves your Mac',

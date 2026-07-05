@@ -7,9 +7,6 @@ import {Caption} from '../components/Caption';
 import {colors} from '../tokens';
 import {springIn} from '../animation';
 
-// Real SystemView.swift stacks POWER above KEYBOARD on one screen - not two
-// separate screens. This scene shows both together, Prevent Sleep on top,
-// then the Clean Keyboard card demos its own lock/countdown states.
 const SCRIM_IN = [100, 118];
 const ARMING_START = 118;
 const ARMING_END = 166;

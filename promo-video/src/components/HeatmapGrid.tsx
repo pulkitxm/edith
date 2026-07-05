@@ -2,9 +2,9 @@ import React from 'react';
 import {colors} from '../tokens';
 import {interpolate} from 'remotion';
 
-const ROWS = 7; // M, _, W, _, F, _, S - matches UsageView.swift's calendar
+const ROWS = 7; 
 const DAY_LABELS = ['M', '', 'W', '', 'F', '', 'S'];
-const COLS = 18; // more weeks of (fake, demo) history - wider grid
+const COLS = 18; 
 const MONTH_LABELS = [
   'Feb', '', '', '',
   'Mar', '', '', '',
@@ -13,8 +13,6 @@ const MONTH_LABELS = [
   'Jun', '',
 ];
 
-// Deterministic pseudo-random quartile level (0 = no activity, 1-4 = theme
-// opacity steps), matching UsageView.swift's cellColor quartile buckets.
 const levelAt = (i: number) => {
   const seed = Math.sin(i * 12.9898) * 43758.5453;
   const r = seed - Math.floor(seed);
@@ -75,8 +73,6 @@ export const HeatmapGrid: React.FC<{progress: number; cellSize?: number}> = ({
         >
           {Array.from({length: ROWS * COLS}).map((_, i) => {
             const col = Math.floor(i / ROWS);
-            // spread the stagger across however many columns there are, so
-            // the reveal always finishes around the same overall progress
             const delay = (col / (COLS - 1)) * 0.8 + (i % ROWS) * 0.02;
             const p = Math.max(0, Math.min(1, (progress - delay) / 0.25));
             const scale = interpolate(p, [0, 1], [0.3, 1]);

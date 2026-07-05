@@ -1,8 +1,6 @@
 import React from 'react';
 import {colors, fontFamily} from '../tokens';
 
-// Matches LimitsStatusItem.swift's real format: "5h 14%  7d 35%",
-// each number tinted by risk (theme color here, kept consistent with the rest).
 export const MenuBarBadge: React.FC<{reveal: number}> = ({reveal}) => {
   return (
     <div

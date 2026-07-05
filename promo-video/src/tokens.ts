@@ -16,26 +16,22 @@ export const fontFamily =
 
 export const fps = 30;
 
-// scene durations in frames, 30fps - each trimmed to a short buffer past
-// where its animation actually settles, so no scene sits frozen mid-cut.
 export const durations = {
   coldOpen: 65,
-  rings: 145, // rings + 24h chart draw-in
+  rings: 145, 
   heatmap: 100,
   stats: 80,
-  system: 230, // POWER + KEYBOARD cards together, then the lock demo
-  music: 140, // track list + now-playing bar, continuous scrub/visualizer
-  calendar: 135, // agenda: 3 day groups, 4 fake events, staggered in
+  system: 230, 
+  music: 140, 
+  calendar: 135, 
   menuBar: 60,
   notification: 75,
-  shortcut: 80, // keys press, then the panel opens
-  settings: 80, // 4 tab rows now (calendar added)
-  trust: 190, // more hold time to actually read the three points
+  shortcut: 80, 
+  settings: 80, 
+  trust: 190, 
   outro: 80,
 };
 
-// TransitionSeries overlaps each pair of neighboring sequences by the
-// transition's own length, shortening the total by (scenes - 1) * that length.
 export const transitionFrames = 12;
 const sceneCount = Object.keys(durations).length;
 export const totalDuration =

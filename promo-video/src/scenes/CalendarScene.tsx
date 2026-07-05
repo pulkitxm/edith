@@ -6,11 +6,9 @@ import {Caption} from '../components/Caption';
 import {colors, fontFamily} from '../tokens';
 import {springIn} from '../animation';
 
-// Fake demo data standing in for real EventKit events - shape matches the
-// redesigned CalendarView.swift: grouped by day under one tracked eyebrow
-// label, time range or "All day", optional location (skipped if URL-shaped),
-// optional meeting link surfaced as a provider-tinted video icon.
-const GROUPS = [
+type CalEvent = {time: string; title: string; location?: string; link?: string};
+
+const GROUPS: {day: string; date: string; events: CalEvent[]}[] = [
   {
     day: 'Today',
     date: 'Jul 5',
@@ -31,8 +29,6 @@ const GROUPS = [
   },
 ];
 
-// Matches CalendarView.swift's providerColor(_:) - brand-tinted so the
-// platform reads at a glance.
 const providerColor = (link?: string) => {
   if (!link) return colors.accent;
   if (link.includes('zoom.us')) return '#2e8cff';

@@ -1,8 +1,6 @@
 import React from 'react';
 import {colors} from '../tokens';
 
-// Matches App.swift's real tab order: default "usage,music,system", with
-// calendar appended as the newest tab.
 const TABS = [
   {label: 'Agent Usage', width: 176},
   {label: 'Music', width: 100},

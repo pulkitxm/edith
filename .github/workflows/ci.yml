@@ -13,7 +13,7 @@ jobs:
   comments:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: Comment-stripper self-test
@@ -24,7 +24,7 @@ jobs:
   dashboard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: Format and lint (Biome)
@@ -32,10 +32,24 @@ jobs:
       - name: Tests
         run: bun test dashboard/tests scripts
 
+  promo-video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install
+        run: npm ci
+        working-directory: promo-video
+      - name: Type-check
+        run: npx tsc --noEmit
+        working-directory: promo-video
+
   swift:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
       - name: Type-check

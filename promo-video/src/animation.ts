@@ -1,6 +1,5 @@
 import {spring, interpolate, Easing} from 'remotion';
 
-// Apple-style snappy-but-smooth spring: quick settle, no bounce overshoot by default.
 export const springIn = (
   frame: number,
   fps: number,
