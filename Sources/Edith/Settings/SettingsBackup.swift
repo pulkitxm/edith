@@ -42,6 +42,7 @@ final class SettingsBackup: ObservableObject {
         "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "repoPath",
         "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
         "tabSystemEnabled", "preventSleep", "tabOrder",
+        "backupSettings", "backupUsage", "backupLimits",
         // limits + menu bar widget
         "limitsInMenuBar", "menuBarColorMode", "smartColor",
         "warnPercent", "critPercent", "pacingMargin",
@@ -57,9 +58,25 @@ final class SettingsBackup: ObservableObject {
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
     private var cloudFile: URL { AppData.cloudDir.appendingPathComponent("settings.json") }
 
+    // Data-file backup targets (mirrored under iCloud/Edith/data/).
+    private var localLimits: URL { LimitsHistory.url }
+    private var cloudLimits: URL { AppData.cloudDir.appendingPathComponent("data/limits-history.jsonl") }
+    private var localUsage: URL { Repo.usageJSON }
+    private var cloudUsage: URL { AppData.cloudDir.appendingPathComponent("data/usage.json") }
+
+    /// A per-file backup toggle; new keys default on when absent.
+    private func flag(_ key: String) -> Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? true
+    }
+    /// Master gate: iCloud backup enabled and iCloud actually available.
+    private var backupOn: Bool {
+        UserDefaults.standard.bool(forKey: "icloudBackup") && AppData.cloudAvailable
+    }
+
     func start() {
         importFromCloudIfNewer()
         export() // make sure the local mirror exists from day one
+        syncData() // mirror/merge the data files (gated internally on backupOn)
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -76,6 +93,7 @@ final class SettingsBackup: ObservableObject {
         ) { _ in
             MainActor.assumeIsolated {
                 SettingsBackup.shared.debounceFlush()
+                SettingsBackup.shared.syncLimits()
             }
         }
     }
@@ -135,14 +153,70 @@ final class SettingsBackup: ObservableObject {
         if (try? Data(contentsOf: localFile)) != data {
             try? data.write(to: localFile)
         }
-        guard UserDefaults.standard.bool(forKey: "icloudBackup"), AppData.cloudAvailable
-        else { return }
+        guard backupOn, flag("backupSettings") else { return }
         try? FileManager.default.createDirectory(
             at: AppData.cloudDir, withIntermediateDirectories: true)
         if (try? Data(contentsOf: cloudFile)) != data {
             try? data.write(to: cloudFile)
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastBackupAt")
         }
+    }
+
+    /// Back up both data files if enabled. Called at launch, after cc-update,
+    /// and when a backup toggle flips on.
+    func syncData() {
+        syncLimits()
+        syncUsage()
+    }
+
+    /// Merge the account-wide, append-only limits log local <-> iCloud and write
+    /// the union to both. Symmetric: this is how a fresh Mac pulls the cloud
+    /// history in AND how this Mac pushes its own - no clobber either way. Runs
+    /// every poll.
+    func syncLimits() {
+        guard backupOn, flag("backupLimits") else { return }
+        let fm = FileManager.default
+        let localText = (try? String(contentsOf: localLimits, encoding: .utf8)) ?? ""
+        var cloudText = ""
+        if fm.fileExists(atPath: cloudLimits.path) {
+            // Dataless guard: cloud exists but isn't downloaded -> fetch and skip
+            // this round. Overwriting content we couldn't read would lose the
+            // other Mac's data.
+            if let t = try? String(contentsOf: cloudLimits, encoding: .utf8) {
+                cloudText = t
+            } else {
+                try? fm.startDownloadingUbiquitousItem(at: cloudLimits)
+                return
+            }
+        }
+        let merged = LimitsHistory.merge(localText, cloudText)
+        guard !merged.isEmpty else { return }
+        let data = Data(merged.utf8)
+        try? fm.createDirectory(at: localLimits.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fm.createDirectory(at: cloudLimits.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if (try? Data(contentsOf: localLimits)) != data { try? data.write(to: localLimits) }
+        if (try? Data(contentsOf: cloudLimits)) != data { try? data.write(to: cloudLimits) }
+    }
+
+    /// usage.json is per-machine and regeneratable: push local -> iCloud on
+    /// change, and pull cloud -> local only when local is missing (bootstrap a
+    /// fresh Mac; the next cc-update overwrites with this machine's real data).
+    func syncUsage() {
+        guard backupOn, flag("backupUsage") else { return }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: cloudUsage.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard let localData = try? Data(contentsOf: localUsage) else {
+            if fm.fileExists(atPath: cloudUsage.path) {
+                if let cloud = try? Data(contentsOf: cloudUsage) {
+                    try? fm.createDirectory(at: localUsage.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try? cloud.write(to: localUsage)
+                } else {
+                    try? fm.startDownloadingUbiquitousItem(at: cloudUsage)
+                }
+            }
+            return
+        }
+        if (try? Data(contentsOf: cloudUsage)) != localData { try? localData.write(to: cloudUsage) }
     }
 
     private func importFromCloudIfNewer() {
