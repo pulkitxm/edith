@@ -28,6 +28,10 @@ import Testing
         #expect(!needsAttention(systemTab: true))
     }
 
+    @Test func systemTabOffIgnoresKeyboardPermissions() {
+        #expect(!needsAttention(systemTab: false, accessibility: false, inputMonitoring: false))
+    }
+
     @Test func notificationsWarnOnlyWhenMasterIsOn() {
         #expect(!needsAttention(notifyMaster: false, notifications: false))
         #expect(needsAttention(notifyMaster: true, notifications: false))
