@@ -23,8 +23,12 @@ struct MiniPlayer: View {
                     }
                 }
                 Spacer(minLength: 8)
-                TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-                    VisualizerBars(level: player.meterLevel(), color: theme.opacity(0.9))
+                if player.isPlaying {
+                    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+                        VisualizerBars(level: player.meterLevel(), color: theme.opacity(0.9))
+                    }
+                } else {
+                    VisualizerBars(level: 0, color: theme.opacity(0.9))
                 }
                 Button {
                     player.playPause()

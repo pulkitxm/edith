@@ -46,9 +46,18 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         rescan()
         restoreLastPlayback()
         setupRemoteCommands()
+    }
+
+    private func startSaveTimer() {
+        guard saveTimer == nil else { return }
         saveTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in if self?.isPlaying == true { self?.persistPlayback() } }
+            Task { @MainActor in self?.persistPlayback() }
         }
+    }
+
+    private func stopSaveTimer() {
+        saveTimer?.invalidate()
+        saveTimer = nil
     }
 
     private func setupRemoteCommands() {
@@ -155,6 +164,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         p.setVolume(Float(volume), fadeDuration: fade)
         current = track
         isPlaying = true
+        startSaveTimer()
         updateNowPlaying()
         persistPlayback()
     }
@@ -163,6 +173,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         guard let p = player else { return }
         p.setVolume(0, fadeDuration: fade)
         isPlaying = false
+        stopSaveTimer()
         persistPlayback()
         DispatchQueue.main.asyncAfter(deadline: .now() + fade) { [weak self] in
             guard let self, !self.isPlaying else { return }
@@ -176,11 +187,13 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         p.play()
         p.setVolume(Float(volume), fadeDuration: fade)
         isPlaying = true
+        startSaveTimer()
         updateNowPlaying()
     }
 
     func stop() {
         persistPlayback()
+        stopSaveTimer()
         player?.stop()
         player = nil
         current = nil
