@@ -10,7 +10,7 @@ center built to run 24/7 on near-zero resources.
 - **Smart notifications** — threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset alerts, all optional, with a self-diagnosing test button.
 - **Activity heatmap** — GitHub-style daily spend calendar across your full history.
 - **Token & cost stats** — today / week / billing cycle, filterable by agent (Claude Code, Codex, OpenCode…).
-- **One-click dashboard** — opens the full HTML usage dashboard in the browser, carrying your filters.
+- **Full dashboard** — a native window with KPIs, per-day / model / source / project / hourly charts, a sortable model table and an activity heatmap, all interactive; refreshed by a self-contained collector bundled in the app.
 - **Music player** — plays your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys.
 - **System tools** — prevent-sleep toggle and a keyboard-cleaning lock with a 60s auto-restore.
 - **Global shortcut** — toggle the panel from anywhere (default ⌥⌘E), re-recordable.

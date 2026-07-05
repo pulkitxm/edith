@@ -80,14 +80,24 @@ struct DashboardView: View {
         }
     }
 
+    private var metaText: String {
+        guard model.loaded else { return "Loading…" }
+        let m = model.meta
+        let parts: [String] = [
+            "Updated \(m.updated)",
+            m.totalCost,
+            "\(m.activeDays) active days",
+            "\(m.totalTokens) tokens",
+            "\(m.modelCount) models",
+            m.sourceLabels,
+        ]
+        return parts.joined(separator: " · ")
+    }
+
     private var metaLine: some View {
-        Text(
-            model.loaded
-                ? "Updated \(model.meta.updated) · \(model.meta.totalCost) across \(model.meta.activeDays) active days · \(model.meta.totalTokens) tokens · \(model.meta.modelCount) models · \(model.meta.sourceLabels)"
-                : "Loading…"
-        )
-        .font(.system(size: 11)).foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+        Text(metaText)
+            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var kpiGrid: some View {

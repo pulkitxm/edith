@@ -706,9 +706,11 @@ final class DashboardModel: ObservableObject {
             var chats = 0
             for p in dayRow.projects ?? [] {
                 projTok[p.projectName ?? "unknown", default: 0] += p.tokens ?? 0
-                chats +=
-                    (p.chats?.count ?? 0)
-                    + (p.worktrees?.reduce(0) { $0 + ($1.chats?.count ?? 0) } ?? 0)
+                var wtChats = 0
+                for wt in p.worktrees ?? [] {
+                    wtChats += wt.chats?.count ?? 0
+                }
+                chats += (p.chats?.count ?? 0) + wtChats
             }
             h.projects = projTok.sorted { $0.value > $1.value }.map {
                 NamedValue(id: $0.key, name: $0.key, value: $0.value)

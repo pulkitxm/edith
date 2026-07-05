@@ -5,9 +5,7 @@
     "strip-comments": "bun scripts/strip-comments.mjs",
     "check-comments": "bun scripts/strip-comments.mjs --check",
     "selftest": "bun scripts/strip-comments.mjs --selftest",
-    "test": "bun test apps/dashboard/tests scripts",
-    "lint": "cd apps/dashboard && biome ci .",
-    "format": "cd apps/dashboard && biome check --write ."
+    "test": "bun test scripts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

@@ -191,9 +191,12 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
     select(.type == "assistant" and (.message.usage != null)) |
     (.message.id // .requestId // "") as $id | select($id != "") |
     (.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 + $off) as $loc |
+    (.message.usage) as $u |
+    ($u.input_tokens // 0) as $inp | ($u.output_tokens // 0) as $out |
+    ($u.cache_creation_input_tokens // 0) as $cc | ($u.cache_read_input_tokens // 0) as $cr |
     { id: $id, date: ($loc | strftime("%Y-%m-%d")), hour: (($loc / 3600 | floor) % 24),
       model: (.message.model // "unknown"), cwd: (.cwd // ""), sid: (.sessionId // ""),
-      tok: ((.message.usage.input_tokens // 0) + (.message.usage.output_tokens // 0) + (.message.usage.cache_creation_input_tokens // 0) + (.message.usage.cache_read_input_tokens // 0)) }
+      inp: $inp, out: $out, cc: $cc, cr: $cr, tok: ($inp + $out + $cc + $cr) }
   ' >"$TMP/records.jsonl" 2>/dev/null || true
   _phase "walk" "$(wc -l <"$TMP/records.jsonl" | tr -d ' ') messages"
 
@@ -230,6 +233,61 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
     ]
   ' "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$OUT"
   _phase "merge" "hours + projects merged"
+
+  echo "[]" >"$TMP/cloud.json"
+  CLOUD_RAW="$(perl -e 'alarm 20; exec @ARGV' claude agents --json --all 2>/dev/null || true)"
+  if [ -n "$CLOUD_RAW" ]; then
+    printf '%s' "$CLOUD_RAW" \
+      | jq -c '[.[] | select(.kind == "background" and .sessionId) | .sessionId] | unique' \
+        >"$TMP/cloud.json" 2>/dev/null || echo "[]" >"$TMP/cloud.json"
+  fi
+  NCLOUD=$(jq 'length' "$TMP/cloud.json" 2>/dev/null || echo 0)
+  if [ "${NCLOUD:-0}" -gt 0 ]; then
+    jq --slurpfile cloud "$TMP/cloud.json" '
+      ($cloud[0] // [] | map({(.): true}) | add // {}) as $CS |
+      [ .[] | select($CS[.sid]) ]
+      | group_by(.date + "|" + .model)
+      | map({ date: .[0].date, model: .[0].model,
+              inputTokens: (map(.inp) | add), outputTokens: (map(.out) | add),
+              cacheCreationTokens: (map(.cc) | add), cacheReadTokens: (map(.cr) | add),
+              cost: (map(.cost) | add) })
+      | reduce .[] as $x ({}; .[$x.date][$x.model] = $x)
+    ' "$TMP/recs.json" >"$TMP/cloudagg.json"
+
+    jq --slurpfile ca "$TMP/cloudagg.json" '
+      ($ca[0] // {}) as $CA |
+      .daily = [ .daily[] | . as $d | ($CA[$d.period] // {}) as $cm |
+        if ($cm | length) == 0 then . else
+          .bySource.cli = [ (.bySource.cli // [])[] | . as $b | ($cm[$b.modelName]) as $c |
+            if $c == null then $b else
+              $b
+              | .inputTokens = ([(.inputTokens // 0) - $c.inputTokens, 0] | max)
+              | .outputTokens = ([(.outputTokens // 0) - $c.outputTokens, 0] | max)
+              | .cacheCreationTokens = ([(.cacheCreationTokens // 0) - $c.cacheCreationTokens, 0] | max)
+              | .cacheReadTokens = ([(.cacheReadTokens // 0) - $c.cacheReadTokens, 0] | max)
+              | .cost = ([(.cost // 0) - $c.cost, 0] | max)
+            end ]
+          | .bySource["cc-cloud"] = [ $cm | to_entries[] | .value
+              | {modelName: .model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, cost} ]
+        end
+      ]
+      | if (.daily | map(.bySource | has("cc-cloud")) | any) then
+          .sources = ((.sources // []) + (["cc-cloud"] - (.sources // [])))
+          | .defaultSources = ((.defaultSources // []) + (["cc-cloud"] - (.defaultSources // [])))
+          | .sourceMeta += {"cc-cloud": {label: "Claude Code Cloud", tool: "Claude Code Cloud"}}
+        else . end
+      | ([.daily[].bySource[][]]) as $all
+      | .totals = {
+          cost: ([$all[].cost] | add // 0),
+          tokens: ([$all[] | ((.inputTokens // 0) + (.outputTokens // 0) + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0))] | add // 0),
+          inputTokens: ([$all[].inputTokens] | add // 0),
+          outputTokens: ([$all[].outputTokens] | add // 0),
+          cacheCreationTokens: ([$all[].cacheCreationTokens] | add // 0),
+          cacheReadTokens: ([$all[].cacheReadTokens] | add // 0)
+        }
+    ' "$OUT" >"$TMP/split.json" && mv "$TMP/split.json" "$OUT"
+    _phase "cc-cloud" "$NCLOUD cloud sessions split out"
+  fi
 fi
 
 DAYS=$(jq '.daily | length' "$OUT")

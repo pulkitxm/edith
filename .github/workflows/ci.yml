@@ -21,16 +21,14 @@ jobs:
       - name: No disallowed comments
         run: bun scripts/strip-comments.mjs --check
 
-  dashboard:
+  scripts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - name: Format and lint (Biome)
-        run: bun run lint
       - name: Tests
-        run: bun test apps/dashboard/tests scripts
+        run: bun test scripts
 
   promo-video:
     runs-on: ubuntu-latest
