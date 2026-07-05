@@ -2,6 +2,9 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
+// The app theme: one accent used by the limit rings, the activity calendar,
+// and the player controls. Stored by name in UserDefaults ("theme").
+// "accent" (default) follows the macOS system accent color.
 let themePalette: [(name: String, color: Color)] = [
     ("blue", .blue), ("indigo", .indigo), ("teal", .teal), ("green", .green),
     ("purple", .purple), ("pink", .pink), ("red", .red), ("orange", .orange),
@@ -30,6 +33,13 @@ struct SettingsView: View {
     @AppStorage("lastBackupAt") private var lastBackupAt = 0.0
     @AppStorage("musicBackup") private var musicBackup = false
     @AppStorage("lastMusicBackupAt") private var lastMusicBackupAt = 0.0
+    @AppStorage("backupSettings") private var backupSettings = true
+    @AppStorage("backupUsage") private var backupUsage = true
+    @AppStorage("backupLimits") private var backupLimits = true
+    @State private var showBackupDetail = false
+    @State private var settingsSize = ""
+    @State private var usageSize = ""
+    @State private var limitsSize = ""
     @ObservedObject private var backupService = SettingsBackup.shared
     @State private var musicSize = ""
     @AppStorage("limitsInMenuBar") private var limitsInMenuBar = true
@@ -73,6 +83,8 @@ struct SettingsView: View {
                 }
             }
             .card()
+            // Toggling a tab creates or tears down its whole module - timers,
+            // network, audio, caches - so an off tab costs nothing.
             .onChange(of: usageEnabled) { services.sync() }
             .onChange(of: musicEnabled) { services.sync() }
             .onChange(of: systemEnabled) { services.sync() }
@@ -119,10 +131,9 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 eyebrow("LIMITS")
-                toggleRow(
-                    "Show in menu bar",
-                    subtitle: "Session + weekly percentages next to the clock",
-                    isOn: $limitsInMenuBar)
+                toggleRow("Show in menu bar",
+                          subtitle: "Session + weekly percentages next to the clock",
+                          isOn: $limitsInMenuBar)
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Menu bar color").font(.system(size: 13))
@@ -137,24 +148,17 @@ struct SettingsView: View {
                     }
                     .labelsHidden().pickerStyle(.menu).fixedSize().pointerCursor()
                 }
-                toggleRow(
-                    "Smart color",
-                    subtitle: "Time-aware risk drives colors and alerts",
-                    isOn: $smartColor)
+                toggleRow("Smart color",
+                          subtitle: "Time-aware risk drives colors and alerts",
+                          isOn: $smartColor)
                 if showAllLimitSettings {
                     HStack {
                         Text("Warning / critical").font(.system(size: 13))
                         Spacer()
-                        Stepper(
-                            "\(warnPercent)%", value: $warnPercent, in: 10...critPercent - 5,
-                            step: 5
-                        )
-                        .font(.system(size: 12)).fixedSize().pointerCursor()
-                        Stepper(
-                            "\(critPercent)%", value: $critPercent, in: warnPercent + 5...100,
-                            step: 5
-                        )
-                        .font(.system(size: 12)).fixedSize().pointerCursor()
+                        Stepper("\(warnPercent)%", value: $warnPercent, in: 10...critPercent - 5, step: 5)
+                            .font(.system(size: 12)).fixedSize().pointerCursor()
+                        Stepper("\(critPercent)%", value: $critPercent, in: warnPercent + 5...100, step: 5)
+                            .font(.system(size: 12)).fixedSize().pointerCursor()
                     }
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -163,10 +167,8 @@ struct SettingsView: View {
                                 .font(.system(size: 10)).foregroundStyle(.tertiary)
                         }
                         Spacer()
-                        Stepper(
-                            "±\(Int(pacingMargin))pp", value: $pacingMargin, in: 5...25, step: 5
-                        )
-                        .font(.system(size: 12)).fixedSize().pointerCursor()
+                        Stepper("±\(Int(pacingMargin))pp", value: $pacingMargin, in: 5...25, step: 5)
+                            .font(.system(size: 12)).fixedSize().pointerCursor()
                     }
                 }
                 Button {
@@ -194,12 +196,11 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 eyebrow("NOTIFICATIONS")
-                toggleRow(
-                    "Enable notifications",
-                    subtitle: notifDenied
-                        ? "Denied in System Settings > Notifications > Edith"
-                        : "Alerts for limit levels, pacing, resets",
-                    isOn: $notifyMaster)
+                toggleRow("Enable notifications",
+                          subtitle: notifDenied
+                            ? "Denied in System Settings > Notifications > Edith"
+                            : "Alerts for limit levels, pacing, resets",
+                          isOn: $notifyMaster)
                 if showAllNotifSettings {
                     Group {
                         toggleRow("Session (5h) alerts", isOn: $notifyTrackSession)
@@ -264,9 +265,9 @@ struct SettingsView: View {
                 if notifyMaster {
                     services.usage?.notifier.requestPermission()
                     Task {
+                        // brief delay so the permission dialog result lands first
                         try? await Task.sleep(nanoseconds: 500_000_000)
-                        notifDenied =
-                            await services.usage?.notifier.authorizationStatus() == .denied
+                        notifDenied = await services.usage?.notifier.authorizationStatus() == .denied
                     }
                 } else {
                     services.usage?.notifier.cancelReminders()
@@ -287,13 +288,10 @@ struct SettingsView: View {
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
-                    Toggle(
-                        "",
-                        isOn: Binding(
-                            get: { themeName == "accent" },
-                            set: { themeName = $0 ? "accent" : lastPaletteTheme }
-                        )
-                    )
+                    Toggle("", isOn: Binding(
+                        get: { themeName == "accent" },
+                        set: { themeName = $0 ? "accent" : lastPaletteTheme }
+                    ))
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -329,22 +327,38 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(theme)
                 }
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Back up settings to iCloud")
-                            .font(.system(size: 13))
-                        Text(backupSubtitle)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) { showBackupDetail.toggle() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(showBackupDetail ? 90 : 0))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Back up to iCloud").font(.system(size: 13))
+                                    Text(backupSubtitle).font(.system(size: 10)).foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                        .buttonStyle(HoverButtonStyle())
+                        Spacer()
+                        Toggle("", isOn: $icloudBackup)
+                            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                            .tint(theme).pointerCursor().disabled(!AppData.cloudAvailable)
                     }
-                    Spacer()
-                    Toggle("", isOn: $icloudBackup)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .tint(theme)
-                        .pointerCursor()
-                        .disabled(!AppData.cloudAvailable)
+                    if showBackupDetail {
+                        Group {
+                            backupFileRow("Settings", file: "settings.json", size: settingsSize, isOn: $backupSettings)
+                            backupFileRow("Usage", file: "usage.json", size: usageSize, isOn: $backupUsage)
+                            backupFileRow("Session history", file: "limits-history.jsonl", size: limitsSize, isOn: $backupLimits)
+                        }
+                        .padding(.leading, 16)
+                        .disabled(!icloudBackup)
+                        .opacity(icloudBackup ? 1 : 0.45)
+                    }
                 }
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -366,12 +380,15 @@ struct SettingsView: View {
             }
             .card()
             .onChange(of: icloudBackup) {
-                if icloudBackup { SettingsBackup.shared.export() }
+                if icloudBackup { SettingsBackup.shared.export(); SettingsBackup.shared.syncData() }
             }
+            .onChange(of: backupSettings) { if icloudBackup { SettingsBackup.shared.export() } }
+            .onChange(of: backupUsage) { if icloudBackup { SettingsBackup.shared.syncData() } }
+            .onChange(of: backupLimits) { if icloudBackup { SettingsBackup.shared.syncData() } }
             .onChange(of: musicBackup) {
                 if musicBackup { SettingsBackup.shared.backupMusic() }
             }
-            .onAppear { computeMusicSize() }
+            .onAppear { computeMusicSize(); computeDataSizes() }
 
             HStack(spacing: 4) {
                 Text("Made with ❤️ by")
@@ -394,7 +411,7 @@ struct SettingsView: View {
     private func swatch(_ name: String, color: Color, help: String) -> some View {
         Button {
             themeName = name
-            lastPaletteTheme = name
+            lastPaletteTheme = name // what the system-accent switch falls back to
         } label: {
             ZStack {
                 Circle()
@@ -425,9 +442,8 @@ struct SettingsView: View {
 
     private func computeMusicSize() {
         Task.detached(priority: .utility) {
-            let files =
-                (try? FileManager.default.contentsOfDirectory(
-                    at: Repo.musicDir, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+            let files = (try? FileManager.default.contentsOfDirectory(
+                at: Repo.musicDir, includingPropertiesForKeys: [.fileSizeKey])) ?? []
             let total = files.reduce(0) {
                 $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
             }
@@ -448,17 +464,18 @@ struct SettingsView: View {
 
     private func tabRow(_ info: TabInfo) -> some View {
         HStack(spacing: 10) {
+            // grip: press here and drag the whole row to reorder
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 11))
-                .foregroundStyle(
-                    draggingTab == info.id ? AnyShapeStyle(theme) : AnyShapeStyle(.tertiary)
-                )
+                .foregroundStyle(draggingTab == info.id ? AnyShapeStyle(theme) : AnyShapeStyle(.tertiary))
                 .frame(width: 18, height: 26)
                 .contentShape(Rectangle())
                 .onHover { over in
                     over ? NSCursor.openHand.set() : NSCursor.arrow.set()
                 }
                 .highPriorityGesture(
+                    // Global space: local coordinates move with the row's own
+                    // offset, feeding the translation back into itself (jitter).
                     DragGesture(coordinateSpace: .global)
                         .onChanged { value in
                             if draggingTab == nil {
@@ -484,6 +501,8 @@ struct SettingsView: View {
                 .tint(theme)
                 .pointerCursor()
         }
+        // Lift look with zero layout impact: negative-padded background and a
+        // scale, never real padding - resizing the row mid-drag causes jitter.
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(draggingTab == info.id ? Color.primary.opacity(0.08) : .clear)
@@ -492,12 +511,12 @@ struct SettingsView: View {
         )
         .scaleEffect(draggingTab == info.id ? 1.02 : 1)
         .shadow(color: .black.opacity(draggingTab == info.id ? 0.3 : 0), radius: 6, y: 2)
-        .background(
-            GeometryReader { geo in
-                Color.clear.onAppear { rowPitch = geo.size.height + 12 }
-            })
+        .background(GeometryReader { geo in
+            Color.clear.onAppear { rowPitch = geo.size.height + 12 } // height + card spacing
+        })
     }
 
+    /// How many slots the dragged row has moved (rounded to the nearest row).
     private var projectedDelta: Int {
         guard rowPitch > 0 else { return 0 }
         return Int((dragTranslation / rowPitch).rounded())
@@ -505,8 +524,7 @@ struct SettingsView: View {
 
     private func rowOffset(index: Int, id: String, order: [String]) -> CGFloat {
         guard let dragging = draggingTab,
-            let from = order.firstIndex(of: dragging)
-        else { return 0 }
+              let from = order.firstIndex(of: dragging) else { return 0 }
         if id == dragging { return dragTranslation }
         let to = max(0, min(order.count - 1, from + projectedDelta))
         if from < to, index > from, index <= to { return -rowPitch }
@@ -542,9 +560,35 @@ struct SettingsView: View {
         }
     }
 
-    private func toggleRow(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>)
-        -> some View
-    {
+    private func backupFileRow(_ title: String, file: String, size: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12))
+                Text(size.isEmpty ? file : "\(file) · \(size)")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                .tint(theme).pointerCursor()
+                .disabled(!AppData.cloudAvailable)
+        }
+    }
+
+    private func computeDataSizes() {
+        Task.detached(priority: .utility) {
+            let fmt = { (url: URL) -> String in
+                guard let n = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else { return "—" }
+                return ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file)
+            }
+            let s = fmt(AppData.supportDir.appendingPathComponent("settings.json"))
+            let u = fmt(Repo.usageJSON)
+            let l = fmt(LimitsHistory.url)
+            await MainActor.run { settingsSize = s; usageSize = u; limitsSize = l }
+        }
+    }
+
+    private func toggleRow(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13))
@@ -559,7 +603,12 @@ struct SettingsView: View {
     }
 }
 
+/// Click → "Press shortcut…" → next chord with ⌘/⌥/⌃ becomes the global
+/// toggle. Esc cancels. The hotkey is suspended while recording so re-picking
+/// the current combo doesn't toggle the panel mid-recording.
 struct ShortcutRecorder: View {
+    /// Read by the app-level Esc monitor so Esc cancels recording instead of
+    /// closing the panel while a capture is in progress.
     static var isRecording = false
 
     @State private var recording = false
@@ -587,12 +636,15 @@ struct ShortcutRecorder: View {
         recording = true
         Self.isRecording = true
         HotKey.unregister()
+        // The panel is a non-activating panel: without forcing key status the
+        // keystrokes keep going to the previously active app and the local
+        // monitor never sees them.
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.first { $0.className.contains("MenuBarExtraWindow") }?
             .makeKeyAndOrderFront(nil)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             handle(event)
-            return nil
+            return nil // consume while recording
         }
     }
 
@@ -603,16 +655,17 @@ struct ShortcutRecorder: View {
             NSEvent.removeMonitor(monitor)
             self.monitor = nil
         }
-        HotKey.register()
+        HotKey.register() // re-arm with whatever is stored now
         label = HotKey.label
     }
 
     private func handle(_ event: NSEvent) {
-        if event.keyCode == 53 {
+        if event.keyCode == 53 { // Esc cancels
             stop()
             return
         }
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        // require a real modifier so plain typing can't become the hotkey
         guard flags.contains(.command) || flags.contains(.option) || flags.contains(.control)
         else { return }
         var mods = 0
