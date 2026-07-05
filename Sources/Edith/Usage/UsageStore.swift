@@ -283,6 +283,7 @@ final class UsageStore: ObservableObject {
         retryNotBefore = nil
         notifier.evaluate(session: session, week: week)
         history.append(session: session, week: week)
+        SettingsBackup.shared.syncLimits() // mirror/merge to iCloud if enabled
         statusItem?.update(session: session, week: week)
     }
 
@@ -582,6 +583,7 @@ final class UsageStore: ObservableObject {
                     self.log += "\n✖ cc-update exited with status \(proc.terminationStatus)"
                 }
                 await self.loadStats()
+                SettingsBackup.shared.syncUsage() // back up the fresh usage.json
             }
         }
         do {
