@@ -42,9 +42,7 @@ struct CleaningOverlayView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(themeColor(themeName))
                     .controlSize(.large)
-                    .onHover { over in
-                        over ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-                    }
+                    .pointerCursor()
                 } else {
                     Text("Starting in \(store.armingCountdown)…")
                         .font(.title)

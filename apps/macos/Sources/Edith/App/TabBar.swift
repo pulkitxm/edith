@@ -76,8 +76,6 @@ struct TabBar: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .onHover { over in
-            over ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-        }
+        .pointerCursor()
     }
 }

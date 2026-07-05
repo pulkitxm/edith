@@ -116,9 +116,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .fixedSize()
-                    .onHover { over in
-                        over ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-                    }
+                    .pointerCursor()
                     .onChange(of: appearance) { applyAppearance(appearance) }
                 }
             }

@@ -256,10 +256,8 @@ struct HoverButton: ViewModifier {
                     .strokeBorder(.primary.opacity(hovering ? 0.18 : 0), lineWidth: 0.5)
             )
             .shadow(color: .black.opacity(hovering ? 0.35 : 0), radius: 4, y: 1)
-            .onHover { over in
-                hovering = over
-                over ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-            }
+            .onHover { hovering = $0 }
+            .pointerCursor()
             .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
@@ -276,8 +274,19 @@ struct HoverButtonStyle: ButtonStyle {
 extension View {
     func hoverButton() -> some View { modifier(HoverButton()) }
 
+    @ViewBuilder
     func pointerCursor() -> some View {
-        onHover { $0 ? NSCursor.pointingHand.set() : NSCursor.arrow.set() }
+        if #available(macOS 15.0, *) {
+            pointerStyle(.link)
+        } else {
+            onContinuousHover { phase in
+                if case .active = phase {
+                    NSCursor.pointingHand.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            }
+        }
     }
 
     func presenterBlur(_ on: Bool) -> some View {

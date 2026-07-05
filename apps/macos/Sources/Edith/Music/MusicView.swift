@@ -218,10 +218,8 @@ private struct TrackRow: View {
                 ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: 7)
         )
-        .onHover { over in
-            hovering = over
-            over ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-        }
+        .onHover { hovering = $0 }
+        .pointerCursor()
         .task {
             artwork = await player.artwork(for: track)
             duration = await player.durationLabel(for: track)
