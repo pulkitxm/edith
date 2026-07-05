@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Full-screen overlay per display while keyboard cleaning is armed/active.
-/// The trackpad stays live, so a normal clickable window is enough.
 final class CleaningOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 
@@ -13,7 +11,7 @@ final class CleaningOverlayWindow: NSWindow {
         level = .screenSaver
         isOpaque = false
         backgroundColor = .clear
-        ignoresMouseEvents = false // the Done button must be clickable
+        ignoresMouseEvents = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         hasShadow = false
         contentView = NSHostingView(rootView: rootView)

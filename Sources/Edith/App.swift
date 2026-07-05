@@ -1,13 +1,9 @@
 import Carbon.HIToolbox
 import SwiftUI
 
-// Repo layout the app leans on: dashboard/ holds the usage dashboard + data
-// pipeline, local/ the gitignored personal files. Overridable without a
-// rebuild via `defaults write com.pulkit.edith repoPath /new/path`.
 enum Repo {
     static let root: URL = {
         let override = UserDefaults.standard.string(forKey: "repoPath")
-        // ponytail: hardcoded personal path; the defaults key is the escape hatch
         return URL(fileURLWithPath: override ?? "/Users/pulkit/scripts/edith")
     }()
     static var dashboard: URL { root.appendingPathComponent("dashboard/dashboard.html") }
@@ -16,20 +12,15 @@ enum Repo {
     static var musicDir: URL { root.appendingPathComponent("local/music") }
 }
 
-/// preferredColorScheme is a no-op inside MenuBarExtra windows; setting the
-/// AppKit appearance app-wide is what actually flips the panel.
 func applyAppearance(_ value: String) {
-    // NSApplication.shared, not NSApp: this runs from App.init, before NSApp is set
     let app = NSApplication.shared
     switch value {
     case "light": app.appearance = NSAppearance(named: .aqua)
     case "dark": app.appearance = NSAppearance(named: .darkAqua)
-    default: app.appearance = nil // follow the system
+    default: app.appearance = nil
     }
 }
 
-/// The Edith mark: the glasses tile (margin-trimmed MenuBar.png bundled by
-/// build.sh), used colored everywhere - menu bar, header, dock.
 enum Logo {
     private static func loadTile() -> NSImage? {
         Bundle.main.url(forResource: "MenuBar", withExtension: "png")
@@ -37,27 +28,24 @@ enum Logo {
     }
 
     static let menuBar: NSImage = {
-        let image = loadTile()
+        let image =
+            loadTile()
             ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
         image.size = NSSize(width: 20, height: 20)
         return image
     }()
 
-    static let header: NSImage = loadTile()
+    static let header: NSImage =
+        loadTile()
         ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
 }
 
-/// One-time defaults carry-over from the pre-rename bundle id. macOS 26's
-/// menu bar manager block-listed com.pulkit.control-center outright (its
-/// status items never show, and the app then self-terminates as windowless);
-/// the block is keyed to the bundle id and survives reboots, so a fresh id
-/// was the only fix. NSStatusItem visibility keys stay behind - they ARE the
-/// poisoned state that triggered the rename.
 @MainActor
 private func migratedServices() -> AppServices {
     let d = UserDefaults.standard
     if !d.bool(forKey: "migratedFromControlCenter"),
-       let old = d.persistentDomain(forName: "com.pulkit.control-center") {
+        let old = d.persistentDomain(forName: "com.pulkit.control-center")
+    {
         for (key, value) in old where !key.hasPrefix("NSStatusItem") {
             if d.object(forKey: key) == nil { d.set(value, forKey: key) }
         }
@@ -68,26 +56,16 @@ private func migratedServices() -> AppServices {
 
 @main
 struct EdithApp: App {
-    // Plain let, not @StateObject: App.body must not re-evaluate on store
-    // changes. migratedServices() imports the old bundle id's settings FIRST -
-    // this property initializer is the earliest defaults reader in the app.
     private let services = migratedServices()
 
     init() {
-        // Heal poisoned status-item visibility state. Auto-assigned autosave
-        // names ("Item-N") are creation-order dependent; a persisted hide under
-        // one of them makes SwiftUI spawn the MenuBarExtra invisible, conclude
-        // it was user-removed, and terminate the "windowless" app at launch.
-        // Force-visible (mere key removal loses to the system's cached
-        // "removed" verdict); without its icon the app is unreachable anyway.
-        for key in ["NSStatusItem VisibleCC Item-0", "NSStatusItem VisibleCC Item-1",
-                    "NSStatusItem VisibleCC limits"] {
+        for key in [
+            "NSStatusItem VisibleCC Item-0", "NSStatusItem VisibleCC Item-1",
+            "NSStatusItem VisibleCC limits",
+        ] {
             UserDefaults.standard.set(true, forKey: key)
         }
 
-        // Close when focus leaves the panel (click elsewhere / switch app).
-        // didResignActive alone is unreliable for LSUIElement apps - the app
-        // may never have been "active" - so watch the panel's key status too.
         NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
         ) { _ in
@@ -97,23 +75,14 @@ struct EdithApp: App {
             forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
         ) { note in
             guard let panel = note.object as? NSWindow,
-                  panel.className.contains("MenuBarExtraWindow") else { return }
-            // Deferred one tick: if the panel is mid-close (normal toggle) it's
-            // gone by then and this no-ops; if focus genuinely left, close it
-            // through the status item so the highlight clears with it. The
-            // system color panel is ours - picking a color must not close us.
+                panel.className.contains("MenuBarExtraWindow")
+            else { return }
             DispatchQueue.main.async { [weak panel] in
                 if let panel, panel.isVisible, !NSColorPanel.shared.isVisible {
                     dismissPanel()
                 }
             }
         }
-        // MenuBarExtra re-anchors the panel's leading edge to the icon on every
-        // open/resize/system reposition - and its anchor pass can run AFTER our
-        // handler in the same tick. So: pin on key/resize/move (the move observer
-        // catches the system's own repositioning; the idempotence check inside
-        // centerPanelUnderIcon stops that from looping), and pin once more on
-        // the next runloop turn so we always get the last word.
         let names: [Notification.Name] = [
             NSWindow.didBecomeKeyNotification,
             NSWindow.didResizeNotification,
@@ -124,12 +93,11 @@ struct EdithApp: App {
                 forName: name, object: nil, queue: .main
             ) { note in
                 guard let panel = note.object as? NSWindow,
-                      panel.className.contains("MenuBarExtraWindow") else { return }
-                // queue: .main guarantees the main actor; assert it so pinning
-                // stays synchronous (an async hop would defer it and flicker).
+                    panel.className.contains("MenuBarExtraWindow")
+                else { return }
                 MainActor.assumeIsolated {
                     centerPanelUnderIcon(panel)
-                    MiniPanel.shared.sync() // keep the detached pane glued below
+                    MiniPanel.shared.sync()
                 }
                 DispatchQueue.main.async { [weak panel] in
                     MainActor.assumeIsolated {
@@ -143,22 +111,21 @@ struct EdithApp: App {
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
         ) { note in
             guard let window = note.object as? NSWindow,
-                  window.className.contains("MenuBarExtraWindow") else { return }
+                window.className.contains("MenuBarExtraWindow")
+            else { return }
             Task { @MainActor in MiniPanel.shared.sync() }
         }
-        HotKey.register() // ⌥⌘E toggles the panel from anywhere
-        SettingsBackup.shared.start() // settings mirror + optional iCloud sync
+        HotKey.register()
+        SettingsBackup.shared.start()
         applyAppearance(UserDefaults.standard.string(forKey: "appearance") ?? "system")
 
-        // Esc closes the panel. onExitCommand alone needs SwiftUI focus inside
-        // the panel, which a non-activating panel rarely has - catch the key
-        // directly. The shortcut recorder gets first claim on Esc to cancel.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53, !ShortcutRecorder.isRecording,
-               !NSColorPanel.shared.isVisible, // Esc closes the color panel first
-               NSApp.windows.contains(where: {
-                   $0.className.contains("MenuBarExtraWindow") && $0.isVisible
-               }) {
+                !NSColorPanel.shared.isVisible,
+                NSApp.windows.contains(where: {
+                    $0.className.contains("MenuBarExtraWindow") && $0.isVisible
+                })
+            {
                 dismissPanel()
                 return nil
             }
@@ -177,8 +144,6 @@ struct EdithApp: App {
     }
 }
 
-/// Global toggle hotkey via Carbon - the one API that needs no accessibility
-/// permission. Default ⌥⌘E; customizable from Settings (stored in defaults).
 enum HotKey {
     private static var ref: EventHotKeyRef?
     private static var handlerInstalled = false
@@ -197,14 +162,16 @@ enum HotKey {
         if !handlerInstalled {
             var eventType = EventTypeSpec(
                 eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-            InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-                DispatchQueue.main.async { togglePanel() }
-                return noErr
-            }, 1, &eventType, nil, nil)
+            InstallEventHandler(
+                GetApplicationEventTarget(),
+                { _, _, _ in
+                    DispatchQueue.main.async { togglePanel() }
+                    return noErr
+                }, 1, &eventType, nil, nil)
             handlerInstalled = true
         }
         unregister()
-        let id = EventHotKeyID(signature: OSType(0x4544_4954), id: 1) // 'EDIT'
+        let id = EventHotKeyID(signature: OSType(0x4544_4954), id: 1)
         RegisterEventHotKey(
             UInt32(code), UInt32(mods), id, GetApplicationEventTarget(), 0, &ref)
     }
@@ -223,36 +190,26 @@ enum HotKey {
     }
 }
 
-/// The MenuBarExtra's own status window, identified POSITIVELY: the one
-/// status window hosting a real button with an image (the glasses). The
-/// limits item's button carries only an attributed title, and per-screen
-/// replicant windows (second display) mirror pixels, not view hierarchies,
-/// so they host no NSButton at all - both fall out of this filter naturally.
-/// Exclusion by window identity broke on multi-display Macs.
-/// No isolation annotation - matches the surrounding plain globals
-/// (clickStatusItem, centerPanelUnderIcon), which all run on main in practice.
 private func menuBarExtraStatusWindow() -> NSWindow? {
     NSApp.windows.first {
         guard $0.className.contains("StatusBarWindow"),
-              let button = firstButton(in: $0.contentView) else { return false }
+            let button = firstButton(in: $0.contentView)
+        else { return false }
         return button.image != nil && button !== LimitsStatusItem.button
     }
 }
 
-/// Synthesize a click on the status item. This is the ONLY correct way to open
-/// OR close the panel: it toggles through MenuBarExtra's own state machine, so
-/// the icon highlight always matches. Closing the window directly desyncs that
-/// state - the icon stays lit and the next toggle gets eaten resetting it.
 func clickStatusItem() {
     if let statusWindow = menuBarExtraStatusWindow(),
-       let button = firstButton(in: statusWindow.contentView),
-       button !== LimitsStatusItem.button {
+        let button = firstButton(in: statusWindow.contentView),
+        button !== LimitsStatusItem.button
+    {
         button.performClick(nil)
     }
 }
 
 func togglePanel() {
-    clickStatusItem() // open or close - MenuBarExtra decides from its own state
+    clickStatusItem()
 }
 
 private func firstButton(in view: NSView?) -> NSButton? {
@@ -264,11 +221,6 @@ private func firstButton(in view: NSView?) -> NSButton? {
     return nil
 }
 
-/// Align the panel's horizontal center with the menu bar icon's center. The
-/// status item is one of our own windows (NSStatusBarWindow), so its frame
-/// gives the icon's exact screen position; clamp so the panel stays on-screen.
-/// No-ops when already centered - that's what lets the didMove observer call
-/// this without our own setFrameOrigin re-triggering an endless move loop.
 func centerPanelUnderIcon(_ panel: NSWindow) {
     guard let icon = menuBarExtraStatusWindow() else { return }
     var x = icon.frame.midX - panel.frame.width / 2
@@ -280,26 +232,25 @@ func centerPanelUnderIcon(_ panel: NSWindow) {
     panel.setFrameOrigin(NSPoint(x: x, y: panel.frame.origin.y))
 }
 
-/// MenuBarExtra windows don't auto-dismiss on button actions; close explicitly
-/// after actions that take the user elsewhere (browser, Finder). Goes through
-/// the status-item click so the icon highlight stays in sync (see above).
 func dismissPanel() {
     if NSColorPanel.shared.isVisible { NSColorPanel.shared.close() }
-    guard NSApp.windows.contains(where: {
-        $0.className.contains("MenuBarExtraWindow") && $0.isVisible
-    }) else { return }
+    guard
+        NSApp.windows.contains(where: {
+            $0.className.contains("MenuBarExtraWindow") && $0.isVisible
+        })
+    else { return }
     clickStatusItem()
 }
 
-/// Hover affordance for clickable controls: pointing-hand cursor plus a soft
-/// border, fill, and shadow that fade in under the pointer.
 struct HoverButton: ViewModifier {
     @State private var hovering = false
 
     func body(content: Content) -> some View {
         content
             .padding(4)
-            .background(.primary.opacity(hovering ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6))
+            .background(
+                .primary.opacity(hovering ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(.primary.opacity(hovering ? 0.18 : 0), lineWidth: 0.5)
@@ -313,8 +264,6 @@ struct HoverButton: ViewModifier {
     }
 }
 
-/// Button style wrapping the hover chrome INSIDE the button, so the whole
-/// padded/bordered area is the hit target, with pressed-state feedback.
 struct HoverButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -324,17 +273,13 @@ struct HoverButtonStyle: ButtonStyle {
     }
 }
 
-// Shared panel styling: grouped-settings cards + tracked small-caps eyebrows.
 extension View {
     func hoverButton() -> some View { modifier(HoverButton()) }
 
-    /// Pointing-hand cursor while hovered. For native controls (sliders,
-    /// toggles, pickers) that don't get HoverButtonStyle's chrome.
     func pointerCursor() -> some View {
         onHover { $0 ? NSCursor.pointingHand.set() : NSCursor.arrow.set() }
     }
 
-    /// Presenter view hides sensitive text behind a blur (readable shape, not content).
     func presenterBlur(_ on: Bool) -> some View {
         blur(radius: on ? 4 : 0)
     }
@@ -353,7 +298,6 @@ func eyebrow(_ text: String) -> some View {
         .foregroundStyle(.tertiary)
 }
 
-/// Single registry for everything tab-related; order lives in "tabOrder".
 struct TabInfo {
     let id: String
     let title: String
@@ -362,17 +306,20 @@ struct TabInfo {
 }
 
 let allTabs: [TabInfo] = [
-    TabInfo(id: "usage", title: "Agent Usage",
-            subtitle: "limit polling, usage stats", enabledKey: "tabUsageEnabled"),
-    TabInfo(id: "music", title: "Music",
-            subtitle: "player, media keys", enabledKey: "tabMusicEnabled"),
-    TabInfo(id: "system", title: "System",
-            subtitle: "prevent sleep, keyboard cleaning", enabledKey: "tabSystemEnabled"),
-    TabInfo(id: "calendar", title: "Calendar",
-            subtitle: "today's schedule", enabledKey: "tabCalendarEnabled"),
+    TabInfo(
+        id: "usage", title: "Agent Usage",
+        subtitle: "limit polling, usage stats", enabledKey: "tabUsageEnabled"),
+    TabInfo(
+        id: "music", title: "Music",
+        subtitle: "player, media keys", enabledKey: "tabMusicEnabled"),
+    TabInfo(
+        id: "system", title: "System",
+        subtitle: "prevent sleep, keyboard cleaning", enabledKey: "tabSystemEnabled"),
+    TabInfo(
+        id: "calendar", title: "Calendar",
+        subtitle: "today's schedule", enabledKey: "tabCalendarEnabled"),
 ]
 
-/// Stored order, cleaned of unknown ids, with any new tabs appended.
 func orderedTabIDs(_ raw: String) -> [String] {
     var ids = raw.split(separator: ",").map(String.init)
         .filter { id in allTabs.contains { $0.id == id } }
@@ -384,10 +331,6 @@ func orderedTabIDs(_ raw: String) -> [String] {
 
 struct RootView: View {
     @EnvironmentObject private var services: AppServices
-    // @State, not @AppStorage: defaults-backed storage re-renders via a
-    // UserDefaults hop that DROPS the withAnimation transaction, which is why
-    // settings (plain @State) resized smoothly and tab switches snapped.
-    // Persisted manually in onChange below.
     @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
     @AppStorage("theme") private var themeName = "accent"
     @AppStorage("tabUsageEnabled") private var usageEnabled = true
@@ -397,17 +340,17 @@ struct RootView: View {
     @AppStorage("tabOrder") private var tabOrderRaw = "usage,music,system"
     @State private var showSettings = false
 
-    // Registry order comes from settings; enabled flags gate each entry.
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
             guard let info = allTabs.first(where: { $0.id == id }) else { return nil }
-            let on = switch id {
-            case "usage": usageEnabled
-            case "music": musicEnabled
-            case "system": systemEnabled
-            case "calendar": calendarEnabled
-            default: false
-            }
+            let on =
+                switch id {
+                case "usage": usageEnabled
+                case "music": musicEnabled
+                case "system": systemEnabled
+                case "calendar": calendarEnabled
+                default: false
+                }
             return on ? (info.id, info.title) : nil
         }
     }
@@ -457,16 +400,12 @@ struct RootView: View {
                 .help("Quit Edith (⌘Q)")
             }
             if showSettings {
-                // Settings outgrew the screen; cap near the usage tab's height
-                // and scroll inside. ponytail: fixed cap, tune if tabs multiply.
                 ScrollView {
                     SettingsView()
                 }
                 .frame(height: 640)
             } else {
                 if enabledTabs.count > 1 {
-                    // Custom bar: the AppKit segmented control always paints its
-                    // selection in the system accent, ignoring our theme.
                     TabBar(tabs: enabledTabs, selection: $tab, theme: themeColor(themeName))
                 }
                 if tab == "usage", let store = services.usage {
@@ -513,20 +452,16 @@ struct RootView: View {
         .onChange(of: calendarEnabled) { pinTab() }
         .padding(14)
         .frame(width: 480)
-        // Solidify the system material - pure vibrancy washes out over busy screens.
         .background(PanelBackground())
-        .onExitCommand { dismissPanel() } // Esc closes the panel
+        .onExitCommand { dismissPanel() }
     }
 
-    /// The panel resizes with a 0.35s spring on tab/settings switches; re-pin
-    /// the detached pane once the animation has settled on the final frame.
     private func settleMiniPanel() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             MiniPanel.shared.sync()
         }
     }
 
-    /// Keep the selection on a live tab when tabs get toggled in Settings.
     private func pinTab() {
         if !enabledTabs.contains(where: { $0.id == tab }), let first = enabledTabs.first {
             tab = first.id
@@ -534,7 +469,6 @@ struct RootView: View {
     }
 }
 
-/// Backing layer behind the vibrancy material, per resolved color scheme.
 private struct PanelBackground: View {
     @Environment(\.colorScheme) private var scheme
 
@@ -543,4 +477,3 @@ private struct PanelBackground: View {
             .ignoresSafeArea()
     }
 }
-

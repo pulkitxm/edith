@@ -18,7 +18,8 @@ import EventKit
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         let later = Self.event(title: "Later", start: base.addingTimeInterval(3600))
         let earlier = Self.event(title: "Earlier", start: base)
-        let holiday = Self.event(title: "Holiday", start: base.addingTimeInterval(-3600), allDay: true)
+        let holiday = Self.event(
+            title: "Holiday", start: base.addingTimeInterval(-3600), allDay: true)
 
         let sorted = CalendarDayEvents.sorted([later, earlier, holiday])
 
@@ -36,10 +37,8 @@ import EventKit
     }
 
     @Test func groupsByDayAscendingSortedWithin() {
-        // Fixed calendar so the test doesn't depend on the machine's zone.
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
-        // Anchor to midnight so "+2h" stays within the same day.
         let day0 = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
         let day1 = day0.addingTimeInterval(86_400)
 

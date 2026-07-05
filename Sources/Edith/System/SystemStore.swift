@@ -5,17 +5,11 @@ import CoreGraphics
 import IOKit.pwr_mgt
 import SwiftUI
 
-/// System tab: Prevent Sleep (IOKit power assertion, the Amphetamine
-/// mechanism) and Keyboard Cleaning (CGEventTap swallowing every key incl.
-/// the function/media row, with an overlay + failsafe so nothing can stick).
 @MainActor
 final class SystemStore: ObservableObject {
-    // MARK: Prevent sleep
 
     @Published private(set) var preventingSleep = false
     private var assertionID: IOPMAssertionID = 0
-
-    // MARK: Keyboard cleaning
 
     enum CleaningPhase { case idle, arming, cleaning }
     @Published private(set) var phase = CleaningPhase.idle
@@ -40,8 +34,6 @@ final class SystemStore: ObservableObject {
         if UserDefaults.standard.bool(forKey: "preventSleep") {
             enableSleepPrevention()
         }
-        // Explicit teardown on quit - never trust deinit for a power
-        // assertion or a live event tap.
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -49,7 +41,6 @@ final class SystemStore: ObservableObject {
         }
     }
 
-    /// Tab disabled or app quitting: release everything OS-visible.
     func shutdown() {
         stopCleaning()
         if preventingSleep {
@@ -61,8 +52,6 @@ final class SystemStore: ObservableObject {
             self.terminateObserver = nil
         }
     }
-
-    // MARK: - Prevent sleep
 
     func setPreventSleep(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: "preventSleep")
@@ -85,40 +74,34 @@ final class SystemStore: ObservableObject {
         preventingSleep = false
     }
 
-    // MARK: - Permissions
-
     func refreshPermissions() {
         hasInputMonitoring = CGPreflightListenEventAccess()
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         hasAccessibility = AXIsProcessTrustedWithOptions([key: false] as CFDictionary)
-        // The preflight flags lag behind a fresh grant until the app
-        // relaunches. The tap itself is the ground truth: if we can create
-        // one right now, both permissions effectively work right now.
         if (!hasInputMonitoring || !hasAccessibility), phase == .idle, probeTap() {
             hasInputMonitoring = true
             hasAccessibility = true
         }
     }
 
-    /// Try to create (and immediately destroy) a real event tap.
     private func probeTap() -> Bool {
         let callback: CGEventTapCallBack = { _, _, event, _ in
             Unmanaged.passUnretained(event)
         }
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: CGEventMask(1) << CGEventType.keyDown.rawValue,
-            callback: callback,
-            userInfo: nil)
+        guard
+            let tap = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .defaultTap,
+                eventsOfInterest: CGEventMask(1) << CGEventType.keyDown.rawValue,
+                callback: callback,
+                userInfo: nil)
         else { return false }
         CGEvent.tapEnable(tap: tap, enable: false)
         CFMachPortInvalidate(tap)
         return true
     }
 
-    /// Fresh process picks up fresh permission state.
     func relaunch() {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -127,9 +110,6 @@ final class SystemStore: ObservableObject {
         NSApp.terminate(nil)
     }
 
-    // The system prompt for each permission appears only ONCE per app
-    // identity - later requests silently no-op. So Grant always also opens
-    // the right System Settings pane, where the toggle actually lives.
     func requestInputMonitoring() {
         CGRequestListenEventAccess()
         openInputMonitoringSettings()
@@ -144,13 +124,18 @@ final class SystemStore: ObservableObject {
     }
 
     func openInputMonitoringSettings() {
-        NSWorkspace.shared.open(URL(string:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+        NSWorkspace.shared.open(
+            URL(
+                string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
     }
 
     func openAccessibilitySettings() {
-        NSWorkspace.shared.open(URL(string:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        NSWorkspace.shared.open(
+            URL(
+                string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        )
     }
 
     private func recheckSoon() {
@@ -159,12 +144,10 @@ final class SystemStore: ObservableObject {
         }
     }
 
-    // MARK: - Keyboard cleaning
-
     func beginCleaning() {
         refreshPermissions()
         guard phase == .idle, hasInputMonitoring, hasAccessibility else { return }
-        dismissPanel() // the overlay takes over from here
+        dismissPanel()
         phase = .arming
         armingCountdown = armingSeconds
         showOverlays()
@@ -187,7 +170,8 @@ final class SystemStore: ObservableObject {
         }
         phase = .cleaning
         failsafeRemaining = failsafeSeconds
-        failsafeTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+        failsafeTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) {
+            [weak self] timer in
             Task { @MainActor in
                 guard let self else { timer.invalidate(); return }
                 self.failsafeRemaining -= 1
@@ -197,7 +181,6 @@ final class SystemStore: ObservableObject {
                 }
             }
         }
-        // macOS can silently disable a tap (timeout, re-sign); re-arm it.
         healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let tap = self.eventTap else { return }
@@ -223,7 +206,7 @@ final class SystemStore: ObservableObject {
 
     private func showOverlays() {
         guard overlays.isEmpty else { return }
-        for screen in NSScreen.screens { // every display, not just .main
+        for screen in NSScreen.screens {
             let window = CleaningOverlayWindow(
                 screen: screen,
                 rootView: CleaningOverlayView(store: self))
@@ -232,15 +215,11 @@ final class SystemStore: ObservableObject {
         }
     }
 
-    // MARK: Event tap
-
     private func installEventTap() -> Bool {
         func bit(_ type: CGEventType) -> CGEventMask { CGEventMask(1) << type.rawValue }
-        // systemDefined carries the function-row/media keys - without it,
-        // letters block but volume/brightness/play-pause leak through.
         let mask: CGEventMask =
             bit(.keyDown) | bit(.keyUp) | bit(.flagsChanged)
-            | (CGEventMask(1) << 14) // NX_SYSDEFINED (media/function keys)
+            | (CGEventMask(1) << 14)
 
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
@@ -251,16 +230,17 @@ final class SystemStore: ObservableObject {
                 }
                 return nil
             }
-            return nil // swallow every keyboard event while cleaning
+            return nil
         }
 
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: callback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque())
+        guard
+            let tap = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .defaultTap,
+                eventsOfInterest: mask,
+                callback: callback,
+                userInfo: Unmanaged.passUnretained(self).toOpaque())
         else { return false }
 
         eventTap = tap

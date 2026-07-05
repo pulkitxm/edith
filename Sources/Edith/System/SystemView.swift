@@ -19,10 +19,13 @@ struct SystemView: View {
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
-                    Toggle("", isOn: Binding(
-                        get: { store.preventingSleep },
-                        set: { store.setPreventSleep($0) }
-                    ))
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { store.preventingSleep },
+                            set: { store.setPreventSleep($0) }
+                        )
+                    )
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -34,10 +37,12 @@ struct SystemView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 eyebrow("KEYBOARD")
-                Text("Blocks every key - letters, shortcuts, volume, brightness - so you can wipe the keyboard. The trackpad stays live; exit with the Done button or the 60s auto-restore.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Blocks every key - letters, shortcuts, volume, brightness - so you can wipe the keyboard. The trackpad stays live; exit with the Done button or the 60s auto-restore."
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
                 if !store.hasInputMonitoring || !store.hasAccessibility {
                     permissionRow(
@@ -47,10 +52,12 @@ struct SystemView: View {
                         "Accessibility", granted: store.hasAccessibility,
                         grant: { store.requestAccessibility() })
                     HStack(spacing: 6) {
-                        Text("Grant opens System Settings - flip Edith on there and this updates by itself. Still showing Grant after enabling?")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        Text(
+                            "Grant opens System Settings - flip Edith on there and this updates by itself. Still showing Grant after enabling?"
+                        )
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                         Button("Relaunch") { store.relaunch() }
                             .buttonStyle(HoverButtonStyle())
                             .font(.system(size: 11))
@@ -58,7 +65,7 @@ struct SystemView: View {
                             .help("macOS applies fresh grants only to a fresh process")
                     }
                     .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
-                        store.refreshPermissions() // live-updates the rows while you toggle
+                        store.refreshPermissions()
                     }
                 } else {
                     Button {

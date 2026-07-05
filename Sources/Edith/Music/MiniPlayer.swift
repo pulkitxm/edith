@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Compact now-playing bar shown outside the Music tab while audio plays:
-/// small title, elapsed/total, play-pause, volume. The full player owns the
-/// Music tab, so this only exists on the other screens.
 struct MiniPlayer: View {
     @ObservedObject var player: MusicPlayer
     let theme: Color
@@ -18,7 +15,6 @@ struct MiniPlayer: View {
                         .lineLimit(1)
                         .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                         .presenterBlur(presenter)
-                    // Ticks only while the pane is visible.
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text("\(timeLabel(player.elapsed)) / \(timeLabel(player.trackDuration))")
                             .font(.system(size: 10))
@@ -38,7 +34,9 @@ struct MiniPlayer: View {
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(HoverButtonStyle())
-                Button { player.isLooping.toggle() } label: {
+                Button {
+                    player.isLooping.toggle()
+                } label: {
                     Image(systemName: "repeat")
                         .font(.system(size: 12))
                         .foregroundStyle(player.isLooping ? theme : .secondary)

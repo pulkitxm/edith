@@ -1,9 +1,5 @@
 import Foundation
 
-/// Owns the per-tab stores and their lifecycles. A disabled tab's store is
-/// never created - no timers, no network, no audio session, no caches - and
-/// disabling a live tab tears its store down and frees those resources.
-/// Future tabs: add a flag + store pair here and a case in RootView.
 @MainActor
 final class AppServices: ObservableObject {
     @Published private(set) var usage: UsageStore?
@@ -19,7 +15,6 @@ final class AppServices: ObservableObject {
         sync()
     }
 
-    /// Reconcile live stores with the enabled-tab flags in UserDefaults.
     func sync() {
         let usageOn = Self.tabEnabled("tabUsageEnabled")
         let musicOn = Self.tabEnabled("tabMusicEnabled")

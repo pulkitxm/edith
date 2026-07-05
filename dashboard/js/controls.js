@@ -1,37 +1,35 @@
-import { shortModel, ymd } from "./format.js";
-import {
-  sourceLabel,
-  SOURCES,
-  DEFAULT_SOURCES,
-  ALL_MODELS,
-  DEFAULT_MODELS,
-  LATEST,
-  monthsInData,
-  cyclesInData,
-} from "./data.js";
-import {
-  sourceColor,
-  OTHER_COLOR,
-  MODEL_COLOR,
-  setPalette,
-} from "./palette.js";
-import { state, DEFAULT_BILLING_DAY } from "./state.js";
-import { writeParams } from "./params.js";
 import { cycleStart } from "./cycles.js";
 import {
+  ALL_MODELS,
+  cyclesInData,
+  DEFAULT_MODELS,
+  DEFAULT_SOURCES,
+  LATEST,
+  monthsInData,
+  SOURCES,
+  sourceLabel,
+} from "./data.js";
+import { shortModel, ymd } from "./format.js";
+import {
+  MODEL_COLOR,
+  OTHER_COLOR,
+  setPalette,
+  sourceColor,
+} from "./palette.js";
+import { writeParams } from "./params.js";
+import {
   liveRetheme,
-  renderTable,
-  renderProjectsTable,
-  renderHourly,
   openHourly,
   renderAll,
+  renderHourly,
+  renderProjectsTable,
+  renderTable,
   setHeatMetric,
   toggleProjList,
 } from "./render.js";
+import { DEFAULT_BILLING_DAY, state } from "./state.js";
 import { toast } from "./toast.js";
 
-// Copy text via the async Clipboard API, falling back to a hidden textarea on
-// file:// / older browsers where navigator.clipboard is unavailable.
 function copyText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(
@@ -50,14 +48,11 @@ function copyText(text) {
     document.execCommand("copy");
     ta.remove();
     toast("Copied chat id");
-  } catch (e) {
+  } catch (_e) {
     toast("Copy failed");
   }
 }
 
-// ============ SOURCE FILTER (multi-select dropdown) ============
-// Inline chips wrapped the controls bar once several sources existed, so the
-// source filter is a native <details> dropdown of checkbox rows instead.
 function sourceSummaryText() {
   const n = state.sources.size;
   if (n === SOURCES.length) return "All sources";
@@ -66,10 +61,10 @@ function sourceSummaryText() {
 }
 function updateSourceSummary() {
   const el = document.getElementById("source-summary");
-  if (el) el.textContent = sourceSummaryText(); // the ▾ caret is a ::after, untouched
+  if (el) el.textContent = sourceSummaryText();
 }
 export function buildSourceChips() {
-  if (SOURCES.length < 2) return; // single source → no filter / no chart card
+  if (SOURCES.length < 2) return;
   document.getElementById("source-group").style.display = "";
   document.getElementById("card-source").style.display = "";
   const menu = document.getElementById("source-menu");
@@ -88,8 +83,7 @@ export function buildSourceChips() {
       else if (state.sources.size === 1) {
         inp.checked = true;
         return;
-      } // keep ≥1 selected
-      else state.sources.delete(s);
+      } else state.sources.delete(s);
       updateSourceSummary();
       renderAll();
       writeParams();
@@ -98,7 +92,6 @@ export function buildSourceChips() {
   updateSourceSummary();
 }
 
-// ============ MODEL CHIPS ============
 export function buildChips() {
   const box = document.getElementById("model-chips");
   box.innerHTML = ALL_MODELS.map(
@@ -111,7 +104,7 @@ export function buildChips() {
     c.addEventListener("click", () => {
       const m = c.dataset.model;
       if (state.models.has(m)) {
-        if (state.models.size === 1) return; // keep at least one
+        if (state.models.size === 1) return;
         state.models.delete(m);
         c.setAttribute("aria-pressed", "false");
       } else {
@@ -124,7 +117,6 @@ export function buildChips() {
   );
 }
 
-// recolor chip swatches in place after a theme/palette change (no rebuild)
 function skinChips() {
   document.querySelectorAll("#model-chips .chip").forEach((c) => {
     const sw = c.querySelector(".swatch");
@@ -136,7 +128,6 @@ function skinChips() {
   });
 }
 
-// ============ CONTROL WIRING ============
 function setSeg(container, attr, val) {
   document
     .querySelectorAll(`#${container} button`)
@@ -147,7 +138,6 @@ function setSeg(container, attr, val) {
       ),
     );
 }
-// reflect state.range across the segment buttons, month <select> and date inputs
 export function buildMonthSelect() {
   const sel = document.getElementById("month-select");
   sel.innerHTML =
@@ -166,8 +156,6 @@ export function buildCycleSelect() {
 }
 export function syncRangeControls() {
   const r = state.range;
-  // The "This cycle" segment button represents the CURRENT billing cycle; past
-  // cycles are selected via the dropdown, so the two controls never both light up.
   const isCurrentCycle =
     r.mode === "cycle" &&
     LATEST &&
@@ -190,27 +178,21 @@ export function syncRangeControls() {
   document.getElementById("billing-day").value = String(state.billingDay);
 }
 
-// ---------- theme ----------
 export function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   document.documentElement.style.colorScheme = t;
   document.getElementById("theme-toggle").textContent =
     t === "dark" ? "☀" : "☾";
 }
-// Theme switch must NOT rebuild/recompute charts: update palette maps, then
-// recolor live chart instances (chart.update('none')) and re-skin chip swatches.
 function switchTheme(t) {
   state.theme = t;
   applyTheme(t);
-  setPalette(t); // refresh MODEL_COLOR / TOKEN_COLORS / SOURCE_COLOR for current theme
-  liveRetheme(); // recolor existing charts + DOM heatmap, no rebuild/recompute
-  skinChips(); // chip swatches read palette; cheap DOM update, no chart work
+  setPalette(t);
+  liveRetheme();
+  skinChips();
 }
 
-// Attach all DOM event listeners. Called once from app.js init (only when
-// there is data), preserving the original early-return-on-empty behavior.
 export function wireControls() {
-  // close the source dropdown when clicking anywhere outside it
   document.addEventListener("click", (e) => {
     const dd = document.getElementById("source-dd");
     if (dd && dd.open && !dd.contains(e.target)) dd.open = false;
@@ -219,8 +201,6 @@ export function wireControls() {
     const b = e.target.closest("button");
     if (!b) return;
     const m = b.dataset.range;
-    // "This cycle" resolves to the billing cycle containing the latest data day;
-    // the other presets are self-contained ({mode} is enough).
     state.range =
       m === "cycle" && LATEST
         ? { mode: "cycle", cycle: ymd(cycleStart(LATEST, state.billingDay)) }
@@ -248,8 +228,8 @@ export function wireControls() {
     if (!Number.isFinite(n)) n = DEFAULT_BILLING_DAY;
     n = Math.min(31, Math.max(1, n));
     state.billingDay = n;
-    e.target.value = String(n); // reflect clamping back to the input
-    if (state.range.mode === "cycle") state.range = { mode: "all" }; // old start may be stale
+    e.target.value = String(n);
+    if (state.range.mode === "cycle") state.range = { mode: "all" };
     buildCycleSelect();
     syncRangeControls();
     renderAll();
@@ -283,11 +263,9 @@ export function wireControls() {
       renderProjectsTable();
     }),
   );
-  // expand / collapse project + worktree rows (event delegation; rows rebuilt)
   document
     .querySelector("#tbl-projects tbody")
     .addEventListener("click", (e) => {
-      // ⌘/Ctrl-click a chat icon → copy its session id (takes precedence over expand)
       const ic = e.target.closest(".ticon.copyable[data-chat-id]");
       if (ic && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -301,21 +279,17 @@ export function wireControls() {
       else state.projExpanded.add(k);
       renderProjectsTable();
     });
-  // hourly day picker
   document.getElementById("hourly-date").addEventListener("change", (e) => {
     if (e.target.value) renderHourly(e.target.value);
   });
-  // heat-cell click → open the hourly view for that date
   document.getElementById("heat").addEventListener("click", (e) => {
     const cell = e.target.closest(".cell");
     if (cell && cell.dataset.date && !cell.dataset.empty)
       openHourly(cell.dataset.date);
   });
-  // activity-calendar metric toggle (transient - intentionally not persisted to the URL)
   document.getElementById("heat-metric").addEventListener("change", (e) => {
     setHeatMetric(e.target.value);
   });
-  // By-project list: the whole table is collapsed behind a toggle by default
   document.getElementById("proj-toggle").addEventListener("click", () => {
     state.projListOpen = !state.projListOpen;
     toggleProjList();
@@ -326,10 +300,6 @@ export function wireControls() {
   });
 
   document.getElementById("btn-reset").addEventListener("click", () => {
-    // "Reset" returns to the pristine first-load view: the current billing cycle
-    // (which rangeToParam leaves as a clean URL), the default (Claude Code) models
-    // and source filter, and a collapsed project list. Billing day & theme are
-    // preferences - left as set.
     state.range = LATEST
       ? { mode: "cycle", cycle: ymd(cycleStart(LATEST, state.billingDay)) }
       : { mode: "all" };
@@ -341,7 +311,7 @@ export function wireControls() {
     state.projListOpen = false;
     syncRangeControls();
     buildSourceChips();
-    buildChips(); // reset chip pressed-states
+    buildChips();
     renderAll();
     writeParams();
   });

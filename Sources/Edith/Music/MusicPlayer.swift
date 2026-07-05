@@ -5,15 +5,12 @@ import MediaPlayer
 struct Track: Identifiable, Equatable {
     let url: URL
     var id: URL { url }
-    /// "kishore-kumar-top-12.mp3" → "Kishore Kumar Top 12"
     var title: String {
         url.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "-", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
     }
-    /// Stable per-track hue for the no-artwork tile (djb2 - String.hashValue
-    /// is randomized per launch and would repaint every restart).
     var hue: Double {
         var h: UInt64 = 5381
         for b in url.lastPathComponent.utf8 { h = (h &* 33) &+ UInt64(b) }
@@ -32,7 +29,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
             UserDefaults.standard.set(volume, forKey: "musicVolume")
         }
     }
-    /// On track end: repeat the current song when true, else shuffle to a random one.
     @Published var isLooping: Bool {
         didSet { UserDefaults.standard.set(isLooping, forKey: "musicLooping") }
     }
@@ -45,19 +41,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     override init() {
         let saved = UserDefaults.standard.object(forKey: "musicVolume") as? Double
         volume = saved ?? 0.7
-        isLooping = UserDefaults.standard.bool(forKey: "musicLooping") // default off
+        isLooping = UserDefaults.standard.bool(forKey: "musicLooping")
         super.init()
         rescan()
-        restoreLastPlayback() // reload the last track, paused at its exact offset
+        restoreLastPlayback()
         setupRemoteCommands()
-        // Clean pause/stop persist the exact position; this 2s tick is the
-        // safety net for a crash or force-quit that never runs them.
         saveTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in if self?.isPlaying == true { self?.persistPlayback() } }
         }
     }
 
-    // Media keys / AirPods / the system Now Playing widget drive the player too.
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
@@ -98,16 +91,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         center.playbackState = isPlaying ? .playing : .paused
     }
 
-    // Everything CoreAudio opens on this machine - verified including mp4 and webm.
     private static let playableExtensions: Set<String> =
         ["mp3", "m4a", "m4b", "aac", "wav", "aiff", "flac", "mp4", "mov", "webm"]
 
-    /// The music folder is the source of truth - a plain directory listing, no manifest.
     func rescan() {
-        let files = (try? FileManager.default.contentsOfDirectory(
-            at: Repo.musicDir, includingPropertiesForKeys: nil
-        )) ?? []
-        tracks = files
+        let files =
+            (try? FileManager.default.contentsOfDirectory(
+                at: Repo.musicDir, includingPropertiesForKeys: nil
+            )) ?? []
+        tracks =
+            files
             .filter { Self.playableExtensions.contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .map(Track.init)
@@ -137,7 +130,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     func next() { step(1) }
     func previous() { step(-1) }
 
-    /// Jump to a random track, avoiding an immediate repeat when there's a choice.
     func playRandom() {
         if let track = Shuffle.pool(tracks, excluding: current).randomElement() { play(track) }
     }
@@ -151,7 +143,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private func play(_ track: Track) {
         player?.stop()
         guard let p = try? AVAudioPlayer(contentsOf: track.url) else {
-            // unreadable file - drop it from the list and move on
             tracks.removeAll { $0 == track }
             return
         }
@@ -161,7 +152,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         p.volume = 0
         p.prepareToPlay()
         p.play()
-        p.setVolume(Float(volume), fadeDuration: fade) // gentle fade-in keeps it smooth
+        p.setVolume(Float(volume), fadeDuration: fade)
         current = track
         isPlaying = true
         updateNowPlaying()
@@ -172,9 +163,9 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         guard let p = player else { return }
         p.setVolume(0, fadeDuration: fade)
         isPlaying = false
-        persistPlayback() // capture the exact pause point
+        persistPlayback()
         DispatchQueue.main.asyncAfter(deadline: .now() + fade) { [weak self] in
-            guard let self, !self.isPlaying else { return } // resumed during the fade
+            guard let self, !self.isPlaying else { return }
             self.player?.pause()
         }
         updateNowPlaying()
@@ -189,7 +180,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 
     func stop() {
-        persistPlayback() // remember where we were before dropping the track
+        persistPlayback()
         player?.stop()
         player = nil
         current = nil
@@ -197,28 +188,25 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         updateNowPlaying()
     }
 
-    /// Tab disabled → stop audio, release caches, unhook the media keys.
     func shutdown() {
         stop()
         tracks = []
         artworkCache.removeAll()
         durationCache.removeAll()
         let center = MPRemoteCommandCenter.shared()
-        [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
-         center.nextTrackCommand, center.previousTrackCommand]
-            .forEach { $0.removeTarget(nil) }
+        [
+            center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
+            center.nextTrackCommand, center.previousTrackCommand,
+        ]
+        .forEach { $0.removeTarget(nil) }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
-    /// 0…1 for the progress bar; polled by a TimelineView that only ticks while visible.
     func progressNow() -> Double {
         guard let p = player, p.duration > 0 else { return 0 }
         return p.currentTime / p.duration
     }
 
-    /// 0...1 live output level for the visualizer bars; 0 when paused or
-    /// stopped. Polled from TimelineViews that only tick while a player
-    /// surface is visible - updateMeters() is cheap.
     func meterLevel() -> Double {
         guard isPlaying, let p = player else { return 0 }
         p.updateMeters()
@@ -228,7 +216,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     var elapsed: TimeInterval { player?.currentTime ?? 0 }
     var trackDuration: TimeInterval { player?.duration ?? 0 }
 
-    /// Jump to a fraction of the current track (works paused or playing).
     func seek(to fraction: Double) {
         guard let p = player, p.duration > 0 else { return }
         p.currentTime = min(max(fraction, 0), 0.999) * p.duration
@@ -238,7 +225,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private var durationCache: [URL: TimeInterval] = [:]
 
-    /// "3:42" - loaded lazily per row, cached for the app's lifetime.
     func durationLabel(for track: Track) async -> String? {
         let seconds: TimeInterval
         if let hit = durationCache[track.url] {
@@ -267,8 +253,9 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 }
             }
         }
-        // Video containers (mp4/webm/mov): a frame from ~20% in is the thumbnail.
-        if let videoTracks = try? await asset.loadTracks(withMediaType: .video), !videoTracks.isEmpty {
+        if let videoTracks = try? await asset.loadTracks(withMediaType: .video),
+            !videoTracks.isEmpty
+        {
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: 120, height: 120)
@@ -283,22 +270,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         return nil
     }
 
-    // MARK: - Session restore
-
-    /// Save the current track + exact offset (seconds, sub-second kept) so a
-    /// relaunch can resume from the same spot.
     private func persistPlayback() {
         guard let current else { return }
         UserDefaults.standard.set(current.url.lastPathComponent, forKey: "musicLastTrack")
         UserDefaults.standard.set(elapsed, forKey: "musicLastPosition")
     }
 
-    /// At launch, reload the last track paused at its saved offset. Never
-    /// autoplays - the user presses play to resume exactly where they left off.
     private func restoreLastPlayback() {
         guard current == nil,
-              let name = UserDefaults.standard.string(forKey: "musicLastTrack"),
-              let track = tracks.first(where: { $0.url.lastPathComponent == name })
+            let name = UserDefaults.standard.string(forKey: "musicLastTrack"),
+            let track = tracks.first(where: { $0.url.lastPathComponent == name })
         else { return }
         let position = UserDefaults.standard.double(forKey: "musicLastPosition")
         guard let p = try? AVAudioPlayer(contentsOf: track.url) else { return }
@@ -307,28 +288,24 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         p.delegate = self
         p.volume = Float(volume)
         p.prepareToPlay()
-        if position > 0, position < p.duration { p.currentTime = position } // else start at 0
+        if position > 0, position < p.duration { p.currentTime = position }
         current = track
         isPlaying = false
         updateNowPlaying()
     }
 
-    // MARK: - AVAudioPlayerDelegate
-
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             if self.isLooping, let current = self.current {
-                self.play(current) // repeat the same track
+                self.play(current)
             } else {
-                self.playRandom() // shuffle onward → endless background mix
+                self.playRandom()
             }
         }
     }
 }
 
 enum Shuffle {
-    /// Candidates for a random pick: everything but `current`, unless excluding it
-    /// would leave nothing (single-track library) — then the whole list.
     static func pool<T: Equatable>(_ all: [T], excluding current: T?) -> [T] {
         let rest = all.filter { $0 != current }
         return rest.isEmpty ? all : rest

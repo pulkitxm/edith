@@ -17,8 +17,6 @@ struct MusicView: View {
                     .multilineTextAlignment(.center)
                     .padding(.vertical, 28)
             } else {
-                // Size the list to its real content (46pt rows + 2pt gaps) so no
-                // scrollbar appears until the library actually outgrows 520pt.
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(player.tracks) { track in
@@ -31,13 +29,12 @@ struct MusicView: View {
                 nowPlayingBar
             }
         }
-        .onAppear { player.rescan() } // folder listing is cheap; keeps list in sync
+        .onAppear { player.rescan() }
     }
 
     private var nowPlayingBar: some View {
         VStack(spacing: 10) {
             if player.current != nil {
-                // Ticks only while the panel is visible - zero cost when closed.
                 TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                     HStack(spacing: 10) {
                         Text(timeLabel(player.elapsed))
@@ -67,23 +64,31 @@ struct MusicView: View {
                     }
                 }
                 Spacer()
-                Button { player.previous() } label: {
+                Button {
+                    player.previous()
+                } label: {
                     Image(systemName: "backward.fill")
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(HoverButtonStyle())
-                Button { player.playPause() } label: {
+                Button {
+                    player.playPause()
+                } label: {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 18))
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(HoverButtonStyle())
-                Button { player.next() } label: {
+                Button {
+                    player.next()
+                } label: {
                     Image(systemName: "forward.fill")
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(HoverButtonStyle())
-                Button { player.isLooping.toggle() } label: {
+                Button {
+                    player.isLooping.toggle()
+                } label: {
                     Image(systemName: "repeat")
                         .font(.system(size: 13))
                         .foregroundStyle(player.isLooping ? theme : .secondary)
@@ -103,15 +108,13 @@ struct MusicView: View {
         .background {
             if let track = player.current {
                 AmbientGlow(track: track, player: player)
-                    .clipShape(RoundedRectangle(cornerRadius: 12)) // matches card()'s shape
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .animation(.easeInOut(duration: 0.6), value: track.id)
             }
         }
         .animation(.easeInOut(duration: 0.6), value: player.current)
     }
 
-    /// Drag-to-seek progress capsule; while dragging it previews the grab point
-    /// and only commits the seek on release.
     private var scrubber: some View {
         GeometryReader { geo in
             let fraction = dragFraction ?? player.progressNow()
@@ -121,7 +124,7 @@ struct MusicView: View {
                     .fill(theme.opacity(0.85))
                     .frame(width: max(3, geo.size.width * fraction))
             }
-            .contentShape(Rectangle().inset(by: -8)) // fat hit target for a 4pt bar
+            .contentShape(Rectangle().inset(by: -8))
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { dragFraction = min(max($0.location.x / geo.size.width, 0), 1) }
@@ -167,7 +170,6 @@ private struct TrackRow: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     } else {
-                        // No embedded art → stable per-track tinted tile.
                         ZStack {
                             LinearGradient(
                                 colors: [
@@ -212,7 +214,8 @@ private struct TrackRow: View {
         }
         .buttonStyle(.plain)
         .background(
-            isCurrent ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+            isCurrent
+                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: 7)
         )
         .onHover { over in

@@ -1,11 +1,6 @@
-// Limits history card: session + weekly utilization curves over time with
-// threshold rules and reset markers. Self-contained: own range state (the
-// global range controls are calendar-date based; limits are rolling-window).
-import { mount, GRIDC, baseTooltip } from "./charts.js";
-import { sliceRange, resetMarkers } from "../limits.mjs";
+import { resetMarkers, sliceRange } from "../limits.mjs";
+import { baseTooltip, GRIDC, mount } from "./charts.js";
 
-// ponytail: thresholds mirror the app defaults (60/85); the dashboard can't
-// read the app's UserDefaults.
 const WARN = 60,
   CRIT = 85;
 const SESSION_C = "#d97757",
@@ -65,7 +60,7 @@ export function initLimitsCard() {
     LP =
       JSON.parse(document.getElementById("limits-data")?.textContent || "{}")
         .points || [];
-  } catch (e) {
+  } catch (_e) {
     LP = [];
   }
   if (!LP.length) {
@@ -101,7 +96,6 @@ function renderLimits() {
   const now = LP[LP.length - 1].t;
   const pts = sliceRange(LP, now, RANGES[range]);
   if (!pts.length) return;
-  // Session windows roll every ~5h - beyond 7d the markers are pure noise.
   const marks = resetMarkers(pts).filter(
     (m) => m.kind === "weekly" || (RANGES[range] ?? Infinity) <= 7 * 864e5,
   );

@@ -1,7 +1,5 @@
 import Foundation
 
-/// Threshold-mode config (user-tunable in Settings). Smart mode ignores these
-/// and is self-calibrated by the balanced-profile constants below.
 struct UsageThresholds: Equatable {
     var warningPercent: Int
     var criticalPercent: Int
@@ -34,31 +32,22 @@ enum LimitWindowKind: String {
     var duration: TimeInterval { self == .session ? 5 * 3600 : 7 * 24 * 3600 }
 }
 
-/// Smart-color risk model, ported from TokenEater (SmartColor.swift) with the
-/// "balanced" profile inlined. Pure functions; risk is a continuous [0,1]
-/// score combining absolute usage, end-of-window projection, and pacing.
 enum LimitMath {
-    // Balanced-profile constants (TokenEater SmartColorProfile.balanced).
-    static let k = 5.0            // confidence growth rate
-    static let projUpper = 1.4    // projection-overflow smoothstep upper bound
+    static let k = 5.0
+    static let projUpper = 1.4
     static let absoluteLower = 0.50
     static let absoluteUpper = 1.00
     static let risingChill = 0.30, risingWarning = 0.55, risingHot = 0.78
     static let fallingChill = 0.25, fallingWarning = 0.50, fallingHot = 0.73
 
-    /// Hermite-smoothed step: 0 at <= a, 1 at >= b, C1-continuous between.
     static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
         guard a < b else { return x >= b ? 1 : 0 }
         let t = max(0, min(1, (x - a) / (b - a)))
         return t * t * (3 - 2 * t)
     }
 
-    /// Confidence in the rate estimate, 0 -> ~1 across the window; dampens
-    /// projection/pacing risk early when a few elapsed minutes make the rate noisy.
     static func confidence(e: Double) -> Double { 1 - exp(-k * max(0, e)) }
 
-    /// Combined risk: max of absolute (dampened by projection health),
-    /// projection overflow, and pacing delta. u, e, m all in [0,1].
     static func combinedRisk(u: Double, e: Double, m: Double) -> Double {
         if u >= 1.0 { return 1.0 }
         let aRaw = smoothstep(absoluteLower, absoluteUpper, u)
@@ -72,8 +61,6 @@ enum LimitMath {
         return max(a, max(b, c))
     }
 
-    /// Risk for a limit window. utilization in 0..100; falls back to pure
-    /// absolute risk when there's no reset date to derive elapsed time from.
     static func smartRisk(
         utilization: Double, resetsAt: Date?, windowDuration: TimeInterval,
         pacingMargin: Double, now: Date = Date()
@@ -88,14 +75,12 @@ enum LimitMath {
         return combinedRisk(u: u, e: e, m: pacingMargin / 100)
     }
 
-    /// 3-level mapping used by notifications and the menu bar (TokenEater legacyLevel).
     static func level(forRisk risk: Double) -> UsageLevel {
         if risk >= 0.78 { return .red }
         if risk >= 0.50 { return .orange }
         return .green
     }
 
-    /// 4-zone discretisation with falling-edge hysteresis (5pp buffer).
     static func zone(forRisk risk: Double, previous: PacingZone? = nil) -> PacingZone {
         let r = max(0, min(1, risk))
         func rising() -> PacingZone {
@@ -125,8 +110,6 @@ enum LimitMath {
         }
     }
 
-    /// Pacing: actual utilization minus the linear "expected by now" pace, in
-    /// percentage points. Full-window only (TokenEater's schedule feature not ported).
     static func pacingDelta(
         utilization: Double, resetsAt: Date, windowDuration: TimeInterval, now: Date = Date()
     ) -> Double {
@@ -135,7 +118,6 @@ enum LimitMath {
         return utilization - elapsed * 100
     }
 
-    /// chill < -margin <= onTrack <= +margin < warning <= 2*margin < hot
     static func pacingZone(delta: Double, margin: Double) -> PacingZone {
         if delta < -margin { return .chill }
         if delta <= margin { return .onTrack }

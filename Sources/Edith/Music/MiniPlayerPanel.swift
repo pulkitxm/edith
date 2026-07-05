@@ -2,10 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// The detached now-playing pane: a real second window (borderless,
-/// non-activating, its own glass) attached as a child of the menu bar panel,
-/// floating below it with a visible gap - the OneMenu look. It slides up into
-/// the main pane when hidden and emerges from it when shown.
 @MainActor
 final class MiniPanel {
     static let shared = MiniPanel()
@@ -23,8 +19,6 @@ final class MiniPanel {
     private var lastFrameChange = Date.distantPast
     private var retryScheduled = false
 
-    /// Called right before a tab/settings switch: the panel is about to
-    /// resize, so hold any entrance until its frame settles.
     func expectResize() {
         lastFrameChange = Date()
     }
@@ -51,12 +45,11 @@ final class MiniPanel {
         } else {
             lastParentFrame = nil
         }
-        let wantsVisible = parent != nil
+        let wantsVisible =
+            parent != nil
             && player?.current != nil
             && (tab != "music" || showSettings)
         if wantsVisible, let parent, let player {
-            // Entering mid-resize would slide in at a stale position and then
-            // visibly shift; wait until the frame has been still for a beat.
             if !shown, Date().timeIntervalSince(lastFrameChange) < 0.3 {
                 scheduleRetry()
                 return
@@ -88,15 +81,12 @@ final class MiniPanel {
             width: parent.frame.width,
             height: height)
 
-        // Inherit the menu bar panel's level and space behavior - at the default
-        // window level the pane renders BEHIND whatever app is frontmost.
         p.level = parent.level
         p.collectionBehavior = parent.collectionBehavior
         if parent.childWindows?.contains(p) != true {
             parent.addChildWindow(p, ordered: .above)
         }
         if !shown {
-            // emerge from behind the main pane: start tucked up + transparent
             p.setFrame(target.offsetBy(dx: 0, dy: height * 0.6), display: false)
             p.alphaValue = 0
             p.orderFront(nil)
@@ -108,8 +98,8 @@ final class MiniPanel {
             }
             shown = true
         } else {
-            p.setFrame(target, display: true) // track parent moves/resizes
-            if !p.isVisible { // rescued from an interrupted hide animation
+            p.setFrame(target, display: true)
+            if !p.isVisible {
                 p.alphaValue = 1
                 p.orderFront(nil)
             }
@@ -120,20 +110,20 @@ final class MiniPanel {
         guard shown, let p = panel else { return }
         shown = false
         let tucked = p.frame.offsetBy(dx: 0, dy: height * 0.6)
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            p.animator().setFrame(tucked, display: true)
-            p.animator().alphaValue = 0
-        }, completionHandler: {
-            Task { @MainActor in
-                // a newer present() may have re-shown the pane mid-fade;
-                // tearing it down now would leave it invisible until resync
-                guard !MiniPanel.shared.shown else { return }
-                p.parent?.removeChildWindow(p)
-                p.orderOut(nil)
-            }
-        })
+        NSAnimationContext.runAnimationGroup(
+            { ctx in
+                ctx.duration = 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                p.animator().setFrame(tucked, display: true)
+                p.animator().alphaValue = 0
+            },
+            completionHandler: {
+                Task { @MainActor in
+                    guard !MiniPanel.shared.shown else { return }
+                    p.parent?.removeChildWindow(p)
+                    p.orderOut(nil)
+                }
+            })
     }
 
     private func makePanel(player: MusicPlayer) -> NSPanel {
@@ -147,7 +137,6 @@ final class MiniPanel {
         p.becomesKeyOnlyIfNeeded = true
         p.isMovable = false
 
-        // own glass: behind-window blur clipped to a rounded pane
         let effect = NSVisualEffectView()
         effect.material = .popover
         effect.blendingMode = .behindWindow
@@ -172,7 +161,6 @@ final class MiniPanel {
     }
 }
 
-/// Wrapper giving the detached pane its theme + backing tint.
 struct MiniPlayerDetached: View {
     @ObservedObject var player: MusicPlayer
     @AppStorage("theme") private var themeName = "accent"

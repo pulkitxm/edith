@@ -1,18 +1,11 @@
 import AppKit
 import EventKit
 
-/// Calendar tab: an upcoming-events agenda via EventKit, from the start of
-/// today forward over a rolling window that grows as the user scrolls. Read-
-/// only, all calendars, no polling - EventKit pushes `.EKEventStoreChanged`
-/// on any edit and we also refresh on wake (matches UsageStore's wake-
-/// refresh), both re-fetching the current window.
 @MainActor
 final class CalendarStore: ObservableObject {
     @Published private(set) var events: [EKEvent] = []
     @Published private(set) var authStatus: EKAuthorizationStatus
 
-    // How many days ahead the agenda currently covers. Grows on scroll (see
-    // loadMore) up to a ceiling so an empty calendar can't loop forever.
     private var daysLoaded = 14
     private static let maxDays = 120
 
@@ -35,7 +28,6 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    /// Tab disabled or app quitting: drop the live subscriptions.
     func shutdown() {
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
@@ -43,9 +35,6 @@ final class CalendarStore: ObservableObject {
         wakeObserver = nil
     }
 
-    /// The OS calendar prompt fires only once per app identity - same
-    /// caveat as SystemStore's Accessibility/Input Monitoring requests - so
-    /// Grant always also opens the right System Settings pane.
     func requestAccess() {
         Task { @MainActor in
             _ = try? await store.requestFullAccessToEvents()
@@ -70,8 +59,6 @@ final class CalendarStore: ObservableObject {
         events = CalendarDayEvents.sorted(store.events(matching: predicate))
     }
 
-    /// Scrolled to the bottom: widen the window and re-fetch. No-op once we've
-    /// hit the ceiling, so a sparse calendar stops instead of loading forever.
     func loadMore() {
         guard daysLoaded < Self.maxDays else { return }
         daysLoaded = min(daysLoaded + 14, Self.maxDays)
@@ -79,7 +66,9 @@ final class CalendarStore: ObservableObject {
     }
 
     func openCalendarSettings() {
-        NSWorkspace.shared.open(URL(string:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+        NSWorkspace.shared.open(
+            URL(
+                string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
     }
 }

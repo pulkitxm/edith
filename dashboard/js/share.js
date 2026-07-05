@@ -1,11 +1,10 @@
-import { statsSummary } from "./stats.js";
-import { derive, activeWindow } from "./compute.js";
+import { activeWindow, derive } from "./compute.js";
+import { fmtTok, fmtUSD, MON, shortModel } from "./format.js";
 import { workSummary } from "./render.js";
 import { charts, state } from "./state.js";
-import { fmtUSD, fmtTok, shortModel, MON } from "./format.js";
+import { statsSummary } from "./stats.js";
 import { toast } from "./toast.js";
 
-// read a CSS custom property off <body>, with a fallback (mirrors charts.js)
 const cssVar = (n, fallback) =>
   getComputedStyle(document.body).getPropertyValue(n).trim() || fallback;
 function cardTheme() {
@@ -26,7 +25,6 @@ const dlabel = (d, withYear) =>
   `${d.getDate()} ${MON[d.getMonth()]}` +
   (withYear ? ` ${d.getFullYear()}` : "");
 
-// Subtitle for the share card: "All time" or "26 May – 25 Jun 2026".
 export function rangeLabel() {
   if (state.range.mode === "all") return "All time";
   const w = activeWindow();
@@ -57,15 +55,13 @@ function triggerDownload(canvas, filename) {
   }, "image/png");
 }
 
-// Lay metric cells out in a centered, auto-balanced grid (≤3 per row). Partial
-// last rows are centered, so the card reads well for any number of metrics.
 function drawFlexGrid(ctx, t, cells, { PAD, W, blurCost, blurred }) {
   const n = cells.length;
   if (!n) return;
   const contentW = W - PAD * 2;
   const maxPerRow = 3;
   const rows = Math.ceil(n / maxPerRow);
-  const cols = Math.ceil(n / rows); // balance: e.g. 4 → 2×2, 6 → 3×2
+  const cols = Math.ceil(n / rows);
   const cellW = contentW / cols;
   const rowH = 112;
   const bandTop = 318,
@@ -77,7 +73,7 @@ function drawFlexGrid(ctx, t, cells, { PAD, W, blurCost, blurred }) {
   for (let i = 0; i < n; i++) {
     const r = Math.floor(i / cols);
     const rowStart = r * cols;
-    const rowCount = Math.min(cols, n - rowStart); // cells on this row
+    const rowCount = Math.min(cols, n - rowStart);
     const rowLeft = PAD + (contentW - rowCount * cellW) / 2;
     const x = rowLeft + (i - rowStart) * cellW;
     const yLabel = firstLabelY + r * rowH;
@@ -95,7 +91,6 @@ function drawFlexGrid(ctx, t, cells, { PAD, W, blurCost, blurred }) {
   }
 }
 
-// ---------- branded share card (current filtered stats) → returns a canvas ----------
 export function drawShareCard(opts = {}) {
   const { blurCost = false } = opts;
   const s = statsSummary(derive());
@@ -110,9 +105,6 @@ export function drawShareCard(opts = {}) {
   const ctx = canvas.getContext("2d");
   ctx.scale(SCALE, SCALE);
 
-  // Redact a $ value: draw it under a heavy blur, stamped a few times so it
-  // stays visible as a smudge but is no longer legible. Radius scales with the
-  // font size (≈0.45×) so digits merge into a blob at any size.
   const blurred = (radius, fn, stamps = 3) => {
     ctx.save();
     ctx.filter = `blur(${radius}px)`;
@@ -123,12 +115,11 @@ export function drawShareCard(opts = {}) {
   ctx.fillStyle = t.bg;
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = t.accent;
-  ctx.fillRect(0, 0, W, 6); // accent top rule
+  ctx.fillRect(0, 0, W, 6);
 
   const PAD = 72,
     COL2 = PAD + 470;
 
-  // header
   ctx.fillStyle = t.ink;
   ctx.font = `600 38px ${t.serif}`;
   ctx.fillText("Claude Code · Usage", PAD, 96);
@@ -136,7 +127,6 @@ export function drawShareCard(opts = {}) {
   ctx.font = `19px ${t.mono}`;
   ctx.fillText(rangeLabel(), PAD, 128);
 
-  // hero numbers - big value on top, caption beneath (cost can be blurred)
   ctx.font = `700 84px ${t.mono}`;
   const drawCost = () => {
     ctx.fillStyle = t.gold;
@@ -151,11 +141,9 @@ export function drawShareCard(opts = {}) {
   ctx.fillText("TOTAL COST", PAD, 262);
   ctx.fillText("TOTAL TOKENS", COL2, 262);
 
-  // hairline divider
   ctx.fillStyle = t.line;
   ctx.fillRect(PAD, 296, W - PAD * 2, 1);
 
-  // metric grid - focused on work produced (auto-flex, centered)
   const cells = [
     {
       label: "INPUT / OUTPUT",
@@ -170,7 +158,6 @@ export function drawShareCard(opts = {}) {
   return canvas;
 }
 
-// ---------- preview modal: shows the card + a blur-cost toggle before saving ----------
 function openCardModal() {
   const overlay = document.createElement("div");
   overlay.className = "card-modal-overlay";
@@ -194,7 +181,7 @@ function openCardModal() {
     canvas = drawShareCard({ blurCost: blur.checked });
     img.src = canvas.toDataURL("image/png");
   };
-  refresh(); // blur off by default
+  refresh();
   blur.addEventListener("change", refresh);
 
   const close = () => {
@@ -216,13 +203,6 @@ function openCardModal() {
   });
 }
 
-// ---------- activity-calendar PNG (the whole card box, exactly as rendered) ----------
-// The calendar card is HTML/CSS (grid + a rich stats panel), not a <canvas>, so we
-// can't export it like the charts. Instead we rasterize the live DOM: clone the
-// card, inline the page styles + active theme variables, wrap it in an SVG
-// <foreignObject>, and paint that onto a canvas. This captures the entire box -
-// calendar grid, headline, model/source bars, sparkline - and stays correct as
-// the panel evolves, with no external dependency.
 export async function downloadHeatmap() {
   const card =
     document.getElementById("heat") &&
@@ -232,15 +212,11 @@ export async function downloadHeatmap() {
     const SCALE = 2;
     const pageBg = cssVar("--paper", "#fff");
 
-    // Clone the card, then strip / freeze the interactive chrome we don't want
-    // baked into a static image.
     const clone = card.cloneNode(true);
-    clone.querySelectorAll(".heat-dl").forEach((el) => el.remove()); // the download button itself
+    clone.querySelectorAll(".heat-dl").forEach((el) => el.remove());
     clone.querySelectorAll(".heat-wrap").forEach((el) => {
       el.style.overflow = "visible";
-    }); // include scrolled-off weeks
-    // A live <select> renders unreliably inside foreignObject - replace it with a
-    // static chip showing its current value.
+    });
     const liveSel = document.getElementById("heat-metric");
     const cloneSel = clone.querySelector("#heat-metric");
     if (liveSel && cloneSel) {
@@ -253,8 +229,6 @@ export async function downloadHeatmap() {
       cloneSel.replaceWith(chip);
     }
 
-    // Measure at the live width (so the compact/wide layout decision matches), then
-    // grow to include any calendar wider than its horizontal scroll.
     clone.style.boxSizing = "border-box";
     clone.style.width = card.offsetWidth + "px";
     clone.style.position = "fixed";
@@ -263,10 +237,7 @@ export async function downloadHeatmap() {
     clone.style.margin = "0";
     document.body.appendChild(clone);
     const W = Math.ceil(Math.max(clone.scrollWidth, clone.offsetWidth));
-    clone.style.width = W + "px"; // relayout so header/legend span the full width
-    // Measure from the furthest descendant's bottom edge, not scrollHeight: the
-    // stats column can overflow its flex box (visible overflow), and those pixels
-    // - the DAILY sparkline - don't count toward scrollHeight, so it would crop.
+    clone.style.width = W + "px";
     const cloneTop = clone.getBoundingClientRect().top;
     let maxBottom = clone.getBoundingClientRect().bottom;
     clone.querySelectorAll("*").forEach((el) => {
@@ -274,16 +245,12 @@ export async function downloadHeatmap() {
       if (b > maxBottom) maxBottom = b;
     });
     const H = Math.ceil(maxBottom - cloneTop);
-    // TEMP DEBUG - capture before clone is removed
     const _sp = clone.querySelector(".hs-spark");
     const _dbgSparkBottom = _sp
       ? Math.round(_sp.getBoundingClientRect().bottom - cloneTop)
       : -1;
     const _dbgScrollH = clone.scrollHeight;
 
-    // foreignObject is its own root, so it doesn't inherit the page's :root/body
-    // theme context. Resolve every CSS variable the stylesheet declares against the
-    // active theme and pin them on the clone so var() works inside the SVG.
     const styleText = [...document.querySelectorAll("style")]
       .map((s) => s.textContent)
       .join("\n");
@@ -298,10 +265,6 @@ export async function downloadHeatmap() {
       if (v) vars += `${n}:${v.trim()};`;
     });
 
-    // The card normally inherits its text color/font and color-scheme from
-    // <body>/<html>; inside the foreignObject neither exists, so un-colored text
-    // (e.g. the card title) falls back to the default black. Pin the resolved
-    // values so inheritance matches the live page in either theme.
     const inherited =
       `color:${bodyCS.color};font-family:${bodyCS.fontFamily};` +
       `font-size:${bodyCS.fontSize};line-height:${bodyCS.lineHeight};` +
@@ -320,9 +283,6 @@ export async function downloadHeatmap() {
     const svg =
       `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">` +
       `<foreignObject x="0" y="0" width="${W}" height="${H}">` +
-      // CDATA: the SVG is parsed as XML, so a stray `<`/`&` in the CSS (e.g. a
-      // comment mentioning "<details>") would break the parse and the image
-      // would fail to load. ponytail: breaks only on a literal `]]>` in CSS.
       `<div xmlns="http://www.w3.org/1999/xhtml"><style><![CDATA[${styleText}]]></style>${xhtml}</div>` +
       `</foreignObject>` +
       `</svg>`;
@@ -346,7 +306,7 @@ export async function downloadHeatmap() {
     const ctx = canvas.getContext("2d");
     ctx.scale(SCALE, SCALE);
     ctx.fillStyle = pageBg;
-    ctx.fillRect(0, 0, W, H); // page color behind the card's rounded corners
+    ctx.fillRect(0, 0, W, H);
     ctx.drawImage(img, 0, 0, W, H);
 
     const title =
@@ -361,12 +321,11 @@ export async function downloadHeatmap() {
       `H=${H} sparkBot=${_dbgSparkBottom} img=${img.naturalHeight} sh=${_dbgScrollH}`,
     );
   } catch (e) {
-    console.error("[heatmap export]", e); // ponytail: console keeps the real cause; toast stays terse
+    console.error("[heatmap export]", e);
     toast("Couldn't export calendar");
   }
 }
 
-// ---------- per-chart PNG (chart canvas on a solid theme background) ----------
 export function downloadChart(canvasId) {
   const chart = charts[canvasId];
   if (!chart) return;
@@ -387,13 +346,12 @@ export function downloadChart(canvasId) {
   triggerDownload(out, `cc-usage_${slug}.png`);
 }
 
-// ---------- wiring (called once on init) ----------
 export function wireShareButtons() {
   const share = document.getElementById("btn-share");
   if (share) share.addEventListener("click", openCardModal);
   document.querySelectorAll(".card").forEach((card) => {
     const cv = card.querySelector("canvas");
-    if (!cv || !cv.id) return; // skip cards without a chart canvas (heatmap, tables)
+    if (!cv || !cv.id) return;
     const head = card.querySelector(".card-head");
     if (!head) return;
     const btn = document.createElement("button");
@@ -407,9 +365,6 @@ export function wireShareButtons() {
     head.appendChild(btn);
   });
 
-  // The activity calendar is an HTML/CSS heatmap (no <canvas>), so the loop above
-  // skips it. Give it its own ⤓, placed inline beside the metric dropdown - the
-  // top-right corner where .chart-dl normally sits is taken by that dropdown.
   const metricSel = document.getElementById("heat-metric");
   if (metricSel && document.getElementById("heat")) {
     const btn = document.createElement("button");

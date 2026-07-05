@@ -1,10 +1,6 @@
 import Charts
 import SwiftUI
 
-/// Compact last-24h limits curve: session (theme color) + weekly (gray),
-/// stepped lines with dashed threshold rules. Points are sparse (writes are
-/// deduped) - stepEnd interpolation carries values forward, and a synthetic
-/// tail point extends each line to "now".
 struct LimitsChartView: View {
     let points: [LimitPoint]
     let theme: Color
@@ -25,7 +21,7 @@ struct LimitsChartView: View {
         for (key, name) in [(\LimitPoint.s, "Session"), (\LimitPoint.w, "Weekly")] {
             let pts = points.compactMap { p in p[keyPath: key].map { (p.date, $0) } }
             out += pts.map { Sample(date: $0.0, value: $0.1, series: name) }
-            if let last = pts.last, last.0 < now { // carry the last value to now
+            if let last = pts.last, last.0 < now {
                 out.append(Sample(date: now, value: last.1, series: name))
             }
         }
@@ -38,10 +34,11 @@ struct LimitsChartView: View {
                 LineMark(
                     x: .value("Time", s.date),
                     y: .value("Percent", s.value),
-                    series: .value("Series", s.series))
-                    .interpolationMethod(.stepEnd)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
-                    .foregroundStyle(by: .value("Series", s.series))
+                    series: .value("Series", s.series)
+                )
+                .interpolationMethod(.stepEnd)
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .foregroundStyle(by: .value("Series", s.series))
             }
             RuleMark(y: .value("Warning", warn))
                 .foregroundStyle(.orange.opacity(0.35))

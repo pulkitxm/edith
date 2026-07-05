@@ -1,21 +1,15 @@
-import { state, DEFAULT_BILLING_DAY } from "./state.js";
+import { cycleStart } from "./cycles.js";
 import {
   ALL_MODELS,
   DEFAULT_MODELS,
-  SOURCES,
   DEFAULT_SOURCES,
   LATEST,
+  SOURCES,
 } from "./data.js";
 import { shortModel, ymd } from "./format.js";
 import { systemTheme } from "./palette.js";
-import { cycleStart } from "./cycles.js";
+import { DEFAULT_BILLING_DAY, state } from "./state.js";
 
-// ---------- URL query-param sync ----------
-// Filters live in the URL (not localStorage) so a view is shareable and
-// survives reload. Params: ?range=cy:YYYY-MM-DD &metric=tokens &models=opus-4-8,haiku-4-5
-// A *clean* URL (no range) means the default view = the CURRENT billing cycle;
-// "All" is NOT the default, so it persists explicitly as ?range=all. Past cycles
-// persist as ?range=cy:<start>. Default models/sources are omitted to keep URLs clean.
 export const shortToFull = {};
 ALL_MODELS.forEach((m) => {
   shortToFull[shortModel(m)] = m;
@@ -25,14 +19,13 @@ export function readParams() {
   let q;
   try {
     q = new URLSearchParams(location.search);
-  } catch (e) {
+  } catch (_e) {
     return;
   }
   const r = q.get("range");
   if (r) {
     if (r === "all") state.range = { mode: "all" };
     else if (/^\d+$/.test(r)) {
-      // back-compat: old 7/30/90 → custom window ending at LATEST
       const n = +r;
       const to = new Date(LATEST);
       const from = new Date(LATEST);
@@ -73,30 +66,26 @@ export function readParams() {
 
 export function rangeToParam() {
   const r = state.range;
-  if (r.mode === "all") return "all"; // All is NOT the default → persist it
+  if (r.mode === "all") return "all";
   if (r.mode === "month") return "m:" + r.month;
   if (r.mode === "cycle") {
-    // The current cycle (containing the latest data day, for the active billing
-    // day) is the implicit default, so a clean URL already means it - omit it.
-    // Past cycles persist explicitly so they survive reload / sharing.
     if (LATEST && r.cycle === ymd(cycleStart(LATEST, state.billingDay)))
       return "";
     return "cy:" + r.cycle;
   }
   if (r.mode === "custom") return "c:" + r.from + "~" + r.to;
-  return r.mode; // today / yesterday / thisWeek / lastWeek
+  return r.mode;
 }
 export function writeParams() {
   let url;
   try {
     url = new URL(location.href);
-  } catch (e) {
+  } catch (_e) {
     return;
   }
   const q = url.searchParams;
   const rp = rangeToParam();
   rp ? q.set("range", rp) : q.delete("range");
-  // Clean URL = the default (Claude Code) model filter; any deviation persists.
   const isDefaultModels =
     state.models.size === DEFAULT_MODELS.length &&
     DEFAULT_MODELS.every((m) => state.models.has(m));
@@ -108,7 +97,6 @@ export function writeParams() {
         .map(shortModel)
         .join(","),
     );
-  // Clean URL = the default (Claude Code) source filter; any deviation persists.
   const isDefaultSources =
     state.sources.size === DEFAULT_SOURCES.length &&
     DEFAULT_SOURCES.every((s) => state.sources.has(s));
@@ -120,7 +108,5 @@ export function writeParams() {
   state.theme === systemTheme ? q.delete("theme") : q.set("theme", state.theme);
   try {
     history.replaceState(null, "", url.toString());
-  } catch (e) {
-    /* sandbox */
-  }
+  } catch (_e) {}
 }

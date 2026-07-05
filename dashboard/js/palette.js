@@ -1,11 +1,8 @@
 import { ALL_MODELS, SOURCES } from "./data.js";
 
-export let SOURCE_COLOR = { cli: "#2f4858", cowork: "#d97757" }; // reassigned per theme by setPalette
+export let SOURCE_COLOR = { cli: "#2f4858", cowork: "#d97757" };
 export const sourceColor = (s) => SOURCE_COLOR[s] || "#b8b0a4";
 
-// ---------- palette (theme-aware) ----------
-// Models keep their hue identity across themes; the dark variants are just
-// lightened so they stay legible on a dark background.
 export const PALETTES = {
   light: {
     slate: "#2f4858",
@@ -39,7 +36,7 @@ export const PALETTES = {
   },
 };
 export const OTHER_COLOR = "#b8b0a4";
-export let PALETTE, SLATE, TOKEN_COLORS; // assigned by setPalette()
+export let PALETTE, SLATE, TOKEN_COLORS;
 export const MODEL_COLOR = {};
 
 export function setPalette(theme) {
@@ -52,8 +49,6 @@ export function setPalette(theme) {
     cacheCreate: "#c89b3c",
     cacheRead: "#6a8d73",
   };
-  // cli=slate, cowork=cat[0] (their original identity); every other source gets
-  // the next categorical hue so added tools (OpenCode, Codex, …) stay distinct.
   SOURCE_COLOR = {};
   SOURCES.forEach(
     (s, i) =>
@@ -67,7 +62,7 @@ export const systemTheme = (() => {
     return matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
       : "light";
-  } catch (e) {
+  } catch (_e) {
     return "light";
   }
 })();

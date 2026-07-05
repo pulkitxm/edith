@@ -1,5 +1,3 @@
-// ---------- summary stats over derive() rows (pure; no DOM, no state) ----------
-// rows: [{date, cost, input, output, cacheCreate, cacheRead, tokens, byModel:{m:{cost,tokens}}}]
 export function statsSummary(rows) {
   const s = {
     totalCost: 0,

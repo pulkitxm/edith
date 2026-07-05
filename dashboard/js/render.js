@@ -1,56 +1,54 @@
 import {
-  fmtUSD,
-  fmtUSDfull,
-  fmtTok,
-  fmtTokFull,
-  fmtPct,
-  fmtDur,
-  shortModel,
-  parseDate,
-  ymd,
-  fmtDate,
-  DOW,
-} from "./format.js";
+  autoScrollRight,
+  baseTooltip,
+  CARD_BG,
+  COSTC,
+  dualScales,
+  GRIDC,
+  mount,
+  readThemeColors,
+  sizeChartInner,
+  TICKC,
+} from "./charts.js";
 import {
-  RAW,
-  DAILY,
-  SESSIONS,
-  sourceLabel,
-  SOURCES,
-  ALL_MODELS,
-  EARLIEST,
-  LATEST,
-} from "./data.js";
-import {
-  sourceColor,
-  OTHER_COLOR,
-  TOKEN_COLORS,
-  MODEL_COLOR,
-} from "./palette.js";
-import { state, charts } from "./state.js";
-import {
+  activeWindow,
   dayBreakdowns,
-  tokensOf,
-  inRangeDays,
   derive,
   deriveBySource,
-  activeWindow,
+  inRangeDays,
+  tokensOf,
 } from "./compute.js";
 import {
-  GRIDC,
-  CARD_BG,
-  TICKC,
-  COSTC,
-  readThemeColors,
-  dualScales,
-  sizeChartInner,
-  autoScrollRight,
-  mount,
-  baseTooltip,
-} from "./charts.js";
+  ALL_MODELS,
+  DAILY,
+  EARLIEST,
+  LATEST,
+  RAW,
+  SESSIONS,
+  SOURCES,
+  sourceLabel,
+} from "./data.js";
+import {
+  DOW,
+  fmtDate,
+  fmtDur,
+  fmtPct,
+  fmtTok,
+  fmtTokFull,
+  fmtUSD,
+  fmtUSDfull,
+  parseDate,
+  shortModel,
+  ymd,
+} from "./format.js";
+import {
+  MODEL_COLOR,
+  OTHER_COLOR,
+  sourceColor,
+  TOKEN_COLORS,
+} from "./palette.js";
+import { charts, state } from "./state.js";
 
-// Recolor EXISTING chart instances from current CSS vars and update without
-// animation - used on theme toggle so charts don't rebuild/recompute.
 export function liveRetheme() {
   readThemeColors();
   Object.values(charts).forEach((ch) => {
@@ -67,7 +65,6 @@ export function liveRetheme() {
           sc.grid.color = GRIDC;
         if (sc.ticks) sc.ticks.color = TICKC;
       }
-    // datasets whose colors derive from theme CSS vars
     ch.data.datasets.forEach((d) => {
       if (ch.config.type === "doughnut") {
         d.borderColor = CARD_BG;
@@ -84,10 +81,9 @@ export function liveRetheme() {
     });
     ch.update("none");
   });
-  renderHeat(); // DOM heatmap text colors are JS-driven; cheap re-render (no Chart.js)
+  renderHeat();
 }
 
-// ============ HEADER / META ============
 export function renderMeta() {
   const t = RAW.totals || {};
   const tCost = t.cost ?? t.totalCost,
@@ -113,17 +109,13 @@ export function renderMeta() {
     `schema v${RAW.schemaVersion || 1} · ${SESSIONS.length} sessions · ${DAILY.length} days`;
 }
 
-// ============ KPI CARDS ============
 function renderKPIs() {
   const rows = derive();
   const totalCost = rows.reduce((a, r) => a + r.cost, 0);
   const totalTok = rows.reduce((a, r) => a + r.tokens, 0);
-  const nDays = rows.length || 1;
-  const avg = totalCost / nDays;
   const totIn = rows.reduce((a, r) => a + r.input, 0);
   const totRead = rows.reduce((a, r) => a + r.cacheRead, 0);
   const cacheRate = totRead + totIn ? totRead / (totRead + totIn) : 0;
-  // most-used model + per-source cost (by $), within current source/model/range filters
   const mcost = {};
   const srcCost = {};
   SOURCES.forEach((s) => (srcCost[s] = 0));
@@ -138,14 +130,12 @@ function renderKPIs() {
     }),
   );
   const topModel = Object.keys(mcost).sort((a, b) => mcost[b] - mcost[a])[0];
-  // busiest day = most TOKENS (ignore zero-filled days)
   const active = rows.filter((r) => r.tokens > 0);
   const activeDays = active.length || 1;
   let big = active[0] || { date: "-", cost: 0, tokens: 0 };
   active.forEach((r) => {
     if (r.tokens > big.tokens) big = r;
   });
-  // month to date - based on the latest month present in full data
   const ym = ymd(LATEST).slice(0, 7);
   let mtdCost = 0,
     mtdTok = 0;
@@ -197,7 +187,6 @@ function renderKPIs() {
       s: `${fmtUSD(mcost[topModel] || 0)} of spend`,
     },
   ];
-  // Cowork-share KPI only when Cowork data exists
   if (SOURCES.includes("cowork")) {
     const cw = srcCost.cowork || 0,
       tot = SOURCES.reduce((a, s) => a + (srcCost[s] || 0), 0) || 1;
@@ -219,13 +208,11 @@ function renderKPIs() {
     .join("");
 }
 
-// dual-axis tooltip label: cost datasets (y1) show $, token datasets show tokens
 const dualLabel = (c) =>
   c.dataset.yAxisID === "y1"
     ? ` ${c.dataset.label}: ${fmtUSDfull(c.parsed.y)}`
     : ` ${c.dataset.label}: ${fmtTokFull(c.parsed.y)}`;
 
-// ============ DAILY USAGE (dual axis) ============
 function renderDaily() {
   const rows = derive();
   const labels = rows.map((r) => r.date.slice(5));
@@ -281,7 +268,6 @@ function renderDaily() {
   autoScrollRight("scroll-daily");
 }
 
-// ============ DONUT: token share by model (tooltip shows tokens% + cost) ============
 function renderDonut() {
   const rows = derive();
   const agg = {};
@@ -342,7 +328,6 @@ function renderDonut() {
   });
 }
 
-// ============ TOKEN MIX STACKED (+ cost line on right axis) ============
 function renderTokens() {
   const rows = derive();
   const labels = rows.map((r) => r.date.slice(5));
@@ -405,7 +390,6 @@ function renderTokens() {
   autoScrollRight("scroll-tokens");
 }
 
-// ============ MODEL USAGE OVER TIME (stacked tokens + cost line) ============
 function renderModelTime() {
   const rows = derive();
   const labels = rows.map((r) => r.date.slice(5));
@@ -454,7 +438,6 @@ function renderModelTime() {
   autoScrollRight("scroll-modeltime");
 }
 
-// ============ DAY OF WEEK (TOTAL tokens + total cost, dual axis) ============
 function renderDOW() {
   const rows = derive();
   const tok = [0, 0, 0, 0, 0, 0, 0],
@@ -535,8 +518,6 @@ function renderDOW() {
   });
 }
 
-// ============ CALENDAR HEATMAP ============
-// full per-day breakdown across selected sources × models (metric-independent)
 function heatDayDetail(d) {
   const sources = {},
     models = {};
@@ -564,8 +545,6 @@ function heatDayDetail(d) {
       sources[s].tokens += t;
     }
   }
-  // Project / chat / hour rollups are NOT split by model or source in the data,
-  // so they reflect the whole day regardless of the source/model filters above.
   const projects = [];
   let chatCount = 0;
   for (const p of d.projects || []) {
@@ -583,7 +562,6 @@ function heatDayDetail(d) {
     });
   }
   projects.sort((a, b) => b.tokens - a.tokens);
-  // busiest hour of the day (index into the 24-slot hours array)
   let peakHour = -1,
     peakTok = 0;
   (d.hours || []).forEach((h, i) => {
@@ -609,15 +587,13 @@ function heatDayDetail(d) {
     peakTok,
   };
 }
-// deterministic warm-ish dot color per project name (no semantic palette exists
-// for projects, so hash the name into a stable hue that reads in both themes).
 function projDot(name) {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
   return `hsl(${((h % 360) + 360) % 360} 48% 60%)`;
 }
 const fmtHour = (h) => (h < 0 ? "" : `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`);
-const PROJ_TIP_CAP = 4; // top projects shown in the calendar tooltip
+const PROJ_TIP_CAP = 4;
 function heatTipHTML(key, det) {
   const head = parseDate(key).toLocaleDateString("en-US", {
     weekday: "short",
@@ -654,7 +630,6 @@ function heatTipHTML(key, det) {
           )
           .join("")
       : "";
-  // top projects for the day (capped), with the rest lumped into "+N more"
   const projTop = det.projects.slice(0, PROJ_TIP_CAP),
     projRest = det.projects.slice(PROJ_TIP_CAP);
   let projHTML = projTop
@@ -675,7 +650,6 @@ function heatTipHTML(key, det) {
       `${fmtUSD(ct)} · ${fmtTok(tk)}`,
     );
   }
-  // quick insights chips: how many projects / chats touched, and the peak hour
   const chips = [];
   if (det.projCount)
     chips.push(`${det.projCount} project${det.projCount > 1 ? "s" : ""}`);
@@ -699,8 +673,6 @@ function heatTipHTML(key, det) {
       ${projHTML ? `<div class="ht-sec"><div class="ht-lbl">Projects</div>${projHTML}</div>` : ""}`;
 }
 
-// Activity-calendar metric: "tokens" (default) or "cost". Transient UI state -
-// intentionally NOT synced to the URL (unlike the top filters).
 let heatMetric = "tokens";
 export function setHeatMetric(m) {
   heatMetric = m === "cost" ? "cost" : "tokens";
@@ -726,15 +698,12 @@ function wireHeat() {
       y = e.clientY + pad;
     if (x + w > innerWidth) x = e.clientX - w - pad;
     if (y + h > innerHeight) y = e.clientY - h - pad;
-    // clamp to the viewport on every side so the tip is never clipped
     x = Math.max(4, Math.min(x, innerWidth - w - 4));
     y = Math.max(4, Math.min(y, innerHeight - h - 4));
     _heatTip.style.left = x + "px";
     _heatTip.style.top = y + "px";
   };
   heat.addEventListener("mouseover", (e) => {
-    // Dateless cells (week-padding / future days) carry no tooltip - hide any
-    // open tip instead of leaving the previous day's tip stuck to the cursor.
     const cell = e.target.closest(".cell");
     if (!cell || !cell.dataset.date) {
       _heatTip.hidden = true;
@@ -755,13 +724,10 @@ function wireHeat() {
 function renderHeat() {
   wireHeat();
   readThemeColors();
-  // Metric is toggled by the calendar's own dropdown (transient, not URL-synced).
   const isCost = heatMetric === "cost";
   const metricOf = (det) => (isCost ? det.cost : det.tokens);
   document.getElementById("t-heat").textContent =
     "Activity calendar - " + (isCost ? "cost" : "tokens");
-  // Follow the active range filter (clamped to data bounds), like the table/charts.
-  // 'all' still spans the full history. Day values respect the source/model filters.
   const detail = {},
     valByDate = {};
   DAILY.forEach((d) => {
@@ -772,24 +738,14 @@ function renderHeat() {
   const w = activeWindow();
   const winFrom = new Date(Math.max(w.from.getTime(), EARLIEST.getTime()));
   const winTo = new Date(Math.min(w.to.getTime(), LATEST.getTime()));
-  // Intensity ramp scales to the busiest day WITHIN the window, so a narrow
-  // filter still shows useful day-to-day contrast (same idea as the bar charts).
   let max = 1;
   for (let d = new Date(winFrom); d <= winTo; d.setDate(d.getDate() + 1)) {
     const v = valByDate[ymd(d)] || 0;
     if (v > max) max = v;
   }
   const level = (v) => (v <= 0 ? 0 : Math.min(4, Math.ceil((v / max) * 4)));
-  // Fixed light→orange ramp (identical in both themes). Level 0 is the empty/
-  // zero level (subtle background, no text). The per-level TEXT color is chosen
-  // for contrast against each cell's OWN background - NOT the page theme - so
-  // the in-cell token numbers stay legible in dark mode too. Index 4 must have
-  // a real (non-transparent) background or the busiest cell goes invisible.
   const SCALE = ["var(--grid)", "#f6d9bf", "#f0b384", "#e2884f", "#c75e36"];
-  const SCALE_FG = ["transparent", "#000", "#000", "#fff", "#fff"]; // pure black/white chosen by cell bg luminance
-  // span the window, padded to whole weeks (Mon-start) so the 7-row grid aligns.
-  // getDay() is Sun=0…Sat=6; (getDay()+6)%7 is days back to Monday, (7-getDay())%7
-  // is days forward to Sunday.
+  const SCALE_FG = ["transparent", "#000", "#000", "#fff", "#fff"];
   const start = new Date(winFrom);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const end = new Date(winTo);
@@ -798,18 +754,15 @@ function renderHeat() {
   _heatHTML = {};
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const key = ymd(d);
-    const inWindow = d >= winFrom && d <= winTo; // week-padding cells fall outside
+    const inWindow = d >= winFrom && d <= winTo;
     const det = inWindow ? detail[key] : undefined;
     const v = det ? metricOf(det) : 0;
     const has = inWindow && det !== undefined;
     const active = has && v > 0;
     const lv = active ? level(v) : 0;
     if (inWindow) _heatHTML[key] = heatTipHTML(key, det || null);
-    // contrast text from the cell's own level; empty/zero cells carry no text
     const txt = active ? SCALE_FG[lv] : "transparent";
     const label = active ? (isCost ? fmtUSD(v) : fmtTok(v)) : "";
-    // active cells get the ramp color; in-window empty days keep a visible
-    // (theme-aware) background; out-of-window padding & gap days stay faint.
     const bg = active ? SCALE[lv] : "var(--grid)";
     cells.push(
       `<div class="cell"${inWindow ? ` data-date="${key}"` : ""} data-l="${lv}"${active ? "" : ' data-empty="1"'} style="background:${bg};color:${txt};${!has ? "opacity:.5" : ""}">${label}</div>`,
@@ -821,10 +774,6 @@ function renderHeat() {
     .querySelectorAll(".heat-legend .cell")
     .forEach((el, i) => (el.style.background = SCALE[i]));
 
-  // ---- axis labels (GitHub-style) ----
-  // Weekday labels down the left, one per row, matching the grid's
-  // Mon(row 0)…Sun(row 6) order so each sits beside its row. (Our 32px-tall
-  // cells leave room for all 7, unlike GitHub's cramped Mon/Wed/Fri.)
   document.getElementById("heat-days").innerHTML = [
     "Mon",
     "Tue",
@@ -837,17 +786,12 @@ function renderHeat() {
     .map((l) => `<span>${l}</span>`)
     .join("");
 
-  // ---- compact mode: narrow range (≤6 columns) gets the rich stats panel ----
-  // Cells stay tidy/GitHub-sized; the freed-up row is filled with content (the
-  // stats panel below), not with stretched tiles.
   const numCols = cells.length / 7;
   const compact = numCols <= 6;
   const heatCard = heatEl.closest(".card");
   heatCard.classList.toggle("heat-compact", compact);
-  const COLW = 48; // 42px cell + 6px gap
+  const COLW = 48;
 
-  // Month labels across the top: one per column (week), placed above the first
-  // column whose Monday falls in a new month, at COLW-pixel intervals.
   const MONTHS = [
     "Jan",
     "Feb",
@@ -865,13 +809,11 @@ function renderHeat() {
   const mLabels = [];
   let lastM = -1,
     lastY = null;
-  const wk = new Date(start); // 'start' is a Monday → matches grid row 0
+  const wk = new Date(start);
   for (let c = 0; c < numCols; c++) {
     const m = wk.getMonth(),
       y = wk.getFullYear();
     if (m !== lastM) {
-      // disambiguate years (e.g. the 'all' range) by tagging the month that
-      // crosses into a new year; within a single year no suffix is shown.
       const txt =
         lastY !== null && y !== lastY
           ? `${MONTHS[m]} '${String(y).slice(-2)}`
@@ -884,10 +826,8 @@ function renderHeat() {
   }
   document.getElementById("heat-months").innerHTML = mLabels.join("");
 
-  // ---- rich stats panel: fills the freed-up row with a headline + breakdowns ----
   const statsEl = document.getElementById("heat-stats");
   if (compact) {
-    // aggregate over the active window; also collect a per-day series for the spark
     let totalVal = 0,
       activeDays = 0,
       busiestDate = "",
@@ -923,7 +863,6 @@ function renderHeat() {
         ? fmtDate(ymd(winFrom))
         : `${fmtDate(ymd(winFrom))} – ${fmtDate(ymd(winTo))}`;
 
-    // headline column: big total + the at-a-glance numbers
     const headCol = `
         <div class="hs-head">
           <div class="hs-period">${periodLabel}</div>
@@ -938,7 +877,6 @@ function renderHeat() {
           }
         </div>`;
 
-    // a labelled horizontal bar, width ∝ value / section max
     const barRow = (color, name, val, frac) =>
       `<div class="hs-bar-row"><span class="hs-bar-name"><i style="background:${color}"></i>${name}</span>` +
       `<span class="hs-bar"><b style="width:${Math.max(2, frac * 100).toFixed(1)}%;background:${color}"></b></span>` +
@@ -954,7 +892,6 @@ function renderHeat() {
       )
       .join("");
 
-    // source split only when more than one source exists in the data
     const srcs =
       SOURCES.length > 1
         ? Object.entries(srcTotals).sort((a, b) => b[1] - a[1])
@@ -964,8 +901,6 @@ function renderHeat() {
       .map(([s, v]) => barRow(sourceColor(s), sourceLabel(s), v, v / maxSrc))
       .join("");
 
-    // daily sparkline (skip for very short ranges where it's just 1–2 stubs).
-    // Each bar is colored by the same intensity level as its calendar cell.
     let spark = "";
     if (totalDays >= 5) {
       const bars = series
@@ -993,7 +928,6 @@ function renderHeat() {
   }
 }
 
-// ============ MODELS TABLE ============
 export function renderTable() {
   const agg = {};
   inRangeDays().forEach((d) => {
@@ -1019,7 +953,7 @@ export function renderTable() {
       a._days.add(d.period);
     });
   });
-  let list = Object.values(agg);
+  const list = Object.values(agg);
   list.forEach((x) => (x.days = x._days.size));
   const totCost = list.reduce((a, b) => a + b.cost, 0) || 1;
   list.forEach((x) => (x.share = x.cost / totCost));
@@ -1045,7 +979,6 @@ export function renderTable() {
       </tr>`,
     )
     .join("");
-  // header arrows
   document.querySelectorAll("#tbl-models thead th").forEach((th) => {
     const active = th.dataset.key === key;
     th.dataset.active = active ? "1" : "0";
@@ -1053,7 +986,6 @@ export function renderTable() {
   });
 }
 
-// ============ USAGE BY SOURCE (stacked tokens + total cost line) ============
 function renderSource() {
   if (SOURCES.length < 2) return;
   const rows = derive();
@@ -1113,13 +1045,6 @@ function renderSource() {
   autoScrollRight("scroll-source");
 }
 
-// ============ BY PROJECT (v3/v4) ============
-// v3 daily[].projects = [{projectName, tokens, cost}]. v4 deepens each to
-// {..., chats:[{id,title,tokens,cost}], worktrees:[{name,tokens,cost,chats:[…]}]}
-// so project rows expand into their chats + worktrees. Older snapshots omit
-// these → degrade gracefully (flat, non-expandable; hide all if no projects).
-// Project rows are per-day so the date-range filter is respected; the rollups
-// aren't split by model/source, so those filters don't subdivide the totals.
 const HAS_PROJECTS = DAILY.some((d) => Array.isArray(d.projects));
 const HAS_TREE = DAILY.some(
   (d) =>
@@ -1130,9 +1055,8 @@ const HAS_TREE = DAILY.some(
 );
 const HAS_HOURS = DAILY.some((d) => Array.isArray(d.hours));
 const PROJ_TOPN = 15;
-const CHATS_PER_GROUP = 20; // cap chats shown per group; rest → "+N more"
+const CHATS_PER_GROUP = 20;
 
-// Inline Lucide icons (v1.17.0, ISC) - folder=project, branch=worktree, msg=chat.
 const ICONS = {
   "folder-git-2":
     '<path d="M18 19a5 5 0 0 1-5-5v8"/><path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5"/><circle cx="13" cy="12" r="2"/><circle cx="20" cy="19" r="2"/>',
@@ -1145,8 +1069,6 @@ const ICONS = {
 const icon = (name, cls = "") =>
   `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 
-// merge chat lists (by sessionId) across days; chatArr → tokens-desc array.
-// `period` (the day being merged) advances each chat's lastActive.
 function mergeChats(map, list, period) {
   for (const c of list || []) {
     const id = c.id || "(no-session)";
@@ -1169,7 +1091,6 @@ function mergeChats(map, list, period) {
     if (c.source) x.source = c.source;
     if (c.title) x.title = c.title;
     if (period && period > x.lastActive) x.lastActive = period;
-    // span across day-fragments: earliest first, latest last (time-spent = last-first)
     const f = +c.firstTs || 0,
       l = +c.lastTs || 0;
     if (f && (!x.firstTs || f < x.firstTs)) x.firstTs = f;
@@ -1187,8 +1108,8 @@ const chatArr = (map) =>
     .sort((a, b) => b.tokens - a.tokens);
 
 function aggregateProjects() {
-  const agg = {}; // name -> {tokens, cost, main:Map, wts:Map}
-  const dayset = {}; // name -> Set(dates)
+  const agg = {};
+  const dayset = {};
   for (const d of inRangeDays()) {
     if (!Array.isArray(d.projects)) continue;
     for (const p of d.projects) {
@@ -1222,11 +1143,6 @@ function aggregateProjects() {
     for (const c of arr) for (const d of c._days || []) s.add(d);
     return s.size;
   };
-  // Keep only chats whose source is selected (chats carry a `source` tag - cli /
-  // cc-cloud / cowork). Legacy data without the tag stays visible. Project and
-  // worktree totals/shares/days are recomputed from the VISIBLE chats so the
-  // whole drilldown is consistent with the source filter (e.g. picking only
-  // "Claude Code Cloud" shows just the projects with cloud sessions).
   const srcVisible = (c) => !c.source || state.sources.has(c.source);
   const sumTok = (arr) => arr.reduce((s, c) => s + (+c.tokens || 0), 0);
   const sumCost = (arr) => arr.reduce((s, c) => s + (+c.cost || 0), 0);
@@ -1257,13 +1173,11 @@ function aggregateProjects() {
         cost: sumCost(mainChats) + worktrees.reduce((s, w) => s + w.cost, 0),
         days: daysOf(allChats),
         lastActive: chatsMaxDate(allChats),
-        // total time spent in the project = sum of every chat span, worktrees included
         dur:
           sumDur(mainChats) + worktrees.reduce((s, w) => s + (w.dur || 0), 0),
       };
     })
     .filter((p) => p.chats.length || p.worktrees.length);
-  // shares are relative to the filtered total so they sum to 100% in-view
   const totalCost = projs.reduce((s, p) => s + p.cost, 0) || 1;
   const setShare = (arr) => arr.forEach((c) => (c.share = c.cost / totalCost));
   for (const p of projs) {
@@ -1277,10 +1191,6 @@ function aggregateProjects() {
   return projs.sort((a, b) => b.tokens - a.tokens);
 }
 
-// Work-output rollup for the share card: distinct sessions (chats) and projects
-// touched over the current filtered range. Reuses the By-project aggregation, so
-// it is date-range AND source scoped (chats are filtered by the source filter;
-// model filtering still doesn't split the tree).
 export function workSummary() {
   let sessions = 0,
     projects = 0;
@@ -1314,9 +1224,8 @@ function renderProjects() {
   emptyEl.style.display = "none";
 
   let rows = aggregateProjects();
-  const projCount = rows.length; // in-range project count (pre top-N cap)
+  const projCount = rows.length;
   if (rows.length > PROJ_TOPN) {
-    // cap to top-N, lump rest
     const head = rows.slice(0, PROJ_TOPN),
       rest = rows.slice(PROJ_TOPN);
     const o = rest.reduce(
@@ -1411,11 +1320,9 @@ function renderProjects() {
     toggleBtn.style.display = "";
     toggleBtn.dataset.count = String(projCount);
   }
-  toggleProjList(); // apply collapsed/expanded visibility + sync the label/count
+  toggleProjList();
 }
 
-// Show/hide the whole By-project table (collapsed by default) and sync the toggle's
-// label + count. The tbody is always rendered (cheap), so expanding is instant.
 export function toggleProjList() {
   const btn = document.getElementById("proj-toggle");
   const wrap = document.getElementById("proj-table-wrap");
@@ -1428,7 +1335,6 @@ export function toggleProjList() {
   btn.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
-// Table is rendered separately so expand/collapse re-renders rows only (no chart).
 const escHtml = (s) =>
   String(s == null ? "" : s).replace(
     /[&<>"]/g,
@@ -1444,7 +1350,6 @@ function nameCell(
     : `<span class="chev spacer">${icon("chevron-right")}</span>`;
   const badge =
     count > 0 ? `<sup class="icount">${count > 99 ? "99+" : count}</sup>` : "";
-  // Chat icons carry their session id so ⌘/Ctrl-click can copy it (wired in controls.js).
   const copyAttrs = copyId
     ? ` data-chat-id="${escHtml(copyId)}" title="⌘/Ctrl-click to copy chat id"`
     : "";
@@ -1454,7 +1359,6 @@ function nameCell(
   return `<td><span class="tname" style="padding-left:${depth * 20}px">${chev}${ic}<span class="tlabel">${escHtml(label)}</span></span></td>`;
 }
 
-// chat leaf rows (+ a lumped "+N more" row past the cap), indented to `depth`
 function chatRows(chats, depth) {
   let out = "";
   const top = chats.slice(0, CHATS_PER_GROUP),
@@ -1495,10 +1399,8 @@ function chatRows(chats, depth) {
 }
 
 export function renderProjectsTable() {
-  let rows = aggregateProjects();
+  const rows = aggregateProjects();
   const { key, dir } = state.projSort;
-  // One comparator for every level of the tree. Chats carry `title` rather
-  // than `name`, so fall back to it for name sorting.
   const cmp = (a, b) =>
     key === "name"
       ? dir *
@@ -1516,7 +1418,6 @@ export function renderProjectsTable() {
     const hasKids = HAS_TREE && (r.chats.length > 0 || r.worktrees.length > 0);
     const pkey = "proj:" + r.name;
     const open = state.projExpanded.has(pkey);
-    // total items nested under the project: direct chats + each worktree + the chats inside those worktrees
     const projCount =
       r.chats.length +
       r.worktrees.length +
@@ -1562,7 +1463,6 @@ export function renderProjectsTable() {
   });
 }
 
-// ============ HOURLY (v3, single-day) ============
 export function latestDayWithHours() {
   const days = DAILY.slice().sort((a, b) => (a.period < b.period ? 1 : -1));
   for (const d of days)
@@ -1652,10 +1552,6 @@ export function renderHourly(dateKey) {
   });
 }
 
-// ============ HOURLY - ALL TIME (aggregate across every recorded day) ============
-// Hour rollups are not split by source/model in the data, so like the
-// single-day hourly card this ignores the source/model/range filters and is
-// rendered once at init.
 export function renderHourlyAll() {
   const emptyEl = document.getElementById("hourly-all-empty");
   const chartBox = document
@@ -1745,7 +1641,6 @@ export function renderHourlyAll() {
   });
 }
 
-// open the hourly view for a date (wired to heat-cell clicks)
 export function openHourly(dateKey) {
   if (!dateKey) return;
   const inp = document.getElementById("hourly-date");
@@ -1755,11 +1650,10 @@ export function openHourly(dateKey) {
   if (card && card.scrollIntoView) {
     try {
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    } catch (e) {}
+    } catch (_e) {}
   }
 }
 
-// ============ RENDER ALL ============
 export function renderAll() {
   renderKPIs();
   renderDaily();

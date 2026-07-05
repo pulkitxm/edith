@@ -17,12 +17,10 @@ struct UsageView: View {
             usageCard
         }
         .task {
-            await store.loadStats() // panel open → pick up fresh snapshots
+            await store.loadStats()
             await store.loadLimitHistory()
         }
     }
-
-    // MARK: - Limits
 
     private var limitsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,7 +28,8 @@ struct UsageView: View {
                 eyebrow("LIMITS")
                 Spacer()
                 if let at = store.limitsUpdatedAt {
-                    let next = store.nextLimitsRefresh
+                    let next =
+                        store.nextLimitsRefresh
                         .map { $0.formatted(date: .omitted, time: .shortened) } ?? "-"
                     Text("updated \(at.formatted(date: .omitted, time: .shortened)) · next \(next)")
                         .font(.system(size: 10))
@@ -51,7 +50,7 @@ struct UsageView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(width: 16, height: 16) // stable slot: icon ↔ spinner swap
+                    .frame(width: 16, height: 16)
                 }
                 .buttonStyle(HoverButtonStyle())
                 .disabled(store.refreshingLimits)
@@ -80,8 +79,6 @@ struct UsageView: View {
         .card()
     }
 
-    /// Ring gauge: recessed track + rounded progress arc with a soft glow,
-    /// percent in the middle, label and live countdown beneath.
     private func ring(_ label: String, window: LimitWindow?) -> some View {
         let pct = window?.percent ?? 0
         let fill = color(for: pct)
@@ -102,8 +99,6 @@ struct UsageView: View {
             .padding(.bottom, 2)
             eyebrow(label)
             if let reset = window?.resetsAt, reset > Date() {
-                // Live countdown, "2d 3:45:12" above 24h. TimelineView only ticks
-                // while the panel is visible; monospacedDigit keeps width stable.
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text(countdown(from: context.date, to: reset))
                         .font(.system(size: 11))
@@ -112,7 +107,7 @@ struct UsageView: View {
                         .lineLimit(1)
                 }
             } else {
-                Text(" ").font(.system(size: 11)) // keep both columns level
+                Text(" ").font(.system(size: 11))
             }
         }
         .frame(maxWidth: .infinity)
@@ -126,19 +121,15 @@ struct UsageView: View {
         return String(format: "%d:%02d", m, sec)
     }
 
-    // Theme color normally; orange/red stay as genuine warning states.
     private func color(for percent: Double) -> Color {
         percent >= 90 ? .red : percent >= 70 ? .orange : theme
     }
-
-    // MARK: - Activity calendar
 
     private var activityCard: some View {
         let days = store.calendarDays
         let weeks: [[DayPoint]] = stride(from: 0, to: days.count, by: 7).map {
             Array(days[$0..<min($0 + 7, days.count)])
         }
-        // GitHub-style intensity: quartiles of the non-zero days → 4 steps of one hue.
         let nonzero = days.map(\.cost).filter { $0 > 0 }.sorted()
         let quartile = { (p: Double) -> Double in
             nonzero.isEmpty ? 0 : nonzero[Int(Double(nonzero.count - 1) * p)]
@@ -158,15 +149,15 @@ struct UsageView: View {
             }
             HStack(alignment: .top, spacing: 4) {
                 VStack(spacing: 4) {
-                    ForEach(Array(["M", "", "W", "", "F", "", "S"].enumerated()), id: \.offset) { _, label in
+                    ForEach(Array(["M", "", "W", "", "F", "", "S"].enumerated()), id: \.offset) {
+                        _, label in
                         Text(label)
                             .font(.system(size: 9))
                             .foregroundStyle(.tertiary)
                             .frame(width: 13, height: 17)
                     }
                 }
-                .padding(.top, 16) // clears the month-label row
-                // Full history since the first data day; lands on the newest week.
+                .padding(.top, 16)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 4) {
                         ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
@@ -179,16 +170,16 @@ struct UsageView: View {
                                     RoundedRectangle(cornerRadius: 3.5)
                                         .fill(cellColor(day.cost, cuts: cuts))
                                         .frame(width: 17, height: 17)
-                                        .help(presenter
-                                            ? day.date.formatted(.dateTime.day().month())
-                                            : "\(day.date.formatted(.dateTime.day().month())) - $\(String(format: "%.2f", day.cost))")
+                                        .help(
+                                            presenter
+                                                ? day.date.formatted(.dateTime.day().month())
+                                                : "\(day.date.formatted(.dateTime.day().month())) - $\(String(format: "%.2f", day.cost))"
+                                        )
                                 }
                             }
                         }
                     }
                 }
-                // ponytail: ~19 week columns fit the card; under that the anchor
-                // must be leading or narrow content gets shoved to the right edge
                 .defaultScrollAnchor(weeks.count > 19 ? .trailing : .leading)
             }
         }
@@ -199,7 +190,8 @@ struct UsageView: View {
         guard let first = weeks[index].first?.date else { return "" }
         let month = Calendar.current.component(.month, from: first)
         if index > 0, let prev = weeks[index - 1].first?.date,
-           Calendar.current.component(.month, from: prev) == month {
+            Calendar.current.component(.month, from: prev) == month
+        {
             return ""
         }
         return first.formatted(.dateTime.month(.abbreviated))
@@ -212,8 +204,6 @@ struct UsageView: View {
         if cost <= cuts[2] { return theme.opacity(0.7) }
         return theme
     }
-
-    // MARK: - Usage stats
 
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -305,7 +295,9 @@ struct UsageView: View {
             ForEach(store.sources) { source in
                 Button {
                     if store.selectedSources.contains(source.id) {
-                        if store.selectedSources.count > 1 { store.selectedSources.remove(source.id) }
+                        if store.selectedSources.count > 1 {
+                            store.selectedSources.remove(source.id)
+                        }
                     } else {
                         store.selectedSources.insert(source.id)
                     }
@@ -326,7 +318,7 @@ struct UsageView: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
-            .hoverButton() // on the label so the padded area stays clickable
+            .hoverButton()
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -360,7 +352,6 @@ struct UsageView: View {
 }
 
 extension Double {
-    /// 12_345_678 → "12.3M" - token-count formatting like the dashboard's.
     var compactTokens: String {
         switch self {
         case 1e9...: return String(format: "%.2fB", self / 1e9)

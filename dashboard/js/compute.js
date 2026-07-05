@@ -1,12 +1,8 @@
-import { DAILY, SOURCES, EARLIEST, LATEST } from "./data.js";
-import { state } from "./state.js";
-import { parseDate, ymd } from "./format.js";
 import { cycleEnd } from "./cycles.js";
+import { DAILY, EARLIEST, LATEST, SOURCES } from "./data.js";
+import { parseDate, ymd } from "./format.js";
+import { state } from "./state.js";
 
-// ---------- sources (v2) with v1 back-compat ----------
-// v2 rows carry bySource:{cli:[...],cowork:[...]}. Old v1 rows had a flat
-// modelBreakdowns[] - treat those as a single "cli" source.
-// model breakdown entries for a day across the currently-selected sources
 export function dayBreakdowns(d) {
   const out = [];
   for (const s of SOURCES) {
@@ -16,15 +12,12 @@ export function dayBreakdowns(d) {
   return out;
 }
 
-// ---------- range window ----------
 export const tokensOf = (b) =>
   (+b.inputTokens || 0) +
   (+b.outputTokens || 0) +
   (+b.cacheCreationTokens || 0) +
   (+b.cacheReadTokens || 0);
 
-// inclusive {from,to} Date window for the active range, anchored on LATEST data day
-// for the relative presets. Weeks are Monday-start, ending on/around LATEST.
 export function activeWindow() {
   const r = state.range;
   switch (r.mode) {
@@ -39,7 +32,7 @@ export function activeWindow() {
     }
     case "thisWeek": {
       const end = new Date(LATEST);
-      const dow = (end.getDay() + 6) % 7; // 0=Mon
+      const dow = (end.getDay() + 6) % 7;
       const start = new Date(end);
       start.setDate(start.getDate() - dow);
       return { from: start, to: end };
@@ -70,7 +63,6 @@ export function activeWindow() {
   }
 }
 
-// range-filtered actual data days (used by table/heat-detail lookups)
 export function inRangeDays() {
   const days = DAILY.slice().sort((a, b) => (a.period < b.period ? -1 : 1));
   if (state.range.mode === "all") return days;
@@ -81,13 +73,10 @@ export function inRangeDays() {
   });
 }
 
-// Recompute each day's numbers from ONLY the selected sources × models, zero-filling
-// every calendar day across the active window so the per-day x-axis is continuous.
 export function derive() {
   const sel = state.models;
   const byDate = {};
   inRangeDays().forEach((d) => (byDate[d.period] = d));
-  // clamp window to data bounds so 'all' / wide custom don't fabricate huge empty spans
   const w = activeWindow();
   const from = new Date(Math.max(w.from.getTime(), EARLIEST.getTime()));
   const to = new Date(Math.min(w.to.getTime(), LATEST.getTime()));
@@ -95,7 +84,6 @@ export function derive() {
   for (let cur = new Date(from); cur <= to; cur.setDate(cur.getDate() + 1)) {
     const key = ymd(cur);
     const d = byDate[key];
-    // byModel[m] = {cost, tokens}
     const r = {
       date: key,
       cost: 0,
@@ -127,7 +115,6 @@ export function derive() {
   return rows;
 }
 
-// per-source token series + total cost line over the zero-filled derive() rows
 export function deriveBySource(rows) {
   const byDate = {};
   DAILY.forEach((d) => (byDate[d.period] = d));

@@ -19,7 +19,6 @@ export const fmtTok = (n) => {
 };
 export const fmtTokFull = (n) => (+n || 0).toLocaleString("en-US");
 export const fmtPct = (n) => (n * 100).toFixed(1) + "%";
-// active time in a chat/project: "2h 15m", "45m", "30s", em dash for none.
 export const fmtDur = (ms) => {
   ms = +ms || 0;
   if (ms <= 0) return "-";
@@ -55,7 +54,6 @@ export const MON = [
   "Nov",
   "Dec",
 ];
-// "YYYY-MM-DD" -> "Jun 1" (year omitted; data is recent). Empty -> em dash.
 export const fmtDate = (s) => {
   if (!s) return "-";
   const [, m, d] = String(s).split("-").map(Number);

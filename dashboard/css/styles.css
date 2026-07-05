@@ -70,7 +70,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Header ---- */
 header.masthead {
   position: relative;
   border-bottom: 2px solid var(--ink);
@@ -140,7 +139,6 @@ h1 em {
   font-weight: 600;
 }
 
-/* ---- Controls ---- */
 .controls {
   position: sticky;
   top: 0;
@@ -236,8 +234,6 @@ h1 em {
   opacity: 1;
 }
 
-/* Source filter: a native <details> dropdown of checkbox rows. Scales to many
-     sources without wrapping the controls bar (unlike inline chips). */
 .dropdown {
   position: relative;
   display: inline-block;
@@ -322,7 +318,6 @@ h1 em {
   color: var(--accent-deep);
 }
 
-/* ---- KPI ---- */
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -372,7 +367,6 @@ h1 em {
   font-size: 11.5px;
 }
 
-/* ---- Cards / grid ---- */
 .grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -432,7 +426,6 @@ h1 em {
 .chart-box.short {
   height: 200px;
 }
-/* horizontally-scrollable per-day chart: outer scrolls, inner is widened in JS */
 .chart-scroll {
   overflow-x: auto;
   overflow-y: hidden;
@@ -447,17 +440,10 @@ h1 em {
   height: 230px;
 }
 
-/* ---- Calendar heatmap ---- */
-/* padding on all sides so a cell's hover outline (outline-offset ~3px) isn't
-     clipped by this scroll container - overflow-x:auto also clips the y-axis. */
 .heat-wrap {
   overflow-x: auto;
   padding: 4px;
 }
-/* 2×2 layout: top-left corner is empty, month labels span the top, weekday
-     labels run down the left, the cell grid fills the bottom-right. */
-/* column-gap separates the weekday labels from the cells; row-gap separates the
-     month labels from the first row. */
 .heat-grid {
   display: grid;
   grid-template-columns: auto max-content;
@@ -478,8 +464,6 @@ h1 em {
   top: 0;
   white-space: nowrap;
 }
-/* row track mirrors the cell grid (7 × 32px rows, 3px gap) so each weekday lines
-     up with its row; labels right-align toward the cells. */
 .heat-days {
   display: grid;
   grid-template-rows: repeat(7, 32px);
@@ -522,15 +506,11 @@ h1 em {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* flex row holding the calendar grid + optional stats panel */
 .heat-body {
   display: flex;
   align-items: flex-start;
   gap: 0;
 }
-/* Stats panel: hidden by default. When the range is narrow (.heat-compact) the
-     calendar keeps its tidy cells and stays content-width; the panel grows to fill
-     the rest of the row as a 2-column block (headline + breakdown bars/sparkline). */
 .heat-stats {
   display: none;
   min-width: 0;
@@ -551,7 +531,6 @@ h1 em {
   gap: 34px;
   align-content: start;
 }
-/* headline column */
 .hs-period {
   font-family: var(--mono);
   font-size: 10px;
@@ -583,7 +562,6 @@ h1 em {
   margin-bottom: 3px;
   font-family: var(--mono);
 }
-/* breakdown column */
 .hs-lbl {
   font-family: var(--mono);
   font-size: 10px;
@@ -646,7 +624,6 @@ h1 em {
   min-height: 2px;
   border-radius: 2px 2px 0 0;
 }
-/* narrow screens: stack the panel below the calendar and collapse to one column */
 @media (max-width: 720px) {
   .heat-compact .heat-body {
     flex-direction: column;
@@ -762,7 +739,6 @@ h1 em {
   margin-top: 4px;
 }
 
-/* ---- Table ---- */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -822,7 +798,6 @@ th.num {
   border-radius: 3px;
 }
 
-/* ---- Project tree (expandable rows) ---- */
 tr.tr-expandable {
   cursor: pointer;
 }
@@ -915,7 +890,6 @@ tr.tr-more .tlabel {
   color: var(--ink-faint);
 }
 
-/* ---- Empty state ---- */
 .empty {
   display: none;
   text-align: center;
@@ -959,13 +933,12 @@ footer {
   display: none !important;
 }
 
-/* download buttons (share card reuses .btn-reset; per-chart icon below) */
 .card {
   position: relative;
 }
 .card-head {
   padding-right: 30px;
-} /* reserve room for the corner button */
+}
 .chart-dl {
   position: absolute;
   top: 14px;
@@ -990,8 +963,6 @@ footer {
   color: var(--accent-deep);
   border-color: var(--accent);
 }
-/* the calendar's download button sits inline next to its metric dropdown,
-     not in the corner (which the dropdown already occupies) */
 .heat-dl {
   position: static;
   top: auto;
@@ -999,7 +970,6 @@ footer {
   flex: 0 0 auto;
 }
 
-/* ⌘/Ctrl-click a chat icon to copy its session id */
 .ticon.copyable {
   cursor: pointer;
   border-radius: 6px;
@@ -1012,7 +982,6 @@ footer {
   transform: scale(1.12);
 }
 
-/* share-card preview modal */
 .card-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1085,7 +1054,6 @@ footer {
   border-color: var(--accent);
 }
 
-/* transient toast (copy / download feedback) */
 .toast {
   position: fixed;
   left: 50%;

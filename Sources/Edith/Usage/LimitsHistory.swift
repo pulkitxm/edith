@@ -1,13 +1,8 @@
 import Foundation
 
-/// Append-only JSONL of limit polls: {"ts","s","w","sr","wr"} per line.
-/// s/w = session/weekly percent (0.1 precision), sr/wr = reset ISO dates.
-/// Rows identical to the previous one (ignoring ts) are skipped, so an idle
-/// machine writes nothing. dashboard/data/ is gitignored.
 struct LimitsHistory {
     static var url: URL { Repo.root.appendingPathComponent("dashboard/data/limits-history.jsonl") }
 
-    /// Injectable for tests; the app always logs to the repo's dashboard/data.
     private let fileURL: URL
 
     init(url: URL = LimitsHistory.url) {
@@ -27,8 +22,9 @@ struct LimitsHistory {
 
     private static let iso = ISO8601DateFormatter()
 
-    /// Pure row builder: dedupe key (values sans timestamp) + the JSONL line.
-    static func row(session: LimitWindow?, week: LimitWindow?, now: Date) -> (key: String, line: String) {
+    static func row(session: LimitWindow?, week: LimitWindow?, now: Date) -> (
+        key: String, line: String
+    ) {
         let round1 = { (v: Double) in (v * 10).rounded() / 10 }
         let r = Row(
             ts: iso.string(from: now),
@@ -37,7 +33,6 @@ struct LimitsHistory {
             sr: session?.resetsAt.map { iso.string(from: $0) },
             wr: week?.resetsAt.map { iso.string(from: $0) })
         let key = "\(r.s ?? -1)|\(r.w ?? -1)|\(r.sr ?? "-")|\(r.wr ?? "-")"
-        // Codable keeps this future-proof; key order in the line doesn't matter.
         let data = (try? JSONEncoder().encode(r)) ?? Data("{}".utf8)
         return (key, String(decoding: data, as: UTF8.self) + "\n")
     }
@@ -49,7 +44,8 @@ struct LimitsHistory {
         lastKey = key
         let url = fileURL
         let fm = FileManager.default
-        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fm.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if !fm.fileExists(atPath: url.path) {
             try? Data(line.utf8).write(to: url)
             return
@@ -57,7 +53,6 @@ struct LimitsHistory {
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
             var payload = Data(line.utf8)
-            // Heal a torn tail (interrupted write): never glue onto a partial line.
             if let end = try? handle.seekToEnd(), end > 0 {
                 try? handle.seek(toOffset: end - 1)
                 let last = (try? handle.read(upToCount: 1)) ?? nil
@@ -69,25 +64,24 @@ struct LimitsHistory {
         }
     }
 
-    /// Seed the dedupe key from the file's last line so an app restart on an
-    /// idle machine doesn't write a duplicate row.
     private mutating func seed() {
         seeded = true
         guard let data = try? Data(contentsOf: fileURL),
-              let text = String(data: data, encoding: .utf8) else { return }
+            let text = String(data: data, encoding: .utf8)
+        else { return }
         guard let line = text.split(separator: "\n").last,
-              let row = try? JSONDecoder().decode(Row.self, from: Data(line.utf8)) else { return }
+            let row = try? JSONDecoder().decode(Row.self, from: Data(line.utf8))
+        else { return }
         lastKey = "\(row.s ?? -1)|\(row.w ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")"
     }
-
-    // MARK: - Reading (panel chart)
 
     static func parse(_ text: String, since: Date) -> [LimitPoint] {
         var out: [LimitPoint] = []
         let decoder = JSONDecoder()
         for line in text.split(separator: "\n") {
             guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)),
-                  let date = UsageStore.parseISO(row.ts), date >= since else { continue }
+                let date = UsageStore.parseISO(row.ts), date >= since
+            else { continue }
             out.append(LimitPoint(date: date, s: row.s, w: row.w))
         }
         return out.sorted { $0.date < $1.date }

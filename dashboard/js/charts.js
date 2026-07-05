@@ -1,23 +1,20 @@
-import { charts } from "./state.js";
 import { fmtTok, fmtUSD } from "./format.js";
+import { charts } from "./state.js";
 
-// ---------- chart.js defaults ----------
 Chart.defaults.font.family =
   getComputedStyle(document.body).getPropertyValue("--mono") || "monospace";
 Chart.defaults.font.size = 11;
 const cssVar = (n) =>
   getComputedStyle(document.body).getPropertyValue(n).trim();
 export let GRIDC, CARD_BG, TICKC, INKC, COSTC;
-// read theme-dependent colors into module globals (used at chart-build time)
 export function readThemeColors() {
   GRIDC = cssVar("--grid") || "#ece5d8";
   CARD_BG = cssVar("--paper-2") || "#fffdf8";
   TICKC = cssVar("--ink-soft") || "#5c5247";
   INKC = cssVar("--ink") || "#241f1a";
-  COSTC = cssVar("--gold") || "#c89b3c"; // cost line color
+  COSTC = cssVar("--gold") || "#c89b3c";
   Chart.defaults.color = TICKC;
 }
-// dual-axis scales: left (y) = tokens, right (y1) = cost
 export function dualScales(stacked) {
   return {
     x: {
@@ -40,7 +37,7 @@ export function dualScales(stacked) {
     },
   };
 }
-const DAYPX = 34; // min px per day column before horizontal scroll kicks in
+const DAYPX = 34;
 export function sizeChartInner(scrollId, numDays) {
   const sc = document.getElementById(scrollId);
   if (!sc) return;
@@ -52,7 +49,6 @@ export function autoScrollRight(scrollId) {
   const sc = document.getElementById(scrollId);
   if (sc) sc.scrollLeft = sc.scrollWidth;
 }
-// legacy name kept: now only reads globals (build-time). Theme switch uses liveRetheme().
 export function applyChartTheme() {
   readThemeColors();
 }

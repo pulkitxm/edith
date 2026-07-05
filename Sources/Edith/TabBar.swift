@@ -1,15 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Theme-tinted tab bar with a sliding selection pill.
-/// Few tabs → they share the row evenly (segmented look). Many tabs → the row
-/// overflows into a horizontal scroller that keeps the selection centered,
-/// so the same component carries any number of future tabs.
-///
-/// The pill is ONE persistent view moved to the measured frame of the selected
-/// chip - never inserted/removed - which is what makes the slide reliable
-/// (matchedGeometryEffect across if-branches animates removal but snaps
-/// insertion).
 struct TabBar: View {
     let tabs: [(id: String, title: String)]
     @Binding var selection: String
@@ -64,9 +55,6 @@ struct TabBar: View {
 
     private func chip(_ entry: (id: String, title: String), expand: Bool) -> some View {
         Button {
-            // withAnimation puts the whole layout change - including the
-            // panel's height resize - into one animated transaction, matching
-            // the settings open/close feel.
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 selection = entry.id
             }
@@ -78,11 +66,13 @@ struct TabBar: View {
                 .padding(.vertical, 7)
                 .padding(.horizontal, 14)
                 .frame(maxWidth: expand ? .infinity : nil)
-                .background(GeometryReader { geo in
-                    Color.clear.preference(
-                        key: ChipFramesKey.self,
-                        value: [entry.id: geo.frame(in: .named("tabbar"))])
-                })
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ChipFramesKey.self,
+                            value: [entry.id: geo.frame(in: .named("tabbar"))])
+                    }
+                )
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

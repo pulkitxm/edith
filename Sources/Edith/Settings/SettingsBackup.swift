@@ -2,16 +2,15 @@ import AppKit
 import Foundation
 
 enum AppData {
-    /// The app's fixed data home: ~/Library/Application Support/Edith
     static let supportDir: URL = {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Edith")
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[
+            0
+        ]
+        .appendingPathComponent("Edith")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
 
-    /// iCloud Drive folder - files here sync natively, no entitlements needed
-    /// (CloudKit proper requires a provisioned app, which an ad-hoc build isn't).
     static let cloudDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Edith")
 
@@ -22,30 +21,19 @@ enum AppData {
     }
 }
 
-/// Mirrors the app's settings (UserDefaults) into Application Support/Edith/
-/// settings.json and - when the iCloud toggle is on - into iCloud Drive.
-/// Sync model: last writer wins. A newer iCloud copy is imported at launch;
-/// afterwards every settings change re-exports, debounced and content-compared
-/// so unchanged snapshots never touch mtimes.
 @MainActor
 final class SettingsBackup: ObservableObject {
     static let shared = SettingsBackup()
 
     @Published private(set) var musicBackupRunning = false
 
-    /// Every persisted preference the app has. New settings join this list.
-    /// Deliberately absent: notifier edge-trigger state (notifSessionLevel &
-    /// friends - syncing those would suppress alerts on the other Mac),
-    /// migratedFromControlCenter, and NSStatusItem visibility keys.
     private static let keys = [
         "theme", "tab", "presenterMode", "tabUsageEnabled", "tabMusicEnabled",
         "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "repoPath",
         "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
         "tabSystemEnabled", "preventSleep", "tabOrder",
-        // limits + menu bar widget
         "limitsInMenuBar", "menuBarColorMode", "smartColor",
         "warnPercent", "critPercent", "pacingMargin",
-        // notifications
         "notifyMaster", "notifyTrackSession", "notifyTrackWeekly",
         "notifyRecovery", "notifyPacingWarning", "notifyPacingHot",
         "notifyReminderSession", "notifyReminderSessionOffsetMin",
@@ -59,18 +47,15 @@ final class SettingsBackup: ObservableObject {
 
     func start() {
         importFromCloudIfNewer()
-        export() // make sure the local mirror exists from day one
+        export()
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleExport() }
         }
         if UserDefaults.standard.bool(forKey: "musicBackup") {
-            backupMusic() // rsync no-ops fast when nothing changed
+            backupMusic()
         }
-        // Flush a pending debounced export on quit - otherwise a setting
-        // changed moments before termination misses the mirror, and a stale
-        // iCloud copy can resurrect the old value on the next launch.
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { _ in
@@ -87,10 +72,10 @@ final class SettingsBackup: ObservableObject {
         }
     }
 
-    /// Copy new/changed music files into iCloud Drive (additive, never deletes).
     func backupMusic() {
         guard !musicBackupRunning, AppData.cloudAvailable,
-              FileManager.default.fileExists(atPath: Repo.musicDir.path) else { return }
+            FileManager.default.fileExists(atPath: Repo.musicDir.path)
+        else { return }
         musicBackupRunning = true
         let destination = AppData.cloudDir.appendingPathComponent("music")
         try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -148,15 +133,17 @@ final class SettingsBackup: ObservableObject {
     private func importFromCloudIfNewer() {
         guard UserDefaults.standard.bool(forKey: "icloudBackup") else { return }
         let fm = FileManager.default
-        guard let cloudDate = (try? fm.attributesOfItem(atPath: cloudFile.path))?[.modificationDate] as? Date
+        guard
+            let cloudDate = (try? fm.attributesOfItem(atPath: cloudFile.path))?[.modificationDate]
+                as? Date
         else { return }
-        let localDate = (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
+        let localDate =
+            (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
             ?? .distantPast
         guard cloudDate > localDate.addingTimeInterval(2) else { return }
         guard let data = try? Data(contentsOf: cloudFile),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
-            // dataless iCloud placeholder - kick off the download for next launch
             try? fm.startDownloadingUbiquitousItem(at: cloudFile)
             return
         }
@@ -164,6 +151,6 @@ final class SettingsBackup: ObservableObject {
             UserDefaults.standard.set(value, forKey: key)
         }
         try? data.write(to: localFile)
-        HotKey.register() // an imported shortcut takes effect immediately
+        HotKey.register()
     }
 }

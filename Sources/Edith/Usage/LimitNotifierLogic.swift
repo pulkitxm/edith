@@ -27,7 +27,8 @@ struct NotifySettings {
         s.pacingWarning = d.object(forKey: "notifyPacingWarning") as? Bool ?? true
         s.pacingHot = d.object(forKey: "notifyPacingHot") as? Bool ?? true
         s.reminderSession = d.bool(forKey: "notifyReminderSession")
-        s.reminderSessionOffsetMin = d.object(forKey: "notifyReminderSessionOffsetMin") as? Int ?? 30
+        s.reminderSessionOffsetMin =
+            d.object(forKey: "notifyReminderSessionOffsetMin") as? Int ?? 30
         s.reminderWeekly = d.bool(forKey: "notifyReminderWeekly")
         s.reminderWeeklyOffsetMin = d.object(forKey: "notifyReminderWeeklyOffsetMin") as? Int ?? 120
         s.tokenExpired = d.object(forKey: "notifyTokenExpired") as? Bool ?? true
@@ -45,9 +46,6 @@ struct LimitNotifierState: Equatable {
     var weeklyPacing: PacingZone = .onTrack
 }
 
-/// Edge-triggered notification decisions, ported from TokenEater's
-/// NotificationService. Pure: state in/out, alerts returned; the caller
-/// persists state and hands alerts to UNUserNotificationCenter.
 enum LimitNotifierLogic {
     static func decide(
         session: LimitWindow?, week: LimitWindow?,
@@ -60,26 +58,33 @@ enum LimitNotifierLogic {
         let weeklyPacing = pacing(week, kind: .weekly, margin: settings.pacingMargin, now: now)
 
         if settings.trackSession, let session {
-            alerts += checkSurface(.session, window: session, pacing: sessionPacing,
-                                   settings: settings, level: &state.sessionLevel, now: now)
+            alerts += checkSurface(
+                .session, window: session, pacing: sessionPacing,
+                settings: settings, level: &state.sessionLevel, now: now)
         }
         if settings.trackWeekly, let week {
-            alerts += checkSurface(.weekly, window: week, pacing: weeklyPacing,
-                                   settings: settings, level: &state.weeklyLevel, now: now)
+            alerts += checkSurface(
+                .weekly, window: week, pacing: weeklyPacing,
+                settings: settings, level: &state.weeklyLevel, now: now)
         }
         if let z = sessionPacing {
-            alerts += checkPacing(z, surface: .session, settings: settings, last: &state.sessionPacing)
+            alerts += checkPacing(
+                z, surface: .session, settings: settings, last: &state.sessionPacing)
         }
         if let z = weeklyPacing {
-            alerts += checkPacing(z, surface: .weekly, settings: settings, last: &state.weeklyPacing)
+            alerts += checkPacing(
+                z, surface: .weekly, settings: settings, last: &state.weeklyPacing)
         }
         return alerts
     }
 
-    private static func pacing(_ window: LimitWindow?, kind: LimitWindowKind, margin: Double, now: Date) -> PacingZone? {
+    private static func pacing(
+        _ window: LimitWindow?, kind: LimitWindowKind, margin: Double, now: Date
+    ) -> PacingZone? {
         guard let window, let resetsAt = window.resetsAt else { return nil }
         let delta = LimitMath.pacingDelta(
-            utilization: window.percent, resetsAt: resetsAt, windowDuration: kind.duration, now: now)
+            utilization: window.percent, resetsAt: resetsAt, windowDuration: kind.duration, now: now
+        )
         return LimitMath.pacingZone(delta: delta, margin: margin)
     }
 
@@ -88,21 +93,25 @@ enum LimitNotifierLogic {
         settings: NotifySettings, level previous: inout UsageLevel, now: Date
     ) -> [LimitAlert] {
         let absolute = UsageLevel.from(pct: window.percent, thresholds: settings.thresholds)
-        let current: UsageLevel = settings.smartColor
-            ? LimitMath.level(forRisk: LimitMath.smartRisk(
-                utilization: window.percent, resetsAt: window.resetsAt,
-                windowDuration: kind.duration, pacingMargin: settings.pacingMargin, now: now))
+        let current: UsageLevel =
+            settings.smartColor
+            ? LimitMath.level(
+                forRisk: LimitMath.smartRisk(
+                    utilization: window.percent, resetsAt: window.resetsAt,
+                    windowDuration: kind.duration, pacingMargin: settings.pacingMargin, now: now))
             : absolute
         guard current != previous else { return [] }
         let prev = previous
         previous = current
 
-        // Smart escalated ABOVE the raw threshold on the weekly surface: driven
-        // by rate/projection, not the cap - say "ahead of pace", not "capped".
         let paceDriven = settings.smartColor && current > absolute && kind == .weekly
 
         if current > prev {
-            return [escalation(kind, level: current, window: window, pacing: pacing, paceDriven: paceDriven, now: now)]
+            return [
+                escalation(
+                    kind, level: current, window: window, pacing: pacing, paceDriven: paceDriven,
+                    now: now)
+            ]
         }
         if current == .green, prev > .green, settings.recovery {
             return [recovery(kind, window: window, now: now)]
@@ -117,20 +126,24 @@ enum LimitNotifierLogic {
         guard zone != last else { return [] }
         last = zone
         let prefix = surface == .session ? "Session" : "Weekly"
-        // Only entry into a loud zone notifies; recovery is silent by design.
         switch zone {
         case .hot where settings.pacingHot:
-            return [LimitAlert(id: "pacing_\(surface.rawValue)_hot",
-                               title: "\(prefix): burning hot", body: "Way ahead of pace, pump the brakes")]
+            return [
+                LimitAlert(
+                    id: "pacing_\(surface.rawValue)_hot",
+                    title: "\(prefix): burning hot", body: "Way ahead of pace, pump the brakes")
+            ]
         case .warning where settings.pacingWarning:
-            return [LimitAlert(id: "pacing_\(surface.rawValue)_warning",
-                               title: "\(prefix): drifting fast", body: "A touch faster than ideal, keep an eye")]
+            return [
+                LimitAlert(
+                    id: "pacing_\(surface.rawValue)_warning",
+                    title: "\(prefix): drifting fast",
+                    body: "A touch faster than ideal, keep an eye")
+            ]
         default:
             return []
         }
     }
-
-    // MARK: - Copy (adapted from TokenEater en.lproj)
 
     private static func escalation(
         _ kind: LimitWindowKind, level: UsageLevel, window: LimitWindow,
@@ -138,14 +151,18 @@ enum LimitNotifierLogic {
     ) -> LimitAlert {
         let id = "escalation_\(kind.rawValue)"
         if paceDriven {
-            return LimitAlert(id: id, title: "Ahead of weekly pace",
-                body: "You're ahead of an even weekly burn rate, not near the cap. Fine if intentional.")
+            return LimitAlert(
+                id: id, title: "Ahead of weekly pace",
+                body:
+                    "You're ahead of an even weekly burn rate, not near the cap. Fine if intentional."
+            )
         }
         switch kind {
         case .session:
             let left = window.resetsAt.flatMap { $0 > now ? countdown(from: now, to: $0) : nil }
             if level == .red {
-                return LimitAlert(id: id, title: "5h almost capped",
+                return LimitAlert(
+                    id: id, title: "5h almost capped",
                     body: left.map { "Easy until reset, \($0) left" } ?? "Limit almost reached")
             }
             let zone = pacing ?? .onTrack
@@ -171,29 +188,33 @@ enum LimitNotifierLogic {
         case .weekly:
             let when = window.resetsAt.flatMap { $0 > now ? dateTime($0) : nil }
             if level == .red {
-                return LimitAlert(id: id, title: "Weekly almost capped",
+                return LimitAlert(
+                    id: id, title: "Weekly almost capped",
                     body: when.map { "Take it slow until \($0)" } ?? "Weekly limit almost reached")
             }
-            return LimitAlert(id: id, title: "Weekly filling up",
+            return LimitAlert(
+                id: id, title: "Weekly filling up",
                 body: when.map { "Resets \($0)" } ?? "Past the weekly warning")
         }
     }
 
-    private static func recovery(_ kind: LimitWindowKind, window: LimitWindow, now: Date) -> LimitAlert {
+    private static func recovery(_ kind: LimitWindowKind, window: LimitWindow, now: Date)
+        -> LimitAlert
+    {
         let id = "recovery_\(kind.rawValue)"
         switch kind {
         case .session:
             let at = window.resetsAt.flatMap { $0 > now ? time($0) : nil }
-            return LimitAlert(id: id, title: "5h cleared",
+            return LimitAlert(
+                id: id, title: "5h cleared",
                 body: at.map { "Fresh slate at \($0)" } ?? "Fresh slate, you're back")
         case .weekly:
             let at = window.resetsAt.flatMap { $0 > now ? dateTime($0) : nil }
-            return LimitAlert(id: id, title: "Weekly reset",
+            return LimitAlert(
+                id: id, title: "Weekly reset",
                 body: at.map { "New cycle, you're back at \($0)" } ?? "New cycle, you're back")
         }
     }
-
-    // MARK: - Formatting
 
     static func countdown(from now: Date, to target: Date) -> String {
         let mins = max(0, Int(target.timeIntervalSince(now)) / 60)
@@ -211,13 +232,10 @@ enum LimitNotifierLogic {
         d.formatted(date: .omitted, time: .shortened)
     }
 
-    /// Matches the Settings picker labels: round hours as "2 h", else "30 min".
     static func offsetLabel(minutes: Int) -> String {
         minutes >= 60 && minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes) min"
     }
 
-    /// The fire date for a reminder that fires `offsetMinutes` before `reset`,
-    /// or nil if there's no reset to count down to or that date has already passed.
     static func reminderFireDate(reset: Date?, offsetMinutes: Int, now: Date = Date()) -> Date? {
         guard let reset else { return nil }
         let fire = reset.addingTimeInterval(-Double(offsetMinutes) * 60)

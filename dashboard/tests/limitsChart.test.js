@@ -1,10 +1,4 @@
-// Limits card smoke test: confirms initLimitsCard() hides the card when the
-// inline limits-data block is absent/empty, and mounts a 2-dataset stepped
-// chart when it's present with real points. Module-level globals (Chart,
-// getComputedStyle, matchMedia, document.body) must exist BEFORE the first
-// dynamic import, because charts.js touches Chart.defaults and
-// getComputedStyle(document.body) at import time.
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 
 globalThis.__constructed = [];
 globalThis.Chart = class {
@@ -25,14 +19,24 @@ globalThis.document = {
 const { initLimitsCard } = await import("../js/limitsChart.js");
 
 function makeDOM(limitsJSON) {
-  const el = (extra = {}) => ({ style: {}, setAttribute() {}, addEventListener() {}, ...extra });
+  const el = (extra = {}) => ({
+    style: {},
+    setAttribute() {},
+    addEventListener() {},
+    ...extra,
+  });
   const card = el();
   const canvas = el({ id: "c-limits" });
   globalThis.document.getElementById = (id) =>
-    id === "limits-card" ? card
-    : id === "c-limits" ? canvas
-    : id === "limits-data" ? (limitsJSON == null ? null : { textContent: limitsJSON })
-    : el();
+    id === "limits-card"
+      ? card
+      : id === "c-limits"
+        ? canvas
+        : id === "limits-data"
+          ? limitsJSON == null
+            ? null
+            : { textContent: limitsJSON }
+          : el();
   globalThis.document.querySelectorAll = () => [];
   globalThis.__constructed.length = 0;
   return { card, canvas, constructed: globalThis.__constructed };

@@ -1,43 +1,16 @@
 #!/usr/bin/env bun
-/**
- * ccusage-total - Claude Code usage by model: today + all-time.
- *
- * Pulls usage from `ccusage` (via bunx) and aggregates the per-model
- * breakdowns into two tables - today's usage and the entire history -
- * each sorted by cost with every model's share of spend.
- *
- * Built for Bun - run with:
- *   bun ccusage-total.mjs                 # tables: today + all-time
- *   bun ccusage-total.mjs --today         # tables: today only
- *   bun ccusage-total.mjs --day-wise      # tables: one per day
- *   bun ccusage-total.mjs --json [...]    # verbose JSON (adds per-chat detail)
- *   ./ccusage-total.mjs                   # via the bun shebang
- *
- * Tables are driven by `ccusage` and stay deliberately simple. The JSON is
- * richer: it joins ccusage's per-day/per-model totals with data parsed from
- * the raw Claude Code transcripts (~/.claude/projects) to add, per day, the
- * list of chats (sessions) - name, project, git branch, message counts, and
- * a per-model token/cost breakdown. Per-chat cost uses per-model unit prices
- * derived at runtime from ccusage's own session data, so they match ccusage.
- */
 
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
-// Usage comes from two sources, both logged as Claude Code JSONL transcripts:
-//   cli    - the normal CLI logs in ~/.claude
-//   cowork - Cowork (local-agent mode) runs Claude Code under the hood but logs
-//            into nested .claude dirs under the desktop app. We discover every
-//            such dir so both the ccusage CLI totals and the transcript walk
-//            include Cowork usage.
 const CLI_CONFIG = join(homedir(), ".claude");
 const COWORK_ROOT = join(
   homedir(),
   "Library",
   "Application Support",
   "Claude",
-  "local-agent-mode-sessions"
+  "local-agent-mode-sessions",
 );
 
 function findCoworkConfigDirs() {
@@ -53,7 +26,7 @@ function findCoworkConfigDirs() {
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       if (e.name === ".claude") {
-        out.push(join(dir, e.name)); // a Cowork config dir; don't descend further
+        out.push(join(dir, e.name));
         continue;
       }
       walk(join(dir, e.name), depth + 1);
@@ -66,13 +39,11 @@ function findCoworkConfigDirs() {
 const COWORK_DIRS = findCoworkConfigDirs();
 const CONFIG_DIRS = [CLI_CONFIG, ...COWORK_DIRS];
 const PROJECTS_DIRS = CONFIG_DIRS.map((c) => join(c, "projects"));
-// ccusage reads a comma-separated list of config dirs from CLAUDE_CONFIG_DIR.
-const CCUSAGE_ENV = { ...process.env, CLAUDE_CONFIG_DIR: CONFIG_DIRS.join(",") };
+const CCUSAGE_ENV = {
+  ...process.env,
+  CLAUDE_CONFIG_DIR: CONFIG_DIRS.join(","),
+};
 
-// Usage sources for the per-source breakdown. Each source maps to its own set
-// of config dirs; querying ccusage per source lets us split "code" (the normal
-// CLI) from "cowork" (local-agent mode). Cowork is omitted when there are no
-// such dirs so we never query ccusage with an empty CLAUDE_CONFIG_DIR.
 const SOURCES = [
   { key: "code", dirs: [CLI_CONFIG] },
   ...(COWORK_DIRS.length ? [{ key: "cowork", dirs: COWORK_DIRS }] : []),
@@ -83,7 +54,6 @@ const todayOnly = Bun.argv.includes("--today");
 const dayWise =
   Bun.argv.includes("--day-wise") || Bun.argv.includes("--daywise");
 
-// Local YYYY-MM-DD, matching how ccusage labels daily periods.
 function localDateStr(d = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -95,11 +65,13 @@ function fetchCcusage(period, dirs = CONFIG_DIRS) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: dirs.join(",") };
   const proc = Bun.spawnSync(
     ["bunx", "ccusage@latest", period, "--breakdown", "--json"],
-    { stdout: "pipe", stderr: "pipe", env }
+    { stdout: "pipe", stderr: "pipe", env },
   );
   if (proc.exitCode !== 0) {
     const err = proc.stderr.toString().trim();
-    throw new Error(`ccusage ${period} failed (exit ${proc.exitCode}):\n${err}`);
+    throw new Error(
+      `ccusage ${period} failed (exit ${proc.exitCode}):\n${err}`,
+    );
   }
   return JSON.parse(proc.stdout.toString());
 }
@@ -111,20 +83,14 @@ function fetchSessionData() {
     env: CCUSAGE_ENV,
   });
   if (proc.exitCode !== 0) {
-    throw new Error(`ccusage session failed:\n${proc.stderr.toString().trim()}`);
+    throw new Error(
+      `ccusage session failed:\n${proc.stderr.toString().trim()}`,
+    );
   }
   return JSON.parse(proc.stdout.toString());
 }
 
-// --- per-model unit pricing -------------------------------------------------
-// ccusage prices some very new models (e.g. opus-4-7/4-8) with a placeholder
-// that differs from Anthropic's list price. To stay consistent with ccusage's
-// own totals we DERIVE the effective unit prices from its session breakdowns
-// (cost is linear in the four token types) via least squares, and only fall
-// back to a static table if a model has too few/unstable samples.
 const FALLBACK_PRICE_PER_MTOK = {
-  // fable-5 sessions mix 5m- and 1h-TTL cache writes (priced 1.25x vs 2x input),
-  // so the least-squares fit degenerates and this fallback is what actually prices it.
   "claude-fable-5": [10, 50, 12.5, 1],
   "claude-opus-4-8": [5, 25, 6.25, 0.5],
   "claude-opus-4-7": [5, 25, 6.25, 0.5],
@@ -132,9 +98,13 @@ const FALLBACK_PRICE_PER_MTOK = {
   "claude-haiku-4-5-20251001": [1, 5, 1.25, 0.1],
 };
 
-// Solve the 4x4 normal equations for [in, out, cacheWrite, cacheRead].
 function leastSquares4(rows) {
-  const M = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  const M = [
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+  ];
   const v = [0, 0, 0, 0];
   for (const { x, y } of rows) {
     for (let i = 0; i < 4; i++) {
@@ -158,7 +128,6 @@ function leastSquares4(rows) {
   return [0, 1, 2, 3].map((i) => A[i][4] / A[i][i]);
 }
 
-// Returns Map<model, {in,out,cw,cr}> as per-single-token prices.
 function derivePrices(sessionData) {
   const rowsByModel = new Map();
   for (const s of sessionData.session ?? []) {
@@ -188,8 +157,8 @@ function derivePrices(sessionData) {
         actual += y;
         dev += Math.abs(pred - y);
       }
-      if (!(actual > 0 && dev / actual < 0.02)) p = null; // reject >2% residual
-      if (p && p.some((z) => z < 0)) p = null; // reject negative prices
+      if (!(actual > 0 && dev / actual < 0.02)) p = null;
+      if (p && p.some((z) => z < 0)) p = null;
     }
     if (!p) {
       const fb = FALLBACK_PRICE_PER_MTOK[model];
@@ -203,7 +172,12 @@ function derivePrices(sessionData) {
 function costOf(prices, model, t) {
   const p = prices.get(model);
   if (!p) return 0;
-  return t.input * p.in + t.output * p.out + t.cacheCreate * p.cw + t.cacheRead * p.cr;
+  return (
+    t.input * p.in +
+    t.output * p.out +
+    t.cacheCreate * p.cw +
+    t.cacheRead * p.cr
+  );
 }
 
 function pricingInfo(prices) {
@@ -222,7 +196,6 @@ function pricingInfo(prices) {
   };
 }
 
-// --- raw transcript parsing -------------------------------------------------
 function walkJsonl(dir) {
   const out = [];
   let entries;
@@ -250,11 +223,6 @@ function extractText(content) {
   return "";
 }
 
-// Walk every transcript and build:
-//   byDate: Map<date, Map<sessionId, { models, msg counts, ts span }>>
-//   meta:   Map<sessionId, { title, project, branch, version, lifetime span }>
-// Usage is attributed to the local date of each assistant message's timestamp,
-// deduped by messageId|requestId (same key ccusage uses).
 function buildChatIndex() {
   const meta = new Map();
   const byDate = new Map();
@@ -287,7 +255,14 @@ function buildChatIndex() {
     }
     let dc = dayMap.get(sid);
     if (!dc) {
-      dc = { sessionId: sid, models: new Map(), firstTs: ts, lastTs: ts, userMsgs: 0, asstMsgs: 0 };
+      dc = {
+        sessionId: sid,
+        models: new Map(),
+        firstTs: ts,
+        lastTs: ts,
+        userMsgs: 0,
+        asstMsgs: 0,
+      };
       dayMap.set(sid, dc);
     }
     if (ts < dc.firstTs) dc.firstTs = ts;
@@ -349,13 +324,21 @@ function buildChatIndex() {
         dc.asstMsgs++;
         const u = o.message?.usage;
         if (!u) continue;
-        const key = o.message?.id && o.requestId ? `${o.message.id}|${o.requestId}` : null;
+        const key =
+          o.message?.id && o.requestId
+            ? `${o.message.id}|${o.requestId}`
+            : null;
         if (key) {
           if (seen.has(key)) continue;
           seen.add(key);
         }
         const model = o.message?.model ?? "unknown";
-        const t = dc.models.get(model) ?? { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 };
+        const t = dc.models.get(model) ?? {
+          input: 0,
+          output: 0,
+          cacheCreate: 0,
+          cacheRead: 0,
+        };
         t.input += u.input_tokens || 0;
         t.output += u.output_tokens || 0;
         t.cacheCreate += u.cache_creation_input_tokens || 0;
@@ -368,7 +351,6 @@ function buildChatIndex() {
   return { byDate, meta };
 }
 
-// Build the chats array for one date from the index.
 function chatsForDate(index, prices, date) {
   const dayMap = index.byDate.get(date);
   if (!dayMap) return [];
@@ -391,7 +373,11 @@ function chatsForDate(index, prices, date) {
     chats.push({
       sessionId: dc.sessionId,
       title: m.aiTitle || m.firstUserText || "(untitled)",
-      titleSource: m.aiTitle ? "ai-title" : m.firstUserText ? "first-prompt" : "none",
+      titleSource: m.aiTitle
+        ? "ai-title"
+        : m.firstUserText
+          ? "first-prompt"
+          : "none",
       project: m.project ?? null,
       projectName: m.projectName ?? null,
       gitBranch: m.gitBranch ?? null,
@@ -411,19 +397,17 @@ function chatsForDate(index, prices, date) {
   return chats.sort((a, b) => b.totalCost - a.totalCost);
 }
 
-// Aggregate a day's chats by project.
 function projectsForChats(chats) {
   const byProj = new Map();
   for (const c of chats) {
     const key = c.project ?? "(unknown)";
-    const a =
-      byProj.get(key) ?? {
-        project: c.project ?? null,
-        projectName: c.projectName ?? null,
-        chatCount: 0,
-        totalTokens: 0,
-        totalCost: 0,
-      };
+    const a = byProj.get(key) ?? {
+      project: c.project ?? null,
+      projectName: c.projectName ?? null,
+      chatCount: 0,
+      totalTokens: 0,
+      totalCost: 0,
+    };
     a.chatCount++;
     a.totalTokens += c.totalTokens;
     a.totalCost += c.totalCost;
@@ -432,8 +416,6 @@ function projectsForChats(chats) {
   return [...byProj.values()].sort((a, b) => b.totalCost - a.totalCost);
 }
 
-// Assemble one verbose day object: ccusage-authoritative totals/models plus
-// the transcript-derived chats and project rollups.
 function richDay(date, dailyItem, index, prices) {
   const chats = chatsForDate(index, prices, date);
   return {
@@ -457,8 +439,6 @@ function richDay(date, dailyItem, index, prices) {
   };
 }
 
-// Sum the per-model breakdowns across a set of period items into rows,
-// sorted by cost (highest first).
 function rowsFromItems(items) {
   const byModel = new Map();
   const empty = () => ({
@@ -498,12 +478,9 @@ const num = (n) => n.toLocaleString("en-US");
 const usd = (n) => "$" + n.toFixed(2);
 const shortName = (n) => n.replace(/^claude-/, "").replace(/-\d{8}$/, "");
 
-// Render a clean, aligned ASCII table.
-// `align` per column: "l" left, "r" right. The last data row (TOTAL) is
-// separated from the rest by a divider line.
 function renderTable(headers, rows, align, { dividerBeforeLast = false } = {}) {
   const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map((r) => String(r[i]).length))
+    Math.max(h.length, ...rows.map((r) => String(r[i]).length)),
   );
 
   const pad = (s, i) => {
@@ -540,7 +517,8 @@ function printSection(title, rows) {
   }
 
   const totalCost = rows.reduce((s, r) => s + r.cost, 0);
-  const pct = (c) => (totalCost ? ((c / totalCost) * 100).toFixed(1) : "0.0") + "%";
+  const pct = (c) =>
+    (totalCost ? ((c / totalCost) * 100).toFixed(1) : "0.0") + "%";
 
   const headers = [
     "Model",
@@ -577,12 +555,12 @@ function printSection(title, rows) {
     "100%",
   ]);
 
-  console.log(renderTable(headers, dataRows, align, { dividerBeforeLast: true }));
+  console.log(
+    renderTable(headers, dataRows, align, { dividerBeforeLast: true }),
+  );
   console.log(`\nTotal spend: ${usd(totalCost)}\n`);
 }
 
-// Per-model rows for `today`, one row per (model, source). Each source is
-// queried separately so its rows can be tagged with where the usage came from.
 function todayRowsBySource() {
   const out = [];
   for (const src of SOURCES) {
@@ -593,9 +571,6 @@ function todayRowsBySource() {
   return out;
 }
 
-// Render today's usage: the usual merged per-model table (unchanged), followed
-// by a compact By Source rollup that splits the same total into code vs cowork.
-// Percentages are share of today's total spend across all sources.
 function printTodayBySource(title, rows) {
   console.log(`\n${title}\n`);
 
@@ -605,11 +580,10 @@ function printTodayBySource(title, rows) {
   }
 
   const totalCost = rows.reduce((s, r) => s + r.cost, 0);
-  const pct = (c) => (totalCost ? ((c / totalCost) * 100).toFixed(1) : "0.0") + "%";
+  const pct = (c) =>
+    (totalCost ? ((c / totalCost) * 100).toFixed(1) : "0.0") + "%";
   const sum = (key) => rows.reduce((s, r) => s + r[key], 0);
 
-  // Merged per-model table: collapse the per-source rows back together by model
-  // so this matches the original (no Source column).
   const byModelMap = new Map();
   for (const r of rows) {
     const a = byModelMap.get(r.modelName) ?? {
@@ -632,8 +606,14 @@ function printTodayBySource(title, rows) {
   const modelRows = [...byModelMap.values()].sort((a, b) => b.cost - a.cost);
 
   const headers = [
-    "Model", "Input", "Output", "Cache Create",
-    "Cache Read", "Total Tokens", "Cost", "% Spend",
+    "Model",
+    "Input",
+    "Output",
+    "Cache Create",
+    "Cache Read",
+    "Total Tokens",
+    "Cost",
+    "% Spend",
   ];
   const align = ["l", "r", "r", "r", "r", "r", "r", "r"];
   const dataRows = modelRows.map((r) => [
@@ -656,9 +636,10 @@ function printTodayBySource(title, rows) {
     usd(totalCost),
     "100%",
   ]);
-  console.log(renderTable(headers, dataRows, align, { dividerBeforeLast: true }));
+  console.log(
+    renderTable(headers, dataRows, align, { dividerBeforeLast: true }),
+  );
 
-  // By Source rollup.
   const bySrc = new Map();
   for (const r of rows) {
     const a = bySrc.get(r.source) ?? {
@@ -682,8 +663,14 @@ function printTodayBySource(title, rows) {
 
   console.log("\nBy Source\n");
   const sHeaders = [
-    "Source", "Input", "Output", "Cache Create",
-    "Cache Read", "Total Tokens", "Cost", "% Spend",
+    "Source",
+    "Input",
+    "Output",
+    "Cache Create",
+    "Cache Read",
+    "Total Tokens",
+    "Cost",
+    "% Spend",
   ];
   const sAlign = ["l", "r", "r", "r", "r", "r", "r", "r"];
   const sData = srcRows.map((r) => [
@@ -706,11 +693,12 @@ function printTodayBySource(title, rows) {
     usd(totalCost),
     "100%",
   ]);
-  console.log(renderTable(sHeaders, sData, sAlign, { dividerBeforeLast: true }));
+  console.log(
+    renderTable(sHeaders, sData, sAlign, { dividerBeforeLast: true }),
+  );
   console.log(`\nTotal spend: ${usd(totalCost)}\n`);
 }
 
-// --- gather data ---
 const today = localDateStr();
 
 const dailyData = fetchCcusage("daily");
@@ -726,7 +714,6 @@ const dayRange =
       ? allDays[0].period
       : `${allDays[0].period} → ${allDays.at(-1).period}`;
 
-// All-time is skipped entirely in --today / --day-wise mode (no monthly query).
 let allRows = [];
 let range = "no data";
 if (!todayOnly && !dayWise) {
@@ -742,8 +729,6 @@ if (!todayOnly && !dayWise) {
         : `${periods[0]} → ${periods.at(-1)}`;
 }
 
-// Per-chat detail (derived pricing + transcript parsing) is only needed for
-// the verbose JSON output, so it stays out of the table code paths.
 let prices = null;
 let chatIndex = null;
 if (wantJson) {
@@ -751,12 +736,14 @@ if (wantJson) {
   chatIndex = buildChatIndex();
 }
 
-// --- output ---
 if (dayWise) {
   if (wantJson) {
     const payload = {
       generatedAt: new Date().toISOString(),
-      range: { from: allDays[0]?.period ?? null, to: allDays.at(-1)?.period ?? null },
+      range: {
+        from: allDays[0]?.period ?? null,
+        to: allDays.at(-1)?.period ?? null,
+      },
       pricing: pricingInfo(prices),
       days: allDays.map((d) => richDay(d.period, d, chatIndex, prices)),
     };
@@ -788,7 +775,7 @@ if (dayWise) {
 } else {
   printTodayBySource(
     `Claude Code - Today's Usage by Model (${today})`,
-    todayRowsBySource()
+    todayRowsBySource(),
   );
   if (!todayOnly) {
     printSection(`Claude Code - All-Time Usage by Model (${range})`, allRows);
