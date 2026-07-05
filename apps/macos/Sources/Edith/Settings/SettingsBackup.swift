@@ -44,6 +44,7 @@ final class SettingsBackup: ObservableObject {
         "notifyReminderSession", "notifyReminderSessionOffsetMin",
         "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
         "notifyTokenExpired",
+        "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
     ]
 
     private var debounce: Timer?

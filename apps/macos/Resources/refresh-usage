@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+if ! command -v bun >/dev/null 2>&1; then
+  NODE_DIR="$HOME/.nvm/versions/node"
+  [ -d "$NODE_DIR" ] && export PATH="$NODE_DIR/$(ls "$NODE_DIR" 2>/dev/null | tail -1)/bin:$PATH"
+fi
+
+OUT_DIR="${1:-$PWD/data}"
+mkdir -p "$OUT_DIR"
+OUT="$OUT_DIR/usage.json"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+_now() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%.3f", time' 2>/dev/null || date +%s; }
+_t0=$(_now)
+_tlast=$_t0
+_phase() {
+  local n d
+  n=$(_now)
+  d=$(awk "BEGIN{printf \"%.2f\", $n-$_tlast}")
+  _tlast=$n
+  printf '  ▸ %-10s %-32s %6ss\n' "$1" "$2" "$d"
+}
+_total() { awk "BEGIN{printf \"%.2f\", $(_now)-$_t0}"; }
+
+label_for() {
+  case "$1" in
+    cli) echo "Claude Code" ;;
+    cowork) echo "Cowork" ;;
+    cc-cloud) echo "Claude Code Cloud" ;;
+    codex) echo "Codex" ;;
+    opencode) echo "OpenCode" ;;
+    amp) echo "Amp" ;;
+    droid) echo "Droid" ;;
+    gemini) echo "Gemini" ;;
+    copilot) echo "Copilot" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+NORM='
+def normDay:
+  if (.modelBreakdowns | type) == "array" then
+    { period: .date, breakdowns: [ .modelBreakdowns[] | {
+        modelName: (.modelName // "unknown"),
+        inputTokens: (.inputTokens // 0),
+        outputTokens: ((.outputTokens // 0) + (.reasoningOutputTokens // 0)),
+        cacheCreationTokens: (.cacheCreationTokens // 0),
+        cacheReadTokens: (.cacheReadTokens // 0),
+        cost: (.cost // .costUSD // 0)
+      } ] }
+  elif (.models | type) == "object" then
+    (.costUSD // .totalCost // 0) as $cost
+    | [ .models | to_entries[] | . + { tok: ((.value.inputTokens // 0) + (.value.outputTokens // 0) + (.value.reasoningOutputTokens // 0) + (.value.cacheCreationTokens // 0) + (.value.cacheReadTokens // 0)) } ] as $m
+    | ([ $m[].tok ] | add // 0) as $tot
+    | { period: .date, breakdowns: [ $m[] | {
+        modelName: .key,
+        inputTokens: (.value.inputTokens // 0),
+        outputTokens: ((.value.outputTokens // 0) + (.value.reasoningOutputTokens // 0)),
+        cacheCreationTokens: (.value.cacheCreationTokens // 0),
+        cacheReadTokens: (.value.cacheReadTokens // 0),
+        cost: (if $tot > 0 then $cost * (.tok / $tot) else 0 end)
+      } ] }
+  else
+    . as $d | (.modelsUsed // ["unknown"]) as $mu | ($mu | length) as $n
+    | { period: .date, breakdowns: [ $mu[] | {
+        modelName: .,
+        inputTokens: (($d.inputTokens // 0) / $n),
+        outputTokens: ((($d.outputTokens // 0) + ($d.reasoningOutputTokens // 0)) / $n),
+        cacheCreationTokens: (($d.cacheCreationTokens // 0) / $n),
+        cacheReadTokens: (($d.cacheReadTokens // 0) / $n),
+        cost: (($d.totalCost // $d.costUSD // 0) / $n)
+      } ] }
+  end;
+'
+
+printf '\n  EDITH · refresh usage · %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+printf '  ────────────────────────────────────────────────────\n'
+
+if command -v bun >/dev/null 2>&1; then
+  CACHE="$HOME/Library/Application Support/Edith/.ccusage"
+  mkdir -p "$CACHE"
+  if [ ! -x "$CACHE/node_modules/.bin/ccusage" ]; then
+    printf '  · installing ccusage (first run, ~15s)…\n'
+    (cd "$CACHE" && bun add ccusage >/dev/null 2>&1)
+    _phase "ccusage" "installed via bun"
+  else
+    _phase "ccusage" "cached"
+  fi
+  ccu() { bun "$CACHE/node_modules/.bin/ccusage" "$@"; }
+elif command -v npx >/dev/null 2>&1; then
+  _phase "ccusage" "via npx"
+  ccu() { npx -y ccusage@latest "$@"; }
+else
+  printf '  ✖ need bun or npx on PATH to run ccusage\n' >&2
+  exit 1
+fi
+
+: >"$TMP/manifest.jsonl"
+
+add_source() {
+  local src="$1" daily="$2" session="$3"
+  local n
+  n=$(jq '.daily | length' "$daily" 2>/dev/null || echo 0)
+  if [ "${n:-0}" = "0" ] || [ -z "$n" ]; then return 1; fi
+  jq -c "$NORM"' { source: $src, label: $label, norm: [ .daily[] | normDay ] }' \
+    --arg src "$src" --arg label "$(label_for "$src")" "$daily" >>"$TMP/manifest.jsonl"
+  jq -c '{ source: $src, sessions: [ (.sessions // [])[] | { id: (.sessionId // ""), source: $src } ] }' \
+    --arg src "$src" "$session" >>"$TMP/sessions.jsonl"
+  _phase "$src" "$n days"
+  return 0
+}
+
+printf '  · discovering sources…\n'
+
+CLI_CFG="$HOME/.claude"
+CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cli.daily.json" || echo '{"daily":[]}' >"$TMP/cli.daily.json"
+CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude session --json 2>/dev/null >"$TMP/cli.session.json" || echo '{"sessions":[]}' >"$TMP/cli.session.json"
+add_source cli "$TMP/cli.daily.json" "$TMP/cli.session.json" || true
+
+COWORK_CFG="$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions" -maxdepth 2 -name .claude -type d 2>/dev/null | paste -sd, -)"
+if [ -n "$COWORK_CFG" ]; then
+  CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cowork.daily.json" || echo '{"daily":[]}' >"$TMP/cowork.daily.json"
+  CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude session --json 2>/dev/null >"$TMP/cowork.session.json" || echo '{"sessions":[]}' >"$TMP/cowork.session.json"
+  add_source cowork "$TMP/cowork.daily.json" "$TMP/cowork.session.json" || true
+fi
+
+for agent in codex opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw; do
+  ccu "$agent" daily --json --offline 2>/dev/null >"$TMP/$agent.daily.json" || continue
+  ccu "$agent" session --json --offline 2>/dev/null >"$TMP/$agent.session.json" || echo '{"sessions":[]}' >"$TMP/$agent.session.json"
+  add_source "$agent" "$TMP/$agent.daily.json" "$TMP/$agent.session.json" || true
+done
+
+if [ ! -s "$TMP/manifest.jsonl" ]; then
+  printf '  ✖ no usage found from any source\n' >&2
+  exit 1
+fi
+[ -s "$TMP/sessions.jsonl" ] || : >"$TMP/sessions.jsonl"
+
+printf '  · assembling usage.json…\n'
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+jq -s \
+  --arg now "$NOW" \
+  --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") '
+  . as $srcs
+  | [ $srcs[].source ] as $sources
+  | ( reduce $srcs[] as $s ({};
+        reduce $s.norm[] as $day (.;
+          .[$day.period][$s.source] = $day.breakdowns)) ) as $byDate
+  | ( [ $byDate[] | .[] | .[] ] ) as $all
+  | {
+      schemaVersion: 2,
+      generatedAt: $now,
+      sources: $sources,
+      defaultSources: $sources,
+      sourceMeta: ( reduce $srcs[] as $s ({}; .[$s.source] = { label: $s.label, tool: $s.label }) ),
+      totals: {
+        cost: ([ $all[].cost ] | add // 0),
+        tokens: ([ $all[] | (.inputTokens + .outputTokens + .cacheCreationTokens + .cacheReadTokens) ] | add // 0),
+        inputTokens: ([ $all[].inputTokens ] | add // 0),
+        outputTokens: ([ $all[].outputTokens ] | add // 0),
+        cacheCreationTokens: ([ $all[].cacheCreationTokens ] | add // 0),
+        cacheReadTokens: ([ $all[].cacheReadTokens ] | add // 0)
+      },
+      daily: ( $byDate | to_entries | sort_by(.key) | map({ period: .key, bySource: .value }) ),
+      sessions: [ $ss[0][] | .sessions[] ]
+    }
+' "$TMP/manifest.jsonl" >"$TMP/usage.json"
+
+mv "$TMP/usage.json" "$OUT"
+
+PROJECTS_DIR="$HOME/.claude/projects"
+if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
+  jq -c '
+    reduce (.daily[]) as $d ({};
+      reduce ($d.modelBreakdowns[]) as $m (.;
+        ((($m.inputTokens // 0) + ($m.outputTokens // 0) + ($m.cacheCreationTokens // 0) + ($m.cacheReadTokens // 0))) as $t
+        | .[$d.date][$m.modelName] = (if $t > 0 then ($m.cost // 0) / $t else 0 end)))
+  ' "$TMP/cli.daily.json" >"$TMP/rates.json"
+
+  Z=$(date +%z)
+  OFF=$((10#${Z:1:2} * 3600 + 10#${Z:3:2} * 60))
+  [ "${Z:0:1}" = "-" ] && OFF=$((-OFF))
+
+  NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+  printf '  · walking %s transcript files…\n' "$NFILES"
+  find "$PROJECTS_DIR" -name '*.jsonl' -print0 2>/dev/null | xargs -0 cat 2>/dev/null | jq -c --argjson off "$OFF" '
+    select(.type == "assistant" and (.message.usage != null)) |
+    (.message.id // .requestId // "") as $id | select($id != "") |
+    (.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 + $off) as $loc |
+    { id: $id, date: ($loc | strftime("%Y-%m-%d")), hour: (($loc / 3600 | floor) % 24),
+      model: (.message.model // "unknown"), cwd: (.cwd // ""), sid: (.sessionId // ""),
+      tok: ((.message.usage.input_tokens // 0) + (.message.usage.output_tokens // 0) + (.message.usage.cache_creation_input_tokens // 0) + (.message.usage.cache_read_input_tokens // 0)) }
+  ' >"$TMP/records.jsonl" 2>/dev/null || true
+  _phase "walk" "$(wc -l <"$TMP/records.jsonl" | tr -d ' ') messages"
+
+  jq -s --slurpfile r "$TMP/rates.json" \
+    'unique_by(.id) | map(. + {cost: (.tok * (($r[0][.date][.model]) // 0))})' \
+    "$TMP/records.jsonl" >"$TMP/recs.json"
+
+  : >"$TMP/cwdmap.jsonl"
+  jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | while IFS= read -r cwd; do
+    root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)
+    name=$(basename "${root:-$cwd}")
+    jq -cn --arg c "$cwd" --arg n "$name" '{cwd: $c, name: $n}' >>"$TMP/cwdmap.jsonl"
+  done
+  _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
+
+  jq \
+    --slurpfile usage "$OUT" \
+    --slurpfile nm <(jq -s 'map({(.cwd): .name}) | add // {}' "$TMP/cwdmap.jsonl") '
+    . as $R | $usage[0] as $usage | ($nm[0] // {}) as $NAME |
+    ( $R | group_by(.date) | map({
+        key: .[0].date,
+        hours: ( group_by(.hour) | map({hour: .[0].hour, tokens: (map(.tok) | add), cost: (map(.cost) | add)}) ),
+        projects: ( map(. + {p: ($NAME[.cwd] // "unknown")}) | group_by(.p)
+          | map({projectName: .[0].p, tokens: (map(.tok) | add), cost: (map(.cost) | add),
+                 chats: (map(.sid) | unique | map({id: .})), worktrees: []})
+          | sort_by(-.tokens) )
+      }) | map({(.key): {hours: .hours, projects: .projects}}) | add // {} ) as $BY |
+    $usage | .schemaVersion = 4 | .daily = [ .daily[] |
+      ($BY[.period]) as $b |
+      .hours = ( [range(0; 24)] | map( . as $h |
+        ($b.hours // [] | map(select(.hour == $h)) | .[0]) as $x
+        | {tokens: ($x.tokens // 0), cost: ($x.cost // 0)} ) )
+      | .projects = ($b.projects // [])
+    ]
+  ' "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$OUT"
+  _phase "merge" "hours + projects merged"
+fi
+
+DAYS=$(jq '.daily | length' "$OUT")
+SESS=$(jq '.sessions | length' "$OUT")
+SRCS=$(jq -r '.sources | join(", ")' "$OUT")
+MODELS=$(jq '[.daily[].bySource[][].modelName] | unique | length' "$OUT")
+FROM=$(jq -r '.daily[0].period // "—"' "$OUT")
+TO=$(jq -r '.daily[-1].period // "—"' "$OUT")
+COST=$(printf '$%.2f' "$(jq -r '.totals.cost // 0' "$OUT")")
+KB=$(awk "BEGIN{printf \"%.0f\", $(wc -c <"$OUT")/1024}")
+
+printf '  ────────────────────────────────────────────────────\n'
+printf '  ✓ sources   %s\n' "$SRCS"
+printf '  ✓ window    %s → %s · %s days · %s models\n' "$FROM" "$TO" "$DAYS" "$MODELS"
+printf '  ✓ spend     %s · %s sessions · %s KB\n' "$COST" "$SESS" "$KB"
+printf '  ✓ done in %ss\n\n' "$(_total)"

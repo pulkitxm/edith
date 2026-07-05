@@ -210,43 +210,39 @@ struct UsageView: View {
             HStack(spacing: 12) {
                 eyebrow("USAGE")
                 Spacer()
-                if Repo.isDev {
-                    Button {
-                        store.runUpdate()
-                    } label: {
-                        Group {
-                            if store.updating {
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .controlSize(.mini)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                            }
+                Button {
+                    store.runUpdate()
+                } label: {
+                    Group {
+                        if store.updating {
+                            ProgressView().progressViewStyle(.circular).controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
                         }
-                        .frame(width: 16, height: 16)
                     }
-                    .buttonStyle(HoverButtonStyle())
-                    .foregroundStyle(.secondary)
-                    .disabled(store.updating)
-                    .help("Run cc-update")
-                    Button {
-                        withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
-                    } label: {
-                        Image(systemName: "terminal")
-                            .foregroundStyle(showLog ? theme : Color.secondary)
-                    }
-                    .buttonStyle(HoverButtonStyle())
-                    .help("Show cc-update logs")
-                    Button {
-                        store.openDashboard()
-                        dismissPanel()
-                    } label: {
-                        Image(systemName: "arrow.up.forward.square")
-                    }
-                    .buttonStyle(HoverButtonStyle())
-                    .foregroundStyle(.secondary)
-                    .help("Open dashboard in browser (keeps filters)")
+                    .frame(width: 16, height: 16)
                 }
+                .buttonStyle(HoverButtonStyle())
+                .foregroundStyle(.secondary)
+                .disabled(store.updating)
+                .help("Refresh usage data")
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
+                } label: {
+                    Image(systemName: "terminal")
+                        .foregroundStyle(showLog ? theme : Color.secondary)
+                }
+                .buttonStyle(HoverButtonStyle())
+                .help("Show refresh log")
+                Button {
+                    DashboardWindow.open(store: store)
+                    dismissPanel()
+                } label: {
+                    Image(systemName: "chart.bar.xaxis")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .foregroundStyle(.secondary)
+                .help("Open the full dashboard")
             }
             .font(.system(size: 13))
 
@@ -334,22 +330,7 @@ struct UsageView: View {
     }
 
     private var logView: some View {
-        ScrollView {
-            ScrollViewReader { proxy in
-                Text(store.log.isEmpty ? "No output yet - hit ↻" : store.log)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .id("end")
-                    .onChange(of: store.log) {
-                        proxy.scrollTo("end", anchor: .bottom)
-                    }
-            }
-        }
-        .frame(height: 130)
-        .padding(8)
-        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+        TerminalLogView(log: store.log, theme: theme, height: 130)
     }
 }
 

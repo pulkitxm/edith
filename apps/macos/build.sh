@@ -27,6 +27,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Edith "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+cp Resources/refresh-usage "$APP/Contents/Resources/"
+chmod +x "$APP/Contents/Resources/refresh-usage"
 # menu bar / header glyph: trim the icon's canvas margin, then scale
 cp Resources/appicon.png "$APP/Contents/Resources/MenuBar.png"
 sips -c 942 942 "$APP/Contents/Resources/MenuBar.png" >/dev/null 2>&1

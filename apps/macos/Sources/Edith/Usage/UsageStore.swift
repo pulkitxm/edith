@@ -502,34 +502,22 @@ final class UsageStore: ObservableObject {
         limitPoints = points
     }
 
-    func openDashboard() {
-        guard let dashboard = Repo.dashboard else { return }
-        var components = URLComponents(url: dashboard, resolvingAgainstBaseURL: false)!
-        if selectedSources != Set(defaultSources) {
-            let picked = sources.map(\.id).filter { selectedSources.contains($0) }
-            components.queryItems = [
-                URLQueryItem(name: "sources", value: picked.joined(separator: ","))
-            ]
-        }
-        guard let url = components.url else { return }
-        if let browser = NSWorkspace.shared.urlForApplication(
-            toOpen: URL(string: "https://apple.com")!)
-        {
-            NSWorkspace.shared.open(
-                [url], withApplicationAt: browser, configuration: NSWorkspace.OpenConfiguration())
-        } else {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
     func runUpdate() {
-        guard !updating, let ccUpdate = Repo.ccUpdate, let root = Repo.root else { return }
+        guard !updating,
+            let script = Bundle.main.url(forResource: "refresh-usage", withExtension: nil)
+        else {
+            log = "✖ refresh-usage script not found in app bundle"
+            return
+        }
         updating = true
         log = ""
+        let dataDir = Repo.dataDir
+        try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
 
         let p = Process()
-        p.executableURL = ccUpdate
-        p.currentDirectoryURL = root
+        p.executableURL = URL(fileURLWithPath: "/bin/bash")
+        p.arguments = [script.path, dataDir.path]
+        p.currentDirectoryURL = AppData.supportDir
         p.qualityOfService = .utility
         let pipe = Pipe()
         p.standardOutput = pipe
@@ -550,10 +538,11 @@ final class UsageStore: ObservableObject {
                 self.updating = false
                 self.process = nil
                 if proc.terminationStatus != 0 {
-                    self.log += "\n✖ cc-update exited with status \(proc.terminationStatus)"
+                    self.log += "\n✖ refresh exited with status \(proc.terminationStatus)"
                 }
                 await self.loadStats()
                 SettingsBackup.shared.syncUsage()
+                NotificationCenter.default.post(name: .usageDataChanged, object: nil)
             }
         }
         do {
@@ -561,7 +550,11 @@ final class UsageStore: ObservableObject {
             process = p
         } catch {
             updating = false
-            log = "✖ could not launch cc-update: \(error.localizedDescription)"
+            log = "✖ could not launch refresh-usage: \(error.localizedDescription)"
         }
     }
+}
+
+extension Notification.Name {
+    static let usageDataChanged = Notification.Name("usageDataChanged")
 }

@@ -4,7 +4,6 @@ import SwiftUI
 enum Repo {
     static let devRoot: URL? = UserDefaults.standard.string(forKey: "repoPath")
         .map { URL(fileURLWithPath: $0) }
-    static var isDev: Bool { devRoot != nil }
 
     static var dataDir: URL {
         devRoot?.appendingPathComponent("apps/dashboard/data")
@@ -16,9 +15,6 @@ enum Repo {
         devRoot?.appendingPathComponent("local/music")
             ?? AppData.supportDir.appendingPathComponent("music")
     }
-    static var dashboard: URL? { devRoot?.appendingPathComponent("apps/dashboard/dashboard.html") }
-    static var ccUpdate: URL? { devRoot?.appendingPathComponent("apps/dashboard/cc-update") }
-    static var root: URL? { devRoot }
 }
 
 func applyAppearance(_ value: String) {
