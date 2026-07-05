@@ -2,6 +2,7 @@
 .build/
 dist/
 local/
+node_modules/
 # usage data stays local - never pushed
 dashboard/data/
 dashboard/dashboard.html

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  comments:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Comment-stripper self-test
+        run: bun scripts/strip-comments.mjs --selftest
+      - name: No disallowed comments
+        run: bun scripts/strip-comments.mjs --check
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Format and lint (Biome)
+        run: bun run lint
+      - name: Tests
+        run: bun test dashboard/tests scripts
+
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Format and lint (swift-format)
+        run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
+      - name: Type-check
+        run: swift build
+      - name: Tests
+        run: swift test
