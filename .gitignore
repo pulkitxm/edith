@@ -1,6 +1,8 @@
 .DS_Store
 .build/
 dist/
+# generated from Resources/appicon.png by build.sh
+Resources/AppIcon.icns
 local/
 node_modules/
 # usage data stays local - never pushed
