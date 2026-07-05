@@ -8,6 +8,8 @@ dashboard/dashboard.html
 
 # design notes stay local - deleted from the remote on purpose
 docs/
-
-# promo video project stays local
 extras/
+
+# promo-video: track source, not build output
+promo-video/node_modules/
+promo-video/out/
