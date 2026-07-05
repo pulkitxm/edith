@@ -348,6 +348,8 @@ struct RootView: View {
     @AppStorage("tabCalendarEnabled") private var calendarEnabled = true
     @AppStorage("tabOrder") private var tabOrderRaw = "usage,music,system"
     @State private var showSettings = false
+    @State private var showPermissions = false
+    @StateObject private var permissions = PermissionsModel()
 
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
@@ -371,12 +373,15 @@ struct RootView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 19, height: 19)
-                Text(showSettings ? "EDITH · SETTINGS" : "EDITH")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(3)
-                    .foregroundStyle(.secondary)
+                Text(
+                    showPermissions
+                        ? "EDITH · PERMISSIONS" : showSettings ? "EDITH · SETTINGS" : "EDITH"
+                )
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(3)
+                .foregroundStyle(.secondary)
                 Spacer()
-                if tab == "music", musicEnabled, !showSettings {
+                if tab == "music", musicEnabled, !showSettings, !showPermissions {
                     Button {
                         NSWorkspace.shared.open(Repo.musicDir)
                         dismissPanel()
@@ -389,7 +394,29 @@ struct RootView: View {
                     .help("Open music folder in Finder")
                 }
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { showSettings.toggle() }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        showSettings = false
+                        showPermissions.toggle()
+                    }
+                } label: {
+                    Image(
+                        systemName: permissions.needsAttention
+                            ? "exclamationmark.triangle.fill" : "checkmark.shield"
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(
+                        permissions.needsAttention
+                            ? AnyShapeStyle(.orange)
+                            : showPermissions
+                                ? AnyShapeStyle(themeColor(themeName)) : AnyShapeStyle(.secondary))
+                }
+                .buttonStyle(HoverButtonStyle())
+                .help(permissions.needsAttention ? "Permissions need attention" : "Permissions")
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        showPermissions = false
+                        showSettings.toggle()
+                    }
                 } label: {
                     Image(systemName: showSettings ? "gearshape.fill" : "gearshape")
                         .font(.system(size: 13))
@@ -408,7 +435,9 @@ struct RootView: View {
                 .keyboardShortcut("q", modifiers: .command)
                 .help("Quit Edith (⌘Q)")
             }
-            if showSettings {
+            if showPermissions {
+                PermissionsView(model: permissions)
+            } else if showSettings {
                 ScrollView {
                     SettingsView()
                 }
@@ -435,11 +464,13 @@ struct RootView: View {
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: tab)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showSettings)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showPermissions)
         .onAppear {
             pinTab()
+            permissions.refresh()
             MiniPanel.shared.services = services
             MiniPanel.shared.tab = tab
-            MiniPanel.shared.showSettings = showSettings
+            MiniPanel.shared.showSettings = showSettings || showPermissions
             MiniPanel.shared.sync()
         }
         .onChange(of: tab) {
@@ -450,7 +481,14 @@ struct RootView: View {
             settleMiniPanel()
         }
         .onChange(of: showSettings) {
-            MiniPanel.shared.showSettings = showSettings
+            MiniPanel.shared.showSettings = showSettings || showPermissions
+            MiniPanel.shared.expectResize()
+            MiniPanel.shared.sync()
+            settleMiniPanel()
+        }
+        .onChange(of: showPermissions) {
+            if showPermissions { permissions.refresh() }
+            MiniPanel.shared.showSettings = showSettings || showPermissions
             MiniPanel.shared.expectResize()
             MiniPanel.shared.sync()
             settleMiniPanel()
