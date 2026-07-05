@@ -220,13 +220,17 @@ final class SettingsBackup: ObservableObject {
     }
 
     private func importFromCloudIfNewer() {
-        guard UserDefaults.standard.bool(forKey: "icloudBackup") else { return }
         let fm = FileManager.default
+        // First run on this Mac = no local mirror yet. Adopt the cloud snapshot
+        // unconditionally so a fresh install picks up the backup out of the box
+        // (including icloudBackup itself); afterwards, gate on the toggle as before.
+        let firstRun = !fm.fileExists(atPath: localFile.path)
+        guard firstRun || UserDefaults.standard.bool(forKey: "icloudBackup") else { return }
         guard let cloudDate = (try? fm.attributesOfItem(atPath: cloudFile.path))?[.modificationDate] as? Date
         else { return }
         let localDate = (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
             ?? .distantPast
-        guard cloudDate > localDate.addingTimeInterval(2) else { return }
+        guard firstRun || cloudDate > localDate.addingTimeInterval(2) else { return }
         guard let data = try? Data(contentsOf: cloudFile),
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
