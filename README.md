@@ -17,6 +17,23 @@ center built to run 24/7 on near-zero resources.
 - **Presenter mode** — blurs track names and spend figures for screen sharing.
 - **Local-first** — usage data never leaves your Mac; optional iCloud backup that merges across machines.
 
+## Resource use
+
+Built to idle cheaply. Measured on an Apple M4 Pro — CPU as a share of one core
+(the convention Activity Monitor uses), memory as physical footprint:
+
+| State | CPU | Memory |
+| --- | --- | --- |
+| Idle, panel closed | ~0% | ~22 MB |
+| Music playing, panel closed | ~1% | ~40 MB |
+| Music playing, panel open (visualizer on screen) | ~29% | ~42 MB |
+| Paused | <1% | ~40 MB |
+
+Work stops when it isn't seen: disabling a tab tears down its timers, observers
+and background jobs entirely, and per-frame UI (the music visualizer and
+scrubber) only redraws while the panel is open and playing — so listening in the
+background costs just the audio decode.
+
 ## Build & install
 
 ```bash

@@ -87,6 +87,7 @@ struct EdithApp: App {
             NSWindow.didBecomeKeyNotification,
             NSWindow.didResizeNotification,
             NSWindow.didMoveNotification,
+            NSWindow.didChangeOcclusionStateNotification,
         ]
         for name in names {
             NotificationCenter.default.addObserver(

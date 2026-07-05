@@ -2,11 +2,25 @@ import SwiftUI
 
 struct MusicView: View {
     @EnvironmentObject private var player: MusicPlayer
+    @ObservedObject private var mini = MiniPanel.shared
     @State private var dragFraction: Double?
     @AppStorage("presenterMode") private var presenter = false
     @AppStorage("theme") private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
+
+    private var scrubberRow: some View {
+        HStack(spacing: 10) {
+            Text(timeLabel(player.elapsed))
+                .frame(width: 40, alignment: .leading)
+            scrubber
+            Text(timeLabel(player.trackDuration))
+                .frame(width: 40, alignment: .trailing)
+        }
+        .font(.system(size: 10))
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -35,17 +49,10 @@ struct MusicView: View {
     private var nowPlayingBar: some View {
         VStack(spacing: 10) {
             if player.current != nil {
-                TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                    HStack(spacing: 10) {
-                        Text(timeLabel(player.elapsed))
-                            .frame(width: 40, alignment: .leading)
-                        scrubber
-                        Text(timeLabel(player.trackDuration))
-                            .frame(width: 40, alignment: .trailing)
-                    }
-                    .font(.system(size: 10))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                if mini.panelOpen {
+                    TimelineView(.periodic(from: .now, by: 0.5)) { _ in scrubberRow }
+                } else {
+                    scrubberRow
                 }
             }
             HStack(spacing: 12) {
@@ -59,8 +66,8 @@ struct MusicView: View {
                     .foregroundStyle(player.current == nil ? .secondary : .primary)
                     .presenterBlur(presenter && player.current != nil)
                 if player.current != nil {
-                    if player.isPlaying {
-                        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+                    if player.isPlaying, mini.panelOpen {
+                        TimelineView(.periodic(from: .now, by: 0.2)) { _ in
                             VisualizerBars(level: player.meterLevel(), color: theme.opacity(0.9))
                         }
                     } else {

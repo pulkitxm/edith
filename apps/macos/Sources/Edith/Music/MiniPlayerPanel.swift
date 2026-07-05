@@ -3,15 +3,16 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class MiniPanel {
+final class MiniPanel: ObservableObject {
     static let shared = MiniPanel()
 
+    @Published private(set) var panelOpen = false
     weak var services: AppServices?
     var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
     var showSettings = false
 
     private var panel: NSPanel?
-    private var hosting: NSHostingView<MiniPlayerDetached>?
+    private var hosting: NSHostingView<AnyView>?
     private var subscription: AnyCancellable?
     private var observedPlayer: MusicPlayer?
     private var shown = false
@@ -45,6 +46,7 @@ final class MiniPanel {
         } else {
             lastParentFrame = nil
         }
+        if panelOpen != (parent != nil) { panelOpen = (parent != nil) }
         let wantsVisible =
             parent != nil
             && player?.current != nil
@@ -73,7 +75,7 @@ final class MiniPanel {
 
     private func present(below parent: NSWindow, player: MusicPlayer) {
         let p = panel ?? makePanel(player: player)
-        hosting?.rootView = MiniPlayerDetached(player: player)
+        hosting?.rootView = AnyView(MiniPlayerDetached(player: player))
 
         let target = NSRect(
             x: parent.frame.minX,
@@ -122,6 +124,7 @@ final class MiniPanel {
                     guard !MiniPanel.shared.shown else { return }
                     p.parent?.removeChildWindow(p)
                     p.orderOut(nil)
+                    MiniPanel.shared.hosting?.rootView = AnyView(EmptyView())
                 }
             })
     }
@@ -145,7 +148,8 @@ final class MiniPanel {
         effect.layer?.cornerRadius = 16
         effect.layer?.masksToBounds = true
 
-        let host = NSHostingView(rootView: MiniPlayerDetached(player: player))
+        let host = NSHostingView(rootView: AnyView(MiniPlayerDetached(player: player)))
+        host.sizingOptions = []
         host.translatesAutoresizingMaskIntoConstraints = false
         effect.addSubview(host)
         NSLayoutConstraint.activate([
