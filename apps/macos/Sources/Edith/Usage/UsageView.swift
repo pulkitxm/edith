@@ -210,41 +210,43 @@ struct UsageView: View {
             HStack(spacing: 12) {
                 eyebrow("USAGE")
                 Spacer()
-                Button {
-                    store.runUpdate()
-                } label: {
-                    Group {
-                        if store.updating {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .controlSize(.mini)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
+                if Repo.isDev {
+                    Button {
+                        store.runUpdate()
+                    } label: {
+                        Group {
+                            if store.updating {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.mini)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
                         }
+                        .frame(width: 16, height: 16)
                     }
-                    .frame(width: 16, height: 16)
+                    .buttonStyle(HoverButtonStyle())
+                    .foregroundStyle(.secondary)
+                    .disabled(store.updating)
+                    .help("Run cc-update")
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
+                    } label: {
+                        Image(systemName: "terminal")
+                            .foregroundStyle(showLog ? theme : Color.secondary)
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .help("Show cc-update logs")
+                    Button {
+                        store.openDashboard()
+                        dismissPanel()
+                    } label: {
+                        Image(systemName: "arrow.up.forward.square")
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .foregroundStyle(.secondary)
+                    .help("Open dashboard in browser (keeps filters)")
                 }
-                .buttonStyle(HoverButtonStyle())
-                .foregroundStyle(.secondary)
-                .disabled(store.updating)
-                .help("Run cc-update")
-                Button {
-                    withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
-                } label: {
-                    Image(systemName: "terminal")
-                        .foregroundStyle(showLog ? theme : Color.secondary)
-                }
-                .buttonStyle(HoverButtonStyle())
-                .help("Show cc-update logs")
-                Button {
-                    store.openDashboard()
-                    dismissPanel()
-                } label: {
-                    Image(systemName: "arrow.up.forward.square")
-                }
-                .buttonStyle(HoverButtonStyle())
-                .foregroundStyle(.secondary)
-                .help("Open dashboard in browser (keeps filters)")
             }
             .font(.system(size: 13))
 

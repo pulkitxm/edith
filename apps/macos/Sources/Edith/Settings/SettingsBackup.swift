@@ -1,6 +1,10 @@
 import AppKit
 import Foundation
 
+extension Notification.Name {
+    static let musicFolderChanged = Notification.Name("musicFolderChanged")
+}
+
 enum AppData {
     static let supportDir: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[
@@ -69,7 +73,7 @@ final class SettingsBackup: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleExport() }
         }
-        if UserDefaults.standard.bool(forKey: "musicBackup") {
+        if UserDefaults.standard.bool(forKey: "musicBackup"), !restoreMusic() {
             backupMusic()
         }
         NotificationCenter.default.addObserver(
@@ -113,6 +117,35 @@ final class SettingsBackup: ObservableObject {
             try p.run()
         } catch {
             musicBackupRunning = false
+        }
+    }
+
+    @discardableResult
+    func restoreMusic() -> Bool {
+        guard AppData.cloudAvailable else { return false }
+        let source = AppData.cloudDir.appendingPathComponent("music")
+        let fm = FileManager.default
+        func hasAudio(_ dir: URL) -> Bool {
+            let exts: Set<String> = ["mp3", "m4a", "m4b", "aac", "wav", "aiff", "flac"]
+            return ((try? fm.contentsOfDirectory(atPath: dir.path)) ?? [])
+                .contains { exts.contains(($0 as NSString).pathExtension.lowercased()) }
+        }
+        guard hasAudio(source), !hasAudio(Repo.musicDir) else { return false }
+        try? fm.createDirectory(at: Repo.musicDir, withIntermediateDirectories: true)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+        p.arguments = ["-a", "--exclude", ".DS_Store", source.path + "/", Repo.musicDir.path + "/"]
+        p.qualityOfService = .utility
+        p.terminationHandler = { proc in
+            if proc.terminationStatus == 0 {
+                NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            }
+        }
+        do {
+            try p.run()
+            return true
+        } catch {
+            return false
         }
     }
 

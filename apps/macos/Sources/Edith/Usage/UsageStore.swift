@@ -503,7 +503,8 @@ final class UsageStore: ObservableObject {
     }
 
     func openDashboard() {
-        var components = URLComponents(url: Repo.dashboard, resolvingAgainstBaseURL: false)!
+        guard let dashboard = Repo.dashboard else { return }
+        var components = URLComponents(url: dashboard, resolvingAgainstBaseURL: false)!
         if selectedSources != Set(defaultSources) {
             let picked = sources.map(\.id).filter { selectedSources.contains($0) }
             components.queryItems = [
@@ -522,13 +523,13 @@ final class UsageStore: ObservableObject {
     }
 
     func runUpdate() {
-        guard !updating else { return }
+        guard !updating, let ccUpdate = Repo.ccUpdate, let root = Repo.root else { return }
         updating = true
         log = ""
 
         let p = Process()
-        p.executableURL = Repo.ccUpdate
-        p.currentDirectoryURL = Repo.root
+        p.executableURL = ccUpdate
+        p.currentDirectoryURL = root
         p.qualityOfService = .utility
         let pipe = Pipe()
         p.standardOutput = pipe

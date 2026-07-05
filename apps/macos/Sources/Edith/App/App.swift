@@ -2,14 +2,23 @@ import Carbon.HIToolbox
 import SwiftUI
 
 enum Repo {
-    static let root: URL = {
-        let override = UserDefaults.standard.string(forKey: "repoPath")
-        return URL(fileURLWithPath: override ?? "/Users/pulkit/scripts/edith")
-    }()
-    static var dashboard: URL { root.appendingPathComponent("apps/dashboard/dashboard.html") }
-    static var usageJSON: URL { root.appendingPathComponent("apps/dashboard/data/usage.json") }
-    static var ccUpdate: URL { root.appendingPathComponent("apps/dashboard/cc-update") }
-    static var musicDir: URL { root.appendingPathComponent("local/music") }
+    static let devRoot: URL? = UserDefaults.standard.string(forKey: "repoPath")
+        .map { URL(fileURLWithPath: $0) }
+    static var isDev: Bool { devRoot != nil }
+
+    static var dataDir: URL {
+        devRoot?.appendingPathComponent("apps/dashboard/data")
+            ?? AppData.supportDir.appendingPathComponent("data")
+    }
+    static var usageJSON: URL { dataDir.appendingPathComponent("usage.json") }
+    static var limitsJSONL: URL { dataDir.appendingPathComponent("limits-history.jsonl") }
+    static var musicDir: URL {
+        devRoot?.appendingPathComponent("local/music")
+            ?? AppData.supportDir.appendingPathComponent("music")
+    }
+    static var dashboard: URL? { devRoot?.appendingPathComponent("apps/dashboard/dashboard.html") }
+    static var ccUpdate: URL? { devRoot?.appendingPathComponent("apps/dashboard/cc-update") }
+    static var root: URL? { devRoot }
 }
 
 func applyAppearance(_ value: String) {
@@ -384,6 +393,8 @@ struct RootView: View {
                 Spacer()
                 if tab == "music", musicEnabled, !showSettings, !showPermissions {
                     Button {
+                        try? FileManager.default.createDirectory(
+                            at: Repo.musicDir, withIntermediateDirectories: true)
                         NSWorkspace.shared.open(Repo.musicDir)
                         dismissPanel()
                     } label: {

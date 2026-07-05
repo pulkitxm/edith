@@ -46,6 +46,11 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         rescan()
         restoreLastPlayback()
         setupRemoteCommands()
+        NotificationCenter.default.addObserver(
+            forName: .musicFolderChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rescan() }
+        }
     }
 
     private func startSaveTimer() {
