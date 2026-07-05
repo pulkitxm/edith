@@ -32,6 +32,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
             UserDefaults.standard.set(volume, forKey: "musicVolume")
         }
     }
+    /// On track end: repeat the current song when true, else shuffle to a random one.
+    @Published var isLooping: Bool {
+        didSet { UserDefaults.standard.set(isLooping, forKey: "musicLooping") }
+    }
 
     private var player: AVAudioPlayer?
     private var artworkCache: [URL: NSImage] = [:]
@@ -40,6 +44,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     override init() {
         let saved = UserDefaults.standard.object(forKey: "musicVolume") as? Double
         volume = saved ?? 0.7
+        isLooping = UserDefaults.standard.bool(forKey: "musicLooping") // default off
         super.init()
         rescan()
         setupRemoteCommands()
@@ -124,6 +129,11 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     func next() { step(1) }
     func previous() { step(-1) }
+
+    /// Jump to a random track, avoiding an immediate repeat when there's a choice.
+    func playRandom() {
+        if let track = Shuffle.pool(tracks, excluding: current).randomElement() { play(track) }
+    }
 
     private func step(_ delta: Int) {
         guard !tracks.isEmpty else { return }
@@ -266,7 +276,20 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
-            self.next() // auto-advance, wraps around → endless background loop
+            if self.isLooping, let current = self.current {
+                self.play(current) // repeat the same track
+            } else {
+                self.playRandom() // shuffle onward → endless background mix
+            }
         }
+    }
+}
+
+enum Shuffle {
+    /// Candidates for a random pick: everything but `current`, unless excluding it
+    /// would leave nothing (single-track library) — then the whole list.
+    static func pool<T: Equatable>(_ all: [T], excluding current: T?) -> [T] {
+        let rest = all.filter { $0 != current }
+        return rest.isEmpty ? all : rest
     }
 }
