@@ -79,4 +79,31 @@ import Testing
         let pts = LimitsHistory.parse(raw, since: .distantPast)
         #expect(pts.count == 2) // torn line skipped, both real rows parse
     }
+
+    @Test func mergeUnionsSortsAndDedupes() {
+        let a = """
+        {"ts":"2026-07-01T10:00:00Z","s":10,"w":5}
+        {"ts":"2026-07-01T12:00:00Z","s":30,"w":6}
+        """
+        let b = """
+        {"ts":"2026-07-01T11:00:00Z","s":20,"w":5}
+        {"ts":"2026-07-01T12:00:00Z","s":30,"w":6}
+        """ // last line identical to a's last → collapses to one
+        let lines = LimitsHistory.merge(a, b).split(separator: "\n").map(String.init)
+        #expect(lines.count == 3) // 4 inputs, 1 exact dup removed
+        #expect(lines[0].contains("10:00:00")) // sorted ascending by ts
+        #expect(lines[1].contains("11:00:00"))
+        #expect(lines[2].contains("12:00:00"))
+        // no valid line dropped
+        #expect(lines.contains { $0.contains("\"s\":10") })
+        #expect(lines.contains { $0.contains("\"s\":20") })
+        #expect(lines.contains { $0.contains("\"s\":30") })
+    }
+
+    @Test func mergeDropsGarbageKeepsValid() {
+        let a = "not json\n{\"ts\":\"2026-07-01T10:00:00Z\",\"s\":10,\"w\":5}\n"
+        let lines = LimitsHistory.merge(a, "").split(separator: "\n").map(String.init)
+        #expect(lines.count == 1)
+        #expect(lines[0].contains("10:00:00"))
+    }
 }
