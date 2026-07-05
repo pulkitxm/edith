@@ -17,8 +17,8 @@ explaining, improve the name or the structure instead of adding prose.
 ## Checks
 
 - `bun run check-comments` — no disallowed comments (all tracked source).
-- `swift build` — Swift type-check. `swift test` / `./test.sh` — Swift tests.
-- `swift format lint --strict --recursive Sources Tests Package.swift` — Swift format + lint.
+- Swift checks run from `apps/macos/`: `swift build` (type-check), `swift test` / `./test.sh` (tests),
+  `swift format lint --strict --recursive Sources Tests Package.swift` (format + lint).
 - `bun run lint` — Biome format + lint for the dashboard.
-- `bun test dashboard/tests scripts` — JS tests.
-- `cd promo-video && npm ci && npx tsc --noEmit` — promo-video (Remotion) type-check.
+- `bun test apps/dashboard/tests scripts` — JS tests.
+- `cd apps/promo-video && npm ci && npx tsc --noEmit` — promo-video (Remotion) type-check.

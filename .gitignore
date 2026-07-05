@@ -2,17 +2,17 @@
 .build/
 dist/
 # generated from Resources/appicon.png by build.sh
-Resources/AppIcon.icns
+apps/macos/Resources/AppIcon.icns
 local/
 node_modules/
 # usage data stays local - never pushed
-dashboard/data/
-dashboard/dashboard.html
+apps/dashboard/data/
+apps/dashboard/dashboard.html
 
 # design notes stay local - deleted from the remote on purpose
 docs/
 extras/
 
 # promo-video: track source, not build output
-promo-video/node_modules/
-promo-video/out/
+apps/promo-video/node_modules/
+apps/promo-video/out/

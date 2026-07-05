@@ -1,4 +1,4 @@
-# <img src="Resources/appicon.png" width="30" align="top" alt=""> Edith
+# <img src="apps/macos/Resources/appicon.png" width="30" align="top" alt=""> Edith
 
 A native SwiftUI menu bar app for the Mac — a dark, minimal personal control
 center built to run 24/7 on near-zero resources.
@@ -20,6 +20,7 @@ center built to run 24/7 on near-zero resources.
 ## Build & install
 
 ```bash
+cd apps/macos
 ./build.sh            # build + run from dist/
 ./build.sh --install  # build + copy to /Applications + launch
 ./test.sh             # run the Swift test suite

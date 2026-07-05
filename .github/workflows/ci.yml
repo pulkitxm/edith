@@ -30,7 +30,7 @@ jobs:
       - name: Format and lint (Biome)
         run: bun run lint
       - name: Tests
-        run: bun test dashboard/tests scripts
+        run: bun test apps/dashboard/tests scripts
 
   promo-video:
     runs-on: ubuntu-latest
@@ -41,13 +41,16 @@ jobs:
           node-version: 24
       - name: Install
         run: npm ci
-        working-directory: promo-video
+        working-directory: apps/promo-video
       - name: Type-check
         run: npx tsc --noEmit
-        working-directory: promo-video
+        working-directory: apps/promo-video
 
   swift:
     runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/macos
     steps:
       - uses: actions/checkout@v5
       - name: Format and lint (swift-format)

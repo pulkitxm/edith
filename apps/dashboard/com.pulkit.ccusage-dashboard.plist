@@ -7,7 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/pulkit/scripts/edith/dashboard/cc-update</string>
+        <string>/Users/pulkit/scripts/edith/apps/dashboard/cc-update</string>
         <string>--push</string>
     </array>
 

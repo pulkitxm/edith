@@ -6,9 +6,9 @@ enum Repo {
         let override = UserDefaults.standard.string(forKey: "repoPath")
         return URL(fileURLWithPath: override ?? "/Users/pulkit/scripts/edith")
     }()
-    static var dashboard: URL { root.appendingPathComponent("dashboard/dashboard.html") }
-    static var usageJSON: URL { root.appendingPathComponent("dashboard/data/usage.json") }
-    static var ccUpdate: URL { root.appendingPathComponent("dashboard/cc-update") }
+    static var dashboard: URL { root.appendingPathComponent("apps/dashboard/dashboard.html") }
+    static var usageJSON: URL { root.appendingPathComponent("apps/dashboard/data/usage.json") }
+    static var ccUpdate: URL { root.appendingPathComponent("apps/dashboard/cc-update") }
     static var musicDir: URL { root.appendingPathComponent("local/music") }
 }
 

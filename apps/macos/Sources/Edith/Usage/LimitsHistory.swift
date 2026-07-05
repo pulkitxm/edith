@@ -1,7 +1,9 @@
 import Foundation
 
 struct LimitsHistory {
-    static var url: URL { Repo.root.appendingPathComponent("dashboard/data/limits-history.jsonl") }
+    static var url: URL {
+        Repo.root.appendingPathComponent("apps/dashboard/data/limits-history.jsonl")
+    }
 
     private let fileURL: URL
 
