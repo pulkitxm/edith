@@ -116,6 +116,7 @@ enum DashRange: Equatable {
     case today, yesterday, thisWeek, lastWeek, all
     case cycle(String?)
     case month(String)
+    case custom(String, String)
 }
 
 enum DashMetric: String { case tokens, cost }
@@ -376,6 +377,7 @@ final class DashboardModel: ObservableObject {
         case .all: return "all"
         case .cycle(let id): return id.map { "cycle:\($0)" } ?? "cycle"
         case .month(let ym): return "month:\(ym)"
+        case .custom(let f, let t): return "custom:\(f)~\(t)"
         }
     }
 
@@ -390,6 +392,10 @@ final class DashboardModel: ObservableObject {
         default:
             if s.hasPrefix("cycle:") { return .cycle(String(s.dropFirst(6))) }
             if s.hasPrefix("month:") { return .month(String(s.dropFirst(6))) }
+            if s.hasPrefix("custom:") {
+                let parts = s.dropFirst(7).split(separator: "~", maxSplits: 1).map(String.init)
+                if parts.count == 2 { return .custom(parts[0], parts[1]) }
+            }
             return .cycle(nil)
         }
     }
@@ -404,6 +410,15 @@ final class DashboardModel: ObservableObject {
 
     private func parseYMD(_ s: String) -> Date? { Self.ymd.date(from: s) }
     private func ymdStr(_ d: Date) -> String { Self.ymd.string(from: d) }
+
+    var dataRange: ClosedRange<Date>? {
+        guard let data, !data.daily.isEmpty else { return nil }
+        let periods = data.daily.map(\.period).sorted()
+        guard let e = parseYMD(periods.first!), let l = parseYMD(periods.last!) else { return nil }
+        return e...l
+    }
+
+    func ymd(_ d: Date) -> String { ymdStr(d) }
 
     private func rebuildCycles() {
         guard let data else { return }
@@ -495,6 +510,9 @@ final class DashboardModel: ObservableObject {
             let start = cal.date(from: cal.dateComponents([.year, .month], from: d)) ?? d
             let end = anchor(cal.date(byAdding: .month, value: 1, to: start) ?? start, 1)
             return (start, cal.date(byAdding: .day, value: -1, to: end) ?? start)
+        case .custom(let f, let t):
+            guard let fd = parseYMD(f), let td = parseYMD(t) else { return (earliest, latest) }
+            return (min(fd, td), max(fd, td))
         }
     }
 

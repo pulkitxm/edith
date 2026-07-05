@@ -8,34 +8,54 @@ struct DashboardView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var showLog = false
     @State private var hoveredDay: String?
+    @State private var customFrom = Date()
+    @State private var customTo = Date()
 
-    private var theme: Color { themeColor(themeName) }
+    private var appTheme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
+    private var acc: Color { DashSkin.accent(dark) }
+    private var gold: Color { DashSkin.gold }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                header
-                metaLine
+            LazyVStack(alignment: .leading, spacing: 16, pinnedViews: [.sectionHeaders]) {
+                masthead
+                    .padding(.horizontal, 24).padding(.top, 22)
                 if model.loaded {
-                    kpiGrid
-                    controlsBar
-                    if showLog { logView }
-                    charts
+                    kpiGrid.padding(.horizontal, 24)
+                    Section {
+                        VStack(spacing: 16) {
+                            if showLog { logView }
+                            SkinCard(title: "Activity", dark: dark) { heatmap }
+                            LimitsCardView(theme: acc, dark: dark)
+                            charts
+                        }
+                        .padding(.horizontal, 24).padding(.bottom, 28)
+                    } header: {
+                        controlsBar
+                    }
                 } else {
                     ContentUnavailableView(
                         "No usage data yet", systemImage: "chart.bar",
                         description: Text("Hit reload to run the bundled collector.")
                     )
-                    .frame(maxWidth: .infinity, minHeight: 200)
+                    .frame(maxWidth: .infinity, minHeight: 240)
                 }
             }
-            .padding(18)
+            .frame(maxWidth: 1160)
+            .frame(maxWidth: .infinity)
         }
-        .frame(minWidth: 720, minHeight: 560)
+        .background(background)
+        .frame(minWidth: 760, minHeight: 600)
         .task {
             await model.load()
             await store.loadLimitHistory()
+        }
+        .onChange(of: model.loaded) { _, loaded in
+            if loaded, let b = model.dataRange {
+                customFrom = b.lowerBound
+                customTo = b.upperBound
+            }
         }
         .onChange(of: store.updating) { _, updating in
             if !updating {
@@ -47,14 +67,49 @@ struct DashboardView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Image(nsImage: Logo.header)
-                .resizable().aspectRatio(contentMode: .fit).frame(width: 20, height: 20)
-            Text("USAGE OBSERVATORY")
-                .font(.system(size: 13, weight: .semibold)).tracking(3)
-                .foregroundStyle(.secondary)
-            Spacer()
+    private var background: some View {
+        DashSkin.paper(dark)
+            .overlay(alignment: .topTrailing) {
+                RadialGradient(
+                    colors: [acc.opacity(0.08), .clear], center: .topTrailing,
+                    startRadius: 0, endRadius: 620
+                )
+                .ignoresSafeArea()
+            }
+            .overlay(alignment: .bottomLeading) {
+                RadialGradient(
+                    colors: [DashPalette.slate(dark).opacity(0.06), .clear], center: .bottomLeading,
+                    startRadius: 0, endRadius: 520
+                )
+                .ignoresSafeArea()
+            }
+            .ignoresSafeArea()
+    }
+
+    private var masthead: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                PulsingDot(color: acc)
+                Text("CLAUDE CODE · USAGE OBSERVATORY")
+                    .font(DashSkin.mono(11)).tracking(2)
+                    .foregroundStyle(DashSkin.accentDeep(dark))
+                Spacer()
+                mastheadButtons
+            }
+            HStack(spacing: 0) {
+                Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
+                Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
+                Text(".").foregroundStyle(DashSkin.ink(dark))
+            }
+            .font(DashSkin.serif(40))
+            Text(metaText)
+                .font(.system(size: 12.5)).foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var mastheadButtons: some View {
+        HStack(spacing: 6) {
             Button {
                 store.runUpdate()
             } label: {
@@ -73,7 +128,8 @@ struct DashboardView: View {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
             } label: {
-                Image(systemName: "terminal").foregroundStyle(showLog ? theme : .secondary)
+                Image(systemName: "terminal")
+                    .foregroundStyle(showLog ? appTheme : DashSkin.inkFaint(dark))
             }
             .buttonStyle(HoverButtonStyle())
             .help("Show collector log")
@@ -83,46 +139,44 @@ struct DashboardView: View {
     private var metaText: String {
         guard model.loaded else { return "Loading…" }
         let m = model.meta
-        let parts: [String] = [
-            "Updated \(m.updated)",
-            m.totalCost,
-            "\(m.activeDays) active days",
-            "\(m.totalTokens) tokens",
-            "\(m.modelCount) models",
-            m.sourceLabels,
-        ]
-        return parts.joined(separator: " · ")
-    }
-
-    private var metaLine: some View {
-        Text(metaText)
-            .font(.system(size: 11)).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+        return [
+            "Updated \(m.updated)", m.totalCost, "\(m.activeDays) active days",
+            "\(m.totalTokens) tokens", "\(m.modelCount) models", m.sourceLabels,
+        ].joined(separator: "  ·  ")
     }
 
     private var kpiGrid: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10
-        ) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 158), spacing: 12)], spacing: 12) {
             ForEach(model.kpis) { kpi in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(kpi.label.uppercased())
-                        .font(.system(size: 9, weight: .semibold)).tracking(1)
-                        .foregroundStyle(.tertiary)
-                    Text(kpi.value)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(kpi.hot ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
-                    Text(kpi.sub).font(.system(size: 10)).foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    Rectangle().fill(kpi.hot ? acc : Color.clear).frame(width: 3)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(kpi.label.uppercased())
+                            .font(DashSkin.mono(10)).tracking(1.4)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        Text(kpi.value)
+                            .font(DashSkin.serif(26))
+                            .foregroundStyle(DashSkin.ink(dark))
+                        Text(kpi.sub)
+                            .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkSoft(dark))
+                    }
+                    .padding(14)
+                    Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                .background(DashSkin.paper2(dark))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14).strokeBorder(
+                        DashSkin.line(dark), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .shadow(color: .black.opacity(dark ? 0.3 : 0.05), radius: 8, y: 4)
             }
         }
     }
 
     private var controlsBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 rangeButton("Today", .today)
                 rangeButton("Yesterday", .yesterday)
@@ -130,8 +184,12 @@ struct DashboardView: View {
                 rangeButton("Last week", .lastWeek)
                 rangeButton("Cycle", .cycle(nil))
                 rangeButton("All", .all)
+                Spacer()
+                Button("Reset") { model.reset() }
+                    .buttonStyle(.plain).font(DashSkin.mono(11))
+                    .foregroundStyle(acc)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 if !model.cycleOptions.isEmpty {
                     Menu {
                         ForEach(model.cycleOptions) { c in
@@ -154,12 +212,46 @@ struct DashboardView: View {
                 }
                 Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
                     .font(.system(size: 11)).fixedSize()
+                customRange
                 sourceMenu
                 modelMenu
-                Button("Reset") { model.reset() }
-                    .buttonStyle(.borderless).font(.system(size: 11)).foregroundStyle(theme)
                 Spacer()
             }
+            .foregroundStyle(DashSkin.inkSoft(dark))
+        }
+        .padding(.horizontal, 24).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DashSkin.paper(dark))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+        }
+    }
+
+    private var customRange: some View {
+        HStack(spacing: 4) {
+            DatePicker(
+                "",
+                selection: Binding(
+                    get: { customFrom },
+                    set: {
+                        customFrom = $0
+                        model.range = .custom(model.ymd($0), model.ymd(customTo))
+                    }),
+                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
+            )
+            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+            Text("→").font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
+            DatePicker(
+                "",
+                selection: Binding(
+                    get: { customTo },
+                    set: {
+                        customTo = $0
+                        model.range = .custom(model.ymd(customFrom), model.ymd($0))
+                    }),
+                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
+            )
+            .labelsHidden().datePickerStyle(.field).controlSize(.small)
         }
     }
 
@@ -167,13 +259,17 @@ struct DashboardView: View {
         let active = isActive(r)
         return Button(title) { model.range = r }
             .buttonStyle(.plain)
-            .font(.system(size: 11, weight: active ? .semibold : .regular))
-            .padding(.horizontal, 10).padding(.vertical, 5)
+            .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
+            .padding(.horizontal, 11).padding(.vertical, 5)
             .background(
-                active ? AnyShapeStyle(theme.opacity(0.9)) : AnyShapeStyle(.primary.opacity(0.06)),
-                in: Capsule()
+                active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
+                in: RoundedRectangle(cornerRadius: 8)
             )
-            .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(active ? Color.clear : DashSkin.lineStrong(dark), lineWidth: 1)
+            )
+            .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
     }
 
     private func isActive(_ r: DashRange) -> Bool {
@@ -208,9 +304,7 @@ struct DashboardView: View {
 
     private var sourceSummary: String {
         if model.selectedSources.count == model.allSources.count { return "All sources" }
-        if model.selectedSources.count == 1,
-            let id = model.selectedSources.first
-        {
+        if model.selectedSources.count == 1, let id = model.selectedSources.first {
             return model.sourceLabel(id)
         }
         return "\(model.selectedSources.count) sources"
@@ -238,49 +332,47 @@ struct DashboardView: View {
     }
 
     private var logView: some View {
-        TerminalLogView(log: store.log, theme: theme, height: 150)
+        TerminalLogView(log: store.log, theme: appTheme, height: 150)
     }
 
     @ViewBuilder private var charts: some View {
-        DashCard(title: "Daily usage") {
-            ComboChart(points: dailyPoints, barColor: theme, lineColor: .orange, scroll: true)
+        SkinCard(title: "Daily usage", dark: dark) {
+            ComboChart(points: dailyPoints, barColor: acc, lineColor: gold, scroll: true)
         }
-        DashCard(title: "Token mix by day") {
+        SkinCard(title: "Token mix by day", dark: dark) {
             StackedChart(
                 bars: tokenMixBars, costLine: dailyPoints,
                 domain: tokenMixDomain, range: tokenMixRange)
         }
-        DashCard(title: "Model usage over time") {
+        SkinCard(title: "Model usage over time", dark: dark) {
             StackedChart(
                 bars: modelTimeBars, costLine: dailyPoints,
                 domain: modelDomain, range: modelRange)
         }
         if model.allSources.count > 1 {
-            DashCard(title: "Usage by source over time") {
+            SkinCard(title: "Usage by source over time", dark: dark) {
                 StackedChart(
                     bars: sourceBars, costLine: dailyPoints,
                     domain: sourceDomain, range: sourceRange)
             }
         }
-        HStack(alignment: .top, spacing: 14) {
-            DashCard(title: "By day of week") {
-                ComboChart(points: dowPoints, barColor: theme, lineColor: .orange, height: 200)
+        HStack(alignment: .top, spacing: 16) {
+            SkinCard(title: "By day of week", dark: dark) {
+                ComboChart(points: dowPoints, barColor: acc, lineColor: gold, height: 200)
             }
-            DashCard(title: "Share by model") {
+            SkinCard(title: "Share by model", dark: dark) {
                 DonutChart(slices: donutSlices)
             }
         }
         if !model.projects.isEmpty {
-            DashCard(title: "By project") {
-                ComboChart(points: projectPoints, barColor: theme, lineColor: .orange, height: 240)
+            SkinCard(title: "By project", dark: dark) {
+                ComboChart(points: projectPoints, barColor: acc, lineColor: gold, height: 240)
             }
         }
-        DashCard(title: "Hourly — all time") {
-            ComboChart(points: hourlyPoints, barColor: theme, lineColor: .orange, height: 200)
+        SkinCard(title: "Hourly — all time", dark: dark) {
+            ComboChart(points: hourlyPoints, barColor: acc, lineColor: gold, height: 200)
         }
-        DashCard(title: "Models") { modelsTable }
-        DashCard(title: "Activity") { heatmap }
-        LimitsCardView(theme: theme)
+        SkinCard(title: "Models", dark: dark) { modelsTable }
     }
 
     private var modelsTable: some View {
@@ -292,27 +384,28 @@ struct DashboardView: View {
                 tableHeader("Tokens", .tokens, width: 70)
                 tableHeader("Days", .days, width: 44)
             }
-            .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+            .font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.vertical, 4)
-            Divider()
+            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
             ForEach(model.modelTotals) { m in
                 HStack(spacing: 8) {
                     Circle().fill(model.modelColor(m.model, dark: dark)).frame(width: 8, height: 8)
-                    Text(DashFmt.shortModel(m.model)).font(.system(size: 11))
+                    Text(DashFmt.shortModel(m.model))
+                        .font(.system(size: 11)).foregroundStyle(DashSkin.ink(dark))
                         .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
-                    Text(DashFmt.usd(m.cost)).font(.system(size: 11)).frame(
+                    Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
                         width: 70, alignment: .trailing)
-                    Text(DashFmt.pct(m.share)).font(.system(size: 11)).frame(
+                    Text(DashFmt.pct(m.share)).font(DashSkin.mono(11)).frame(
                         width: 60, alignment: .trailing
-                    )
-                    .foregroundStyle(.secondary)
-                    Text(DashFmt.tokens(m.tokens)).font(.system(size: 11)).frame(
+                    ).foregroundStyle(DashSkin.inkSoft(dark))
+                    Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
                         width: 70, alignment: .trailing)
-                    Text("\(m.days)").font(.system(size: 11)).frame(width: 44, alignment: .trailing)
-                        .foregroundStyle(.secondary)
+                    Text("\(m.days)").font(DashSkin.mono(11)).frame(width: 44, alignment: .trailing)
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                 }
-                .padding(.vertical, 4)
-                Divider().opacity(0.4)
+                .foregroundStyle(DashSkin.ink(dark))
+                .padding(.vertical, 5)
+                Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: 1)
             }
         }
     }
@@ -359,7 +452,8 @@ struct DashboardView: View {
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 3)
                                         .strokeBorder(
-                                            .primary.opacity(hoveredDay == day.id ? 0.5 : 0),
+                                            DashSkin.ink(dark).opacity(
+                                                hoveredDay == day.id ? 0.5 : 0),
                                             lineWidth: 1)
                                 )
                                 .onHover { inside in
@@ -388,11 +482,11 @@ struct DashboardView: View {
     }
 
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
-        if cost <= 0 { return .primary.opacity(0.08) }
-        if cost <= cuts[0] { return theme.opacity(0.3) }
-        if cost <= cuts[1] { return theme.opacity(0.5) }
-        if cost <= cuts[2] { return theme.opacity(0.72) }
-        return theme
+        if cost <= 0 { return DashSkin.grid(dark) }
+        if cost <= cuts[0] { return DashPalette.color("#f6d9bf") }
+        if cost <= cuts[1] { return DashPalette.color("#f0b384") }
+        if cost <= cuts[2] { return DashPalette.color("#e2884f") }
+        return DashPalette.color("#c75e36")
     }
 
     private var dailyPoints: [ComboPoint] {

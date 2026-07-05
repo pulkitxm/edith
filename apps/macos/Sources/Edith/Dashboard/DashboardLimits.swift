@@ -86,6 +86,7 @@ enum DashLimits {
 
 struct LimitsCardView: View {
     let theme: Color
+    let dark: Bool
     @AppStorage("warnPercent") private var warn = 60
     @AppStorage("critPercent") private var crit = 85
     @State private var all: [DashLimitPoint] = []
@@ -105,14 +106,16 @@ struct LimitsCardView: View {
     }
 
     var body: some View {
-        Group {
+        SkinCard(title: "Rate limits — session & weekly", dark: dark) {
             if all.count > 1 {
-                DashCard(title: "Rate limits — session & weekly") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        segmented
-                        chart
-                    }
+                VStack(alignment: .leading, spacing: 12) {
+                    segmented
+                    chart
                 }
+            } else {
+                Text("Collecting limit history…")
+                    .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(maxWidth: .infinity, minHeight: 60)
             }
         }
         .task { all = DashLimits.loadAll() }
