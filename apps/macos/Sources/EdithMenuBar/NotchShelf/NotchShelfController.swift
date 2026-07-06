@@ -29,6 +29,8 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private var collapseWorkItem: DispatchWorkItem?
     private var pendingDragOutID: UUID?
     private var internalDragItemID: UUID?
+    private var sharePickerDelegate: SharePickerDelegate?
+    private var isSharing = false
 
     init() {
         items = store.items
@@ -222,7 +224,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     }
 
     private func collapseNow() {
-        guard isExpanded else { return }
+        guard isExpanded, !isSharing else { return }
         isExpanded = false
         updateAllFrames(animated: true)
     }
@@ -308,6 +310,30 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         store.remove(item)
         items = store.items
         collapseNow()
+    }
+
+    func share(_ item: ShelfItem) {
+        let mouse = NSEvent.mouseLocation
+        let panel =
+            panels.values.first { $0.frame.contains(mouse) }
+            ?? builtinDisplayID.flatMap { panels[$0] }
+        guard let panel, let view = panel.contentView else { return }
+        isSharing = true
+        collapseWorkItem?.cancel()
+        let delegate = SharePickerDelegate { [weak self] in
+            self?.isSharing = false
+            self?.sharePickerDelegate = nil
+            self?.collapseAfterDelay()
+        }
+        sharePickerDelegate = delegate
+        let picker = NSSharingServicePicker(items: [fileURL(for: item)])
+        picker.delegate = delegate
+        let size = view.bounds.size
+        let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
+        let position = NotchGeometry.itemPosition(stored: item.position, index: index, in: size)
+        let anchor = NSRect(
+            x: position.x - 20, y: size.height - position.y - 20, width: 40, height: 40)
+        picker.show(relativeTo: anchor, of: view, preferredEdge: .minY)
     }
 
     func dragItem(_ item: ShelfItem, to point: CGPoint) {
@@ -425,6 +451,21 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         if let location { store.setPosition(location, for: item) }
         items = store.items
         fireHaptic()
+    }
+}
+
+final class SharePickerDelegate: NSObject, NSSharingServicePickerDelegate {
+    private let onEnd: @MainActor @Sendable () -> Void
+
+    init(onEnd: @escaping @MainActor @Sendable () -> Void) {
+        self.onEnd = onEnd
+    }
+
+    func sharingServicePicker(
+        _ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?
+    ) {
+        let onEnd = onEnd
+        Task { @MainActor in onEnd() }
     }
 }
 
