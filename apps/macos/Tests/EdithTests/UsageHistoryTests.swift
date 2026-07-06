@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import Edith
+@testable import EdithKit
 
 @Suite struct UsageHistoryTests {
     private func usage(

@@ -1,54 +1,69 @@
 import Foundation
 
-struct UsageThresholds: Equatable {
-    var warningPercent: Int
-    var criticalPercent: Int
-    static let `default` = UsageThresholds(warningPercent: 60, criticalPercent: 85)
+public struct LimitWindow {
+    public let percent: Double
+    public let resetsAt: Date?
 
-    static func fromDefaults(_ d: UserDefaults = .standard) -> UsageThresholds {
+    public init(percent: Double, resetsAt: Date?) {
+        self.percent = percent
+        self.resetsAt = resetsAt
+    }
+}
+
+public struct UsageThresholds: Equatable {
+    public var warningPercent: Int
+    public var criticalPercent: Int
+    public static let `default` = UsageThresholds(warningPercent: 60, criticalPercent: 85)
+
+    public init(warningPercent: Int, criticalPercent: Int) {
+        self.warningPercent = warningPercent
+        self.criticalPercent = criticalPercent
+    }
+
+    public static func fromDefaults(_ d: UserDefaults = .standard) -> UsageThresholds {
         UsageThresholds(
             warningPercent: d.object(forKey: "warnPercent") as? Int ?? 60,
             criticalPercent: d.object(forKey: "critPercent") as? Int ?? 85)
     }
 }
 
-enum UsageLevel: Int, Comparable {
+public enum UsageLevel: Int, Comparable {
     case green = 0, orange = 1, red = 2
-    static func < (lhs: UsageLevel, rhs: UsageLevel) -> Bool { lhs.rawValue < rhs.rawValue }
+    public static func < (lhs: UsageLevel, rhs: UsageLevel) -> Bool { lhs.rawValue < rhs.rawValue }
 
-    static func from(pct: Double, thresholds: UsageThresholds) -> UsageLevel {
+    public static func from(pct: Double, thresholds: UsageThresholds) -> UsageLevel {
         if pct >= Double(thresholds.criticalPercent) { return .red }
         if pct >= Double(thresholds.warningPercent) { return .orange }
         return .green
     }
 }
 
-enum PacingZone: String {
+public enum PacingZone: String {
     case chill, onTrack, warning, hot
 }
 
-enum LimitWindowKind: String {
+public enum LimitWindowKind: String {
     case session, weekly
-    var duration: TimeInterval { self == .session ? 5 * 3600 : 7 * 24 * 3600 }
+    public var duration: TimeInterval { self == .session ? 5 * 3600 : 7 * 24 * 3600 }
 }
 
-enum LimitMath {
-    static let k = 5.0
-    static let projUpper = 1.4
-    static let absoluteLower = 0.50
-    static let absoluteUpper = 1.00
-    static let risingChill = 0.30, risingWarning = 0.55, risingHot = 0.78
-    static let fallingChill = 0.25, fallingWarning = 0.50, fallingHot = 0.73
+public enum LimitMath {
+    public static let k = 5.0
+    public static let projUpper = 1.4
+    public static let absoluteLower = 0.50
+    public static let absoluteUpper = 1.00
+    public static let risingChill = 0.30, risingWarning = 0.55, risingHot = 0.78
+    public static let fallingChill = 0.25, fallingWarning = 0.50, fallingHot = 0.73
 
-    static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
+    public static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
         guard a < b else { return x >= b ? 1 : 0 }
         let t = max(0, min(1, (x - a) / (b - a)))
         return t * t * (3 - 2 * t)
     }
 
-    static func confidence(e: Double) -> Double { 1 - exp(-k * max(0, e)) }
+    public static func confidence(e: Double) -> Double { 1 - exp(-k * max(0, e)) }
 
-    static func combinedRisk(u: Double, e: Double, m: Double) -> Double {
+    public static func combinedRisk(u: Double, e: Double, m: Double) -> Double {
         if u >= 1.0 { return 1.0 }
         let aRaw = smoothstep(absoluteLower, absoluteUpper, u)
         let projectionHealth = e > 0.0001 ? smoothstep(0.7, 1.0, u / e) : 1.0
@@ -61,7 +76,7 @@ enum LimitMath {
         return max(a, max(b, c))
     }
 
-    static func smartRisk(
+    public static func smartRisk(
         utilization: Double, resetsAt: Date?, windowDuration: TimeInterval,
         pacingMargin: Double, now: Date = Date()
     ) -> Double {
@@ -75,13 +90,13 @@ enum LimitMath {
         return combinedRisk(u: u, e: e, m: pacingMargin / 100)
     }
 
-    static func level(forRisk risk: Double) -> UsageLevel {
+    public static func level(forRisk risk: Double) -> UsageLevel {
         if risk >= 0.78 { return .red }
         if risk >= 0.50 { return .orange }
         return .green
     }
 
-    static func zone(forRisk risk: Double, previous: PacingZone? = nil) -> PacingZone {
+    public static func zone(forRisk risk: Double, previous: PacingZone? = nil) -> PacingZone {
         let r = max(0, min(1, risk))
         func rising() -> PacingZone {
             if r >= risingHot { return .hot }
@@ -110,7 +125,7 @@ enum LimitMath {
         }
     }
 
-    static func pacingDelta(
+    public static func pacingDelta(
         utilization: Double, resetsAt: Date, windowDuration: TimeInterval, now: Date = Date()
     ) -> Double {
         let start = resetsAt.addingTimeInterval(-windowDuration)
@@ -118,7 +133,7 @@ enum LimitMath {
         return utilization - elapsed * 100
     }
 
-    static func pacingZone(delta: Double, margin: Double) -> PacingZone {
+    public static func pacingZone(delta: Double, margin: Double) -> PacingZone {
         if delta < -margin { return .chill }
         if delta <= margin { return .onTrack }
         if delta <= margin * 2 { return .warning }

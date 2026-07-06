@@ -1,7 +1,7 @@
 import Foundation
 
-enum UsageHistory {
-    static func merge(local: Data?, cloud: Data?) -> Data? {
+public enum UsageHistory {
+    public static func merge(local: Data?, cloud: Data?) -> Data? {
         guard let local else { return cloud }
         guard let cloud else { return local }
         guard let l = decode(local) else { return cloud }
@@ -71,7 +71,7 @@ enum UsageHistory {
             + num(r["cacheReadTokens"])
     }
 
-    static func dayTokens(_ day: [String: Any]) -> Double {
+    public static func dayTokens(_ day: [String: Any]) -> Double {
         rows(day).reduce(0) { $0 + rowTokens($1.row) }
     }
 

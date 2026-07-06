@@ -1,24 +1,34 @@
 import Foundation
 
-struct LimitAlert: Equatable {
-    let id: String
-    let title: String
-    let body: String
+public struct LimitAlert: Equatable {
+    public let id: String
+    public let title: String
+    public let body: String
+
+    public init(id: String, title: String, body: String) {
+        self.id = id
+        self.title = title
+        self.body = body
+    }
 }
 
-struct NotifySettings {
-    var master = false
-    var trackSession = true, trackWeekly = true
-    var recovery = true
-    var pacingWarning = true, pacingHot = true
-    var reminderSession = false; var reminderSessionOffsetMin = 30
-    var reminderWeekly = false; var reminderWeeklyOffsetMin = 120
-    var tokenExpired = true
-    var smartColor = true
-    var pacingMargin = 10.0
-    var thresholds = UsageThresholds.default
+public struct NotifySettings {
+    public var master = false
+    public var trackSession = true, trackWeekly = true
+    public var recovery = true
+    public var pacingWarning = true, pacingHot = true
+    public var reminderSession = false
+    public var reminderSessionOffsetMin = 30
+    public var reminderWeekly = false
+    public var reminderWeeklyOffsetMin = 120
+    public var tokenExpired = true
+    public var smartColor = true
+    public var pacingMargin = 10.0
+    public var thresholds = UsageThresholds.default
 
-    static func fromDefaults(_ d: UserDefaults = .standard) -> NotifySettings {
+    public init() {}
+
+    public static func fromDefaults(_ d: UserDefaults = .standard) -> NotifySettings {
         var s = NotifySettings()
         s.master = d.bool(forKey: "notifyMaster")
         s.trackSession = d.object(forKey: "notifyTrackSession") as? Bool ?? true
@@ -39,15 +49,17 @@ struct NotifySettings {
     }
 }
 
-struct LimitNotifierState: Equatable {
-    var sessionLevel: UsageLevel = .green
-    var weeklyLevel: UsageLevel = .green
-    var sessionPacing: PacingZone = .onTrack
-    var weeklyPacing: PacingZone = .onTrack
+public struct LimitNotifierState: Equatable {
+    public var sessionLevel: UsageLevel = .green
+    public var weeklyLevel: UsageLevel = .green
+    public var sessionPacing: PacingZone = .onTrack
+    public var weeklyPacing: PacingZone = .onTrack
+
+    public init() {}
 }
 
-enum LimitNotifierLogic {
-    static func decide(
+public enum LimitNotifierLogic {
+    public static func decide(
         session: LimitWindow?, week: LimitWindow?,
         settings: NotifySettings, state: inout LimitNotifierState, now: Date = Date()
     ) -> [LimitAlert] {
@@ -216,7 +228,7 @@ enum LimitNotifierLogic {
         }
     }
 
-    static func countdown(from now: Date, to target: Date) -> String {
+    public static func countdown(from now: Date, to target: Date) -> String {
         let mins = max(0, Int(target.timeIntervalSince(now)) / 60)
         let h = mins / 60, m = mins % 60
         if h >= 24 { return "\(h / 24) d \(h % 24) h" }
@@ -224,19 +236,21 @@ enum LimitNotifierLogic {
         return "\(m) min"
     }
 
-    static func dateTime(_ d: Date) -> String {
+    public static func dateTime(_ d: Date) -> String {
         d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
     }
 
-    static func time(_ d: Date) -> String {
+    public static func time(_ d: Date) -> String {
         d.formatted(date: .omitted, time: .shortened)
     }
 
-    static func offsetLabel(minutes: Int) -> String {
+    public static func offsetLabel(minutes: Int) -> String {
         minutes >= 60 && minutes % 60 == 0 ? "\(minutes / 60) h" : "\(minutes) min"
     }
 
-    static func reminderFireDate(reset: Date?, offsetMinutes: Int, now: Date = Date()) -> Date? {
+    public static func reminderFireDate(reset: Date?, offsetMinutes: Int, now: Date = Date())
+        -> Date?
+    {
         guard let reset else { return nil }
         let fire = reset.addingTimeInterval(-Double(offsetMinutes) * 60)
         return fire > now ? fire : nil

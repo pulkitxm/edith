@@ -1,4 +1,5 @@
 import Charts
+import EdithKit
 import SwiftUI
 
 struct DashLimitPoint: Identifiable {

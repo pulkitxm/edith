@@ -1,11 +1,11 @@
 import Foundation
 
-struct LimitsHistory {
-    static var url: URL { Repo.limitsJSONL }
+public struct LimitsHistory {
+    public static var url: URL { Repo.limitsJSONL }
 
     private let fileURL: URL
 
-    init(url: URL = LimitsHistory.url) {
+    public init(url: URL = LimitsHistory.url) {
         self.fileURL = url
     }
 
@@ -22,7 +22,7 @@ struct LimitsHistory {
 
     private static let iso = ISO8601DateFormatter()
 
-    static func row(session: LimitWindow?, week: LimitWindow?, now: Date) -> (
+    public static func row(session: LimitWindow?, week: LimitWindow?, now: Date) -> (
         key: String, line: String
     ) {
         let round1 = { (v: Double) in (v * 10).rounded() / 10 }
@@ -37,7 +37,7 @@ struct LimitsHistory {
         return (key, String(decoding: data, as: UTF8.self) + "\n")
     }
 
-    mutating func append(session: LimitWindow?, week: LimitWindow?, now: Date = Date()) {
+    public mutating func append(session: LimitWindow?, week: LimitWindow?, now: Date = Date()) {
         if !seeded { seed() }
         let (key, line) = Self.row(session: session, week: week, now: now)
         guard key != lastKey else { return }
@@ -75,19 +75,19 @@ struct LimitsHistory {
         lastKey = "\(row.s ?? -1)|\(row.w ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")"
     }
 
-    static func parse(_ text: String, since: Date) -> [LimitPoint] {
+    public static func parse(_ text: String, since: Date) -> [LimitPoint] {
         var out: [LimitPoint] = []
         let decoder = JSONDecoder()
         for line in text.split(separator: "\n") {
             guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)),
-                let date = UsageStore.parseISO(row.ts), date >= since
+                let date = EdithDate.parseISO(row.ts), date >= since
             else { continue }
             out.append(LimitPoint(date: date, s: row.s, w: row.w))
         }
         return out.sorted { $0.date < $1.date }
     }
 
-    static func merge(_ a: String, _ b: String) -> String {
+    public static func merge(_ a: String, _ b: String) -> String {
         var seen = Set<String>()
         var rows: [(Date, String)] = []
         let decoder = JSONDecoder()
@@ -96,7 +96,7 @@ struct LimitsHistory {
                 let line = String(sub)
                 if seen.contains(line) { continue }
                 guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)),
-                    let ts = UsageStore.parseISO(row.ts)
+                    let ts = EdithDate.parseISO(row.ts)
                 else { continue }
                 seen.insert(line)
                 rows.append((ts, line))
@@ -107,9 +107,15 @@ struct LimitsHistory {
     }
 }
 
-struct LimitPoint: Identifiable, Equatable {
-    let date: Date
-    let s: Double?
-    let w: Double?
-    var id: Date { date }
+public struct LimitPoint: Identifiable, Equatable {
+    public let date: Date
+    public let s: Double?
+    public let w: Double?
+    public var id: Date { date }
+
+    public init(date: Date, s: Double?, w: Double?) {
+        self.date = date
+        self.s = s
+        self.w = w
+    }
 }

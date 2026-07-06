@@ -1,21 +1,6 @@
 import Carbon.HIToolbox
+import EdithKit
 import SwiftUI
-
-enum Repo {
-    static let devRoot: URL? = UserDefaults.standard.string(forKey: "repoPath")
-        .map { URL(fileURLWithPath: $0) }
-
-    static var dataDir: URL {
-        devRoot?.appendingPathComponent("apps/dashboard/data")
-            ?? AppData.supportDir.appendingPathComponent("data")
-    }
-    static var usageJSON: URL { dataDir.appendingPathComponent("usage.json") }
-    static var limitsJSONL: URL { dataDir.appendingPathComponent("limits-history.jsonl") }
-    static var musicDir: URL {
-        devRoot?.appendingPathComponent("local/music")
-            ?? AppData.supportDir.appendingPathComponent("music")
-    }
-}
 
 func applyAppearance(_ value: String) {
     let app = NSApplication.shared

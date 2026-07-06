@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import EdithKit
 import SwiftUI
 
 let themePalette: [(name: String, color: Color)] = [

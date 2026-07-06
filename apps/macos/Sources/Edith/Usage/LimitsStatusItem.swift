@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 
 @MainActor
 final class LimitsStatusItem {

@@ -1,28 +1,9 @@
 import AppKit
+import EdithKit
 import Foundation
 
 extension Notification.Name {
     static let musicFolderChanged = Notification.Name("musicFolderChanged")
-}
-
-enum AppData {
-    static let supportDir: URL = {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[
-            0
-        ]
-        .appendingPathComponent("Edith")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }()
-
-    static let cloudDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Edith")
-
-    static var cloudAvailable: Bool {
-        FileManager.default.fileExists(
-            atPath: FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs").path)
-    }
 }
 
 @MainActor

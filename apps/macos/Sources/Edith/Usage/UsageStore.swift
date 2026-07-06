@@ -1,10 +1,6 @@
 import AppKit
+import EdithKit
 import Foundation
-
-struct LimitWindow {
-    let percent: Double
-    let resetsAt: Date?
-}
 
 extension UserDefaults {
     @objc dynamic var limitsInMenuBar: Bool { bool(forKey: "limitsInMenuBar") }
@@ -411,11 +407,7 @@ final class UsageStore: ObservableObject {
         return f
     }()
 
-    nonisolated static func parseISO(_ s: String?) -> Date? {
-        guard var s else { return nil }
-        s = s.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        return ISO8601DateFormatter().date(from: s)
-    }
+    nonisolated static func parseISO(_ s: String?) -> Date? { EdithDate.parseISO(s) }
 
     struct DailyRow: Decodable {
         let period: String

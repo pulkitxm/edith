@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Edith
+@testable import EdithKit
 
 @Suite struct LimitsHistoryTests {
     let now = Date(timeIntervalSince1970: 1_750_000_000)

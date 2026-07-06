@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import EdithKit
 import MediaPlayer
 
 struct Track: Identifiable, Equatable {

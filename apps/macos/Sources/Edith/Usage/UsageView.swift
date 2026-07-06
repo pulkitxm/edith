@@ -1,3 +1,4 @@
+import EdithKit
 import SwiftUI
 
 struct UsageView: View {

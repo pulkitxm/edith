@@ -1,3 +1,4 @@
+import EdithKit
 import SwiftUI
 
 enum DashPalette {
