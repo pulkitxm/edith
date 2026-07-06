@@ -112,6 +112,7 @@ struct EdithApp: App {
             services.system?.syncPreventSleep()
             services.usage?.notifier.clearStateIfMasterOff()
             services.colorPicker?.registerHotKey()
+            services.pixelRuler?.registerHotKey()
         }
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }

@@ -8,6 +8,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
     @Published private(set) var colorPicker: ColorPickerStore?
+    @Published private(set) var pixelRuler: PixelRulerStore?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -52,6 +53,14 @@ final class AppServices: ObservableObject {
         if !colorPickerOn, let store = colorPicker {
             store.shutdown()
             colorPicker = nil
+        }
+
+        let pixelRulerOn =
+            SharedDefaults.store.object(forKey: "pixelRulerEnabled") as? Bool ?? false
+        if pixelRulerOn, pixelRuler == nil { pixelRuler = PixelRulerStore() }
+        if !pixelRulerOn, let store = pixelRuler {
+            store.shutdown()
+            pixelRuler = nil
         }
     }
 }
