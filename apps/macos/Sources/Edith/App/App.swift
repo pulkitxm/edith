@@ -41,6 +41,7 @@ private func migratedServices() -> AppServices {
         }
         d.set(true, forKey: "migratedFromControlCenter")
     }
+    SharedDefaults.migrate()
     return AppServices()
 }
 
