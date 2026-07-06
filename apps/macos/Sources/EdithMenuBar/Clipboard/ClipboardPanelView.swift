@@ -149,7 +149,12 @@ struct ClipboardPanelView: View {
                             .id(entry.id)
                             .listRowInsets(EdgeInsets())
                             .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(
+                                        selectedID == entry.id
+                                            ? Color.accentColor : Color.clear)
+                            )
                     }
                 }
             }
@@ -184,10 +189,6 @@ struct ClipboardPanelView: View {
         .frame(height: Self.rowHeight(for: entry))
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(selected ? Color.white : Color.primary)
-        .background(
-            selected ? Color.accentColor : Color.clear,
-            in: RoundedRectangle(cornerRadius: 4)
-        )
         .contentShape(Rectangle())
         .onHover { hovering in
             if hovering { selectedID = entry.id }
@@ -316,7 +317,8 @@ struct ClipboardPanelView: View {
     }
 
     private func reportHeight() {
-        onHeightChange(Self.height(for: visible, showFooter: showFooter))
+        let sizingEntries = filterText.isEmpty ? visible : store.entries
+        onHeightChange(Self.height(for: sizingEntries, showFooter: showFooter))
     }
 }
 
