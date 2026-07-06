@@ -36,3 +36,18 @@ public enum Repo {
             ?? AppData.supportDir.appendingPathComponent("music")
     }
 }
+
+public enum ClipboardPaths {
+    public static var dir: URL {
+        AppData.supportDir.appendingPathComponent("clipboard")
+    }
+    public static var indexFile: URL {
+        dir.appendingPathComponent("index.jsonl")
+    }
+    public static var blobsDir: URL {
+        dir.appendingPathComponent("blobs")
+    }
+    public static func blobFile(sha256: String, ext: String) -> URL {
+        blobsDir.appendingPathComponent("\(sha256).\(ext)")
+    }
+}
