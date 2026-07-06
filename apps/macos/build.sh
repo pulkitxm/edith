@@ -74,16 +74,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Edith "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
-cp Resources/refresh-usage "$APP/Contents/Resources/"
-chmod +x "$APP/Contents/Resources/refresh-usage"
-# menu bar / header glyph: trim the icon's canvas margin, then scale
-cp Resources/appicon.png "$APP/Contents/Resources/MenuBar.png"
-sips -c 942 942 "$APP/Contents/Resources/MenuBar.png" >/dev/null 2>&1
-sips -z 80 80 "$APP/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 
-mkdir -p "$HELPER/Contents/MacOS"
+mkdir -p "$HELPER/Contents/MacOS" "$HELPER/Contents/Resources"
 cp .build/release/EdithMenuBar "$HELPER/Contents/MacOS/"
 cp Resources/HelperInfo.plist "$HELPER/Contents/Info.plist"
+cp Resources/refresh-usage "$HELPER/Contents/Resources/"
+chmod +x "$HELPER/Contents/Resources/refresh-usage"
+# menu bar / header glyph: trim the icon's canvas margin, then scale
+cp Resources/appicon.png "$HELPER/Contents/Resources/MenuBar.png"
+sips -c 942 942 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
+sips -z 80 80 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 
 # sign inside-out: the nested helper first, then the outer bundle - never --deep.
 codesign --force --sign "$SIGN_IDENTITY" "$HELPER"

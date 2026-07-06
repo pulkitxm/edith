@@ -20,13 +20,7 @@
 	<string>9</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<key>LSUIElement</key>
-	<true/>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
 </dict>
 </plist>
