@@ -46,6 +46,16 @@ public enum ClipboardRepository {
         try? Data(contentsOf: ClipboardPaths.blobFile(sha256: entry.sha256, ext: entry.ext))
     }
 
+    public static func pruneEntriesMissingBlobs() {
+        let entries = loadEntries()
+        let kept = entries.filter {
+            FileManager.default.fileExists(
+                atPath: ClipboardPaths.blobFile(sha256: $0.sha256, ext: $0.ext).path)
+        }
+        guard kept.count != entries.count else { return }
+        try? saveEntries(kept)
+    }
+
     public static func pruneOrphanBlobs(keeping entries: [ClipboardEntry]) {
         let referenced = Set(entries.map { "\($0.sha256).\($0.ext)" })
         let fm = FileManager.default

@@ -257,7 +257,7 @@ struct ClipboardPane: View {
 
     private var backupSubtitle: String {
         if !AppData.cloudAvailable { return "iCloud Drive is not available on this Mac" }
-        if !icloudBackup { return "Text history only, capped at 1 MB per item" }
+        if !icloudBackup { return "Items up to 1 MB each - larger copies stay on this Mac only" }
         if lastBackupAt > 0 {
             let at = Date(timeIntervalSince1970: lastBackupAt)
             return "Backed up \(at.formatted(date: .abbreviated, time: .shortened))"

@@ -200,6 +200,7 @@ final class SettingsBackup: ObservableObject {
             "-a", "--delete", "--max-size=1m",
             "--include", "*/", "--include", "index.jsonl",
             "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
+            "--include", "*.url", "--include", "*.png", "--include", "*.tiff",
             "--exclude", "*",
             localClipboardDir.path + "/", cloudClipboardDir.path + "/",
         ]
@@ -246,6 +247,7 @@ final class SettingsBackup: ObservableObject {
         p.qualityOfService = .utility
         p.terminationHandler = { process in
             if process.terminationStatus == 0 {
+                ClipboardRepository.pruneEntriesMissingBlobs()
                 IPC.post(IPC.Name.clipboardChanged)
             }
         }
