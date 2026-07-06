@@ -29,6 +29,12 @@ final class SettingsBackup: ObservableObject {
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
     ]
 
+    private static let sharedKeys: Set<String> = ["theme", "lastPaletteTheme", "appearance"]
+
+    private func store(for key: String) -> UserDefaults {
+        Self.sharedKeys.contains(key) ? SharedDefaults.store : .standard
+    }
+
     private var debounce: Timer?
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
     private var cloudFile: URL { AppData.cloudDir.appendingPathComponent("settings.json") }
@@ -142,7 +148,7 @@ final class SettingsBackup: ObservableObject {
     private func snapshot() -> Data? {
         var dict: [String: Any] = [:]
         for key in Self.keys {
-            if let value = UserDefaults.standard.object(forKey: key) { dict[key] = value }
+            if let value = store(for: key).object(forKey: key) { dict[key] = value }
         }
         return try? JSONSerialization.data(
             withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
@@ -231,7 +237,7 @@ final class SettingsBackup: ObservableObject {
             return
         }
         for (key, value) in dict where Self.keys.contains(key) {
-            UserDefaults.standard.set(value, forKey: key)
+            store(for: key).set(value, forKey: key)
         }
         try? data.write(to: localFile)
         HotKey.register()
