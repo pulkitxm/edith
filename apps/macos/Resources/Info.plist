@@ -26,5 +26,7 @@
 	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 </dict>
 </plist>
