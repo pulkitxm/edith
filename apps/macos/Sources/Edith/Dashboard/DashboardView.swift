@@ -5,7 +5,10 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject private var refresh = DashboardRefreshBridge()
     @ObservedObject private var model = DashboardModel.shared
+    @StateObject private var presenterState = PresenterState.shared
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+        true
     @Environment(\.colorScheme) private var scheme
     @State private var showLog = false
     @State private var customFrom = Date()
@@ -15,6 +18,7 @@ struct DashboardView: View {
     private var dark: Bool { scheme == .dark }
     private var acc: Color { DashSkin.accent(dark) }
     private var gold: Color { DashSkin.gold }
+    private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
         ScrollView {
@@ -30,7 +34,8 @@ struct DashboardView: View {
                         VStack(spacing: 16) {
                             SkinCard(title: "Activity", dark: dark) {
                                 ActivityHeatmap(
-                                    days: model.calendarDays, model: model, dark: dark)
+                                    days: model.calendarDays, model: model, dark: dark,
+                                    blur: blurMoney)
                             }
                             LimitsCardView(theme: acc, dark: dark)
                             charts
@@ -103,9 +108,13 @@ struct DashboardView: View {
                 Spacer()
                 mastheadButtons
             }
-            Text(metaText)
-                .font(.system(size: 12.5)).foregroundStyle(DashSkin.inkSoft(dark))
-                .fixedSize(horizontal: false, vertical: true)
+            WrapHStack(spacing: 6, lineSpacing: 2) {
+                ForEach(metaSegments) { seg in
+                    Text(seg.text)
+                        .presenterBlur(seg.sensitive && blurMoney)
+                }
+            }
+            .font(.system(size: 12.5)).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 
@@ -137,13 +146,27 @@ struct DashboardView: View {
         }
     }
 
-    private var metaText: String {
-        guard model.loaded else { return "Loading…" }
+    private struct MetaSegment: Identifiable {
+        let id: Int
+        let text: String
+        let sensitive: Bool
+    }
+
+    private var metaSegments: [MetaSegment] {
+        guard model.loaded else { return [MetaSegment(id: 0, text: "Loading…", sensitive: false)] }
         let m = model.meta
-        return [
-            "Updated \(m.updated)", m.totalCost, "\(m.activeDays) active days",
-            "\(m.totalTokens) tokens", "\(m.modelCount) models", m.sourceLabels,
-        ].joined(separator: "  ·  ")
+        let parts: [(String, Bool)] = [
+            ("Updated \(m.updated)", false),
+            (m.totalCost, true),
+            ("\(m.activeDays) active days", false),
+            ("\(m.totalTokens) tokens", true),
+            ("\(m.modelCount) models", false),
+            (m.sourceLabels, false),
+        ]
+        return parts.enumerated().map { index, part in
+            MetaSegment(
+                id: index, text: index == 0 ? part.0 : "·  \(part.0)", sensitive: part.1)
+        }
     }
 
     private var kpiGrid: some View {
@@ -158,8 +181,10 @@ struct DashboardView: View {
                         Text(kpi.value)
                             .font(DashSkin.serif(26))
                             .foregroundStyle(DashSkin.ink(dark))
+                            .presenterBlur(kpi.sensitiveValue && blurMoney)
                         Text(kpi.sub)
                             .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkSoft(dark))
+                            .presenterBlur(blurMoney)
                     }
                     .padding(14)
                     Spacer(minLength: 0)
@@ -340,29 +365,31 @@ struct DashboardView: View {
     @ViewBuilder private var charts: some View {
         SkinCard(title: "Daily usage", dark: dark) {
             ComboChart(
-                points: dailyPoints, barColor: acc, lineColor: gold, dark: dark, scroll: true)
+                points: dailyPoints, barColor: acc, lineColor: gold, dark: dark, scroll: true,
+                blur: blurMoney)
         }
         SkinCard(title: "Token mix by day", dark: dark) {
             StackedChart(
                 bars: tokenMixBars, costLine: dailyPoints,
-                domain: tokenMixDomain, range: tokenMixRange, dark: dark)
+                domain: tokenMixDomain, range: tokenMixRange, dark: dark, blur: blurMoney)
         }
         SkinCard(title: "Model usage over time", dark: dark) {
             StackedChart(
                 bars: modelTimeBars, costLine: dailyPoints,
-                domain: modelDomain, range: modelRange, dark: dark)
+                domain: modelDomain, range: modelRange, dark: dark, blur: blurMoney)
         }
         if model.allSources.count > 1 {
             SkinCard(title: "Usage by source over time", dark: dark) {
                 StackedChart(
                     bars: sourceBars, costLine: dailyPoints,
-                    domain: sourceDomain, range: sourceRange, dark: dark)
+                    domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney)
             }
         }
         HStack(alignment: .top, spacing: 16) {
             SkinCard(title: "By day of week", dark: dark) {
                 ComboChart(
-                    points: dowPoints, barColor: acc, lineColor: gold, dark: dark, height: 200)
+                    points: dowPoints, barColor: acc, lineColor: gold, dark: dark, height: 200,
+                    blur: blurMoney)
             }
             SkinCard(title: "Share by model", dark: dark) {
                 DonutChart(slices: donutSlices)
@@ -373,14 +400,15 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ComboChart(
                         points: projectPoints, barColor: acc, lineColor: gold, dark: dark,
-                        height: 280)
-                    ProjectDrilldownView(model: model, dark: dark)
+                        height: 280, blur: blurMoney)
+                    ProjectDrilldownView(model: model, dark: dark, blur: blurMoney)
                 }
             }
         }
         SkinCard(title: "Hourly — all time", dark: dark) {
             ComboChart(
-                points: hourlyPoints, barColor: acc, lineColor: gold, dark: dark, height: 200)
+                points: hourlyPoints, barColor: acc, lineColor: gold, dark: dark, height: 200,
+                blur: blurMoney)
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
     }
@@ -404,12 +432,14 @@ struct DashboardView: View {
                         .font(.system(size: 11)).foregroundStyle(DashSkin.ink(dark))
                         .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
                     Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
-                        width: 70, alignment: .trailing)
+                        width: 70, alignment: .trailing
+                    ).presenterBlur(blurMoney)
                     Text(DashFmt.pct(m.share)).font(DashSkin.mono(11)).frame(
                         width: 60, alignment: .trailing
                     ).foregroundStyle(DashSkin.inkSoft(dark))
                     Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
-                        width: 70, alignment: .trailing)
+                        width: 70, alignment: .trailing
+                    ).presenterBlur(blurMoney)
                     Text("\(m.days)").font(DashSkin.mono(11)).frame(width: 44, alignment: .trailing)
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
@@ -530,6 +560,7 @@ struct ActivityHeatmap: View {
     let days: [DayPoint]
     let model: DashboardModel
     let dark: Bool
+    var blur = false
     @State private var hoveredDay: String?
 
     var body: some View {
@@ -570,7 +601,8 @@ struct ActivityHeatmap: View {
                                     arrowEdge: .trailing
                                 ) {
                                     if let detail = model.heatDetail[day.id] {
-                                        HeatCard(detail: detail, model: model, dark: dark)
+                                        HeatCard(
+                                            detail: detail, model: model, dark: dark, blur: blur)
                                     }
                                 }
                         }

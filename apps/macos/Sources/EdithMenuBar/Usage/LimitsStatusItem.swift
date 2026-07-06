@@ -26,17 +26,38 @@ final class LimitsStatusItem {
 
     func update(session: LimitWindow?, week: LimitWindow?) {
         let title = NSMutableAttributedString()
-        segment("5h", window: session, kind: .session, into: title)
+        if PresenterState.shared.autoActive {
+            title.append(presenterGlyph())
+        }
+        let masked =
+            PresenterState.shared.active
+            && (SharedDefaults.store.object(forKey: "presenterHideMenuBarNumbers") as? Bool ?? true)
+        segment("5h", window: session, kind: .session, into: title, masked: masked)
         title.append(NSAttributedString(string: "  "))
-        segment("7d", window: week, kind: .weekly, into: title)
+        segment("7d", window: week, kind: .weekly, into: title, masked: masked)
         item.button?.attributedTitle = title
     }
 
     func showUnavailable() { update(session: nil, week: nil) }
 
+    private func presenterGlyph() -> NSAttributedString {
+        let attachment = NSTextAttachment()
+        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+        let image = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: "Presenting")?
+            .withSymbolConfiguration(config)
+        image?.isTemplate = true
+        attachment.image = image
+        let out = NSMutableAttributedString(attachment: attachment)
+        out.addAttribute(
+            .foregroundColor, value: fixedColor ?? NSColor.secondaryLabelColor,
+            range: NSRange(location: 0, length: out.length))
+        out.append(NSAttributedString(string: " "))
+        return out
+    }
+
     private func segment(
         _ label: String, window: LimitWindow?, kind: LimitWindowKind,
-        into out: NSMutableAttributedString
+        into out: NSMutableAttributedString, masked: Bool
     ) {
         out.append(
             NSAttributedString(
@@ -47,6 +68,16 @@ final class LimitsStatusItem {
                     .baselineOffset: 1.5,
                 ]))
         let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        guard !masked else {
+            out.append(
+                NSAttributedString(
+                    string: "· ·",
+                    attributes: [
+                        .font: numberFont,
+                        .foregroundColor: fixedColor ?? NSColor.tertiaryLabelColor,
+                    ]))
+            return
+        }
         guard let window else {
             out.append(
                 NSAttributedString(

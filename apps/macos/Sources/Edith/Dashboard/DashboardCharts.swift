@@ -22,6 +22,7 @@ struct ComboChart: View {
     var dark = false
     var scroll = false
     var height: CGFloat = 200
+    var blur = false
     @State private var selected: String?
 
     private var selectedPoint: ComboPoint? {
@@ -58,7 +59,7 @@ struct ComboChart: View {
                         position: .top, alignment: .center, spacing: 6,
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
-                        PointTooltip(label: p.label, tokens: p.tokens, cost: p.cost)
+                        PointTooltip(label: p.label, tokens: p.tokens, cost: p.cost, blur: blur)
                     }
             }
         }
@@ -68,7 +69,8 @@ struct ComboChart: View {
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
                         Text(DashFmt.tokens(d)).font(.system(size: 9)).foregroundStyle(
-                            DashSkin.inkSoft(dark))
+                            DashSkin.inkSoft(dark)
+                        ).presenterBlur(blur)
                     }
                 }
             }
@@ -76,7 +78,8 @@ struct ComboChart: View {
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
                         Text(DashFmt.usd(d / scale)).font(.system(size: 9)).foregroundStyle(
-                            lineColor)
+                            lineColor
+                        ).presenterBlur(blur)
                     }
                 }
             }
@@ -105,11 +108,14 @@ struct PointTooltip: View {
     let label: String
     let tokens: Double
     let cost: Double
+    var blur = false
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label).font(.system(size: 9)).foregroundStyle(.secondary)
             Text(DashFmt.tokens(tokens)).font(.system(size: 11, weight: .semibold))
+                .presenterBlur(blur)
             Text(DashFmt.usdFull(cost)).font(.system(size: 10)).foregroundStyle(.secondary)
+                .presenterBlur(blur)
         }
         .padding(.horizontal, 8).padding(.vertical, 5)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
@@ -132,6 +138,7 @@ struct StackedChart: View {
     var dark = false
     var scroll = true
     var height: CGFloat = 200
+    var blur = false
     @State private var selected: String?
 
     private var selectedPoint: ComboPoint? {
@@ -166,7 +173,7 @@ struct StackedChart: View {
                         position: .top, alignment: .center, spacing: 6,
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
-                        PointTooltip(label: p.label, tokens: p.tokens, cost: p.cost)
+                        PointTooltip(label: p.label, tokens: p.tokens, cost: p.cost, blur: blur)
                     }
             }
         }
@@ -178,7 +185,8 @@ struct StackedChart: View {
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
                         Text(DashFmt.tokens(d)).font(.system(size: 9)).foregroundStyle(
-                            DashSkin.inkSoft(dark))
+                            DashSkin.inkSoft(dark)
+                        ).presenterBlur(blur)
                     }
                 }
             }
@@ -271,6 +279,7 @@ struct HeatCard: View {
     let detail: HeatDay
     let model: DashboardModel
     let dark: Bool
+    var blur = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -278,6 +287,7 @@ struct HeatCard: View {
                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
             Text("\(DashFmt.tokens(detail.tokens)) tokens · \(DashFmt.usdFull(detail.cost))")
                 .font(.system(size: 15, weight: .semibold))
+                .presenterBlur(blur)
             HStack(spacing: 5) {
                 if detail.projCount > 0 { chip("\(detail.projCount) proj") }
                 if detail.chatCount > 0 { chip("\(detail.chatCount) chats") }
@@ -320,6 +330,7 @@ struct HeatCard: View {
             Text(label).font(.system(size: 10)).foregroundStyle(.secondary)
             Spacer()
             Text(DashFmt.tokens(value)).font(.system(size: 10)).monospacedDigit()
+                .presenterBlur(blur)
         }
     }
 
