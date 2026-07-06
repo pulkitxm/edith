@@ -27,6 +27,9 @@ final class SettingsBackup: ObservableObject {
         "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
         "notifyTokenExpired",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
+        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
+        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
+        "focusDimHotKeyLabel",
     ]
 
     private static let sharedKeys: Set<String> = [
@@ -44,6 +47,9 @@ final class SettingsBackup: ObservableObject {
         "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
         "preventSleep", "repoPath",
+        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
+        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
+        "focusDimHotKeyLabel",
     ]
 
     private func store(for key: String) -> UserDefaults {

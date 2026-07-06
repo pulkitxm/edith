@@ -7,6 +7,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var music: MusicPlayer?
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
+    @Published private(set) var focusDim: FocusDimEngine?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -43,6 +44,13 @@ final class AppServices: ObservableObject {
         if !calendarOn, let store = calendar {
             store.shutdown()
             calendar = nil
+        }
+
+        let focusDimOn = SharedDefaults.store.bool(forKey: "focusDimEnabled")
+        if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
+        if !focusDimOn, let engine = focusDim {
+            engine.shutdown()
+            focusDim = nil
         }
     }
 }

@@ -8,7 +8,7 @@ enum MainSection: String, Identifiable {
 }
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
-    case usage, music, calendar, system, general, permissions, backup
+    case usage, music, calendar, system, focusDim, general, permissions, backup
     var id: String { rawValue }
 
     var title: String {
@@ -17,6 +17,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .system: return "System"
+        case .focusDim: return "Focus Dim"
         case .general: return "General"
         case .permissions: return "Permissions"
         case .backup: return "Backup"
@@ -29,13 +30,14 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "switch.2"
+        case .focusDim: return "circle.lefthalf.filled"
         case .general: return "gearshape"
         case .permissions: return "checkmark.shield"
         case .backup: return "icloud"
         }
     }
 
-    static let modules: [SettingsDestination] = [.usage, .music, .calendar, .system]
+    static let modules: [SettingsDestination] = [.usage, .music, .calendar, .system, .focusDim]
     static let app: [SettingsDestination] = [.general, .permissions, .backup]
 }
 
@@ -304,6 +306,7 @@ struct MainWindowView: View {
         case .music: MusicPane()
         case .calendar: CalendarPane()
         case .system: SystemPane()
+        case .focusDim: FocusDimPane()
         case .general: GeneralPane()
         case .permissions: MainPermissionsPane()
         case .backup: BackupPane()
