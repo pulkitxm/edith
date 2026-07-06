@@ -90,7 +90,7 @@ codesign --force --sign "$SIGN_IDENTITY" "$HELPER"
 codesign --force --sign "$SIGN_IDENTITY" "$APP"
 
 killall Edith 2>/dev/null || true
-killall EdithMenuBar 2>/dev/null || true
+pkill -if "edith.?menubar" 2>/dev/null || true
 killall ControlCenter 2>/dev/null || true # pre-rename binary name
 if [ "$INSTALL" = 1 ]; then
   rm -rf "/Applications/Edith.app" "/Applications/Control Center.app"
