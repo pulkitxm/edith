@@ -142,6 +142,7 @@ private struct ShelfItemView: View {
         .contextMenu {
             Button("Open") { controller.open(item) }
             Button("Reveal in Finder") { controller.reveal(item) }
+            ShareLink("Share", item: controller.fileURL(for: item))
             Button("Delete", role: .destructive) { controller.remove(item) }
         }
     }
