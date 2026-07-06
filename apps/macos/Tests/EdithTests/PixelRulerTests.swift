@@ -1,6 +1,7 @@
 import Testing
 
 @testable import EdithKit
+@testable import EdithMenuBar
 
 @Suite struct PixelEdgeWalkerTests {
     @Test func walksRightToTheFirstEdgeBeyondTolerance() {
@@ -69,6 +70,30 @@ import Testing
     @Test func mixedDPIScalesIndependently() {
         #expect(PixelGeometry.measurement(devicePixels: 300, scale: 1, unit: .points) == 300)
         #expect(PixelGeometry.measurement(devicePixels: 300, scale: 1.5, unit: .points) == 200)
+    }
+}
+
+@Suite struct PixelRulerCaptureHintTests {
+    @Test func noHintWhenTheScreenWasCaptured() {
+        #expect(PixelRulerCaptureHint.hint(granted: true, hasCapture: true) == nil)
+    }
+
+    @Test func deniedHintExplainsTheMissingPermission() {
+        let hint = PixelRulerCaptureHint.hint(granted: false, hasCapture: false)
+        #expect(hint?.contains("Screen Recording is off") == true)
+        #expect(hint?.contains("relaunch") == true)
+    }
+
+    @Test func failedHintSuggestsReopeningOrRetoggling() {
+        let hint = PixelRulerCaptureHint.hint(granted: true, hasCapture: false)
+        #expect(hint?.contains("Screen capture failed") == true)
+        #expect(hint?.contains("reopen") == true)
+    }
+
+    @Test func deniedAndFailedHintsDiffer() {
+        let denied = PixelRulerCaptureHint.hint(granted: false, hasCapture: false)
+        let failed = PixelRulerCaptureHint.hint(granted: true, hasCapture: false)
+        #expect(denied != failed)
     }
 }
 

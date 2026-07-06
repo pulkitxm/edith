@@ -41,7 +41,10 @@ final class PixelRulerOverlayWindow: NSWindow {
 
     override var canBecomeKey: Bool { true }
 
-    init(screen: NSScreen, capture: PixelRulerCapture?, onFinish: @escaping () -> Void) {
+    init(
+        screen: NSScreen, capture: PixelRulerCapture?, hint: String?,
+        onFinish: @escaping () -> Void
+    ) {
         hostScreen = screen
         super.init(
             contentRect: screen.frame, styleMask: [.borderless],
@@ -55,7 +58,7 @@ final class PixelRulerOverlayWindow: NSWindow {
         hasShadow = false
         contentView = PixelRulerView(
             frame: NSRect(origin: .zero, size: screen.frame.size),
-            screen: screen, capture: capture, onFinish: onFinish)
+            screen: screen, capture: capture, hint: hint, onFinish: onFinish)
         setFrame(screen.frame, display: true)
     }
 }
@@ -72,6 +75,7 @@ private struct PixelRulerCell {
 final class PixelRulerView: NSView {
     private let hostScreen: NSScreen
     private let capture: PixelRulerCapture?
+    private let hint: String?
     private let onFinish: () -> Void
     private let backgroundImage: NSImage?
     private var cursorPoint: NSPoint
@@ -81,10 +85,12 @@ final class PixelRulerView: NSView {
     override var acceptsFirstResponder: Bool { true }
 
     init(
-        frame: NSRect, screen: NSScreen, capture: PixelRulerCapture?, onFinish: @escaping () -> Void
+        frame: NSRect, screen: NSScreen, capture: PixelRulerCapture?, hint: String?,
+        onFinish: @escaping () -> Void
     ) {
         hostScreen = screen
         self.capture = capture
+        self.hint = hint
         self.onFinish = onFinish
         backgroundImage = capture.map { NSImage(cgImage: $0.cgImage, size: frame.size) }
         cursorPoint = NSPoint(x: frame.midX, y: frame.midY)
@@ -232,6 +238,30 @@ final class PixelRulerView: NSView {
         if let result {
             drawHUD(text: text(for: result))
         }
+        drawHintBanner()
+    }
+
+    private func drawHintBanner() {
+        guard let hint else { return }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let maxWidth = min(bounds.width - 120, 560)
+        let textRect = (hint as NSString).boundingRect(
+            with: NSSize(width: maxWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin], attributes: attributes)
+        let padding: CGFloat = 12
+        let banner = NSRect(
+            x: bounds.midX - textRect.width / 2 - padding, y: 48,
+            width: textRect.width + padding * 2, height: textRect.height + padding * 2)
+        NSColor.black.withAlphaComponent(0.78).setFill()
+        NSBezierPath(roundedRect: banner, xRadius: 8, yRadius: 8).fill()
+        (hint as NSString).draw(
+            in: NSRect(
+                x: banner.minX + padding, y: banner.minY + padding,
+                width: textRect.width, height: textRect.height),
+            withAttributes: attributes)
     }
 
     private func drawCrosshair() {

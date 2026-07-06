@@ -11,6 +11,7 @@ final class PixelRulerStore: ObservableObject, FeatureModule {
 
     init() {
         registerHotKey()
+        _ = Self.requestScreenRecordingAccessIfNeeded()
     }
 
     func shutdown() {
@@ -34,8 +35,10 @@ final class PixelRulerStore: ObservableObject, FeatureModule {
             let granted = Self.requestScreenRecordingAccessIfNeeded()
             let captures = granted ? await Self.captureAllScreens() : [:]
             windows = NSScreen.screens.map { screen in
-                PixelRulerOverlayWindow(
-                    screen: screen, capture: screen.pixelRulerDisplayID.flatMap { captures[$0] }
+                let capture = screen.pixelRulerDisplayID.flatMap { captures[$0] }
+                return PixelRulerOverlayWindow(
+                    screen: screen, capture: capture,
+                    hint: PixelRulerCaptureHint.hint(granted: granted, hasCapture: capture != nil)
                 ) { [weak self] in
                     self?.teardown()
                 }
@@ -91,6 +94,18 @@ final class PixelRulerStore: ObservableObject, FeatureModule {
             result[displayID] = PixelRulerCapture(cgImage: cgImage, buffer: buffer)
         }
         return result
+    }
+}
+
+enum PixelRulerCaptureHint {
+    static func hint(granted: Bool, hasCapture: Bool) -> String? {
+        if hasCapture { return nil }
+        if granted {
+            return
+                "Screen capture failed, so the screen isn't frozen. Quit and reopen Edith, or re-toggle Edith Menu Bar in System Settings > Privacy & Security > Screen Recording."
+        }
+        return
+            "Screen Recording is off, so the screen isn't frozen. Allow Edith Menu Bar in System Settings > Privacy & Security > Screen Recording, then relaunch Edith."
     }
 }
 

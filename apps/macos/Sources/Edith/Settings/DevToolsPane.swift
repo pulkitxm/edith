@@ -23,6 +23,8 @@ struct DevToolsPane: View {
     @AppStorage("pixelRulerLoupeZoom", store: SharedDefaults.store) private var loupeZoom = 8.0
     @AppStorage("pixelRulerCopyFormat", store: SharedDefaults.store) private var rulerCopyFormat:
         PixelRulerCopyFormat = .times
+    @AppStorage("permScreenRecordingGranted", store: SharedDefaults.store) private
+        var screenRecordingGranted = false
 
     var body: some View {
         Form {
@@ -82,6 +84,19 @@ struct DevToolsPane: View {
                     "Freezes the screen under a crosshair and shows pixel distances, with edge snapping when Screen Recording is granted."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+                if pixelRulerEnabled, !screenRecordingGranted {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(
+                            "Freezing needs Screen Recording for Edith Menu Bar - after granting, relaunch Edith."
+                        )
+                        .font(.caption)
+                        Spacer()
+                        Button("Grant…") { IPC.post(IPC.Name.grantScreenRecording) }
+                            .pointerCursor()
+                    }
+                }
             } header: {
                 Text("Pixel Ruler")
             }
@@ -127,7 +142,10 @@ struct DevToolsPane: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Dev Tools")
-        .onAppear { history = ColorHistoryStore.load() }
+        .onAppear {
+            history = ColorHistoryStore.load()
+            IPC.post(IPC.Name.requestPermissionsRefresh)
+        }
     }
 }
 
