@@ -284,6 +284,8 @@ struct RootView: View {
         "usage,music,system"
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
         "dashboard"
+    @AppStorage("settingsSection", store: SharedDefaults.store) private var settingsSection =
+        "general"
     @StateObject private var permissions = PermissionsModel.shared
     @State private var showDeveloper = false
 
@@ -329,7 +331,7 @@ struct RootView: View {
                     .help("Open music folder in Finder")
                 }
                 Button {
-                    mainWindowSection = "permissions"
+                    mainWindowSection = "settings"
                     MainApp.openDashboard()
                     dismissPanel()
                 } label: {
@@ -348,7 +350,8 @@ struct RootView: View {
                     if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
                         showDeveloper.toggle()
                     } else {
-                        mainWindowSection = "general"
+                        mainWindowSection = "settings"
+                        settingsSection = "general"
                         MainApp.openDashboard()
                         dismissPanel()
                     }

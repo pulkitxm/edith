@@ -12,6 +12,7 @@ let package = Package(
         .executableTarget(
             name: "Edith",
             dependencies: ["EdithKit"],
+            resources: [.copy("Resources/appicon.png")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(

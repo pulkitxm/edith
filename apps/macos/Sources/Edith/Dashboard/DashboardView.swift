@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @StateObject private var refresh = DashboardRefreshBridge()
-    @StateObject private var model = DashboardModel()
+    @ObservedObject private var model = DashboardModel.shared
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @Environment(\.colorScheme) private var scheme
     @State private var showLog = false
@@ -39,6 +39,10 @@ struct DashboardView: View {
                     } header: {
                         controlsBar
                     }
+                } else if !model.loadAttempted {
+                    ProgressView("Loading usage data…")
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, minHeight: 240)
                 } else {
                     ContentUnavailableView(
                         "No usage data yet", systemImage: "chart.bar",

@@ -15,6 +15,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         let showDockIcon = SharedDefaults.store.object(forKey: "showDockIcon") as? Bool ?? true
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         launchHelperIfNeeded()
+        Task { await DashboardModel.shared.load() }
         MainWindow.open()
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)

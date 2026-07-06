@@ -1,13 +1,13 @@
 import Testing
-@testable import EdithMenuBar
+@testable import EdithKit
 
-@Suite struct PermissionsModelTests {
+@Suite struct PermissionsStatusTests {
     func needsAttention(
         calendarTab: Bool = false, systemTab: Bool = false, notifyMaster: Bool = false,
         calendar: Bool = true, accessibility: Bool = true, inputMonitoring: Bool = true,
         notifications: Bool = true
     ) -> Bool {
-        PermissionsModel.needsAttention(
+        PermissionsStatus.needsAttention(
             calendarTab: calendarTab, systemTab: systemTab, notifyMaster: notifyMaster,
             calendar: calendar, accessibility: accessibility, inputMonitoring: inputMonitoring,
             notifications: notifications)

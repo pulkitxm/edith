@@ -63,21 +63,11 @@ final class PermissionsModel: ObservableObject {
     var needsAttention: Bool {
         let d = SharedDefaults.store
         func on(_ key: String) -> Bool { d.object(forKey: key) as? Bool ?? true }
-        return Self.needsAttention(
+        return PermissionsStatus.needsAttention(
             calendarTab: on("tabCalendarEnabled"), systemTab: on("tabSystemEnabled"),
             notifyMaster: d.bool(forKey: "notifyMaster"),
             calendar: calendar, accessibility: accessibility,
             inputMonitoring: inputMonitoring, notifications: notifications)
-    }
-
-    nonisolated static func needsAttention(
-        calendarTab: Bool, systemTab: Bool, notifyMaster: Bool,
-        calendar: Bool, accessibility: Bool, inputMonitoring: Bool, notifications: Bool
-    ) -> Bool {
-        if calendarTab, !calendar { return true }
-        if systemTab, !accessibility || !inputMonitoring { return true }
-        if notifyMaster, !notifications { return true }
-        return false
     }
 
     func grantCalendar() {
