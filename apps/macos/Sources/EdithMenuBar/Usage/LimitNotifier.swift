@@ -3,13 +3,12 @@ import Foundation
 import UserNotifications
 
 @MainActor
-final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
+final class LimitNotifier {
     private let defaults = UserDefaults.standard
     private var center: UNUserNotificationCenter { .current() }
 
-    override init() {
-        super.init()
-        center.delegate = self
+    init() {
+        _ = NotificationDelegateHub.shared
     }
 
     func evaluate(session: LimitWindow?, week: LimitWindow?) {
@@ -112,12 +111,6 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     func authorizationStatus() async -> UNAuthorizationStatus {
         await center.notificationSettings().authorizationStatus
-    }
-
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
     }
 
     private func loadState() -> LimitNotifierState {
