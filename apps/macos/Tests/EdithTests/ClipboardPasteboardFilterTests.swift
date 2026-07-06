@@ -30,6 +30,12 @@ import Testing
         #expect(!ClipboardPasteboardFilter.shouldSkip(types: ["public.utf8-plain-text"]))
     }
 
+    @Test func knownTransientTypesAreSkipped() {
+        for type in ClipboardPasteboardFilter.knownTransientTypes {
+            #expect(ClipboardPasteboardFilter.shouldSkip(types: ["public.utf8-plain-text", type]))
+        }
+    }
+
     @Test func capturableTypesDropsDynPrefixed() {
         let filtered = ClipboardPasteboardFilter.capturableTypes(
             from: ["public.utf8-plain-text", "dyn.ah62d4rv4gu8yc6durvwwa3xmrvw1um1"])

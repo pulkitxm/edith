@@ -135,11 +135,17 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         let sha = ClipboardRepository.sha256Hex(captured.data)
         try? ClipboardRepository.writeBlob(captured.data, sha256: sha, ext: captured.ext)
 
+        let existing = entries.first { $0.sha256 == sha && $0.ext == captured.ext }
+        if let existing {
+            entries.removeAll { $0.id == existing.id }
+        }
         entries.append(
             ClipboardEntry(
+                id: existing?.id ?? UUID().uuidString,
                 sha256: sha, types: captured.types, ext: captured.ext,
                 sourceApp: frontApp?.localizedName, sourceBundleID: bundleID,
-                size: captured.data.count, preview: captured.preview))
+                size: captured.data.count, preview: captured.preview,
+                pinned: existing?.pinned ?? false))
         persistAndTrim()
         SettingsBackup.shared.scheduleClipboardBackup()
     }
@@ -173,22 +179,31 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         guard saveText else { return nil }
         if let data = pb.data(forType: .rtf) {
             let plain = NSAttributedString(rtf: data, documentAttributes: nil)?.string
-            return Captured(
-                data: data, types: [NSPasteboard.PasteboardType.rtf.rawValue], ext: "rtf",
-                preview: plain)
+            if hasVisibleText(plain) {
+                return Captured(
+                    data: data, types: [NSPasteboard.PasteboardType.rtf.rawValue], ext: "rtf",
+                    preview: plain)
+            }
         }
         if let data = pb.data(forType: .html) {
             let plain = NSAttributedString(html: data, documentAttributes: nil)?.string
-            return Captured(
-                data: data, types: [NSPasteboard.PasteboardType.html.rawValue], ext: "html",
-                preview: plain)
+            if hasVisibleText(plain) {
+                return Captured(
+                    data: data, types: [NSPasteboard.PasteboardType.html.rawValue], ext: "html",
+                    preview: plain)
+            }
         }
-        if let string = pb.string(forType: .string), !string.isEmpty {
+        if let string = pb.string(forType: .string), hasVisibleText(string) {
             return Captured(
                 data: Data(string.utf8), types: [NSPasteboard.PasteboardType.string.rawValue],
                 ext: "txt", preview: string)
         }
         return nil
+    }
+
+    private static func hasVisibleText(_ text: String?) -> Bool {
+        guard let text else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func persistAndTrim() {
