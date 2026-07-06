@@ -70,6 +70,7 @@ enum MainWindow {
         w.titlebarSeparatorStyle = .none
         w.isReleasedWhenClosed = false
         w.center()
+        w.contentMinSize = NSSize(width: 720, height: 500)
         let hosting = NSHostingController(rootView: MainWindowView())
         hosting.sizingOptions = []
         w.contentViewController = hosting

@@ -178,7 +178,7 @@ struct MainWindowView: View {
     private var sidebarList: some View {
         if mainWindowSection == "settings" {
             List(selection: settingsSelection) {
-                Section("Modules") {
+                Section("Extensions") {
                     ForEach(SettingsDestination.modules) { destination in
                         sidebarRow(destination.title, icon: destination.icon)
                             .tag(destination)
