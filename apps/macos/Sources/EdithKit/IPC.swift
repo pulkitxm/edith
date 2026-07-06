@@ -20,6 +20,8 @@ public enum IPC {
         public static let grantInputMonitoring = Notification.Name(
             "com.pulkit.edith.grantInputMonitoring")
         public static let grantFullDisk = Notification.Name("com.pulkit.edith.grantFullDisk")
+        public static let grantScreenRecording = Notification.Name(
+            "com.pulkit.edith.grantScreenRecording")
         public static let requestTestNotification = Notification.Name(
             "com.pulkit.edith.requestTestNotification")
         public static let presenterAutoActiveChanged = Notification.Name(

@@ -31,6 +31,12 @@ private let permissions: [MainPermission] = [
         id: "disk", name: "Full Disk Access", icon: "externaldrive",
         usedFor: "Optional - reads your Claude credentials and usage data for the dashboard.",
         key: "permFullDiskGranted", request: IPC.Name.grantFullDisk),
+    MainPermission(
+        id: "screenRecording", name: "Screen Recording",
+        icon: "rectangle.inset.filled.badge.record",
+        usedFor:
+            "Optional - reads window titles for auto presenter mode and powers the pixel ruler.",
+        key: "permScreenRecordingGranted", request: IPC.Name.grantScreenRecording),
 ]
 
 struct MainPermissionsPane: View {
