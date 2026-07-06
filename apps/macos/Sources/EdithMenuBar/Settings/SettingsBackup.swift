@@ -221,13 +221,24 @@ final class SettingsBackup: ObservableObject {
     }
 
     @discardableResult
-    func restoreClipboard() -> Bool {
+    func restoreClipboard(attempts: Int = 3) -> Bool {
         guard AppData.cloudAvailable else { return false }
         let fm = FileManager.default
         let cloudIndex = cloudClipboardDir.appendingPathComponent("index.jsonl")
         let localIndex = localClipboardDir.appendingPathComponent("index.jsonl")
-        guard fm.fileExists(atPath: cloudIndex.path), !fm.fileExists(atPath: localIndex.path)
-        else { return false }
+        guard !fm.fileExists(atPath: localIndex.path) else { return false }
+        guard fm.fileExists(atPath: cloudIndex.path) else {
+            let placeholder = cloudClipboardDir.appendingPathComponent(".index.jsonl.icloud")
+            guard attempts > 0, fm.fileExists(atPath: placeholder.path) else { return false }
+            try? fm.startDownloadingUbiquitousItem(at: cloudClipboardDir)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                Task { @MainActor in
+                    SettingsBackup.shared.restoreClipboard(attempts: attempts - 1)
+                }
+            }
+            return true
+        }
+        try? fm.startDownloadingUbiquitousItem(at: cloudClipboardDir)
         try? fm.createDirectory(at: localClipboardDir, withIntermediateDirectories: true)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")

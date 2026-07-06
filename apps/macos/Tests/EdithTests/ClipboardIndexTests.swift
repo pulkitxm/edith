@@ -23,6 +23,14 @@ import Testing
         #expect(decoded.contains { $0.id == "b" && $0.pinned })
     }
 
+    @Test func encodeLineAppendsToExistingIndex() {
+        let base = ClipboardIndex.encode([entry("a", age: 10)])
+        let line = ClipboardIndex.encodeLine(entry("b", age: 5))
+        #expect(line != nil)
+        let decoded = ClipboardIndex.decode(base + (line ?? ""))
+        #expect(decoded.map(\.id) == ["a", "b"])
+    }
+
     @Test func decodeSkipsGarbageLines() {
         let text = "not json\n{\"broken\n"
         #expect(ClipboardIndex.decode(text).isEmpty)

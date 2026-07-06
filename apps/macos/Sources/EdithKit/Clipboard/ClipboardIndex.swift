@@ -35,6 +35,10 @@ public enum ClipboardIndex {
             .joined(separator: "\n") + "\n"
     }
 
+    public static func encodeLine(_ entry: ClipboardEntry) -> String? {
+        (try? encoder().encode(entry)).map { String(decoding: $0, as: UTF8.self) + "\n" }
+    }
+
     public static func applyRetention(
         _ entries: [ClipboardEntry],
         maxItems: Int,

@@ -17,6 +17,19 @@ public enum ClipboardRepository {
         try Data(text.utf8).write(to: ClipboardPaths.indexFile, options: .atomic)
     }
 
+    @discardableResult
+    public static func appendEntry(_ entry: ClipboardEntry) -> Bool {
+        guard FileManager.default.fileExists(atPath: ClipboardPaths.indexFile.path),
+            let line = ClipboardIndex.encodeLine(entry),
+            let handle = try? FileHandle(forWritingTo: ClipboardPaths.indexFile)
+        else { return false }
+        defer { try? handle.close() }
+        guard (try? handle.seekToEnd()) != nil,
+            (try? handle.write(contentsOf: Data(line.utf8))) != nil
+        else { return false }
+        return true
+    }
+
     public static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }

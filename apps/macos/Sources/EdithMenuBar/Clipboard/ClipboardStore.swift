@@ -139,14 +139,14 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         if let existing {
             entries.removeAll { $0.id == existing.id }
         }
-        entries.append(
-            ClipboardEntry(
-                id: existing?.id ?? UUID().uuidString,
-                sha256: sha, types: captured.types, ext: captured.ext,
-                sourceApp: frontApp?.localizedName, sourceBundleID: bundleID,
-                size: captured.data.count, preview: captured.preview,
-                pinned: existing?.pinned ?? false))
-        persistAndTrim()
+        let entry = ClipboardEntry(
+            id: existing?.id ?? UUID().uuidString,
+            sha256: sha, types: captured.types, ext: captured.ext,
+            sourceApp: frontApp?.localizedName, sourceBundleID: bundleID,
+            size: captured.data.count, preview: captured.preview,
+            pinned: existing?.pinned ?? false)
+        entries.append(entry)
+        persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
     }
 
@@ -206,16 +206,25 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func persistAndTrim() {
+    private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
         let known = Set(entries.map(\.id))
         let onDiskOnly = ClipboardRepository.loadEntries().filter { !known.contains($0.id) }
         entries.insert(contentsOf: onDiskOnly, at: 0)
+        let beforeRetention = entries.count
         let maxItems = SharedDefaults.store.object(forKey: "clipboardMaxItems") as? Int ?? 200
         let maxAgeDays = SharedDefaults.store.object(forKey: "clipboardMaxAgeDays") as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil
         entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
-        try? ClipboardRepository.saveEntries(entries)
-        ClipboardRepository.pruneOrphanBlobs(keeping: entries)
+        let removedAny = entries.count != beforeRetention
+        let appendedFastPath =
+            appended != nil && onDiskOnly.isEmpty && !removedAny
+            && ClipboardRepository.appendEntry(appended!)
+        if !appendedFastPath {
+            try? ClipboardRepository.saveEntries(entries)
+        }
+        if removedAny {
+            ClipboardRepository.pruneOrphanBlobs(keeping: entries)
+        }
         IPC.post(IPC.Name.clipboardChanged)
     }
 
