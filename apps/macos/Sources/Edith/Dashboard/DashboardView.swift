@@ -21,11 +21,13 @@ struct DashboardView: View {
             LazyVStack(alignment: .leading, spacing: 16, pinnedViews: [.sectionHeaders]) {
                 masthead
                     .padding(.horizontal, 24).padding(.top, 22)
+                if showLog {
+                    logView.padding(.horizontal, 24)
+                }
                 if model.loaded {
                     kpiGrid.padding(.horizontal, 24)
                     Section {
                         VStack(spacing: 16) {
-                            if showLog { logView }
                             SkinCard(title: "Activity", dark: dark) { heatmap }
                             LimitsCardView(theme: acc, dark: dark)
                             charts
@@ -42,7 +44,6 @@ struct DashboardView: View {
                     .frame(maxWidth: .infinity, minHeight: 240)
                 }
             }
-            .frame(maxWidth: 1160)
             .frame(maxWidth: .infinity)
         }
         .background(background)
@@ -88,20 +89,16 @@ struct DashboardView: View {
 
     private var masthead: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                PulsingDot(color: acc)
-                Text("CLAUDE CODE · USAGE OBSERVATORY")
-                    .font(DashSkin.mono(11)).tracking(2)
-                    .foregroundStyle(DashSkin.accentDeep(dark))
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                HStack(spacing: 0) {
+                    Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
+                    Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
+                    Text(".").foregroundStyle(DashSkin.ink(dark))
+                }
+                .font(DashSkin.serif(40))
                 Spacer()
                 mastheadButtons
             }
-            HStack(spacing: 0) {
-                Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
-                Text(".").foregroundStyle(DashSkin.ink(dark))
-            }
-            .font(DashSkin.serif(40))
             Text(metaText)
                 .font(.system(size: 12.5)).foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
@@ -337,28 +334,30 @@ struct DashboardView: View {
 
     @ViewBuilder private var charts: some View {
         SkinCard(title: "Daily usage", dark: dark) {
-            ComboChart(points: dailyPoints, barColor: acc, lineColor: gold, scroll: true)
+            ComboChart(
+                points: dailyPoints, barColor: acc, lineColor: gold, dark: dark, scroll: true)
         }
         SkinCard(title: "Token mix by day", dark: dark) {
             StackedChart(
                 bars: tokenMixBars, costLine: dailyPoints,
-                domain: tokenMixDomain, range: tokenMixRange)
+                domain: tokenMixDomain, range: tokenMixRange, dark: dark)
         }
         SkinCard(title: "Model usage over time", dark: dark) {
             StackedChart(
                 bars: modelTimeBars, costLine: dailyPoints,
-                domain: modelDomain, range: modelRange)
+                domain: modelDomain, range: modelRange, dark: dark)
         }
         if model.allSources.count > 1 {
             SkinCard(title: "Usage by source over time", dark: dark) {
                 StackedChart(
                     bars: sourceBars, costLine: dailyPoints,
-                    domain: sourceDomain, range: sourceRange)
+                    domain: sourceDomain, range: sourceRange, dark: dark)
             }
         }
         HStack(alignment: .top, spacing: 16) {
             SkinCard(title: "By day of week", dark: dark) {
-                ComboChart(points: dowPoints, barColor: acc, lineColor: gold, height: 200)
+                ComboChart(
+                    points: dowPoints, barColor: acc, lineColor: gold, dark: dark, height: 200)
             }
             SkinCard(title: "Share by model", dark: dark) {
                 DonutChart(slices: donutSlices)
@@ -366,11 +365,12 @@ struct DashboardView: View {
         }
         if !model.projects.isEmpty {
             SkinCard(title: "By project", dark: dark) {
-                ComboChart(points: projectPoints, barColor: acc, lineColor: gold, height: 240)
+                ComboChart(
+                    points: projectPoints, barColor: acc, lineColor: gold, dark: dark, height: 280)
             }
         }
         SkinCard(title: "Hourly — all time", dark: dark) {
-            ComboChart(points: hourlyPoints, barColor: acc, lineColor: gold, height: 200)
+            ComboChart(points: hourlyPoints, barColor: acc, lineColor: gold, dark: dark, height: 200)
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
     }

@@ -53,22 +53,3 @@ struct SkinCard<Content: View>: View {
         .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: 12, y: 8)
     }
 }
-
-struct PulsingDot: View {
-    let color: Color
-    @State private var on = false
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 7, height: 7)
-            .overlay(
-                Circle().stroke(color.opacity(0.18), lineWidth: 3).scaleEffect(on ? 1.9 : 1.2)
-                    .opacity(on ? 0 : 1)
-            )
-            .onAppear {
-                withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
-                    on = true
-                }
-            }
-    }
-}

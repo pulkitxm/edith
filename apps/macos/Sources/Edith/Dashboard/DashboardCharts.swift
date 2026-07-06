@@ -18,6 +18,7 @@ struct ComboChart: View {
     let points: [ComboPoint]
     let barColor: Color
     let lineColor: Color
+    var dark = false
     var scroll = false
     var height: CGFloat = 200
     @State private var selected: String?
@@ -65,14 +66,15 @@ struct ComboChart: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: 8)).foregroundStyle(.tertiary)
+                        Text(DashFmt.tokens(d)).font(.system(size: 9)).foregroundStyle(
+                            DashSkin.inkSoft(dark))
                     }
                 }
             }
             AxisMarks(position: .trailing) { value in
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.usd(d / scale)).font(.system(size: 8)).foregroundStyle(
+                        Text(DashFmt.usd(d / scale)).font(.system(size: 9)).foregroundStyle(
                             lineColor)
                     }
                 }
@@ -81,7 +83,7 @@ struct ComboChart: View {
         .chartXAxis {
             AxisMarks(preset: .aligned) { _ in
                 AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: 7)).foregroundStyle(.tertiary)
+                    .font(.system(size: 10.5)).foregroundStyle(DashSkin.ink(dark))
             }
         }
         .chartXSelection(value: $selected)
@@ -126,6 +128,7 @@ struct StackedChart: View {
     let costLine: [ComboPoint]
     let domain: [String]
     let range: [Color]
+    var dark = false
     var scroll = true
     var height: CGFloat = 200
     @State private var selected: String?
@@ -173,7 +176,8 @@ struct StackedChart: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: 8)).foregroundStyle(.tertiary)
+                        Text(DashFmt.tokens(d)).font(.system(size: 9)).foregroundStyle(
+                            DashSkin.inkSoft(dark))
                     }
                 }
             }
@@ -181,7 +185,7 @@ struct StackedChart: View {
         .chartXAxis {
             AxisMarks(preset: .aligned) { _ in
                 AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: 7)).foregroundStyle(.tertiary)
+                    .font(.system(size: 10.5)).foregroundStyle(DashSkin.ink(dark))
             }
         }
         .chartLegend(position: .bottom, alignment: .center, spacing: 6)

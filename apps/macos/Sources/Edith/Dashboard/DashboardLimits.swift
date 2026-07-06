@@ -69,15 +69,25 @@ enum DashLimits {
         return (Array(buckets.values) + raw).sorted { $0.t < $1.t }
     }
 
-    static func markers(_ pts: [DashLimitPoint]) -> [ResetMarker] {
+    static func markers(_ pts: [DashLimitPoint], minGap: TimeInterval = 20 * 60) -> [ResetMarker] {
         guard pts.count > 1 else { return [] }
         var out: [ResetMarker] = []
+        var lastSession: Date?
+        var lastWeekly: Date?
         for i in 1..<pts.count {
             let p = pts[i - 1]
             let q = pts[i]
-            if let a = p.sr, let b = q.sr, a != b { out.append(ResetMarker(t: q.t, session: true)) }
-            if let a = p.wr, let b = q.wr, a != b {
+            if let a = p.sr, let b = q.sr, a != b,
+                lastSession.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
+            {
+                out.append(ResetMarker(t: q.t, session: true))
+                lastSession = q.t
+            }
+            if let a = p.wr, let b = q.wr, a != b,
+                lastWeekly.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
+            {
                 out.append(ResetMarker(t: q.t, session: false))
+                lastWeekly = q.t
             }
         }
         return out
@@ -91,6 +101,7 @@ struct LimitsCardView: View {
     @AppStorage("critPercent") private var crit = 85
     @State private var all: [DashLimitPoint] = []
     @State private var range = "24h"
+    @State private var selected: Date?
 
     private let sessionC = DashPalette.color("#d97757")
     private let weeklyC = DashPalette.color("#c89b3c")
@@ -109,7 +120,11 @@ struct LimitsCardView: View {
         SkinCard(title: "Rate limits — session & weekly", dark: dark) {
             if all.count > 1 {
                 VStack(alignment: .leading, spacing: 12) {
-                    segmented
+                    HStack {
+                        segmented
+                        Spacer()
+                        readout
+                    }
                     chart
                 }
             } else {
@@ -140,13 +155,39 @@ struct LimitsCardView: View {
         }
     }
 
-    private var chart: some View {
+    private var visiblePoints: [DashLimitPoint] {
         let now = all.last?.t ?? Date()
         let ms = ranges.first { $0.0 == range }?.1 ?? nil
         let ds = DashLimits.downsample(all, now: now)
-        let pts = ms.map { m in ds.filter { $0.t >= now.addingTimeInterval(-m) } } ?? ds
+        return ms.map { m in ds.filter { $0.t >= now.addingTimeInterval(-m) } } ?? ds
+    }
+
+    private var readout: some View {
+        let pts = visiblePoints
+        let point = selected.flatMap { d in
+            pts.min(by: { abs($0.t.timeIntervalSince(d)) < abs($1.t.timeIntervalSince(d)) })
+        }
+        return Group {
+            if let point {
+                HStack(spacing: 10) {
+                    Text(point.t.formatted(.dateTime.month().day().hour().minute()))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    if let s = point.s { Text("S \(Int(s))%").foregroundStyle(sessionC) }
+                    if let w = point.w { Text("W \(Int(w))%").foregroundStyle(weeklyC) }
+                }
+            } else {
+                Text("Drag chart to inspect").foregroundStyle(DashSkin.inkFaint(dark))
+            }
+        }
+        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+    }
+
+    private var chart: some View {
+        let now = all.last?.t ?? Date()
+        let pts = visiblePoints
         let start = pts.first?.t ?? now
-        let marks = DashLimits.markers(pts).filter { !$0.session || (ms ?? .infinity) <= 7 * 86400 }
+        let spanDays = now.timeIntervalSince(start) / 86400
+        let marks = DashLimits.markers(pts).filter { !$0.session || spanDays <= 7 }
         let samples =
             pts.flatMap { p -> [Sample] in
                 [
@@ -180,6 +221,7 @@ struct LimitsCardView: View {
         .chartForegroundStyleScale(["Session": sessionC, "Weekly": weeklyC])
         .chartYScale(domain: 0...100)
         .chartXScale(domain: start...now)
+        .chartXSelection(value: $selected)
         .chartYAxis {
             AxisMarks(values: [0, 50, 100]) { value in
                 AxisGridLine().foregroundStyle(.primary.opacity(0.08))
@@ -189,21 +231,23 @@ struct LimitsCardView: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: range == "24h" ? 5 : 6)) { value in
+            AxisMarks(values: .automatic(desiredCount: spanDays < 2 ? 5 : 6)) { value in
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(tick(d)).font(.system(size: 8)).foregroundStyle(.tertiary)
+                        Text(tick(d, spanDays: spanDays)).font(.system(size: 8)).foregroundStyle(
+                            .tertiary)
                     }
                 }
             }
         }
         .chartLegend(position: .top, alignment: .trailing, spacing: 6)
         .frame(height: 220)
+        .onChange(of: range) { selected = nil }
     }
 
-    private func tick(_ d: Date) -> String {
+    private func tick(_ d: Date, spanDays: Double) -> String {
         let cal = Calendar.current
-        if range == "24h" {
+        if spanDays < 2 {
             return String(format: "%02d:00", cal.component(.hour, from: d))
         }
         return "\(cal.component(.month, from: d))/\(cal.component(.day, from: d))"
