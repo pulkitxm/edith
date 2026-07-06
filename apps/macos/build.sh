@@ -11,13 +11,17 @@
 #                             # missing), and install
 #   ./build.sh --branch name  # same, for a branch named directly
 #
-# Signing: ad-hoc ("-") by default. Export EDITH_SIGN_IDENTITY to sign with a
-# stable identity instead (e.g. a self-signed "Edith Dev" cert) so TCC grants
-# and SMAppService login-item registration survive rebuilds - see README.
+# Signing: a self-signed "Edith Dev" cert is picked up automatically when it
+# exists in the keychain (create it once - see README) so TCC grants and
+# SMAppService login-item registration survive rebuilds. Export
+# EDITH_SIGN_IDENTITY to override; without either, signing falls back to
+# ad-hoc ("-"), which resets TCC grants (Screen Recording, ...) every build.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:--}"
+SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
+  | awk -F'"' '/Edith Dev/{print $2; exit}')}"
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 INSTALL=0 NO_OPEN=0 PR="" BRANCH=""
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -8,6 +8,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
     @Published private(set) var notchShelf: NotchShelfController?
+    @Published private(set) var colorPicker: ColorPickerStore?
     @Published private(set) var clipboard: ClipboardStore?
     @Published private(set) var focusDim: FocusDimEngine?
     @Published private(set) var presenter: PresenterDetector?
@@ -58,6 +59,14 @@ final class AppServices: ObservableObject {
         if !notchShelfOn, let controller = notchShelf {
             controller.shutdown()
             notchShelf = nil
+        }
+
+        let colorPickerOn =
+            SharedDefaults.store.object(forKey: "colorPickerEnabled") as? Bool ?? false
+        if colorPickerOn, colorPicker == nil { colorPicker = ColorPickerStore() }
+        if !colorPickerOn, let store = colorPicker {
+            store.shutdown()
+            colorPicker = nil
         }
 
         let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false

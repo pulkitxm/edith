@@ -118,6 +118,7 @@ struct EdithApp: App {
             services.usage?.refreshMenuBarItem()
             services.system?.syncPreventSleep()
             services.usage?.notifier.clearStateIfMasterOff()
+            services.colorPicker?.registerHotKey()
             services.focusDim?.applySettings()
         }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
@@ -166,7 +167,6 @@ enum GlobalHotKey {
         static let notchShelf: UInt32 = 3
         static let focusDim: UInt32 = 4
         static let colorPicker: UInt32 = 5
-        static let pixelRuler: UInt32 = 6
         static let presenterToggle: UInt32 = 7
     }
 
@@ -462,6 +462,27 @@ struct RootView: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help("Open music folder in Finder")
+                }
+                if let colorPicker = services.colorPicker {
+                    Button {
+                        dismissPanel()
+                        colorPicker.pick()
+                    } label: {
+                        Image(systemName: "eyedropper")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .help("Grab a color (\(ColorPickerHotKey.label))")
+                    .contextMenu {
+                        if colorPicker.history.isEmpty {
+                            Text("No colors picked yet")
+                        } else {
+                            ForEach(colorPicker.history.prefix(8)) { swatch in
+                                Button(swatch.string(for: .hex)) { colorPicker.copyDefault(swatch) }
+                            }
+                        }
+                    }
                 }
                 Button {
                     toggleFocusDim()
