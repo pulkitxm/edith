@@ -44,3 +44,17 @@ cd apps/macos
 ```
 
 Needs only Xcode Command Line Tools (Swift 6).
+
+`build.sh` also assembles a small `EdithMenuBar.app` helper nested inside
+`Edith.app` (`Contents/Library/LoginItems`) - the always-on menu bar
+companion that will keep running after the main app quits. Both bundles are
+signed ad-hoc by default. Ad-hoc signatures change on every rebuild, which
+resets TCC permission grants (Accessibility, Screen Recording, ...) and can
+duplicate login-item registrations. To avoid that, create a self-signed
+code-signing certificate once - Keychain Access → menu bar → Certificate
+Assistant → Create a Certificate…, name it "Edith Dev", Identity Type
+"Self Signed Root", Certificate Type "Code Signing" - then build with:
+
+```bash
+EDITH_SIGN_IDENTITY="Edith Dev" ./build.sh --install
+```

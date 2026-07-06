@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
 #
-# build.sh - build Edith.app from the Swift package.
+# build.sh - build Edith.app (+ nested EdithMenuBar.app helper) from the
+# Swift package.
 #
 #   ./build.sh                # build into dist/Edith.app and launch it
 #   ./build.sh --install      # also copy to /Applications and launch from there
+#   ./build.sh --no-open      # build only, don't launch (used by CI)
 #   ./build.sh --pr 42        # resolve PR #42's branch via gh, build it from the
 #                             # worktree it is checked out in (created if
 #                             # missing), and install
 #   ./build.sh --branch name  # same, for a branch named directly
 #
+# Signing: ad-hoc ("-") by default. Export EDITH_SIGN_IDENTITY to sign with a
+# stable identity instead (e.g. a self-signed "Edith Dev" cert) so TCC grants
+# and SMAppService login-item registration survive rebuilds - see README.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-INSTALL=0 PR="" BRANCH=""
+SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:--}"
+INSTALL=0 NO_OPEN=0 PR="" BRANCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --install) INSTALL=1 ;;
+    --no-open) NO_OPEN=1 ;;
     --pr) PR="${2:?--pr needs a PR number}"; shift ;;
     --branch) BRANCH="${2:?--branch needs a branch name}"; shift ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
@@ -61,6 +68,7 @@ if [ ! -f Resources/AppIcon.icns ] || [ Resources/appicon.png -nt Resources/AppI
 fi
 
 APP="dist/Edith.app"
+HELPER="$APP/Contents/Library/LoginItems/EdithMenuBar.app"
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Edith "$APP/Contents/MacOS/"
@@ -72,14 +80,22 @@ chmod +x "$APP/Contents/Resources/refresh-usage"
 cp Resources/appicon.png "$APP/Contents/Resources/MenuBar.png"
 sips -c 942 942 "$APP/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 sips -z 80 80 "$APP/Contents/Resources/MenuBar.png" >/dev/null 2>&1
-codesign --force --sign - "$APP"
+
+mkdir -p "$HELPER/Contents/MacOS"
+cp .build/release/EdithMenuBar "$HELPER/Contents/MacOS/"
+cp Resources/HelperInfo.plist "$HELPER/Contents/Info.plist"
+
+# sign inside-out: the nested helper first, then the outer bundle - never --deep.
+codesign --force --sign "$SIGN_IDENTITY" "$HELPER"
+codesign --force --sign "$SIGN_IDENTITY" "$APP"
 
 killall Edith 2>/dev/null || true
+killall EdithMenuBar 2>/dev/null || true
 killall ControlCenter 2>/dev/null || true # pre-rename binary name
 if [ "$INSTALL" = 1 ]; then
   rm -rf "/Applications/Edith.app" "/Applications/Control Center.app"
   cp -R "$APP" /Applications/
-  open "/Applications/Edith.app"
+  [ "$NO_OPEN" = 1 ] || open "/Applications/Edith.app"
 else
-  open "$APP"
+  [ "$NO_OPEN" = 1 ] || open "$APP"
 fi

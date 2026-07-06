@@ -28,6 +28,7 @@ if [ "${1:-}" != "-y" ]; then
 fi
 
 killall Edith 2>/dev/null || true
+killall EdithMenuBar 2>/dev/null || true
 
 rm -rf "$INSTALLED_APP"
 rm -rf "$APP_SUPPORT"
