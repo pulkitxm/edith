@@ -14,6 +14,9 @@ final class SettingsBackup: ObservableObject {
 
     private static let keys = [
         "theme", "tab", "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
+        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
+        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         "tabUsageEnabled", "tabMusicEnabled",
         "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "repoPath",
         "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
@@ -32,6 +35,9 @@ final class SettingsBackup: ObservableObject {
     private static let sharedKeys: Set<String> = [
         "theme", "lastPaletteTheme", "appearance",
         "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
+        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
+        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         "tabUsageEnabled", "tabMusicEnabled", "tabSystemEnabled", "tabCalendarEnabled", "tabOrder",
         "icloudBackup", "lastBackupAt", "musicBackup", "lastMusicBackupAt",
         "backupSettings", "backupUsage", "backupLimits",
