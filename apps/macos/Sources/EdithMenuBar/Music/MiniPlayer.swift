@@ -4,7 +4,7 @@ import SwiftUI
 struct MiniPlayer: View {
     @ObservedObject var player: MusicPlayer
     let theme: Color
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @StateObject private var presenterState = PresenterState.shared
     @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
         true
 
@@ -17,7 +17,7 @@ struct MiniPlayer: View {
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                         .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                        .presenterBlur(presenter && presenterBlurMusic)
+                        .presenterBlur(presenterState.active && presenterBlurMusic)
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text("\(timeLabel(player.elapsed)) / \(timeLabel(player.trackDuration))")
                             .font(.system(size: 10))

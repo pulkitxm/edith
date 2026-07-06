@@ -15,6 +15,7 @@ final class PermissionsModel: ObservableObject {
     @Published private(set) var accessibility = false
     @Published private(set) var inputMonitoring = false
     @Published private(set) var fullDisk = false
+    @Published private(set) var screenRecording = false
 
     private let eventStore = EKEventStore()
     private var ipcTokens: [NSObjectProtocol] = []
@@ -34,6 +35,9 @@ final class PermissionsModel: ObservableObject {
                 self?.grantInputMonitoring()
             },
             IPC.observe(IPC.Name.grantFullDisk) { [weak self] in self?.grantFullDisk() },
+            IPC.observe(IPC.Name.grantScreenRecording) { [weak self] in
+                self?.grantScreenRecording()
+            },
         ]
     }
 
@@ -42,6 +46,7 @@ final class PermissionsModel: ObservableObject {
         accessibility = AXIsProcessTrusted()
         inputMonitoring = CGPreflightListenEventAccess()
         fullDisk = Self.hasFullDiskAccess()
+        screenRecording = CGPreflightScreenCaptureAccess()
         mirrorToSharedDefaults()
         Task { @MainActor in
             let status = await UNUserNotificationCenter.current()
@@ -58,6 +63,7 @@ final class PermissionsModel: ObservableObject {
         d.set(accessibility, forKey: "permAccessibilityGranted")
         d.set(inputMonitoring, forKey: "permInputMonitoringGranted")
         d.set(fullDisk, forKey: "permFullDiskGranted")
+        d.set(screenRecording, forKey: "permScreenRecordingGranted")
     }
 
     var needsAttention: Bool {
@@ -100,6 +106,11 @@ final class PermissionsModel: ObservableObject {
 
     func grantFullDisk() {
         openSecuritySettings("Privacy_AllFiles")
+    }
+
+    func grantScreenRecording() {
+        CGRequestScreenCaptureAccess()
+        openSecuritySettings("Privacy_ScreenCapture")
     }
 
     private func openSecuritySettings(_ anchor: String) {

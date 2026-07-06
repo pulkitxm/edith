@@ -9,11 +9,6 @@ struct GeneralPane: View {
     @AppStorage("lastPaletteTheme", store: SharedDefaults.store) private var lastPaletteTheme =
         "blue"
     @AppStorage("showDockIcon", store: SharedDefaults.store) private var showDockIcon = true
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
-        true
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
-        true
 
     var body: some View {
         Form {
@@ -60,24 +55,6 @@ struct GeneralPane: View {
                 }
             } header: {
                 Text("Window")
-            }
-
-            Section {
-                HStack {
-                    Toggle("Auto-blur for presenting", isOn: $presenter)
-                        .pointerCursor()
-                    InfoDot(
-                        "Blurs sensitive numbers and track names everywhere in Edith. Turn this on before sharing your screen."
-                    )
-                }
-                Toggle("Blur music", isOn: $presenterBlurMusic)
-                    .pointerCursor()
-                    .disabled(!presenter)
-                Toggle("Blur cost and usage figures", isOn: $presenterBlurMoney)
-                    .pointerCursor()
-                    .disabled(!presenter)
-            } header: {
-                Text("Presenter mode")
             }
         }
         .formStyle(.grouped)
