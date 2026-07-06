@@ -28,7 +28,7 @@ struct ClipboardPanelView: View {
     }
 
     private static func rowHeight(for entry: ClipboardEntry) -> CGFloat {
-        entry.kind == .image ? imageRowHeight : rowHeight
+        entry.kind == .image || entry.kind == .file ? imageRowHeight : rowHeight
     }
 
     private static func height(for entries: [ClipboardEntry], showFooter: Bool) -> CGFloat {
@@ -197,17 +197,8 @@ struct ClipboardPanelView: View {
 
     @ViewBuilder private func rowContent(_ entry: ClipboardEntry) -> some View {
         switch entry.kind {
-        case .image:
+        case .image, .file:
             ClipboardThumbnailView(entry: entry, maxHeight: 40) {
-                rowTitle(entry)
-            }
-        case .file:
-            HStack(spacing: 6) {
-                ClipboardThumbnailView(entry: entry, maxHeight: 18) {
-                    Image(systemName: "doc")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
                 rowTitle(entry)
             }
         default:

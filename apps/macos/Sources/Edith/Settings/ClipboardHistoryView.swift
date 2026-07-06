@@ -57,7 +57,7 @@ struct ClipboardHistoryView: View {
 
     private func row(_ entry: ClipboardEntry) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            ClipboardThumbnailView(entry: entry, maxHeight: entry.kind == .image ? 40 : 18) {
+            ClipboardThumbnailView(entry: entry, maxHeight: entry.kind == .text ? 18 : 40) {
                 Image(systemName: icon(for: entry.kind))
                     .foregroundStyle(.secondary)
                     .frame(width: 18)
