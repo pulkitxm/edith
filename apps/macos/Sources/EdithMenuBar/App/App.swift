@@ -111,6 +111,7 @@ struct EdithApp: App {
             services.usage?.refreshMenuBarItem()
             services.system?.syncPreventSleep()
             services.usage?.notifier.clearStateIfMasterOff()
+            services.colorPicker?.registerHotKey()
         }
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
@@ -370,6 +371,27 @@ struct RootView: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help("Open music folder in Finder")
+                }
+                if let colorPicker = services.colorPicker {
+                    Button {
+                        dismissPanel()
+                        colorPicker.pick()
+                    } label: {
+                        Image(systemName: "eyedropper")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .help("Grab a color (\(ColorPickerHotKey.label))")
+                    .contextMenu {
+                        if colorPicker.history.isEmpty {
+                            Text("No colors picked yet")
+                        } else {
+                            ForEach(colorPicker.history.prefix(8)) { swatch in
+                                Button(swatch.string(for: .hex)) { colorPicker.copyDefault(swatch) }
+                            }
+                        }
+                    }
                 }
                 Button {
                     mainWindowSection = "settings"

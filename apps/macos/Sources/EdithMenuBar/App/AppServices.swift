@@ -7,6 +7,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var music: MusicPlayer?
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
+    @Published private(set) var colorPicker: ColorPickerStore?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -43,6 +44,14 @@ final class AppServices: ObservableObject {
         if !calendarOn, let store = calendar {
             store.shutdown()
             calendar = nil
+        }
+
+        let colorPickerOn =
+            SharedDefaults.store.object(forKey: "colorPickerEnabled") as? Bool ?? false
+        if colorPickerOn, colorPicker == nil { colorPicker = ColorPickerStore() }
+        if !colorPickerOn, let store = colorPicker {
+            store.shutdown()
+            colorPicker = nil
         }
     }
 }
