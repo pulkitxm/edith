@@ -22,6 +22,8 @@ public enum IPC {
         public static let grantFullDisk = Notification.Name("com.pulkit.edith.grantFullDisk")
         public static let requestTestNotification = Notification.Name(
             "com.pulkit.edith.requestTestNotification")
+        public static let presenterAutoActiveChanged = Notification.Name(
+            "com.pulkit.edith.presenterAutoActiveChanged")
     }
 
     public static func post(_ name: Notification.Name) {

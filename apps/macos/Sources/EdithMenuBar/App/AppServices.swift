@@ -7,9 +7,14 @@ final class AppServices: ObservableObject {
     @Published private(set) var music: MusicPlayer?
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
+    @Published private(set) var presenter: PresenterDetector?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
+    }
+
+    static func featureOffByDefault(_ key: String) -> Bool {
+        SharedDefaults.store.object(forKey: key) as? Bool ?? false
     }
 
     init() {
@@ -43,6 +48,13 @@ final class AppServices: ObservableObject {
         if !calendarOn, let store = calendar {
             store.shutdown()
             calendar = nil
+        }
+
+        let presenterOn = Self.featureOffByDefault("presenterAutoEnabled")
+        if presenterOn, presenter == nil { presenter = PresenterDetector() }
+        if !presenterOn, let detector = presenter {
+            detector.shutdown()
+            presenter = nil
         }
     }
 }
