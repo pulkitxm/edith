@@ -74,7 +74,7 @@ final class LimitsStatusItem {
     }
 
     private func color(for window: LimitWindow, kind: LimitWindowKind) -> NSColor {
-        let d = UserDefaults.standard
+        let d = SharedDefaults.store
         if d.object(forKey: "smartColor") as? Bool ?? true {
             let risk = LimitMath.smartRisk(
                 utilization: window.percent, resetsAt: window.resetsAt,
@@ -90,7 +90,7 @@ final class LimitsStatusItem {
     }
 
     private var fixedColor: NSColor? {
-        switch UserDefaults.standard.string(forKey: "menuBarColorMode") {
+        switch SharedDefaults.store.string(forKey: "menuBarColorMode") {
         case "white": return .white
         case "black": return .black
         default: return nil

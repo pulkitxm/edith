@@ -20,7 +20,7 @@ struct Track: Identifiable, Equatable {
 }
 
 @MainActor
-final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
+final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, FeatureModule {
     @Published private(set) var tracks: [Track] = []
     @Published private(set) var current: Track?
     @Published private(set) var isPlaying = false
@@ -38,6 +38,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var artworkCache: [URL: NSImage] = [:]
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
+    private var folderChangedObserver: NSObjectProtocol?
 
     override init() {
         let saved = UserDefaults.standard.object(forKey: "musicVolume") as? Double
@@ -47,7 +48,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         rescan()
         restoreLastPlayback()
         setupRemoteCommands()
-        NotificationCenter.default.addObserver(
+        folderChangedObserver = NotificationCenter.default.addObserver(
             forName: .musicFolderChanged, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rescan() }
@@ -219,6 +220,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
         ]
         .forEach { $0.removeTarget(nil) }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        if let folderChangedObserver {
+            NotificationCenter.default.removeObserver(folderChangedObserver)
+            self.folderChangedObserver = nil
+        }
     }
 
     func progressNow() -> Double {

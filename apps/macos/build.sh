@@ -57,11 +57,12 @@ fi
 swift build -c release
 
 # Icon: regenerate from the artwork only when missing or stale.
-if [ ! -f Resources/AppIcon.icns ] || [ Resources/appicon.png -nt Resources/AppIcon.icns ]; then
+ARTWORK="Sources/Edith/Resources/appicon.png"
+if [ ! -f Resources/AppIcon.icns ] || [ "$ARTWORK" -nt Resources/AppIcon.icns ]; then
   rm -rf AppIcon.iconset && mkdir AppIcon.iconset
   for s in 16 32 128 256 512; do
-    sips -z $s $s Resources/appicon.png --out "AppIcon.iconset/icon_${s}x${s}.png" >/dev/null
-    sips -z $((s*2)) $((s*2)) Resources/appicon.png --out "AppIcon.iconset/icon_${s}x${s}@2x.png" >/dev/null
+    sips -z $s $s "$ARTWORK" --out "AppIcon.iconset/icon_${s}x${s}.png" >/dev/null
+    sips -z $((s*2)) $((s*2)) "$ARTWORK" --out "AppIcon.iconset/icon_${s}x${s}@2x.png" >/dev/null
   done
   iconutil -c icns AppIcon.iconset -o Resources/AppIcon.icns
   rm -rf AppIcon.iconset
@@ -81,7 +82,7 @@ cp Resources/HelperInfo.plist "$HELPER/Contents/Info.plist"
 cp Resources/refresh-usage "$HELPER/Contents/Resources/"
 chmod +x "$HELPER/Contents/Resources/refresh-usage"
 # menu bar / header glyph: trim the icon's canvas margin, then scale
-cp Resources/appicon.png "$HELPER/Contents/Resources/MenuBar.png"
+cp "$ARTWORK" "$HELPER/Contents/Resources/MenuBar.png"
 sips -c 942 942 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 sips -z 80 80 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 

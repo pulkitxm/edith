@@ -41,6 +41,8 @@ struct EdithApp: App {
     private let services = migratedServices()
 
     init() {
+        _ = ProcessUptime.launchedAt
+
         for key in [
             "NSStatusItem VisibleCC Item-0", "NSStatusItem VisibleCC Item-1",
             "NSStatusItem VisibleCC limits",
@@ -101,10 +103,23 @@ struct EdithApp: App {
         HotKey.register()
         SettingsBackup.shared.start()
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        let services = services
+        _ = IPC.observe(IPC.Name.settingsChanged) {
+            HotKey.register()
+            applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+            services.sync()
+            services.usage?.refreshMenuBarItem()
+            services.system?.syncPreventSleep()
+            services.usage?.notifier.clearStateIfMasterOff()
+        }
+        _ = IPC.observe(IPC.Name.requestTestNotification) {
+            Task { _ = await services.usage?.notifier.sendTest() }
+        }
+        PermissionsModel.shared.startIPCBridge()
+        PermissionsModel.shared.refresh()
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53, !ShortcutRecorder.isRecording,
-                !NSColorPanel.shared.isVisible,
+            if event.keyCode == 53, !NSColorPanel.shared.isVisible,
                 NSApp.windows.contains(where: {
                     $0.className.contains("MenuBarExtraWindow") && $0.isVisible
                 })
@@ -132,13 +147,13 @@ enum HotKey {
     private static var handlerInstalled = false
 
     static var code: Int {
-        UserDefaults.standard.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
+        SharedDefaults.store.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
     }
     static var mods: Int {
-        UserDefaults.standard.object(forKey: "hotKeyMods") as? Int ?? (cmdKey | optionKey)
+        SharedDefaults.store.object(forKey: "hotKeyMods") as? Int ?? (cmdKey | optionKey)
     }
     static var label: String {
-        UserDefaults.standard.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
+        SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
     }
 
     static func register() {
@@ -167,9 +182,9 @@ enum HotKey {
     }
 
     static func save(code: Int, mods: Int, label: String) {
-        UserDefaults.standard.set(code, forKey: "hotKeyCode")
-        UserDefaults.standard.set(mods, forKey: "hotKeyMods")
-        UserDefaults.standard.set(label, forKey: "hotKeyLabel")
+        SharedDefaults.store.set(code, forKey: "hotKeyCode")
+        SharedDefaults.store.set(mods, forKey: "hotKeyMods")
+        SharedDefaults.store.set(label, forKey: "hotKeyLabel")
     }
 }
 
@@ -260,14 +275,19 @@ struct RootView: View {
     @EnvironmentObject private var services: AppServices
     @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("tabUsageEnabled") private var usageEnabled = true
-    @AppStorage("tabMusicEnabled") private var musicEnabled = true
-    @AppStorage("tabSystemEnabled") private var systemEnabled = true
-    @AppStorage("tabCalendarEnabled") private var calendarEnabled = true
-    @AppStorage("tabOrder") private var tabOrderRaw = "usage,music,system"
-    @State private var showSettings = false
-    @State private var showPermissions = false
-    @StateObject private var permissions = PermissionsModel()
+    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = true
+    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = true
+    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
+    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+        true
+    @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
+        "usage,music,system"
+    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+        "dashboard"
+    @AppStorage("settingsSection", store: SharedDefaults.store) private var settingsSection =
+        "general"
+    @StateObject private var permissions = PermissionsModel.shared
+    @State private var showDeveloper = false
 
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
@@ -291,15 +311,12 @@ struct RootView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 19, height: 19)
-                Text(
-                    showPermissions
-                        ? "EDITH · PERMISSIONS" : showSettings ? "EDITH · SETTINGS" : "EDITH"
-                )
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(3)
-                .foregroundStyle(.secondary)
+                Text("EDITH")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(3)
+                    .foregroundStyle(.secondary)
                 Spacer()
-                if tab == "music", musicEnabled, !showSettings, !showPermissions {
+                if tab == "music", musicEnabled {
                     Button {
                         try? FileManager.default.createDirectory(
                             at: Repo.musicDir, withIntermediateDirectories: true)
@@ -314,10 +331,9 @@ struct RootView: View {
                     .help("Open music folder in Finder")
                 }
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        showSettings = false
-                        showPermissions.toggle()
-                    }
+                    mainWindowSection = "settings"
+                    MainApp.openDashboard()
+                    dismissPanel()
                 } label: {
                     Image(
                         systemName: permissions.needsAttention
@@ -326,24 +342,26 @@ struct RootView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(
                         permissions.needsAttention
-                            ? AnyShapeStyle(.orange)
-                            : showPermissions
-                                ? AnyShapeStyle(themeColor(themeName)) : AnyShapeStyle(.secondary))
+                            ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help(permissions.needsAttention ? "Permissions need attention" : "Permissions")
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        showPermissions = false
-                        showSettings.toggle()
+                    if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
+                        showDeveloper.toggle()
+                    } else {
+                        mainWindowSection = "settings"
+                        settingsSection = "general"
+                        MainApp.openDashboard()
+                        dismissPanel()
                     }
                 } label: {
-                    Image(systemName: showSettings ? "gearshape.fill" : "gearshape")
+                    Image(systemName: "gearshape")
                         .font(.system(size: 13))
-                        .foregroundStyle(showSettings ? themeColor(themeName) : Color.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(HoverButtonStyle())
-                .help(showSettings ? "Back" : "Settings")
+                .help("Settings (⌥-click for developer options)")
                 Menu {
                     Button("Close Panel") { dismissPanel() }
                     Button("Quit Edith Completely", role: .destructive) {
@@ -359,60 +377,38 @@ struct RootView: View {
                 .buttonStyle(HoverButtonStyle())
                 .help("Quit options")
             }
-            if showPermissions {
-                PermissionsView(model: permissions)
-            } else if showSettings {
-                ScrollView {
-                    SettingsView()
-                }
-                .frame(height: 640)
-            } else {
-                if enabledTabs.count > 1 {
-                    TabBar(tabs: enabledTabs, selection: $tab, theme: themeColor(themeName))
-                }
-                if tab == "usage", let store = services.usage {
-                    UsageView().environmentObject(store)
-                } else if tab == "music", let player = services.music {
-                    MusicView().environmentObject(player)
-                } else if tab == "system", let system = services.system {
-                    SystemView().environmentObject(system)
-                } else if tab == "calendar", let calendar = services.calendar {
-                    CalendarView().environmentObject(calendar)
-                } else if enabledTabs.isEmpty {
-                    Text("All tabs are off - enable one in Settings (⚙)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 28)
-                }
+            if enabledTabs.count > 1 {
+                TabBar(tabs: enabledTabs, selection: $tab, theme: themeColor(themeName))
+            }
+            if tab == "usage", let store = services.usage {
+                UsageView().environmentObject(store)
+            } else if tab == "music", let player = services.music {
+                MusicView().environmentObject(player)
+            } else if tab == "system", let system = services.system {
+                SystemView().environmentObject(system)
+            } else if tab == "calendar", let calendar = services.calendar {
+                CalendarView().environmentObject(calendar)
+            } else if enabledTabs.isEmpty {
+                Text("All tabs are off - enable one in Edith's settings (⚙)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 28)
+            }
+            if showDeveloper {
+                DeveloperPanel()
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: tab)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showSettings)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showPermissions)
         .onAppear {
             pinTab()
             permissions.refresh()
             MiniPanel.shared.services = services
             MiniPanel.shared.tab = tab
-            MiniPanel.shared.showSettings = showSettings || showPermissions
             MiniPanel.shared.sync()
         }
         .onChange(of: tab) {
             UserDefaults.standard.set(tab, forKey: "tab")
             MiniPanel.shared.tab = tab
-            MiniPanel.shared.expectResize()
-            MiniPanel.shared.sync()
-            settleMiniPanel()
-        }
-        .onChange(of: showSettings) {
-            MiniPanel.shared.showSettings = showSettings || showPermissions
-            MiniPanel.shared.expectResize()
-            MiniPanel.shared.sync()
-            settleMiniPanel()
-        }
-        .onChange(of: showPermissions) {
-            if showPermissions { permissions.refresh() }
-            MiniPanel.shared.showSettings = showSettings || showPermissions
             MiniPanel.shared.expectResize()
             MiniPanel.shared.sync()
             settleMiniPanel()

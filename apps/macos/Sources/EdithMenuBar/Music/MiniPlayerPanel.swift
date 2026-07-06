@@ -10,7 +10,6 @@ final class MiniPanel: ObservableObject {
     @Published private(set) var panelOpen = false
     weak var services: AppServices?
     var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
-    var showSettings = false
 
     private var panel: NSPanel?
     private var hosting: NSHostingView<AnyView>?
@@ -51,7 +50,7 @@ final class MiniPanel: ObservableObject {
         let wantsVisible =
             parent != nil
             && player?.current != nil
-            && (tab != "music" || showSettings)
+            && tab != "music"
         if wantsVisible, let parent, let player {
             if !shown, Date().timeIntervalSince(lastFrameChange) < 0.3 {
                 scheduleRetry()

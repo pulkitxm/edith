@@ -2,11 +2,12 @@ import AppKit
 import ApplicationServices
 import Combine
 import CoreGraphics
+import EdithKit
 import IOKit.pwr_mgt
 import SwiftUI
 
 @MainActor
-final class SystemStore: ObservableObject {
+final class SystemStore: ObservableObject, FeatureModule {
 
     @Published private(set) var preventingSleep = false
     private var assertionID: IOPMAssertionID = 0
@@ -31,7 +32,7 @@ final class SystemStore: ObservableObject {
 
     init() {
         refreshPermissions()
-        if UserDefaults.standard.bool(forKey: "preventSleep") {
+        if SharedDefaults.store.bool(forKey: "preventSleep") {
             enableSleepPrevention()
         }
         terminateObserver = NotificationCenter.default.addObserver(
@@ -54,8 +55,14 @@ final class SystemStore: ObservableObject {
     }
 
     func setPreventSleep(_ on: Bool) {
-        UserDefaults.standard.set(on, forKey: "preventSleep")
+        SharedDefaults.store.set(on, forKey: "preventSleep")
         on ? enableSleepPrevention() : disableSleepPrevention()
+    }
+
+    func syncPreventSleep() {
+        let want = SharedDefaults.store.bool(forKey: "preventSleep")
+        guard want != preventingSleep else { return }
+        want ? enableSleepPrevention() : disableSleepPrevention()
     }
 
     private func enableSleepPrevention() {

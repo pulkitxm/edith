@@ -13,7 +13,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func evaluate(session: LimitWindow?, week: LimitWindow?) {
-        let settings = NotifySettings.fromDefaults()
+        let settings = NotifySettings.fromDefaults(SharedDefaults.store)
         guard settings.master else {
             cancelReminders()
             return
@@ -40,6 +40,15 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    func clearStateIfMasterOff() {
+        guard !NotifySettings.fromDefaults(SharedDefaults.store).master else { return }
+        for key in [
+            "notifSessionLevel", "notifWeeklyLevel", "notifSessionPacing", "notifWeeklyPacing",
+        ] {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
     func cancelReminders() {
         center.removePendingNotificationRequests(withIdentifiers: [
             "reminder_session", "reminder_weekly",
@@ -47,7 +56,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func notifyTokenExpired() {
-        let settings = NotifySettings.fromDefaults()
+        let settings = NotifySettings.fromDefaults(SharedDefaults.store)
         guard settings.master, settings.tokenExpired else { return }
         if let last = defaults.object(forKey: "notifTokenExpiredAt") as? Date,
             Date().timeIntervalSince(last) < 3600

@@ -4,8 +4,9 @@ import SwiftUI
 struct MiniPlayer: View {
     @ObservedObject var player: MusicPlayer
     let theme: Color
-    @AppStorage("presenterMode") private var presenter = false
-    @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
+    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+        true
 
     var body: some View {
         if let track = player.current {

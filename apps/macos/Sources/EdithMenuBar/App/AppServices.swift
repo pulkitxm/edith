@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 
 @MainActor
@@ -8,7 +9,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var calendar: CalendarStore?
 
     static func tabEnabled(_ key: String) -> Bool {
-        UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        SharedDefaults.store.object(forKey: key) as? Bool ?? true
     }
 
     init() {

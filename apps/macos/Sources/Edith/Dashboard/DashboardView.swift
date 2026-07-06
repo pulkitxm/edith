@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @StateObject private var refresh = DashboardRefreshBridge()
-    @StateObject private var model = DashboardModel()
+    @ObservedObject private var model = DashboardModel.shared
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @Environment(\.colorScheme) private var scheme
     @State private var showLog = false
@@ -39,6 +39,10 @@ struct DashboardView: View {
                     } header: {
                         controlsBar
                     }
+                } else if !model.loadAttempted {
+                    ProgressView("Loading usage data…")
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, minHeight: 240)
                 } else {
                     ContentUnavailableView(
                         "No usage data yet", systemImage: "chart.bar",
@@ -51,6 +55,7 @@ struct DashboardView: View {
         }
         .background(background)
         .frame(minWidth: 760, minHeight: 600)
+        .navigationTitle("Dashboard")
         .task {
             await model.load()
         }
@@ -74,16 +79,16 @@ struct DashboardView: View {
                     colors: [acc.opacity(0.08), .clear], center: .topTrailing,
                     startRadius: 0, endRadius: 620
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: .vertical)
             }
             .overlay(alignment: .bottomLeading) {
                 RadialGradient(
                     colors: [DashPalette.slate(dark).opacity(0.06), .clear], center: .bottomLeading,
                     startRadius: 0, endRadius: 520
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: .vertical)
             }
-            .ignoresSafeArea()
+            .ignoresSafeArea(edges: .vertical)
     }
 
     private var masthead: some View {
@@ -182,7 +187,7 @@ struct DashboardView: View {
                 rangeButton("All", .all)
                 Spacer()
                 Button("Reset") { model.reset() }
-                    .buttonStyle(.plain).font(DashSkin.mono(11))
+                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
                     .foregroundStyle(acc)
             }
             HStack(spacing: 12) {
@@ -194,7 +199,7 @@ struct DashboardView: View {
                     } label: {
                         Label("Cycle", systemImage: "calendar")
                     }
-                    .menuStyle(.borderlessButton).fixedSize()
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
                 }
                 if !model.monthOptions.isEmpty {
                     Menu {
@@ -204,10 +209,10 @@ struct DashboardView: View {
                     } label: {
                         Label("Month", systemImage: "calendar.badge.clock")
                     }
-                    .menuStyle(.borderlessButton).fixedSize()
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
                 }
                 Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
-                    .font(.system(size: 11)).fixedSize()
+                    .pointerCursor().font(.system(size: 11)).fixedSize()
                 customRange
                 sourceMenu
                 modelMenu
@@ -235,7 +240,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
             Text("→").font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
             DatePicker(
                 "",
@@ -247,7 +252,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
         }
     }
 
@@ -255,6 +260,7 @@ struct DashboardView: View {
         let active = isActive(r)
         return Button(title) { model.range = r }
             .buttonStyle(.plain)
+            .pointerCursor()
             .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
             .padding(.horizontal, 11).padding(.vertical, 5)
             .background(
@@ -295,7 +301,7 @@ struct DashboardView: View {
         } label: {
             Label(sourceSummary, systemImage: "square.stack.3d.up")
         }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).pointerCursor().fixedSize()
     }
 
     private var sourceSummary: String {
@@ -324,7 +330,7 @@ struct DashboardView: View {
         } label: {
             Label("\(model.selectedModels.count) models", systemImage: "cpu")
         }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).pointerCursor().fixedSize()
     }
 
     private var logView: some View {
@@ -434,6 +440,7 @@ struct DashboardView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         }
         .buttonStyle(.plain)
+        .pointerCursor()
     }
 
     private var dailyPoints: [ComboPoint] {

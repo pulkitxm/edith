@@ -29,7 +29,22 @@ final class SettingsBackup: ObservableObject {
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
     ]
 
-    private static let sharedKeys: Set<String> = ["theme", "lastPaletteTheme", "appearance"]
+    private static let sharedKeys: Set<String> = [
+        "theme", "lastPaletteTheme", "appearance",
+        "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
+        "tabUsageEnabled", "tabMusicEnabled", "tabSystemEnabled", "tabCalendarEnabled", "tabOrder",
+        "icloudBackup", "lastBackupAt", "musicBackup", "lastMusicBackupAt",
+        "backupSettings", "backupUsage", "backupLimits",
+        "limitsInMenuBar", "menuBarColorMode", "smartColor",
+        "warnPercent", "critPercent", "pacingMargin",
+        "notifyMaster", "notifyTrackSession", "notifyTrackWeekly",
+        "notifyRecovery", "notifyPacingWarning", "notifyPacingHot",
+        "notifyReminderSession", "notifyReminderSessionOffsetMin",
+        "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
+        "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
+        "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
+        "preventSleep", "repoPath",
+    ]
 
     private func store(for key: String) -> UserDefaults {
         Self.sharedKeys.contains(key) ? SharedDefaults.store : .standard
@@ -47,10 +62,10 @@ final class SettingsBackup: ObservableObject {
     private var cloudUsage: URL { AppData.cloudDir.appendingPathComponent("data/usage.json") }
 
     private func flag(_ key: String) -> Bool {
-        UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        store(for: key).object(forKey: key) as? Bool ?? true
     }
     private var backupOn: Bool {
-        UserDefaults.standard.bool(forKey: "icloudBackup") && AppData.cloudAvailable
+        SharedDefaults.store.bool(forKey: "icloudBackup") && AppData.cloudAvailable
     }
 
     func start() {
@@ -62,7 +77,7 @@ final class SettingsBackup: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleExport() }
         }
-        if UserDefaults.standard.bool(forKey: "musicBackup"), !restoreMusic() {
+        if SharedDefaults.store.bool(forKey: "musicBackup"), !restoreMusic() {
             backupMusic()
         }
         NotificationCenter.default.addObserver(
@@ -97,7 +112,7 @@ final class SettingsBackup: ObservableObject {
             Task { @MainActor in
                 self.musicBackupRunning = false
                 if process.terminationStatus == 0 {
-                    UserDefaults.standard.set(
+                    SharedDefaults.store.set(
                         Date().timeIntervalSince1970, forKey: "lastMusicBackupAt")
                 }
             }
@@ -164,7 +179,7 @@ final class SettingsBackup: ObservableObject {
             at: AppData.cloudDir, withIntermediateDirectories: true)
         if (try? Data(contentsOf: cloudFile)) != data {
             try? data.write(to: cloudFile)
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastBackupAt")
+            SharedDefaults.store.set(Date().timeIntervalSince1970, forKey: "lastBackupAt")
         }
     }
 
@@ -221,7 +236,7 @@ final class SettingsBackup: ObservableObject {
     private func importFromCloudIfNewer() {
         let fm = FileManager.default
         let firstRun = !fm.fileExists(atPath: localFile.path)
-        guard firstRun || UserDefaults.standard.bool(forKey: "icloudBackup") else { return }
+        guard firstRun || SharedDefaults.store.bool(forKey: "icloudBackup") else { return }
         guard
             let cloudDate = (try? fm.attributesOfItem(atPath: cloudFile.path))?[.modificationDate]
                 as? Date

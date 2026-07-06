@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import SwiftUI
 
 struct ProjNode: Identifiable {
@@ -52,6 +53,7 @@ struct ProjectDrilldownView: View {
             .foregroundStyle(DashSkin.inkSoft(dark))
         }
         .buttonStyle(.plain)
+        .pointerCursor()
     }
 
     private var projectTable: some View {
@@ -230,6 +232,7 @@ struct ProjectDrilldownView: View {
                 img
             }
             .buttonStyle(.plain)
+            .pointerCursor()
         } else {
             img
         }

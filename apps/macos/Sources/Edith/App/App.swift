@@ -7,18 +7,36 @@ private let helperBundleIdentifier = "com.pulkit.edith.menubar"
 @MainActor
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
+    private var settingsChangeDebounce: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        let showDockIcon = SharedDefaults.store.object(forKey: "showDockIcon") as? Bool ?? true
+        NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         launchHelperIfNeeded()
-        DashboardWindow.open()
+        Task { await DashboardModel.shared.load() }
+        MainWindow.open()
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)
+        }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleSettingsChangedBroadcast() }
+        }
+    }
+
+    private func scheduleSettingsChangedBroadcast() {
+        settingsChangeDebounce?.invalidate()
+        settingsChangeDebounce = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+            IPC.post(IPC.Name.settingsChanged)
         }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { DashboardWindow.open() }
+        if !hasVisibleWindows { MainWindow.open() }
         return true
     }
 

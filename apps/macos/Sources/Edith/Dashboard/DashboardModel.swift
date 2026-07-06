@@ -286,6 +286,8 @@ struct MetaLine {
 
 @MainActor
 final class DashboardModel: ObservableObject {
+    static let shared = DashboardModel()
+
     @Published var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
     @Published var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
     @Published var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
@@ -301,6 +303,7 @@ final class DashboardModel: ObservableObject {
     private var loading = false
 
     @Published private(set) var loaded = false
+    @Published private(set) var loadAttempted = false
     @Published private(set) var series: [DayDatum] = []
     @Published private(set) var kpis: [KPI] = []
     @Published private(set) var modelTotals: [ModelTotal] = []
@@ -323,8 +326,36 @@ final class DashboardModel: ObservableObject {
 
     private var data: DashUsage?
     private var mtime: Date?
+    private var dataDirWatch: DispatchSourceFileSystemObject?
+    private var reloadDebounce: Task<Void, Never>?
 
     private let cal = Calendar.current
+
+    init() {
+        watchDataDir()
+    }
+
+    private func watchDataDir() {
+        let fd = open(Repo.dataDir.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: .write, queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.scheduleReload() }
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        dataDirWatch = source
+    }
+
+    private func scheduleReload() {
+        reloadDebounce?.cancel()
+        reloadDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.load()
+        }
+    }
 
     static let ymd: DateFormatter = {
         let f = DateFormatter()
@@ -345,20 +376,26 @@ final class DashboardModel: ObservableObject {
 
     func load() async {
         let url = Repo.usageJSON
-        let m =
-            (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-            as? Date
-        if let m, m == mtime, data != nil { return }
-        guard
-            let parsed = try? await Task.detached(
+        defer { loadAttempted = true }
+        for attempt in 0..<4 {
+            let m =
+                (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
+                as? Date
+            if let m, m == mtime, data != nil { return }
+            if let parsed = try? await Task.detached(
                 priority: .utility,
                 operation: {
                     try JSONDecoder().decode(DashUsage.self, from: Data(contentsOf: url))
                 }
-            ).value
-        else { return }
-        mtime = m
-        ingest(parsed)
+            ).value {
+                mtime = m
+                ingest(parsed)
+                return
+            }
+            if attempt < 3 {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+        }
     }
 
     func ingest(_ parsed: DashUsage) {
@@ -399,7 +436,7 @@ final class DashboardModel: ObservableObject {
     private func restore() {
         loading = true
         defer { loading = false }
-        let d = UserDefaults.standard
+        let d = SharedDefaults.store
         if let rs = d.string(forKey: "dashRange") { range = decodeRange(rs) }
         let validSources = Set(allSources.map(\.id))
         if let raw = d.string(forKey: "dashSources"), !raw.isEmpty {
@@ -426,7 +463,7 @@ final class DashboardModel: ObservableObject {
 
     private func persist() {
         guard !loading else { return }
-        let d = UserDefaults.standard
+        let d = SharedDefaults.store
         d.set(encodeRange(range), forKey: "dashRange")
         d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
         d.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
