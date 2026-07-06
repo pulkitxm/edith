@@ -51,6 +51,7 @@ struct DashboardView: View {
         }
         .background(background)
         .frame(minWidth: 760, minHeight: 600)
+        .navigationTitle("Dashboard")
         .task {
             await model.load()
         }
@@ -74,16 +75,16 @@ struct DashboardView: View {
                     colors: [acc.opacity(0.08), .clear], center: .topTrailing,
                     startRadius: 0, endRadius: 620
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: .vertical)
             }
             .overlay(alignment: .bottomLeading) {
                 RadialGradient(
                     colors: [DashPalette.slate(dark).opacity(0.06), .clear], center: .bottomLeading,
                     startRadius: 0, endRadius: 520
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: .vertical)
             }
-            .ignoresSafeArea()
+            .ignoresSafeArea(edges: .vertical)
     }
 
     private var masthead: some View {

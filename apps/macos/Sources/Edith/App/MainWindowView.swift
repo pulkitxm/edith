@@ -35,6 +35,7 @@ enum MainSection: String, CaseIterable, Identifiable {
 struct MainWindowView: View {
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var selectionRaw =
         MainSection.dashboard.rawValue
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var selection: Binding<MainSection?> {
         Binding(
@@ -43,7 +44,7 @@ struct MainWindowView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             List(selection: selection) {
                 Section("Home") {
                     row(.dashboard)
@@ -63,6 +64,19 @@ struct MainWindowView: View {
             .navigationSplitViewColumnWidth(200)
         } detail: {
             detail(for: selection.wrappedValue ?? .dashboard)
+        }
+        .toolbar(removing: .sidebarToggle)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    withAnimation {
+                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .help("Toggle sidebar")
+            }
         }
     }
 
