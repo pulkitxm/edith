@@ -109,10 +109,6 @@ final class PresenterDetector: FeatureModule {
             windowHit = false
             windowReason = nil
             recordingHit = false
-            if paused {
-                paused = false
-                SharedDefaults.store.set(false, forKey: "presenterAutoPaused")
-            }
             evaluate()
         }
     }
@@ -168,11 +164,15 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func evaluate() {
-        guard !paused else {
-            publish(active: false, reason: nil)
-            return
-        }
         let hit = windowHit || recordingHit || sharingHit || mirrorHit
+        if paused {
+            guard !PresenterPauseGate.stillPaused(hit: hit) else {
+                publish(active: false, reason: nil)
+                return
+            }
+            paused = false
+            SharedDefaults.store.set(false, forKey: "presenterAutoPaused")
+        }
         let reason =
             windowReason
             ?? (recordingHit ? "Screen recording detected" : nil)
