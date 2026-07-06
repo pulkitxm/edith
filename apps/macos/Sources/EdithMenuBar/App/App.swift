@@ -41,6 +41,8 @@ struct EdithApp: App {
     private let services = migratedServices()
 
     init() {
+        _ = ProcessUptime.launchedAt
+
         for key in [
             "NSStatusItem VisibleCC Item-0", "NSStatusItem VisibleCC Item-1",
             "NSStatusItem VisibleCC limits",
@@ -283,6 +285,7 @@ struct RootView: View {
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
         "dashboard"
     @StateObject private var permissions = PermissionsModel.shared
+    @State private var showDeveloper = false
 
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
@@ -342,16 +345,20 @@ struct RootView: View {
                 .buttonStyle(HoverButtonStyle())
                 .help(permissions.needsAttention ? "Permissions need attention" : "Permissions")
                 Button {
-                    mainWindowSection = "general"
-                    MainApp.openDashboard()
-                    dismissPanel()
+                    if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
+                        showDeveloper.toggle()
+                    } else {
+                        mainWindowSection = "general"
+                        MainApp.openDashboard()
+                        dismissPanel()
+                    }
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(HoverButtonStyle())
-                .help("Settings")
+                .help("Settings (⌥-click for developer options)")
                 Menu {
                     Button("Close Panel") { dismissPanel() }
                     Button("Quit Edith Completely", role: .destructive) {
@@ -383,6 +390,9 @@ struct RootView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 28)
+            }
+            if showDeveloper {
+                DeveloperPanel()
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: tab)

@@ -21,8 +21,9 @@ public enum AppData {
 }
 
 public enum Repo {
-    public static let devRoot: URL? = UserDefaults.standard.string(forKey: "repoPath")
-        .map { URL(fileURLWithPath: $0) }
+    public static var devRoot: URL? {
+        SharedDefaults.store.string(forKey: "repoPath").map { URL(fileURLWithPath: $0) }
+    }
 
     public static var dataDir: URL {
         devRoot?.appendingPathComponent("apps/dashboard/data")

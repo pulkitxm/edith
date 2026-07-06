@@ -43,7 +43,7 @@ final class SettingsBackup: ObservableObject {
         "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
         "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
-        "preventSleep",
+        "preventSleep", "repoPath",
     ]
 
     private func store(for key: String) -> UserDefaults {
