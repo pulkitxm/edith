@@ -66,3 +66,11 @@ jobs:
         run: swift build
       - name: Tests
         run: swift test
+      - name: Build .app bundle (smoke test)
+        run: ./build.sh --no-open
+      - name: Verify nested helper bundle and signing
+        run: |
+          test -f dist/Edith.app/Contents/MacOS/Edith
+          test -f dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/MacOS/EdithMenuBar
+          codesign --verify dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app
+          codesign --verify dist/Edith.app
