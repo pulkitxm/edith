@@ -209,9 +209,23 @@ struct DonutSlice: Identifiable {
     let color: Color
 }
 
+func donutSlice(at value: Double, in slices: [DonutSlice]) -> DonutSlice? {
+    var acc = 0.0
+    for s in slices {
+        acc += s.value
+        if value < acc { return s }
+    }
+    return slices.last
+}
+
 struct DonutChart: View {
     let slices: [DonutSlice]
     var height: CGFloat = 220
+    @State private var angle: Double?
+
+    private var selected: DonutSlice? {
+        angle.flatMap { donutSlice(at: $0, in: slices) }
+    }
 
     var body: some View {
         let total = max(slices.reduce(0) { $0 + $1.value }, 1)
@@ -223,7 +237,9 @@ struct DonutChart: View {
             )
             .cornerRadius(2)
             .foregroundStyle(by: .value("Model", s.label))
+            .opacity(selected == nil || selected?.id == s.id ? 1 : 0.3)
         }
+        .chartAngleSelection(value: $angle)
         .chartForegroundStyleScale(
             domain: slices.map(\.label), range: slices.map(\.color)
         )
@@ -231,10 +247,21 @@ struct DonutChart: View {
         .frame(height: height)
         .overlay {
             VStack(spacing: 1) {
-                Text(DashFmt.tokens(total)).font(.system(size: 13, weight: .semibold))
-                Text("tokens").font(.system(size: 8)).foregroundStyle(.tertiary)
+                if let s = selected {
+                    Text(s.label)
+                        .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text(DashFmt.tokens(s.value)).font(.system(size: 13, weight: .semibold))
+                    Text(DashFmt.pct(s.value / total)).font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text(DashFmt.tokens(total)).font(.system(size: 13, weight: .semibold))
+                    Text("tokens").font(.system(size: 8)).foregroundStyle(.tertiary)
+                }
             }
+            .frame(maxWidth: 110)
             .offset(y: -14)
+            .allowsHitTesting(false)
         }
     }
 }

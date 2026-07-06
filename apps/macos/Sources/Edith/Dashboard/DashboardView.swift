@@ -7,7 +7,6 @@ struct DashboardView: View {
     @AppStorage("theme") private var themeName = "accent"
     @Environment(\.colorScheme) private var scheme
     @State private var showLog = false
-    @State private var hoveredDay: String?
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -28,7 +27,10 @@ struct DashboardView: View {
                     kpiGrid.padding(.horizontal, 24)
                     Section {
                         VStack(spacing: 16) {
-                            SkinCard(title: "Activity", dark: dark) { heatmap }
+                            SkinCard(title: "Activity", dark: dark) {
+                                ActivityHeatmap(
+                                    days: model.calendarDays, model: model, dark: dark)
+                            }
                             LimitsCardView(theme: acc, dark: dark)
                             charts
                         }
@@ -370,7 +372,8 @@ struct DashboardView: View {
             }
         }
         SkinCard(title: "Hourly — all time", dark: dark) {
-            ComboChart(points: hourlyPoints, barColor: acc, lineColor: gold, dark: dark, height: 200)
+            ComboChart(
+                points: hourlyPoints, barColor: acc, lineColor: gold, dark: dark, height: 200)
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
     }
@@ -430,63 +433,6 @@ struct DashboardView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         }
         .buttonStyle(.plain)
-    }
-
-    private var heatmap: some View {
-        let weeks = stride(from: 0, to: model.calendarDays.count, by: 7).map {
-            Array(model.calendarDays[$0..<min($0 + 7, model.calendarDays.count)])
-        }
-        let costs = model.calendarDays.map(\.cost).filter { $0 > 0 }.sorted()
-        let cuts =
-            costs.isEmpty
-            ? [0.0, 0, 0]
-            : [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 3) {
-                ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                    VStack(spacing: 3) {
-                        ForEach(week) { day in
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(cellColor(day.cost, cuts: cuts))
-                                .frame(width: 14, height: 14)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .strokeBorder(
-                                            DashSkin.ink(dark).opacity(
-                                                hoveredDay == day.id ? 0.5 : 0),
-                                            lineWidth: 1)
-                                )
-                                .onHover { inside in
-                                    if inside {
-                                        hoveredDay = model.heatDetail[day.id] != nil ? day.id : nil
-                                    } else if hoveredDay == day.id {
-                                        hoveredDay = nil
-                                    }
-                                }
-                                .popover(
-                                    isPresented: Binding(
-                                        get: { hoveredDay == day.id },
-                                        set: { if !$0 { hoveredDay = nil } }),
-                                    arrowEdge: .trailing
-                                ) {
-                                    if let detail = model.heatDetail[day.id] {
-                                        HeatCard(detail: detail, model: model, dark: dark)
-                                    }
-                                }
-                        }
-                    }
-                }
-            }
-        }
-        .frame(height: 122)
-    }
-
-    private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
-        if cost <= 0 { return DashSkin.grid(dark) }
-        if cost <= cuts[0] { return DashPalette.color("#f6d9bf") }
-        if cost <= cuts[1] { return DashPalette.color("#f0b384") }
-        if cost <= cuts[2] { return DashPalette.color("#e2884f") }
-        return DashPalette.color("#c75e36")
     }
 
     private var dailyPoints: [ComboPoint] {
@@ -559,5 +505,69 @@ struct DashboardView: View {
                 id: $0.model, label: DashFmt.shortModel($0.model), value: $0.tokens,
                 color: model.modelColor($0.model, dark: dark))
         }
+    }
+}
+
+struct ActivityHeatmap: View {
+    let days: [DayPoint]
+    let model: DashboardModel
+    let dark: Bool
+    @State private var hoveredDay: String?
+
+    var body: some View {
+        let weeks = stride(from: 0, to: days.count, by: 7).map {
+            Array(days[$0..<min($0 + 7, days.count)])
+        }
+        let costs = days.map(\.cost).filter { $0 > 0 }.sorted()
+        let cuts =
+            costs.isEmpty
+            ? [0.0, 0, 0]
+            : [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 3) {
+                ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                    VStack(spacing: 3) {
+                        ForEach(week) { day in
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(cellColor(day.cost, cuts: cuts))
+                                .frame(width: 14, height: 14)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .strokeBorder(
+                                            DashSkin.ink(dark).opacity(
+                                                hoveredDay == day.id ? 0.5 : 0),
+                                            lineWidth: 1)
+                                )
+                                .onHover { inside in
+                                    if inside {
+                                        hoveredDay = model.heatDetail[day.id] != nil ? day.id : nil
+                                    } else if hoveredDay == day.id {
+                                        hoveredDay = nil
+                                    }
+                                }
+                                .popover(
+                                    isPresented: Binding(
+                                        get: { hoveredDay == day.id },
+                                        set: { if !$0 { hoveredDay = nil } }),
+                                    arrowEdge: .trailing
+                                ) {
+                                    if let detail = model.heatDetail[day.id] {
+                                        HeatCard(detail: detail, model: model, dark: dark)
+                                    }
+                                }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: 122)
+    }
+
+    private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
+        if cost <= 0 { return DashSkin.grid(dark) }
+        if cost <= cuts[0] { return DashPalette.color("#f6d9bf") }
+        if cost <= cuts[1] { return DashPalette.color("#f0b384") }
+        if cost <= cuts[2] { return DashPalette.color("#e2884f") }
+        return DashPalette.color("#c75e36")
     }
 }

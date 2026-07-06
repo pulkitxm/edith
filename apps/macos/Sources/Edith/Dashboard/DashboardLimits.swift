@@ -100,6 +100,10 @@ struct LimitsCardView: View {
     @AppStorage("warnPercent") private var warn = 60
     @AppStorage("critPercent") private var crit = 85
     @State private var all: [DashLimitPoint] = []
+    @State private var downsampled: [DashLimitPoint] = []
+    @State private var visible: [DashLimitPoint] = []
+    @State private var samples: [Sample] = []
+    @State private var marks: [ResetMarker] = []
     @State private var range = "24h"
     @State private var selected: Date?
 
@@ -133,7 +137,34 @@ struct LimitsCardView: View {
                     .frame(maxWidth: .infinity, minHeight: 60)
             }
         }
-        .task { all = DashLimits.loadAll() }
+        .task {
+            all = DashLimits.loadAll()
+            let now = all.last?.t ?? Date()
+            downsampled = DashLimits.downsample(all, now: now)
+            rebuildVisible()
+        }
+        .onChange(of: range) {
+            selected = nil
+            rebuildVisible()
+        }
+    }
+
+    private func rebuildVisible() {
+        let now = all.last?.t ?? Date()
+        let ms = ranges.first { $0.0 == range }?.1 ?? nil
+        let pts =
+            ms.map { m in downsampled.filter { $0.t >= now.addingTimeInterval(-m) } }
+            ?? downsampled
+        visible = pts
+        let start = pts.first?.t ?? now
+        let spanDays = now.timeIntervalSince(start) / 86400
+        marks = DashLimits.markers(pts).filter { !$0.session || spanDays <= 7 }
+        samples = pts.flatMap { p -> [Sample] in
+            [
+                p.s.map { Sample(t: p.t, v: $0, series: "Session") },
+                p.w.map { Sample(t: p.t, v: $0, series: "Weekly") },
+            ].compactMap { $0 }
+        }
     }
 
     private var segmented: some View {
@@ -155,17 +186,9 @@ struct LimitsCardView: View {
         }
     }
 
-    private var visiblePoints: [DashLimitPoint] {
-        let now = all.last?.t ?? Date()
-        let ms = ranges.first { $0.0 == range }?.1 ?? nil
-        let ds = DashLimits.downsample(all, now: now)
-        return ms.map { m in ds.filter { $0.t >= now.addingTimeInterval(-m) } } ?? ds
-    }
-
     private var readout: some View {
-        let pts = visiblePoints
         let point = selected.flatMap { d in
-            pts.min(by: { abs($0.t.timeIntervalSince(d)) < abs($1.t.timeIntervalSince(d)) })
+            visible.min(by: { abs($0.t.timeIntervalSince(d)) < abs($1.t.timeIntervalSince(d)) })
         }
         return Group {
             if let point {
@@ -184,17 +207,8 @@ struct LimitsCardView: View {
 
     private var chart: some View {
         let now = all.last?.t ?? Date()
-        let pts = visiblePoints
-        let start = pts.first?.t ?? now
+        let start = visible.first?.t ?? now
         let spanDays = now.timeIntervalSince(start) / 86400
-        let marks = DashLimits.markers(pts).filter { !$0.session || spanDays <= 7 }
-        let samples =
-            pts.flatMap { p -> [Sample] in
-                [
-                    p.s.map { Sample(t: p.t, v: $0, series: "Session") },
-                    p.w.map { Sample(t: p.t, v: $0, series: "Weekly") },
-                ].compactMap { $0 }
-            }
         return Chart {
             ForEach(marks) { m in
                 RuleMark(x: .value("Reset", m.t))
@@ -242,7 +256,6 @@ struct LimitsCardView: View {
         }
         .chartLegend(position: .top, alignment: .trailing, spacing: 6)
         .frame(height: 220)
-        .onChange(of: range) { selected = nil }
     }
 
     private func tick(_ d: Date, spanDays: Double) -> String {
