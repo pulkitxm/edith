@@ -9,6 +9,7 @@ public enum IPC {
         public static let usageRefreshFinished = Notification.Name(
             "com.pulkit.edith.usageRefreshFinished")
         public static let quitMainApp = Notification.Name("com.pulkit.edith.quitMainApp")
+        public static let settingsChanged = Notification.Name("com.pulkit.edith.settingsChanged")
     }
 
     public static func post(_ name: Notification.Name) {

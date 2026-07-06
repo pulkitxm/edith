@@ -101,6 +101,13 @@ struct EdithApp: App {
         HotKey.register()
         SettingsBackup.shared.start()
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        let services = services
+        _ = IPC.observe(IPC.Name.settingsChanged) {
+            HotKey.register()
+            applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+            services.sync()
+            services.usage?.refreshMenuBarItem()
+        }
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53, !ShortcutRecorder.isRecording,

@@ -7,6 +7,8 @@ private let helperBundleIdentifier = "com.pulkit.edith.menubar"
 @MainActor
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
+    private var settingsChangeDebounce: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
@@ -14,6 +16,19 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         DashboardWindow.open()
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)
+        }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleSettingsChangedBroadcast()
+        }
+    }
+
+    private func scheduleSettingsChangedBroadcast() {
+        settingsChangeDebounce?.invalidate()
+        settingsChangeDebounce = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+            IPC.post(IPC.Name.settingsChanged)
         }
     }
 
