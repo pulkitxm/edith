@@ -132,13 +132,13 @@ enum HotKey {
     private static var handlerInstalled = false
 
     static var code: Int {
-        UserDefaults.standard.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
+        SharedDefaults.store.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
     }
     static var mods: Int {
-        UserDefaults.standard.object(forKey: "hotKeyMods") as? Int ?? (cmdKey | optionKey)
+        SharedDefaults.store.object(forKey: "hotKeyMods") as? Int ?? (cmdKey | optionKey)
     }
     static var label: String {
-        UserDefaults.standard.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
+        SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
     }
 
     static func register() {
@@ -167,9 +167,9 @@ enum HotKey {
     }
 
     static func save(code: Int, mods: Int, label: String) {
-        UserDefaults.standard.set(code, forKey: "hotKeyCode")
-        UserDefaults.standard.set(mods, forKey: "hotKeyMods")
-        UserDefaults.standard.set(label, forKey: "hotKeyLabel")
+        SharedDefaults.store.set(code, forKey: "hotKeyCode")
+        SharedDefaults.store.set(mods, forKey: "hotKeyMods")
+        SharedDefaults.store.set(label, forKey: "hotKeyLabel")
     }
 }
 
@@ -260,11 +260,13 @@ struct RootView: View {
     @EnvironmentObject private var services: AppServices
     @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("tabUsageEnabled") private var usageEnabled = true
-    @AppStorage("tabMusicEnabled") private var musicEnabled = true
-    @AppStorage("tabSystemEnabled") private var systemEnabled = true
-    @AppStorage("tabCalendarEnabled") private var calendarEnabled = true
-    @AppStorage("tabOrder") private var tabOrderRaw = "usage,music,system"
+    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = true
+    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = true
+    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
+    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+        true
+    @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
+        "usage,music,system"
     @State private var showSettings = false
     @State private var showPermissions = false
     @StateObject private var permissions = PermissionsModel()

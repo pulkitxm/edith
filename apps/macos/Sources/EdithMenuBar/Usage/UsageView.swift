@@ -5,8 +5,9 @@ struct UsageView: View {
     @EnvironmentObject private var store: UsageStore
     @State private var showLog = false
     @State private var showDiagnostics = false
-    @AppStorage("presenterMode") private var presenter = false
-    @AppStorage("presenterBlurMoney") private var presenterBlurMoney = true
+    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+        true
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }

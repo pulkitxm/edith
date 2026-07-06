@@ -5,8 +5,9 @@ struct MusicView: View {
     @EnvironmentObject private var player: MusicPlayer
     @ObservedObject private var mini = MiniPanel.shared
     @State private var dragFraction: Double?
-    @AppStorage("presenterMode") private var presenter = false
-    @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
+    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+        true
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
@@ -167,8 +168,9 @@ private struct TrackRow: View {
     @State private var artwork: NSImage?
     @State private var duration: String?
     @State private var hovering = false
-    @AppStorage("presenterMode") private var presenter = false
-    @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
+    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+        true
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }

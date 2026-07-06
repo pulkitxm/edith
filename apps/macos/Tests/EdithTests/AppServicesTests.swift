@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 import Testing
 @testable import EdithMenuBar
@@ -6,19 +7,19 @@ import Testing
     private let probe = "tabEnabledProbeKey"
 
     @Test func defaultsToEnabledWhenUnset() {
-        UserDefaults.standard.removeObject(forKey: probe)
+        SharedDefaults.store.removeObject(forKey: probe)
         #expect(AppServices.tabEnabled(probe))
     }
 
     @Test func respectsExplicitDisable() {
-        UserDefaults.standard.set(false, forKey: probe)
-        defer { UserDefaults.standard.removeObject(forKey: probe) }
+        SharedDefaults.store.set(false, forKey: probe)
+        defer { SharedDefaults.store.removeObject(forKey: probe) }
         #expect(!AppServices.tabEnabled(probe))
     }
 
     @Test func respectsExplicitEnable() {
-        UserDefaults.standard.set(true, forKey: probe)
-        defer { UserDefaults.standard.removeObject(forKey: probe) }
+        SharedDefaults.store.set(true, forKey: probe)
+        defer { SharedDefaults.store.removeObject(forKey: probe) }
         #expect(AppServices.tabEnabled(probe))
     }
 }

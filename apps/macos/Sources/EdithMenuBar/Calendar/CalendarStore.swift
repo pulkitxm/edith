@@ -1,8 +1,9 @@
 import AppKit
+import EdithKit
 import EventKit
 
 @MainActor
-final class CalendarStore: ObservableObject {
+final class CalendarStore: ObservableObject, FeatureModule {
     @Published private(set) var events: [EKEvent] = []
     @Published private(set) var authStatus: EKAuthorizationStatus
 

@@ -14,7 +14,7 @@ struct RangeStat: Identifiable {
 }
 
 @MainActor
-final class UsageStore: ObservableObject {
+final class UsageStore: ObservableObject, FeatureModule {
     @Published private(set) var session: LimitWindow?
     @Published private(set) var week: LimitWindow?
     @Published private(set) var limitsError: String?
@@ -116,7 +116,7 @@ final class UsageStore: ObservableObject {
             }
         }
 
-        limitsKVO = UserDefaults.standard.observe(\.limitsInMenuBar) { [weak self] _, _ in
+        limitsKVO = SharedDefaults.store.observe(\.limitsInMenuBar) { [weak self] _, _ in
             Task { @MainActor in self?.syncStatusItem() }
         }
 
@@ -184,7 +184,7 @@ final class UsageStore: ObservableObject {
 
     func syncStatusItem() {
         guard NSApp?.isRunning == true else { return }
-        let on = UserDefaults.standard.object(forKey: "limitsInMenuBar") as? Bool ?? true
+        let on = SharedDefaults.store.object(forKey: "limitsInMenuBar") as? Bool ?? true
         if on, statusItem == nil {
             statusItem = LimitsStatusItem()
             statusItem?.update(session: session, week: week)

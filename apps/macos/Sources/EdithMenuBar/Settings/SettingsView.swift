@@ -5,9 +5,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var services: AppServices
-    @AppStorage("presenterMode") private var presenter = false
-    @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
-    @AppStorage("presenterBlurMoney") private var presenterBlurMoney = true
+    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+        true
+    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+        true
     @State private var showPresenterDetail = false
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("lastPaletteTheme", store: SharedDefaults.store) private var lastPaletteTheme =
@@ -16,41 +18,53 @@ struct SettingsView: View {
     @State private var draggingTab: String?
     @State private var dragTranslation: CGFloat = 0
     @State private var rowPitch: CGFloat = 46
-    @AppStorage("tabUsageEnabled") private var usageEnabled = true
-    @AppStorage("tabMusicEnabled") private var musicEnabled = true
-    @AppStorage("tabSystemEnabled") private var systemEnabled = true
-    @AppStorage("tabCalendarEnabled") private var calendarEnabled = true
-    @AppStorage("tabOrder") private var tabOrderRaw = "usage,music,system"
-    @AppStorage("icloudBackup") private var icloudBackup = false
-    @AppStorage("lastBackupAt") private var lastBackupAt = 0.0
-    @AppStorage("musicBackup") private var musicBackup = false
-    @AppStorage("lastMusicBackupAt") private var lastMusicBackupAt = 0.0
-    @AppStorage("backupSettings") private var backupSettings = true
-    @AppStorage("backupUsage") private var backupUsage = true
-    @AppStorage("backupLimits") private var backupLimits = true
+    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = true
+    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = true
+    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
+    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+        true
+    @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
+        "usage,music,system"
+    @AppStorage("icloudBackup", store: SharedDefaults.store) private var icloudBackup = false
+    @AppStorage("lastBackupAt", store: SharedDefaults.store) private var lastBackupAt = 0.0
+    @AppStorage("musicBackup", store: SharedDefaults.store) private var musicBackup = false
+    @AppStorage("lastMusicBackupAt", store: SharedDefaults.store) private var lastMusicBackupAt =
+        0.0
+    @AppStorage("backupSettings", store: SharedDefaults.store) private var backupSettings = true
+    @AppStorage("backupUsage", store: SharedDefaults.store) private var backupUsage = true
+    @AppStorage("backupLimits", store: SharedDefaults.store) private var backupLimits = true
     @State private var showBackupDetail = false
     @State private var settingsSize = ""
     @State private var usageSize = ""
     @State private var limitsSize = ""
     @ObservedObject private var backupService = SettingsBackup.shared
     @State private var musicSize = ""
-    @AppStorage("limitsInMenuBar") private var limitsInMenuBar = true
-    @AppStorage("menuBarColorMode") private var menuBarColorMode = "auto"
-    @AppStorage("smartColor") private var smartColor = true
-    @AppStorage("warnPercent") private var warnPercent = 60
-    @AppStorage("critPercent") private var critPercent = 85
-    @AppStorage("pacingMargin") private var pacingMargin = 10.0
-    @AppStorage("notifyMaster") private var notifyMaster = false
-    @AppStorage("notifyTrackSession") private var notifyTrackSession = true
-    @AppStorage("notifyTrackWeekly") private var notifyTrackWeekly = true
-    @AppStorage("notifyRecovery") private var notifyRecovery = true
-    @AppStorage("notifyPacingWarning") private var notifyPacingWarning = true
-    @AppStorage("notifyPacingHot") private var notifyPacingHot = true
-    @AppStorage("notifyReminderSession") private var reminderSession = false
-    @AppStorage("notifyReminderSessionOffsetMin") private var reminderSessionOffset = 30
-    @AppStorage("notifyReminderWeekly") private var reminderWeekly = false
-    @AppStorage("notifyReminderWeeklyOffsetMin") private var reminderWeeklyOffset = 120
-    @AppStorage("notifyTokenExpired") private var notifyTokenExpired = true
+    @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
+    @AppStorage("menuBarColorMode", store: SharedDefaults.store) private var menuBarColorMode =
+        "auto"
+    @AppStorage("smartColor", store: SharedDefaults.store) private var smartColor = true
+    @AppStorage("warnPercent", store: SharedDefaults.store) private var warnPercent = 60
+    @AppStorage("critPercent", store: SharedDefaults.store) private var critPercent = 85
+    @AppStorage("pacingMargin", store: SharedDefaults.store) private var pacingMargin = 10.0
+    @AppStorage("notifyMaster", store: SharedDefaults.store) private var notifyMaster = false
+    @AppStorage("notifyTrackSession", store: SharedDefaults.store) private var notifyTrackSession =
+        true
+    @AppStorage("notifyTrackWeekly", store: SharedDefaults.store) private var notifyTrackWeekly =
+        true
+    @AppStorage("notifyRecovery", store: SharedDefaults.store) private var notifyRecovery = true
+    @AppStorage("notifyPacingWarning", store: SharedDefaults.store) private
+        var notifyPacingWarning = true
+    @AppStorage("notifyPacingHot", store: SharedDefaults.store) private var notifyPacingHot = true
+    @AppStorage("notifyReminderSession", store: SharedDefaults.store) private var reminderSession =
+        false
+    @AppStorage("notifyReminderSessionOffsetMin", store: SharedDefaults.store) private
+        var reminderSessionOffset = 30
+    @AppStorage("notifyReminderWeekly", store: SharedDefaults.store) private var reminderWeekly =
+        false
+    @AppStorage("notifyReminderWeeklyOffsetMin", store: SharedDefaults.store) private
+        var reminderWeeklyOffset = 120
+    @AppStorage("notifyTokenExpired", store: SharedDefaults.store) private var notifyTokenExpired =
+        true
     @State private var notifDenied = false
     @State private var showAllNotifSettings = false
     @State private var showAllLimitSettings = false

@@ -399,7 +399,7 @@ final class DashboardModel: ObservableObject {
     private func restore() {
         loading = true
         defer { loading = false }
-        let d = UserDefaults.standard
+        let d = SharedDefaults.store
         if let rs = d.string(forKey: "dashRange") { range = decodeRange(rs) }
         let validSources = Set(allSources.map(\.id))
         if let raw = d.string(forKey: "dashSources"), !raw.isEmpty {
@@ -426,7 +426,7 @@ final class DashboardModel: ObservableObject {
 
     private func persist() {
         guard !loading else { return }
-        let d = UserDefaults.standard
+        let d = SharedDefaults.store
         d.set(encodeRange(range), forKey: "dashRange")
         d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
         d.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
