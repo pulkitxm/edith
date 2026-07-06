@@ -34,12 +34,12 @@ enum DashLimits {
         var out: [DashLimitPoint] = []
         for line in text.split(separator: "\n") {
             guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = UsageStore.parseISO(r.ts)
+                let t = EdithDate.parseISO(r.ts)
             else { continue }
             out.append(
                 DashLimitPoint(
                     t: t, s: r.s, w: r.w,
-                    sr: r.sr.flatMap(UsageStore.parseISO), wr: r.wr.flatMap(UsageStore.parseISO)))
+                    sr: r.sr.flatMap(EdithDate.parseISO), wr: r.wr.flatMap(EdithDate.parseISO)))
         }
         return out.sorted { $0.t < $1.t }
     }

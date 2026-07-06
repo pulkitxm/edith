@@ -21,7 +21,7 @@ let package = Package(
         ),
         .testTarget(
             name: "EdithTests",
-            dependencies: ["Edith", "EdithKit"],
+            dependencies: ["Edith", "EdithKit", "EdithMenuBar"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

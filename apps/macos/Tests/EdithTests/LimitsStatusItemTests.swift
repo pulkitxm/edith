@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import Edith
+@testable import EdithMenuBar
 
 @MainActor
 @Suite struct LimitsStatusItemTests {

@@ -1,10 +1,11 @@
 import Charts
+import EdithKit
 import SwiftUI
 
 struct DashboardView: View {
-    @EnvironmentObject private var store: UsageStore
+    @StateObject private var refresh = DashboardRefreshBridge()
     @StateObject private var model = DashboardModel()
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @Environment(\.colorScheme) private var scheme
     @State private var showLog = false
     @State private var customFrom = Date()
@@ -52,7 +53,6 @@ struct DashboardView: View {
         .frame(minWidth: 760, minHeight: 600)
         .task {
             await model.load()
-            await store.loadLimitHistory()
         }
         .onChange(of: model.loaded) { _, loaded in
             if loaded, let b = model.dataRange {
@@ -60,12 +60,9 @@ struct DashboardView: View {
                 customTo = b.upperBound
             }
         }
-        .onChange(of: store.updating) { _, updating in
+        .onChange(of: refresh.updating) { _, updating in
             if !updating {
-                Task {
-                    await model.load()
-                    await store.loadLimitHistory()
-                }
+                Task { await model.load() }
             }
         }
     }
@@ -110,10 +107,10 @@ struct DashboardView: View {
     private var mastheadButtons: some View {
         HStack(spacing: 6) {
             Button {
-                store.runUpdate()
+                refresh.requestRefresh()
             } label: {
                 Group {
-                    if store.updating {
+                    if refresh.updating {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "arrow.clockwise")
@@ -122,7 +119,7 @@ struct DashboardView: View {
                 .frame(width: 18, height: 18)
             }
             .buttonStyle(HoverButtonStyle())
-            .disabled(store.updating)
+            .disabled(refresh.updating)
             .help("Refresh usage data")
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
@@ -331,7 +328,7 @@ struct DashboardView: View {
     }
 
     private var logView: some View {
-        TerminalLogView(log: store.log, theme: appTheme, height: 150)
+        TerminalLogView(log: refresh.log, theme: appTheme, height: 150)
     }
 
     @ViewBuilder private var charts: some View {

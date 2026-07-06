@@ -1,4 +1,5 @@
 import Charts
+import EdithKit
 import SwiftUI
 
 struct ComboPoint: Identifiable {
@@ -419,29 +420,6 @@ struct _WrapLayout: Layout {
             x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
         }
-    }
-}
-
-struct TerminalLogView: View {
-    let log: String
-    let theme: Color
-    var height: CGFloat = 140
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Text(log.isEmpty ? "No output yet — hit reload" : log)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(theme)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .id("end")
-            }
-            .onChange(of: log) { proxy.scrollTo("end", anchor: .bottom) }
-        }
-        .frame(height: height)
-        .padding(8)
-        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
     }
 }
 

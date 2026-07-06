@@ -1,5 +1,5 @@
 import Testing
-@testable import Edith
+@testable import EdithMenuBar
 
 @Suite struct TabOrderTests {
     @Test func appendsTabsMissingFromSavedOrder() {

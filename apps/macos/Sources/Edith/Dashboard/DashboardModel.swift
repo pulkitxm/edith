@@ -904,7 +904,7 @@ final class DashboardModel: ObservableObject {
     private func buildMeta(from: String, to: String) {
         guard let data else { return }
         var m = MetaLine()
-        if let gen = data.generatedAt, let d = UsageStore.parseISO(gen) {
+        if let gen = data.generatedAt, let d = EdithDate.parseISO(gen) {
             m.updated = d.formatted(date: .abbreviated, time: .shortened)
         }
         m.totalCost = DashFmt.usd(series.reduce(0) { $0 + $1.cost })

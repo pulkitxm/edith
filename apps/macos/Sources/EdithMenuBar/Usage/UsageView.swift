@@ -7,7 +7,7 @@ struct UsageView: View {
     @State private var showDiagnostics = false
     @AppStorage("presenterMode") private var presenter = false
     @AppStorage("presenterBlurMoney") private var presenterBlurMoney = true
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
     private var blurMoney: Bool { presenter && presenterBlurMoney }
@@ -251,7 +251,7 @@ struct UsageView: View {
                 .buttonStyle(HoverButtonStyle())
                 .help("Show refresh log")
                 Button {
-                    DashboardWindow.open(store: store)
+                    MainApp.openDashboard()
                     dismissPanel()
                 } label: {
                     Image(systemName: "chart.bar.xaxis")

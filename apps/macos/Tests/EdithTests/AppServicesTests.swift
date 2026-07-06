@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Edith
+@testable import EdithMenuBar
 
 @MainActor @Suite struct AppServicesTests {
     private let probe = "tabEnabledProbeKey"

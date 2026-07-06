@@ -7,7 +7,7 @@ struct MusicView: View {
     @State private var dragFraction: Double?
     @AppStorage("presenterMode") private var presenter = false
     @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
     private var blurMusic: Bool { presenter && presenterBlurMusic }
@@ -169,7 +169,7 @@ private struct TrackRow: View {
     @State private var hovering = false
     @AppStorage("presenterMode") private var presenter = false
     @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
     private var isCurrent: Bool { player.current == track }

@@ -5,7 +5,7 @@ import SwiftUI
 enum DashboardWindow {
     private static var window: NSWindow?
 
-    static func open(store: UsageStore) {
+    static func open() {
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -18,8 +18,7 @@ enum DashboardWindow {
         w.title = "Edith — Usage"
         w.isReleasedWhenClosed = false
         w.center()
-        w.contentView = NSHostingView(
-            rootView: DashboardView().environmentObject(store))
+        w.contentView = NSHostingView(rootView: DashboardView())
         w.delegate = DashboardWindowDelegate.shared
         window = w
         w.makeKeyAndOrderFront(nil)

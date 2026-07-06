@@ -1,9 +1,10 @@
+import EdithKit
 import EventKit
 import SwiftUI
 
 struct CalendarView: View {
     @EnvironmentObject private var store: CalendarStore
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
 

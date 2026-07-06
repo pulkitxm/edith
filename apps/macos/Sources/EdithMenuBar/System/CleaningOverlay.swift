@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import SwiftUI
 
 final class CleaningOverlayWindow: NSWindow {
@@ -21,7 +22,7 @@ final class CleaningOverlayWindow: NSWindow {
 
 struct CleaningOverlayView: View {
     @ObservedObject var store: SystemStore
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     var body: some View {
         ZStack {

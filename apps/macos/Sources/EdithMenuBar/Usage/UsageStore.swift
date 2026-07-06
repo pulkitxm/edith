@@ -13,17 +13,6 @@ struct RangeStat: Identifiable {
     let cost: Double
 }
 
-struct SourceInfo: Identifiable {
-    let id: String
-    let label: String
-}
-
-struct DayPoint: Identifiable {
-    let id: String
-    let date: Date
-    let cost: Double
-}
-
 @MainActor
 final class UsageStore: ObservableObject {
     @Published private(set) var session: LimitWindow?
@@ -60,6 +49,7 @@ final class UsageStore: ObservableObject {
     private var process: Process?
     private var limitsKVO: NSKeyValueObservation?
     private var launchObserver: NSObjectProtocol?
+    private var refreshRequestObserver: NSObjectProtocol?
     let notifier = LimitNotifier()
     private var history = LimitsHistory()
     @Published private(set) var limitPoints: [LimitPoint] = []
@@ -129,6 +119,10 @@ final class UsageStore: ObservableObject {
         limitsKVO = UserDefaults.standard.observe(\.limitsInMenuBar) { [weak self] _, _ in
             Task { @MainActor in self?.syncStatusItem() }
         }
+
+        refreshRequestObserver = IPC.observe(IPC.Name.requestUsageRefresh) { [weak self] in
+            self?.runUpdate()
+        }
     }
 
     private func startPolling() {
@@ -181,6 +175,10 @@ final class UsageStore: ObservableObject {
         if let launchObserver {
             NotificationCenter.default.removeObserver(launchObserver)
             self.launchObserver = nil
+        }
+        if let refreshRequestObserver {
+            IPC.stopObserving(refreshRequestObserver)
+            self.refreshRequestObserver = nil
         }
     }
 
@@ -563,6 +561,7 @@ final class UsageStore: ObservableObject {
         }
         updating = true
         log = ""
+        IPC.post(IPC.Name.usageRefreshStarted)
         let dataDir = Repo.dataDir
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
 
@@ -594,7 +593,11 @@ final class UsageStore: ObservableObject {
                 }
                 SettingsBackup.shared.syncUsage()
                 await self.loadStats()
+                try? self.log.write(
+                    to: Repo.dataDir.appendingPathComponent("refresh.log"),
+                    atomically: true, encoding: .utf8)
                 NotificationCenter.default.post(name: .usageDataChanged, object: nil)
+                IPC.post(IPC.Name.usageRefreshFinished)
             }
         }
         do {

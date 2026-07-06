@@ -3,25 +3,16 @@ import Carbon.HIToolbox
 import EdithKit
 import SwiftUI
 
-let themePalette: [(name: String, color: Color)] = [
-    ("blue", .blue), ("indigo", .indigo), ("teal", .teal), ("green", .green),
-    ("purple", .purple), ("pink", .pink), ("red", .red), ("orange", .orange),
-]
-
-func themeColor(_ name: String) -> Color {
-    if name == "accent" { return .accentColor }
-    return themePalette.first { $0.name == name }?.color ?? .accentColor
-}
-
 struct SettingsView: View {
     @EnvironmentObject private var services: AppServices
     @AppStorage("presenterMode") private var presenter = false
     @AppStorage("presenterBlurMusic") private var presenterBlurMusic = true
     @AppStorage("presenterBlurMoney") private var presenterBlurMoney = true
     @State private var showPresenterDetail = false
-    @AppStorage("theme") private var themeName = "accent"
-    @AppStorage("lastPaletteTheme") private var lastPaletteTheme = "blue"
-    @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage("lastPaletteTheme", store: SharedDefaults.store) private var lastPaletteTheme =
+        "blue"
+    @AppStorage("appearance", store: SharedDefaults.store) private var appearance = "system"
     @State private var draggingTab: String?
     @State private var dragTranslation: CGFloat = 0
     @State private var rowPitch: CGFloat = 46

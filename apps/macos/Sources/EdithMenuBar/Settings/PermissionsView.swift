@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import EdithKit
 import EventKit
 import SwiftUI
 import UserNotifications
@@ -95,7 +96,7 @@ final class PermissionsModel: ObservableObject {
 
 struct PermissionsView: View {
     @ObservedObject var model: PermissionsModel
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
 

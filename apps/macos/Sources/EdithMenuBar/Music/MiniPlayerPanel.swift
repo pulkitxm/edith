@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import EdithKit
 import SwiftUI
 
 @MainActor
@@ -167,7 +168,7 @@ final class MiniPanel: ObservableObject {
 
 struct MiniPlayerDetached: View {
     @ObservedObject var player: MusicPlayer
-    @AppStorage("theme") private var themeName = "accent"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     var body: some View {
         MiniPlayer(player: player, theme: themeColor(themeName))
