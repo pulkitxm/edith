@@ -88,17 +88,27 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
 
     @MainActor
     private static func focusedTextRect() -> NSRect? {
-        guard AXIsProcessTrusted() else { return nil }
-        var focusedRef: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString,
-                &focusedRef) == .success,
-            let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
-        else { return nil }
-        let element = unsafeBitCast(focusedRef, to: AXUIElement.self)
+        guard AXIsProcessTrusted(), let element = focusedElement() else { return nil }
         if let caret = caretRect(of: element) { return caret }
         return textElementRect(of: element)
+    }
+
+    @MainActor
+    private static func focusedElement() -> AXUIElement? {
+        var candidates = [AXUIElementCreateSystemWide()]
+        if let app = NSWorkspace.shared.frontmostApplication {
+            candidates.append(AXUIElementCreateApplication(app.processIdentifier))
+        }
+        for candidate in candidates {
+            var focusedRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(
+                candidate, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+                let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
+            {
+                return unsafeBitCast(focusedRef, to: AXUIElement.self)
+            }
+        }
+        return nil
     }
 
     private static func caretRect(of element: AXUIElement) -> NSRect? {
@@ -108,18 +118,31 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
                 element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
             let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID()
         else { return nil }
-        var boundsRef: CFTypeRef?
-        guard
-            AXUIElementCopyParameterizedAttributeValue(
-                element, kAXBoundsForRangeParameterizedAttribute as CFString, rangeRef,
-                &boundsRef) == .success,
-            let boundsRef, CFGetTypeID(boundsRef) == AXValueGetTypeID()
-        else { return nil }
-        var rect = CGRect.zero
-        guard AXValueGetValue(unsafeBitCast(boundsRef, to: AXValue.self), .cgRect, &rect),
-            rect.height > 0, rect.origin != .zero
-        else { return nil }
-        return flippedToCocoa(rect)
+        let selected = unsafeBitCast(rangeRef, to: AXValue.self)
+        var range = CFRange()
+        AXValueGetValue(selected, .cfRange, &range)
+        var probes = [selected]
+        if range.length == 0 {
+            for location in [range.location, max(range.location - 1, 0)] {
+                var widened = CFRange(location: location, length: 1)
+                if let value = AXValueCreate(.cfRange, &widened) { probes.append(value) }
+            }
+        }
+        for probe in probes {
+            var boundsRef: CFTypeRef?
+            guard
+                AXUIElementCopyParameterizedAttributeValue(
+                    element, kAXBoundsForRangeParameterizedAttribute as CFString, probe,
+                    &boundsRef) == .success,
+                let boundsRef, CFGetTypeID(boundsRef) == AXValueGetTypeID()
+            else { continue }
+            var rect = CGRect.zero
+            guard AXValueGetValue(unsafeBitCast(boundsRef, to: AXValue.self), .cgRect, &rect),
+                rect.height > 0, rect.height < 300, rect.origin != .zero
+            else { continue }
+            return flippedToCocoa(rect)
+        }
+        return nil
     }
 
     private static func textElementRect(of element: AXUIElement) -> NSRect? {
