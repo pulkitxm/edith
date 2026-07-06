@@ -101,11 +101,13 @@ struct EdithApp: App {
             Task { @MainActor in MiniPanel.shared.sync() }
         }
         HotKey.register()
+        ClipboardHotKey.register()
         SettingsBackup.shared.start()
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
         let services = services
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
+            ClipboardHotKey.register()
             applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
             services.sync()
             services.usage?.refreshMenuBarItem()
@@ -226,6 +228,36 @@ enum HotKey {
         SharedDefaults.store.set(code, forKey: "hotKeyCode")
         SharedDefaults.store.set(mods, forKey: "hotKeyMods")
         SharedDefaults.store.set(label, forKey: "hotKeyLabel")
+    }
+}
+
+enum ClipboardHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "clipboardHotKeyCode") as? Int ?? kVK_ANSI_C
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "clipboardHotKeyMods") as? Int
+            ?? (controlKey | shiftKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "clipboardHotKeyLabel") ?? "⌃⇧C"
+    }
+
+    static func register() {
+        let enabled = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        guard enabled else {
+            GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.clipboard, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { ClipboardPanel.shared.toggle() }
+        }
+    }
+
+    static func save(code: Int, mods: Int, label: String) {
+        SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
+        SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
+        SharedDefaults.store.set(label, forKey: "clipboardHotKeyLabel")
     }
 }
 

@@ -11,6 +11,7 @@ final class SettingsBackup: ObservableObject {
     static let shared = SettingsBackup()
 
     @Published private(set) var musicBackupRunning = false
+    @Published private(set) var clipboardBackupRunning = false
 
     private static let keys = [
         "theme", "tab", "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
@@ -27,6 +28,10 @@ final class SettingsBackup: ObservableObject {
         "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
         "notifyTokenExpired",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
+        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
+        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
+        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
+        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
     ]
 
     private static let sharedKeys: Set<String> = [
@@ -44,6 +49,10 @@ final class SettingsBackup: ObservableObject {
         "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
         "preventSleep", "repoPath",
+        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
+        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
+        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
+        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
     ]
 
     private func store(for key: String) -> UserDefaults {
@@ -79,6 +88,9 @@ final class SettingsBackup: ObservableObject {
         }
         if SharedDefaults.store.bool(forKey: "musicBackup"), !restoreMusic() {
             backupMusic()
+        }
+        if SharedDefaults.store.bool(forKey: "clipboardBackup"), !restoreClipboard() {
+            backupClipboard()
         }
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
@@ -145,6 +157,76 @@ final class SettingsBackup: ObservableObject {
                 NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
             }
         }
+        do {
+            try p.run()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private var localClipboardDir: URL { ClipboardPaths.dir }
+    private var cloudClipboardDir: URL { AppData.cloudDir.appendingPathComponent("clipboard") }
+    private var clipboardDebounce: Timer?
+
+    private var clipboardBackupOn: Bool {
+        SharedDefaults.store.bool(forKey: "clipboardBackup") && AppData.cloudAvailable
+    }
+
+    func scheduleClipboardBackup() {
+        guard clipboardBackupOn else { return }
+        clipboardDebounce?.invalidate()
+        clipboardDebounce = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { _ in
+            Task { @MainActor in SettingsBackup.shared.backupClipboard() }
+        }
+    }
+
+    func backupClipboard() {
+        guard !clipboardBackupRunning, clipboardBackupOn,
+            FileManager.default.fileExists(atPath: localClipboardDir.path)
+        else { return }
+        clipboardBackupRunning = true
+        try? FileManager.default.createDirectory(
+            at: cloudClipboardDir, withIntermediateDirectories: true)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+        p.arguments = [
+            "-a", "--max-size=1m",
+            "--include", "*/", "--include", "index.jsonl",
+            "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
+            "--exclude", "*",
+            localClipboardDir.path + "/", cloudClipboardDir.path + "/",
+        ]
+        p.qualityOfService = .utility
+        p.terminationHandler = { process in
+            Task { @MainActor in
+                self.clipboardBackupRunning = false
+                if process.terminationStatus == 0 {
+                    SharedDefaults.store.set(
+                        Date().timeIntervalSince1970, forKey: "lastClipboardBackupAt")
+                }
+            }
+        }
+        do {
+            try p.run()
+        } catch {
+            clipboardBackupRunning = false
+        }
+    }
+
+    @discardableResult
+    func restoreClipboard() -> Bool {
+        guard AppData.cloudAvailable else { return false }
+        let fm = FileManager.default
+        let cloudIndex = cloudClipboardDir.appendingPathComponent("index.jsonl")
+        let localIndex = localClipboardDir.appendingPathComponent("index.jsonl")
+        guard fm.fileExists(atPath: cloudIndex.path), !fm.fileExists(atPath: localIndex.path)
+        else { return false }
+        try? fm.createDirectory(at: localClipboardDir, withIntermediateDirectories: true)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+        p.arguments = ["-a", cloudClipboardDir.path + "/", localClipboardDir.path + "/"]
+        p.qualityOfService = .utility
         do {
             try p.run()
             return true

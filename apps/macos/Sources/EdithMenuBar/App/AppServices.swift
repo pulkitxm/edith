@@ -7,6 +7,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var music: MusicPlayer?
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
+    @Published private(set) var clipboard: ClipboardStore?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -44,5 +45,13 @@ final class AppServices: ObservableObject {
             store.shutdown()
             calendar = nil
         }
+
+        let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        if clipboardOn, clipboard == nil { clipboard = ClipboardStore() }
+        if !clipboardOn, let store = clipboard {
+            store.shutdown()
+            clipboard = nil
+        }
+        ClipboardPanel.shared.store = clipboard
     }
 }
