@@ -142,10 +142,66 @@ struct EdithApp: App {
     }
 }
 
-enum HotKey {
-    private static var ref: EventHotKeyRef?
+private func dispatchGlobalHotKey(_ id: UInt32) {
+    if let action = GlobalHotKey.actions[id] {
+        DispatchQueue.main.async(execute: action)
+    }
+}
+
+enum GlobalHotKey {
+    enum ID {
+        static let panel: UInt32 = 1
+        static let clipboard: UInt32 = 2
+        static let notchShelf: UInt32 = 3
+        static let focusDim: UInt32 = 4
+        static let colorPicker: UInt32 = 5
+        static let pixelRuler: UInt32 = 6
+        static let presenterToggle: UInt32 = 7
+    }
+
+    fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
+    fileprivate static var actions: [UInt32: () -> Void] = [:]
     private static var handlerInstalled = false
 
+    private static func installHandlerOnce() {
+        guard !handlerInstalled else { return }
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, event, _ in
+                guard let event else { return noErr }
+                var hotKeyID = EventHotKeyID()
+                GetEventParameter(
+                    event, EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil,
+                    &hotKeyID)
+                dispatchGlobalHotKey(hotKeyID.id)
+                return noErr
+            }, 1, &eventType, nil, nil)
+        handlerInstalled = true
+    }
+
+    static func set(id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void) {
+        installHandlerOnce()
+        clear(id: id)
+        actions[id] = action
+        let hotKeyID = EventHotKeyID(signature: OSType(0x4544_4954), id: id)
+        var ref: EventHotKeyRef?
+        RegisterEventHotKey(
+            UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        refs[id] = ref
+    }
+
+    static func clear(id: UInt32) {
+        if let ref = refs.removeValue(forKey: id) {
+            UnregisterEventHotKey(ref)
+        }
+        actions.removeValue(forKey: id)
+    }
+}
+
+enum HotKey {
     static var code: Int {
         SharedDefaults.store.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
     }
@@ -157,28 +213,13 @@ enum HotKey {
     }
 
     static func register() {
-        if !handlerInstalled {
-            var eventType = EventTypeSpec(
-                eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-            InstallEventHandler(
-                GetApplicationEventTarget(),
-                { _, _, _ in
-                    DispatchQueue.main.async { togglePanel() }
-                    return noErr
-                }, 1, &eventType, nil, nil)
-            handlerInstalled = true
+        GlobalHotKey.set(id: GlobalHotKey.ID.panel, keyCode: code, modifiers: mods) {
+            togglePanel()
         }
-        unregister()
-        let id = EventHotKeyID(signature: OSType(0x4544_4954), id: 1)
-        RegisterEventHotKey(
-            UInt32(code), UInt32(mods), id, GetApplicationEventTarget(), 0, &ref)
     }
 
     static func unregister() {
-        if let ref {
-            UnregisterEventHotKey(ref)
-            Self.ref = nil
-        }
+        GlobalHotKey.clear(id: GlobalHotKey.ID.panel)
     }
 
     static func save(code: Int, mods: Int, label: String) {
