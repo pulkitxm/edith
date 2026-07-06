@@ -111,6 +111,7 @@ struct EdithApp: App {
             services.usage?.refreshMenuBarItem()
             services.system?.syncPreventSleep()
             services.usage?.notifier.clearStateIfMasterOff()
+            services.standup?.rearm()
         }
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
