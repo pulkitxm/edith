@@ -35,7 +35,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
                 onDismiss: { [weak self] in self?.hide() },
                 onHeightChange: { [weak self] height in self?.resize(toFit: height) }))
         let height = min(
-            ClipboardPanelView.estimatedHeight(itemCount: store.entries.count), Self.maxHeight)
+            ClipboardPanelView.estimatedHeight(entries: store.entries), Self.maxHeight)
         p.setContentSize(NSSize(width: Self.width, height: height))
         p.setFrameOrigin(
             ClipboardPopupPosition.current.origin(

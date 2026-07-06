@@ -15,20 +15,25 @@ struct ClipboardPanelView: View {
 
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
+    private static let imageRowHeight: CGFloat = 48
     private static let footerHeight: CGFloat = 55
     private static let bottomPadding: CGFloat = 5
 
-    static func estimatedHeight(itemCount: Int) -> CGFloat {
-        height(itemCount: itemCount, showFooter: footerEnabled)
+    static func estimatedHeight(entries: [ClipboardEntry]) -> CGFloat {
+        height(for: entries, showFooter: footerEnabled)
     }
 
     private static var footerEnabled: Bool {
         SharedDefaults.store.object(forKey: "clipboardShowFooter") as? Bool ?? true
     }
 
-    private static func height(itemCount: Int, showFooter: Bool) -> CGFloat {
-        headerHeight + CGFloat(max(itemCount, 1)) * rowHeight
-            + (showFooter ? footerHeight : 0) + bottomPadding
+    private static func rowHeight(for entry: ClipboardEntry) -> CGFloat {
+        entry.kind == .image ? imageRowHeight : rowHeight
+    }
+
+    private static func height(for entries: [ClipboardEntry], showFooter: Bool) -> CGFloat {
+        let rows = entries.isEmpty ? rowHeight : entries.reduce(0) { $0 + rowHeight(for: $1) }
+        return headerHeight + rows + (showFooter ? footerHeight : 0) + bottomPadding
     }
 
     private var pinToTop: Bool { pinTo != "bottom" }
@@ -128,21 +133,29 @@ struct ClipboardPanelView: View {
 
     private var list: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if visible.isEmpty {
-                        Text(filterText.isEmpty ? "Clipboard history is empty" : "No matches")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .frame(height: Self.rowHeight)
-                    } else {
-                        ForEach(visible) { entry in
-                            row(entry)
-                                .id(entry.id)
-                        }
+            List {
+                if visible.isEmpty {
+                    Text(filterText.isEmpty ? "Clipboard history is empty" : "No matches")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .frame(height: Self.rowHeight)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(visible) { entry in
+                        row(entry)
+                            .id(entry.id)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, Self.rowHeight)
             .padding(.horizontal, 5)
             .onChange(of: keyboardScrollTick) { _, _ in
                 guard let selectedID else { return }
@@ -159,10 +172,7 @@ struct ClipboardPanelView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
             }
-            Text(title(entry))
-                .font(.system(size: 13))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            rowContent(entry)
             Spacer(minLength: 8)
             if let digit = digitShortcuts[entry.id] {
                 Text("⌘\(digit)")
@@ -171,7 +181,7 @@ struct ClipboardPanelView: View {
             }
         }
         .padding(.horizontal, 8)
-        .frame(height: Self.rowHeight)
+        .frame(height: Self.rowHeight(for: entry))
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(selected ? Color.white : Color.primary)
         .background(
@@ -183,6 +193,33 @@ struct ClipboardPanelView: View {
             if hovering { selectedID = entry.id }
         }
         .onTapGesture { activate(entry, plainText: false) }
+    }
+
+    @ViewBuilder private func rowContent(_ entry: ClipboardEntry) -> some View {
+        switch entry.kind {
+        case .image:
+            ClipboardThumbnailView(entry: entry, maxHeight: 40) {
+                rowTitle(entry)
+            }
+        case .file:
+            HStack(spacing: 6) {
+                ClipboardThumbnailView(entry: entry, maxHeight: 18) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                rowTitle(entry)
+            }
+        default:
+            rowTitle(entry)
+        }
+    }
+
+    private func rowTitle(_ entry: ClipboardEntry) -> some View {
+        Text(title(entry))
+            .font(.system(size: 13))
+            .lineLimit(1)
+            .truncationMode(.middle)
     }
 
     private var footer: some View {
@@ -288,7 +325,7 @@ struct ClipboardPanelView: View {
     }
 
     private func reportHeight() {
-        onHeightChange(Self.height(itemCount: visible.count, showFooter: showFooter))
+        onHeightChange(Self.height(for: visible, showFooter: showFooter))
     }
 }
 
