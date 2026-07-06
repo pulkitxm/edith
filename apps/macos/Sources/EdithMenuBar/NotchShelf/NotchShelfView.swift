@@ -38,10 +38,11 @@ struct NotchShelfContentView: View {
                 } else {
                     ForEach(Array(controller.items.enumerated()), id: \.element.id) {
                         index, item in
-                        ShelfItemView(item: item, controller: controller)
+                        ShelfItemView(item: item, controller: controller, canvasSize: geo.size)
                             .position(
                                 NotchGeometry.itemPosition(
-                                    stored: item.position, index: index, in: geo.size))
+                                    stored: controller.livePositions[item.id] ?? item.position,
+                                    index: index, in: geo.size))
                     }
                 }
                 if controller.isOptionHeld {
@@ -49,7 +50,9 @@ struct NotchShelfContentView: View {
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
+            .coordinateSpace(name: "shelfCanvas")
         }
+        .onContinuousHover { _ in controller.refreshOptionState() }
         .background(.black, in: NotchShape(bottomRadius: 22))
     }
 }
@@ -91,7 +94,12 @@ private struct ResizeEdges: View {
     private func strip(cursor: NSCursor, resizesWidth: Bool, resizesHeight: Bool) -> some View {
         Color.clear
             .contentShape(Rectangle())
-            .onHover { inside in (inside ? cursor : NSCursor.arrow).set() }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active: cursor.set()
+                case .ended: NSCursor.arrow.set()
+                }
+            }
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { _ in
@@ -114,26 +122,44 @@ private struct ResizeEdges: View {
 private struct ShelfItemView: View {
     let item: ShelfItem
     @ObservedObject var controller: NotchShelfController
+    let canvasSize: CGSize
+    @State private var handedOffToSystemDrag = false
 
     var body: some View {
-        Menu {
+        VStack(spacing: 4) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path))
+                .resizable()
+                .frame(width: 38, height: 38)
+            Text(item.name)
+                .font(.system(size: 10))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .frame(width: 64)
+        }
+        .contentShape(Rectangle())
+        .gesture(moveOrDragOut)
+        .onTapGesture { controller.open(item) }
+        .contextMenu {
             Button("Open") { controller.open(item) }
             Button("Reveal in Finder") { controller.reveal(item) }
-            Button("Clear", role: .destructive) { controller.remove(item) }
-        } label: {
-            VStack(spacing: 4) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path))
-                    .resizable()
-                    .frame(width: 38, height: 38)
-                Text(item.name)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .frame(width: 64)
-            }
+            Button("Delete", role: .destructive) { controller.remove(item) }
         }
-        .menuIndicator(.hidden)
-        .buttonStyle(.plain)
-        .onDrag { controller.dragOutProvider(for: item) }
+    }
+
+    private var moveOrDragOut: some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: .named("shelfCanvas"))
+            .onChanged { value in
+                guard !handedOffToSystemDrag else { return }
+                if CGRect(origin: .zero, size: canvasSize).contains(value.location) {
+                    controller.dragItem(item, to: value.location)
+                } else {
+                    handedOffToSystemDrag = true
+                    controller.beginExternalDrag(of: item)
+                }
+            }
+            .onEnded { _ in
+                handedOffToSystemDrag = false
+                controller.endDrag(of: item)
+            }
     }
 }

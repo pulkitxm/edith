@@ -10,7 +10,7 @@ struct NotchShelfPane: View {
     @AppStorage("notchShelfKeepDuration", store: SharedDefaults.store) private var keepDuration =
         "forever"
     @AppStorage("notchShelfRemoveAfterDragOut", store: SharedDefaults.store)
-    private var removeAfterDragOut = false
+    private var removeAfterDragOut = true
     @AppStorage("notchShelfShowOnExternal", store: SharedDefaults.store)
     private var showOnExternal = false
     @AppStorage("notchShelfHaptics", store: SharedDefaults.store) private var haptics = true

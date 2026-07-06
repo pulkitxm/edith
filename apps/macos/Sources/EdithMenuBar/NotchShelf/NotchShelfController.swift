@@ -14,6 +14,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
     @Published private(set) var isOptionHeld = false
+    @Published private(set) var livePositions: [UUID: CGPoint] = [:]
 
     private let store = ShelfStore()
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
@@ -27,6 +28,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
     private var pendingDragOutID: UUID?
+    private var internalDragItemID: UUID?
 
     init() {
         items = store.items
@@ -92,7 +94,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private var openOnDrag: Bool { flag("notchShelfOpenOnDrag", default: true) }
     private var openOnHover: Bool { flag("notchShelfOpenOnHover", default: true) }
     private var requireOption: Bool { flag("notchShelfRequireOption", default: false) }
-    private var removeAfterDragOut: Bool { flag("notchShelfRemoveAfterDragOut", default: false) }
+    private var removeAfterDragOut: Bool { flag("notchShelfRemoveAfterDragOut", default: true) }
     private var showOnExternal: Bool { flag("notchShelfShowOnExternal", default: false) }
     private var hapticsOn: Bool { flag("notchShelfHaptics", default: true) }
     private var keepDuration: ShelfKeepDuration {
@@ -225,6 +227,11 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         updateAllFrames(animated: true)
     }
 
+    func refreshOptionState() {
+        let held = NSEvent.modifierFlags.contains(.option)
+        if held != isOptionHeld { isOptionHeld = held }
+    }
+
     func hoverChanged(_ hovering: Bool) {
         if hovering {
             guard openOnHover, optionSatisfied() else { return }
@@ -239,26 +246,13 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         switch event.type {
         case .leftMouseDown:
             lastDragChangeCount = NSPasteboard(name: .drag).changeCount
+            internalDragItemID = nil
         case .leftMouseDragged:
-            let count = NSPasteboard(name: .drag).changeCount
-            guard count != lastDragChangeCount else { return }
-            lastDragChangeCount = count
+            guard NSPasteboard(name: .drag).changeCount != lastDragChangeCount else { return }
             guard optionSatisfied(), isNearNotch(NSEvent.mouseLocation) else { return }
             expand()
-        case .leftMouseUp:
-            resolvePendingDragOut(at: NSEvent.mouseLocation)
         default:
             break
-        }
-    }
-
-    private func resolvePendingDragOut(at point: CGPoint) {
-        guard let id = pendingDragOutID else { return }
-        pendingDragOutID = nil
-        let insideShelf = panels.values.contains { $0.frame.contains(point) }
-        guard !insideShelf, let item = items.first(where: { $0.id == id }) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.remove(item)
         }
     }
 
@@ -316,10 +310,50 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         collapseNow()
     }
 
-    func dragOutProvider(for item: ShelfItem) -> NSItemProvider {
-        let provider = NSItemProvider(contentsOf: fileURL(for: item)) ?? NSItemProvider()
+    func dragItem(_ item: ShelfItem, to point: CGPoint) {
+        livePositions[item.id] = point
+    }
+
+    func endDrag(of item: ShelfItem) {
+        guard let point = livePositions.removeValue(forKey: item.id) else { return }
+        store.setPosition(point, for: item)
+        items = store.items
+    }
+
+    func beginExternalDrag(of item: ShelfItem) {
+        livePositions.removeValue(forKey: item.id)
+        let mouse = NSEvent.mouseLocation
+        let panel =
+            panels.values.first { $0.frame.contains(mouse) }
+            ?? builtinDisplayID.flatMap { panels[$0] }
+        guard let catcher = panel?.contentView as? ShelfDropCatcherView,
+            let event = NSApp.currentEvent
+        else { return }
+        internalDragItemID = item.id
         if removeAfterDragOut { pendingDragOutID = item.id }
-        return provider
+        catcher.beginDrag(of: fileURL(for: item), event: event)
+    }
+
+    func externalDragEnded(at point: CGPoint, operation: NSDragOperation) {
+        internalDragItemID = nil
+        guard let id = pendingDragOutID else { return }
+        pendingDragOutID = nil
+        let insideShelf = panels.values.contains { $0.frame.contains(point) }
+        guard !insideShelf, operation != [], let item = items.first(where: { $0.id == id })
+        else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.remove(item)
+        }
+    }
+
+    private func internalDragItem(matching url: URL) -> ShelfItem? {
+        if let id = internalDragItemID,
+            let item = items.first(where: { $0.id == id }),
+            item.name == url.lastPathComponent
+        {
+            return item
+        }
+        return store.item(forFileURL: url)
     }
 
     @discardableResult
@@ -334,20 +368,21 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             switch object {
             case let receiver as NSFilePromiseReceiver:
                 handled = true
-                receivePromise(receiver)
+                receivePromise(receiver, at: location)
             case let url as URL:
                 handled = true
-                if let location, let existing = store.item(forFileURL: url) {
+                if let location, let existing = internalDragItem(matching: url) {
                     pendingDragOutID = nil
+                    internalDragItemID = nil
                     store.setPosition(location, for: existing)
                     items = store.items
                     repositioned = true
                 } else {
-                    addFile(at: url)
+                    addFile(at: url, location: location)
                 }
             case let text as String:
                 handled = true
-                addText(text)
+                addText(text, location: location)
             default:
                 break
             }
@@ -356,7 +391,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         return handled
     }
 
-    private func receivePromise(_ receiver: NSFilePromiseReceiver) {
+    private func receivePromise(_ receiver: NSFilePromiseReceiver, at location: CGPoint?) {
         let id = UUID()
         let destination = store.promiseDestination(id: id)
         receiver.receivePromisedFiles(
@@ -369,28 +404,32 @@ final class NotchShelfController: ObservableObject, FeatureModule {
                     self.store.discardPromiseDestination(id: id)
                     return
                 }
-                self.store.adopt(fileAt: url, id: id)
+                if let item = self.store.adopt(fileAt: url, id: id), let location {
+                    self.store.setPosition(location, for: item)
+                }
                 self.items = self.store.items
                 self.fireHaptic()
             }
         }
     }
 
-    private func addFile(at url: URL) {
-        guard store.addCopy(of: url) != nil else { return }
+    private func addFile(at url: URL, location: CGPoint?) {
+        guard let item = store.addCopy(of: url) else { return }
+        if let location { store.setPosition(location, for: item) }
         items = store.items
         fireHaptic()
     }
 
-    private func addText(_ text: String) {
-        guard store.addText(text) != nil else { return }
+    private func addText(_ text: String, location: CGPoint?) {
+        guard let item = store.addText(text) else { return }
+        if let location { store.setPosition(location, for: item) }
         items = store.items
         fireHaptic()
     }
 }
 
 @MainActor
-private final class ShelfDropCatcherView: NSView {
+final class ShelfDropCatcherView: NSView {
     weak var controller: NotchShelfController?
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
@@ -399,5 +438,28 @@ private final class ShelfDropCatcherView: NSView {
         let windowPoint = convert(sender.draggingLocation, from: nil)
         let location = CGPoint(x: windowPoint.x, y: bounds.height - windowPoint.y)
         return controller?.handleDrop(from: sender.draggingPasteboard, at: location) ?? false
+    }
+
+    func beginDrag(of url: URL, event: NSEvent) {
+        let draggingItem = NSDraggingItem(pasteboardWriter: url as NSURL)
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        let point = convert(event.locationInWindow, from: nil)
+        draggingItem.setDraggingFrame(
+            NSRect(x: point.x - 21, y: point.y - 21, width: 42, height: 42), contents: icon)
+        beginDraggingSession(with: [draggingItem], event: event, source: self)
+    }
+}
+
+extension ShelfDropCatcherView: NSDraggingSource {
+    func draggingSession(
+        _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
+        .copy
+    }
+
+    func draggingSession(
+        _ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation
+    ) {
+        controller?.externalDragEnded(at: screenPoint, operation: operation)
     }
 }
