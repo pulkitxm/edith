@@ -1,10 +1,10 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import {
-  swiftComments,
-  htmlComments,
-  cssComments,
-  jsoncComments,
   build,
+  cssComments,
+  htmlComments,
+  jsoncComments,
+  swiftComments,
 } from "./strip-comments.mjs";
 
 const strip = (fn, src) => build(src, fn(src).remove);
@@ -18,7 +18,9 @@ test("swift: strips a trailing line comment, keeps the code", () => {
 test("swift: // and /* */ inside strings are not comments", () => {
   expect(swiftComments('let r = #"a // b /* c */"#').remove.length).toBe(0);
   expect(swiftComments('let s = "\\(a)//x"').remove.length).toBe(0);
-  expect(swiftComments('let m = """\n// not a comment\n"""').remove.length).toBe(0);
+  expect(
+    swiftComments('let m = """\n// not a comment\n"""').remove.length,
+  ).toBe(0);
   expect(swiftComments('let m = #"""\n// nope\n"""#').remove.length).toBe(0);
 });
 

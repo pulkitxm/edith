@@ -5,6 +5,7 @@
     "strip-comments": "bun scripts/strip-comments.mjs",
     "check-comments": "bun scripts/strip-comments.mjs --check",
     "selftest": "bun scripts/strip-comments.mjs --selftest",
+    "lint": "biome check .",
     "test": "bun test scripts"
   },
   "devDependencies": {

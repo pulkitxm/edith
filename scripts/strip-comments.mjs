@@ -476,18 +476,78 @@ export function scan(file, text) {
 
 function selftest() {
   const cases = [
-    { name: "url in string + trailing comment", src: 'let u = "https://x.com" // c', remove: 1, kept: 0 },
-    { name: "raw string with slashes", src: 'let r = #"a // b /* c */"#', remove: 0, kept: 0 },
-    { name: "interpolation then string content", src: 'let s = "\\(a)//x"', remove: 0, kept: 0 },
-    { name: "block comment inside interpolation", src: 'let s = "\\(a /* n */)"', remove: 1, kept: 0 },
-    { name: "multiline string with fake comment", src: 'let m = """\n// not a comment\n"""', remove: 0, kept: 0 },
-    { name: "nested block comment", src: '/* a /* b */ c */ let x = 1', remove: 1, kept: 0 },
-    { name: "doc comment stripped", src: '/// doc\nfunc f() {}', remove: 1, kept: 0 },
-    { name: "tools-version kept", src: '// swift-tools-version:6.0\nimport X', remove: 0, kept: 1 },
-    { name: "MARK stripped", src: '// MARK: - Section\nlet x = 1', remove: 1, kept: 0 },
-    { name: "swiftlint kept", src: '// swiftlint:disable foo\nlet x = 1', remove: 0, kept: 1 },
-    { name: "division not a comment", src: 'let a = 1 / 2 // c', remove: 1, kept: 0 },
-    { name: "raw multiline string", src: 'let m = #"""\n// nope\n"""#\nlet y = 1 // yes', remove: 1, kept: 0 },
+    {
+      name: "url in string + trailing comment",
+      src: 'let u = "https://x.com" // c',
+      remove: 1,
+      kept: 0,
+    },
+    {
+      name: "raw string with slashes",
+      src: 'let r = #"a // b /* c */"#',
+      remove: 0,
+      kept: 0,
+    },
+    {
+      name: "interpolation then string content",
+      src: 'let s = "\\(a)//x"',
+      remove: 0,
+      kept: 0,
+    },
+    {
+      name: "block comment inside interpolation",
+      src: 'let s = "\\(a /* n */)"',
+      remove: 1,
+      kept: 0,
+    },
+    {
+      name: "multiline string with fake comment",
+      src: 'let m = """\n// not a comment\n"""',
+      remove: 0,
+      kept: 0,
+    },
+    {
+      name: "nested block comment",
+      src: "/* a /* b */ c */ let x = 1",
+      remove: 1,
+      kept: 0,
+    },
+    {
+      name: "doc comment stripped",
+      src: "/// doc\nfunc f() {}",
+      remove: 1,
+      kept: 0,
+    },
+    {
+      name: "tools-version kept",
+      src: "// swift-tools-version:6.0\nimport X",
+      remove: 0,
+      kept: 1,
+    },
+    {
+      name: "MARK stripped",
+      src: "// MARK: - Section\nlet x = 1",
+      remove: 1,
+      kept: 0,
+    },
+    {
+      name: "swiftlint kept",
+      src: "// swiftlint:disable foo\nlet x = 1",
+      remove: 0,
+      kept: 1,
+    },
+    {
+      name: "division not a comment",
+      src: "let a = 1 / 2 // c",
+      remove: 1,
+      kept: 0,
+    },
+    {
+      name: "raw multiline string",
+      src: 'let m = #"""\n// nope\n"""#\nlet y = 1 // yes',
+      remove: 1,
+      kept: 0,
+    },
   ];
   let failed = 0;
   for (const t of cases) {
@@ -601,7 +661,8 @@ function main() {
       continue;
     }
     let out = build(text, remove);
-    if (ext === ".css" || ext === ".html" || ext === ".htm") out = tidyText(out);
+    if (ext === ".css" || ext === ".html" || ext === ".htm")
+      out = tidyText(out);
     if (out !== text) writeFileSync(f, out);
   }
 
