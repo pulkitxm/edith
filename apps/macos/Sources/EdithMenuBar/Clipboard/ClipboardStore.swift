@@ -192,6 +192,9 @@ final class ClipboardStore: ObservableObject, FeatureModule {
     }
 
     private func persistAndTrim() {
+        let known = Set(entries.map(\.id))
+        let onDiskOnly = ClipboardRepository.loadEntries().filter { !known.contains($0.id) }
+        entries.insert(contentsOf: onDiskOnly, at: 0)
         let maxItems = SharedDefaults.store.object(forKey: "clipboardMaxItems") as? Int ?? 200
         let maxAgeDays = SharedDefaults.store.object(forKey: "clipboardMaxAgeDays") as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil

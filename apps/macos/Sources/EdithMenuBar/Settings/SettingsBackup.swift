@@ -233,6 +233,11 @@ final class SettingsBackup: ObservableObject {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
         p.arguments = ["-a", cloudClipboardDir.path + "/", localClipboardDir.path + "/"]
         p.qualityOfService = .utility
+        p.terminationHandler = { process in
+            if process.terminationStatus == 0 {
+                IPC.post(IPC.Name.clipboardChanged)
+            }
+        }
         do {
             try p.run()
             return true
