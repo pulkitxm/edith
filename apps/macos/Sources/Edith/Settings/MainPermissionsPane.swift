@@ -34,8 +34,7 @@ private let permissions: [MainPermission] = [
     MainPermission(
         id: "screenRecording", name: "Screen Recording",
         icon: "rectangle.inset.filled.badge.record",
-        usedFor:
-            "Optional - reads window titles for auto presenter mode and powers the pixel ruler.",
+        usedFor: "Optional - reads window titles for auto presenter mode.",
         key: "permScreenRecordingGranted", request: IPC.Name.grantScreenRecording),
 ]
 

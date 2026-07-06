@@ -8,7 +8,6 @@ final class AppServices: ObservableObject {
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
     @Published private(set) var colorPicker: ColorPickerStore?
-    @Published private(set) var pixelRuler: PixelRulerStore?
     @Published private(set) var clipboard: ClipboardStore?
     @Published private(set) var focusDim: FocusDimEngine?
     @Published private(set) var presenter: PresenterDetector?
@@ -60,14 +59,6 @@ final class AppServices: ObservableObject {
         if !colorPickerOn, let store = colorPicker {
             store.shutdown()
             colorPicker = nil
-        }
-
-        let pixelRulerOn =
-            SharedDefaults.store.object(forKey: "pixelRulerEnabled") as? Bool ?? false
-        if pixelRulerOn, pixelRuler == nil { pixelRuler = PixelRulerStore() }
-        if !pixelRulerOn, let store = pixelRuler {
-            store.shutdown()
-            pixelRuler = nil
         }
 
         let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false

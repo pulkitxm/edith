@@ -119,7 +119,6 @@ struct EdithApp: App {
             services.system?.syncPreventSleep()
             services.usage?.notifier.clearStateIfMasterOff()
             services.colorPicker?.registerHotKey()
-            services.pixelRuler?.registerHotKey()
             services.focusDim?.applySettings()
         }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
@@ -168,7 +167,6 @@ enum GlobalHotKey {
         static let notchShelf: UInt32 = 3
         static let focusDim: UInt32 = 4
         static let colorPicker: UInt32 = 5
-        static let pixelRuler: UInt32 = 6
         static let presenterToggle: UInt32 = 7
     }
 
