@@ -8,6 +8,7 @@ struct CalendarPane: View {
         Form {
             Section {
                 Toggle("Today's schedule", isOn: $enabled)
+                    .pointerCursor()
                 Text("Shows today's calendar events in the menu bar panel.")
                     .font(.caption).foregroundStyle(.secondary)
             }

@@ -180,13 +180,13 @@ struct MainWindowView: View {
             List(selection: settingsSelection) {
                 Section("Modules") {
                     ForEach(SettingsDestination.modules) { destination in
-                        Label(destination.title, systemImage: destination.icon)
+                        sidebarRow(destination.title, icon: destination.icon)
                             .tag(destination)
                     }
                 }
                 Section("App") {
                     ForEach(SettingsDestination.app) { destination in
-                        Label(destination.title, systemImage: destination.icon)
+                        sidebarRow(destination.title, icon: destination.icon)
                             .tag(destination)
                     }
                 }
@@ -196,13 +196,20 @@ struct MainWindowView: View {
         } else {
             List(selection: mainSelection) {
                 Section("Home") {
-                    Label("Dashboard", systemImage: "chart.bar.fill")
+                    sidebarRow("Dashboard", icon: "chart.bar.fill")
                         .tag(MainSection.dashboard)
                 }
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
         }
+    }
+
+    private func sidebarRow(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .pointerCursor()
     }
 
     private var sidebarEdge: some View {
@@ -267,6 +274,7 @@ struct MainWindowView: View {
             .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
+        .pointerCursor()
     }
 
     private func sidebarFooterButton(

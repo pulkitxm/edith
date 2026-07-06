@@ -9,6 +9,7 @@ struct MusicPane: View {
         Form {
             Section {
                 Toggle("Music player", isOn: $enabled)
+                    .pointerCursor()
                 Text("Plays your local music folder from the menu bar panel, with media keys.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -19,6 +20,7 @@ struct MusicPane: View {
                             at: Repo.musicDir, withIntermediateDirectories: true)
                         NSWorkspace.shared.open(Repo.musicDir)
                     }
+                    .pointerCursor()
                 }
             }
             .disabled(!enabled)

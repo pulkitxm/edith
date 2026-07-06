@@ -82,6 +82,7 @@ struct MainPermissionsPane: View {
                     .labelStyle(.titleAndIcon)
             } else {
                 Button("Grant…") { IPC.post(permission.request) }
+                    .pointerCursor()
             }
         } label: {
             HStack(spacing: 10) {

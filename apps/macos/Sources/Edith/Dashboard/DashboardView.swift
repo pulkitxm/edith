@@ -187,7 +187,7 @@ struct DashboardView: View {
                 rangeButton("All", .all)
                 Spacer()
                 Button("Reset") { model.reset() }
-                    .buttonStyle(.plain).font(DashSkin.mono(11))
+                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
                     .foregroundStyle(acc)
             }
             HStack(spacing: 12) {
@@ -199,7 +199,7 @@ struct DashboardView: View {
                     } label: {
                         Label("Cycle", systemImage: "calendar")
                     }
-                    .menuStyle(.borderlessButton).fixedSize()
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
                 }
                 if !model.monthOptions.isEmpty {
                     Menu {
@@ -209,10 +209,10 @@ struct DashboardView: View {
                     } label: {
                         Label("Month", systemImage: "calendar.badge.clock")
                     }
-                    .menuStyle(.borderlessButton).fixedSize()
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
                 }
                 Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
-                    .font(.system(size: 11)).fixedSize()
+                    .pointerCursor().font(.system(size: 11)).fixedSize()
                 customRange
                 sourceMenu
                 modelMenu
@@ -240,7 +240,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
             Text("→").font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
             DatePicker(
                 "",
@@ -252,7 +252,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
         }
     }
 
@@ -260,6 +260,7 @@ struct DashboardView: View {
         let active = isActive(r)
         return Button(title) { model.range = r }
             .buttonStyle(.plain)
+            .pointerCursor()
             .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
             .padding(.horizontal, 11).padding(.vertical, 5)
             .background(
@@ -300,7 +301,7 @@ struct DashboardView: View {
         } label: {
             Label(sourceSummary, systemImage: "square.stack.3d.up")
         }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).pointerCursor().fixedSize()
     }
 
     private var sourceSummary: String {
@@ -329,7 +330,7 @@ struct DashboardView: View {
         } label: {
             Label("\(model.selectedModels.count) models", systemImage: "cpu")
         }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).pointerCursor().fixedSize()
     }
 
     private var logView: some View {
@@ -439,6 +440,7 @@ struct DashboardView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         }
         .buttonStyle(.plain)
+        .pointerCursor()
     }
 
     private var dailyPoints: [ComboPoint] {

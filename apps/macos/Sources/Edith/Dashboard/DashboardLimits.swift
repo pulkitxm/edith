@@ -173,6 +173,7 @@ struct LimitsCardView: View {
             ForEach(ranges, id: \.0) { name, _ in
                 Button(name) { range = name }
                     .buttonStyle(.plain)
+                    .pointerCursor()
                     .font(.system(size: 11, weight: range == name ? .semibold : .regular))
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(

@@ -9,6 +9,7 @@ struct SystemPane: View {
         Form {
             Section {
                 Toggle("System tools", isOn: $enabled)
+                    .pointerCursor()
                 Text(
                     "Prevent-sleep toggle and the keyboard-cleaning lock, from the menu bar panel."
                 )
@@ -17,6 +18,7 @@ struct SystemPane: View {
             Section {
                 HStack {
                     Toggle("Prevent sleep", isOn: $preventSleep)
+                        .pointerCursor()
                     InfoDot(
                         "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
                     )

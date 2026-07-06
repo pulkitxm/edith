@@ -19,6 +19,7 @@ struct BackupPane: View {
             Section {
                 HStack {
                     Toggle("Back up settings to iCloud", isOn: $icloudBackup)
+                        .pointerCursor()
                         .disabled(!cloudAvailable)
                     InfoDot(
                         "Keeps your settings in iCloud Drive so a reinstall or another Mac can restore them. Newest copy wins - it's a backup, not a live sync."
@@ -26,10 +27,13 @@ struct BackupPane: View {
                 }
                 Text(backupSubtitle).font(.caption).foregroundStyle(.secondary)
                 Toggle("Settings", isOn: $backupSettings)
+                    .pointerCursor()
                     .disabled(!icloudBackup)
                 Toggle("Usage data", isOn: $backupUsage)
+                    .pointerCursor()
                     .disabled(!icloudBackup)
                 Toggle("Session history", isOn: $backupLimits)
+                    .pointerCursor()
                     .disabled(!icloudBackup)
             } header: {
                 Text("iCloud backup")
@@ -41,6 +45,7 @@ struct BackupPane: View {
 
             Section {
                 Toggle("Back up music to iCloud", isOn: $musicBackup)
+                    .pointerCursor()
                     .disabled(!cloudAvailable)
                 Text(musicSubtitle).font(.caption).foregroundStyle(.secondary)
             } header: {
@@ -52,6 +57,7 @@ struct BackupPane: View {
                     Button("Open") {
                         NSWorkspace.shared.open(AppData.supportDir)
                     }
+                    .pointerCursor()
                 }
             }
         }

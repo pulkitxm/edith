@@ -23,6 +23,7 @@ struct GeneralPane: View {
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
                 }
+                .pointerCursor()
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
@@ -34,6 +35,7 @@ struct GeneralPane: View {
                                 set: { themeName = $0 ? "accent" : lastPaletteTheme })
                         )
                         .toggleStyle(.switch)
+                        .pointerCursor()
                         ForEach(themePalette, id: \.name) { entry in
                             swatch(entry.name, color: entry.color)
                         }
@@ -46,6 +48,7 @@ struct GeneralPane: View {
 
             Section {
                 Toggle("Show Dock icon", isOn: $showDockIcon)
+                    .pointerCursor()
                     .onChange(of: showDockIcon) { _, on in
                         NSApp.setActivationPolicy(on ? .regular : .accessory)
                     }
@@ -62,13 +65,16 @@ struct GeneralPane: View {
             Section {
                 HStack {
                     Toggle("Auto-blur for presenting", isOn: $presenter)
+                        .pointerCursor()
                     InfoDot(
                         "Blurs sensitive numbers and track names everywhere in Edith. Turn this on before sharing your screen."
                     )
                 }
                 Toggle("Blur music", isOn: $presenterBlurMusic)
+                    .pointerCursor()
                     .disabled(!presenter)
                 Toggle("Blur cost and usage figures", isOn: $presenterBlurMoney)
+                    .pointerCursor()
                     .disabled(!presenter)
             } header: {
                 Text("Presenter mode")
@@ -93,6 +99,7 @@ struct GeneralPane: View {
             }
         }
         .buttonStyle(.plain)
+        .pointerCursor()
     }
 }
 
@@ -110,6 +117,7 @@ private struct MainShortcutRecorder: View {
                 .padding(.vertical, 2)
                 .padding(.horizontal, 6)
         }
+        .pointerCursor()
         .onDisappear { if recording { stop() } }
         .help("Click, then press the new shortcut (Esc cancels)")
     }
