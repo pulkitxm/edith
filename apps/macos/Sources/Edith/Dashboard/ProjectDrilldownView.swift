@@ -23,6 +23,7 @@ struct ProjNode: Identifiable {
 struct ProjectDrilldownView: View {
     @ObservedObject var model: DashboardModel
     let dark: Bool
+    var blur = false
     @State private var sortOrder = [KeyPathComparator(\ProjNode.cost, order: .reverse)]
 
     private static let chatsPerGroup = 20
@@ -81,11 +82,11 @@ struct ProjectDrilldownView: View {
             }
             .width(min: 200)
             SwiftUI.TableColumn("Tokens", value: \ProjNode.tokens) { (node: ProjNode) in
-                numCell(DashFmt.tokensFull(node.tokens), node)
+                numCell(DashFmt.tokensFull(node.tokens), node, blurred: true)
             }
             .width(min: 70, ideal: 95)
             SwiftUI.TableColumn("Cost", value: \ProjNode.cost) { (node: ProjNode) in
-                numCell(DashFmt.usdLong(node.cost), node)
+                numCell(DashFmt.usdLong(node.cost), node, blurred: true)
             }
             .width(min: 60, ideal: 85)
             SwiftUI.TableColumn("% share", value: \ProjNode.share) { (node: ProjNode) in
@@ -238,12 +239,13 @@ struct ProjectDrilldownView: View {
         }
     }
 
-    private func numCell(_ text: String, _ node: ProjNode) -> some View {
+    private func numCell(_ text: String, _ node: ProjNode, blurred: Bool = false) -> some View {
         Text(text)
             .font(DashSkin.mono(11))
             .lineLimit(1)
             .foregroundStyle(tint(node))
             .frame(maxWidth: .infinity, alignment: .trailing)
+            .presenterBlur(blurred && blur)
     }
 
     private func copyToPasteboard(_ text: String) {

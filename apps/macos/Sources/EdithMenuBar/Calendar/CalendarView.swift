@@ -4,6 +4,7 @@ import SwiftUI
 
 struct CalendarView: View {
     @EnvironmentObject private var store: CalendarStore
+    @StateObject private var presenterState = PresenterState.shared
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
@@ -70,6 +71,7 @@ struct CalendarView: View {
                 Text(event.title ?? "Untitled")
                     .font(.system(size: 13))
                     .lineLimit(1)
+                    .presenterBlur(presenterState.active)
                 if let location = event.location, !location.isEmpty,
                     !location.hasPrefix("http")
                 {

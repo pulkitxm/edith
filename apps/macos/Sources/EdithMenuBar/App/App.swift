@@ -101,16 +101,27 @@ struct EdithApp: App {
             Task { @MainActor in MiniPanel.shared.sync() }
         }
         HotKey.register()
+        ClipboardHotKey.register()
+        FocusDimHotKey.register()
+        PresenterHotKey.register()
         SettingsBackup.shared.start()
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
         let services = services
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
+            ClipboardHotKey.register()
+            SettingsBackup.shared.scheduleClipboardBackup()
+            FocusDimHotKey.register()
+            PresenterHotKey.register()
             applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
             services.sync()
             services.usage?.refreshMenuBarItem()
             services.system?.syncPreventSleep()
             services.usage?.notifier.clearStateIfMasterOff()
+            services.focusDim?.applySettings()
+        }
+        _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
+            services.usage?.refreshMenuBarItem()
         }
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
@@ -229,7 +240,86 @@ enum HotKey {
     }
 }
 
-private func menuBarExtraStatusWindow() -> NSWindow? {
+enum ClipboardHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "clipboardHotKeyCode") as? Int ?? kVK_ANSI_C
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "clipboardHotKeyMods") as? Int
+            ?? (controlKey | shiftKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "clipboardHotKeyLabel") ?? "⌃⇧C"
+    }
+
+    static func register() {
+        let enabled = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        guard enabled else {
+            GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.clipboard, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { ClipboardPanel.shared.toggle() }
+        }
+    }
+
+    static func save(code: Int, mods: Int, label: String) {
+        SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
+        SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
+        SharedDefaults.store.set(label, forKey: "clipboardHotKeyLabel")
+    }
+}
+
+enum FocusDimHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "focusDimHotKeyCode") as? Int ?? kVK_ANSI_F
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "focusDimHotKeyMods") as? Int ?? (cmdKey | optionKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "focusDimHotKeyLabel") ?? "⌥⌘F"
+    }
+
+    static func register() {
+        GlobalHotKey.set(id: GlobalHotKey.ID.focusDim, keyCode: code, modifiers: mods) {
+            toggleFocusDim()
+        }
+    }
+}
+
+func toggleFocusDim() {
+    let enabled = !SharedDefaults.store.bool(forKey: "focusDimEnabled")
+    SharedDefaults.store.set(enabled, forKey: "focusDimEnabled")
+    IPC.post(IPC.Name.settingsChanged)
+}
+
+enum PresenterHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "presenterHotKeyCode") as? Int ?? kVK_ANSI_P
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "presenterHotKeyMods") as? Int
+            ?? (cmdKey | optionKey | shiftKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "presenterHotKeyLabel") ?? "⇧⌥⌘P"
+    }
+
+    static func register() {
+        GlobalHotKey.set(id: GlobalHotKey.ID.presenterToggle, keyCode: code, modifiers: mods) {
+            let d = SharedDefaults.store
+            d.set(!d.bool(forKey: "presenterMode"), forKey: "presenterMode")
+            IPC.post(IPC.Name.settingsChanged)
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
+    }
+}
+
+func menuBarExtraStatusWindow() -> NSWindow? {
     NSApp.windows.first {
         guard $0.className.contains("StatusBarWindow"),
             let button = firstButton(in: $0.contentView)
@@ -321,6 +411,7 @@ struct RootView: View {
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
     @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
         true
+    @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var focusDimEnabled = false
     @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
         "usage,music,system"
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
@@ -328,6 +419,7 @@ struct RootView: View {
     @AppStorage("settingsSection", store: SharedDefaults.store) private var settingsSection =
         "general"
     @StateObject private var permissions = PermissionsModel.shared
+    @StateObject private var presenterState = PresenterState.shared
     @State private var showDeveloper = false
 
     private var enabledTabs: [(id: String, title: String)] {
@@ -371,6 +463,15 @@ struct RootView: View {
                     .buttonStyle(HoverButtonStyle())
                     .help("Open music folder in Finder")
                 }
+                Button {
+                    toggleFocusDim()
+                } label: {
+                    Image(systemName: focusDimEnabled ? "circle.lefthalf.filled" : "circle.dashed")
+                        .font(.system(size: 13))
+                        .foregroundStyle(focusDimEnabled ? .primary : .secondary)
+                }
+                .buttonStyle(HoverButtonStyle())
+                .help("Focus dim (\(FocusDimHotKey.label))")
                 Button {
                     mainWindowSection = "settings"
                     MainApp.openDashboard()
@@ -418,6 +519,9 @@ struct RootView: View {
                 .buttonStyle(HoverButtonStyle())
                 .help("Quit options")
             }
+            if presenterState.autoActive {
+                presenterBanner
+            }
             if enabledTabs.count > 1 {
                 TabBar(tabs: enabledTabs, selection: $tab, theme: themeColor(themeName))
             }
@@ -462,6 +566,26 @@ struct RootView: View {
         .frame(width: 480)
         .background(PanelBackground())
         .onExitCommand { dismissPanel() }
+    }
+
+    private var presenterBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+            Text(presenterState.autoReason ?? "Screen sharing detected")
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button("Pause") {
+                services.presenter?.pauseUntilShareEnds()
+            }
+            .buttonStyle(HoverButtonStyle())
+            .font(.system(size: 11))
+            .help("Stop auto-blur until this share ends")
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func settleMiniPanel() {

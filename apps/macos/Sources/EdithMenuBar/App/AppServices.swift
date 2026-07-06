@@ -8,9 +8,16 @@ final class AppServices: ObservableObject {
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
     @Published private(set) var notchShelf: NotchShelfController?
+    @Published private(set) var clipboard: ClipboardStore?
+    @Published private(set) var focusDim: FocusDimEngine?
+    @Published private(set) var presenter: PresenterDetector?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
+    }
+
+    static func featureOffByDefault(_ key: String) -> Bool {
+        SharedDefaults.store.object(forKey: key) as? Bool ?? false
     }
 
     init() {
@@ -51,6 +58,28 @@ final class AppServices: ObservableObject {
         if !notchShelfOn, let controller = notchShelf {
             controller.shutdown()
             notchShelf = nil
+        }
+
+        let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        if clipboardOn, clipboard == nil { clipboard = ClipboardStore() }
+        if !clipboardOn, let store = clipboard {
+            store.shutdown()
+            clipboard = nil
+        }
+        ClipboardPanel.shared.store = clipboard
+
+        let focusDimOn = SharedDefaults.store.bool(forKey: "focusDimEnabled")
+        if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
+        if !focusDimOn, let engine = focusDim {
+            engine.shutdown()
+            focusDim = nil
+        }
+
+        let presenterOn = Self.featureOffByDefault("presenterAutoEnabled")
+        if presenterOn, presenter == nil { presenter = PresenterDetector() }
+        if !presenterOn, let detector = presenter {
+            detector.shutdown()
+            presenter = nil
         }
     }
 }

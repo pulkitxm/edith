@@ -237,6 +237,7 @@ struct KPI: Identifiable {
     let value: String
     let sub: String
     var hot = false
+    var sensitiveValue = false
 }
 
 struct NamedValue: Identifiable {
@@ -907,10 +908,11 @@ final class DashboardModel: ObservableObject {
         var out: [KPI] = [
             KPI(
                 label: "Total tokens", value: DashFmt.tokens(totalTokens),
-                sub: "\(DashFmt.usd(totalCost)) · \(active.count) active days", hot: true),
+                sub: "\(DashFmt.usd(totalCost)) · \(active.count) active days", hot: true,
+                sensitiveValue: true),
             KPI(
                 label: "Total cost", value: DashFmt.usd(totalCost),
-                sub: "\(DashFmt.tokensFull(totalTokens)) tokens"),
+                sub: "\(DashFmt.tokensFull(totalTokens)) tokens", sensitiveValue: true),
         ]
         if let busiest {
             out.append(
@@ -923,7 +925,8 @@ final class DashboardModel: ObservableObject {
                 KPI(
                     label: "Daily average",
                     value: DashFmt.tokens(totalTokens / Double(active.count)),
-                    sub: "\(DashFmt.usd(totalCost / Double(active.count))) / active day"))
+                    sub: "\(DashFmt.usd(totalCost / Double(active.count))) / active day",
+                    sensitiveValue: true))
         }
         out.append(
             KPI(
