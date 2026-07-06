@@ -20,7 +20,14 @@ struct ClipboardPane: View {
         0.0
     @AppStorage("permAccessibilityGranted", store: SharedDefaults.store)
     private var accessibilityGranted = false
+    @AppStorage("clipboardPopupAt", store: SharedDefaults.store) private var popupAt = "cursor"
+    @AppStorage("clipboardPinTo", store: SharedDefaults.store) private var pinTo = "top"
+    @AppStorage("clipboardShowFooter", store: SharedDefaults.store) private var showFooter = true
+    @AppStorage("clipboardSaveFiles", store: SharedDefaults.store) private var saveFiles = true
+    @AppStorage("clipboardSaveImages", store: SharedDefaults.store) private var saveImages = true
+    @AppStorage("clipboardSaveText", store: SharedDefaults.store) private var saveText = true
 
+    @State private var tab = "general"
     @State private var recentEntries: [ClipboardEntry] = []
     @State private var showHistory = false
     @State private var refreshObserver: NSObjectProtocol?
@@ -42,103 +49,23 @@ struct ClipboardPane: View {
             }
 
             Section {
-                HStack {
-                    LabeledContent("History hotkey") { ClipboardShortcutRecorder() }
-                    InfoDot("Opens the history panel at your cursor.")
+                Picker("", selection: $tab) {
+                    Text("General").tag("general")
+                    Text("Storage").tag("storage")
+                    Text("Appearance").tag("appearance")
+                    Text("Ignore").tag("ignore")
                 }
-                HStack {
-                    Stepper(
-                        "Maximum items: \(maxItems)", value: $maxItems, in: 20...2000, step: 20
-                    )
-                    .pointerCursor()
-                    InfoDot("Oldest unpinned entries are deleted beyond this count.")
-                }
-                HStack {
-                    Stepper(
-                        "Maximum item size: \(maxItemMB.wrappedValue) MB", value: maxItemMB,
-                        in: 1...200
-                    )
-                    .pointerCursor()
-                    InfoDot(
-                        "Copies larger than this aren't saved - a small indicator shows when one was skipped."
-                    )
-                }
-                HStack {
-                    Picker("Auto-delete after", selection: $maxAgeDays) {
-                        Text("Never").tag(0)
-                        Text("7 days").tag(7)
-                        Text("30 days").tag(30)
-                        Text("90 days").tag(90)
-                    }
-                    .pointerCursor()
-                    InfoDot("Removes entries older than N days, pinned items excepted.")
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledContent("Ignored apps") {
-                        TextField("com.app.bundleid, com.other.app", text: $ignoredApps)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Text(
-                        "Copies made in these apps are never recorded (password managers are pre-listed)."
-                    )
-                    .font(.caption).foregroundStyle(.secondary)
-                }
-                HStack {
-                    Stepper(
-                        "Check interval: \(String(format: "%.1f", checkInterval))s",
-                        value: $checkInterval, in: 0.2...5, step: 0.1
-                    )
-                    .pointerCursor()
-                    InfoDot(
-                        "How often Edith peeks at the clipboard. Larger saves battery; smaller catches rapid copies."
-                    )
-                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.5)
 
-            Section {
-                HStack {
-                    Toggle(
-                        "Paste automatically",
-                        isOn: Binding(
-                            get: { autoPaste },
-                            set: { newValue in
-                                autoPaste = newValue
-                                if newValue, !accessibilityGranted {
-                                    IPC.post(IPC.Name.grantAccessibility)
-                                }
-                            })
-                    )
-                    .pointerCursor()
-                    InfoDot(
-                        "Selecting an item pastes it into the front app instead of just copying. Needs Accessibility."
-                    )
+            Group {
+                switch tab {
+                case "storage": storageSections
+                case "appearance": appearanceSections
+                case "ignore": ignoreSections
+                default: generalSections
                 }
-                if autoPaste, !accessibilityGranted {
-                    Text(
-                        "Accessibility isn't granted yet - selecting an item only copies until you grant it."
-                    )
-                    .font(.caption).foregroundStyle(.orange)
-                }
-                Toggle("Paste as plain text", isOn: $pastePlainText)
-                    .pointerCursor()
-                Text("Strips fonts, colors and links so pasted text matches the destination.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.5)
-
-            Section {
-                HStack {
-                    Toggle("Back up to iCloud", isOn: $icloudBackup)
-                        .pointerCursor()
-                        .disabled(!AppData.cloudAvailable)
-                    InfoDot(
-                        "Keeps text history in iCloud Drive so reinstalls and other Macs can restore it. Backup, not live sync."
-                    )
-                }
-                Text(backupSubtitle).font(.caption).foregroundStyle(.secondary)
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
@@ -170,6 +97,161 @@ struct ClipboardPane: View {
         }
         .sheet(isPresented: $showHistory) {
             ClipboardHistoryView()
+        }
+    }
+
+    @ViewBuilder private var generalSections: some View {
+        Section {
+            HStack {
+                LabeledContent("Open") { ClipboardShortcutRecorder() }
+                InfoDot(
+                    "Global shortcut to open and close the history popup. Default: ⌃⇧C.")
+            }
+        }
+        Section {
+            HStack {
+                Toggle(
+                    "Paste automatically",
+                    isOn: Binding(
+                        get: { autoPaste },
+                        set: { newValue in
+                            autoPaste = newValue
+                            if newValue, !accessibilityGranted {
+                                IPC.post(IPC.Name.grantAccessibility)
+                            }
+                        })
+                )
+                .pointerCursor()
+                InfoDot(
+                    "Selecting an item pastes it into the front app instead of just copying. Needs Accessibility."
+                )
+            }
+            if autoPaste, !accessibilityGranted {
+                Text(
+                    "Accessibility isn't granted yet - selecting an item only copies until you grant it."
+                )
+                .font(.caption).foregroundStyle(.orange)
+            }
+            Toggle("Paste without formatting", isOn: $pastePlainText)
+                .pointerCursor()
+            Text("Strips fonts, colors and links so pasted text matches the destination.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Behavior")
+        }
+    }
+
+    @ViewBuilder private var storageSections: some View {
+        Section {
+            Toggle("Files", isOn: $saveFiles).pointerCursor()
+            Toggle("Images", isOn: $saveImages).pointerCursor()
+            Toggle("Text", isOn: $saveText).pointerCursor()
+            Text("Change what types of copied content should be stored.")
+                .font(.caption).foregroundStyle(.secondary)
+        } header: {
+            Text("Save")
+        }
+        Section {
+            HStack {
+                LabeledContent("Size") {
+                    HStack(spacing: 4) {
+                        TextField("", value: $maxItems, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                            .multilineTextAlignment(.trailing)
+                            .labelsHidden()
+                        Stepper("", value: $maxItems, in: 1...999)
+                            .labelsHidden()
+                            .pointerCursor()
+                    }
+                }
+                InfoDot("Number of history items to keep. Default: 200.")
+            }
+            HStack {
+                Stepper(
+                    "Maximum item size: \(maxItemMB.wrappedValue) MB", value: maxItemMB,
+                    in: 1...200
+                )
+                .pointerCursor()
+                InfoDot(
+                    "Copies larger than this aren't saved - a small indicator shows when one was skipped."
+                )
+            }
+            HStack {
+                Picker("Auto-delete after", selection: $maxAgeDays) {
+                    Text("Never").tag(0)
+                    Text("7 days").tag(7)
+                    Text("30 days").tag(30)
+                    Text("90 days").tag(90)
+                }
+                .pointerCursor()
+                InfoDot("Removes entries older than N days, pinned items excepted.")
+            }
+            HStack {
+                Stepper(
+                    "Check interval: \(String(format: "%.1f", checkInterval))s",
+                    value: $checkInterval, in: 0.2...5, step: 0.1
+                )
+                .pointerCursor()
+                InfoDot(
+                    "How often Edith peeks at the clipboard. Larger saves battery; smaller catches rapid copies."
+                )
+            }
+        }
+        Section {
+            HStack {
+                Toggle("Back up to iCloud", isOn: $icloudBackup)
+                    .pointerCursor()
+                    .disabled(!AppData.cloudAvailable)
+                InfoDot(
+                    "Keeps text history in iCloud Drive so reinstalls and other Macs can restore it. Backup, not live sync."
+                )
+            }
+            Text(backupSubtitle).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var appearanceSections: some View {
+        Section {
+            HStack {
+                Picker("Popup at", selection: $popupAt) {
+                    ForEach(ClipboardPopupPosition.allCases) { position in
+                        Text(position.title).tag(position.rawValue)
+                    }
+                }
+                .pointerCursor()
+                InfoDot(
+                    "Where the popup appears: at the mouse cursor, under the menu icon, centered on the front window or screen, or wherever you last dragged it."
+                )
+            }
+            HStack {
+                Picker("Pin to", selection: $pinTo) {
+                    Text("Top").tag("top")
+                    Text("Bottom").tag("bottom")
+                }
+                .pointerCursor()
+                InfoDot("Whether pinned items stick to the top or the bottom of the list.")
+            }
+            HStack {
+                Toggle("Show footer", isOn: $showFooter)
+                    .pointerCursor()
+                InfoDot("Shows the Clear and Preferences rows at the bottom of the popup.")
+            }
+        }
+    }
+
+    @ViewBuilder private var ignoreSections: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                LabeledContent("Ignored apps") {
+                    TextField("com.app.bundleid, com.other.app", text: $ignoredApps)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text(
+                    "Copies made in these apps are never recorded (password managers are pre-listed)."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 

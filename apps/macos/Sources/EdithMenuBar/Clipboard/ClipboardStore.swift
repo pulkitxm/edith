@@ -145,22 +145,32 @@ final class ClipboardStore: ObservableObject, FeatureModule {
     }
 
     private static func extractPayload(_ pb: NSPasteboard) -> Captured? {
-        if let string = pb.string(forType: .fileURL), let data = string.data(using: .utf8) {
+        let defaults = SharedDefaults.store
+        let saveFiles = defaults.object(forKey: "clipboardSaveFiles") as? Bool ?? true
+        let saveImages = defaults.object(forKey: "clipboardSaveImages") as? Bool ?? true
+        let saveText = defaults.object(forKey: "clipboardSaveText") as? Bool ?? true
+
+        if saveFiles, let string = pb.string(forType: .fileURL),
+            let data = string.data(using: .utf8)
+        {
             let name = (string as NSString).lastPathComponent.removingPercentEncoding ?? string
             return Captured(
                 data: data, types: [NSPasteboard.PasteboardType.fileURL.rawValue], ext: "url",
                 preview: name)
         }
-        if let data = pb.data(forType: .png) {
-            return Captured(
-                data: data, types: [NSPasteboard.PasteboardType.png.rawValue], ext: "png",
-                preview: "Image")
+        if saveImages {
+            if let data = pb.data(forType: .png) {
+                return Captured(
+                    data: data, types: [NSPasteboard.PasteboardType.png.rawValue], ext: "png",
+                    preview: "Image")
+            }
+            if let data = pb.data(forType: .tiff) {
+                return Captured(
+                    data: data, types: [NSPasteboard.PasteboardType.tiff.rawValue], ext: "tiff",
+                    preview: "Image")
+            }
         }
-        if let data = pb.data(forType: .tiff) {
-            return Captured(
-                data: data, types: [NSPasteboard.PasteboardType.tiff.rawValue], ext: "tiff",
-                preview: "Image")
-        }
+        guard saveText else { return nil }
         if let data = pb.data(forType: .rtf) {
             let plain = NSAttributedString(rtf: data, documentAttributes: nil)?.string
             return Captured(
@@ -195,6 +205,14 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[index].pinned.toggle()
         try? ClipboardRepository.saveEntries(entries)
+        SettingsBackup.shared.scheduleClipboardBackup()
+        IPC.post(IPC.Name.clipboardChanged)
+    }
+
+    func clear(includingPinned: Bool = false) {
+        entries = includingPinned ? [] : entries.filter(\.pinned)
+        try? ClipboardRepository.saveEntries(entries)
+        ClipboardRepository.pruneOrphanBlobs(keeping: entries)
         SettingsBackup.shared.scheduleClipboardBackup()
         IPC.post(IPC.Name.clipboardChanged)
     }

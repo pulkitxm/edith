@@ -4,151 +4,320 @@ import SwiftUI
 struct ClipboardPanelView: View {
     @ObservedObject var store: ClipboardStore
     var onDismiss: () -> Void
+    var onHeightChange: (CGFloat) -> Void
 
     @State private var filterText = ""
     @State private var selectedID: String?
+    @State private var keyboardScrollTick = 0
     @FocusState private var searchFocused: Bool
 
-    private var filtered: [ClipboardEntry] {
+    private static let headerHeight: CGFloat = 33
+    private static let rowHeight: CGFloat = 24
+    private static let footerHeight: CGFloat = 55
+    private static let bottomPadding: CGFloat = 5
+
+    static func estimatedHeight(itemCount: Int) -> CGFloat {
+        height(itemCount: itemCount, showFooter: footerEnabled)
+    }
+
+    private static var footerEnabled: Bool {
+        SharedDefaults.store.object(forKey: "clipboardShowFooter") as? Bool ?? true
+    }
+
+    private static func height(itemCount: Int, showFooter: Bool) -> CGFloat {
+        headerHeight + CGFloat(max(itemCount, 1)) * rowHeight
+            + (showFooter ? footerHeight : 0) + bottomPadding
+    }
+
+    private var showFooter: Bool { Self.footerEnabled }
+
+    private var pinToTop: Bool {
+        (SharedDefaults.store.string(forKey: "clipboardPinTo") ?? "top") != "bottom"
+    }
+
+    private var visible: [ClipboardEntry] {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = store.entries.filter { entry in
             query.isEmpty
                 || (entry.preview?.lowercased().contains(query) ?? false)
                 || (entry.sourceApp?.lowercased().contains(query) ?? false)
         }
-        return matched.sorted { lhs, rhs in
-            if lhs.pinned != rhs.pinned { return lhs.pinned }
-            return lhs.createdAt > rhs.createdAt
-        }
+        let pinned = matched.filter(\.pinned).sorted { $0.createdAt > $1.createdAt }
+        let unpinned = matched.filter { !$0.pinned }.sorted { $0.createdAt > $1.createdAt }
+        return pinToTop ? pinned + unpinned : unpinned + pinned
+    }
+
+    private var digitShortcuts: [String: Int] {
+        let unpinned = visible.filter { !$0.pinned }.prefix(9)
+        return Dictionary(
+            uniqueKeysWithValues: unpinned.enumerated().map { ($1.id, $0 + 1) })
     }
 
     var body: some View {
         VStack(spacing: 0) {
             searchField
-            Divider()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
             list
-            if let at = store.skippedOversizeAt, Date().timeIntervalSince(at) < 4 {
-                Text("Skipped a copy over the size limit")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-            }
+            if showFooter { footer }
         }
-        .frame(width: 360, height: 420)
+        .padding(.bottom, Self.bottomPadding)
+        .frame(width: ClipboardPanel.width)
         .onAppear {
             searchFocused = true
-            selectedID = filtered.first?.id
+            selectedID = visible.first?.id
+            reportHeight()
         }
         .onChange(of: filterText) { _, _ in
-            selectedID = filtered.first?.id
+            selectedID = visible.first?.id
+            keyboardScrollTick += 1
+            reportHeight()
         }
+        .onChange(of: store.entries) { _, _ in reportHeight() }
     }
 
     private var searchField: some View {
-        TextField("Search clipboard history", text: $filterText)
-            .textFieldStyle(.plain)
-            .font(.system(size: 14))
-            .padding(10)
-            .focused($searchFocused)
-            .onKeyPress(.downArrow) {
-                move(1)
-                return .handled
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.secondary.opacity(0.1))
+            HStack(spacing: 0) {
+                Image(systemName: "magnifyingglass")
+                    .resizable()
+                    .frame(width: 11, height: 11)
+                    .padding(.leading, 5)
+                    .opacity(0.8)
+                TextField("Search", text: $filterText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .disableAutocorrection(true)
+                    .padding(.horizontal, 4)
+                    .focused($searchFocused)
+                    .onKeyPress(.downArrow) {
+                        move(1)
+                        return .handled
+                    }
+                    .onKeyPress(.upArrow) {
+                        move(-1)
+                        return .handled
+                    }
+                    .onKeyPress(.escape) {
+                        onDismiss()
+                        return .handled
+                    }
+                    .onKeyPress(keys: [.return]) { press in
+                        activate(selectedEntry, plainText: press.modifiers.contains(.option))
+                        return .handled
+                    }
+                    .onKeyPress { press in handle(press) }
+                if !filterText.isEmpty {
+                    Button {
+                        filterText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .resizable()
+                            .frame(width: 11, height: 11)
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .padding(.trailing, 5)
+                }
             }
-            .onKeyPress(.upArrow) {
-                move(-1)
-                return .handled
-            }
-            .onKeyPress(.escape) {
-                onDismiss()
-                return .handled
-            }
-            .onKeyPress(keys: [.return]) { press in
-                activateSelected(plainText: press.modifiers.contains(.option))
-                return .handled
-            }
+        }
+        .frame(height: 23)
     }
 
     private var list: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(filtered) { entry in
-                        row(entry)
-                            .id(entry.id)
+                LazyVStack(spacing: 0) {
+                    if visible.isEmpty {
+                        Text(filterText.isEmpty ? "Clipboard history is empty" : "No matches")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .frame(height: Self.rowHeight)
+                    } else {
+                        ForEach(visible) { entry in
+                            row(entry)
+                                .id(entry.id)
+                        }
                     }
                 }
-                .padding(6)
             }
-            .onChange(of: selectedID) { _, id in
-                guard let id else { return }
-                proxy.scrollTo(id, anchor: .center)
+            .padding(.horizontal, 5)
+            .onChange(of: keyboardScrollTick) { _, _ in
+                guard let selectedID else { return }
+                proxy.scrollTo(selectedID)
             }
         }
     }
 
     private func row(_ entry: ClipboardEntry) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon(for: entry.kind))
-                .frame(width: 18)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.preview ?? "")
-                    .font(.system(size: 12))
-                    .lineLimit(2)
-                HStack(spacing: 4) {
-                    Text(entry.sourceApp ?? "Unknown")
-                    Text("·")
-                    Text(entry.createdAt.formatted(.relative(presentation: .named)))
-                }
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+        let selected = selectedID == entry.id
+        return HStack(spacing: 6) {
+            if entry.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
             }
-            Spacer(minLength: 0)
-            Button {
-                store.togglePin(entry.id)
-            } label: {
-                Image(systemName: entry.pinned ? "pin.fill" : "pin")
+            Text(title(entry))
+                .font(.system(size: 13))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            if let digit = digitShortcuts[entry.id] {
+                Text("⌘\(digit)")
                     .font(.system(size: 11))
-                    .foregroundStyle(entry.pinned ? Color.accentColor : .secondary)
+                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .frame(height: Self.rowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(selected ? Color.white : Color.primary)
         .background(
-            selectedID == entry.id ? Color.accentColor.opacity(0.16) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 8)
+            selected ? Color.accentColor : Color.clear,
+            in: RoundedRectangle(cornerRadius: 4)
         )
         .contentShape(Rectangle())
-        .onTapGesture {
-            selectedID = entry.id
-            store.activate(entry)
-            onDismiss()
+        .onHover { hovering in
+            if hovering { selectedID = entry.id }
         }
+        .onTapGesture { activate(entry, plainText: false) }
     }
 
-    private func icon(for kind: ClipboardEntry.Kind) -> String {
-        switch kind {
-        case .image: return "photo"
-        case .file: return "doc"
-        case .richText, .html: return "doc.richtext"
-        case .text: return "doc.plaintext"
+    private var footer: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+            footerRow("Clear", shortcut: "⌥⌘⌫") { clear() }
+            footerRow("Preferences…", shortcut: "⌘,") { openPreferences() }
         }
+        .padding(.horizontal, 5)
+    }
+
+    private func footerRow(
+        _ label: String, shortcut: String, action: @escaping () -> Void
+    ) -> some View {
+        FooterRow(label: label, shortcut: shortcut, action: action)
+    }
+
+    private func title(_ entry: ClipboardEntry) -> String {
+        (entry.preview ?? "")
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private var selectedEntry: ClipboardEntry? {
+        visible.first { $0.id == selectedID }
     }
 
     private func move(_ delta: Int) {
-        guard !filtered.isEmpty else { return }
-        let index = selectedID.flatMap { id in filtered.firstIndex { $0.id == id } } ?? -delta
-        let next = min(max(index + delta, 0), filtered.count - 1)
-        selectedID = filtered[next].id
+        let items = visible
+        guard !items.isEmpty else { return }
+        let index = selectedID.flatMap { id in items.firstIndex { $0.id == id } } ?? -delta
+        let next = min(max(index + delta, 0), items.count - 1)
+        selectedID = items[next].id
+        keyboardScrollTick += 1
     }
 
-    private func activateSelected(plainText: Bool) {
-        guard let id = selectedID, let entry = filtered.first(where: { $0.id == id }) else {
-            return
+    private func handle(_ press: KeyPress) -> KeyPress.Result {
+        if press.modifiers.contains(.command),
+            let digit = press.key.character.wholeNumberValue, (1...9).contains(digit),
+            let id = digitShortcuts.first(where: { $0.value == digit })?.key,
+            let entry = visible.first(where: { $0.id == id })
+        {
+            activate(entry, plainText: press.modifiers.contains(.option))
+            return .handled
         }
-        store.activate(entry, forcePlainText: plainText)
+        if press.key == .delete {
+            if press.modifiers.contains([.option, .command]) {
+                clear()
+                return .handled
+            }
+            if press.modifiers.contains(.option) {
+                deleteSelected()
+                return .handled
+            }
+        }
+        if press.modifiers.contains(.option), press.key.character == "p",
+            let entry = selectedEntry
+        {
+            store.togglePin(entry.id)
+            return .handled
+        }
+        if press.modifiers.contains(.command), press.key.character == "," {
+            openPreferences()
+            return .handled
+        }
+        return .ignored
+    }
+
+    private func activate(_ entry: ClipboardEntry?, plainText: Bool) {
+        guard let entry else { return }
         onDismiss()
+        store.activate(entry, forcePlainText: plainText)
+    }
+
+    private func deleteSelected() {
+        guard let entry = selectedEntry else { return }
+        let items = visible
+        let index = items.firstIndex { $0.id == entry.id } ?? 0
+        store.delete(entry.id)
+        let remaining = visible
+        if remaining.isEmpty {
+            selectedID = nil
+        } else {
+            selectedID = remaining[min(index, remaining.count - 1)].id
+        }
+        reportHeight()
+    }
+
+    private func clear() {
+        store.clear()
+        selectedID = visible.first?.id
+        reportHeight()
+    }
+
+    private func openPreferences() {
+        SharedDefaults.store.set("settings", forKey: "mainWindowSection")
+        SharedDefaults.store.set("clipboard", forKey: "settingsSection")
+        MainApp.openDashboard()
+        onDismiss()
+    }
+
+    private func reportHeight() {
+        onHeightChange(Self.height(itemCount: visible.count, showFooter: showFooter))
+    }
+}
+
+private struct FooterRow: View {
+    let label: String
+    let shortcut: String
+    let action: () -> Void
+
+    @State private var hovered = false
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 13))
+            Spacer()
+            Text(shortcut)
+                .font(.system(size: 11))
+                .foregroundStyle(hovered ? Color.white.opacity(0.8) : Color.secondary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 21)
+        .foregroundStyle(hovered ? Color.white : Color.primary)
+        .background(
+            hovered ? Color.accentColor : Color.clear,
+            in: RoundedRectangle(cornerRadius: 4)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .onTapGesture(perform: action)
     }
 }

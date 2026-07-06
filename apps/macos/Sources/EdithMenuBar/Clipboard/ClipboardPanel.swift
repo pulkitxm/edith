@@ -2,9 +2,16 @@ import AppKit
 import EdithKit
 import SwiftUI
 
+private final class ClipboardFloatingPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
 final class ClipboardPanel: NSObject, NSWindowDelegate {
     static let shared = ClipboardPanel()
+
+    static let width: CGFloat = 450
+    static let maxHeight: CGFloat = 800
 
     weak var store: ClipboardStore?
 
@@ -23,8 +30,16 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         guard let store else { return }
         let p = panel ?? makePanel()
         hosting?.rootView = AnyView(
-            ClipboardPanelView(store: store, onDismiss: { [weak self] in self?.hide() }))
-        position(p)
+            ClipboardPanelView(
+                store: store,
+                onDismiss: { [weak self] in self?.hide() },
+                onHeightChange: { [weak self] height in self?.resize(toFit: height) }))
+        let height = min(
+            ClipboardPanelView.estimatedHeight(itemCount: store.entries.count), Self.maxHeight)
+        p.setContentSize(NSSize(width: Self.width, height: height))
+        p.setFrameOrigin(
+            ClipboardPopupPosition.current.origin(
+                size: p.frame.size, statusItemFrame: menuBarExtraStatusWindow()?.frame))
         p.orderFrontRegardless()
         p.makeKey()
     }
@@ -33,33 +48,31 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         panel?.orderOut(nil)
     }
 
-    private func position(_ panel: NSPanel) {
-        let mouse = NSEvent.mouseLocation
-        guard
-            let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) })
-                ?? NSScreen.main
-        else { return }
-        let visible = screen.visibleFrame
-        var origin = NSPoint(x: mouse.x + 6, y: mouse.y - panel.frame.height - 6)
-        origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - panel.frame.width - 8)
-        origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - panel.frame.height - 8)
-        panel.setFrameOrigin(origin)
+    private func resize(toFit height: CGFloat) {
+        guard let panel, panel.isVisible else { return }
+        let clamped = min(height, Self.maxHeight)
+        guard abs(panel.frame.height - clamped) > 0.5 else { return }
+        var frame = panel.frame
+        frame.origin.y += frame.height - clamped
+        frame.size.height = clamped
+        panel.setFrame(frame, display: true)
     }
 
     private func makePanel() -> NSPanel {
-        let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 420),
+        let p = ClipboardFloatingPanel(
+            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 400),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: true)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
         p.level = .statusBar
+        p.collectionBehavior = [.auxiliary, .stationary, .moveToActiveSpace, .fullScreenAuxiliary]
         p.animationBehavior = .none
-        p.becomesKeyOnlyIfNeeded = false
+        p.isFloatingPanel = true
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
-        p.isMovable = false
+        p.isMovableByWindowBackground = true
         p.delegate = self
 
         let effect = NSVisualEffectView()
@@ -67,7 +80,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
-        effect.layer?.cornerRadius = 14
+        effect.layer?.cornerRadius = 9
         effect.layer?.masksToBounds = true
 
         let host = NSHostingView(rootView: AnyView(EmptyView()))
@@ -87,5 +100,14 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
 
     nonisolated func windowDidResignKey(_ notification: Notification) {
         Task { @MainActor in ClipboardPanel.shared.hide() }
+    }
+
+    nonisolated func windowDidMove(_ notification: Notification) {
+        Task { @MainActor in
+            guard let panel = ClipboardPanel.shared.panel, panel.isVisible,
+                NSEvent.pressedMouseButtons & 1 == 1
+            else { return }
+            ClipboardPopupPosition.saveLastPosition(frame: panel.frame, screen: panel.screen)
+        }
     }
 }

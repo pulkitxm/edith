@@ -261,7 +261,7 @@ enum ClipboardHotKey {
     }
 }
 
-private func menuBarExtraStatusWindow() -> NSWindow? {
+func menuBarExtraStatusWindow() -> NSWindow? {
     NSApp.windows.first {
         guard $0.className.contains("StatusBarWindow"),
             let button = firstButton(in: $0.contentView)
