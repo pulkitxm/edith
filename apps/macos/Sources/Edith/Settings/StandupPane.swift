@@ -22,7 +22,7 @@ struct StandupPane: View {
     private var githubAllowlistRaw = ""
 
     @State private var notionToken = ""
-    @State private var hasStoredToken = StandupKeychain.get() != nil
+    @State private var hasStoredToken = false
     @State private var ghStatus = "Checking…"
     @State private var historyQuery = ""
     @State private var history: [StandupHistory.Entry] = []
@@ -68,6 +68,7 @@ struct StandupPane: View {
         .onAppear {
             if authorEmail.isEmpty { loadDefaultAuthorEmail() }
             checkGHStatus()
+            checkStoredToken()
             history = StandupHistory.load()
         }
     }
@@ -274,6 +275,13 @@ struct StandupPane: View {
                 .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty
         else { return }
         authorEmail = value
+    }
+
+    private func checkStoredToken() {
+        Task.detached(priority: .utility) {
+            let has = StandupKeychain.get() != nil
+            await MainActor.run { hasStoredToken = has }
+        }
     }
 
     private func checkGHStatus() {
