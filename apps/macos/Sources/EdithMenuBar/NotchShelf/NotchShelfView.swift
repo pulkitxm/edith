@@ -124,26 +124,46 @@ private struct ShelfItemView: View {
     @ObservedObject var controller: NotchShelfController
     let canvasSize: CGSize
     @State private var handedOffToSystemDrag = false
+    @State private var thumbnail: NSImage?
 
     var body: some View {
         VStack(spacing: 4) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path))
-                .resizable()
-                .frame(width: 38, height: 38)
+            Image(
+                nsImage: thumbnail
+                    ?? NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path)
+            )
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 38, height: 38)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
             Text(item.name)
                 .font(.system(size: 10))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .frame(width: 64)
         }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.white.opacity(controller.selectedIDs.contains(item.id) ? 0.2 : 0))
+        )
         .contentShape(Rectangle())
         .gesture(moveOrDragOut)
-        .onTapGesture { controller.open(item) }
+        .onTapGesture {
+            if NSEvent.modifierFlags.contains(.shift) {
+                controller.toggleSelection(item)
+            } else {
+                controller.open(item)
+            }
+        }
         .contextMenu {
             Button("Open") { controller.open(item) }
             Button("Reveal in Finder") { controller.reveal(item) }
             Button("Share") { controller.share(item) }
             Button("Delete", role: .destructive) { controller.remove(item) }
+        }
+        .task(id: item.name) {
+            thumbnail = await ShelfThumbnails.thumbnail(for: controller.fileURL(for: item))
         }
     }
 
@@ -152,7 +172,7 @@ private struct ShelfItemView: View {
             .onChanged { value in
                 guard !handedOffToSystemDrag else { return }
                 if CGRect(origin: .zero, size: canvasSize).contains(value.location) {
-                    controller.dragItem(item, to: value.location)
+                    controller.canvasDrag(item, to: value.location, in: canvasSize)
                 } else {
                     handedOffToSystemDrag = true
                     controller.beginExternalDrag(of: item)
@@ -160,7 +180,7 @@ private struct ShelfItemView: View {
             }
             .onEnded { _ in
                 handedOffToSystemDrag = false
-                controller.endDrag(of: item)
+                controller.endCanvasDrag()
             }
     }
 }
