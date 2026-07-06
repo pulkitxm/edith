@@ -108,6 +108,7 @@ struct EdithApp: App {
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
             ClipboardHotKey.register()
+            SettingsBackup.shared.scheduleClipboardBackup()
             applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
             services.sync()
             services.usage?.refreshMenuBarItem()

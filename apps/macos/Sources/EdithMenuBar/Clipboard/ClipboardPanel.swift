@@ -55,6 +55,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         var frame = panel.frame
         frame.origin.y += frame.height - clamped
         frame.size.height = clamped
+        frame.origin = ClipboardPopupPosition.clampedToScreen(frame.origin, frame.size)
         panel.setFrame(frame, display: true)
     }
 

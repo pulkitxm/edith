@@ -10,6 +10,8 @@ struct ClipboardPanelView: View {
     @State private var selectedID: String?
     @State private var keyboardScrollTick = 0
     @FocusState private var searchFocused: Bool
+    @AppStorage("clipboardShowFooter", store: SharedDefaults.store) private var showFooter = true
+    @AppStorage("clipboardPinTo", store: SharedDefaults.store) private var pinTo = "top"
 
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
@@ -29,11 +31,7 @@ struct ClipboardPanelView: View {
             + (showFooter ? footerHeight : 0) + bottomPadding
     }
 
-    private var showFooter: Bool { Self.footerEnabled }
-
-    private var pinToTop: Bool {
-        (SharedDefaults.store.string(forKey: "clipboardPinTo") ?? "top") != "bottom"
-    }
+    private var pinToTop: Bool { pinTo != "bottom" }
 
     private var visible: [ClipboardEntry] {
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -74,6 +72,7 @@ struct ClipboardPanelView: View {
             reportHeight()
         }
         .onChange(of: store.entries) { _, _ in reportHeight() }
+        .onChange(of: showFooter) { _, _ in reportHeight() }
     }
 
     private var searchField: some View {

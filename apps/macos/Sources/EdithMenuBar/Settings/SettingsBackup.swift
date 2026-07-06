@@ -32,6 +32,9 @@ final class SettingsBackup: ObservableObject {
         "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
         "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
         "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
+        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
+        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        "clipboardWindowPositionX", "clipboardWindowPositionY",
     ]
 
     private static let sharedKeys: Set<String> = [
@@ -53,6 +56,9 @@ final class SettingsBackup: ObservableObject {
         "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
         "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
         "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
+        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
+        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        "clipboardWindowPositionX", "clipboardWindowPositionY",
     ]
 
     private func store(for key: String) -> UserDefaults {
@@ -191,7 +197,7 @@ final class SettingsBackup: ObservableObject {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
         p.arguments = [
-            "-a", "--max-size=1m",
+            "-a", "--delete", "--max-size=1m",
             "--include", "*/", "--include", "index.jsonl",
             "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
             "--exclude", "*",

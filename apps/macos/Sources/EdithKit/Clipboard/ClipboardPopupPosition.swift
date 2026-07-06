@@ -26,21 +26,22 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
 
     @MainActor
     public func origin(size: NSSize, statusItemFrame: NSRect?) -> NSPoint {
+        Self.clampedToScreen(unclampedOrigin(size: size, statusItemFrame: statusItemFrame), size)
+    }
+
+    @MainActor
+    private func unclampedOrigin(size: NSSize, statusItemFrame: NSRect?) -> NSPoint {
         switch self {
         case .cursor:
+            if let caret = Self.focusedTextRect() {
+                return NSPoint(x: caret.minX, y: caret.minY - size.height - 4)
+            }
             var point = NSEvent.mouseLocation
             point.y -= size.height
             return point
         case .statusItem:
-            guard let statusItemFrame, let screen = Self.popupScreen() else {
-                return Self.centered(size)
-            }
-            var point = NSPoint(
-                x: statusItemFrame.minX, y: statusItemFrame.minY - size.height)
-            if point.x + size.width > screen.frame.maxX {
-                point.x = screen.frame.maxX - size.width
-            }
-            return point
+            guard let statusItemFrame else { return Self.centered(size) }
+            return NSPoint(x: statusItemFrame.minX, y: statusItemFrame.minY - size.height)
         case .window:
             guard let frame = Self.frontmostWindowFrame() else { return Self.centered(size) }
             return NSPoint(
@@ -60,6 +61,18 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
     }
 
     @MainActor
+    public static func clampedToScreen(_ point: NSPoint, _ size: NSSize) -> NSPoint {
+        let screen =
+            NSScreen.screens.first {
+                $0.frame.contains(NSPoint(x: point.x, y: point.y + size.height))
+            } ?? popupScreen()
+        guard let visible = screen?.visibleFrame else { return point }
+        return NSPoint(
+            x: min(max(point.x, visible.minX), max(visible.minX, visible.maxX - size.width)),
+            y: min(max(point.y, visible.minY), max(visible.minY, visible.maxY - size.height)))
+    }
+
+    @MainActor
     public static func saveLastPosition(frame: NSRect, screen: NSScreen?) {
         guard let screen else { return }
         let bounds = screen.frame
@@ -71,6 +84,76 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
         store.set(
             Double((frame.maxY - bounds.minY) / bounds.height),
             forKey: "clipboardWindowPositionY")
+    }
+
+    @MainActor
+    private static func focusedTextRect() -> NSRect? {
+        guard AXIsProcessTrusted() else { return nil }
+        var focusedRef: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString,
+                &focusedRef) == .success,
+            let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
+        else { return nil }
+        let element = unsafeBitCast(focusedRef, to: AXUIElement.self)
+        if let caret = caretRect(of: element) { return caret }
+        return textElementRect(of: element)
+    }
+
+    private static func caretRect(of element: AXUIElement) -> NSRect? {
+        var rangeRef: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+            let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID()
+        else { return nil }
+        var boundsRef: CFTypeRef?
+        guard
+            AXUIElementCopyParameterizedAttributeValue(
+                element, kAXBoundsForRangeParameterizedAttribute as CFString, rangeRef,
+                &boundsRef) == .success,
+            let boundsRef, CFGetTypeID(boundsRef) == AXValueGetTypeID()
+        else { return nil }
+        var rect = CGRect.zero
+        guard AXValueGetValue(unsafeBitCast(boundsRef, to: AXValue.self), .cgRect, &rect),
+            rect.height > 0, rect.origin != .zero
+        else { return nil }
+        return flippedToCocoa(rect)
+    }
+
+    private static func textElementRect(of element: AXUIElement) -> NSRect? {
+        var roleRef: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+                == .success,
+            let role = roleRef as? String,
+            ["AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"].contains(role)
+        else { return nil }
+        var positionRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                element, kAXPositionAttribute as CFString, &positionRef) == .success,
+            AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef)
+                == .success,
+            let positionRef, CFGetTypeID(positionRef) == AXValueGetTypeID(),
+            let sizeRef, CFGetTypeID(sizeRef) == AXValueGetTypeID()
+        else { return nil }
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard
+            AXValueGetValue(unsafeBitCast(positionRef, to: AXValue.self), .cgPoint, &position),
+            AXValueGetValue(unsafeBitCast(sizeRef, to: AXValue.self), .cgSize, &size),
+            size.height > 0
+        else { return nil }
+        return flippedToCocoa(CGRect(origin: position, size: size))
+    }
+
+    private static func flippedToCocoa(_ rect: CGRect) -> NSRect {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        return NSRect(
+            x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
     @MainActor
