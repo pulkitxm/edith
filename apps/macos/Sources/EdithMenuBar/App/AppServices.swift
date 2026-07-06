@@ -7,6 +7,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var music: MusicPlayer?
     @Published private(set) var system: SystemStore?
     @Published private(set) var calendar: CalendarStore?
+    @Published private(set) var notchShelf: NotchShelfController?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -43,6 +44,13 @@ final class AppServices: ObservableObject {
         if !calendarOn, let store = calendar {
             store.shutdown()
             calendar = nil
+        }
+
+        let notchShelfOn = SharedDefaults.store.bool(forKey: "notchShelfEnabled")
+        if notchShelfOn, notchShelf == nil { notchShelf = NotchShelfController() }
+        if !notchShelfOn, let controller = notchShelf {
+            controller.shutdown()
+            notchShelf = nil
         }
     }
 }

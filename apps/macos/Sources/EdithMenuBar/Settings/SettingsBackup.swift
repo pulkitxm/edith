@@ -27,6 +27,9 @@ final class SettingsBackup: ObservableObject {
         "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
         "notifyTokenExpired",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
+        "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
+        "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
+        "notchShelfShowOnExternal", "notchShelfHaptics",
     ]
 
     private static let sharedKeys: Set<String> = [
@@ -44,6 +47,9 @@ final class SettingsBackup: ObservableObject {
         "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
         "preventSleep", "repoPath",
+        "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
+        "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
+        "notchShelfShowOnExternal", "notchShelfHaptics",
     ]
 
     private func store(for key: String) -> UserDefaults {
