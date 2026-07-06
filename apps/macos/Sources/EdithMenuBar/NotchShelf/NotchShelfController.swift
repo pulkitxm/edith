@@ -13,19 +13,30 @@ extension NSScreen {
 final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
+    @Published private(set) var isOptionHeld = false
 
     private let store = ShelfStore()
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
     private var collapsedSizes: [CGDirectDisplayID: CGSize] = [:]
     private var builtinDisplayID: CGDirectDisplayID?
+    private var expandedSize = NotchGeometry.expandedSize
 
     private var screenObserver: NSObjectProtocol?
     private var dragMonitor: Any?
+    private var flagsMonitors: [Any] = []
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
+    private var pendingDragOutID: UUID?
 
     init() {
         items = store.items
+        let width = SharedDefaults.store.double(forKey: "notchShelfExpandedWidth")
+        let height = SharedDefaults.store.double(forKey: "notchShelfExpandedHeight")
+        if width > 0, height > 0 {
+            expandedSize = CGSize(
+                width: max(width, NotchGeometry.expandedSize.width),
+                height: max(height, NotchGeometry.expandedSize.height))
+        }
         purgeExpired()
         rebuildPanels()
         screenObserver = NotificationCenter.default.addObserver(
@@ -38,11 +49,34 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         ) { [weak self] event in
             Task { @MainActor in self?.handleGlobalMouse(event) }
         }
+        if let monitor = NSEvent.addGlobalMonitorForEvents(
+            matching: .flagsChanged,
+            handler: {
+                [weak self] event in
+                let held = event.modifierFlags.contains(.option)
+                Task { @MainActor in self?.isOptionHeld = held }
+            })
+        {
+            flagsMonitors.append(monitor)
+        }
+        if let monitor = NSEvent.addLocalMonitorForEvents(
+            matching: .flagsChanged,
+            handler: {
+                [weak self] event in
+                let held = event.modifierFlags.contains(.option)
+                Task { @MainActor in self?.isOptionHeld = held }
+                return event
+            })
+        {
+            flagsMonitors.append(monitor)
+        }
     }
 
     func shutdown() {
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
+        for monitor in flagsMonitors { NSEvent.removeMonitor(monitor) }
+        flagsMonitors.removeAll()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         collapseWorkItem?.cancel()
@@ -144,15 +178,13 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private func applyFrame(
         _ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID, animated: Bool
     ) {
-        let size =
-            isExpanded
-            ? NotchGeometry.expandedSize : (collapsedSizes[id] ?? NotchGeometry.fallbackSize)
+        let size = isExpanded ? expandedSize : (collapsedSizes[id] ?? NotchGeometry.fallbackSize)
         let frame = NSRect(
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: size), size: size)
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.22
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                ctx.duration = 0.35
+                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.4, 0.64, 1)
                 panel.animator().setFrame(frame, display: true)
             }
         } else {
@@ -213,9 +245,42 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             lastDragChangeCount = count
             guard optionSatisfied(), isNearNotch(NSEvent.mouseLocation) else { return }
             expand()
+        case .leftMouseUp:
+            resolvePendingDragOut(at: NSEvent.mouseLocation)
         default:
             break
         }
+    }
+
+    private func resolvePendingDragOut(at point: CGPoint) {
+        guard let id = pendingDragOutID else { return }
+        pendingDragOutID = nil
+        let insideShelf = panels.values.contains { $0.frame.contains(point) }
+        guard !insideShelf, let item = items.first(where: { $0.id == id }) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.remove(item)
+        }
+    }
+
+    func resizeExpanded(toPointer point: CGPoint, resizesWidth: Bool, resizesHeight: Bool) {
+        guard isExpanded else { return }
+        let screen =
+            NSScreen.screens.first { $0.frame.contains(point) }
+            ?? NSScreen.screens.first { $0.displayID == builtinDisplayID }
+        guard let screen else { return }
+        let proposed = CGSize(
+            width: resizesWidth
+                ? abs(point.x - screen.frame.midX) * 2 + 8 : expandedSize.width,
+            height: resizesHeight ? screen.frame.maxY - point.y + 4 : expandedSize.height)
+        let minSize = NotchGeometry.expandedSize
+        let size = CGSize(
+            width: min(max(proposed.width, minSize.width), screen.frame.width * 0.9),
+            height: min(max(proposed.height, minSize.height), screen.frame.height * 0.7))
+        guard size != expandedSize else { return }
+        expandedSize = size
+        SharedDefaults.store.set(Double(size.width), forKey: "notchShelfExpandedWidth")
+        SharedDefaults.store.set(Double(size.height), forKey: "notchShelfExpandedHeight")
+        updateAllFrames(animated: false)
     }
 
     private func isNearNotch(_ point: CGPoint) -> Bool {
@@ -237,32 +302,34 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     func open(_ item: ShelfItem) {
         NSWorkspace.shared.open(fileURL(for: item))
+        collapseNow()
     }
 
     func reveal(_ item: ShelfItem) {
         NSWorkspace.shared.activateFileViewerSelecting([fileURL(for: item)])
+        collapseNow()
     }
 
     func remove(_ item: ShelfItem) {
         store.remove(item)
         items = store.items
+        collapseNow()
     }
 
     func dragOutProvider(for item: ShelfItem) -> NSItemProvider {
         let provider = NSItemProvider(contentsOf: fileURL(for: item)) ?? NSItemProvider()
-        if removeAfterDragOut {
-            DispatchQueue.main.async { [weak self] in self?.remove(item) }
-        }
+        if removeAfterDragOut { pendingDragOutID = item.id }
         return provider
     }
 
     @discardableResult
-    func handleDrop(from pasteboard: NSPasteboard) -> Bool {
+    func handleDrop(from pasteboard: NSPasteboard, at location: CGPoint? = nil) -> Bool {
         let objects =
             pasteboard.readObjects(
                 forClasses: [NSFilePromiseReceiver.self, NSURL.self, NSString.self],
                 options: [.urlReadingFileURLsOnly: true]) ?? []
         var handled = false
+        var repositioned = false
         for object in objects {
             switch object {
             case let receiver as NSFilePromiseReceiver:
@@ -270,7 +337,14 @@ final class NotchShelfController: ObservableObject, FeatureModule {
                 receivePromise(receiver)
             case let url as URL:
                 handled = true
-                addFile(at: url)
+                if let location, let existing = store.item(forFileURL: url) {
+                    pendingDragOutID = nil
+                    store.setPosition(location, for: existing)
+                    items = store.items
+                    repositioned = true
+                } else {
+                    addFile(at: url)
+                }
             case let text as String:
                 handled = true
                 addText(text)
@@ -278,7 +352,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
                 break
             }
         }
-        if handled { collapseAfterDelay(1.2) }
+        if handled, !repositioned { collapseAfterDelay(1.2) }
         return handled
     }
 
@@ -322,6 +396,8 @@ private final class ShelfDropCatcherView: NSView {
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        controller?.handleDrop(from: sender.draggingPasteboard) ?? false
+        let windowPoint = convert(sender.draggingLocation, from: nil)
+        let location = CGPoint(x: windowPoint.x, y: bounds.height - windowPoint.y)
+        return controller?.handleDrop(from: sender.draggingPasteboard, at: location) ?? false
     }
 }

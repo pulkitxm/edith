@@ -74,6 +74,65 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: fileURL.path))
     }
 
+    @Test func storesFilesFlatAtTheShelfRoot() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let item = try #require(store.addText("flat"))
+        #expect(store.fileURL(for: item) == dir.appendingPathComponent(item.name))
+    }
+
+    @Test func duplicateNamesGetFinderStyleSuffixes() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-source-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let file = source.appendingPathComponent("Screenshot.png")
+        try "a".write(to: file, atomically: true, encoding: .utf8)
+
+        let first = try #require(store.addCopy(of: file))
+        let second = try #require(store.addCopy(of: file))
+        #expect(first.name == "Screenshot.png")
+        #expect(second.name == "Screenshot 2.png")
+        #expect(FileManager.default.fileExists(atPath: store.fileURL(for: second).path))
+    }
+
+    @Test func migratesLegacyPerItemFoldersToFlatFiles() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let fm = FileManager.default
+        let id = UUID()
+        let legacyDir = dir.appendingPathComponent(id.uuidString)
+        try fm.createDirectory(at: legacyDir, withIntermediateDirectories: true)
+        try "legacy".write(
+            to: legacyDir.appendingPathComponent("Note.txt"), atomically: true, encoding: .utf8)
+        let legacyItems = [ShelfItem(id: id, name: "Note.txt", addedAt: Date())]
+        try JSONEncoder().encode(legacyItems).write(to: dir.appendingPathComponent("index.json"))
+
+        let store = ShelfStore(root: dir)
+        let item = try #require(store.items.first)
+        #expect(store.fileURL(for: item) == dir.appendingPathComponent("Note.txt"))
+        #expect(try String(contentsOf: store.fileURL(for: item), encoding: .utf8) == "legacy")
+        #expect(!fm.fileExists(atPath: legacyDir.path))
+
+        let reopened = ShelfStore(root: dir)
+        #expect(reopened.items.count == 1)
+    }
+
+    @Test func setPositionPersistsAcrossInstances() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let item = try #require(store.addText("movable"))
+        store.setPosition(CGPoint(x: 120, y: 60), for: item)
+        let reopened = ShelfStore(root: dir)
+        #expect(reopened.items.first?.position == CGPoint(x: 120, y: 60))
+    }
+
     @Test func purgeExpiredRemovesOnlyOnceThePolicyWindowHasPassed() throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }

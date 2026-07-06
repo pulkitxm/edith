@@ -5,6 +5,7 @@ struct ShelfItem: Codable, Identifiable, Equatable {
     let id: UUID
     let name: String
     let addedAt: Date
+    var position: CGPoint?
 }
 
 enum ShelfKeepDuration: String, CaseIterable {
@@ -36,10 +37,39 @@ final class ShelfStore {
     init(root: URL = AppData.supportDir.appendingPathComponent("Shelf")) {
         self.root = root
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        migrateLegacyIndex()
         load()
+        migrateLegacyFolders()
     }
 
-    private var indexURL: URL { root.appendingPathComponent("index.json") }
+    private var indexURL: URL { root.appendingPathComponent(".index.json") }
+
+    private func migrateLegacyIndex() {
+        let legacy = root.appendingPathComponent("index.json")
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: indexURL.path) else {
+            return
+        }
+        try? fm.moveItem(at: legacy, to: indexURL)
+    }
+
+    private func migrateLegacyFolders() {
+        let fm = FileManager.default
+        var changed = false
+        for (index, item) in items.enumerated() {
+            let legacyDir = root.appendingPathComponent(item.id.uuidString)
+            let legacyFile = legacyDir.appendingPathComponent(item.name)
+            guard fm.fileExists(atPath: legacyFile.path) else { continue }
+            let name = uniqueName(item.name)
+            guard (try? fm.moveItem(at: legacyFile, to: root.appendingPathComponent(name))) != nil
+            else { continue }
+            try? fm.removeItem(at: legacyDir)
+            items[index] = ShelfItem(
+                id: item.id, name: name, addedAt: item.addedAt, position: item.position)
+            changed = true
+        }
+        if changed { save() }
+    }
 
     private func load() {
         guard let data = try? Data(contentsOf: indexURL) else { return }
@@ -51,24 +81,30 @@ final class ShelfStore {
         try? data.write(to: indexURL, options: .atomic)
     }
 
-    func directory(for item: ShelfItem) -> URL { root.appendingPathComponent(item.id.uuidString) }
-    func fileURL(for item: ShelfItem) -> URL {
-        directory(for: item).appendingPathComponent(item.name)
+    func fileURL(for item: ShelfItem) -> URL { root.appendingPathComponent(item.name) }
+
+    private func uniqueName(_ proposed: String) -> String {
+        let fm = FileManager.default
+        var name = proposed
+        var counter = 2
+        let base = (proposed as NSString).deletingPathExtension
+        let ext = (proposed as NSString).pathExtension
+        while fm.fileExists(atPath: root.appendingPathComponent(name).path) {
+            name = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
+            counter += 1
+        }
+        return name
     }
 
     @discardableResult
     func addCopy(of source: URL) -> ShelfItem? {
-        let id = UUID()
-        let dir = root.appendingPathComponent(id.uuidString)
-        let name = source.lastPathComponent
+        let name = uniqueName(source.lastPathComponent)
         do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: source, to: dir.appendingPathComponent(name))
+            try FileManager.default.copyItem(at: source, to: root.appendingPathComponent(name))
         } catch {
-            try? FileManager.default.removeItem(at: dir)
             return nil
         }
-        let item = ShelfItem(id: id, name: name, addedAt: Date())
+        let item = ShelfItem(id: UUID(), name: name, addedAt: Date())
         items.append(item)
         save()
         return item
@@ -76,43 +112,59 @@ final class ShelfStore {
 
     @discardableResult
     func addText(_ text: String) -> ShelfItem? {
-        let id = UUID()
-        let dir = root.appendingPathComponent(id.uuidString)
-        let name = "Dropped Text.txt"
+        let name = uniqueName("Dropped Text.txt")
         do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try text.write(
-                to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+                to: root.appendingPathComponent(name), atomically: true, encoding: .utf8)
         } catch {
-            try? FileManager.default.removeItem(at: dir)
             return nil
         }
-        let item = ShelfItem(id: id, name: name, addedAt: Date())
+        let item = ShelfItem(id: UUID(), name: name, addedAt: Date())
         items.append(item)
         save()
         return item
     }
 
     @discardableResult
-    func adopt(fileAt url: URL, id: UUID) -> ShelfItem {
-        let item = ShelfItem(id: id, name: url.lastPathComponent, addedAt: Date())
+    func adopt(fileAt url: URL, id: UUID) -> ShelfItem? {
+        let name = uniqueName(url.lastPathComponent)
+        do {
+            try FileManager.default.moveItem(at: url, to: root.appendingPathComponent(name))
+        } catch {
+            discardPromiseDestination(id: id)
+            return nil
+        }
+        discardPromiseDestination(id: id)
+        let item = ShelfItem(id: id, name: name, addedAt: Date())
         items.append(item)
         save()
         return item
     }
 
     func promiseDestination(id: UUID) -> URL {
-        let dir = root.appendingPathComponent(id.uuidString)
+        let dir = root.appendingPathComponent(".incoming-\(id.uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
     func discardPromiseDestination(id: UUID) {
-        try? FileManager.default.removeItem(at: root.appendingPathComponent(id.uuidString))
+        try? FileManager.default.removeItem(
+            at: root.appendingPathComponent(".incoming-\(id.uuidString)"))
+    }
+
+    func item(forFileURL url: URL) -> ShelfItem? {
+        let path = url.standardizedFileURL.path
+        return items.first { fileURL(for: $0).standardizedFileURL.path == path }
+    }
+
+    func setPosition(_ position: CGPoint, for item: ShelfItem) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index].position = position
+        save()
     }
 
     func remove(_ item: ShelfItem) {
-        try? FileManager.default.removeItem(at: directory(for: item))
+        try? FileManager.default.removeItem(at: fileURL(for: item))
         items.removeAll { $0.id == item.id }
         save()
     }
@@ -122,7 +174,9 @@ final class ShelfStore {
             ShelfExpiry.isExpired(addedAt: $0.addedAt, keep: keep, now: now)
         }
         guard !expired.isEmpty else { return }
-        for item in expired { try? FileManager.default.removeItem(at: directory(for: item)) }
+        for item in expired {
+            try? FileManager.default.removeItem(at: fileURL(for: item))
+        }
         let expiredIDs = Set(expired.map(\.id))
         items.removeAll { expiredIDs.contains($0.id) }
         save()
