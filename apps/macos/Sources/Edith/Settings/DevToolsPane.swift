@@ -22,7 +22,11 @@ struct DevToolsPane: View {
                     "Summons the system loupe from a hotkey or the panel, then copies the sampled color to your clipboard."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Color Picker")
+            }
 
+            Section {
                 HStack {
                     LabeledContent("Pick hotkey") { ColorPickerShortcutRecorder() }
                     InfoDot("Summons the magnifier from anywhere.")
@@ -48,8 +52,6 @@ struct DevToolsPane: View {
                     Stepper("History size: \(historySize)", value: $historySize, in: 1...100)
                     InfoDot("How many past colors to keep.")
                 }
-            } header: {
-                Text("Color Picker")
             }
             .disabled(!colorPickerEnabled)
             .opacity(colorPickerEnabled ? 1 : 0.5)
