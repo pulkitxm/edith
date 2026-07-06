@@ -82,7 +82,11 @@ struct DevToolsPane: View {
                     "Freezes the screen under a crosshair and shows pixel distances, with edge snapping when Screen Recording is granted."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Pixel Ruler")
+            }
 
+            Section {
                 HStack {
                     LabeledContent("Ruler hotkey") { PixelRulerShortcutRecorder() }
                     InfoDot("Freezes the screen and starts measuring.")
@@ -117,8 +121,6 @@ struct DevToolsPane: View {
                     .pointerCursor()
                     InfoDot("The text template used on click, e.g. \"120 × 48\".")
                 }
-            } header: {
-                Text("Pixel Ruler")
             }
             .disabled(!pixelRulerEnabled)
             .opacity(pixelRulerEnabled ? 1 : 0.5)

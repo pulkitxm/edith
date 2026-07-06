@@ -11,9 +11,13 @@ final class SettingsBackup: ObservableObject {
     static let shared = SettingsBackup()
 
     @Published private(set) var musicBackupRunning = false
+    @Published private(set) var clipboardBackupRunning = false
 
     private static let keys = [
         "theme", "tab", "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
+        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
+        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         "tabUsageEnabled", "tabMusicEnabled",
         "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "repoPath",
         "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
@@ -27,11 +31,24 @@ final class SettingsBackup: ObservableObject {
         "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
         "notifyTokenExpired",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
+        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
+        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
+        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
+        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
+        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
+        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        "clipboardWindowPositionX", "clipboardWindowPositionY",
+        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
+        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
+        "focusDimHotKeyLabel",
     ]
 
     private static let sharedKeys: Set<String> = [
         "theme", "lastPaletteTheme", "appearance",
         "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
+        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
+        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         "tabUsageEnabled", "tabMusicEnabled", "tabSystemEnabled", "tabCalendarEnabled", "tabOrder",
         "icloudBackup", "lastBackupAt", "musicBackup", "lastMusicBackupAt",
         "backupSettings", "backupUsage", "backupLimits",
@@ -44,6 +61,16 @@ final class SettingsBackup: ObservableObject {
         "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
         "preventSleep", "repoPath",
+        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
+        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
+        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
+        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
+        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
+        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        "clipboardWindowPositionX", "clipboardWindowPositionY",
+        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
+        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
+        "focusDimHotKeyLabel",
     ]
 
     private func store(for key: String) -> UserDefaults {
@@ -79,6 +106,9 @@ final class SettingsBackup: ObservableObject {
         }
         if SharedDefaults.store.bool(forKey: "musicBackup"), !restoreMusic() {
             backupMusic()
+        }
+        if SharedDefaults.store.bool(forKey: "clipboardBackup"), !restoreClipboard() {
+            backupClipboard()
         }
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
@@ -143,6 +173,94 @@ final class SettingsBackup: ObservableObject {
         p.terminationHandler = { proc in
             if proc.terminationStatus == 0 {
                 NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            }
+        }
+        do {
+            try p.run()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private var localClipboardDir: URL { ClipboardPaths.dir }
+    private var cloudClipboardDir: URL { AppData.cloudDir.appendingPathComponent("clipboard") }
+    private var clipboardDebounce: Timer?
+
+    private var clipboardBackupOn: Bool {
+        SharedDefaults.store.bool(forKey: "clipboardBackup") && AppData.cloudAvailable
+    }
+
+    func scheduleClipboardBackup() {
+        guard clipboardBackupOn else { return }
+        clipboardDebounce?.invalidate()
+        clipboardDebounce = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { _ in
+            Task { @MainActor in SettingsBackup.shared.backupClipboard() }
+        }
+    }
+
+    func backupClipboard() {
+        guard !clipboardBackupRunning, clipboardBackupOn,
+            FileManager.default.fileExists(atPath: localClipboardDir.path)
+        else { return }
+        clipboardBackupRunning = true
+        try? FileManager.default.createDirectory(
+            at: cloudClipboardDir, withIntermediateDirectories: true)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+        p.arguments = [
+            "-a", "--delete", "--max-size=1m",
+            "--include", "*/", "--include", "index.jsonl",
+            "--include", "*.txt", "--include", "*.rtf", "--include", "*.html",
+            "--include", "*.url", "--include", "*.png", "--include", "*.tiff",
+            "--exclude", "*",
+            localClipboardDir.path + "/", cloudClipboardDir.path + "/",
+        ]
+        p.qualityOfService = .utility
+        p.terminationHandler = { process in
+            Task { @MainActor in
+                self.clipboardBackupRunning = false
+                if process.terminationStatus == 0 {
+                    SharedDefaults.store.set(
+                        Date().timeIntervalSince1970, forKey: "lastClipboardBackupAt")
+                }
+            }
+        }
+        do {
+            try p.run()
+        } catch {
+            clipboardBackupRunning = false
+        }
+    }
+
+    @discardableResult
+    func restoreClipboard(attempts: Int = 3) -> Bool {
+        guard AppData.cloudAvailable else { return false }
+        let fm = FileManager.default
+        let cloudIndex = cloudClipboardDir.appendingPathComponent("index.jsonl")
+        let localIndex = localClipboardDir.appendingPathComponent("index.jsonl")
+        guard !fm.fileExists(atPath: localIndex.path) else { return false }
+        guard fm.fileExists(atPath: cloudIndex.path) else {
+            let placeholder = cloudClipboardDir.appendingPathComponent(".index.jsonl.icloud")
+            guard attempts > 0, fm.fileExists(atPath: placeholder.path) else { return false }
+            try? fm.startDownloadingUbiquitousItem(at: cloudClipboardDir)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                Task { @MainActor in
+                    SettingsBackup.shared.restoreClipboard(attempts: attempts - 1)
+                }
+            }
+            return true
+        }
+        try? fm.startDownloadingUbiquitousItem(at: cloudClipboardDir)
+        try? fm.createDirectory(at: localClipboardDir, withIntermediateDirectories: true)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+        p.arguments = ["-a", cloudClipboardDir.path + "/", localClipboardDir.path + "/"]
+        p.qualityOfService = .utility
+        p.terminationHandler = { process in
+            if process.terminationStatus == 0 {
+                ClipboardRepository.pruneEntriesMissingBlobs()
+                IPC.post(IPC.Name.clipboardChanged)
             }
         }
         do {

@@ -5,13 +5,13 @@ struct UsageView: View {
     @EnvironmentObject private var store: UsageStore
     @State private var showLog = false
     @State private var showDiagnostics = false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @StateObject private var presenterState = PresenterState.shared
     @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
         true
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
-    private var blurMoney: Bool { presenter && presenterBlurMoney }
+    private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

@@ -1,9 +1,12 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build reset reinstall loc
+.PHONY: build install reset reinstall loc
 
 build:
 	apps/macos/build.sh $(FLAGS)
+
+install:
+	apps/macos/build.sh --install $(FLAGS)
 
 reset:
 	apps/macos/reset.sh

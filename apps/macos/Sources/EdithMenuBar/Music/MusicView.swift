@@ -5,13 +5,13 @@ struct MusicView: View {
     @EnvironmentObject private var player: MusicPlayer
     @ObservedObject private var mini = MiniPanel.shared
     @State private var dragFraction: Double?
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @StateObject private var presenterState = PresenterState.shared
     @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
         true
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private var theme: Color { themeColor(themeName) }
-    private var blurMusic: Bool { presenter && presenterBlurMusic }
+    private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
     private var scrubberRow: some View {
         HStack(spacing: 10) {
@@ -168,7 +168,7 @@ private struct TrackRow: View {
     @State private var artwork: NSImage?
     @State private var duration: String?
     @State private var hovering = false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenter = false
+    @StateObject private var presenterState = PresenterState.shared
     @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
         true
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
@@ -208,7 +208,7 @@ private struct TrackRow: View {
                     .font(.system(size: 13))
                     .lineLimit(1)
                     .foregroundStyle(isCurrent ? theme : .primary)
-                    .presenterBlur(presenter && presenterBlurMusic)
+                    .presenterBlur(presenterState.active && presenterBlurMusic)
 
                 Spacer()
 
