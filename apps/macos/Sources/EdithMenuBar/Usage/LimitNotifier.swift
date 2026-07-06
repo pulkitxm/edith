@@ -40,6 +40,15 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    func clearStateIfMasterOff() {
+        guard !NotifySettings.fromDefaults(SharedDefaults.store).master else { return }
+        for key in [
+            "notifSessionLevel", "notifWeeklyLevel", "notifSessionPacing", "notifWeeklyPacing",
+        ] {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
     func cancelReminders() {
         center.removePendingNotificationRequests(withIdentifiers: [
             "reminder_session", "reminder_weekly",

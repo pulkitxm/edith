@@ -12,8 +12,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        let showDockIcon = SharedDefaults.store.object(forKey: "showDockIcon") as? Bool ?? true
+        NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         launchHelperIfNeeded()
-        DashboardWindow.open()
+        MainWindow.open()
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)
         }
@@ -21,7 +23,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main
         ) { [weak self] _ in
-            self?.scheduleSettingsChangedBroadcast()
+            MainActor.assumeIsolated { self?.scheduleSettingsChangedBroadcast() }
         }
     }
 
@@ -33,7 +35,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { DashboardWindow.open() }
+        if !hasVisibleWindows { MainWindow.open() }
         return true
     }
 

@@ -59,6 +59,12 @@ final class SystemStore: ObservableObject, FeatureModule {
         on ? enableSleepPrevention() : disableSleepPrevention()
     }
 
+    func syncPreventSleep() {
+        let want = SharedDefaults.store.bool(forKey: "preventSleep")
+        guard want != preventingSleep else { return }
+        want ? enableSleepPrevention() : disableSleepPrevention()
+    }
+
     private func enableSleepPrevention() {
         guard !preventingSleep else { return }
         let result = IOPMAssertionCreateWithName(

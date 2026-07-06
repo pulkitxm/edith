@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-enum DashboardWindow {
+enum MainWindow {
     private static var window: NSWindow?
 
     static func open() {
@@ -15,11 +15,11 @@ enum DashboardWindow {
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 680),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered, defer: false)
-        w.title = "Edith — Usage"
+        w.title = "Edith"
         w.isReleasedWhenClosed = false
         w.center()
-        w.contentView = NSHostingView(rootView: DashboardView())
-        w.delegate = DashboardWindowDelegate.shared
+        w.contentView = NSHostingView(rootView: MainWindowView())
+        w.delegate = MainWindowDelegate.shared
         window = w
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -29,9 +29,9 @@ enum DashboardWindow {
 }
 
 @MainActor
-final class DashboardWindowDelegate: NSObject, NSWindowDelegate {
-    static let shared = DashboardWindowDelegate()
+final class MainWindowDelegate: NSObject, NSWindowDelegate {
+    static let shared = MainWindowDelegate()
     func windowWillClose(_ notification: Notification) {
-        DashboardWindow.forget()
+        MainWindow.forget()
     }
 }

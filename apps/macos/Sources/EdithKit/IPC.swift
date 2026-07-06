@@ -10,6 +10,18 @@ public enum IPC {
             "com.pulkit.edith.usageRefreshFinished")
         public static let quitMainApp = Notification.Name("com.pulkit.edith.quitMainApp")
         public static let settingsChanged = Notification.Name("com.pulkit.edith.settingsChanged")
+        public static let requestPermissionsRefresh = Notification.Name(
+            "com.pulkit.edith.requestPermissionsRefresh")
+        public static let grantCalendar = Notification.Name("com.pulkit.edith.grantCalendar")
+        public static let grantNotifications = Notification.Name(
+            "com.pulkit.edith.grantNotifications")
+        public static let grantAccessibility = Notification.Name(
+            "com.pulkit.edith.grantAccessibility")
+        public static let grantInputMonitoring = Notification.Name(
+            "com.pulkit.edith.grantInputMonitoring")
+        public static let grantFullDisk = Notification.Name("com.pulkit.edith.grantFullDisk")
+        public static let requestTestNotification = Notification.Name(
+            "com.pulkit.edith.requestTestNotification")
     }
 
     public static func post(_ name: Notification.Name) {
