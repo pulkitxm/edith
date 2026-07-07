@@ -69,6 +69,35 @@ import Testing
         #expect(HomeMath.zoneMatches(query: "zzzznotacity", taken: []).isEmpty)
     }
 
+    @Test func topModelsAggregatesAcrossDays() {
+        let monday = HeatDay(
+            date: Date(),
+            models: [
+                NamedValue(id: "opus", name: "opus", value: 10),
+                NamedValue(id: "haiku", name: "haiku", value: 1),
+            ])
+        let tuesday = HeatDay(
+            date: Date(), models: [NamedValue(id: "opus", name: "opus", value: 5)])
+        let top = HomeMath.topModels(days: [monday, tuesday, nil])
+        #expect(top.map(\.name) == ["opus", "haiku"])
+        #expect(top.first?.value == 15)
+    }
+
+    @Test func topModelsCapsAtLimit() {
+        let day = HeatDay(
+            date: Date(),
+            models: (0..<5).map {
+                NamedValue(id: "m\($0)", name: "m\($0)", value: Double($0))
+            })
+        #expect(HomeMath.topModels(days: [day]).count == 3)
+        #expect(HomeMath.topModels(days: [day], limit: 2).count == 2)
+    }
+
+    @Test func topModelsEmptyForNoData() {
+        #expect(HomeMath.topModels(days: [nil, nil]).isEmpty)
+        #expect(HomeMath.topModels(days: []).isEmpty)
+    }
+
     @Test func suggestionsAreAllValidTimeZones() {
         for id in HomeMath.zoneSuggestions {
             #expect(TimeZone(identifier: id) != nil, "\(id) is not a valid timezone")

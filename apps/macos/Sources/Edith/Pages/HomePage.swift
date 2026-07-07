@@ -106,6 +106,18 @@ enum HomeMath {
             ? String(format: "%+.0fh", hours) : String(format: "%+.1fh", hours)
     }
 
+    static func topModels(days: [HeatDay?], limit: Int = 3) -> [NamedValue] {
+        var totals: [String: Double] = [:]
+        for day in days {
+            for entry in day?.models ?? [] {
+                totals[entry.name, default: 0] += entry.value
+            }
+        }
+        return totals.sorted { $0.value > $1.value }.prefix(limit).map {
+            NamedValue(id: $0.key, name: $0.key, value: $0.value)
+        }
+    }
+
     static func zoneMatches(query: String, taken: Set<String>) -> [String] {
         if query.isEmpty {
             return zoneSuggestions.filter { !taken.contains($0) }
@@ -641,15 +653,7 @@ private struct UsageSummaryCard: View {
     }
 
     private var weekModels: [NamedValue] {
-        var totals: [String: Double] = [:]
-        for offset in 0..<7 {
-            for entry in day(offset)?.models ?? [] {
-                totals[entry.name, default: 0] += entry.value
-            }
-        }
-        return totals.sorted { $0.value > $1.value }.prefix(3).map {
-            NamedValue(id: $0.key, name: $0.key, value: $0.value)
-        }
+        HomeMath.topModels(days: (0..<7).map(day))
     }
 
     var body: some View {

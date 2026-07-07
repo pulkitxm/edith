@@ -45,7 +45,7 @@ final class MusicRemote: ObservableObject {
         tracks = TrackMeta.scanMusicFolder()
     }
 
-    private func apply(_ info: [AnyHashable: Any]) {
+    func apply(_ info: [AnyHashable: Any]) {
         let file = info["track"] as? String ?? ""
         currentFile = file.isEmpty ? nil : file
         isPlaying = info["isPlaying"] as? Bool ?? false

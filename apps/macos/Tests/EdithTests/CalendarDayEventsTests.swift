@@ -76,4 +76,21 @@ import EventKit
     @Test func plainTextHasNoLink() {
         #expect(MeetingLink.find(in: "Lunch with the team") == nil)
     }
+
+    @Test func matchesBareHostWithoutSubdomain() {
+        #expect(MeetingLink.find(in: "https://zoom.us/j/1234567890")?.host == "zoom.us")
+    }
+
+    @Test func findsTeamsLink() {
+        #expect(MeetingLink.find(in: "https://teams.microsoft.com/l/meetup-join/xyz") != nil)
+    }
+
+    @Test func picksMeetingLinkAmongOtherLinks() {
+        let text = "Agenda: https://example.com/doc\nJoin: https://meet.google.com/abc-defg-hij"
+        #expect(MeetingLink.find(in: text)?.host == "meet.google.com")
+    }
+
+    @Test func emptyTextYieldsNothing() {
+        #expect(MeetingLink.find(in: "") == nil)
+    }
 }
