@@ -12,6 +12,7 @@ struct ClipboardPanelView: View {
     @FocusState private var searchFocused: Bool
     @AppStorage("clipboardShowFooter", store: SharedDefaults.store) private var showFooter = true
     @AppStorage("clipboardPinTo", store: SharedDefaults.store) private var pinTo = "top"
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
 
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
@@ -153,7 +154,7 @@ struct ClipboardPanelView: View {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(
                                         selectedID == entry.id
-                                            ? Color.accentColor : Color.clear)
+                                            ? themeColor(themeName) : Color.clear)
                             )
                     }
                 }
@@ -327,6 +328,7 @@ private struct FooterRow: View {
     let shortcut: String
     let action: () -> Void
 
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @State private var hovered = false
 
     var body: some View {
@@ -342,7 +344,7 @@ private struct FooterRow: View {
         .frame(height: 21)
         .foregroundStyle(hovered ? Color.white : Color.primary)
         .background(
-            hovered ? Color.accentColor : Color.clear,
+            hovered ? themeColor(themeName) : Color.clear,
             in: RoundedRectangle(cornerRadius: 4)
         )
         .contentShape(Rectangle())

@@ -3,14 +3,15 @@ import EdithKit
 import SwiftUI
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case dashboard, music, calendar
+    case home, dashboard, music, calendar
     case extensions, usage, shortcuts, general, permissions, icloud
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .dashboard: return "Dashboard"
+        case .home: return "Home"
+        case .dashboard: return "Agent Usage"
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .extensions: return "Extensions"
@@ -24,6 +25,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .home: return "house.fill"
         case .dashboard: return "chart.bar.fill"
         case .music: return "music.note"
         case .calendar: return "calendar"
@@ -36,12 +38,12 @@ enum MainDestination: String, CaseIterable, Identifiable {
         }
     }
 
-    static let home: [MainDestination] = [.dashboard, .music, .calendar]
-    static let app: [MainDestination] = [
+    static let homeItems: [MainDestination] = [.home, .dashboard, .music, .calendar]
+    static let appItems: [MainDestination] = [
         .extensions, .usage, .shortcuts, .general, .permissions, .icloud,
     ]
 
-    var usesPaperBackground: Bool { Self.home.contains(self) }
+    var usesPaperBackground: Bool { Self.homeItems.contains(self) }
 }
 
 enum Brand {
@@ -138,7 +140,7 @@ private struct SidebarNavRow: View {
 
 struct MainWindowView: View {
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
-        MainDestination.dashboard.rawValue
+        MainDestination.home.rawValue
     @AppStorage("mainSidebarOpen", store: SharedDefaults.store) private var sidebarOpen = true
     @AppStorage("mainSidebarWidth", store: SharedDefaults.store) private var sidebarWidth = 230.0
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
@@ -160,7 +162,7 @@ struct MainWindowView: View {
     }
 
     private var destination: MainDestination {
-        MainDestination(rawValue: mainWindowSection) ?? .dashboard
+        MainDestination(rawValue: mainWindowSection) ?? .home
     }
 
     var body: some View {
@@ -241,7 +243,7 @@ struct MainWindowView: View {
     private var sidebarList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(MainDestination.home) { item in
+                ForEach(MainDestination.homeItems) { item in
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme
                     ) {
@@ -254,7 +256,7 @@ struct MainWindowView: View {
                     .padding(.horizontal, 8)
                     .padding(.top, 14)
                     .padding(.bottom, 4)
-                ForEach(MainDestination.app) { item in
+                ForEach(MainDestination.appItems) { item in
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme
                     ) {
@@ -433,6 +435,7 @@ struct MainWindowView: View {
     @ViewBuilder
     private var detail: some View {
         switch destination {
+        case .home: HomePage()
         case .dashboard: DashboardView()
         case .music: MusicPage()
         case .calendar: CalendarPage()

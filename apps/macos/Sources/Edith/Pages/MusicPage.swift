@@ -399,7 +399,7 @@ struct SidebarMiniPlayer: View {
     @ObservedObject private var remote = MusicRemote.shared
     let width: Double
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
-        MainDestination.dashboard.rawValue
+        MainDestination.home.rawValue
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
         true

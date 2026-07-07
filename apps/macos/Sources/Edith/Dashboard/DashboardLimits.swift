@@ -108,7 +108,7 @@ struct LimitsCardView: View {
     @State private var range = "24h"
     @State private var selected: Date?
 
-    private let sessionC = DashPalette.color("#d97757")
+    private var sessionC: Color { DashSkin.accent(dark) }
     private let weeklyC = DashPalette.color("#c89b3c")
     private let ranges: [(String, TimeInterval?)] = [
         ("24h", 86400), ("7d", 7 * 86400), ("30d", 30 * 86400), ("All", nil),

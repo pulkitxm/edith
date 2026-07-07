@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ClipboardHistoryView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @State private var entries: [ClipboardEntry] = []
     @State private var filterText = ""
     @State private var refreshObserver: NSObjectProtocol?
@@ -90,7 +91,7 @@ struct ClipboardHistoryView: View {
                 togglePin(entry)
             } label: {
                 Image(systemName: entry.pinned ? "pin.fill" : "pin")
-                    .foregroundStyle(entry.pinned ? Color.accentColor : .secondary)
+                    .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
             }
             .buttonStyle(.plain).pointerCursor()
             Button(role: .destructive) {
