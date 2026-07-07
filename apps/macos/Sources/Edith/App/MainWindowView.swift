@@ -143,6 +143,7 @@ struct MainWindowView: View {
     @AppStorage("mainSidebarWidth", store: SharedDefaults.store) private var sidebarWidth = 230.0
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
     @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
+    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenterMode = false
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @ObservedObject private var musicRemote = MusicRemote.shared
     @State private var dragBaseWidth: Double?
@@ -220,16 +221,17 @@ struct MainWindowView: View {
         VStack(spacing: 0) {
             band(Color(nsColor: .windowBackgroundColor), height: bandHeight)
             VStack(spacing: 0) {
+                openPanelRow
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                Divider()
                 sidebarList
                 if footerVisible {
                     Divider()
                     sidebarFooter
                 }
-                Text("Made with ♥ by Pulkit")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 8)
+                credit
+                    .padding(.vertical, 8)
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
@@ -298,14 +300,21 @@ struct MainWindowView: View {
                 preventSleep.toggle()
             },
         ]
-        if clampedSidebarWidth < 220 {
-            VStack(spacing: 8) {
+        let presenterTile = quickActionTile(
+            icon: "theatermasks.fill", title: "Presenter mode", active: presenterMode,
+            help: "Blur sensitive numbers and track names everywhere in Edith"
+        ) {
+            presenterMode.toggle()
+        }
+        VStack(spacing: 8) {
+            if clampedSidebarWidth < 220 {
                 tiles[0]; tiles[1]
+            } else {
+                HStack(spacing: 8) {
+                    tiles[0]; tiles[1]
+                }
             }
-        } else {
-            HStack(spacing: 8) {
-                tiles[0]; tiles[1]
-            }
+            presenterTile
         }
     }
 
@@ -361,6 +370,45 @@ struct MainWindowView: View {
                             .onEnded { _ in dragBaseWidth = nil }
                     )
             }
+    }
+
+    private var openPanelRow: some View {
+        Button {
+            IPC.post(IPC.Name.openPanel)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "menubar.arrow.up.rectangle")
+                    .font(.system(size: 13))
+                    .frame(width: 20)
+                Text("Open Menu Bar Panel")
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(HoverButtonStyle())
+        .pointerCursor()
+        .help("Open the Edith panel from the menu bar")
+    }
+
+    private var credit: some View {
+        HStack(spacing: 3) {
+            Text("Made with ♥ by")
+                .foregroundStyle(.tertiary)
+            Button("Pulkit") {
+                NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
+            }
+            .buttonStyle(.plain)
+            .fontWeight(.semibold)
+            .foregroundStyle(theme)
+            .pointerCursor()
+            .help("pulkit.page")
+        }
+        .font(.system(size: 10))
+        .frame(maxWidth: .infinity)
     }
 
     private var permissionsPill: some View {

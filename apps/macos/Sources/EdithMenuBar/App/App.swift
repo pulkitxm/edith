@@ -128,6 +128,9 @@ struct EdithApp: App {
         _ = IPC.observe(IPC.Name.requestKeyboardClean) {
             services.system?.beginCleaning()
         }
+        _ = IPC.observe(IPC.Name.openPanel) {
+            showPanel()
+        }
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
         }
@@ -345,6 +348,15 @@ func togglePanel() {
     clickStatusItem()
 }
 
+func showPanel() {
+    guard
+        !NSApp.windows.contains(where: {
+            $0.className.contains("MenuBarExtraWindow") && $0.isVisible
+        })
+    else { return }
+    clickStatusItem()
+}
+
 private func firstButton(in view: NSView?) -> NSButton? {
     guard let view else { return nil }
     if let button = view as? NSButton { return button }
@@ -442,14 +454,24 @@ struct RootView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 10) {
-                Image(nsImage: Logo.header)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 19, height: 19)
-                Text("EDITH")
-                    .font(.system(size: 12, weight: .semibold))
-                    .tracking(3)
-                    .foregroundStyle(.secondary)
+                Button {
+                    MainApp.openDashboard()
+                    dismissPanel()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(nsImage: Logo.header)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 19, height: 19)
+                        Text("EDITH")
+                            .font(.system(size: 12, weight: .semibold))
+                            .tracking(3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(HoverButtonStyle())
+                .pointerCursor()
+                .help("Open the Edith app")
                 Spacer()
                 if tab == "music", musicEnabled {
                     Button {
