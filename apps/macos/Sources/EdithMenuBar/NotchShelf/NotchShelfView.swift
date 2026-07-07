@@ -45,14 +45,11 @@ struct NotchShelfContentView: View {
                                     index: index, in: geo.size))
                     }
                 }
-                if controller.isOptionHeld {
-                    ResizeEdges(controller: controller)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                }
+                ResizeEdges(controller: controller)
+                    .frame(width: geo.size.width, height: geo.size.height)
             }
             .coordinateSpace(name: "shelfCanvas")
         }
-        .onContinuousHover { _ in controller.refreshOptionState() }
         .background(.black, in: NotchShape(bottomRadius: 22))
     }
 }

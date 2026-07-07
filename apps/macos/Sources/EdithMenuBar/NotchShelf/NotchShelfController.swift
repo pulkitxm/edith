@@ -13,7 +13,6 @@ extension NSScreen {
 final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
-    @Published private(set) var isOptionHeld = false
     @Published private(set) var livePositions: [UUID: CGPoint] = [:]
     @Published private(set) var selectedIDs: Set<UUID> = []
 
@@ -25,7 +24,6 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     private var screenObserver: NSObjectProtocol?
     private var dragMonitor: Any?
-    private var flagsMonitors: [Any] = []
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
     private var pendingDragOutIDs: Set<UUID> = []
@@ -56,34 +54,11 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         ) { [weak self] event in
             Task { @MainActor in self?.handleGlobalMouse(event) }
         }
-        if let monitor = NSEvent.addGlobalMonitorForEvents(
-            matching: .flagsChanged,
-            handler: {
-                [weak self] event in
-                let held = event.modifierFlags.contains(.option)
-                Task { @MainActor in self?.isOptionHeld = held }
-            })
-        {
-            flagsMonitors.append(monitor)
-        }
-        if let monitor = NSEvent.addLocalMonitorForEvents(
-            matching: .flagsChanged,
-            handler: {
-                [weak self] event in
-                let held = event.modifierFlags.contains(.option)
-                Task { @MainActor in self?.isOptionHeld = held }
-                return event
-            })
-        {
-            flagsMonitors.append(monitor)
-        }
     }
 
     func shutdown() {
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
-        for monitor in flagsMonitors { NSEvent.removeMonitor(monitor) }
-        flagsMonitors.removeAll()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         collapseWorkItem?.cancel()
@@ -233,11 +208,6 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         updateAllFrames(animated: true)
     }
 
-    func refreshOptionState() {
-        let held = NSEvent.modifierFlags.contains(.option)
-        if held != isOptionHeld { isOptionHeld = held }
-    }
-
     func hoverChanged(_ hovering: Bool) {
         if hovering {
             guard openOnHover, optionSatisfied() else { return }
@@ -264,6 +234,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     func resizeExpanded(toPointer point: CGPoint, resizesWidth: Bool, resizesHeight: Bool) {
         guard isExpanded else { return }
+        collapseWorkItem?.cancel()
         let screen =
             NSScreen.screens.first { $0.frame.contains(point) }
             ?? NSScreen.screens.first { $0.displayID == builtinDisplayID }
