@@ -72,5 +72,7 @@ jobs:
         run: |
           test -f dist/Edith.app/Contents/MacOS/Edith
           test -f dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/MacOS/EdithMenuBar
+          test -f dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/Resources/AppIcon.icns
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/Info.plist | grep -qx Edith
           codesign --verify dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app
           codesign --verify dist/Edith.app

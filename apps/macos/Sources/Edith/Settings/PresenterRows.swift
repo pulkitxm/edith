@@ -79,7 +79,7 @@ struct PresenterRows: View {
                 Text("Auto detection")
             } footer: {
                 Text(
-                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for EdithMenuBar. Without it, detection falls back to coarser app + window position heuristics."
+                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics."
                 )
                 .font(.caption)
             }

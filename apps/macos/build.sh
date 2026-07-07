@@ -85,6 +85,7 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 mkdir -p "$HELPER/Contents/MacOS" "$HELPER/Contents/Resources"
 cp .build/release/EdithMenuBar "$HELPER/Contents/MacOS/"
 cp Resources/HelperInfo.plist "$HELPER/Contents/Info.plist"
+cp Resources/AppIcon.icns "$HELPER/Contents/Resources/"
 cp Resources/refresh-usage "$HELPER/Contents/Resources/"
 chmod +x "$HELPER/Contents/Resources/refresh-usage"
 # menu bar / header glyph: trim the icon's canvas margin, then scale
