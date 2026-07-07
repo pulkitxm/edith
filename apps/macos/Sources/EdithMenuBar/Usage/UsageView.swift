@@ -42,7 +42,7 @@ struct UsageView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { showDiagnostics.toggle() }
+                    showDiagnostics.toggle()
                 } label: {
                     Image(systemName: "terminal")
                         .font(.system(size: 11))
@@ -244,7 +244,7 @@ struct UsageView: View {
                 .disabled(store.updating)
                 .help("Refresh usage data")
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
+                    showLog.toggle()
                 } label: {
                     Image(systemName: "terminal")
                         .foregroundStyle(showLog ? theme : Color.secondary)

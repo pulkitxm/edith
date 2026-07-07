@@ -83,7 +83,6 @@ struct MusicPage: View {
     @StateObject private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @State private var search = ""
-    @State private var dragFraction: Double?
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
@@ -282,7 +281,7 @@ struct MusicPage: View {
         HStack(spacing: 10) {
             Text(TrackMeta.timeLabel(remote.elapsed))
                 .frame(width: 44, alignment: .leading)
-            scrubber
+            SeekBar(theme: theme)
             Text(TrackMeta.timeLabel(remote.duration))
                 .frame(width: 44, alignment: .trailing)
         }
@@ -291,14 +290,22 @@ struct MusicPage: View {
         .foregroundStyle(.secondary)
     }
 
-    private var scrubber: some View {
+}
+
+struct SeekBar: View {
+    @ObservedObject private var remote = MusicRemote.shared
+    let theme: Color
+    var height: CGFloat = 5
+    @State private var dragFraction: Double?
+
+    var body: some View {
         GeometryReader { geo in
             let fraction = dragFraction ?? remote.progress
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.1))
                 Capsule()
                     .fill(theme.opacity(0.85))
-                    .frame(width: max(3, geo.size.width * fraction))
+                    .frame(width: max(height, geo.size.width * fraction))
             }
             .contentShape(Rectangle().inset(by: -8))
             .gesture(
@@ -310,7 +317,7 @@ struct MusicPage: View {
                     }
             )
         }
-        .frame(height: 5)
+        .frame(height: height)
         .pointerCursor()
     }
 }
@@ -424,15 +431,7 @@ struct SidebarMiniPlayer: View {
                 .pointerCursor()
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     VStack(spacing: 4) {
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(.primary.opacity(0.1))
-                                Capsule()
-                                    .fill(theme.opacity(0.85))
-                                    .frame(width: max(2, geo.size.width * remote.progress))
-                            }
-                        }
-                        .frame(height: 3)
+                        SeekBar(theme: theme, height: 3)
                         HStack {
                             Text(TrackMeta.timeLabel(remote.elapsed))
                             Spacer()

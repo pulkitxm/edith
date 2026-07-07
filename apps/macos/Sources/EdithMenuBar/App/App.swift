@@ -98,6 +98,7 @@ struct EdithApp: App {
             guard let window = note.object as? NSWindow,
                 window.className.contains("MenuBarExtraWindow")
             else { return }
+            lastPanelDismiss = Date()
             Task { @MainActor in MiniPanel.shared.sync() }
         }
         HotKey.register()
@@ -129,7 +130,9 @@ struct EdithApp: App {
             services.system?.beginCleaning()
         }
         _ = IPC.observe(IPC.Name.openPanel) {
-            showPanel()
+            if Date().timeIntervalSince(lastPanelDismiss) > 0.5 {
+                showPanel()
+            }
         }
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
@@ -377,6 +380,8 @@ func centerPanelUnderIcon(_ panel: NSWindow) {
     panel.setFrameOrigin(NSPoint(x: x, y: panel.frame.origin.y))
 }
 
+private var lastPanelDismiss = Date.distantPast
+
 func dismissPanel() {
     if NSColorPanel.shared.isVisible { NSColorPanel.shared.close() }
     guard
@@ -384,6 +389,7 @@ func dismissPanel() {
             $0.className.contains("MenuBarExtraWindow") && $0.isVisible
         })
     else { return }
+    lastPanelDismiss = Date()
     clickStatusItem()
 }
 
