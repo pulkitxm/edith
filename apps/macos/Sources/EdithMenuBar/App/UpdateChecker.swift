@@ -16,24 +16,42 @@ func isNewerVersion(_ candidate: String, than current: String) -> Bool {
     return false
 }
 
-func parseLatestRelease(_ line: String) -> (tag: String, dmgURL: String?)? {
-    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    let fields = trimmed.split(separator: " ", maxSplits: 1).map(String.init)
-    guard let tag = fields.first, tag.hasPrefix("v") else { return nil }
-    let url = fields.count > 1 && !fields[1].isEmpty ? fields[1] : nil
-    return (tag, url)
+struct LatestRelease: Decodable {
+    struct Asset: Decodable {
+        let name: String
+        let browserDownloadURL: String
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case browserDownloadURL = "browser_download_url"
+        }
+    }
+
+    let tagName: String
+    let assets: [Asset]
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case assets
+    }
+
+    var dmgDownloadURL: URL? {
+        assets.first { $0.name.hasSuffix(".dmg") }
+            .flatMap { URL(string: $0.browserDownloadURL) }
+    }
 }
 
 @MainActor
 final class UpdateChecker: ObservableObject {
     static let shared = UpdateChecker()
 
-    static let repo = "pulkitxm/edith"
+    static let releasesRepo = "pulkitxm/edith-releases"
+    static let releasesPage = URL(string: "https://github.com/\(releasesRepo)/releases/latest")!
 
     @Published private(set) var availableTag: String?
     @Published private(set) var installing = false
 
+    private var dmgURL: URL?
     private var timer: Timer?
 
     var availableVersion: String? {
@@ -53,50 +71,42 @@ final class UpdateChecker: ObservableObject {
     }
 
     func check() async {
-        guard let gh = Self.ghExecutable() else { return }
-        let jq =
-            ".tag_name + \" \" + "
-            + "([.assets[]|select(.name|endswith(\".dmg\"))][0].browser_download_url // \"\")"
-        let args = ["api", "repos/\(Self.repo)/releases/latest", "--jq", jq]
+        var request = URLRequest(
+            url: URL(string: "https://api.github.com/repos/\(Self.releasesRepo)/releases/latest")!)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         guard
-            let out = await Self.run(gh, args),
-            let release = parseLatestRelease(out),
-            isNewerVersion(release.tag, than: currentVersion)
+            let (data, response) = try? await URLSession.shared.data(for: request),
+            (response as? HTTPURLResponse)?.statusCode == 200,
+            let release = try? JSONDecoder().decode(LatestRelease.self, from: data),
+            isNewerVersion(release.tagName, than: currentVersion)
         else { return }
-        availableTag = release.tag
-        notifyOnce(release.tag)
+        availableTag = release.tagName
+        dmgURL = release.dmgDownloadURL
+        notifyOnce(release.tagName)
     }
 
     func downloadAndOpen() {
         guard let tag = availableTag, !installing else { return }
+        guard let dmgURL else {
+            NSWorkspace.shared.open(Self.releasesPage)
+            return
+        }
         installing = true
         Task {
             defer { installing = false }
-            guard let gh = Self.ghExecutable() else {
-                NSWorkspace.shared.open(
-                    URL(string: "https://github.com/\(Self.repo)/releases/latest")!)
+            guard let (downloaded, _) = try? await URLSession.shared.download(from: dmgURL) else {
+                NSWorkspace.shared.open(Self.releasesPage)
                 return
             }
-            let dir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("edith-update-\(tag)")
-            try? FileManager.default.removeItem(at: dir)
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            guard
-                await Self.run(
-                    gh,
-                    [
-                        "release", "download", tag, "-R", Self.repo,
-                        "-p", "*.dmg", "-D", dir.path,
-                    ]) != nil,
-                let dmg = try? FileManager.default.contentsOfDirectory(
-                    at: dir, includingPropertiesForKeys: nil
-                ).first(where: { $0.pathExtension == "dmg" })
-            else {
-                NSWorkspace.shared.open(
-                    URL(string: "https://github.com/\(Self.repo)/releases/latest")!)
-                return
+            let dmg = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Edith-\(tag).dmg")
+            try? FileManager.default.removeItem(at: dmg)
+            do {
+                try FileManager.default.moveItem(at: downloaded, to: dmg)
+                NSWorkspace.shared.open(dmg)
+            } catch {
+                NSWorkspace.shared.open(Self.releasesPage)
             }
-            NSWorkspace.shared.open(dmg)
         }
     }
 
@@ -115,41 +125,6 @@ final class UpdateChecker: ObservableObject {
             try? await center.add(
                 UNNotificationRequest(
                     identifier: "edith-update-\(tag)", content: content, trigger: nil))
-        }
-    }
-
-    private nonisolated static func ghExecutable() -> URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return [
-            "/opt/homebrew/bin/gh", "/usr/local/bin/gh", "\(home)/.local/bin/gh",
-        ]
-        .map { URL(fileURLWithPath: $0) }
-        .first { FileManager.default.isExecutableFile(atPath: $0.path) }
-    }
-
-    private nonisolated static func run(_ tool: URL, _ arguments: [String]) async -> String? {
-        await withCheckedContinuation { continuation in
-            let p = Process()
-            p.executableURL = tool
-            p.arguments = arguments
-            p.qualityOfService = .utility
-            let out = Pipe()
-            p.standardOutput = out
-            p.standardError = Pipe()
-            p.terminationHandler = { proc in
-                guard proc.terminationStatus == 0 else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                let data = out.fileHandleForReading.readDataToEndOfFile()
-                continuation.resume(returning: String(data: data, encoding: .utf8))
-            }
-            do {
-                try p.run()
-            } catch {
-                p.terminationHandler = nil
-                continuation.resume(returning: nil)
-            }
         }
     }
 }

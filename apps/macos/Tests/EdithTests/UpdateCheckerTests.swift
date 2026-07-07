@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import EdithMenuBar
@@ -17,20 +18,28 @@ import Testing
         #expect(!isNewerVersion("garbage", than: "1.7.0"))
     }
 
-    @Test func releaseLineParses() {
-        let parsed = parseLatestRelease("v1.8.0 https://example.com/Edith-v1.8.0.dmg\n")
-        #expect(parsed?.tag == "v1.8.0")
-        #expect(parsed?.dmgURL == "https://example.com/Edith-v1.8.0.dmg")
+    @Test func releaseJSONDecodes() throws {
+        let json = """
+            {
+              "tag_name": "v1.9.0",
+              "assets": [
+                {"name": "notes.txt", "browser_download_url": "https://example.com/notes.txt"},
+                {"name": "Edith-v1.9.0.dmg",
+                 "browser_download_url": "https://example.com/Edith-v1.9.0.dmg"}
+              ]
+            }
+            """
+        let release = try JSONDecoder().decode(LatestRelease.self, from: Data(json.utf8))
+        #expect(release.tagName == "v1.9.0")
+        #expect(release.dmgDownloadURL?.absoluteString == "https://example.com/Edith-v1.9.0.dmg")
     }
 
-    @Test func releaseLineWithoutAssetParses() {
-        let parsed = parseLatestRelease("v1.8.0")
-        #expect(parsed?.tag == "v1.8.0")
-        #expect(parsed?.dmgURL == nil)
-    }
-
-    @Test func malformedReleaseLinesAreRejected() {
-        #expect(parseLatestRelease("") == nil)
-        #expect(parseLatestRelease("not-a-tag something") == nil)
+    @Test func releaseWithoutDMGHasNoDownloadURL() throws {
+        let json = """
+            {"tag_name": "v1.9.0", "assets": []}
+            """
+        let release = try JSONDecoder().decode(LatestRelease.self, from: Data(json.utf8))
+        #expect(release.tagName == "v1.9.0")
+        #expect(release.dmgDownloadURL == nil)
     }
 }

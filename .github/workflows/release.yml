@@ -37,3 +37,16 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" --title "Edith ${GITHUB_REF_NAME}" --generate-notes \
             "Edith-${GITHUB_REF_NAME}.dmg" \
           || gh release upload "${GITHUB_REF_NAME}" "Edith-${GITHUB_REF_NAME}.dmg" --clobber
+      - name: Mirror to public releases repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "RELEASES_TOKEN secret not set - public mirror skipped" >&2
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" -R pulkitxm/edith-releases \
+            --title "Edith ${GITHUB_REF_NAME}" --notes "Edith ${GITHUB_REF_NAME}" \
+            "Edith-${GITHUB_REF_NAME}.dmg" \
+          || gh release upload "${GITHUB_REF_NAME}" -R pulkitxm/edith-releases \
+            "Edith-${GITHUB_REF_NAME}.dmg" --clobber

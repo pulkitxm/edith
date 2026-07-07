@@ -68,9 +68,12 @@ Bump `CFBundleShortVersionString` in `apps/macos/Resources/Info.plist` and
 git tag v1.8.0 && git push origin v1.8.0
 ```
 
-The Release workflow builds `Edith-v1.8.0.dmg` (drag-to-Applications layout)
-and attaches it to the GitHub release. The menu bar app checks the latest
-release every six hours via the `gh` CLI (the repo is private, so an
-authenticated `gh` is required on the machine); when a newer version exists
-it shows an update pill in the panel header and a one-time notification, and
-clicking the pill downloads the DMG and opens it.
+The Release workflow builds `Edith-v1.8.0.dmg` (drag-to-Applications layout),
+attaches it to the GitHub release here, and mirrors it to the public
+[edith-releases](https://github.com/pulkitxm/edith-releases) repo (needs a
+`RELEASES_TOKEN` repo secret: a fine-grained PAT with contents write access
+to edith-releases). The menu bar app checks the public repo's latest release
+every six hours over plain HTTPS - no GitHub auth needed on user machines;
+when a newer version exists it shows an update pill in the panel header and
+a one-time notification, and clicking the pill downloads the DMG and opens
+it.
