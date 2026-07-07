@@ -65,8 +65,6 @@ enum MainWindow {
         w.title = "Edith"
         w.titleVisibility = .hidden
         w.titlebarAppearsTransparent = true
-        w.toolbar = NSToolbar()
-        w.toolbarStyle = .unified
         w.titlebarSeparatorStyle = .none
         w.isReleasedWhenClosed = false
         w.center()

@@ -432,20 +432,35 @@ struct _WrapLayout: Layout {
     func placeSubviews(
         in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void
     ) {
-        var x: CGFloat = bounds.minX
         var y: CGFloat = bounds.minY
+        var line: [(view: LayoutSubviews.Element, size: CGSize)] = []
+        var lineWidth: CGFloat = 0
         var lineHeight: CGFloat = 0
+
+        func flushLine() {
+            var x = bounds.minX
+            for entry in line {
+                entry.view.place(
+                    at: CGPoint(x: x, y: y + (lineHeight - entry.size.height) / 2),
+                    proposal: .unspecified)
+                x += entry.size.width + spacing
+            }
+            y += lineHeight + lineSpacing
+            line = []
+            lineWidth = 0
+            lineHeight = 0
+        }
+
         for view in subviews {
             let size = view.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += lineHeight + lineSpacing
-                lineHeight = 0
+            if lineWidth + size.width > bounds.width, !line.isEmpty {
+                flushLine()
             }
-            view.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-            x += size.width + spacing
+            line.append((view, size))
+            lineWidth += size.width + spacing
             lineHeight = max(lineHeight, size.height)
         }
+        flushLine()
     }
 }
 

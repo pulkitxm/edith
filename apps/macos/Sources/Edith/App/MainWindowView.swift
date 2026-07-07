@@ -206,7 +206,7 @@ struct MainWindowView: View {
             band(
                 destination.usesPaperBackground
                     ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor),
-                height: sidebarOpen ? 28 : bandHeight)
+                height: bandHeight)
             detail
                 .tint(theme)
         }
@@ -221,15 +221,15 @@ struct MainWindowView: View {
         VStack(spacing: 0) {
             band(Color(nsColor: .windowBackgroundColor), height: bandHeight)
             VStack(spacing: 0) {
+                openPanelRow
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                Divider()
                 sidebarList
                 if footerVisible {
                     Divider()
                     sidebarFooter
                 }
-                Divider()
-                openPanelRow
-                    .padding(.horizontal, 10)
-                    .padding(.top, 8)
                 credit
                     .padding(.vertical, 8)
             }
