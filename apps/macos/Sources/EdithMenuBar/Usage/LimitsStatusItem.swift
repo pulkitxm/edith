@@ -31,7 +31,7 @@ final class LimitsStatusItem {
         }
         let masked =
             PresenterState.shared.active
-            && (SharedDefaults.store.object(forKey: "presenterHideMenuBarNumbers") as? Bool ?? true)
+            && (SharedDefaults.store.object(forKey: "presenterHideMenuBarNumbers") as? Bool ?? false)
         segment("5h", window: session, kind: .session, into: title, masked: masked)
         title.append(NSAttributedString(string: "  "))
         segment("7d", window: week, kind: .weekly, into: title, masked: masked)

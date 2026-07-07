@@ -11,7 +11,7 @@ struct PresenterRows: View {
         true
     @AppStorage("presenterAutoEnabled", store: SharedDefaults.store) private var autoEnabled = false
     @AppStorage("presenterHideMenuBarNumbers", store: SharedDefaults.store)
-    private var hideMenuBarNumbers = true
+    private var hideMenuBarNumbers = false
     @AppStorage("presenterDetectRecording", store: SharedDefaults.store)
     private var detectRecording = true
     @AppStorage("presenterDetectScreenSharing", store: SharedDefaults.store)
