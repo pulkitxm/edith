@@ -162,12 +162,12 @@ private struct HomeHeader: View {
             let now = context.date
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 0) {
-                        Text("\(salutation(now)), ").foregroundStyle(DashSkin.ink(dark))
-                        Text(firstName).italic().foregroundStyle(DashSkin.accentDeep(dark))
-                        Text(".").foregroundStyle(DashSkin.ink(dark))
-                    }
-                    .font(DashSkin.serif(40))
+                    (Text("\(salutation(now)), ")
+                        + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
+                        + Text("."))
+                        .font(DashSkin.serif(40))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(
                         now.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
                             .uppercased()
