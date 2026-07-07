@@ -22,4 +22,15 @@ import Testing
         defer { SharedDefaults.store.removeObject(forKey: probe) }
         #expect(AppServices.tabEnabled(probe))
     }
+
+    @Test func featureDefaultsToOffWhenUnset() {
+        SharedDefaults.store.removeObject(forKey: probe)
+        #expect(!AppServices.featureOffByDefault(probe))
+    }
+
+    @Test func featureRespectsExplicitEnable() {
+        SharedDefaults.store.set(true, forKey: probe)
+        defer { SharedDefaults.store.removeObject(forKey: probe) }
+        #expect(AppServices.featureOffByDefault(probe))
+    }
 }

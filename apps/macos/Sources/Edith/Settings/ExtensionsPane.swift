@@ -161,6 +161,15 @@ private struct SystemRows: View {
     }
 }
 
+func movedTabOrder(_ order: [String], from: Int, by delta: Int) -> [String] {
+    guard order.indices.contains(from) else { return order }
+    let to = max(0, min(order.count - 1, from + delta))
+    guard to != from else { return order }
+    var next = order
+    next.insert(next.remove(at: from), at: to)
+    return next
+}
+
 private struct PanelTabsSection: View {
     @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
         "usage,music,system"
@@ -281,13 +290,11 @@ private struct PanelTabsSection: View {
             NSCursor.arrow.set()
         }
         guard let dragging = draggingTab else { return }
-        var order = orderedIDs
+        let order = orderedIDs
         guard let from = order.firstIndex(of: dragging) else { return }
-        let to = max(0, min(order.count - 1, from + projectedDelta))
-        guard to != from else { return }
-        let item = order.remove(at: from)
-        order.insert(item, at: to)
-        tabOrderRaw = order.joined(separator: ",")
+        let next = movedTabOrder(order, from: from, by: projectedDelta)
+        guard next != order else { return }
+        tabOrderRaw = next.joined(separator: ",")
     }
 
     private func binding(for id: String) -> Binding<Bool> {
