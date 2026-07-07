@@ -12,6 +12,7 @@ public final class CalendarStore: ObservableObject, FeatureModule {
     private let store = EKEventStore()
     private var changeObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    private var refreshDebounce: Task<Void, Never>?
 
     public init() {
         authStatus = EKEventStore.authorizationStatus(for: .event)
@@ -19,16 +20,27 @@ public final class CalendarStore: ObservableObject, FeatureModule {
         changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged, object: store, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in self?.scheduleRefresh() }
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in self?.scheduleRefresh() }
+        }
+    }
+
+    private func scheduleRefresh() {
+        refreshDebounce?.cancel()
+        refreshDebounce = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.refresh()
         }
     }
 
     public func shutdown() {
+        refreshDebounce?.cancel()
+        refreshDebounce = nil
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         changeObserver = nil

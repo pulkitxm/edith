@@ -58,12 +58,15 @@ final class PermissionsModel: ObservableObject {
 
     private func mirrorToSharedDefaults() {
         let d = SharedDefaults.store
-        d.set(calendar, forKey: "permCalendarGranted")
-        d.set(notifications, forKey: "permNotificationsGranted")
-        d.set(accessibility, forKey: "permAccessibilityGranted")
-        d.set(inputMonitoring, forKey: "permInputMonitoringGranted")
-        d.set(fullDisk, forKey: "permFullDiskGranted")
-        d.set(screenRecording, forKey: "permScreenRecordingGranted")
+        func setIfChanged(_ value: Bool, _ key: String) {
+            if d.object(forKey: key) as? Bool != value { d.set(value, forKey: key) }
+        }
+        setIfChanged(calendar, "permCalendarGranted")
+        setIfChanged(notifications, "permNotificationsGranted")
+        setIfChanged(accessibility, "permAccessibilityGranted")
+        setIfChanged(inputMonitoring, "permInputMonitoringGranted")
+        setIfChanged(fullDisk, "permFullDiskGranted")
+        setIfChanged(screenRecording, "permScreenRecordingGranted")
     }
 
     var needsAttention: Bool {

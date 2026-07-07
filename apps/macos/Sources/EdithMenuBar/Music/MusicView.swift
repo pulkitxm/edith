@@ -53,7 +53,7 @@ struct MusicView: View {
     private var nowPlayingBar: some View {
         VStack(spacing: 10) {
             if player.current != nil {
-                if mini.panelOpen {
+                if mini.panelOpen, player.isPlaying {
                     TimelineView(.periodic(from: .now, by: 0.5)) { _ in scrubberRow }
                 } else {
                     scrubberRow

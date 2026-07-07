@@ -235,10 +235,50 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
   '
 
   : >"$TMP/walk.jsonl"
+  WCACHE="$HOME/Library/Application Support/Edith/.walkcache"
+  mkdir -p "$WCACHE"
+  find "$WCACHE" -type f -mtime +45 -delete 2>/dev/null || true
+  WVER=$(md5 -q -s "$WALK" 2>/dev/null || echo v1)
   walk_dir() {
     [ -d "$1" ] || return 0
-    find "$1" -name '*.jsonl' -print0 2>/dev/null | xargs -0 cat 2>/dev/null \
-      | jq -c --argjson off "$OFF" --arg src "$2" "$WALK" >>"$TMP/walk.jsonl" 2>/dev/null || true
+    WALK_DIR="$1" WALK_SRC="$2" WALK_OFF="$OFF" WALK_VER="$WVER" \
+      WALK_CACHE="$WCACHE" WALK_OUT="$TMP/walk.jsonl" WALK_PROG="$WALK" \
+      perl -e '
+      use File::Find;
+      use Digest::MD5 qw(md5_hex);
+      open(STDERR, ">", "/dev/null");
+      my ($dir, $src, $off, $ver, $cache, $out, $prog) =
+        @ENV{qw(WALK_DIR WALK_SRC WALK_OFF WALK_VER WALK_CACHE WALK_OUT WALK_PROG)};
+      open(my $ofh, ">>", $out) or exit 0;
+      my @files;
+      find(sub { push @files, $File::Find::name if /\.jsonl$/ }, $dir);
+      for my $f (@files) {
+        my ($size, $mtime) = (stat($f))[7, 9];
+        next unless defined $size;
+        my $cf = "$cache/" . md5_hex("$f|$src");
+        my $meta = "#$mtime $size $off $ver";
+        if (open(my $ch, "<", $cf)) {
+          my $first = <$ch> // "";
+          chomp $first;
+          if ($first eq $meta) {
+            print {$ofh} $_ while <$ch>;
+            close $ch;
+            utime undef, undef, $cf;
+            next;
+          }
+          close $ch;
+        }
+        open(my $cw, ">", "$cf.tmp") or next;
+        print {$cw} "$meta\n";
+        if (open(my $jq, "-|", "jq", "-c", "--argjson", "off", $off,
+            "--arg", "src", $src, $prog, $f)) {
+          while (<$jq>) { print {$cw} $_; print {$ofh} $_; }
+          close $jq;
+        }
+        close $cw;
+        rename "$cf.tmp", $cf;
+      }
+    ' 2>/dev/null || true
   }
   NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
   printf '  · walking %s transcript files…\n' "$NFILES"
@@ -262,8 +302,15 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
     'unique_by(.id) | map(. + {cost: (.tok * (($r[0][.date][.model]) // 0))})' \
     "$TMP/records.jsonl" >"$TMP/recs.json"
 
-  : >"$TMP/cwdmap.jsonl"
-  jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | while IFS= read -r cwd; do
+  CWDMAP_CACHE="$HOME/Library/Application Support/Edith/.cwdmap.jsonl"
+  touch "$CWDMAP_CACHE"
+  jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | sort >"$TMP/cwds.txt"
+  jq -c --rawfile want "$TMP/cwds.txt" \
+    '($want | split("\n") | map(select(. != "")) | map({(.): true}) | add // {}) as $W
+     | select($W[.cwd])' \
+    "$CWDMAP_CACHE" >"$TMP/cwdmap.jsonl" 2>/dev/null || : >"$TMP/cwdmap.jsonl"
+  jq -r '.cwd' "$TMP/cwdmap.jsonl" | sort -u >"$TMP/cwds-have.txt"
+  comm -23 "$TMP/cwds.txt" "$TMP/cwds-have.txt" | while IFS= read -r cwd; do
     name=""
     case "$cwd" in
       */local-agent-mode-sessions/*) name="Cowork" ;;
@@ -293,6 +340,10 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
     [ -n "$name" ] || name=$(basename "$cwd")
     jq -cn --arg c "$cwd" --arg n "$name" '{cwd: $c, name: $n}' >>"$TMP/cwdmap.jsonl"
   done
+  jq -c --rawfile have "$TMP/cwds-have.txt" \
+    '($have | split("\n") | map(select(. != "")) | map({(.): true}) | add // {}) as $H
+     | select($H[.cwd] | not)' \
+    "$TMP/cwdmap.jsonl" >>"$CWDMAP_CACHE" 2>/dev/null || true
   _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
 
   jq \

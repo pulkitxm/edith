@@ -90,9 +90,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
 
     private func startSaveTimer() {
         guard saveTimer == nil else { return }
-        saveTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.persistPlayback() }
         }
+        saveTimer?.tolerance = 5
     }
 
     private func stopSaveTimer() {
@@ -275,6 +276,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     func seek(to fraction: Double) {
         guard let p = player, p.duration > 0 else { return }
         p.currentTime = min(max(fraction, 0), 0.999) * p.duration
+        objectWillChange.send()
         updateNowPlaying()
         persistPlayback()
         broadcastState()

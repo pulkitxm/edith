@@ -31,6 +31,6 @@ public final class DashboardRefreshBridge: ObservableObject {
     }
 
     private func reloadLog() {
-        log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        log = FileTail.read(logURL, maxBytes: 64 * 1024)
     }
 }

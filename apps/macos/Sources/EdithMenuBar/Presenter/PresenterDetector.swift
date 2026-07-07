@@ -121,7 +121,7 @@ final class PresenterDetector: FeatureModule {
         }
         guard windowScanTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: 2, leeway: .seconds(1))
+        timer.schedule(deadline: .now(), repeating: 3, leeway: .seconds(1))
         timer.setEventHandler { [weak self] in
             MainActor.assumeIsolated { self?.scanWindows() }
         }
@@ -130,9 +130,10 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func startSessionTimer() {
-        sessionTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick10s() }
+        sessionTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickSession() }
         }
+        sessionTimer?.tolerance = 5
     }
 
     private func scanWindows() {
@@ -148,7 +149,7 @@ final class PresenterDetector: FeatureModule {
         evaluate()
     }
 
-    private func tick10s() {
+    private func tickSession() {
         let detectSharing =
             SharedDefaults.store.object(forKey: "presenterDetectScreenSharing") as? Bool ?? true
         sharingHit = detectSharing && Self.isRemoteSessionActive()
@@ -213,18 +214,25 @@ final class PresenterDetector: FeatureModule {
     }
 
     private static func isProcessRunning(named target: String) -> Bool {
-        let size = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-        guard size > 0 else { return false }
-        var pids = [pid_t](repeating: 0, count: Int(size) / MemoryLayout<pid_t>.size)
-        let actual = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, size)
-        guard actual > 0 else { return false }
-        let count = Int(actual) / MemoryLayout<pid_t>.size
-        for pid in pids.prefix(count) where pid > 0 {
-            var buffer = [CChar](repeating: 0, count: 64)
-            let len = proc_name(pid, &buffer, UInt32(buffer.count))
-            if len > 0, String(cString: buffer) == target { return true }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
+        var size = 0
+        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return false }
+        size += size / 8
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 4, &buffer, &size, nil, 0) == 0 else { return false }
+        let stride = MemoryLayout<kinfo_proc>.stride
+        let count = size / stride
+        return buffer.withUnsafeBytes { raw in
+            let procs = raw.bindMemory(to: kinfo_proc.self)
+            for i in 0..<count {
+                var comm = procs[i].kp_proc.p_comm
+                let name = withUnsafeBytes(of: &comm) { bytes in
+                    String(decoding: bytes.prefix(while: { $0 != 0 }), as: UTF8.self)
+                }
+                if name == target { return true }
+            }
+            return false
         }
-        return false
     }
 
     private static func isRemoteSessionActive() -> Bool {

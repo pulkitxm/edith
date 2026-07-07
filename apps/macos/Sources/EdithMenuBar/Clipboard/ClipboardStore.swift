@@ -52,9 +52,12 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
             Task { @MainActor in self?.restartTimerIfIntervalChanged() }
         }
-        clipboardChangedObserver = IPC.observe(IPC.Name.clipboardChanged) { [weak self] in
-            Task { @MainActor in self?.entries = ClipboardRepository.loadEntries() }
-        }
+        clipboardChangedObserver = IPC.observe(
+            IPC.Name.clipboardChanged,
+            info: { [weak self] info in
+                guard info["sender"] as? String != Self.senderID else { return }
+                Task { @MainActor in self?.entries = ClipboardRepository.loadEntries() }
+            })
 
         startTimer()
     }
@@ -206,10 +209,14 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private static let senderID =
+        "clipboardStore-\(ProcessInfo.processInfo.processIdentifier)"
+
+    private func postChanged() {
+        IPC.post(IPC.Name.clipboardChanged, userInfo: ["sender": Self.senderID])
+    }
+
     private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
-        let known = Set(entries.map(\.id))
-        let onDiskOnly = ClipboardRepository.loadEntries().filter { !known.contains($0.id) }
-        entries.insert(contentsOf: onDiskOnly, at: 0)
         let beforeRetention = entries.count
         let maxItems = SharedDefaults.store.object(forKey: "clipboardMaxItems") as? Int ?? 200
         let maxAgeDays = SharedDefaults.store.object(forKey: "clipboardMaxAgeDays") as? Int ?? 0
@@ -217,15 +224,14 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
         let removedAny = entries.count != beforeRetention
         let appendedFastPath =
-            appended != nil && onDiskOnly.isEmpty && !removedAny
-            && ClipboardRepository.appendEntry(appended!)
+            appended != nil && !removedAny && ClipboardRepository.appendEntry(appended!)
         if !appendedFastPath {
             try? ClipboardRepository.saveEntries(entries)
         }
         if removedAny {
             ClipboardRepository.pruneOrphanBlobs(keeping: entries)
         }
-        IPC.post(IPC.Name.clipboardChanged)
+        postChanged()
     }
 
     func togglePin(_ id: String) {
@@ -233,7 +239,7 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         entries[index].pinned.toggle()
         try? ClipboardRepository.saveEntries(entries)
         SettingsBackup.shared.scheduleClipboardBackup()
-        IPC.post(IPC.Name.clipboardChanged)
+        postChanged()
     }
 
     func clear(includingPinned: Bool = false) {
@@ -241,14 +247,14 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         try? ClipboardRepository.saveEntries(entries)
         ClipboardRepository.pruneOrphanBlobs(keeping: entries)
         SettingsBackup.shared.scheduleClipboardBackup()
-        IPC.post(IPC.Name.clipboardChanged)
+        postChanged()
     }
 
     func delete(_ id: String) {
         entries.removeAll { $0.id == id }
         try? ClipboardRepository.saveEntries(entries)
         ClipboardRepository.pruneOrphanBlobs(keeping: entries)
-        IPC.post(IPC.Name.clipboardChanged)
+        postChanged()
     }
 
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {

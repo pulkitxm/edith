@@ -204,7 +204,11 @@ struct MusicPage: View {
     private var nowPlayingBar: some View {
         VStack(spacing: 10) {
             if remote.current != nil {
-                TimelineView(.periodic(from: .now, by: 0.5)) { _ in scrubberRow }
+                if remote.isPlaying {
+                    TimelineView(.periodic(from: .now, by: 0.5)) { _ in scrubberRow }
+                } else {
+                    scrubberRow
+                }
             }
             HStack(spacing: 12) {
                 if let track = remote.current {
@@ -414,6 +418,20 @@ struct SidebarMiniPlayer: View {
 
     private var theme: Color { themeColor(themeName) }
 
+    private var progressRows: some View {
+        VStack(spacing: 4) {
+            SeekBar(theme: theme, height: 3)
+            HStack {
+                Text(TrackMeta.timeLabel(remote.elapsed))
+                Spacer()
+                Text(TrackMeta.timeLabel(remote.duration))
+            }
+            .font(.system(size: 9))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+        }
+    }
+
     var body: some View {
         if let track = remote.current {
             VStack(spacing: 7) {
@@ -429,18 +447,10 @@ struct SidebarMiniPlayer: View {
                 .contentShape(Rectangle())
                 .onTapGesture { mainWindowSection = MainDestination.music.rawValue }
                 .pointerCursor()
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    VStack(spacing: 4) {
-                        SeekBar(theme: theme, height: 3)
-                        HStack {
-                            Text(TrackMeta.timeLabel(remote.elapsed))
-                            Spacer()
-                            Text(TrackMeta.timeLabel(remote.duration))
-                        }
-                        .font(.system(size: 9))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                    }
+                if remote.isPlaying {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in progressRows }
+                } else {
+                    progressRows
                 }
                 HStack(spacing: 10) {
                     Button {

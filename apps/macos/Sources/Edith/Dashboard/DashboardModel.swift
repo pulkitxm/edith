@@ -12,21 +12,27 @@ enum DashPalette {
     ]
     static let other = "#b8b0a4"
 
+    static let lightColors = lightCat.map(color)
+    static let darkColors = darkCat.map(color)
+    static let otherColor = color(other)
+    static let slateLight = color("#2f4858")
+    static let slateDark = color("#7ea7be")
+
     static func cat(_ dark: Bool) -> [String] { dark ? darkCat : lightCat }
-    static func slate(_ dark: Bool) -> Color { color(dark ? "#7ea7be" : "#2f4858") }
+    static func slate(_ dark: Bool) -> Color { dark ? slateDark : slateLight }
 
     static func categorical(_ index: Int, dark: Bool) -> Color {
-        let c = cat(dark)
-        return color(c[((index % c.count) + c.count) % c.count])
+        let c = dark ? darkColors : lightColors
+        return c[((index % c.count) + c.count) % c.count]
     }
 
     static func modelColor(_ index: Int?, dark: Bool) -> Color {
-        guard let index else { return color(other) }
+        guard let index else { return otherColor }
         return categorical(index, dark: dark)
     }
 
     static func sourceColor(_ index: Int?, dark: Bool) -> Color {
-        guard let index else { return color(other) }
+        guard let index else { return otherColor }
         return index == 0 ? slate(dark) : categorical(index - 1, dark: dark)
     }
 
@@ -327,6 +333,9 @@ final class DashboardModel: ObservableObject {
     private var sourceIndex: [String: Int] = [:]
 
     private var data: DashUsage?
+    private var sortedPeriods: [String] = []
+    private var ingestStamp = 0
+    private var calendarKey = ""
     private var mtime: Date?
     private var dataDirWatch: DispatchSourceFileSystemObject?
     private var reloadDebounce: Task<Void, Never>?
@@ -402,6 +411,8 @@ final class DashboardModel: ObservableObject {
 
     func ingest(_ parsed: DashUsage) {
         data = parsed
+        sortedPeriods = parsed.daily.map(\.period).sorted()
+        ingestStamp += 1
         let srcIds = (parsed.sources ?? []).filter { id in
             parsed.daily.contains { ($0.bySource?[id]?.isEmpty == false) }
         }
@@ -522,17 +533,17 @@ final class DashboardModel: ObservableObject {
     private func ymdStr(_ d: Date) -> String { Self.ymd.string(from: d) }
 
     var dataRange: ClosedRange<Date>? {
-        guard let data, !data.daily.isEmpty else { return nil }
-        let periods = data.daily.map(\.period).sorted()
-        guard let e = parseYMD(periods.first!), let l = parseYMD(periods.last!) else { return nil }
+        guard let first = sortedPeriods.first, let last = sortedPeriods.last,
+            let e = parseYMD(first), let l = parseYMD(last)
+        else { return nil }
         return e...l
     }
 
     func ymd(_ d: Date) -> String { ymdStr(d) }
 
     private func rebuildCycles() {
-        guard let data else { return }
-        let periods = data.daily.map(\.period).sorted()
+        guard data != nil else { return }
+        let periods = sortedPeriods
         guard let first = periods.first, let last = periods.last,
             let earliest = parseYMD(first), let latest = parseYMD(last)
         else {
@@ -575,13 +586,22 @@ final class DashboardModel: ObservableObject {
         return cal.date(byAdding: .day, value: -1, to: a) ?? start
     }
 
-    private func cycleLabel(_ start: Date, _ end: Date) -> String {
+    private static let dayMonthFmt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "d MMM"
-        let yf = DateFormatter()
-        yf.locale = Locale(identifier: "en_US_POSIX")
-        yf.dateFormat = "yyyy"
+        return f
+    }()
+    private static let yearFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy"
+        return f
+    }()
+
+    private func cycleLabel(_ start: Date, _ end: Date) -> String {
+        let f = Self.dayMonthFmt
+        let yf = Self.yearFmt
         let sameYear = yf.string(from: start) == yf.string(from: end)
         let left =
             sameYear ? f.string(from: start) : "\(f.string(from: start)) \(yf.string(from: start))"
@@ -589,11 +609,9 @@ final class DashboardModel: ObservableObject {
     }
 
     private func window() -> (from: Date, to: Date)? {
-        guard let data, !data.daily.isEmpty else { return nil }
-        let periods = data.daily.map(\.period).sorted()
-        guard let earliest = parseYMD(periods.first!), let latest = parseYMD(periods.last!) else {
-            return nil
-        }
+        guard let first = sortedPeriods.first, let last = sortedPeriods.last,
+            let earliest = parseYMD(first), let latest = parseYMD(last)
+        else { return nil }
         switch range {
         case .all: return (earliest, latest)
         case .today: return (latest, latest)
@@ -721,7 +739,13 @@ final class DashboardModel: ObservableObject {
 
         buildKPIs(rows: rows, totalCost: totalCost)
         buildMeta(from: fromStr, to: toStr)
-        buildCalendar(data: data)
+        let key =
+            "\(selectedSources.sorted().joined(separator: ","))|"
+            + "\(selectedModels.sorted().joined(separator: ","))|\(ingestStamp)"
+        if key != calendarKey {
+            calendarKey = key
+            buildCalendar(data: data)
+        }
         rebuildChartData()
     }
 
@@ -1077,7 +1101,7 @@ final class DashboardModel: ObservableObject {
         heatDetail = detail
 
         var day = today
-        if let first = data.daily.map(\.period).min(), let firstDate = parseYMD(first) {
+        if let first = sortedPeriods.first, let firstDate = parseYMD(first) {
             let start = cal.startOfDay(for: firstDate)
             let dow = (cal.component(.weekday, from: start) + 5) % 7
             day = cal.date(byAdding: .day, value: -dow, to: start) ?? start

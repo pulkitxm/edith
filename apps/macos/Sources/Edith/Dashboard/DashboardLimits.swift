@@ -44,6 +44,20 @@ enum DashLimits {
         return out.sorted { $0.t < $1.t }
     }
 
+    static func loadLatest() -> DashLimitPoint? {
+        let text = FileTail.read(LimitsHistory.url, maxBytes: 8192)
+        let dec = JSONDecoder()
+        for line in text.split(separator: "\n").reversed() {
+            guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
+                let t = EdithDate.parseISO(r.ts)
+            else { continue }
+            return DashLimitPoint(
+                t: t, s: r.s, w: r.w,
+                sr: r.sr.flatMap(EdithDate.parseISO), wr: r.wr.flatMap(EdithDate.parseISO))
+        }
+        return nil
+    }
+
     static func downsample(_ rows: [DashLimitPoint], now: Date, rawWindow: TimeInterval = 7 * 86400)
         -> [DashLimitPoint]
     {

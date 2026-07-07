@@ -105,7 +105,9 @@ struct EdithApp: App {
         ClipboardHotKey.register()
         FocusDimHotKey.register()
         PresenterHotKey.register()
-        SettingsBackup.shared.start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            SettingsBackup.shared.start()
+        }
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
         let services = services
         _ = IPC.observe(IPC.Name.settingsChanged) {

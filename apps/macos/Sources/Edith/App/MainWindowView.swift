@@ -179,9 +179,22 @@ struct MainWindowView: View {
             .ignoresSafeArea()
             .overlay(alignment: .topLeading) { chromeOverlay(bandHeight) }
         }
-        .onAppear { MusicRemote.shared.start() }
-        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
-            IPC.post(IPC.Name.requestPermissionsRefresh)
+        .onAppear {
+            MusicRemote.shared.start()
+            refreshPermissionsPill()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            refreshPermissionsPill()
+        }
+    }
+
+    private func refreshPermissionsPill() {
+        IPC.post(IPC.Name.requestPermissionsRefresh)
+        permissionsNeedAttention = PermissionsStatus.current
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             permissionsNeedAttention = PermissionsStatus.current
         }
     }
