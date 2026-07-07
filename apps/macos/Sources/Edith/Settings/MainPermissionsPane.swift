@@ -41,6 +41,9 @@ private let permissions: [MainPermission] = [
 struct MainPermissionsPane: View {
     @State private var granted: [String: Bool] = [:]
     @State private var refreshTimer: Timer?
+    @State private var walkthroughActive = false
+    @State private var currentStepID: String?
+    @State private var skipped: Set<String> = []
 
     var body: some View {
         Form {
@@ -49,6 +52,9 @@ struct MainPermissionsPane: View {
                     "These are all held by Edith's menu bar helper, the process that actually uses them. Grant opens System Settings - flip Edith on there and this updates on its own."
                 )
                 .font(.caption).foregroundStyle(.secondary)
+            }
+            if !ungranted.isEmpty {
+                Section { setupRow }
             }
             Section {
                 ForEach(permissions) { permission in
@@ -69,12 +75,86 @@ struct MainPermissionsPane: View {
         .onDisappear {
             refreshTimer?.invalidate()
             refreshTimer = nil
+            stopWalkthrough()
         }
+    }
+
+    private var ungranted: [MainPermission] {
+        permissions.filter { !(granted[$0.key] ?? false) }
+    }
+
+    private var pending: [MainPermission] {
+        ungranted.filter { !skipped.contains($0.id) }
+    }
+
+    private var currentStep: MainPermission? {
+        permissions.first { $0.id == currentStepID }
     }
 
     private func refresh() {
         for permission in permissions {
             granted[permission.key] = SharedDefaults.store.bool(forKey: permission.key)
+        }
+        advanceWalkthrough()
+    }
+
+    private func startWalkthrough() {
+        skipped = []
+        walkthroughActive = true
+        currentStepID = nil
+        advanceWalkthrough()
+    }
+
+    private func advanceWalkthrough() {
+        guard walkthroughActive else { return }
+        guard let next = pending.first else {
+            stopWalkthrough()
+            return
+        }
+        guard currentStepID != next.id else { return }
+        currentStepID = next.id
+        IPC.post(next.request)
+    }
+
+    private func skipCurrent() {
+        if let id = currentStepID { skipped.insert(id) }
+        currentStepID = nil
+        advanceWalkthrough()
+    }
+
+    private func stopWalkthrough() {
+        walkthroughActive = false
+        currentStepID = nil
+    }
+
+    @ViewBuilder private var setupRow: some View {
+        if walkthroughActive, let step = currentStep {
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Button("Skip") { skipCurrent() }.pointerCursor()
+                    Button("Stop") { stopWalkthrough() }.pointerCursor()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small).frame(width: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Setting up \(step.name)…")
+                        Text(
+                            "Approve the prompt or flip Edith on in the Settings pane - \(pending.count) left."
+                        )
+                        .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } else {
+            Button {
+                startWalkthrough()
+            } label: {
+                Label("Set up permissions", systemImage: "checkmark.shield")
+            }
+            .pointerCursor()
+            Text("Walk through the \(ungranted.count) remaining one at a time.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

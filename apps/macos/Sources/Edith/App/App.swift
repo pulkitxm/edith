@@ -16,6 +16,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         launchHelperIfNeeded()
         Task { await DashboardModel.shared.load() }
+        nudgePermissionsOnFirstLaunch()
         MainWindow.open()
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)
@@ -32,6 +33,15 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         settingsChangeDebounce?.invalidate()
         settingsChangeDebounce = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
             IPC.post(IPC.Name.settingsChanged)
+        }
+    }
+
+    private func nudgePermissionsOnFirstLaunch() {
+        let store = SharedDefaults.store
+        guard store.object(forKey: "hasPromptedPermissions") == nil else { return }
+        store.set(true, forKey: "hasPromptedPermissions")
+        if PermissionsStatus.current {
+            store.set(MainDestination.permissions.rawValue, forKey: "mainWindowSection")
         }
     }
 
