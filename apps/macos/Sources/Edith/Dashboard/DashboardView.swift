@@ -202,50 +202,45 @@ struct DashboardView: View {
     }
 
     private var controlsBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                rangeButton("Today", .today)
-                rangeButton("Yesterday", .yesterday)
-                rangeButton("Week", .thisWeek)
-                rangeButton("Last week", .lastWeek)
-                rangeButton("Cycle", .cycle(nil))
-                rangeButton("All", .all)
-                Spacer()
-                Button("Reset") { model.reset() }
-                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
-                    .foregroundStyle(acc)
-            }
-            HStack(spacing: 12) {
-                if !model.cycleOptions.isEmpty {
-                    Menu {
-                        ForEach(model.cycleOptions) { c in
-                            Button(c.label) { model.range = .cycle(c.id) }
-                        }
-                    } label: {
-                        Label("Cycle", systemImage: "calendar")
+        WrapHStack(spacing: 8, lineSpacing: 8) {
+            rangeButton("Today", .today)
+            rangeButton("Yesterday", .yesterday)
+            rangeButton("Week", .thisWeek)
+            rangeButton("Last week", .lastWeek)
+            rangeButton("Cycle", .cycle(nil))
+            rangeButton("All", .all)
+            if !model.cycleOptions.isEmpty {
+                Menu {
+                    ForEach(model.cycleOptions) { c in
+                        Button(c.label) { model.range = .cycle(c.id) }
                     }
-                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+                } label: {
+                    Label("Cycle", systemImage: "calendar")
                 }
-                if !model.monthOptions.isEmpty {
-                    Menu {
-                        ForEach(model.monthOptions, id: \.self) { m in
-                            Button(m) { model.range = .month(m) }
-                        }
-                    } label: {
-                        Label("Month", systemImage: "calendar.badge.clock")
-                    }
-                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                }
-                Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
-                    .pointerCursor().font(.system(size: 11)).fixedSize()
-                customRange
-                sourceMenu
-                modelMenu
-                Spacer()
+                .menuStyle(.borderlessButton).pointerCursor().fixedSize()
             }
-            .foregroundStyle(DashSkin.inkSoft(dark))
+            if !model.monthOptions.isEmpty {
+                Menu {
+                    ForEach(model.monthOptions, id: \.self) { m in
+                        Button(m) { model.range = .month(m) }
+                    }
+                } label: {
+                    Label("Month", systemImage: "calendar.badge.clock")
+                }
+                .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+            }
+            Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
+                .pointerCursor().font(.system(size: 11)).fixedSize()
+            customRange
+            sourceMenu
+            modelMenu
+            Button("Reset") { model.reset() }
+                .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
+                .foregroundStyle(acc)
+                .padding(.vertical, 5)
         }
-        .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 10)
+        .foregroundStyle(DashSkin.inkSoft(dark))
+        .padding(.horizontal, 24).padding(.top, 4).padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper(dark))
         .overlay(alignment: .bottom) {

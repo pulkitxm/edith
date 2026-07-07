@@ -33,6 +33,7 @@ public enum IPC {
             "com.pulkit.edith.requestMusicState")
         public static let requestKeyboardClean = Notification.Name(
             "com.pulkit.edith.requestKeyboardClean")
+        public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {
