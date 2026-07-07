@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/macos
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify tag matches app version
+        run: |
+          PLIST_V="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [ "v$PLIST_V" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Info.plist version $PLIST_V" >&2
+            exit 1
+          fi
+      - name: Build .app bundle
+        run: ./build.sh --no-open
+      - name: Package DMG
+        run: |
+          rm -rf dmg-root && mkdir dmg-root
+          cp -R dist/Edith.app dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname Edith -srcfolder dmg-root -format UDZO "Edith-${GITHUB_REF_NAME}.dmg"
+      - name: Upload to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --title "Edith ${GITHUB_REF_NAME}" --generate-notes \
+            "Edith-${GITHUB_REF_NAME}.dmg" \
+          || gh release upload "${GITHUB_REF_NAME}" "Edith-${GITHUB_REF_NAME}.dmg" --clobber

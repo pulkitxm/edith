@@ -58,3 +58,19 @@ Assistant → Create a Certificate…, name it "Edith Dev", Identity Type
 ```bash
 EDITH_SIGN_IDENTITY="Edith Dev" ./build.sh --install
 ```
+
+## Release & updates
+
+Bump `CFBundleShortVersionString` in `apps/macos/Resources/Info.plist` and
+`HelperInfo.plist`, then push a matching tag:
+
+```bash
+git tag v1.8.0 && git push origin v1.8.0
+```
+
+The Release workflow builds `Edith-v1.8.0.dmg` (drag-to-Applications layout)
+and attaches it to the GitHub release. The menu bar app checks the latest
+release every six hours via the `gh` CLI (the repo is private, so an
+authenticated `gh` is required on the machine); when a newer version exists
+it shows an update pill in the panel header and a one-time notification, and
+clicking the pill downloads the DMG and opens it.

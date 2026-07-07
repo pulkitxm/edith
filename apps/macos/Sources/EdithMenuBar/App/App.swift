@@ -105,6 +105,7 @@ struct EdithApp: App {
         FocusDimHotKey.register()
         PresenterHotKey.register()
         SettingsBackup.shared.start()
+        UpdateChecker.shared.start()
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
         let services = services
         _ = IPC.observe(IPC.Name.settingsChanged) {
@@ -422,6 +423,7 @@ struct RootView: View {
         "dashboard"
     @StateObject private var permissions = PermissionsModel.shared
     @StateObject private var presenterState = PresenterState.shared
+    @StateObject private var updater = UpdateChecker.shared
     @State private var showDeveloper = false
 
     private var enabledTabs: [(id: String, title: String)] {
@@ -451,6 +453,23 @@ struct RootView: View {
                     .tracking(3)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if let version = updater.availableVersion {
+                    Button {
+                        updater.downloadAndOpen()
+                        dismissPanel()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 12))
+                            Text("v\(version)")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(.orange)
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .disabled(updater.installing)
+                    .help("Update available - download Edith \(version)")
+                }
                 if tab == "music", musicEnabled {
                     Button {
                         try? FileManager.default.createDirectory(
