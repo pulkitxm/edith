@@ -18,9 +18,15 @@ struct HomePage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HomeHeader(dark: dark)
-                HStack(alignment: .top, spacing: 16) {
-                    WorldClocksCard(dark: dark)
-                    QuickActionsCard(dark: dark)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        WorldClocksCard(dark: dark)
+                        QuickActionsCard(dark: dark)
+                    }
+                    VStack(spacing: 16) {
+                        WorldClocksCard(dark: dark)
+                        QuickActionsCard(dark: dark)
+                    }
                 }
                 if model.loaded {
                     SkinCard(title: "Activity", note: "daily cost", dark: dark) {
