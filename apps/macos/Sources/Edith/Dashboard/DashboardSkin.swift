@@ -41,6 +41,17 @@ enum DashSkin {
     }
 }
 
+private struct CompactLayoutKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var compactLayout: Bool {
+        get { self[CompactLayoutKey.self] }
+        set { self[CompactLayoutKey.self] = newValue }
+    }
+}
+
 struct SkinCard<Content: View>: View {
     let title: String
     var note: String? = nil

@@ -21,45 +21,49 @@ struct DashboardView: View {
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if model.loaded {
-                controlsBar
-            }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    masthead
-                        .padding(.horizontal, 24).padding(.top, 18)
-                    if showLog {
-                        logView.padding(.horizontal, 24)
-                    }
-                    if model.loaded {
-                        kpiGrid.padding(.horizontal, 24)
-                        LazyVStack(spacing: 16) {
-                            SkinCard(title: "Activity", dark: dark) {
-                                ActivityHeatmap(
-                                    days: model.calendarDays, cuts: model.chartData.heatCuts,
-                                    model: model, dark: dark, blur: blurMoney)
-                            }
-                            LimitsCardView(theme: acc, dark: dark)
-                            charts
-                        }
-                        .padding(.horizontal, 24).padding(.bottom, 28)
-                    } else if !model.loadAttempted {
-                        ProgressView("Loading usage data…")
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity, minHeight: 240)
-                    } else {
-                        ContentUnavailableView(
-                            "No usage data yet", systemImage: "chart.bar",
-                            description: Text("Hit reload to run the bundled collector.")
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 240)
-                    }
+        GeometryReader { geo in
+            let compact = geo.size.width < 640
+            VStack(spacing: 0) {
+                if model.loaded {
+                    controlsBar
                 }
-                .frame(maxWidth: .infinity)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        masthead(compact: compact)
+                            .padding(.horizontal, compact ? 18 : 24).padding(.top, 18)
+                        if showLog {
+                            logView.padding(.horizontal, compact ? 18 : 24)
+                        }
+                        if model.loaded {
+                            kpiGrid.padding(.horizontal, compact ? 18 : 24)
+                            LazyVStack(spacing: 16) {
+                                SkinCard(title: "Activity", dark: dark) {
+                                    ActivityHeatmap(
+                                        days: model.calendarDays, cuts: model.chartData.heatCuts,
+                                        model: model, dark: dark, blur: blurMoney)
+                                }
+                                LimitsCardView(theme: acc, dark: dark)
+                                charts
+                            }
+                            .padding(.horizontal, compact ? 18 : 24).padding(.bottom, 28)
+                        } else if !model.loadAttempted {
+                            ProgressView("Loading usage data…")
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity, minHeight: 240)
+                        } else {
+                            ContentUnavailableView(
+                                "No usage data yet", systemImage: "chart.bar",
+                                description: Text("Hit reload to run the bundled collector.")
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 240)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
+            .background(background)
+            .environment(\.compactLayout, compact)
         }
-        .background(background)
         .navigationTitle("Dashboard")
         .task {
             await model.load()
@@ -96,16 +100,16 @@ struct DashboardView: View {
             .ignoresSafeArea(edges: .vertical)
     }
 
-    private var masthead: some View {
+    private func masthead(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                HStack(spacing: 0) {
-                    Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                    Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
-                    Text(".").foregroundStyle(DashSkin.ink(dark))
-                }
-                .font(DashSkin.serif(40))
-                Spacer()
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
+                    + Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
+                    + Text(".").foregroundStyle(DashSkin.ink(dark)))
+                    .font(DashSkin.serif(compact ? 28 : 40))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Spacer(minLength: 8)
                 mastheadButtons
             }
             WrapHStack(spacing: 6, lineSpacing: 2) {
@@ -380,14 +384,14 @@ struct DashboardView: View {
                     domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney)
             }
         }
-        HStack(alignment: .top, spacing: 16) {
-            SkinCard(title: "By day of week", dark: dark) {
-                ComboChart(
-                    points: model.chartData.dow, barColor: acc, lineColor: gold, dark: dark,
-                    height: 200, blur: blurMoney)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                dowCard
+                shareByModelCard
             }
-            SkinCard(title: "Share by model", dark: dark) {
-                DonutChart(slices: donutSlices, blur: blurMoney)
+            VStack(spacing: 16) {
+                dowCard
+                shareByModelCard
             }
         }
         if !model.projects.isEmpty {
@@ -406,6 +410,20 @@ struct DashboardView: View {
                 height: 200, blur: blurMoney)
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
+    }
+
+    private var dowCard: some View {
+        SkinCard(title: "By day of week", dark: dark) {
+            ComboChart(
+                points: model.chartData.dow, barColor: acc, lineColor: gold, dark: dark,
+                height: 200, blur: blurMoney)
+        }
+    }
+
+    private var shareByModelCard: some View {
+        SkinCard(title: "Share by model", dark: dark) {
+            DonutChart(slices: donutSlices, blur: blurMoney)
+        }
     }
 
     private var modelsTable: some View {

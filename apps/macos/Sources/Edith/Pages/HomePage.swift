@@ -15,45 +15,49 @@ struct HomePage: View {
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HomeHeader(dark: dark)
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 16) {
-                        WorldClocksCard(dark: dark)
-                        QuickActionsCard(dark: dark)
+        GeometryReader { geo in
+            let compact = geo.size.width < 640
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HomeHeader(dark: dark)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 16) {
+                            WorldClocksCard(dark: dark)
+                            QuickActionsCard(dark: dark)
+                        }
+                        VStack(spacing: 16) {
+                            WorldClocksCard(dark: dark)
+                            QuickActionsCard(dark: dark)
+                        }
                     }
-                    VStack(spacing: 16) {
-                        WorldClocksCard(dark: dark)
-                        QuickActionsCard(dark: dark)
+                    if model.loaded {
+                        SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                            ActivityHeatmap(
+                                days: model.calendarDays, cuts: model.chartData.heatCuts,
+                                model: model, dark: dark, blur: blurMoney)
+                        }
+                    }
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: compact ? 260 : 340), spacing: 16)],
+                        alignment: .leading, spacing: 16
+                    ) {
+                        Group {
+                            MeetingsCard(dark: dark)
+                            UsageSummaryCard(dark: dark)
+                            LimitsSummaryCard(dark: dark)
+                            MusicCard(dark: dark)
+                        }
+                        .frame(maxHeight: .infinity, alignment: .top)
                     }
                 }
-                if model.loaded {
-                    SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                        ActivityHeatmap(
-                            days: model.calendarDays, cuts: model.chartData.heatCuts,
-                            model: model, dark: dark, blur: blurMoney)
-                    }
-                }
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 340), spacing: 16)],
-                    alignment: .leading, spacing: 16
-                ) {
-                    Group {
-                        MeetingsCard(dark: dark)
-                        UsageSummaryCard(dark: dark)
-                        LimitsSummaryCard(dark: dark)
-                        MusicCard(dark: dark)
-                    }
-                    .frame(maxHeight: .infinity, alignment: .top)
-                }
+                .padding(.horizontal, compact ? 18 : 24)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(background)
+            .environment(\.compactLayout, compact)
         }
-        .background(background)
         .navigationTitle("Home")
         .task { await model.load() }
     }
@@ -138,6 +142,9 @@ enum HomeMath {
 
 private struct HomeHeader: View {
     let dark: Bool
+    @Environment(\.compactLayout) private var compact
+
+    private var titleSize: CGFloat { compact ? 28 : 40 }
 
     private var firstName: String {
         let full = NSFullUserName()
@@ -160,43 +167,62 @@ private struct HomeHeader: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let now = context.date
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 6) {
-                    (Text("\(salutation(now)), ")
-                        + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
-                        + Text("."))
-                        .font(DashSkin.serif(40))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(
-                        now.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
-                            .uppercased()
-                    )
-                    .font(DashSkin.mono(11)).tracking(1.6)
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            if compact {
+                VStack(alignment: .leading, spacing: 8) {
+                    greeting(now)
+                    clockBlock(now, alignment: .leading)
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    TimelineView(.periodic(from: .now, by: 1)) { tick in
-                        Text(clockString(tick.date))
-                            .font(DashSkin.serif(40))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .monospacedDigit()
-                    }
-                    Text(
-                        "\(Calendar.current.component(.hour, from: now) < 12 ? "AM" : "PM")"
-                            + " · \(TimeZone.current.abbreviation() ?? "local")"
-                    )
-                    .font(DashSkin.mono(11)).tracking(1.2)
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    greeting(now)
+                    Spacer(minLength: 16)
+                    clockBlock(now, alignment: .trailing)
                 }
             }
+        }
+    }
+
+    private func greeting(_ now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            (Text("\(salutation(now)), ")
+                + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
+                + Text("."))
+                .font(DashSkin.serif(titleSize))
+                .foregroundStyle(DashSkin.ink(dark))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            Text(
+                now.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
+                    .uppercased()
+            )
+            .font(DashSkin.mono(11)).tracking(1.6)
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .lineLimit(1).minimumScaleFactor(0.7)
+        }
+    }
+
+    private func clockBlock(_ now: Date, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            TimelineView(.periodic(from: .now, by: 1)) { tick in
+                Text(clockString(tick.date))
+                    .font(DashSkin.serif(titleSize))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
+            Text(
+                "\(Calendar.current.component(.hour, from: now) < 12 ? "AM" : "PM")"
+                    + " · \(TimeZone.current.abbreviation() ?? "local")"
+            )
+            .font(DashSkin.mono(11)).tracking(1.2)
+            .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
 }
 
 private struct WorldClocksCard: View {
     let dark: Bool
+    @Environment(\.compactLayout) private var compact
     @AppStorage("homeClockZones", store: SharedDefaults.store) private var zonesRaw =
         "America/New_York,America/Los_Angeles"
     @State private var showAdd = false
@@ -209,7 +235,7 @@ private struct WorldClocksCard: View {
     var body: some View {
         SkinCard(title: "World clocks", note: "hover a clock to remove", dark: dark) {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                HStack(alignment: .top, spacing: 26) {
+                WrapHStack(spacing: 20, lineSpacing: 16) {
                     ClockTile(
                         date: context.date, zone: TimeZone.current, label: "Local", dark: dark,
                         onRemove: nil)
@@ -227,7 +253,6 @@ private struct WorldClocksCard: View {
                 }
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func remove(_ id: String) {
@@ -257,7 +282,7 @@ private struct WorldClocksCard: View {
                     .strokeBorder(
                         DashSkin.lineStrong(dark), style: StrokeStyle(lineWidth: 1, dash: [4, 3])
                     )
-                    .frame(width: 96, height: 96)
+                    .frame(width: compact ? 64 : 96, height: compact ? 64 : 96)
                     .overlay {
                         Image(systemName: "plus")
                             .font(.system(size: 24, weight: .light))
@@ -317,7 +342,11 @@ private struct ClockTile: View {
     let label: String
     let dark: Bool
     let onRemove: (() -> Void)?
+    @Environment(\.compactLayout) private var compact
     @State private var hovering = false
+
+    private var faceSize: CGFloat { compact ? 64 : 96 }
+    private var tileWidth: CGFloat { compact ? 92 : 112 }
 
     private var offsetLabel: String {
         HomeMath.offsetLabel(
@@ -327,7 +356,7 @@ private struct ClockTile: View {
     var body: some View {
         VStack(spacing: 10) {
             ClockFace(zone: zone, dark: dark)
-                .frame(width: 96, height: 96)
+                .frame(width: faceSize, height: faceSize)
                 .overlay(alignment: .topTrailing) {
                     if hovering, let onRemove {
                         Button(action: onRemove) {
@@ -344,9 +373,10 @@ private struct ClockTile: View {
                 }
             VStack(spacing: 2) {
                 Text(label)
-                    .font(DashSkin.serif(15))
+                    .font(DashSkin.serif(compact ? 13 : 15))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(date.formatted(Date.FormatStyle(timeZone: zone).hour().minute()))
                     .font(DashSkin.mono(11.5))
                     .foregroundStyle(DashSkin.inkSoft(dark))
@@ -355,7 +385,7 @@ private struct ClockTile: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .frame(width: 112)
+        .frame(width: tileWidth)
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
