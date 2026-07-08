@@ -1,5 +1,14 @@
 import { type ReactNode, useEffect } from "react";
 import EdithDemo from "./EdithDemo";
+import {
+  HeatmapMock,
+  MenubarMock,
+  MusicMock,
+  NotificationsMock,
+  PresenterMock,
+  RingsMock,
+  SystemMock,
+} from "./mocks";
 
 const PRICE_USD = 50;
 const DOWNLOAD_HREF = "#download";
@@ -29,20 +38,14 @@ export default function Landing() {
     <div className="min-h-screen bg-background text-foreground">
       <Nav />
       <Hero />
+      <TryIt />
       <Pitch />
       <ReplacesTable />
       <Feature
         eyebrow="Rate limits"
         title="Live rings for session and week."
         body="Second-by-second countdowns to your next 5-hour session reset and to the weekly rollover. A 24-hour spark shows the shape of your day at a glance."
-        media={
-          <Shot
-            src="/media/rate-limit-rings.png"
-            alt="Session and weekly rate-limit rings with reset countdowns"
-            width={640}
-            height={530}
-          />
-        }
+        media={<RingsMock />}
       />
       <Feature
         eyebrow="Menu bar"
@@ -58,74 +61,32 @@ export default function Landing() {
         media={<NotificationsMock />}
       />
       <Feature
-        eyebrow="Dashboard"
+        eyebrow="Heatmap"
         reverse
-        title="A native window for the whole picture."
-        body="KPIs, per-day and per-model charts, hourly distribution, sources, projects, and a sortable model table. Refreshed by a collector that runs quietly in the background."
-        media={
-          <Shot
-            src="/media/dashboard.png"
-            alt="Edith dashboard showing cost, tokens, cache hit rate, activity heatmap and rate-limit chart"
-            width={2921}
-            height={1620}
-          />
-        }
+        title="A year of usage at a glance."
+        body="A GitHub-style calendar of daily spend across your full history. Every day is a square, shaded by how much you spent. Hover any square for the exact number."
+        media={<HeatmapMock />}
       />
       <Feature
-        eyebrow="Heatmap"
-        title="A year of usage at a glance."
-        body="A GitHub-style calendar of daily spend across your full history. Hover any square for the exact number."
-        media={
-          <Shot
-            src="/media/activity-heatmap.png"
-            alt="Activity heatmap of daily spend across weeks"
-            width={1055}
-            height={406}
-          />
-        }
+        eyebrow="Music"
+        title="Your local music folder, done right."
+        body="Cover thumbnails, drag-to-seek, crossfades, auto-advance, and media keys. Point it at a folder and press play. No cloud, no accounts, no ads."
+        media={<MusicMock />}
       />
       <Feature
         eyebrow="Privacy"
         reverse
         title="Presenter mode for the room."
-        body="One toggle blurs spend figures and track names so you can screen-share without exposing your bill. Usage stays local, with optional iCloud backup that merges across your machines."
-        media={
-          <Shot
-            src="/media/privacy-presenter.png"
-            alt="Usage KPIs in presenter mode with sensitive numbers blurred"
-            width={2921}
-            height={430}
-          />
-        }
-      />
-      <Feature
-        eyebrow="Music"
-        title="Your local music folder, done right."
-        body="Cover thumbnails, drag-to-seek, crossfades, auto-advance, and media keys. No cloud, no accounts, no ads."
-        media={
-          <Shot
-            src="/media/music-player.png"
-            alt="Edith music player with track list and now-playing transport controls"
-            width={2921}
-            height={2078}
-          />
-        }
+        body="One toggle blurs spend figures and track names so you can screen-share without exposing your bill. Watch it flip below. Usage stays local, with optional iCloud backup that merges across your machines."
+        media={<PresenterMock />}
       />
       <Feature
         eyebrow="System"
-        reverse
         title="Prevent sleep. Lock the keyboard."
-        body="Keep your Mac awake for a long build. Lock the keyboard to wipe it down without triggering shortcuts. Auto-restores in sixty seconds so you can't lock yourself out."
-        media={
-          <Shot
-            src="/media/system-tools.png"
-            alt="Quick actions: clean keys, keep awake and presenter mode"
-            width={1445}
-            height={464}
-          />
-        }
+        body="Keep your Mac awake for a long build, even with the lid closed on power. Lock the keyboard to wipe it down without triggering shortcuts. Auto-restores in sixty seconds so you can't lock yourself out."
+        media={<SystemMock />}
       />
-      <ExtraFeatures />
+      <MoreFeatures />
       <Performance />
       <Local />
       <Pricing />
@@ -187,7 +148,7 @@ function Hero() {
   return (
     <section id="top" className="relative overflow-hidden">
       <div className="hero-glow pointer-events-none absolute inset-0" aria-hidden />
-      <div className="container-page relative pt-24 pb-20 md:pt-36 md:pb-32">
+      <div className="container-page relative pt-24 pb-16 md:pt-36 md:pb-24">
         <div className="reveal mb-8">
           <img
             src="/media/app-icon.png"
@@ -227,12 +188,40 @@ function Hero() {
         </div>
         <p className="reveal mt-4 text-[12px] text-subtle">Requires macOS. Apple Silicon and Intel.</p>
 
-        <div className="reveal mt-16 md:mt-24">
-          <p className="mb-3 text-center text-[12px] text-subtle">
-            Live demo. Try the presenter toggle.
+        <div className="reveal mt-16 md:mt-20">
+          <img
+            src="/media/dashboard.png"
+            alt="Edith dashboard: total cost, tokens, cache hit rate, activity heatmap and session vs weekly rate-limit chart"
+            width={2921}
+            height={1620}
+            className="w-full rounded-2xl border border-border-strong shadow-[0_50px_120px_-40px_rgba(0,0,0,0.8)] ring-1 ring-white/5"
+            decoding="async"
+            fetchPriority="high"
+          />
+          <p className="mt-4 text-center text-[12px] text-subtle">
+            The Agent Usage dashboard. A real screenshot, not a mockup.
           </p>
-          <EdithDemo />
         </div>
+      </div>
+    </section>
+  );
+}
+
+function TryIt() {
+  return (
+    <section className="container-page pb-8 md:pb-12">
+      <div className="reveal mx-auto mb-8 max-w-2xl text-center">
+        <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-accent">Try it live</p>
+        <h2 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.02em] md:text-3xl">
+          An interactive taste of the app.
+        </h2>
+        <p className="mt-3 text-[15px] text-muted-foreground">
+          Toggle presenter mode to blur the numbers. The music widget rotates on its own. This one
+          runs in your browser.
+        </p>
+      </div>
+      <div className="reveal mx-auto max-w-4xl">
+        <EdithDemo />
       </div>
     </section>
   );
@@ -277,12 +266,14 @@ function ReplacesTable() {
     ["An analytics dashboard", "KPIs, per-day and per-model charts, sortable table", "$12/mo"],
     ["A GitHub-style heatmap tool", "Daily spend calendar across your full history", "$4/mo"],
     ["A local music player", "Thumbnails, drag-to-seek, fades, auto-advance, media keys", "$5/mo"],
-    ["Focus and system utilities", "Prevent-sleep toggle, 60-second keyboard-clean lock", "$6/mo"],
+    ["A clipboard manager", "Clipboard history with instant paste on a hotkey", "$6/mo"],
+    ["A color picker", "System loupe on a hotkey, sampled hex to your clipboard", "$5/mo"],
+    ["Focus and system utilities", "Focus dim, prevent-sleep, keyboard-clean lock, notch shelf", "$5/mo"],
   ];
   return (
     <section id="features" className="container-page pb-24 md:pb-32">
       <div className="reveal overflow-hidden rounded-2xl border border-border bg-surface">
-        <div className="grid grid-cols-[1.4fr_1.4fr_auto] gap-6 border-b border-border bg-surface-elevated px-6 py-4 text-[12px] font-medium uppercase tracking-[0.14em] text-muted-foreground md:px-8">
+        <div className="grid grid-cols-[1.3fr_1.5fr_auto] gap-6 border-b border-border bg-surface-elevated px-6 py-4 text-[12px] font-medium uppercase tracking-[0.14em] text-muted-foreground md:px-8">
           <span>Instead of paying monthly for</span>
           <span>Edith includes it</span>
           <span className="text-right">Their price</span>
@@ -290,7 +281,7 @@ function ReplacesTable() {
         {rows.map(([a, b, price], i) => (
           <div
             key={a}
-            className={`grid grid-cols-[1.4fr_1.4fr_auto] items-start gap-6 px-6 py-5 md:px-8 md:py-6 ${
+            className={`grid grid-cols-[1.3fr_1.5fr_auto] items-start gap-6 px-6 py-5 md:px-8 md:py-6 ${
               i !== rows.length - 1 ? "border-b border-border" : ""
             }`}
           >
@@ -307,7 +298,7 @@ function ReplacesTable() {
 
       <div className="reveal mt-10 flex flex-col items-center gap-3 text-center">
         <p className="font-mono text-[15px] text-subtle line-through tabular-nums">
-          $46/mo · roughly $552 a year across seven separate apps
+          $56/mo · roughly $672 a year across nine separate apps
         </p>
         <p className="text-balance text-2xl font-semibold tracking-[-0.02em] md:text-4xl">
           <span className="text-accent">${PRICE_USD} once.</span> Everything above, forever.
@@ -349,122 +340,115 @@ function Feature({
   );
 }
 
-function Shot({
-  src,
-  alt,
-  width,
-  height,
-}: {
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-}) {
-  return (
-    <img
-      src={src}
-      alt={alt}
-      width={width}
-      height={height}
-      loading="lazy"
-      decoding="async"
-      className="w-full rounded-2xl border border-border-strong shadow-[0_30px_80px_-30px_rgba(0,0,0,0.7)]"
-      style={{ aspectRatio: `${width} / ${height}`, background: "#141110" }}
-    />
-  );
-}
-
-function MenubarMock() {
-  return (
-    <div className="rounded-2xl border border-border-strong bg-surface p-6 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.7)]">
-      <div className="flex h-9 items-center justify-end gap-4 rounded-lg border border-border/60 bg-background/60 px-4 font-mono text-[12px] text-muted-foreground">
-        <span className="tabular-nums">
-          <span style={{ color: "var(--sage)" }}>38%</span>
-          <span className="text-subtle"> · </span>
-          <span className="text-accent">62%</span>
-        </span>
-        <span className="text-subtle">Wed 14:22</span>
-      </div>
-      <div className="mt-6 grid grid-cols-3 gap-3 text-[11px] text-muted-foreground">
-        {[
-          ["Safe", "var(--sage)"],
-          ["Close", "var(--accent)"],
-          ["Over", "var(--danger)"],
-        ].map(([l, c]) => (
-          <div
-            key={l}
-            className="flex items-center gap-2 rounded-md border border-border/60 bg-background/40 px-3 py-2"
-          >
-            <span className="h-2 w-2 rounded-full" style={{ background: c }} />
-            {l}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NotificationsMock() {
-  const items: [string, string, string][] = [
-    ["Ahead of pace", "You're using this session faster than usual. 72% with 2h 47m left.", "var(--accent)"],
-    ["Approaching weekly limit", "Week usage at 85%. Resets Sunday 4:00 PM.", "var(--danger)"],
-    ["Back in the green", "Session dropped below 60%. Room to keep going.", "var(--sage)"],
-  ];
-  return (
-    <div className="flex flex-col gap-3">
-      {items.map(([title, body, dot]) => (
-        <div
-          key={title}
-          className="flex items-start gap-3 rounded-2xl border border-border-strong bg-surface/90 p-4 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.7)] backdrop-blur"
-        >
-          <span className="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-[10px] bg-gradient-to-b from-accent to-[#b3543a]">
-            <span className="h-3.5 w-3.5 rounded bg-white/90" />
-          </span>
-          <div className="flex-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[14px] font-semibold">{title}</span>
-              <span className="font-mono text-[11px] text-subtle">Edith · now</span>
-            </div>
-            <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{body}</p>
-          </div>
-          <span
-            className="mt-1.5 h-2 w-2 flex-none rounded-full"
-            style={{ background: dot, boxShadow: `0 0 10px ${dot}` }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ExtraFeatures() {
-  const items = [
-    {
-      title: "Global shortcut",
-      body: "Toggle the panel from anywhere. Defaults to ⌥⌘E. Re-record it to whatever fits your muscle memory.",
-    },
-    {
-      title: "Presenter mode",
-      body: "One toggle blurs track names and spend figures. Safe to screen-share without exposing your bill.",
-    },
-    {
-      title: "Local first",
-      body: "Usage data never leaves your Mac. Optional iCloud backup merges cleanly across machines.",
-    },
+function MoreFeatures() {
+  const items: [ReactNode, string, string][] = [
+    [<EyedropperGlyph key="c" />, "Color picker", "A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard."],
+    [<FocusGlyph key="f" />, "Focus dim", "Dims everything behind your active app so one window is all you see."],
+    [<NotchGlyph key="n" />, "Notch shelf", "Park files under the notch mid-drag, then drop them wherever they belong."],
+    [<ClipboardGlyph key="cl" />, "Clipboard history", "Everything you copied, one shortcut away, with instant paste."],
+    [<CalendarGlyph key="ca" />, "Calendar", "Today's schedule in the panel and the app, with one-tap join links."],
+    [<ClockGlyph key="w" />, "World clocks", "Local time plus the offices you care about, at a glance."],
+    [<CommandGlyph key="s" />, "Global shortcut", "Toggle the panel from anywhere. Defaults to ⌥⌘E and re-records to taste."],
+    [<ShieldGlyph key="l" />, "Local first", "Usage never leaves your Mac. Optional iCloud backup merges across machines."],
   ];
   return (
     <section className="border-t border-border/60">
       <div className="container-page py-24 md:py-32">
-        <div className="grid gap-8 md:grid-cols-3">
-          {items.map((it) => (
-            <div key={it.title} className="reveal rounded-2xl border border-border bg-surface p-8">
-              <h4 className="text-xl font-semibold tracking-tight">{it.title}</h4>
-              <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">{it.body}</p>
+        <div className="reveal mx-auto mb-14 max-w-2xl text-center">
+          <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-accent">And the rest of the shelf</p>
+          <h2 className="mt-3 text-balance text-3xl font-semibold leading-[1.1] tracking-[-0.02em] md:text-5xl">
+            Nine more tools you'd otherwise install one by one.
+          </h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {items.map(([glyph, title, body]) => (
+            <div key={title} className="reveal rounded-2xl border border-border bg-surface p-6">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/12 text-accent">
+                {glyph}
+              </div>
+              <h4 className="mt-5 text-[17px] font-semibold tracking-tight">{title}</h4>
+              <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{body}</p>
             </div>
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+function glyphProps() {
+  return {
+    width: 22,
+    height: 22,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+}
+function EyedropperGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <path d="M13 7l4 4M4 20l1-4 9-9 3 3-9 9-4 1zM15 5l2-2a2 2 0 0 1 3 3l-2 2" />
+    </svg>
+  );
+}
+function FocusGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
+    </svg>
+  );
+}
+function NotchGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <path d="M3 6h6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2h6" />
+      <rect x="7" y="12" width="10" height="7" rx="1.5" />
+      <path d="M12 12v-2" />
+    </svg>
+  );
+}
+function ClipboardGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <rect x="6" y="4" width="12" height="17" rx="2" />
+      <path d="M9 4a3 3 0 0 1 6 0M9 11h6M9 15h4" />
+    </svg>
+  );
+}
+function CalendarGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <rect x="4" y="5" width="16" height="16" rx="2" />
+      <path d="M4 9h16M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+function ClockGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4l3 2" />
+    </svg>
+  );
+}
+function CommandGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z" />
+    </svg>
+  );
+}
+function ShieldGlyph() {
+  return (
+    <svg {...glyphProps()} aria-hidden>
+      <path d="M12 3l7 3v5c0 4.5-3 7-7 8.5C8 18 5 15.5 5 11V6z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
   );
 }
 
@@ -569,7 +553,7 @@ function Pricing() {
               "Full analytics dashboard and heatmap",
               "Smart notifications",
               "Local music player",
-              "Prevent-sleep and keyboard lock",
+              "Clipboard, color picker, focus dim, notch shelf",
               "No subscription. No account. Ever.",
             ].map((f) => (
               <li key={f} className="flex items-start gap-3">
@@ -592,8 +576,8 @@ function Pricing() {
         </div>
 
         <p className="reveal mx-auto mt-10 max-w-md text-center text-[13px] text-subtle">
-          Compare to roughly $46 a month across seven separate menu bar utilities. Edith pays for
-          itself in about seven weeks.
+          Compare to roughly $56 a month across nine separate menu bar utilities. Edith pays for
+          itself in under a week.
         </p>
       </div>
     </section>
