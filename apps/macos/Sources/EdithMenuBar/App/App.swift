@@ -357,6 +357,7 @@ struct RootView: View {
         "dashboard"
     @StateObject private var permissions = PermissionsModel.shared
     @StateObject private var presenterState = PresenterState.shared
+    @StateObject private var external = ExternalMusic()
     @State private var showDeveloper = false
 
     private var enabledTabs: [(id: String, title: String)] {
@@ -489,7 +490,9 @@ struct RootView: View {
             if presenterState.autoActive {
                 presenterBanner
             }
-            if let player = services.music, player.current != nil {
+            if external.isActive {
+                ExternalPlayerBar(external: external, theme: themeColor(themeName))
+            } else if let player = services.music, player.current != nil {
                 NowPlayingBar(player: player, theme: themeColor(themeName))
             }
             if enabledTabs.count > 1 {
@@ -509,7 +512,9 @@ struct RootView: View {
         .onAppear {
             pinTab()
             permissions.refresh()
+            external.start()
         }
+        .onDisappear { external.stop() }
         .onChange(of: tab) {
             UserDefaults.standard.set(tab, forKey: "tab")
         }
