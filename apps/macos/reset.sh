@@ -10,7 +10,7 @@
 #   ./reset.sh -y      # skip confirmation
 set -euo pipefail
 
-BUNDLE_IDS=("com.pulkit.edith" "com.pulkit.edith.menubar" "com.pulkit.edith.shared")
+BUNDLE_IDS=("com.pulkit.edith" "com.pulkit.edith.bar" "com.pulkit.edith.menubar" "com.pulkit.edith.shared")
 APP_SUPPORT="$HOME/Library/Application Support/Edith"
 INSTALLED_APP="/Applications/Edith.app"
 

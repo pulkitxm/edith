@@ -41,25 +41,6 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("Edith lives in the menu bar")
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            var out = "screens:\n"
-            for s in NSScreen.screens {
-                out += "  frame=\(s.frame) visible=\(s.visibleFrame)\n"
-            }
-            out += "status windows:\n"
-            for w in NSApp.windows {
-                let cls = w.className
-                if cls.contains("StatusBar") || cls.contains("MenuBarExtra") || cls.contains("Status")
-                {
-                    out +=
-                        "  \(cls) frame=\(w.frame) visible=\(w.isVisible) onActive=\(w.isOnActiveSpace)\n"
-                }
-            }
-            try? out.write(
-                toFile: "/tmp/edith_statusframe.txt", atomically: true, encoding: .utf8)
-        }
-    }
 }
 
 @main
@@ -69,18 +50,6 @@ struct EdithApp: App {
 
     init() {
         _ = ProcessUptime.launchedAt
-
-        let statusItemVisibilityKeys = [
-            "NSStatusItem VisibleCC Item-0", "NSStatusItem VisibleCC Item-1",
-            "NSStatusItem VisibleCC limits",
-        ]
-        func forceStatusItemsVisible() {
-            for key in statusItemVisibilityKeys {
-                UserDefaults.standard.set(true, forKey: key)
-            }
-        }
-        forceStatusItemsVisible()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: forceStatusItemsVisible)
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
@@ -480,7 +449,6 @@ struct RootView: View {
     @StateObject private var permissions = PermissionsModel.shared
     @StateObject private var presenterState = PresenterState.shared
     @State private var showDeveloper = false
-    @State private var tabContentHeight: CGFloat = 0
 
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
@@ -615,31 +583,20 @@ struct RootView: View {
             if enabledTabs.count > 1 {
                 TabBar(tabs: enabledTabs, selection: $tab, theme: themeColor(themeName))
             }
-            ScrollView(showsIndicators: false) {
-                Group {
-                    if tab == "usage", let store = services.usage {
-                        UsageView().environmentObject(store)
-                    } else if tab == "music", let player = services.music {
-                        MusicView().environmentObject(player)
-                    } else if tab == "system", let system = services.system {
-                        SystemView().environmentObject(system)
-                    } else if tab == "calendar", let calendar = services.calendar {
-                        CalendarView().environmentObject(calendar)
-                    } else if enabledTabs.isEmpty {
-                        Text("All tabs are off - enable one in Edith's settings (⚙)")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 28)
-                    }
-                }
-                .background(
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: TabContentHeightKey.self, value: geo.size.height)
-                    })
+            if tab == "usage", let store = services.usage {
+                UsageView().environmentObject(store)
+            } else if tab == "music", let player = services.music {
+                MusicView().environmentObject(player)
+            } else if tab == "system", let system = services.system {
+                SystemView().environmentObject(system)
+            } else if tab == "calendar", let calendar = services.calendar {
+                CalendarView().environmentObject(calendar)
+            } else if enabledTabs.isEmpty {
+                Text("All tabs are off - enable one in Edith's settings (⚙)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 28)
             }
-            .onPreferenceChange(TabContentHeightKey.self) { tabContentHeight = $0 }
-            .frame(height: min(max(tabContentHeight, 1), contentHeightCap))
             if showDeveloper {
                 DeveloperPanel()
             }
@@ -688,18 +645,6 @@ struct RootView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private struct TabContentHeightKey: PreferenceKey {
-        static let defaultValue: CGFloat = 0
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-            value = max(value, nextValue())
-        }
-    }
-
-    private var contentHeightCap: CGFloat {
-        let screen = menuBarExtraStatusWindow()?.screen ?? NSScreen.main
-        return max(320, (screen?.visibleFrame.height ?? 800) - 140)
     }
 
     private func settleMiniPanel() {
