@@ -30,7 +30,7 @@ struct NotchShelfRows: View {
                     Toggle("Require \u{2325} to trigger", isOn: $requireOption)
                         .pointerCursor()
                     InfoDot(
-                        "Only expand — on drag or on hover — while you're holding Option. Keeps accidental passes over the notch from opening it."
+                        "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
                     )
                 }
             }
@@ -48,7 +48,7 @@ struct NotchShelfRows: View {
                     }
                     .pointerCursor()
                     InfoDot(
-                        "Parked files auto-delete after this long. They're copies — originals are never touched."
+                        "Parked files auto-delete after this long. They're copies - originals are never touched."
                     )
                 }
                 Toggle("Remove after dragging out", isOn: $removeAfterDragOut)

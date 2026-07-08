@@ -83,7 +83,7 @@ export const NotchShelfScene: React.FC = () => {
         </div>
       </div>
 
-      <Caption>Notch shelf — drop files on the notch, carry them anywhere</Caption>
+      <Caption>Notch shelf - drop files on the notch, carry them anywhere</Caption>
     </Background>
   );
 };

@@ -76,7 +76,7 @@ export const FocusDimScene: React.FC = () => {
         </div>
       </div>
 
-      <Caption>Focus Dim — everything but the front window fades back</Caption>
+      <Caption>Focus Dim - everything but the front window fades back</Caption>
     </Background>
   );
 };

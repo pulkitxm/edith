@@ -102,7 +102,7 @@ struct ProjectDrilldownView: View {
             }
             .width(min: 55, ideal: 70)
             SwiftUI.TableColumn("Last used", value: \ProjNode.lastActive) { (node: ProjNode) in
-                numCell(node.lastActive.isEmpty ? "—" : DashFmt.dateShort(node.lastActive), node)
+                numCell(node.lastActive.isEmpty ? "-" : DashFmt.dateShort(node.lastActive), node)
             }
             .width(min: 50, ideal: 62)
         }

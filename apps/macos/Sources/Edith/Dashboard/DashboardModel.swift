@@ -1160,7 +1160,7 @@ enum DashFmt {
     }
     static func pct(_ v: Double) -> String { String(format: "%.1f%%", v * 100) }
     static func duration(_ ms: Double) -> String {
-        guard ms > 0 else { return "—" }
+        guard ms > 0 else { return "-" }
         let s = Int((ms / 1000).rounded())
         if s < 60 { return "\(s)s" }
         let m = Int((Double(s) / 60).rounded())
@@ -1172,7 +1172,7 @@ enum DashFmt {
     static func dateShort(_ ymd: String) -> String {
         let parts = ymd.split(separator: "-")
         guard parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]), (1...12).contains(m)
-        else { return "—" }
+        else { return "-" }
         let mon = [
             "Jan", "Feb", "Mar", "Apr", "May", "Jun",
             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",

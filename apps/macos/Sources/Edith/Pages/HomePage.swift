@@ -816,7 +816,7 @@ private struct LimitsSummaryCard: View {
                         )
                         .rotationEffect(.degrees(-90))
                 }
-                Text(value.map { "\(Int($0))%" } ?? "—")
+                Text(value.map { "\(Int($0))%" } ?? "-")
                     .font(DashSkin.serif(22))
                     .foregroundStyle(value.map(barColor) ?? DashSkin.inkFaint(dark))
                     .monospacedDigit()

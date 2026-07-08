@@ -98,7 +98,7 @@ export const ClipboardScene: React.FC = () => {
         </div>
       </div>
 
-      <Caption>Clipboard history — every copy, one keystroke away</Caption>
+      <Caption>Clipboard history - every copy, one keystroke away</Caption>
     </Background>
   );
 };

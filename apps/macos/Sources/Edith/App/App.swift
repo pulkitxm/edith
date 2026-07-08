@@ -87,7 +87,7 @@ struct EdithApp: App {
 
     var body: some Scene {
         Settings {
-            Text("Edith settings live in the menu bar for now — click the panel icon.")
+            Text("Edith settings live in the menu bar for now - click the panel icon.")
                 .padding(24)
                 .frame(width: 340)
         }

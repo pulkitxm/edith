@@ -107,7 +107,7 @@ export const HomeDashboardScene: React.FC = () => {
         })}
       </div>
 
-      <Caption>A home base — clocks, meetings and usage at a glance</Caption>
+      <Caption>A home base - clocks, meetings and usage at a glance</Caption>
     </Background>
   );
 };

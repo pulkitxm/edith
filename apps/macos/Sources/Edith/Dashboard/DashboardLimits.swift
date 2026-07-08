@@ -136,7 +136,7 @@ struct LimitsCardView: View {
     }
 
     var body: some View {
-        SkinCard(title: "Rate limits — session & weekly", dark: dark) {
+        SkinCard(title: "Rate limits - session & weekly", dark: dark) {
             if all.count > 1 {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {

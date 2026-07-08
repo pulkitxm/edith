@@ -84,7 +84,7 @@ public struct TerminalLogView: View {
     public var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                Text(log.isEmpty ? "No output yet — hit reload" : log)
+                Text(log.isEmpty ? "No output yet - hit reload" : log)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(theme)
                     .frame(maxWidth: .infinity, alignment: .leading)

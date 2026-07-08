@@ -70,7 +70,7 @@ export const HotkeysScene: React.FC = () => {
         })}
       </div>
 
-      <Caption>One shortcut for everything — remap any of them</Caption>
+      <Caption>One shortcut for everything - remap any of them</Caption>
     </Background>
   );
 };

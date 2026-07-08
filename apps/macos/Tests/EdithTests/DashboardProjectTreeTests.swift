@@ -240,8 +240,8 @@ import Testing
 
 @Suite struct DashFmtDrilldownTests {
     @Test func duration() {
-        #expect(DashFmt.duration(0) == "—")
-        #expect(DashFmt.duration(-5) == "—")
+        #expect(DashFmt.duration(0) == "-")
+        #expect(DashFmt.duration(-5) == "-")
         #expect(DashFmt.duration(30000) == "30s")
         #expect(DashFmt.duration(59_000) == "59s")
         #expect(DashFmt.duration(90_000) == "2m")
@@ -254,9 +254,9 @@ import Testing
     @Test func dateShort() {
         #expect(DashFmt.dateShort("2026-06-01") == "Jun 1")
         #expect(DashFmt.dateShort("2026-12-31") == "Dec 31")
-        #expect(DashFmt.dateShort("") == "—")
-        #expect(DashFmt.dateShort("garbage") == "—")
-        #expect(DashFmt.dateShort("2026-13-01") == "—")
+        #expect(DashFmt.dateShort("") == "-")
+        #expect(DashFmt.dateShort("garbage") == "-")
+        #expect(DashFmt.dateShort("2026-13-01") == "-")
     }
 
     @Test func usdLong() {

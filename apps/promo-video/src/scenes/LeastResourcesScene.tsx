@@ -65,7 +65,7 @@ export const LeastResourcesScene: React.FC = () => {
         </div>
       </div>
 
-      <Caption>Work stops when it isn't seen — built to run 24/7</Caption>
+      <Caption>Work stops when it isn't seen - built to run 24/7</Caption>
     </Background>
   );
 };

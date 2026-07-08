@@ -36,7 +36,7 @@ struct ColorPickerRows: View {
                     }
                     .pointerCursor()
                     InfoDot(
-                        "Compute values in sRGB or Display P3 — they differ on wide-gamut screens like this MacBook's."
+                        "Compute values in sRGB or Display P3 - they differ on wide-gamut screens like this MacBook's."
                     )
                 }
                 HStack {

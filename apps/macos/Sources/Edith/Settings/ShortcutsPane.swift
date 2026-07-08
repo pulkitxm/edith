@@ -76,7 +76,7 @@ struct ShortcutsPane: View {
                         SharedDefaults.store.set(offExtension.id, forKey: "extensionsExpand")
                         mainWindowSection = MainDestination.extensions.rawValue
                     } label: {
-                        Text("\(offExtension.message) — turn it on ›")
+                        Text("\(offExtension.message) - turn it on ›")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }

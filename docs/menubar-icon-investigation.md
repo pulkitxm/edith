@@ -147,8 +147,8 @@ with `setActivationPolicy` in place a rename should never again be necessary.
 ## 3. Architecture context (relevant to the bug)
 
 - **Two-process design** (from PR #18):
-  - `Edith` (`com.pulkit.edith`) — the dashboard, a regular `.regular` app with a Dock icon.
-  - `EdithMenuBar` (the helper) — the menu bar app, `LSUIElement` / `.accessory`,
+  - `Edith` (`com.pulkit.edith`) - the dashboard, a regular `.regular` app with a Dock icon.
+  - `EdithMenuBar` (the helper) - the menu bar app, `LSUIElement` / `.accessory`,
     nested at `Edith.app/Contents/Library/LoginItems/EdithMenuBar.app`, launched as an
     `SMAppService` login item.
 - Helper bundle id has been renamed multiple times to escape macOS state:
@@ -158,11 +158,11 @@ with `setActivationPolicy` in place a rename should never again be necessary.
 - IPC between the two processes uses fixed `DistributedNotificationCenter` names
   (`com.pulkit.edith.openPanel`, etc.), independent of bundle id.
 - Two menu bar entities historically existed:
-  - The **glasses** — created by SwiftUI `MenuBarExtra` (autosave `Item-0`).
-  - The **usage-% text** — a manual `NSStatusItem` (`LimitsStatusItem`, autosave `limits`),
+  - The **glasses** - created by SwiftUI `MenuBarExtra` (autosave `Item-0`).
+  - The **usage-% text** - a manual `NSStatusItem` (`LimitsStatusItem`, autosave `limits`),
     whose `clicked()` also opens the panel.
 
-## 4. Earlier fix — PR #43 (`290607a`, "Fix invisible menu bar icons and menu bar panel height")
+## 4. Earlier fix - PR #43 (`290607a`, "Fix invisible menu bar icons and menu bar panel height")
 
 Context carried in from the previous session:
 
@@ -183,7 +183,7 @@ per-bundle-id poison, and renaming had historically been the escape hatch.
 
 ---
 
-## 5. This session — Part A: panel layout fix (related, shipped first)
+## 5. This session - Part A: panel layout fix (related, shipped first)
 
 Reported first as "the panel layout is messed up" on the Music tab: the panel appeared
 **shifted down**, with a **translucent area** around it and the **UI vertically centered**.
@@ -206,12 +206,12 @@ This confirmed the measurement toolkit (see §9) and is why the height fix is so
 
 ---
 
-## 6. This session — Part B: the recurring hidden-icon investigation
+## 6. This session - Part B: the recurring hidden-icon investigation
 
 The icon disappeared during heavy kill/relaunch testing. Treated initially as the PR #43
 recurrence and the same remedy applied, then diagnosed exhaustively.
 
-### 6.1 Attempt 1 — bundle-id rename (`15ecf27`)
+### 6.1 Attempt 1 - bundle-id rename (`15ecf27`)
 - Renamed helper `com.pulkit.edith.bar` → `com.pulkit.edith.panel`
   (`HelperInfo.plist` CFBundleIdentifier, `Edith/App/App.swift`
   `helperBundleIdentifier` + `retiredHelperBundleIdentifier`, `reset.sh` lists).
@@ -219,7 +219,7 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
 - So the fresh `.panel` id was **also** flagged hidden. The rename did **not** fix it
   this time. This broke the "it's just per-bundle-id poison" theory.
 
-### 6.2 What was measured (all via `CGWindowList`, not screenshots — see §9)
+### 6.2 What was measured (all via `CGWindowList`, not screenshots - see §9)
 - A window at **x `765..962` (center 863 = notch center), layer 33, width 197**,
   owned by "Edith". Believed at the time to be the status item.
 - Pref `NSStatusItem VisibleCC Item-0 = 0` in the helper's domain → the glasses item is
@@ -229,18 +229,18 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
   **Edith-specific**.
 
 ### 6.3 Everything ruled out (each tested in isolation, still failed)
-- **Fresh bundle id** — a brand-new never-used id (`com.pulkit.edith.fresh<timestamp>`)
+- **Fresh bundle id** - a brand-new never-used id (`com.pulkit.edith.fresh<timestamp>`)
   still landed at 765 / hidden.
-- **`autosaveName`** present vs absent — no change.
-- **`NSStatusItem Preferred Position <autosave>` pref** (tried e.g. `1300`) — **ignored**.
-- **`MenuBarExtra` vs manual `NSStatusItem`** — with `MenuBarExtra` removed, the manual
+- **`autosaveName`** present vs absent - no change.
+- **`NSStatusItem Preferred Position <autosave>` pref** (tried e.g. `1300`) - **ignored**.
+- **`MenuBarExtra` vs manual `NSStatusItem`** - with `MenuBarExtra` removed, the manual
   `LimitsStatusItem` still failed; both fail.
-- **Creation timing** — delaying item creation 4s after launch — no change.
-- **Activation policy** — `.regular` + `NSApp.activate(ignoringOtherApps:)` — no change.
-- **Doubling / ghost windows** — single clean instance still failed.
-- **ControlCenter `MenuBarCustomizationState`** — backed up, cleared, `killall ControlCenter`,
+- **Creation timing** - delaying item creation 4s after launch - no change.
+- **Activation policy** - `.regular` + `NSApp.activate(ignoringOtherApps:)` - no change.
+- **Doubling / ghost windows** - single clean instance still failed.
+- **ControlCenter `MenuBarCustomizationState`** - backed up, cleared, `killall ControlCenter`,
   relaunched → **did not help** (restored from backup afterward).
-- **Reboot** — the user's reboot did not fix it.
+- **Reboot** - the user's reboot did not fix it.
 
 ### 6.4 Gotchas discovered
 - **Process-name trap:** the login-item helper's **process name is
@@ -256,7 +256,7 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
   `NSPanel` via `NotchShelfController` at:
   - origin `screenFrame.midX − width/2` (≈ x `765`),
   - level `NSWindow.Level.statusBar + 8` (= raw **33**), at the top of the screen.
-- Collapsed width ≈ 197 → the panel sits at **x `765..962`, layer 33** — **identical**
+- Collapsed width ≈ 197 → the panel sits at **x `765..962`, layer 33** - **identical**
   to what was being measured as "the status item."
 - **A large part of the "the item is centered on the notch" conclusion was actually the
   NotchShelf panel, not the menu bar icon.** Disabling `notchShelfEnabled` removed that
@@ -265,14 +265,14 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
   the real status items aren't *misplaced*, they're **hidden / not created**
   (`VisibleCC Item-0 = 0`, and the usage item absent too).
 
-### 6.6 The decisive comparison — TokenEater
+### 6.6 The decisive comparison - TokenEater
 - Sibling app `pulkitxm/TokenEater` (a **single-process** menu bar app) **never had this
   bug**. Its `StatusBarController`:
   - creates a plain **`NSStatusItem`** (`variableLength`, `isVisible = ...`),
   - shows the panel via a **transient `NSPopover`** (`popover.show(relativeTo:of:preferredEdge:)`),
   - is created in an **`AppDelegate.applicationDidFinishLaunching`**,
-  - app scene is `Settings { EmptyView() }` — **no `MenuBarExtra` at all**.
-- Edith used SwiftUI **`MenuBarExtra`** — the thing implicated in the placement/visibility
+  - app scene is `Settings { EmptyView() }` - **no `MenuBarExtra` at all**.
+- Edith used SwiftUI **`MenuBarExtra`** - the thing implicated in the placement/visibility
   failure on this notched macOS.
 
 ---
@@ -285,7 +285,7 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
   - `NSStatusBar.system.statusItem(withLength: .variableLength)`,
   - `autosaveName = "edithGlasses"` (a **fresh** name that dodges the poisoned `Item-0`
     record) and **`isVisible = true`** set explicitly (this is what the old code never did
-    for the manual path — the default `Item-0` autosave restored `VisibleCC = 0`),
+    for the manual path - the default `Item-0` autosave restored `VisibleCC = 0`),
   - `button.image = Logo.menuBar`, click toggles a **transient `NSPopover`** hosting
     `RootView().environmentObject(services)`,
   - `NSHostingController.sizingOptions = [.preferredContentSize]` so the popover
@@ -314,10 +314,10 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
 
 - With the manual item in place, debug logging showed:
   `button = true`, eventually `isVisible = true`, `image = true`, but the button's
-  window stuck at **`(0, -22, 36, 22)` — unplaced** (not in the menu bar), and
+  window stuck at **`(0, -22, 36, 22)` - unplaced** (not in the menu bar), and
   `CGWindowList` shows nothing on-screen.
 - **Decisive test:** the **old `MenuBarExtra` code was git-stashed and rebuilt/installed
-  mid-session — it ALSO placed no status item** the same way. Therefore **no status item
+  mid-session - it ALSO placed no status item** the same way. Therefore **no status item
   places when the helper is launched mid-session** (`make install` / `open` /
   `openApplication`), *regardless of code*. This is a **launch-context limitation**, not
   a code defect.
@@ -329,20 +329,20 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
 
 ## 8. Commits and release
 
-- `82e1c03` — Fix menu bar panel not shrinking to content height on tab switch (`fitPanelHeight`).
-- `15ecf27` — Give menu bar helper a fresh bundle id (`.bar` → `.panel`) to escape parked status items.
-- `9b1c218` — Replace `MenuBarExtra` with a manual `NSStatusItem` + `NSPopover` (TokenEater-style).
-- `d6d9a2b` — Bump version to 1.11.0. Tag **`v1.11.0`** → release workflow built and
+- `82e1c03` - Fix menu bar panel not shrinking to content height on tab switch (`fitPanelHeight`).
+- `15ecf27` - Give menu bar helper a fresh bundle id (`.bar` → `.panel`) to escape parked status items.
+- `9b1c218` - Replace `MenuBarExtra` with a manual `NSStatusItem` + `NSPopover` (TokenEater-style).
+- `d6d9a2b` - Bump version to 1.11.0. Tag **`v1.11.0`** → release workflow built and
   published `Edith-v1.11.0.dmg`.
 
 ## 9. Measurement techniques used (reference)
 
-- **`CGWindowListCopyWindowInfo`** is the source of truth for menu bar geometry — it sees
+- **`CGWindowListCopyWindowInfo`** is the source of truth for menu bar geometry - it sees
   every window regardless of owner. Filter `layer == 33` (third-party status items),
   `y <= 2`, or by `kCGWindowOwnerName` containing "edith". Prints `x`, width, layer,
   `kCGWindowOwnerPID`, `kCGWindowNumber`.
 - **Screenshot filtering caveat:** the computer-use screenshot tool applies "native"
-  filtering — windows owned by **non-granted** apps are excluded. The nested login-item
+  filtering - windows owned by **non-granted** apps are excluded. The nested login-item
   helper (`com.pulkit.edith.panel`) is **not grantable** (`request_access` returns
   `not_installed` for nested login items), so its **panel/popover windows are invisible
   in screenshots**, even though menu bar status items normally composite in. Always
@@ -351,10 +351,10 @@ recurrence and the same remedy applied, then diagnosed exhaustively.
   `NSWindow` + `NSHostingView`, read `fittingSize`, `cacheDisplay` to PNG. Reliable for
   per-tab content heights (`ImageRenderer` fails on `ScrollView`).
 - **File logging over stderr:** when the helper is launched by launchd/`openApplication`,
-  stderr isn't captured — write debug to a file path (e.g. `/tmp/...log`) instead.
+  stderr isn't captured - write debug to a file path (e.g. `/tmp/...log`) instead.
 - **Relevant pref keys** (in `com.pulkit.edith.<id>` domain):
-  - `NSStatusItem VisibleCC <autosave>` — Control-Center-managed visibility (`0` = hidden).
-  - `NSStatusItem Preferred Position <autosave>` — saved x position (observed **ignored**
+  - `NSStatusItem VisibleCC <autosave>` - Control-Center-managed visibility (`0` = hidden).
+  - `NSStatusItem Preferred Position <autosave>` - saved x position (observed **ignored**
     here).
 - **launchd / login item state:** `launchctl print-disabled gui/$(id -u) | grep edith`,
   `sfltool dumpbtm | grep -iA3 edith` (slow). Disable/kill with
