@@ -15,7 +15,7 @@ struct SettingsPane: View {
         }
     }
 
-    @State private var tab = Tab.general
+    @AppStorage("settingsTab", store: SharedDefaults.store) private var tab = Tab.general
 
     var body: some View {
         VStack(spacing: 0) {

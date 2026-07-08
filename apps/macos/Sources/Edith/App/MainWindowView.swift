@@ -144,9 +144,37 @@ private struct SidebarNavRow: View {
     }
 }
 
+private struct NavStack {
+    private(set) var entries: [String] = []
+    private(set) var index = -1
+
+    var canGoBack: Bool { index > 0 }
+    var canGoForward: Bool { index >= 0 && index < entries.count - 1 }
+
+    mutating func record(_ location: String) {
+        if index >= 0, entries[index] == location { return }
+        if index < entries.count - 1 { entries.removeSubrange((index + 1)...) }
+        entries.append(location)
+        index = entries.count - 1
+    }
+
+    mutating func goBack() -> String? {
+        guard canGoBack else { return nil }
+        index -= 1
+        return entries[index]
+    }
+
+    mutating func goForward() -> String? {
+        guard canGoForward else { return nil }
+        index += 1
+        return entries[index]
+    }
+}
+
 struct MainWindowView: View {
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
         MainDestination.home.rawValue
+    @AppStorage("settingsTab", store: SharedDefaults.store) private var settingsTab = "general"
     @AppStorage("mainSidebarOpen", store: SharedDefaults.store) private var sidebarOpen = true
     @AppStorage("mainSidebarWidth", store: SharedDefaults.store) private var sidebarWidth = 230.0
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
@@ -157,6 +185,8 @@ struct MainWindowView: View {
     @AppStorage("creditHidden", store: SharedDefaults.store) private var creditHidden = false
     @State private var dragBaseWidth: Double?
     @State private var musicKeyMonitor: Any?
+    @State private var nav = NavStack()
+    @State private var restoringHistory = false
     @State private var permissionsNeedAttention = PermissionsStatus.current
     @Environment(\.colorScheme) private var scheme
 
@@ -173,6 +203,28 @@ struct MainWindowView: View {
         MainDestination(rawValue: mainWindowSection) ?? .home
     }
 
+    private var currentLocation: String {
+        destination == .settings ? "settings/\(settingsTab)" : mainWindowSection
+    }
+
+    private func navigate(to location: String) {
+        restoringHistory = true
+        if location.hasPrefix("settings/") {
+            settingsTab = String(location.dropFirst("settings/".count))
+            mainWindowSection = MainDestination.settings.rawValue
+        } else {
+            mainWindowSection = location
+        }
+    }
+
+    private func goBack() {
+        if let location = nav.goBack() { navigate(to: location) }
+    }
+
+    private func goForward() {
+        if let location = nav.goForward() { navigate(to: location) }
+    }
+
     var body: some View {
         GeometryReader { geo in
             let bandHeight = max(geo.safeAreaInsets.top, 28)
@@ -187,10 +239,19 @@ struct MainWindowView: View {
             .overlay(alignment: .topLeading) { chromeOverlay(bandHeight) }
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: musicFooterVisible)
         }
+        .background(historyShortcuts)
+        .onChange(of: currentLocation) { _, location in
+            if restoringHistory {
+                restoringHistory = false
+            } else {
+                nav.record(location)
+            }
+        }
         .onAppear {
             MusicRemote.shared.start()
             refreshPermissionsPill()
             installMusicKeys()
+            if nav.entries.isEmpty { nav.record(currentLocation) }
         }
         .onDisappear { removeMusicKeys() }
         .onReceive(
@@ -199,6 +260,17 @@ struct MainWindowView: View {
         ) { _ in
             refreshPermissionsPill()
         }
+    }
+
+    private var historyShortcuts: some View {
+        ZStack {
+            Button("", action: goBack)
+                .keyboardShortcut("[", modifiers: .command)
+            Button("", action: goForward)
+                .keyboardShortcut("]", modifiers: .command)
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
     }
 
     private func installMusicKeys() {

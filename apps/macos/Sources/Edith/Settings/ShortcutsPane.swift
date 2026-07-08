@@ -53,6 +53,16 @@ struct ShortcutsPane: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent("Back") {
+                    Text("⌘[")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("Forward") {
+                    Text("⌘]")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Fixed")
             } footer: {
