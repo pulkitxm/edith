@@ -1,4 +1,1 @@
-node_modules
-dist
-*.local
 .DS_Store

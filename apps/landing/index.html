@@ -9,7 +9,7 @@
       content="Edith is a native macOS menu bar app for AI rate-limit tracking, usage analytics, a local music player, and system tools. One-time $50, no subscription."
     />
     <link rel="canonical" href="https://edith.app/" />
-    <meta name="theme-color" content="#141414" />
+    <meta name="theme-color" content="#0e0f11" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
     <link rel="apple-touch-icon" href="/favicon-180.png" />
     <meta property="og:type" content="website" />
@@ -19,7 +19,7 @@
       property="og:description"
       content="Native macOS menu bar app for AI rate-limit tracking, usage analytics, local music, and system tools. Pay once, own it forever."
     />
-    <meta property="og:image" content="https://edith.app/media/dashboard.png" />
+    <meta property="og:image" content="https://edith.app/app-icon-512.png" />
     <meta property="og:url" content="https://edith.app/" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Edith: One Mac app instead of five subscriptions" />
@@ -27,7 +27,7 @@
       name="twitter:description"
       content="Native macOS menu bar app for AI rate-limit tracking, usage analytics, local music, and system tools. Pay once, own it forever."
     />
-    <meta name="twitter:image" content="https://edith.app/media/dashboard.png" />
+    <meta name="twitter:image" content="https://edith.app/app-icon-512.png" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -36,16 +36,397 @@
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "macOS 13+",
         "description": "A native macOS menu bar app for AI rate-limit tracking, usage analytics, a local music player, and system tools.",
-        "offers": {
-          "@type": "Offer",
-          "price": "50",
-          "priceCurrency": "USD"
-        }
+        "offers": { "@type": "Offer", "price": "50", "priceCurrency": "USD" }
       }
     </script>
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <header class="nav">
+      <div class="page nav-inner">
+        <a href="#top" class="brand">
+          <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" class="brand-icon" />
+          <span>Edith</span>
+        </a>
+        <nav class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#performance">Performance</a>
+          <a href="#pricing">Pricing</a>
+        </nav>
+        <a href="#download" class="btn btn-solid btn-sm">Download</a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="page hero-inner">
+          <img src="/app-icon.png" alt="Edith app icon" width="88" height="88" class="hero-icon" />
+          <p class="eyebrow">For macOS</p>
+          <h1>One menu bar app<br />instead of five subscriptions.</h1>
+          <p class="lede">
+            Edith is a native Mac app for AI rate-limit tracking, usage analytics, local music, and
+            system tools. Pay once. Own it forever.
+          </p>
+          <div class="hero-cta">
+            <a href="#download" class="btn btn-solid">
+              <svg class="apple" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"/></svg>
+              Download for macOS
+            </a>
+            <a href="#pricing" class="btn btn-outline">$50, one time</a>
+          </div>
+          <p class="fine">Requires macOS. Apple Silicon and Intel.</p>
+
+          <div class="hero-demo">
+            <div class="demo">
+              <input type="checkbox" id="presenter" class="vh" />
+              <div class="demo-bar">
+                <span class="lights"><i></i><i></i><i></i></span>
+                <span class="demo-title">Edith</span>
+                <span class="spacer"></span>
+                <span class="demo-clock mono">11:59 PM</span>
+              </div>
+              <div class="demo-body">
+                <aside class="demo-nav">
+                  <span class="on">Home</span>
+                  <span>Agent Usage</span>
+                  <span>Music</span>
+                  <span>Calendar</span>
+                  <span class="demo-settings">Settings</span>
+                </aside>
+                <div class="demo-main">
+                  <div class="greeting">
+                    <div class="serif greet-title">Good evening.</div>
+                    <div class="greet-sub">This week <span class="mono sensitive">$2.1k</span></div>
+                  </div>
+
+                  <div class="clocks">
+                    <div class="clock"><div class="mono clock-t">11:59</div><div class="mono clock-ap">PM</div><div class="clock-l">Local</div></div>
+                    <div class="clock"><div class="mono clock-t">2:29</div><div class="mono clock-ap">PM</div><div class="clock-l">New York</div></div>
+                    <div class="clock"><div class="mono clock-t">7:29</div><div class="mono clock-ap">PM</div><div class="clock-l">London</div></div>
+                  </div>
+
+                  <div class="qa">
+                    <span class="qa-tile"><span class="qa-ic">⌨</span><span>Clean keys</span></span>
+                    <span class="qa-tile on"><span class="qa-ic">☾</span><span>Keep awake</span></span>
+                    <label for="presenter" class="qa-tile qa-toggle"><span class="qa-ic">◍</span><span>Presenter</span></label>
+                  </div>
+
+                  <div class="demo-grid">
+                    <div class="panel">
+                      <div class="panel-h">Rate limits</div>
+                      <div class="rings">
+                        <div class="ring">
+                          <svg viewBox="0 0 80 80"><circle class="ring-bg" cx="40" cy="40" r="32"/><circle class="ring-fg sage" cx="40" cy="40" r="32" transform="rotate(-90 40 40)" style="stroke-dashoffset:106.6"/></svg>
+                          <span class="ring-val mono">47%</span>
+                          <span class="ring-lab">Session</span><span class="ring-sub mono">2h 47m</span>
+                        </div>
+                        <div class="ring">
+                          <svg viewBox="0 0 80 80"><circle class="ring-bg" cx="40" cy="40" r="32"/><circle class="ring-fg accentstroke" cx="40" cy="40" r="32" transform="rotate(-90 40 40)" style="stroke-dashoffset:64.3"/></svg>
+                          <span class="ring-val mono">68%</span>
+                          <span class="ring-lab">Week</span><span class="ring-sub mono">3d 6h</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="panel">
+                      <div class="panel-h between"><span>Activity</span><span class="mono muted2">May to Jul</span></div>
+                      <div class="heatmap" data-rows="7" data-cols="16" aria-hidden="true"></div>
+                    </div>
+                  </div>
+
+                  <div class="np">
+                    <span class="np-art" data-art></span>
+                    <div class="np-meta">
+                      <div class="np-title sensitive" data-title>Weightless</div>
+                      <div class="np-artist sensitive" data-artist>Marconi Union</div>
+                      <div class="np-bar"><span data-progress></span></div>
+                    </div>
+                    <div class="np-ctrl"><span>⏮</span><span class="np-play">❚❚</span><span>⏭</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="fine center">The Home panel, running live. Click Presenter to blur the numbers.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page pitch">
+        <div class="pitch-grid">
+          <p class="eyebrow">The pitch</p>
+          <div>
+            <h2>Stop renting five menu bar utilities. Buy one. Own it forever.</h2>
+            <p class="muted big">
+              Every feature in Edith is normally its own app with its own subscription. We built the
+              whole shelf into a single native binary that idles at twenty-two megabytes.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="page replaces">
+        <div class="table">
+          <div class="tr th">
+            <span>Instead of paying monthly for</span>
+            <span>Edith includes it</span>
+            <span class="right">Their price</span>
+          </div>
+          <div class="tr"><span class="strike">A Claude usage and rate-limit tracker</span><span class="inc">Live session and weekly rings with countdowns</span><span class="right mono strike">$8/mo</span></div>
+          <div class="tr"><span class="strike">A menu bar stats readout</span><span class="inc">Session and weekly %, tinted by a risk model</span><span class="right mono strike">$5/mo</span></div>
+          <div class="tr"><span class="strike">A usage-alerts service</span><span class="inc">Threshold, ahead-of-pace, burn, back-to-green, pre-reset</span><span class="right mono strike">$6/mo</span></div>
+          <div class="tr"><span class="strike">An analytics dashboard</span><span class="inc">KPIs, per-day and per-model charts, sortable table</span><span class="right mono strike">$12/mo</span></div>
+          <div class="tr"><span class="strike">A GitHub-style heatmap tool</span><span class="inc">Daily spend calendar across your full history</span><span class="right mono strike">$4/mo</span></div>
+          <div class="tr"><span class="strike">A local music player</span><span class="inc">Thumbnails, drag-to-seek, fades, auto-advance, media keys</span><span class="right mono strike">$5/mo</span></div>
+          <div class="tr"><span class="strike">A clipboard manager</span><span class="inc">Clipboard history with instant paste on a hotkey</span><span class="right mono strike">$6/mo</span></div>
+          <div class="tr"><span class="strike">A color picker</span><span class="inc">System loupe on a hotkey, sampled hex to your clipboard</span><span class="right mono strike">$5/mo</span></div>
+          <div class="tr"><span class="strike">Focus and system utilities</span><span class="inc">Focus dim, prevent-sleep, keyboard-clean lock, notch shelf</span><span class="right mono strike">$5/mo</span></div>
+        </div>
+        <div class="replaces-sum">
+          <p class="mono strike muted2">$56/mo, roughly $672 a year across nine separate apps</p>
+          <p class="sum-big"><span class="accent">$50 once.</span> Everything above, forever.</p>
+          <p class="muted">A one-time fee. No subscription, no account, no nonsense.</p>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner">
+          <div class="feature-copy">
+            <p class="eyebrow">Rate limits</p>
+            <h3>Live rings for session and week.</h3>
+            <p class="muted big">Second-by-second countdowns to your next 5-hour session reset and to the weekly rollover. A 24-hour spark shows the shape of your day at a glance.</p>
+          </div>
+          <div class="feature-media">
+            <div class="card">
+              <div class="panel-h between"><span>Rate limits</span><span class="mono muted2">session, weekly</span></div>
+              <div class="rings big">
+                <div class="ring">
+                  <svg viewBox="0 0 96 96"><circle class="ring-bg" cx="48" cy="48" r="38"/><circle class="ring-fg sage" cx="48" cy="48" r="38" transform="rotate(-90 48 48)" style="stroke-dashoffset:126.5"/></svg>
+                  <span class="ring-val mono">47%</span><span class="ring-lab">Session (5h)</span><span class="ring-sub mono">resets 2h 47m</span>
+                </div>
+                <div class="ring">
+                  <svg viewBox="0 0 96 96"><circle class="ring-bg" cx="48" cy="48" r="38"/><circle class="ring-fg accentstroke" cx="48" cy="48" r="38" transform="rotate(-90 48 48)" style="stroke-dashoffset:76.4"/></svg>
+                  <span class="ring-val mono">68%</span><span class="ring-lab">Weekly</span><span class="ring-sub mono">resets 3d 6h</span>
+                </div>
+              </div>
+              <div class="spark" data-spark></div>
+              <div class="mono muted2 center small">24-hour spark</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner reverse">
+          <div class="feature-copy">
+            <p class="eyebrow">Menu bar</p>
+            <h3>Two numbers in your menu bar.</h3>
+            <p class="muted big">Session and weekly percentages, tinted by a time-aware risk model. Green when you have room. Amber when you're close. Red when the next prompt could push you over.</p>
+          </div>
+          <div class="feature-media">
+            <div class="card">
+              <div class="menubar mono">
+                <span><span class="sage">38%</span> <span class="muted2">·</span> <span class="accent">62%</span></span>
+                <span class="muted2">Wed 14:22</span>
+              </div>
+              <div class="risk">
+                <span class="risk-item"><i class="dot sage-bg"></i>Safe</span>
+                <span class="risk-item"><i class="dot accent-bg"></i>Close</span>
+                <span class="risk-item"><i class="dot danger-bg"></i>Over</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner">
+          <div class="feature-copy">
+            <p class="eyebrow">Notifications</p>
+            <h3>Alerts that stay out of your way.</h3>
+            <p class="muted big">Threshold, ahead-of-pace, burn, back-to-green, and pre-reset. All optional. A single button sends a test notification and reports back exactly why it did or didn't fire.</p>
+          </div>
+          <div class="feature-media">
+            <div class="notifs">
+              <div class="notif"><span class="notif-ic"></span><div class="notif-b"><div class="notif-h"><b>Ahead of pace</b><span class="mono muted2">Edith · now</span></div><p>You're using this session faster than usual. 72% with 2h 47m left.</p></div><i class="dot accent-bg glow"></i></div>
+              <div class="notif"><span class="notif-ic"></span><div class="notif-b"><div class="notif-h"><b>Approaching weekly limit</b><span class="mono muted2">Edith · now</span></div><p>Week usage at 85%. Resets Sunday 4:00 PM.</p></div><i class="dot danger-bg glow"></i></div>
+              <div class="notif"><span class="notif-ic"></span><div class="notif-b"><div class="notif-h"><b>Back in the green</b><span class="mono muted2">Edith · now</span></div><p>Session dropped below 60%. Room to keep going.</p></div><i class="dot sage-bg glow"></i></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner reverse">
+          <div class="feature-copy">
+            <p class="eyebrow">Heatmap</p>
+            <h3>A year of usage at a glance.</h3>
+            <p class="muted big">A GitHub-style calendar of daily spend across your full history. Every day is a square, shaded by how much you spent. Hover any square for the exact number.</p>
+          </div>
+          <div class="feature-media">
+            <div class="card">
+              <div class="panel-h between"><span>Activity</span><span class="mono muted2">$1,284 · 13 weeks</span></div>
+              <div class="heat-months mono muted2"><span>May</span><span class="center">Jun</span><span class="right">Jul</span></div>
+              <div class="heatmap" data-rows="7" data-cols="20" aria-hidden="true"></div>
+              <div class="heat-legend mono muted2">Less<i class="hl l0"></i><i class="hl l1"></i><i class="hl l2"></i><i class="hl l3"></i><i class="hl l4"></i>More</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner">
+          <div class="feature-copy">
+            <p class="eyebrow">Music</p>
+            <h3>Your local music folder, done right.</h3>
+            <p class="muted big">Cover thumbnails, drag-to-seek, crossfades, auto-advance, and media keys. Point it at a folder and press play. No cloud, no accounts, no ads.</p>
+          </div>
+          <div class="feature-media">
+            <div class="card">
+              <div class="np np-plain">
+                <span class="np-art static-art"></span>
+                <div class="np-meta">
+                  <div class="np-title">Weightless</div>
+                  <div class="np-artist">Marconi Union</div>
+                  <div class="np-bar"><span style="width:42%"></span></div>
+                  <div class="np-times mono muted2"><span>2:38</span><span>-3:34</span></div>
+                </div>
+              </div>
+              <div class="track-list">
+                <div class="track"><span class="track-art a1"></span><span class="track-name">Clair de Lune · Debussy</span><span class="mono muted2">5:02</span></div>
+                <div class="track"><span class="track-art a2"></span><span class="track-name">Time · Hans Zimmer</span><span class="mono muted2">4:35</span></div>
+                <div class="track"><span class="track-art a3"></span><span class="track-name">Intro · The xx</span><span class="mono muted2">2:07</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner reverse">
+          <div class="feature-copy">
+            <p class="eyebrow">Privacy</p>
+            <h3>Presenter mode for the room.</h3>
+            <p class="muted big">One toggle blurs spend figures and track names so you can screen-share without exposing your bill. Watch it flip below. Usage stays local, with optional iCloud backup that merges across your machines.</p>
+          </div>
+          <div class="feature-media">
+            <div class="card" data-presenter-demo>
+              <div class="panel-h between"><span>Usage</span><span class="pbadge" data-pbadge>Presenter on</span></div>
+              <div class="kpis4">
+                <div class="kpi"><div class="kpi-l">Cost this cycle</div><div class="kpi-v mono psens">$3.8k</div></div>
+                <div class="kpi"><div class="kpi-l">Tokens</div><div class="kpi-v mono psens">5.19B</div></div>
+                <div class="kpi"><div class="kpi-l">Cache hit</div><div class="kpi-v mono">99.5%</div></div>
+                <div class="kpi"><div class="kpi-l">Top model</div><div class="kpi-v mono">opus-4-8</div></div>
+              </div>
+              <p class="center muted small" data-pnote>Spend and track names hidden for the room.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div class="page feature-inner">
+          <div class="feature-copy">
+            <p class="eyebrow">System</p>
+            <h3>Prevent sleep. Lock the keyboard.</h3>
+            <p class="muted big">Keep your Mac awake for a long build, even with the lid closed on power. Lock the keyboard to wipe it down without triggering shortcuts. Auto-restores in sixty seconds so you can't lock yourself out.</p>
+          </div>
+          <div class="feature-media">
+            <div class="card">
+              <div class="panel-h">Quick actions</div>
+              <div class="qa qa3">
+                <span class="qa-tile"><span class="qa-ic">⌨</span><span>Clean keys</span><small>Lock the keyboard to wipe it</small></span>
+                <span class="qa-tile on"><span class="qa-ic">☾</span><span>Keep awake</span><small>Stop this Mac from sleeping</small></span>
+                <span class="qa-tile"><span class="qa-ic">◍</span><span>Presenter</span><small>Blur sensitive values</small></span>
+              </div>
+              <div class="sys-note"><span class="lock">🔒</span>Keyboard relocks for 60s, then restores itself. No way to get stuck.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page more">
+        <div class="more-head">
+          <p class="eyebrow">And the rest of the shelf</p>
+          <h2>Nine more tools you'd otherwise install one by one.</h2>
+        </div>
+        <div class="more-grid">
+          <div class="mcard"><span class="mic">◉</span><h4>Color picker</h4><p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p></div>
+          <div class="mcard"><span class="mic">⊚</span><h4>Focus dim</h4><p>Dims everything behind your active app so one window is all you see.</p></div>
+          <div class="mcard"><span class="mic">▭</span><h4>Notch shelf</h4><p>Park files under the notch mid-drag, then drop them wherever they belong.</p></div>
+          <div class="mcard"><span class="mic">▤</span><h4>Clipboard history</h4><p>Everything you copied, one shortcut away, with instant paste.</p></div>
+          <div class="mcard"><span class="mic">▦</span><h4>Calendar</h4><p>Today's schedule in the panel and the app, with one-tap join links.</p></div>
+          <div class="mcard"><span class="mic">◷</span><h4>World clocks</h4><p>Local time plus the offices you care about, at a glance.</p></div>
+          <div class="mcard"><span class="mic">⌘</span><h4>Global shortcut</h4><p>Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.</p></div>
+          <div class="mcard"><span class="mic">⛨</span><h4>Local first</h4><p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p></div>
+        </div>
+      </section>
+
+      <section id="performance" class="page perf">
+        <div class="perf-grid">
+          <div>
+            <p class="eyebrow">24/7, quietly</p>
+            <h2>Built to sit in your menu bar forever.</h2>
+            <p class="muted big">Native SwiftUI, not Electron. Work stops when it isn't seen. Disabling a tab tears down its timers and background jobs. Per-frame UI only redraws while the panel is open.</p>
+            <p class="fine">Measured on Apple M4 Pro. CPU as a share of one core, memory as physical footprint.</p>
+          </div>
+          <div class="table perf-table">
+            <div class="tr th perf-tr"><span>State</span><span class="right">CPU</span><span class="right">Memory</span></div>
+            <div class="tr perf-tr"><span>Idle, panel closed</span><span class="right mono">~0%</span><span class="right mono">~22 MB</span></div>
+            <div class="tr perf-tr"><span>Music playing, panel closed</span><span class="right mono">~1%</span><span class="right mono">~40 MB</span></div>
+            <div class="tr perf-tr"><span>Paused</span><span class="right mono">&lt;1%</span><span class="right mono">~40 MB</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page local">
+        <p class="eyebrow">Local first</p>
+        <h2>Your usage never leaves your Mac.</h2>
+        <p class="muted big center-narrow">No account. No telemetry. Optional iCloud backup merges cleanly across machines so your history follows you between a MacBook and a Mac mini.</p>
+      </section>
+
+      <section id="pricing" class="page pricing">
+        <div class="pricing-head">
+          <p class="eyebrow">Pricing</p>
+          <h2>One payment. Yours forever.</h2>
+        </div>
+        <div class="price-card">
+          <div class="price-row"><span class="price">$50</span><span class="muted">USD</span></div>
+          <p class="muted">One time. Lifetime license. Free updates.</p>
+          <ul class="price-list">
+            <li><span class="tick"></span>Rate-limit rings and menu bar readout</li>
+            <li><span class="tick"></span>Full analytics dashboard and heatmap</li>
+            <li><span class="tick"></span>Smart notifications</li>
+            <li><span class="tick"></span>Local music player</li>
+            <li><span class="tick"></span>Clipboard, color picker, focus dim, notch shelf</li>
+            <li><span class="tick"></span>No subscription. No account. Ever.</li>
+          </ul>
+          <a href="#download" class="btn btn-solid full"><svg class="apple" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"/></svg>Download for macOS</a>
+          <p class="fine center">Requires macOS. Apple Silicon and Intel.</p>
+        </div>
+        <p class="fine center-narrow">Compare to roughly $56 a month across nine separate menu bar utilities. Edith pays for itself in under a week.</p>
+      </section>
+
+      <section id="download" class="page download">
+        <h2>Try Edith on your Mac.</h2>
+        <a href="#" class="btn btn-accent"><svg class="apple" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"/></svg>Download for macOS</a>
+        <p class="fine">Requires macOS. Apple Silicon and Intel.</p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="page footer-inner">
+        <div class="brand">
+          <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" class="brand-icon" />
+          <span class="muted small">Edith. Made for macOS.</span>
+        </div>
+        <div class="footer-links">
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#download">Download</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/app.js" defer></script>
   </body>
 </html>

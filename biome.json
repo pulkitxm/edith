@@ -1,5 +1,18 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
-  "files": { "includes": ["scripts/**"] },
-  "formatter": { "indentStyle": "space" }
+  "files": {
+    "includes": ["scripts/**", "apps/landing/app.js", "apps/landing/styles.css"]
+  },
+  "formatter": { "indentStyle": "space" },
+  "overrides": [
+    {
+      "includes": ["apps/landing/styles.css"],
+      "linter": {
+        "rules": {
+          "complexity": { "noImportantStyles": "off" },
+          "style": { "noDescendingSpecificity": "off" }
+        }
+      }
+    }
+  ]
 }
