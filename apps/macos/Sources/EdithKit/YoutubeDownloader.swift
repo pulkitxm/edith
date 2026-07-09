@@ -5,12 +5,67 @@ extension Notification.Name {
     public static let musicFolderChanged = Notification.Name("musicFolderChanged")
 }
 
-public enum DownloadStatus: Equatable {
+public enum DownloadStatus: Equatable, Codable {
     case queued
     case resolving
     case downloading(progress: String, videoIndex: Int, videoCount: Int)
     case done(String)
     case error(String)
+    case interrupted(String?)
+
+    enum CodingKeys: String, CodingKey {
+        case kind, value, a, b, c
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(String.self, forKey: .kind)
+        switch kind {
+        case "queued": self = .queued
+        case "resolving": self = .resolving
+        case "downloading":
+            let p = try c.decodeIfPresent(String.self, forKey: .value) ?? ""
+            let vi = try c.decodeIfPresent(Int.self, forKey: .a) ?? 0
+            let vc = try c.decodeIfPresent(Int.self, forKey: .b) ?? 0
+            self = .downloading(progress: p, videoIndex: vi, videoCount: vc)
+        case "done":
+            self = .done(try c.decode(String.self, forKey: .value))
+        case "error":
+            self = .error(try c.decode(String.self, forKey: .value))
+        case "interrupted":
+            self = .interrupted(try c.decodeIfPresent(String.self, forKey: .value))
+        default: self = .interrupted(nil)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .queued: try c.encode("queued", forKey: .kind)
+        case .resolving: try c.encode("resolving", forKey: .kind)
+        case let .downloading(p, vi, vc):
+            try c.encode("downloading", forKey: .kind)
+            try c.encode(p, forKey: .value)
+            try c.encode(vi, forKey: .a)
+            try c.encode(vc, forKey: .b)
+        case let .done(o):
+            try c.encode("done", forKey: .kind)
+            try c.encode(o, forKey: .value)
+        case let .error(e):
+            try c.encode("error", forKey: .kind)
+            try c.encode(e, forKey: .value)
+        case let .interrupted(r):
+            try c.encode("interrupted", forKey: .kind)
+            try c.encodeIfPresent(r, forKey: .value)
+        }
+    }
+}
+
+private struct SavedItem: Codable {
+    let url: URL
+    var status: DownloadStatus
+    var outputFilename: String?
+    var createdAt: Date
 }
 
 @MainActor
@@ -22,20 +77,67 @@ public final class YoutubeDownloader: ObservableObject {
     @Published public private(set) var unavailableReason: String?
 
     private var currentProcess: Process?
+    private var currentItemID: UUID?
 
     public struct DownloadItem: Identifiable, Equatable {
         public let id = UUID()
         public let url: URL
         public var status: DownloadStatus
         public var outputFilename: String?
+        public let createdAt: Date
 
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
             lhs.id == rhs.id
         }
     }
 
+    private var persistenceURL: URL {
+        Repo.dataDir.appendingPathComponent("downloads.json")
+    }
+
     private init() {
         checkAvailability()
+        load()
+        var changed = false
+        for i in items.indices {
+            switch items[i].status {
+            case .queued, .resolving, .downloading:
+                items[i].status = .interrupted("Interrupted")
+                changed = true
+            default:
+                break
+            }
+        }
+        if changed {
+            save()
+            NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            IPC.post(IPC.Name.musicFolderChanged)
+        }
+    }
+
+    private func save() {
+        let saved = items.map {
+            SavedItem(
+                url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
+                createdAt: $0.createdAt)
+        }
+        if let data = try? JSONEncoder().encode(saved) {
+            try? FileManager.default.createDirectory(
+                at: Repo.dataDir, withIntermediateDirectories: true)
+            try? data.write(to: persistenceURL, options: .atomic)
+        }
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: persistenceURL),
+            let saved = try? JSONDecoder().decode([SavedItem].self, from: data)
+        else { return }
+        items = saved.map {
+            DownloadItem(
+                url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
+                createdAt: $0.createdAt)
+        }
+        .sorted { $0.createdAt > $1.createdAt }
     }
 
     public func checkAvailability() {
@@ -84,22 +186,57 @@ public final class YoutubeDownloader: ObservableObject {
             } else {
                 template = outputDir.appendingPathComponent("\(prefix)%(title)s.%(ext)s").path
             }
-            return DownloadItem(url: url, status: .queued, outputFilename: template)
+            return DownloadItem(
+                url: url, status: .queued, outputFilename: template, createdAt: Date())
         }
-        self.items.append(contentsOf: items)
+        self.items.insert(contentsOf: items, at: 0)
+        save()
         if !isRunning {
             processNext()
         }
     }
 
+    public func retry(_ item: DownloadItem) {
+        guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[idx].status = .queued
+        save()
+        if !isRunning {
+            processNext()
+        }
+    }
+
+    public func retryAll() {
+        for i in items.indices {
+            switch items[i].status {
+            case .error, .interrupted:
+                items[i].status = .queued
+            default:
+                break
+            }
+        }
+        save()
+        if !isRunning {
+            processNext()
+        }
+    }
+
+    public func clearHistory() {
+        cancelAll()
+        items.removeAll()
+        save()
+    }
+
     private func processNext() {
         guard let index = items.firstIndex(where: { $0.status == .queued }) else {
             isRunning = false
+            currentItemID = nil
             return
         }
         isRunning = true
         let item = items[index]
+        currentItemID = item.id
         items[index].status = .resolving
+        save()
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -144,6 +281,7 @@ public final class YoutubeDownloader: ObservableObject {
                         .compactMap { URL(string: $0)?.lastPathComponent } ?? []
                     let label = files.isEmpty ? "done" : files.joined(separator: ", ")
                     self.items[index].status = .done(label)
+                    self.save()
                     NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
                     IPC.post(IPC.Name.musicFolderChanged)
                 } else {
@@ -152,6 +290,7 @@ public final class YoutubeDownloader: ObservableObject {
                         String(data: errData, encoding: .utf8)?.trimmingCharacters(
                             in: .whitespacesAndNewlines) ?? "Unknown error"
                     self.items[index].status = .error(msg)
+                    self.save()
                 }
                 self.processNext()
             }
@@ -162,6 +301,7 @@ public final class YoutubeDownloader: ObservableObject {
             try p.run()
         } catch {
             items[index].status = .error(error.localizedDescription)
+            save()
             processNext()
         }
     }
@@ -169,8 +309,17 @@ public final class YoutubeDownloader: ObservableObject {
     public func cancelAll() {
         currentProcess?.terminate()
         currentProcess = nil
-        items.removeAll()
+        for i in items.indices {
+            switch items[i].status {
+            case .queued, .resolving, .downloading:
+                items[i].status = .interrupted("Cancelled")
+            default:
+                break
+            }
+        }
         isRunning = false
+        currentItemID = nil
+        save()
     }
 
     private func parseProgress(from text: String) -> (

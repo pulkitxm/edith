@@ -19,6 +19,23 @@ struct DownloadSheet: View {
     private var canStart: Bool {
         parsedCount > 0 && !downloader.isRunning
     }
+
+    private var activeItems: [YoutubeDownloader.DownloadItem] {
+        downloader.items.filter {
+            switch $0.status {
+            case .queued, .resolving, .downloading: true
+            default: false
+            }
+        }
+    }
+    private var historyItems: [YoutubeDownloader.DownloadItem] {
+        downloader.items.filter {
+            switch $0.status {
+            case .queued, .resolving, .downloading: false
+            default: true
+            }
+        }
+    }
     private var progressFraction: Double {
         let total = downloader.items.count
         guard total > 0 else { return 0 }
@@ -28,18 +45,20 @@ struct DownloadSheet: View {
         return Double(done) / Double(total)
     }
     private var summaryText: String {
-        let total = downloader.items.count
-        guard total > 0 else { return "" }
+        let active = activeItems.count
         let done = downloader.items.filter {
             if case .done = $0.status { return true }; return false
         }.count
         let errors = downloader.items.filter {
             if case .error = $0.status { return true }; return false
         }.count
-        let pending = total - done - errors
+        let interrupted = downloader.items.filter {
+            if case .interrupted = $0.status { return true }; return false
+        }.count
         var parts: [String] = []
         if done > 0 { parts.append("\(done) done") }
-        if pending > 0 { parts.append("\(pending) left") }
+        if active > 0 { parts.append("\(active) active") }
+        if interrupted > 0 { parts.append("\(interrupted) paused") }
         if errors > 0 { parts.append("\(errors) failed") }
         return parts.joined(separator: " · ")
     }
@@ -54,7 +73,7 @@ struct DownloadSheet: View {
                 content
             }
         }
-        .frame(width: 520, height: 530)
+        .frame(width: 560, height: 580)
         .background(DashSkin.paper(dark))
     }
 
@@ -111,9 +130,22 @@ struct DownloadSheet: View {
             .padding(.bottom, 14)
         } else {
             VStack(spacing: 0) {
-                progressHeader
+                urlBar
                 Divider().overlay(DashSkin.line(dark))
-                queueList
+                if !activeItems.isEmpty {
+                    progressHeader
+                    activeQueue
+                        .frame(maxHeight: 200)
+                    Divider().overlay(DashSkin.line(dark))
+                }
+                if !historyItems.isEmpty {
+                    historyHeader
+                    historyList
+                }
+                if activeItems.isEmpty && historyItems.isEmpty {
+                    emptyState
+                }
+                Spacer(minLength: 0)
                 Divider().overlay(DashSkin.line(dark))
                 controlsRow
             }
@@ -232,10 +264,38 @@ struct DownloadSheet: View {
         }
     }
 
+    private var urlBar: some View {
+        HStack(spacing: 8) {
+            TextField("Add more YouTube URLs...", text: $urlText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(DashSkin.ink(dark))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                )
+                .disabled(downloader.isRunning)
+            Button(action: addMore) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(canStart ? theme : Color.gray.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canStart)
+            .pointerCursor()
+            .help("Add to queue")
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 8)
+    }
+
     private var progressHeader: some View {
         VStack(spacing: 6) {
             HStack {
-                Text("QUEUE")
+                Text("DOWNLOADING")
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .tracking(0.5)
@@ -263,10 +323,10 @@ struct DownloadSheet: View {
         .padding(.vertical, 10)
     }
 
-    private var queueList: some View {
+    private var activeQueue: some View {
         ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(downloader.items) { item in
+                ForEach(activeItems) { item in
                     queueCard(item)
                 }
             }
@@ -274,6 +334,59 @@ struct DownloadSheet: View {
             .padding(.vertical, 8)
         }
         .scrollIndicators(.hidden)
+    }
+
+    private var historyHeader: some View {
+        HStack {
+            Text("HISTORY")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .tracking(0.5)
+            Spacer()
+            let failedCount = downloader.items.filter {
+                if case .error = $0.status { return true }; return false
+            }.count
+            let interruptedCount = downloader.items.filter {
+                if case .interrupted = $0.status { return true }; return false
+            }.count
+            if failedCount + interruptedCount > 0 {
+                Button("Retry All") {
+                    downloader.retryAll()
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: 10.5, weight: .medium))
+                .pointerCursor()
+                .disabled(downloader.isRunning)
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 8)
+    }
+
+    private var historyList: some View {
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(historyItems) { item in
+                    historyRow(item)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Spacer()
+            Image(systemName: "tray")
+                .font(.system(size: 24))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Text("No downloads yet")
+                .font(.system(size: 12))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+            Spacer()
+        }
     }
 
     private func queueCard(_ item: YoutubeDownloader.DownloadItem) -> some View {
@@ -310,6 +423,10 @@ struct DownloadSheet: View {
                     Image(systemName: "exclamationmark.circle.fill")
                         .font(.system(size: 16))
                         .foregroundStyle(.red)
+                case .interrupted:
+                    Image(systemName: "pause.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.orange)
                 }
             }
             .frame(width: 20)
@@ -331,10 +448,7 @@ struct DownloadSheet: View {
                         statusBadge("Resolving", color: DashSkin.inkSoft(dark))
                     case let .downloading(progress, videoIndex, videoCount):
                         if videoIndex > 0, videoCount > 0 {
-                            statusBadge(
-                                "\(videoIndex)/\(videoCount)",
-                                color: theme
-                            )
+                            statusBadge("\(videoIndex)/\(videoCount)", color: theme)
                         }
                         if !progress.isEmpty {
                             Text(progress)
@@ -351,6 +465,10 @@ struct DownloadSheet: View {
                             .font(.system(size: 10))
                             .foregroundStyle(.red)
                             .lineLimit(2)
+                    case let .interrupted(reason):
+                        Text(reason ?? "Paused")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.orange)
                     }
                 }
             }
@@ -371,24 +489,93 @@ struct DownloadSheet: View {
         )
     }
 
-    private func statusBadge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.12), in: Capsule())
+    private func historyRow(_ item: YoutubeDownloader.DownloadItem) -> some View {
+        HStack(spacing: 10) {
+            Group {
+                switch item.status {
+                case .done:
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.green)
+                case .error:
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red)
+                case .interrupted:
+                    Image(systemName: "pause.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.orange)
+                default:
+                    EmptyView()
+                }
+            }
+            .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(displayURL(item.url))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                switch item.status {
+                case let .done(output):
+                    Text(output)
+                        .font(.system(size: 10))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                case let .error(msg):
+                    Text(msg)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                case let .interrupted(reason):
+                    Text(reason ?? "Paused")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.orange)
+                default:
+                    EmptyView()
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            switch item.status {
+            case .error, .interrupted:
+                Button("Retry") {
+                    downloader.retry(item)
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(theme)
+                .pointerCursor()
+                .disabled(downloader.isRunning)
+            default:
+                EmptyView()
+            }
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .background(Color.clear, in: RoundedRectangle(cornerRadius: 6))
     }
 
     private var controlsRow: some View {
-        HStack {
+        HStack(spacing: 8) {
+            if !downloader.items.isEmpty {
+                Button("Clear History") {
+                    downloader.clearHistory()
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: 11))
+                .pointerCursor()
+                .disabled(downloader.isRunning)
+            }
             if downloader.isRunning {
                 Button {
                     downloader.cancelAll()
-                    dismiss()
                 } label: {
                     Label("Cancel All", systemImage: "xmark")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .pointerCursor()
@@ -401,6 +588,7 @@ struct DownloadSheet: View {
                 dismiss()
             }
             .buttonStyle(HoverButtonStyle())
+            .font(.system(size: 11))
             .pointerCursor()
         }
         .padding(.horizontal, 22)
@@ -412,6 +600,15 @@ struct DownloadSheet: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .tracking(0.6)
+    }
+
+    private func statusBadge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.12), in: Capsule())
     }
 
     private func displayURL(_ url: URL) -> String {
@@ -427,6 +624,13 @@ struct DownloadSheet: View {
     }
 
     private func startDownload() {
+        let urls = downloader.parseURLs(from: urlText)
+        guard !urls.isEmpty else { return }
+        downloader.enqueue(urls: urls, prefix: filenamePrefix)
+        urlText = ""
+    }
+
+    private func addMore() {
         let urls = downloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
         downloader.enqueue(urls: urls, prefix: filenamePrefix)
