@@ -75,6 +75,10 @@ public final class YoutubeDownloader: ObservableObject {
     @Published public private(set) var items: [DownloadItem] = []
     @Published public private(set) var isRunning = false
     @Published public private(set) var unavailableReason: String?
+    @Published public private(set) var ytdlpVersion: String?
+    @Published public private(set) var isUpdatingYTDLP = false
+    @Published public private(set) var ytdlpUpdateMessage: String?
+    @Published public private(set) var updateResult: Result<String, Error>? = nil
 
     private var currentProcess: Process?
     private var currentItemID: UUID?
@@ -145,20 +149,77 @@ public final class YoutubeDownloader: ObservableObject {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         p.arguments = ["yt-dlp", "--version"]
-        p.standardOutput = Pipe()
-        p.standardError = Pipe()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        p.standardOutput = outPipe
+        p.standardError = errPipe
         do {
             try p.run()
             p.waitUntilExit()
             if p.terminationStatus == 0 {
                 unavailableReason = nil
+                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+                ytdlpVersion = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             } else {
                 unavailableReason =
                     "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
+                ytdlpVersion = nil
             }
         } catch {
             unavailableReason =
                 "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
+            ytdlpVersion = nil
+        }
+    }
+
+    public func updateYTDLP(completion: ((Result<String, Error>) -> Void)? = nil) {
+        isUpdatingYTDLP = true
+        updateResult = nil
+        ytdlpUpdateMessage = nil
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = ["yt-dlp", "-U"]
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        p.standardOutput = outPipe
+        p.standardError = errPipe
+
+        p.terminationHandler = { [weak self] proc in
+            let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            Task { @MainActor in
+                guard let self else { return }
+                self.isUpdatingYTDLP = false
+                if proc.terminationStatus == 0 {
+                    let msg = out.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let text = msg.isEmpty ? "yt-dlp updated" : msg
+                    self.updateResult = .success(text)
+                    self.ytdlpUpdateMessage = text
+                } else {
+                    let msg = err.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let text = msg.isEmpty ? "Update failed" : msg
+                    let error = NSError(
+                        domain: "YTDLP",
+                        code: Int(proc.terminationStatus),
+                        userInfo: [NSLocalizedDescriptionKey: text]
+                    )
+                    self.updateResult = .failure(error)
+                    self.ytdlpUpdateMessage = text
+                }
+                self.checkAvailability()
+                completion?(self.updateResult!)
+            }
+        }
+
+        do {
+            try p.run()
+        } catch {
+            isUpdatingYTDLP = false
+            updateResult = .failure(error)
+            ytdlpUpdateMessage = error.localizedDescription
+            checkAvailability()
+            completion?(updateResult!)
         }
     }
 
@@ -231,11 +292,13 @@ public final class YoutubeDownloader: ObservableObject {
         guard let index = items.firstIndex(where: { $0.status == .queued }) else {
             isRunning = false
             currentItemID = nil
+            currentProcess = nil
             return
         }
         isRunning = true
         let item = items[index]
-        currentItemID = item.id
+        let itemID = item.id
+        currentItemID = itemID
         items[index].status = .resolving
         save()
 
@@ -259,7 +322,10 @@ public final class YoutubeDownloader: ObservableObject {
             let data = handle.availableData
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor in
-                guard let self, index < self.items.count else { return }
+                guard let self else { return }
+                guard let index = self.indexOfItem(with: itemID) else { return }
+                // Don't overwrite a cancelled/interrupted status with fresh progress.
+                if case .interrupted = self.items[index].status { return }
                 self.items[index].logs += text
                 let (progress, videoIndex, videoCount) = self.parseProgress(from: text)
                 self.items[index].status = .downloading(
@@ -273,7 +339,17 @@ public final class YoutubeDownloader: ObservableObject {
             let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
 
             Task { @MainActor in
-                guard let self, index < self.items.count else { return }
+                guard let self else { return }
+                defer {
+                    self.currentProcess = nil
+                    self.currentItemID = nil
+                    self.processNext()
+                }
+                guard let index = self.indexOfItem(with: itemID) else { return }
+                // If the item was cancelled, leave it as interrupted.
+                if case .interrupted = self.items[index].status {
+                    return
+                }
                 if proc.terminationStatus == 0 {
                     let files =
                         String(data: outData, encoding: .utf8)?
@@ -288,13 +364,16 @@ public final class YoutubeDownloader: ObservableObject {
                     IPC.post(IPC.Name.musicFolderChanged)
                 } else {
                     let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    let msg =
+                    var msg =
                         String(data: errData, encoding: .utf8)?.trimmingCharacters(
-                            in: .whitespacesAndNewlines) ?? "Unknown error"
-                    self.items[index].status = .error(msg)
+                            in: .whitespacesAndNewlines)
+                        ?? ""
+                    if msg.isEmpty {
+                        msg = self.items[index].logs.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    self.items[index].status = .error(msg.isEmpty ? "Unknown error" : msg)
                     self.save()
                 }
-                self.processNext()
             }
         }
 
@@ -302,10 +381,20 @@ public final class YoutubeDownloader: ObservableObject {
         do {
             try p.run()
         } catch {
+            currentProcess = nil
+            currentItemID = nil
+            guard let index = indexOfItem(with: itemID) else {
+                processNext()
+                return
+            }
             items[index].status = .error(error.localizedDescription)
             save()
             processNext()
         }
+    }
+
+    private func indexOfItem(with id: UUID) -> Int? {
+        items.firstIndex(where: { $0.id == id })
     }
 
     public func cancelAll() {

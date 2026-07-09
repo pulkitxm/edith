@@ -24,7 +24,7 @@ struct DownloadSheet: View {
     private var activeItems: [YoutubeDownloader.DownloadItem] {
         downloader.items.filter {
             switch $0.status {
-            case .queued, .resolving, .downloading: true
+            case .queued, .resolving, .downloading, .error: true
             default: false
             }
         }
@@ -32,7 +32,7 @@ struct DownloadSheet: View {
     private var historyItems: [YoutubeDownloader.DownloadItem] {
         downloader.items.filter {
             switch $0.status {
-            case .queued, .resolving, .downloading: false
+            case .queued, .resolving, .downloading, .error: false
             default: true
             }
         }
@@ -46,7 +46,12 @@ struct DownloadSheet: View {
         return Double(done) / Double(total)
     }
     private var summaryText: String {
-        let active = activeItems.count
+        let active = downloader.items.filter {
+            switch $0.status {
+            case .queued, .resolving, .downloading: true
+            default: false
+            }
+        }.count
         let done = downloader.items.filter {
             if case .done = $0.status { return true }; return false
         }.count
@@ -79,11 +84,38 @@ struct DownloadSheet: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 10) {
             Text("Download YouTube Audio")
                 .font(DashSkin.serif(20))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
+            Button {
+                downloader.updateYTDLP()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(HoverButtonStyle())
+            .disabled(downloader.isRunning || downloader.isUpdatingYTDLP)
+            .pointerCursor()
+            .help("Update yt-dlp")
+            if let result = downloader.updateResult {
+                switch result {
+                case .success(let msg):
+                    Text(msg)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.green)
+                        .lineLimit(1)
+                case .failure(let error):
+                    Text(error.localizedDescription)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                }
+            }
             Button {
                 dismiss()
             } label: {
@@ -296,7 +328,7 @@ struct DownloadSheet: View {
     private var progressHeader: some View {
         VStack(spacing: 6) {
             HStack {
-                Text("DOWNLOADING")
+                Text("ACTIVE")
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .tracking(0.5)
@@ -476,6 +508,20 @@ struct DownloadSheet: View {
             }
 
             Spacer(minLength: 4)
+
+            switch item.status {
+            case .error, .interrupted:
+                Button("Retry") {
+                    downloader.retry(item)
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(theme)
+                .pointerCursor()
+                .disabled(downloader.isRunning)
+            default:
+                EmptyView()
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 10)

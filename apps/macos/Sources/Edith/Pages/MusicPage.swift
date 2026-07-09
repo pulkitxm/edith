@@ -146,7 +146,7 @@ struct MusicPage: View {
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center) {
                 Text("Music")
                     .font(DashSkin.serif(34))
                     .foregroundStyle(DashSkin.ink(dark))
@@ -156,7 +156,7 @@ struct MusicPage: View {
                         at: Repo.musicDir, withIntermediateDirectories: true)
                     NSWorkspace.shared.open(Repo.musicDir)
                 } label: {
-                    Label("Music folder", systemImage: "folder")
+                    Image(systemName: "folder")
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Open music folder in Finder")
@@ -170,7 +170,7 @@ struct MusicPage: View {
                 Button {
                     showDownloader = true
                 } label: {
-                    Label("Download", systemImage: "arrow.down.circle")
+                    Image(systemName: "arrow.down.circle")
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Download YouTube audio")
