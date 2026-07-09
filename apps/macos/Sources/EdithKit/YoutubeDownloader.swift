@@ -82,6 +82,7 @@ public final class YoutubeDownloader: ObservableObject {
 
     private var currentProcess: Process?
     private var currentItemID: UUID?
+    private var ytdlpExecutableCache: (url: URL, prefix: [String])?
 
     public struct DownloadItem: Identifiable, Equatable {
         public let id = UUID()
@@ -146,9 +147,11 @@ public final class YoutubeDownloader: ObservableObject {
     }
 
     public func checkAvailability() {
+        ytdlpExecutableCache = nil
+        let (exe, prefix) = ytdlpExecutable()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = ["yt-dlp", "--version"]
+        p.executableURL = exe
+        p.arguments = prefix + ["--version"]
         let outPipe = Pipe()
         let errPipe = Pipe()
         p.standardOutput = outPipe
@@ -165,11 +168,13 @@ public final class YoutubeDownloader: ObservableObject {
                 unavailableReason =
                     "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
                 ytdlpVersion = nil
+                ytdlpExecutableCache = nil
             }
         } catch {
             unavailableReason =
                 "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
             ytdlpVersion = nil
+            ytdlpExecutableCache = nil
         }
     }
 
@@ -177,9 +182,10 @@ public final class YoutubeDownloader: ObservableObject {
         isUpdatingYTDLP = true
         updateResult = nil
         ytdlpUpdateMessage = nil
+        let (exe, prefix) = ytdlpExecutable()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = ["yt-dlp", "-U"]
+        p.executableURL = exe
+        p.arguments = prefix + ["-U"]
         let outPipe = Pipe()
         let errPipe = Pipe()
         p.standardOutput = outPipe
@@ -191,6 +197,7 @@ public final class YoutubeDownloader: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.isUpdatingYTDLP = false
+                self.ytdlpExecutableCache = nil
                 if proc.terminationStatus == 0 {
                     let msg = out.trimmingCharacters(in: .whitespacesAndNewlines)
                     let text = msg.isEmpty ? "yt-dlp updated" : msg
@@ -216,6 +223,7 @@ public final class YoutubeDownloader: ObservableObject {
             try p.run()
         } catch {
             isUpdatingYTDLP = false
+            ytdlpExecutableCache = nil
             updateResult = .failure(error)
             ytdlpUpdateMessage = error.localizedDescription
             checkAvailability()
@@ -302,10 +310,11 @@ public final class YoutubeDownloader: ObservableObject {
         items[index].status = .resolving
         save()
 
+        let (exe, prefix) = ytdlpExecutable()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = [
-            "yt-dlp", "-x", "--audio-format", "m4a",
+        p.executableURL = exe
+        p.arguments = prefix + [
+            "-x", "--audio-format", "m4a",
             "--embed-thumbnail", "--convert-thumbnails", "jpg",
             "--progress", "--newline",
             "-o", item.outputFilename ?? "%(title)s.%(ext)s",
@@ -395,6 +404,33 @@ public final class YoutubeDownloader: ObservableObject {
 
     private func indexOfItem(with id: UUID) -> Int? {
         items.firstIndex(where: { $0.id == id })
+    }
+
+    private func ytdlpExecutable() -> (url: URL, prefix: [String]) {
+        if let cached = ytdlpExecutableCache { return cached }
+
+        let candidates = [
+            "/opt/homebrew/bin/yt-dlp",
+            "/usr/local/bin/yt-dlp",
+            "/usr/bin/yt-dlp",
+        ]
+        let fm = FileManager.default
+        for path in candidates where fm.fileExists(atPath: path) {
+            let result = (URL(fileURLWithPath: path), [String]())
+            ytdlpExecutableCache = result
+            return result
+        }
+        if let home = ProcessInfo.processInfo.environment["HOME"] {
+            let localBin = (home as NSString).appendingPathComponent(".local/bin/yt-dlp")
+            if fm.fileExists(atPath: localBin) {
+                let result = (URL(fileURLWithPath: localBin), [String]())
+                ytdlpExecutableCache = result
+                return result
+            }
+        }
+        let result = (URL(fileURLWithPath: "/usr/bin/env"), ["yt-dlp"])
+        ytdlpExecutableCache = result
+        return result
     }
 
     public func cancelAll() {
