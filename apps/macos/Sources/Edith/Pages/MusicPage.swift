@@ -108,6 +108,7 @@ struct MusicPage: View {
     @StateObject private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
     @State private var showDownloader = false
 
     private var dark: Bool { scheme == .dark }
@@ -137,6 +138,9 @@ struct MusicPage: View {
         .onAppear { remote.start() }
         .sheet(isPresented: $showDownloader) {
             DownloadSheet()
+        }
+        .onExitCommand {
+            searchFocused = false
         }
     }
 
@@ -178,6 +182,11 @@ struct MusicPage: View {
                 TextField("Search tracks", text: $search)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
+                    .focused($searchFocused)
+                    .onKeyPress(.escape) {
+                        searchFocused = false
+                        return .handled
+                    }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
