@@ -314,6 +314,7 @@ public final class YoutubeDownloader: ObservableObject {
         let p = Process()
         p.executableURL = exe
         p.arguments = prefix + [
+            "--no-update",
             "-x", "--audio-format", "m4a",
             "--embed-thumbnail", "--convert-thumbnails", "jpg",
             "--progress", "--newline",
