@@ -615,7 +615,8 @@ struct DownloadSheet: View {
     }
 
     private func logSheet(_ item: YoutubeDownloader.DownloadItem) -> some View {
-        VStack(spacing: 0) {
+        let live = downloader.items.first(where: { $0.id == item.id }) ?? item
+        return VStack(spacing: 0) {
             HStack {
                 Text("Download Log")
                     .font(DashSkin.serif(16))
@@ -639,7 +640,7 @@ struct DownloadSheet: View {
             Divider().overlay(DashSkin.line(dark))
 
             ScrollView {
-                Text(item.logs.isEmpty ? "Waiting for output…" : item.logs)
+                Text(live.logs.isEmpty ? "Waiting for output…" : live.logs)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(DashSkin.ink(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
