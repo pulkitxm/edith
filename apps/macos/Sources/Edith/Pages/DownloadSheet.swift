@@ -537,7 +537,8 @@ struct DownloadSheet: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            if case .done = item.status {} else {
+            if case .done = item.status {
+            } else {
                 logItem = item
             }
         }
@@ -620,7 +621,9 @@ struct DownloadSheet: View {
                     .font(DashSkin.serif(16))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Button { logItem = nil } label: {
+                Button {
+                    logItem = nil
+                } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)

@@ -192,8 +192,12 @@ public final class YoutubeDownloader: ObservableObject {
         p.standardError = errPipe
 
         p.terminationHandler = { [weak self] proc in
-            let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let out =
+                String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                ?? ""
+            let err =
+                String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                ?? ""
             Task { @MainActor in
                 guard let self else { return }
                 self.isUpdatingYTDLP = false
@@ -313,16 +317,17 @@ public final class YoutubeDownloader: ObservableObject {
         let (exe, prefix) = ytdlpExecutable()
         let p = Process()
         p.executableURL = exe
-        p.arguments = prefix + [
-            "--no-update",
-            "--no-playlist",
-            "-x", "--audio-format", "m4a",
-            "--embed-thumbnail", "--convert-thumbnails", "jpg",
-            "--progress", "--newline",
-            "-o", item.outputFilename ?? "%(title)s.%(ext)s",
-            "--print", "after_move:filepath",
-            item.url.absoluteString,
-        ]
+        p.arguments =
+            prefix + [
+                "--no-update",
+                "--no-playlist",
+                "-x", "--audio-format", "m4a",
+                "--embed-thumbnail", "--convert-thumbnails", "jpg",
+                "--progress", "--newline",
+                "-o", item.outputFilename ?? "%(title)s.%(ext)s",
+                "--print", "after_move:filepath",
+                item.url.absoluteString,
+            ]
 
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -335,7 +340,6 @@ public final class YoutubeDownloader: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 guard let index = self.indexOfItem(with: itemID) else { return }
-                // Don't overwrite a cancelled/interrupted status with fresh progress.
                 if case .interrupted = self.items[index].status { return }
                 self.items[index].logs += text
                 let (progress, videoIndex, videoCount) = self.parseProgress(from: text)
@@ -357,17 +361,16 @@ public final class YoutubeDownloader: ObservableObject {
                     self.processNext()
                 }
                 guard let index = self.indexOfItem(with: itemID) else { return }
-                // If the item was cancelled, leave it as interrupted.
                 if case .interrupted = self.items[index].status {
                     return
                 }
-                if proc.terminationStatus == 0 {
-                    let files =
-                        String(data: outData, encoding: .utf8)?
-                        .components(separatedBy: .newlines)
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                        .compactMap { URL(string: $0)?.lastPathComponent } ?? []
+                let producedPaths =
+                    (String(data: outData, encoding: .utf8) ?? "")
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty && FileManager.default.fileExists(atPath: $0) }
+                if proc.terminationStatus == 0 || !producedPaths.isEmpty {
+                    let files = producedPaths.map { ($0 as NSString).lastPathComponent }
                     let label = files.isEmpty ? "done" : files.joined(separator: ", ")
                     self.items[index].status = .done(label)
                     self.save()
