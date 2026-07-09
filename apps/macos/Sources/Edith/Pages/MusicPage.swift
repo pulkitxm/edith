@@ -314,8 +314,12 @@ struct SeekBar: View {
             Capsule()
                 .fill(theme.opacity(0.85))
                 .frame(width: width)
-                .scaleEffect(
-                    x: width > 0 ? max(height, width * fraction) / width : 0, anchor: .leading)
+                .mask(alignment: .leading) {
+                    Rectangle()
+                        .scaleEffect(
+                            x: width > 0 ? max(height, width * fraction) / width : 0,
+                            anchor: .leading)
+                }
             Circle()
                 .fill(theme)
                 .frame(width: knob, height: knob)
