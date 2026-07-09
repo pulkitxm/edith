@@ -388,6 +388,7 @@ public final class YoutubeDownloader: ObservableObject {
             }
         }
 
+        p.environment = toolchainEnvironment()
         currentProcess = p
         do {
             try p.run()
@@ -406,6 +407,14 @@ public final class YoutubeDownloader: ObservableObject {
 
     private func indexOfItem(with id: UUID) -> Int? {
         items.firstIndex(where: { $0.id == id })
+    }
+
+    private func toolchainEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let toolDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+        let existing = env["PATH"].map { [$0] } ?? []
+        env["PATH"] = (toolDirs + existing).joined(separator: ":")
+        return env
     }
 
     private func ytdlpExecutable() -> (url: URL, prefix: [String]) {
