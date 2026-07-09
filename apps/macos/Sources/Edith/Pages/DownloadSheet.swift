@@ -16,6 +16,14 @@ struct DownloadSheet: View {
         !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !downloader.isRunning
             && downloader.unavailableReason == nil
     }
+    private var progressFraction: Double {
+        let total = downloader.items.count
+        guard total > 0 else { return 0 }
+        let done = downloader.items.filter {
+            if case .done = $0.status { return true }; return false
+        }.count
+        return Double(done) / Double(total)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,7 +101,8 @@ struct DownloadSheet: View {
                 .scrollContentBackground(.hidden)
                 .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 9))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9).strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 9).strokeBorder(
+                        DashSkin.line(dark), lineWidth: 1)
                 )
                 .overlay(alignment: .topLeading) {
                     if urlText.isEmpty {
@@ -147,23 +156,43 @@ struct DownloadSheet: View {
     }
 
     @ViewBuilder private var queueSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("QUEUE")
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .tracking(0.5)
                 Spacer()
+                let total = downloader.items.count
                 let done = downloader.items.filter {
-                    if case .done = $0.status { return true }
-                    return false
+                    if case .done = $0.status { return true }; return false
                 }.count
-                if done > 0 {
-                    Text("\(done)/\(downloader.items.count) done")
+                let errors = downloader.items.filter {
+                    if case .error = $0.status { return true }; return false
+                }.count
+                if done > 0 || errors > 0 {
+                    Text("\(done)/\(total) done\(errors > 0 ? " · \(errors) failed" : "")")
                         .font(.system(size: 10.5))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(errors > 0 ? .red : DashSkin.inkFaint(dark))
                 }
             }
+
+            // Overall progress bar
+            if downloader.isRunning || !downloader.items.isEmpty {
+                let pct = progressFraction
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(DashSkin.line(dark))
+                            .frame(height: 5)
+                        Capsule()
+                            .fill(theme)
+                            .frame(width: max(5, geo.size.width * pct), height: 5)
+                    }
+                }
+                .frame(height: 5)
+            }
+
             ScrollView {
                 LazyVStack(spacing: 4) {
                     ForEach(downloader.items) { item in
@@ -172,7 +201,7 @@ struct DownloadSheet: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .frame(maxHeight: 200)
+            .frame(maxHeight: 180)
         }
     }
 
@@ -188,26 +217,44 @@ struct DownloadSheet: View {
                             ?? AnyShapeStyle(DashSkin.ink(dark))
                     )
                     .lineLimit(1)
-                if case let .done(output) = item.status {
-                    Text(output)
-                        .font(.system(size: 10))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                }
-                if case let .error(msg) = item.status {
-                    Text(msg)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
+
+                // Status detail line
+                HStack(spacing: 4) {
+                    switch item.status {
+                    case .queued:
+                        Text("Waiting...")
+                            .font(.system(size: 10))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    case .resolving:
+                        Text("Resolving playlist...")
+                            .font(.system(size: 10))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    case let .downloading(progress, videoIndex, videoCount):
+                        if videoIndex > 0 && videoCount > 0 {
+                            Text("Video \(videoIndex) of \(videoCount)")
+                                .font(.system(size: 10))
+                                .foregroundStyle(theme)
+                        }
+                        if !progress.isEmpty {
+                            Text(progress)
+                                .font(.system(size: 10))
+                                .foregroundStyle(theme)
+                                .monospacedDigit()
+                        }
+                    case let .done(output):
+                        Text(output)
+                            .font(.system(size: 10))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .lineLimit(1)
+                    case let .error(msg):
+                        Text(msg)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                            .lineLimit(2)
+                    }
                 }
             }
             Spacer(minLength: 4)
-            if case let .downloading(progress) = item.status {
-                Text(progress)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(theme)
-                    .monospacedDigit()
-            }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
@@ -219,7 +266,8 @@ struct DownloadSheet: View {
         if url.host?.contains("youtu.be") == true {
             id = url.lastPathComponent
         } else {
-            id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            id =
+                URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
         }
         return "youtube.com/watch?v=\(id.prefix(11))"
@@ -228,9 +276,11 @@ struct DownloadSheet: View {
     @ViewBuilder
     private func statusIcon(_ status: DownloadStatus) -> some View {
         switch status {
-        case .queued:
-            Circle()
-                .stroke(DashSkin.lineStrong(dark), lineWidth: 2)
+        case .queued, .resolving:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .scaleEffect(0.5)
+                .frame(width: 16, height: 16)
         case .downloading:
             ProgressView()
                 .progressViewStyle(.circular)

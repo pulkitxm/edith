@@ -7,8 +7,9 @@ extension Notification.Name {
 
 public enum DownloadStatus: Equatable {
     case queued
-    case downloading(progress: String)
-    case done(output: String)
+    case resolving
+    case downloading(progress: String, videoIndex: Int, videoCount: Int)
+    case done(String)
     case error(String)
 }
 
@@ -49,10 +50,12 @@ public final class YoutubeDownloader: ObservableObject {
             if p.terminationStatus == 0 {
                 unavailableReason = nil
             } else {
-                unavailableReason = "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
+                unavailableReason =
+                    "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
             }
         } catch {
-            unavailableReason = "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
+            unavailableReason =
+                "yt-dlp is not installed. Install it with Homebrew:\nbrew install yt-dlp"
         }
     }
 
@@ -96,13 +99,14 @@ public final class YoutubeDownloader: ObservableObject {
         }
         isRunning = true
         let item = items[index]
-        items[index].status = .downloading(progress: "starting...")
+        items[index].status = .resolving
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         p.arguments = [
             "yt-dlp", "-x", "--audio-format", "m4a",
             "--embed-thumbnail", "--convert-thumbnails", "jpg",
+            "--progress", "--newline",
             "-o", item.outputFilename ?? "%(title)s.%(ext)s",
             "--print", "after_move:filepath",
             item.url.absoluteString,
@@ -118,10 +122,9 @@ public final class YoutubeDownloader: ObservableObject {
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor in
                 guard let self, index < self.items.count else { return }
-                let progress = self.parseProgress(from: text)
-                if let progress {
-                    self.items[index].status = .downloading(progress: progress)
-                }
+                let (progress, videoIndex, videoCount) = self.parseProgress(from: text)
+                self.items[index].status = .downloading(
+                    progress: progress, videoIndex: videoIndex, videoCount: videoCount)
             }
         }
 
@@ -133,18 +136,21 @@ public final class YoutubeDownloader: ObservableObject {
             Task { @MainActor in
                 guard let self, index < self.items.count else { return }
                 if proc.terminationStatus == 0 {
-                    let files = String(data: outData, encoding: .utf8)?
+                    let files =
+                        String(data: outData, encoding: .utf8)?
                         .components(separatedBy: .newlines)
                         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                         .filter { !$0.isEmpty }
                         .compactMap { URL(string: $0)?.lastPathComponent } ?? []
                     let label = files.isEmpty ? "done" : files.joined(separator: ", ")
-                    self.items[index].status = .done(output: label)
+                    self.items[index].status = .done(label)
                     NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+                    IPC.post(IPC.Name.musicFolderChanged)
                 } else {
                     let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    let msg = String(data: errData, encoding: .utf8)?.trimmingCharacters(
-                        in: .whitespacesAndNewlines) ?? "Unknown error"
+                    let msg =
+                        String(data: errData, encoding: .utf8)?.trimmingCharacters(
+                            in: .whitespacesAndNewlines) ?? "Unknown error"
                     self.items[index].status = .error(msg)
                 }
                 self.processNext()
@@ -167,26 +173,49 @@ public final class YoutubeDownloader: ObservableObject {
         isRunning = false
     }
 
-    private func parseProgress(from text: String) -> String? {
-        let patterns = [
-            #"(\d+\.\d+)%\s*of\s*~?\s*[\d.]+\w+ at"#,
-            #"(\d+\.\d+)%\s*of"#,
-            #"\[download\]\s+(\d+\.\d+)%"#,
-        ]
-        for pattern in patterns {
-            if let range = text.range(of: pattern, options: .regularExpression) {
-                let match = String(text[range])
-                if let pct = match.components(separatedBy: "%").first?.trimmingCharacters(
-                    in: .whitespaces)
-                    .components(separatedBy: " ").last
-                {
-                    return "\(pct)%"
-                }
+    private func parseProgress(from text: String) -> (
+        progress: String, videoIndex: Int, videoCount: Int
+    ) {
+        // Playlist: [download] Downloading video 3 of 15
+        if let range = text.range(
+            of: #"Downloading video (\d+) of (\d+)"#, options: .regularExpression)
+        {
+            let match = String(text[range])
+            let nums = match.components(separatedBy: CharacterSet.decimalDigits.inverted)
+                .compactMap(Int.init)
+            if nums.count >= 2 {
+                let vi = nums.suffix(2)
+                return ("...", vi.first ?? 1, vi.last ?? 1)
             }
         }
-        if text.contains("[ExtractAudio]") { return "Converting..." }
-        if text.contains("[Metadata]") { return "Adding metadata..." }
-        if text.contains("[Merger]") { return "Merging..." }
-        return nil
+
+        // Percentage: [download]  45.2% of ~104.56MiB at 2.3MiB/s
+        if let range = text.range(of: #"(\d+\.\d+)%\s*of"#, options: .regularExpression) {
+            let match = String(text[range])
+            if let pct = match.components(separatedBy: "%").first?.trimmingCharacters(
+                in: .whitespaces
+            )
+            .components(separatedBy: " ").last {
+                return ("\(pct)%", 0, 0)
+            }
+        }
+
+        // Plain: [download]   45.2% of ...
+        if let range = text.range(of: #"\[download\]\s+(\d+\.\d+)%"#, options: .regularExpression) {
+            let match = String(text[range])
+            let pct = match.components(separatedBy: CharacterSet.whitespaces).compactMap {
+                s -> String? in
+                let t = s.trimmingCharacters(in: .whitespaces)
+                return t.hasSuffix("%") ? t : nil
+            }.first
+            if let pct {
+                return (pct, 0, 0)
+            }
+        }
+
+        if text.contains("[ExtractAudio]") { return ("Converting...", 0, 0) }
+        if text.contains("[Metadata]") { return ("Metadata...", 0, 0) }
+        if text.contains("[Merger]") { return ("Merging...", 0, 0) }
+        return ("", 0, 0)
     }
 }

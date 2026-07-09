@@ -34,6 +34,8 @@ public enum IPC {
         public static let requestKeyboardClean = Notification.Name(
             "com.pulkit.edith.requestKeyboardClean")
         public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
+        public static let musicFolderChanged = Notification.Name(
+            "com.pulkit.edith.musicFolderChanged")
         public static let presenterPauseAuto = Notification.Name(
             "com.pulkit.edith.presenterPauseAuto")
     }

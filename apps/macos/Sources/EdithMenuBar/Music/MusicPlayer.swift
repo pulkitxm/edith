@@ -26,6 +26,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
     private var folderChangedObserver: NSObjectProtocol?
+    private var folderChangedIPCObserver: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
     private var stateRequestObserver: NSObjectProtocol?
 
@@ -49,6 +50,9 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
             })
         stateRequestObserver = IPC.observe(IPC.Name.requestMusicState) { [weak self] in
             MainActor.assumeIsolated { self?.broadcastState() }
+        }
+        folderChangedIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
+            MainActor.assumeIsolated { self?.rescan() }
         }
         broadcastState()
     }
@@ -198,6 +202,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         updateNowPlaying()
         persistPlayback()
         broadcastState()
+        // Load artwork async for system Now Playing (Control Centre, etc.)
+        Task { [weak self] in
+            guard let self, let current = self.current, current == track else { return }
+            guard let art = await self.artwork(for: track) else { return }
+            var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(
+                boundsSize: art.size
+            ) { _ in art }
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        }
     }
 
     private func pause() {
@@ -256,6 +270,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         if let stateRequestObserver {
             IPC.stopObserving(stateRequestObserver)
             self.stateRequestObserver = nil
+        }
+        if let folderChangedIPCObserver {
+            IPC.stopObserving(folderChangedIPCObserver)
+            self.folderChangedIPCObserver = nil
         }
     }
 
