@@ -11,18 +11,24 @@
 #                             # missing), and install
 #   ./build.sh --branch name  # same, for a branch named directly
 #
-# Signing: a self-signed "Edith Dev" cert is picked up automatically when it
-# exists in the keychain (create it once - see README) so TCC grants and
-# SMAppService login-item registration survive rebuilds. Export
-# EDITH_SIGN_IDENTITY to override; without either, signing falls back to
-# ad-hoc ("-"), which resets TCC grants (Screen Recording, ...) every build.
+# Signing: the first available of a "Developer ID Application" cert, a
+# self-signed "Edith Dev" cert, or an "Apple Development" cert is picked up
+# automatically (or set EDITH_SIGN_IDENTITY) so its designated requirement is
+# stable across builds and TCC grants + SMAppService login-item registration
+# survive reinstalls. Without any identity, signing falls back to ad-hoc ("-"),
+# whose requirement is pinned to the binary hash and so resets TCC grants
+# (Screen Recording, ...) on every reinstall.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
-  | awk -F'"' '/Edith Dev/{print $2; exit}')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
-  | awk -F'"' '/Apple Development/{print $2; exit}')}"
+find_identity() {
+  security find-identity -v -p codesigning 2>/dev/null \
+    | awk -F'"' -v pat="$1" '$0 ~ pat {print $2; exit}'
+}
+SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
+SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
+SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Edith Dev')}"
+SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Apple Development')}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 INSTALL=0 NO_OPEN=0 PR="" BRANCH=""
 while [ $# -gt 0 ]; do
@@ -92,6 +98,14 @@ chmod +x "$HELPER/Contents/Resources/refresh-usage"
 cp "$ARTWORK" "$HELPER/Contents/Resources/MenuBar.png"
 sips -c 942 942 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 sips -z 80 80 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
+
+if [ "$SIGN_IDENTITY" = "-" ]; then
+  echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
+  echo "         changes every build, so macOS TCC permission grants (Screen" >&2
+  echo "         Recording, Accessibility, Calendar, ...) reset on every reinstall." >&2
+  echo "         Use a Developer ID / Apple Development / self-signed 'Edith Dev'" >&2
+  echo "         identity, or set EDITH_SIGN_IDENTITY, so grants survive reinstalls." >&2
+fi
 
 # sign inside-out: the nested helper first, then the outer bundle - never --deep.
 codesign --force --sign "$SIGN_IDENTITY" "$HELPER"

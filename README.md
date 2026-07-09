@@ -70,3 +70,36 @@ git tag v1.8.0 && git push origin v1.8.0
 
 The Release workflow builds `Edith-v1.8.0.dmg` (drag-to-Applications layout)
 and attaches it to the GitHub release.
+
+### Signing the release (so permissions survive reinstalls)
+
+macOS ties each permission grant (Screen Recording, Accessibility, Calendar,
+...) to the app's code-signing designated requirement. A grant survives a
+reinstall only if the new build still satisfies it. An ad-hoc signature's
+requirement is pinned to the binary hash, which changes every build, so an
+ad-hoc DMG resets every permission on each reinstall. Signing with a stable
+Apple identity gives a requirement that is identical across versions, so grants
+persist just like any app you update normally.
+
+`build.sh` signs with the first available of a "Developer ID Application",
+self-signed "Edith Dev", or "Apple Development" identity, so local builds,
+`--install` reinstalls, and the released DMG all sign the same way. For the DMG
+to match your local builds, CI must sign with the same certificate. Export the
+identity you sign with locally and store it as two repository secrets:
+
+```bash
+security export -k ~/Library/Keychains/login.keychain-db -t identities \
+  -f pkcs12 -P "<pick-a-password>" -o cert.p12
+gh secret set MACOS_CERT_P12 < <(base64 -i cert.p12)
+printf %s "<pick-a-password>" | gh secret set MACOS_CERT_PASSWORD
+```
+
+- `MACOS_CERT_P12` - base64 of the exported `.p12` (certificate + private key).
+- `MACOS_CERT_PASSWORD` - the password set on that `.p12`.
+
+With the secrets present the Release workflow imports the certificate into a
+temporary keychain and `build.sh` signs with it automatically; without them it
+still builds an ad-hoc DMG. An "Apple Development" identity is not notarized, so
+the first launch of a freshly downloaded DMG needs a right-click -> Open (or
+`xattr -dr com.apple.quarantine Edith.app`); permission grants still persist
+across every reinstall after that.
