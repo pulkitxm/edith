@@ -639,15 +639,20 @@ struct DownloadSheet: View {
 
             Divider().overlay(DashSkin.line(dark))
 
-            ScrollView {
-                Text(live.logs.isEmpty ? "Waiting for output…" : live.logs)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(14)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(live.logs.isEmpty ? "Waiting for output…" : live.logs)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(14)
+                    Color.clear.frame(height: 1).id("logBottom")
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: live.logs) { proxy.scrollTo("logBottom", anchor: .bottom) }
+                .onAppear { proxy.scrollTo("logBottom", anchor: .bottom) }
             }
-            .scrollIndicators(.hidden)
         }
         .frame(width: 480, height: 360)
         .background(DashSkin.paper(dark))
