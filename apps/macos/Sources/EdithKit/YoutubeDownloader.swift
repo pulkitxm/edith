@@ -334,12 +334,11 @@ public final class YoutubeDownloader: ObservableObject {
         p.standardOutput = outPipe
         p.standardError = errPipe
 
-        errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        let stream: @Sendable (FileHandle) -> Void = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor in
-                guard let self else { return }
-                guard let index = self.indexOfItem(with: itemID) else { return }
+                guard let self, let index = self.indexOfItem(with: itemID) else { return }
                 if case .interrupted = self.items[index].status { return }
                 self.items[index].logs += text
                 let (progress, videoIndex, videoCount) = self.parseProgress(from: text)
@@ -347,11 +346,17 @@ public final class YoutubeDownloader: ObservableObject {
                     progress: progress, videoIndex: videoIndex, videoCount: videoCount)
             }
         }
+        outPipe.fileHandleForReading.readabilityHandler = stream
+        errPipe.fileHandleForReading.readabilityHandler = stream
 
         p.terminationHandler = { [weak self] proc in
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
-            let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+            let tail =
+                (String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                    ?? "")
+                + (String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                    ?? "")
 
             Task { @MainActor in
                 guard let self else { return }
@@ -364,8 +369,11 @@ public final class YoutubeDownloader: ObservableObject {
                 if case .interrupted = self.items[index].status {
                     return
                 }
+                if !tail.isEmpty {
+                    self.items[index].logs += tail
+                }
                 let producedPaths =
-                    (String(data: outData, encoding: .utf8) ?? "")
+                    self.items[index].logs
                     .components(separatedBy: .newlines)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty && FileManager.default.fileExists(atPath: $0) }
@@ -377,14 +385,8 @@ public final class YoutubeDownloader: ObservableObject {
                     NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
                     IPC.post(IPC.Name.musicFolderChanged)
                 } else {
-                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    var msg =
-                        String(data: errData, encoding: .utf8)?.trimmingCharacters(
-                            in: .whitespacesAndNewlines)
-                        ?? ""
-                    if msg.isEmpty {
-                        msg = self.items[index].logs.trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
+                    let msg = self.items[index].logs.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
                     self.items[index].status = .error(msg.isEmpty ? "Unknown error" : msg)
                     self.save()
                 }
