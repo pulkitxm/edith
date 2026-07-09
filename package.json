@@ -6,10 +6,12 @@
     "check-comments": "bun scripts/strip-comments.mjs --check",
     "selftest": "bun scripts/strip-comments.mjs --selftest",
     "lint": "biome check .",
-    "test": "bun test scripts"
+    "test": "bun test scripts",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
+    "lefthook": "2.1.10",
     "typescript": "^5.9.3"
   }
 }

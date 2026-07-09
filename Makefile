@@ -1,6 +1,35 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build install reset reinstall release loc
+.PHONY: build install reset reinstall release loc ci ci-comments ci-lint ci-scripts ci-promo ci-swift
+
+ci:
+	bun install --frozen-lockfile
+	$(MAKE) ci-comments ci-lint ci-scripts ci-promo ci-swift
+
+ci-comments:
+	bun scripts/strip-comments.mjs --selftest
+	bun scripts/strip-comments.mjs --check
+
+ci-lint:
+	bun run lint
+
+ci-scripts:
+	bun test ./scripts
+
+ci-promo:
+	cd apps/promo-video && npm ci && npx tsc --noEmit
+
+ci-swift:
+	cd apps/macos && swift format lint --strict --parallel --recursive Sources Tests Package.swift
+	cd apps/macos && swift build
+	cd apps/macos && ./test.sh
+	cd apps/macos && ./build.sh --no-open
+	test -f apps/macos/dist/Edith.app/Contents/MacOS/Edith
+	test -f apps/macos/dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/MacOS/EdithMenuBar
+	test -f apps/macos/dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/Resources/AppIcon.icns
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' apps/macos/dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/Info.plist | grep -qx Edith
+	codesign --verify apps/macos/dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app
+	codesign --verify apps/macos/dist/Edith.app
 
 build:
 	apps/macos/build.sh $(FLAGS)

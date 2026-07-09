@@ -1,0 +1,18 @@
+pre-push:
+  parallel: true
+  commands:
+    comments:
+      glob: "*.{swift,js,mjs,ts,tsx,css,json,yaml,yml,html}"
+      run: make ci-comments
+    lint:
+      glob: "{scripts/**,apps/landing/**}"
+      run: make ci-lint
+    scripts:
+      glob: "scripts/**"
+      run: make ci-scripts
+    promo-video:
+      glob: "apps/promo-video/**"
+      run: make ci-promo
+    swift:
+      glob: "apps/macos/**"
+      run: make ci-swift
