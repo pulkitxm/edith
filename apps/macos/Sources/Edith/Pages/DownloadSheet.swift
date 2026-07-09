@@ -120,8 +120,6 @@ struct DownloadSheet: View {
         }
     }
 
-    // MARK: - Input state
-
     private var urlInput: some View {
         VStack(alignment: .leading, spacing: 6) {
             label("VIDEO URLS")
@@ -234,8 +232,6 @@ struct DownloadSheet: View {
         }
     }
 
-    // MARK: - Progress / Queue state
-
     private var progressHeader: some View {
         VStack(spacing: 6) {
             HStack {
@@ -291,7 +287,6 @@ struct DownloadSheet: View {
         }
 
         return HStack(spacing: 10) {
-            // Status icon
             Group {
                 switch item.status {
                 case .queued:
@@ -319,7 +314,6 @@ struct DownloadSheet: View {
             }
             .frame(width: 20)
 
-            // URL + status
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayURL(item.url))
                     .font(.system(size: 12))
@@ -386,8 +380,6 @@ struct DownloadSheet: View {
             .background(color.opacity(0.12), in: Capsule())
     }
 
-    // MARK: - Controls (queue mode)
-
     private var controlsRow: some View {
         HStack {
             if downloader.isRunning {
@@ -414,8 +406,6 @@ struct DownloadSheet: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 10)
     }
-
-    // MARK: - Helpers
 
     private func label(_ text: String) -> some View {
         Text(text)

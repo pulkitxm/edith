@@ -176,7 +176,6 @@ public final class YoutubeDownloader: ObservableObject {
     private func parseProgress(from text: String) -> (
         progress: String, videoIndex: Int, videoCount: Int
     ) {
-        // Playlist: [download] Downloading video 3 of 15
         if let range = text.range(
             of: #"Downloading video (\d+) of (\d+)"#, options: .regularExpression)
         {
@@ -189,7 +188,6 @@ public final class YoutubeDownloader: ObservableObject {
             }
         }
 
-        // Percentage: [download]  45.2% of ~104.56MiB at 2.3MiB/s
         if let range = text.range(of: #"(\d+\.\d+)%\s*of"#, options: .regularExpression) {
             let match = String(text[range])
             if let pct = match.components(separatedBy: "%").first?.trimmingCharacters(
@@ -200,7 +198,6 @@ public final class YoutubeDownloader: ObservableObject {
             }
         }
 
-        // Plain: [download]   45.2% of ...
         if let range = text.range(of: #"\[download\]\s+(\d+\.\d+)%"#, options: .regularExpression) {
             let match = String(text[range])
             let pct = match.components(separatedBy: CharacterSet.whitespaces).compactMap {

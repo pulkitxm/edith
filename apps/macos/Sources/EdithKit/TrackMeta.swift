@@ -94,7 +94,6 @@ public enum TrackMeta {
         return nil
     }
 
-    /// Returns cached artwork without I/O.
     public static func artworkCached(for track: Track) -> NSImage? {
         artworkCache[track.url]
     }

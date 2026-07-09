@@ -202,7 +202,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         updateNowPlaying()
         persistPlayback()
         broadcastState()
-        // Load artwork async for system Now Playing (Control Centre, etc.)
         Task { [weak self] in
             guard let self, let current = self.current, current == track else { return }
             guard let art = await self.artwork(for: track) else { return }
