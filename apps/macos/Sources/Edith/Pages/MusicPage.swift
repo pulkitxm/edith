@@ -3,6 +3,35 @@ import EdithKit
 import SwiftUI
 
 @MainActor
+final class WindowVisibility: ObservableObject {
+    static let shared = WindowVisibility()
+
+    @Published private(set) var visible = true
+    private var observers: [NSObjectProtocol] = []
+
+    private init() {
+        let names: [Notification.Name] = [
+            NSWindow.didChangeOcclusionStateNotification,
+            NSApplication.didHideNotification,
+            NSApplication.didUnhideNotification,
+        ]
+        observers = names.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
+                [weak self] _ in
+                MainActor.assumeIsolated { self?.refresh() }
+            }
+        }
+    }
+
+    private func refresh() {
+        let showing =
+            !NSApp.isHidden
+            && NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
+        if showing != visible { visible = showing }
+    }
+}
+
+@MainActor
 final class MusicRemote: ObservableObject {
     static let shared = MusicRemote()
 
@@ -247,6 +276,7 @@ struct MusicPage: View {
 
 struct SeekBar: View {
     @ObservedObject private var remote = MusicRemote.shared
+    @ObservedObject private var visibility = WindowVisibility.shared
     let theme: Color
     var height: CGFloat = 5
     @State private var dragFraction: Double?
@@ -256,22 +286,12 @@ struct SeekBar: View {
             let knob = max(11, height + 7)
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.1))
-                TimelineView(.periodic(from: .now, by: 0.25)) { _ in
-                    let fraction = dragFraction ?? remote.progress
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(theme.opacity(0.85))
-                            .frame(width: max(height, geo.size.width * fraction))
-                        Circle()
-                            .fill(theme)
-                            .frame(width: knob, height: knob)
-                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                            .offset(
-                                x: min(
-                                    max(geo.size.width * fraction - knob / 2, 0),
-                                    geo.size.width - knob))
+                if remote.isPlaying, visibility.visible, dragFraction == nil {
+                    TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
+                        fill(geo.size.width, knob)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    fill(geo.size.width, knob)
                 }
             }
             .contentShape(Rectangle().inset(by: -8))
@@ -286,6 +306,23 @@ struct SeekBar: View {
         }
         .frame(height: height)
         .pointerCursor()
+    }
+
+    private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {
+        let fraction = dragFraction ?? remote.progress
+        return ZStack(alignment: .leading) {
+            Capsule()
+                .fill(theme.opacity(0.85))
+                .frame(width: width)
+                .scaleEffect(
+                    x: width > 0 ? max(height, width * fraction) / width : 0, anchor: .leading)
+            Circle()
+                .fill(theme)
+                .frame(width: knob, height: knob)
+                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                .offset(x: min(max(width * fraction - knob / 2, 0), width - knob))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -341,6 +378,7 @@ private struct MusicPageRow: View {
 
 struct MusicFooter: View {
     @ObservedObject private var remote = MusicRemote.shared
+    @ObservedObject private var visibility = WindowVisibility.shared
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
         MainDestination.home.rawValue
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
@@ -396,7 +434,9 @@ struct MusicFooter: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 78, alignment: .leading)
             }
-            PlaybackWave(playing: remote.isPlaying, color: theme.opacity(0.9), maxHeight: 13)
+            PlaybackWave(
+                playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
+                maxHeight: 13)
         }
         .contentShape(Rectangle())
         .onTapGesture { mainWindowSection = MainDestination.music.rawValue }
@@ -435,12 +475,12 @@ struct MusicFooter: View {
 
     private var scrubber: some View {
         HStack(spacing: 10) {
-            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            timeTicker {
                 Text(TrackMeta.timeLabel(remote.elapsed))
                     .frame(width: 42, alignment: .trailing)
             }
             SeekBar(theme: theme, height: 4)
-            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            timeTicker {
                 Text("-" + TrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
                     .frame(width: 46, alignment: .leading)
             }
@@ -448,6 +488,17 @@ struct MusicFooter: View {
         .font(.system(size: 10.5))
         .monospacedDigit()
         .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func timeTicker<Content: View>(@ViewBuilder _ content: @escaping () -> Content)
+        -> some View
+    {
+        if remote.isPlaying, visibility.visible {
+            TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in content() }
+        } else {
+            content()
+        }
     }
 
     private var rightControls: some View {

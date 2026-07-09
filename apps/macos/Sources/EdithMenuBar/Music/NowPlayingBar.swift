@@ -5,7 +5,6 @@ struct NowPlayingBar: View {
     @ObservedObject var player: MusicPlayer
     let theme: Color
     @State private var dragFraction: Double?
-    @State private var tick = Date()
     @StateObject private var presenterState = PresenterState.shared
     @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
         true
@@ -23,13 +22,14 @@ struct NowPlayingBar: View {
                             .lineLimit(1)
                             .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                             .presenterBlur(blurMusic)
-                        TimelineView(.periodic(from: tick, by: 1)) { _ in
-                            Text(
-                                "\(timeLabel(player.elapsed)) / \(timeLabel(player.trackDuration))"
-                            )
-                            .font(.system(size: 10))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                        Group {
+                            if player.isPlaying {
+                                TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in
+                                    timeText
+                                }
+                            } else {
+                                timeText
+                            }
                         }
                     }
                     Spacer(minLength: 8)
@@ -87,27 +87,24 @@ struct NowPlayingBar: View {
         }
     }
 
+    private var timeText: some View {
+        Text("\(timeLabel(player.elapsed)) / \(timeLabel(player.trackDuration))")
+            .font(.system(size: 10))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+    }
+
     private var scrubber: some View {
         GeometryReader { geo in
             let knob: CGFloat = 10
             ZStack(alignment: .leading) {
                 Capsule().fill(.primary.opacity(0.1))
-                TimelineView(.periodic(from: tick, by: 0.25)) { _ in
-                    let fraction = dragFraction ?? player.progressNow()
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(theme.opacity(0.85))
-                            .frame(width: max(3, geo.size.width * fraction))
-                        Circle()
-                            .fill(theme)
-                            .frame(width: knob, height: knob)
-                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                            .offset(
-                                x: min(
-                                    max(geo.size.width * fraction - knob / 2, 0),
-                                    geo.size.width - knob))
+                if player.isPlaying, dragFraction == nil {
+                    TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
+                        fill(geo.size.width, knob)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    fill(geo.size.width, knob)
                 }
             }
             .contentShape(Rectangle().inset(by: -8))
@@ -122,6 +119,22 @@ struct NowPlayingBar: View {
         }
         .frame(height: 5)
         .pointerCursor()
+    }
+
+    private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {
+        let fraction = dragFraction ?? player.progressNow()
+        return ZStack(alignment: .leading) {
+            Capsule()
+                .fill(theme.opacity(0.85))
+                .frame(width: width)
+                .scaleEffect(x: width > 0 ? max(3, width * fraction) / width : 0, anchor: .leading)
+            Circle()
+                .fill(theme)
+                .frame(width: knob, height: knob)
+                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                .offset(x: min(max(width * fraction - knob / 2, 0), width - knob))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func timeLabel(_ t: TimeInterval) -> String {
