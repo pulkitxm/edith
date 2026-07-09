@@ -4,7 +4,7 @@ FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-lint ci-scripts ci-promo ci-swift
+	$(MAKE) ci-comments ci-lint ci-scripts ci-promo ci-swift-check
 
 ci-comments:
 	bun scripts/strip-comments.mjs --selftest
