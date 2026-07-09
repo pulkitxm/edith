@@ -70,3 +70,23 @@ git tag v1.8.0 && git push origin v1.8.0
 
 The Release workflow builds `Edith-v1.8.0.dmg` (drag-to-Applications layout)
 and attaches it to the GitHub release.
+
+### Signing the release (so permissions survive reinstalls)
+
+macOS ties each permission grant (Screen Recording, Accessibility, Calendar,
+...) to the app's code-signing designated requirement. A grant survives a
+reinstall only if the new build still satisfies it. An ad-hoc signature's
+requirement is pinned to the binary hash, which changes every build, so an
+ad-hoc DMG resets every permission on each reinstall. Signing with a stable
+Apple identity gives a requirement that is identical across versions, so grants
+persist just like any app you update normally.
+
+To sign the released DMG, add two repository secrets:
+
+- `MACOS_CERT_P12` - base64 of a "Developer ID Application" certificate exported
+  from Keychain Access as a `.p12` (`base64 -i cert.p12 | pbcopy`).
+- `MACOS_CERT_PASSWORD` - the password set on that `.p12`.
+
+With the secrets present the Release workflow imports the certificate and
+`build.sh` signs with it automatically; without them it still builds an ad-hoc
+DMG (which will keep resetting permissions on reinstall).
