@@ -30,6 +30,8 @@ final class MusicRemote: ObservableObject {
 
     var progress: Double { duration > 0 ? min(elapsed / duration, 1) : 0 }
 
+    private var folderObserver: NSObjectProtocol?
+
     func start() {
         rescan()
         guard stateObserver == nil else { return }
@@ -39,6 +41,11 @@ final class MusicRemote: ObservableObject {
                 MainActor.assumeIsolated { self?.apply(info) }
             })
         IPC.post(IPC.Name.requestMusicState)
+        folderObserver = NotificationCenter.default.addObserver(
+            forName: .musicFolderChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rescan() }
+        }
     }
 
     func rescan() {
@@ -101,6 +108,7 @@ struct MusicPage: View {
     @StateObject private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @State private var search = ""
+    @State private var showDownloader = false
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
@@ -127,6 +135,9 @@ struct MusicPage: View {
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationTitle("Music")
         .onAppear { remote.start() }
+        .sheet(isPresented: $showDownloader) {
+            DownloadSheet()
+        }
     }
 
     private var pageHeader: some View {
@@ -152,6 +163,13 @@ struct MusicPage: View {
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Rescan music folder")
+                Button {
+                    showDownloader = true
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .help("Download YouTube audio")
             }
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
