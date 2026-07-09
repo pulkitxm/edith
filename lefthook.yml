@@ -15,4 +15,4 @@ pre-push:
       run: make ci-promo
     swift:
       glob: "apps/macos/**"
-      run: make ci-swift
+      run: make ci-swift-check

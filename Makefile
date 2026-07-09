@@ -1,6 +1,6 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-lint ci-scripts ci-promo ci-swift
+.PHONY: build install reset reinstall release loc ci ci-comments ci-lint ci-scripts ci-promo ci-swift ci-swift-check
 
 ci:
 	bun install --frozen-lockfile
@@ -19,10 +19,12 @@ ci-scripts:
 ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
-ci-swift:
+ci-swift-check:
 	cd apps/macos && swift format lint --strict --parallel --recursive Sources Tests Package.swift
 	cd apps/macos && swift build
 	cd apps/macos && ./test.sh
+
+ci-swift: ci-swift-check
 	cd apps/macos && ./build.sh --no-open
 	test -f apps/macos/dist/Edith.app/Contents/MacOS/Edith
 	test -f apps/macos/dist/Edith.app/Contents/Library/LoginItems/EdithMenuBar.app/Contents/MacOS/EdithMenuBar
