@@ -2,10 +2,6 @@ import AppKit
 import EdithKit
 import Foundation
 
-extension Notification.Name {
-    static let musicFolderChanged = Notification.Name("musicFolderChanged")
-}
-
 @MainActor
 final class SettingsBackup: ObservableObject {
     static let shared = SettingsBackup()

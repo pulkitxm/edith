@@ -26,6 +26,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
     private var folderChangedObserver: NSObjectProtocol?
+    private var folderChangedIPCObserver: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
     private var stateRequestObserver: NSObjectProtocol?
 
@@ -49,6 +50,9 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
             })
         stateRequestObserver = IPC.observe(IPC.Name.requestMusicState) { [weak self] in
             MainActor.assumeIsolated { self?.broadcastState() }
+        }
+        folderChangedIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
+            MainActor.assumeIsolated { self?.rescan() }
         }
         broadcastState()
     }
@@ -198,6 +202,15 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         updateNowPlaying()
         persistPlayback()
         broadcastState()
+        Task { [weak self] in
+            guard let self, let current = self.current, current == track else { return }
+            guard let art = await self.artwork(for: track) else { return }
+            var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(
+                boundsSize: art.size
+            ) { _ in art }
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        }
     }
 
     private func pause() {
@@ -257,6 +270,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
             IPC.stopObserving(stateRequestObserver)
             self.stateRequestObserver = nil
         }
+        if let folderChangedIPCObserver {
+            IPC.stopObserving(folderChangedIPCObserver)
+            self.folderChangedIPCObserver = nil
+        }
     }
 
     func progressNow() -> Double {
@@ -286,25 +303,33 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
 
     private func persistPlayback() {
         guard let current else { return }
-        UserDefaults.standard.set(current.url.lastPathComponent, forKey: "musicLastTrack")
-        UserDefaults.standard.set(elapsed, forKey: "musicLastPosition")
+        PlaybackStore.save(
+            track: current.url.lastPathComponent, position: elapsed, playing: isPlaying,
+            into: .standard)
     }
 
     private func restoreLastPlayback() {
         guard current == nil,
-            let name = UserDefaults.standard.string(forKey: "musicLastTrack"),
-            let track = tracks.first(where: { $0.url.lastPathComponent == name })
+            let snapshot = PlaybackStore.load(from: .standard),
+            let track = tracks.first(where: { $0.url.lastPathComponent == snapshot.track })
         else { return }
-        let position = UserDefaults.standard.double(forKey: "musicLastPosition")
         guard let p = try? AVAudioPlayer(contentsOf: track.url) else { return }
         player = p
         p.isMeteringEnabled = true
         p.delegate = self
         p.volume = Float(volume)
         p.prepareToPlay()
-        if position > 0, position < p.duration { p.currentTime = position }
+        if snapshot.position > 0, snapshot.position < p.duration {
+            p.currentTime = snapshot.position
+        }
         current = track
-        isPlaying = false
+        if snapshot.playing {
+            p.play()
+            isPlaying = true
+            startSaveTimer()
+        } else {
+            isPlaying = false
+        }
         updateNowPlaying()
     }
 
@@ -323,5 +348,30 @@ enum Shuffle {
     static func pool<T: Equatable>(_ all: [T], excluding current: T?) -> [T] {
         let rest = all.filter { $0 != current }
         return rest.isEmpty ? all : rest
+    }
+}
+
+enum PlaybackStore {
+    static let trackKey = "musicLastTrack"
+    static let positionKey = "musicLastPosition"
+    static let playingKey = "musicWasPlaying"
+
+    struct Snapshot: Equatable {
+        let track: String
+        let position: Double
+        let playing: Bool
+    }
+
+    static func save(track: String, position: Double, playing: Bool, into defaults: UserDefaults) {
+        defaults.set(track, forKey: trackKey)
+        defaults.set(position, forKey: positionKey)
+        defaults.set(playing, forKey: playingKey)
+    }
+
+    static func load(from defaults: UserDefaults) -> Snapshot? {
+        guard let track = defaults.string(forKey: trackKey) else { return nil }
+        return Snapshot(
+            track: track, position: defaults.double(forKey: positionKey),
+            playing: defaults.bool(forKey: playingKey))
     }
 }

@@ -93,4 +93,8 @@ public enum TrackMeta {
         }
         return nil
     }
+
+    public static func artworkCached(for track: Track) -> NSImage? {
+        artworkCache[track.url]
+    }
 }

@@ -7,6 +7,7 @@ final class ClipboardStore: ObservableObject, FeatureModule {
     @Published private(set) var entries: [ClipboardEntry] = []
     @Published private(set) var skippedOversizeAt: Date?
 
+    private var sorter: EntrySorter = EntrySorter()
     private var timer: DispatchSourceTimer?
     private var lastChangeCount = NSPasteboard.general.changeCount
     private var locked = false
@@ -146,9 +147,10 @@ final class ClipboardStore: ObservableObject, FeatureModule {
             id: existing?.id ?? UUID().uuidString,
             sha256: sha, types: captured.types, ext: captured.ext,
             sourceApp: frontApp?.localizedName, sourceBundleID: bundleID,
+            lastCopiedAt: Date(),
             size: captured.data.count, preview: captured.preview,
             pinned: existing?.pinned ?? false)
-        entries.append(entry)
+        entries = sorter.sort(entries + [entry])
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
     }
@@ -262,12 +264,30 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { return }
         lastChangeCount = NSPasteboard.general.changeCount
 
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[index].lastCopiedAt = Date()
+            entries = sorter.sort(entries)
+            try? ClipboardRepository.saveEntries(entries)
+            SettingsBackup.shared.scheduleClipboardBackup()
+        }
+
         let autoPaste =
             SharedDefaults.store.bool(forKey: "clipboardAutoPaste")
             && SharedDefaults.store.bool(forKey: "permAccessibilityGranted")
         guard autoPaste else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             ClipboardPasteSynth.synthesizeCommandV()
+        }
+    }
+}
+
+private struct EntrySorter {
+    func sort(_ items: [ClipboardEntry], pinToTop: Bool = true) -> [ClipboardEntry] {
+        items.sorted { lhs, rhs in
+            if lhs.pinned != rhs.pinned {
+                return pinToTop ? lhs.pinned : rhs.pinned
+            }
+            return lhs.lastCopiedAt > rhs.lastCopiedAt
         }
     }
 }

@@ -19,7 +19,7 @@ struct ClipboardHistoryView: View {
         }
         return matched.sorted { lhs, rhs in
             if lhs.pinned != rhs.pinned { return lhs.pinned }
-            return lhs.createdAt > rhs.createdAt
+            return lhs.lastCopiedAt > rhs.lastCopiedAt
         }
     }
 

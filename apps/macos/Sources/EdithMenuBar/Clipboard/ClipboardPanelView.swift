@@ -46,8 +46,8 @@ struct ClipboardPanelView: View {
                 || (entry.preview?.lowercased().contains(query) ?? false)
                 || (entry.sourceApp?.lowercased().contains(query) ?? false)
         }
-        let pinned = matched.filter(\.pinned).sorted { $0.createdAt > $1.createdAt }
-        let unpinned = matched.filter { !$0.pinned }.sorted { $0.createdAt > $1.createdAt }
+        let pinned = matched.filter(\.pinned).sorted { $0.lastCopiedAt > $1.lastCopiedAt }
+        let unpinned = matched.filter { !$0.pinned }.sorted { $0.lastCopiedAt > $1.lastCopiedAt }
         return pinToTop ? pinned + unpinned : unpinned + pinned
     }
 

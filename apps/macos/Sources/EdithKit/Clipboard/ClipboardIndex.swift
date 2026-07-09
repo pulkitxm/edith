@@ -48,9 +48,9 @@ public enum ClipboardIndex {
         var kept = entries
         if let maxAge {
             let cutoff = now.addingTimeInterval(-maxAge)
-            kept = kept.filter { $0.pinned || $0.createdAt >= cutoff }
+            kept = kept.filter { $0.pinned || $0.lastCopiedAt >= cutoff }
         }
-        let sorted = kept.sorted { $0.createdAt < $1.createdAt }
+        let sorted = kept.sorted { $0.lastCopiedAt < $1.lastCopiedAt }
         var overflow = max(0, sorted.filter { !$0.pinned }.count - maxItems)
         guard overflow > 0 else { return sorted }
         var result: [ClipboardEntry] = []
