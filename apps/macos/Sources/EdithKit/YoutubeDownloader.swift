@@ -315,6 +315,7 @@ public final class YoutubeDownloader: ObservableObject {
         p.executableURL = exe
         p.arguments = prefix + [
             "--no-update",
+            "--no-playlist",
             "-x", "--audio-format", "m4a",
             "--embed-thumbnail", "--convert-thumbnails", "jpg",
             "--progress", "--newline",

@@ -201,9 +201,9 @@ struct DownloadSheet: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                 if urlText.isEmpty {
-                    Text("https://youtube.com/watch?v=...\nhttps://youtu.be/...")
+                    Text("Paste one or more YouTube links, one per line")
                         .font(.system(size: 12.5))
-                        .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.7))
+                        .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.45))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .allowsHitTesting(false)
