@@ -321,6 +321,7 @@ public final class YoutubeDownloader: ObservableObject {
             prefix + [
                 "--no-update",
                 "--no-playlist",
+                "--no-quiet",
                 "-x", "--audio-format", "m4a",
                 "--embed-thumbnail", "--convert-thumbnails", "jpg",
                 "--progress", "--newline",
