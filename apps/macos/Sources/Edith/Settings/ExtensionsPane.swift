@@ -231,9 +231,6 @@ private struct SystemRows: View {
             }
             HStack {
                 Text("Keyboard cleaning")
-                InfoDot(
-                    "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
-                )
                 Spacer()
                 if cleaningStarted {
                     Text("Locked - check the overlay")
@@ -247,6 +244,9 @@ private struct SystemRows: View {
                     }
                 }
                 .pointerCursor()
+                InfoDot(
+                    "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
+                )
             }
         }
         .disabled(!enabled)
