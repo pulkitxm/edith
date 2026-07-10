@@ -223,6 +223,7 @@ private struct NotchNowPlayingCard: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(14)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
     }
