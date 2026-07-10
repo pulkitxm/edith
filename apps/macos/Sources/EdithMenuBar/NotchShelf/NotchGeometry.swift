@@ -16,7 +16,7 @@ enum NotchGeometry {
         }
         let width = screenWidth - left - right
         guard width > 1 else { return fallbackSize }
-        return CGSize(width: width + 2 * topFlareRadius, height: safeAreaTop)
+        return CGSize(width: width, height: safeAreaTop)
     }
 
     static func origin(screenFrame: CGRect, panelSize: CGSize) -> CGPoint {
@@ -29,6 +29,7 @@ enum NotchGeometry {
     static let expandedTopRadius: CGFloat = 18
     static let expandedBottomRadius: CGFloat = 34
     static let resizingBottomRadius: CGFloat = 10
+    static let collapsedBottomRadius: CGFloat = 10
 
     static let musicWingWidth: CGFloat = 42
     static let alertDropSize = CGSize(width: 380, height: 84)

@@ -29,12 +29,12 @@ struct NotchShelfContentView: View {
 
     private var topRadius: CGFloat {
         controller.isExpanded || controller.currentAlert != nil
-            ? NotchGeometry.expandedTopRadius : NotchGeometry.topFlareRadius
+            ? NotchGeometry.expandedTopRadius : 0
     }
 
     private var bottomRadius: CGFloat {
         if controller.currentAlert != nil, !controller.isExpanded { return 22 }
-        guard controller.isExpanded else { return 14 }
+        guard controller.isExpanded else { return NotchGeometry.collapsedBottomRadius }
         return controller.isResizing
             ? NotchGeometry.resizingBottomRadius : NotchGeometry.expandedBottomRadius
     }

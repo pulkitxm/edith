@@ -6,7 +6,7 @@ import Testing
     @Test func usesRealNotchMathWhenAreasArePresent() {
         let size = NotchGeometry.collapsedSize(
             screenWidth: 1512, leftAreaWidth: 676, rightAreaWidth: 676, safeAreaTop: 32)
-        #expect(size.width == 160 + 2 * NotchGeometry.topFlareRadius)
+        #expect(size.width == 160)
         #expect(size.height == 32)
     }
 
