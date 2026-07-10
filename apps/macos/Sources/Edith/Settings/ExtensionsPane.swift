@@ -12,6 +12,7 @@ struct ExtensionsPane: View {
     @AppStorage("clipboardEnabled", store: SharedDefaults.store) private var clipboardEnabled =
         false
     @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var focusDimEnabled = false
+    @AppStorage("micMuteEnabled", store: SharedDefaults.store) private var micMuteEnabled = false
     @AppStorage("colorPickerEnabled", store: SharedDefaults.store) private var colorPickerEnabled =
         false
     @State private var expanded: Set<String> = []
@@ -64,6 +65,11 @@ struct ExtensionsPane: View {
                 subtitle: "System loupe on a hotkey, sampled color to your clipboard.",
                 enabled: $colorPickerEnabled)
             if expanded.contains("colorPicker") { ColorPickerRows() }
+
+            header(
+                "micMute", title: "Mic Mute", icon: "mic.slash.fill",
+                subtitle: "Mute every microphone system-wide with ⌘⇧M or the menu bar icon.",
+                enabled: $micMuteEnabled)
         }
         .formStyle(.grouped)
         .navigationTitle("Extensions")
