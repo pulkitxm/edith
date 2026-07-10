@@ -21,12 +21,13 @@ struct NotchShelfContentView: View {
     }
 
     private var topRadius: CGFloat {
-        controller.isExpanded ? 18 : NotchGeometry.topFlareRadius
+        controller.isExpanded ? NotchGeometry.expandedTopRadius : NotchGeometry.topFlareRadius
     }
 
     private var bottomRadius: CGFloat {
         guard controller.isExpanded else { return 14 }
-        return controller.isResizing ? 10 : 34
+        return controller.isResizing
+            ? NotchGeometry.resizingBottomRadius : NotchGeometry.expandedBottomRadius
     }
 
     private var shapeAnimation: Animation? {
@@ -61,7 +62,7 @@ struct NotchShelfContentView: View {
                                     index: index, in: geo.size))
                     }
                 }
-                ResizeEdges(controller: controller)
+                ResizeEdges(controller: controller, hInset: NotchGeometry.expandedTopRadius)
                     .frame(width: geo.size.width, height: geo.size.height)
             }
             .coordinateSpace(name: "shelfCanvas")
@@ -71,34 +72,40 @@ struct NotchShelfContentView: View {
 
 private struct ResizeEdges: View {
     let controller: NotchShelfController
+    let hInset: CGFloat
 
     var body: some View {
         Color.clear
             .overlay(alignment: .leading) {
                 strip(cursor: .resizeLeftRight, resizesWidth: true, resizesHeight: false)
-                    .frame(width: 8)
+                    .frame(width: 10)
+                    .padding(.leading, hInset)
             }
             .overlay(alignment: .trailing) {
                 strip(cursor: .resizeLeftRight, resizesWidth: true, resizesHeight: false)
-                    .frame(width: 8)
+                    .frame(width: 10)
+                    .padding(.trailing, hInset)
             }
             .overlay(alignment: .bottom) {
                 strip(cursor: .resizeUpDown, resizesWidth: false, resizesHeight: true)
-                    .frame(height: 8)
+                    .frame(height: 10)
+                    .padding(.horizontal, hInset)
             }
             .overlay(alignment: .bottomLeading) {
                 strip(
                     cursor: Self.diagonalCursor(rightSide: false), resizesWidth: true,
                     resizesHeight: true
                 )
-                .frame(width: 16, height: 16)
+                .frame(width: 20, height: 20)
+                .padding(.leading, hInset)
             }
             .overlay(alignment: .bottomTrailing) {
                 strip(
                     cursor: Self.diagonalCursor(rightSide: true), resizesWidth: true,
                     resizesHeight: true
                 )
-                .frame(width: 16, height: 16)
+                .frame(width: 20, height: 20)
+                .padding(.trailing, hInset)
             }
             .onDisappear { NSCursor.arrow.set() }
     }

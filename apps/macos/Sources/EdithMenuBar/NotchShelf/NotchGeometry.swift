@@ -26,6 +26,10 @@ enum NotchGeometry {
     static let openMargin: CGFloat = 6
     static let keepOpenMargin: CGFloat = 24
 
+    static let expandedTopRadius: CGFloat = 18
+    static let expandedBottomRadius: CGFloat = 34
+    static let resizingBottomRadius: CGFloat = 10
+
     static func proximity(
         point: CGPoint,
         collapsedFrame: CGRect,

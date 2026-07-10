@@ -345,7 +345,8 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         guard let screen else { return }
         let proposed = CGSize(
             width: resizesWidth
-                ? abs(point.x - screen.frame.midX) * 2 + 8 : expandedSize.width,
+                ? abs(point.x - screen.frame.midX) * 2 + 2 * NotchGeometry.expandedTopRadius
+                : expandedSize.width,
             height: resizesHeight ? screen.frame.maxY - point.y + 4 : expandedSize.height)
         let minSize = NotchGeometry.expandedSize
         let size = CGSize(
