@@ -51,6 +51,64 @@ struct NotchShelfContentView: View {
     }
 
     private var expanded: some View {
+        ZStack {
+            VStack(spacing: 4) {
+                tabStrip
+                    .padding(.top, 30)
+                    .padding(.horizontal, 16)
+                tabContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            GeometryReader { geo in
+                ResizeEdges(controller: controller, hInset: NotchGeometry.expandedTopRadius)
+                    .frame(width: geo.size.width, height: geo.size.height)
+            }
+        }
+    }
+
+    private var tabStrip: some View {
+        HStack(spacing: 6) {
+            ForEach(NotchTab.allCases, id: \.self) { tab in
+                Button {
+                    controller.selectTab(tab)
+                } label: {
+                    Text(tab.title)
+                        .font(
+                            .system(
+                                size: 11.5,
+                                weight: controller.activeTab == tab ? .semibold : .regular)
+                        )
+                        .foregroundStyle(
+                            controller.activeTab == tab ? Color.black : Color.white.opacity(0.7)
+                        )
+                        .padding(.horizontal, 11).padding(.vertical, 5)
+                        .background(
+                            controller.activeTab == tab
+                                ? Color.white.opacity(0.92) : Color.white.opacity(0.07),
+                            in: Capsule())
+                }
+                .buttonStyle(.plain).pointerCursor()
+            }
+            Spacer()
+            Button {
+                MainApp.openDashboard()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7))
+            }
+            .buttonStyle(.plain).pointerCursor()
+        }
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch controller.activeTab {
+        case .home: NotchHomeTab(controller: controller)
+        case .files: filesCanvas
+        case .clipboard: NotchClipboardTab(controller: controller)
+        }
+    }
+
+    private var filesCanvas: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 if controller.items.isEmpty {
@@ -68,10 +126,117 @@ struct NotchShelfContentView: View {
                                     index: index, in: geo.size))
                     }
                 }
-                ResizeEdges(controller: controller, hInset: NotchGeometry.expandedTopRadius)
-                    .frame(width: geo.size.width, height: geo.size.height)
             }
             .coordinateSpace(name: "shelfCanvas")
+        }
+    }
+}
+
+private struct NotchHomeTab: View {
+    @ObservedObject var controller: NotchShelfController
+
+    var body: some View {
+        if let track = controller.nowPlaying {
+            nowPlaying(track)
+        } else {
+            Text("Nothing playing right now")
+                .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func nowPlaying(_ track: NotchNowPlaying) -> some View {
+        HStack(spacing: 14) {
+            artwork
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white).lineLimit(1)
+                if !track.artist.isEmpty {
+                    Text(track.artist)
+                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                }
+                HStack(spacing: 24) {
+                    control("backward.fill", size: 14) { controller.nowPlayingPrevious() }
+                    control(track.isPlaying ? "pause.fill" : "play.fill", size: 19) {
+                        controller.nowPlayingPlayPause()
+                    }
+                    control("forward.fill", size: 14) { controller.nowPlayingNext() }
+                }
+                .padding(.top, 5)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20).padding(.bottom, 16)
+    }
+
+    private var artwork: some View {
+        Group {
+            if let image = controller.nowPlayingArtwork {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                Image(systemName: "music.note")
+                    .font(.system(size: 22)).foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.white.opacity(0.08))
+            }
+        }
+        .frame(width: 62, height: 62)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func control(_ name: String, size: CGFloat, _ action: @escaping () -> Void)
+        -> some View
+    {
+        Button(action: action) {
+            Image(systemName: name).font(.system(size: size)).foregroundStyle(.white)
+        }
+        .buttonStyle(.plain).pointerCursor()
+    }
+}
+
+private struct NotchClipboardTab: View {
+    @ObservedObject var controller: NotchShelfController
+
+    var body: some View {
+        if let store = controller.clipboardStore {
+            NotchClipboardList(store: store, controller: controller)
+        } else {
+            Text("Clipboard history is off")
+                .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct NotchClipboardList: View {
+    @ObservedObject var store: ClipboardStore
+    let controller: NotchShelfController
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 6) {
+                ForEach(store.entries.prefix(8)) { entry in
+                    Button {
+                        controller.copyClipboardEntry(entry)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(entry.preview ?? "Non-text item")
+                                .font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            if entry.pinned {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 9)).foregroundStyle(.white.opacity(0.5))
+                            }
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain).pointerCursor()
+                }
+            }
+            .padding(.horizontal, 16).padding(.bottom, 12)
         }
     }
 }

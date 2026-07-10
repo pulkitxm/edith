@@ -1,5 +1,17 @@
 import Foundation
 
+enum NotchTab: String, CaseIterable, Equatable {
+    case home, files, clipboard
+
+    var title: String {
+        switch self {
+        case .home: "Home"
+        case .files: "Files"
+        case .clipboard: "Clipboard"
+        }
+    }
+}
+
 struct NotchNowPlaying: Equatable {
     enum Source: Equatable {
         case local

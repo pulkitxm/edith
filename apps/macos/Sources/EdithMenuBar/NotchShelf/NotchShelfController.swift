@@ -16,7 +16,9 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var isResizing = false
     @Published private(set) var nowPlaying: NotchNowPlaying?
     @Published private(set) var nowPlayingArtwork: NSImage?
+    @Published var activeTab: NotchTab = .home
     @Published private(set) var currentAlert: NotchAlert?
+    weak var clipboardStore: ClipboardStore?
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -412,6 +414,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         case .leftMouseDragged:
             guard NSPasteboard(name: .drag).changeCount != lastDragChangeCount else { return }
             guard optionSatisfied(), isNearNotch(NSEvent.mouseLocation) else { return }
+            activeTab = .files
             expand()
         default:
             break
@@ -528,6 +531,44 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID)
         else { return nil }
         return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
+    func attachClipboard(_ store: ClipboardStore?) {
+        clipboardStore = store
+    }
+
+    func selectTab(_ tab: NotchTab) {
+        activeTab = tab
+    }
+
+    func nowPlayingPlayPause() {
+        switch nowPlaying?.source {
+        case .local: localMusic?.playPause()
+        case .external: external.playPause()
+        case .none: break
+        }
+    }
+
+    func nowPlayingNext() {
+        switch nowPlaying?.source {
+        case .local: localMusic?.next()
+        case .external: external.next()
+        case .none: break
+        }
+    }
+
+    func nowPlayingPrevious() {
+        switch nowPlaying?.source {
+        case .local: localMusic?.previous()
+        case .external: external.previous()
+        case .none: break
+        }
+    }
+
+    func copyClipboardEntry(_ entry: ClipboardEntry) {
+        guard let text = entry.preview else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     func fileURL(for item: ShelfItem) -> URL { store.fileURL(for: item) }

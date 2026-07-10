@@ -25,6 +25,13 @@ enum ExternalApp: String, Equatable, CaseIterable, Sendable {
         case .music: "com.apple.Music.playerInfo"
         }
     }
+
+    var processName: String {
+        switch self {
+        case .spotify: "Spotify"
+        case .music: "Music"
+        }
+    }
 }
 
 struct ExternalTrack: Equatable, Sendable {
@@ -82,6 +89,24 @@ final class ExternalMusic: ObservableObject {
         for (_, observer) in observers { center.removeObserver(observer) }
         observers.removeAll()
         current = nil
+    }
+
+    func playPause() { control("playpause") }
+    func next() { control("next track") }
+    func previous() { control("previous track") }
+
+    private func control(_ command: String) {
+        guard let app = current?.app else { return }
+        let source = """
+            tell application "System Events"
+                if not (exists process "\(app.processName)") then return
+            end tell
+            tell application "\(app.processName)" to \(command)
+            """
+        Task.detached {
+            var error: NSDictionary?
+            NSAppleScript(source: source)?.executeAndReturnError(&error)
+        }
     }
 
     private func handle(app: ExternalApp, userInfo: [AnyHashable: Any]) {
