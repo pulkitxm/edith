@@ -95,6 +95,21 @@ final class ExternalMusic: ObservableObject {
     func next() { control("next track") }
     func previous() { control("previous track") }
 
+    func setVolume(_ value: Float) {
+        guard let app = current?.app else { return }
+        let level = Int(max(0, min(1, value)) * 100)
+        let source = """
+            tell application "System Events"
+                if not (exists process "\(app.processName)") then return
+            end tell
+            tell application "\(app.processName)" to set sound volume to \(level)
+            """
+        Task.detached {
+            var error: NSDictionary?
+            NSAppleScript(source: source)?.executeAndReturnError(&error)
+        }
+    }
+
     private func control(_ command: String) {
         guard let app = current?.app else { return }
         let source = """

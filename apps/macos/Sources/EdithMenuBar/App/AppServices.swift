@@ -80,6 +80,7 @@ final class AppServices: ObservableObject {
         ClipboardPanel.shared.store = clipboard
         notchShelf?.attachClipboard(clipboard)
         notchShelf?.attachUsage(usage)
+        notchShelf?.attachCalendar(calendar)
 
         let focusDimOn = SharedDefaults.store.bool(forKey: "focusDimEnabled")
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }

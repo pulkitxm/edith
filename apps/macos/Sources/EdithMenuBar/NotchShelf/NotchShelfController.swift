@@ -20,6 +20,8 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
     @Published private(set) var usageStore: UsageStore?
+    @Published private(set) var calendarStore: CalendarStore?
+    private var externalVolume: Double = 0.7
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -258,8 +260,8 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: size), size: size)
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.35
-                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.4, 0.64, 1)
+                ctx.duration = 0.42
+                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.28, 1.12, 0.4, 1)
                 panel.animator().setFrame(frame, display: true)
             }
         } else {
@@ -540,6 +542,42 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     func attachUsage(_ store: UsageStore?) {
         usageStore = store
+    }
+
+    func attachCalendar(_ store: CalendarStore?) {
+        calendarStore = store
+    }
+
+    var nowPlayingSeekable: Bool {
+        if case .local = nowPlaying?.source { return true }
+        return false
+    }
+
+    func nowPlayingProgress() -> Double {
+        nowPlayingSeekable ? (localMusic?.progressNow() ?? 0) : 0
+    }
+
+    func nowPlayingSeek(_ fraction: Double) {
+        guard nowPlayingSeekable else { return }
+        localMusic?.seek(to: fraction)
+    }
+
+    var nowPlayingVolume: Double {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.volume ?? 0
+        case .external: return externalVolume
+        case .none: return 0
+        }
+    }
+
+    func setNowPlayingVolume(_ value: Double) {
+        switch nowPlaying?.source {
+        case .local: localMusic?.volume = value
+        case .external:
+            externalVolume = value
+            external.setVolume(Float(value))
+        case .none: break
+        }
     }
 
     func selectTab(_ tab: NotchTab) {
