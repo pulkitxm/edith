@@ -20,15 +20,22 @@ struct ProjNode: Identifiable {
     var children: [ProjNode]?
 }
 
+enum ProjColumns {
+    static let tokens: CGFloat = 96
+    static let cost: CGFloat = 82
+    static let share: CGFloat = 58
+    static let days: CGFloat = 44
+    static let dur: CGFloat = 76
+    static let last: CGFloat = 64
+}
+
 struct ProjectDrilldownView: View {
     @ObservedObject var model: DashboardModel
     let dark: Bool
     var blur = false
-    @State private var sortOrder = [KeyPathComparator(\ProjNode.cost, order: .reverse)]
-    @State private var hoveredRow: String?
 
     private static let chatsPerGroup = 20
-    private static let rowHeight: CGFloat = 24
+    private static let rowHeight: CGFloat = 27
     private static let minTableHeight: CGFloat = 340
     private static let maxTableHeight: CGFloat = 560
 
@@ -36,7 +43,23 @@ struct ProjectDrilldownView: View {
         VStack(alignment: .leading, spacing: 8) {
             toggleButton
             if model.projListOpen {
-                projectTable
+                VStack(spacing: 0) {
+                    headerRow
+                    Divider().opacity(0.4)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(flatRows, id: \.node.id) { row in
+                                ProjectRow(
+                                    node: row.node, depth: row.depth, dark: dark, blur: blur,
+                                    expanded: model.projExpanded.contains(row.node.id),
+                                    onToggle: { toggleExpand(row.node.id) },
+                                    onCopy: copyToPasteboard)
+                                Divider().opacity(0.12)
+                            }
+                        }
+                    }
+                }
+                .frame(height: tableHeight)
             }
         }
     }
@@ -59,91 +82,78 @@ struct ProjectDrilldownView: View {
         .pointerCursor()
     }
 
-    private var projectTable: some View {
-        rawTable
-            .tableStyle(.inset)
-            .alternatingRowBackgrounds(.disabled)
-            .scrollContentBackground(.hidden)
-            .frame(height: tableHeight)
-            .onChange(of: sortOrder) { _, order in
-                guard let c = order.first else { return }
-                let key = Self.sortKey(for: c.keyPath)
-                let ascending = c.order == .forward
-                if model.projSortKey != key { model.projSortKey = key }
-                if model.projSortAscending != ascending { model.projSortAscending = ascending }
-            }
-            .onChange(of: model.projSortKey) { _, _ in syncSortOrder() }
-            .onChange(of: model.projSortAscending) { _, _ in syncSortOrder() }
-            .onAppear { syncSortOrder() }
+    private var headerRow: some View {
+        HStack(spacing: 0) {
+            headerCell("Project", .name, width: nil)
+            headerCell("Tokens", .tokens, width: ProjColumns.tokens)
+            headerCell("Cost", .cost, width: ProjColumns.cost)
+            headerCell("% share", .share, width: ProjColumns.share)
+            headerCell("Days", .days, width: ProjColumns.days)
+            headerCell("Time spent", .dur, width: ProjColumns.dur)
+            headerCell("Last used", .lastActive, width: ProjColumns.last)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 
-    private var rawTable: some View {
-        Table(nodes, children: \ProjNode.children, sortOrder: $sortOrder) {
-            SwiftUI.TableColumn("Project", value: \ProjNode.label) { (node: ProjNode) in
-                nameCell(node)
+    @ViewBuilder private func headerCell(_ title: String, _ key: ProjSortKey, width: CGFloat?)
+        -> some View
+    {
+        let leading = width == nil
+        Button {
+            sortBy(key)
+        } label: {
+            HStack(spacing: 3) {
+                if !leading { Spacer(minLength: 0) }
+                Text(title).font(.system(size: 11, weight: .medium))
+                if model.projSortKey == key {
+                    Image(systemName: model.projSortAscending ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                if leading { Spacer(minLength: 0) }
             }
-            .width(min: 200)
-            SwiftUI.TableColumn("Tokens", value: \ProjNode.tokens) { (node: ProjNode) in
-                numCell(DashFmt.tokensFull(node.tokens), node, blurred: true)
-            }
-            .width(min: 70, ideal: 95)
-            SwiftUI.TableColumn("Cost", value: \ProjNode.cost) { (node: ProjNode) in
-                numCell(DashFmt.usdLong(node.cost), node, blurred: true)
-            }
-            .width(min: 60, ideal: 85)
-            SwiftUI.TableColumn("% share", value: \ProjNode.share) { (node: ProjNode) in
-                numCell(DashFmt.pct(node.share), node)
-            }
-            .width(min: 45, ideal: 55)
-            SwiftUI.TableColumn("Days", value: \ProjNode.days) { (node: ProjNode) in
-                numCell("\(node.days)", node)
-            }
-            .width(min: 35, ideal: 45)
-            SwiftUI.TableColumn("Time spent", value: \ProjNode.dur) { (node: ProjNode) in
-                numCell(DashFmt.duration(node.dur), node)
-            }
-            .width(min: 55, ideal: 70)
-            SwiftUI.TableColumn("Last used", value: \ProjNode.lastActive) { (node: ProjNode) in
-                numCell(node.lastActive.isEmpty ? "-" : DashFmt.dateShort(node.lastActive), node)
-            }
-            .width(min: 50, ideal: 62)
+            .foregroundStyle(DashSkin.inkSoft(dark))
+            .frame(
+                maxWidth: leading ? .infinity : nil, alignment: leading ? .leading : .trailing
+            )
+            .frame(width: width, alignment: leading ? .leading : .trailing)
         }
+        .buttonStyle(.plain).pointerCursor()
+    }
+
+    private func sortBy(_ key: ProjSortKey) {
+        if model.projSortKey == key {
+            model.projSortAscending.toggle()
+        } else {
+            model.projSortKey = key
+            model.projSortAscending = key == .name
+        }
+    }
+
+    private func toggleExpand(_ id: String) {
+        if model.projExpanded.contains(id) {
+            model.projExpanded.remove(id)
+        } else {
+            model.projExpanded.insert(id)
+        }
+    }
+
+    private var flatRows: [(node: ProjNode, depth: Int)] {
+        var out: [(ProjNode, Int)] = []
+        func add(_ node: ProjNode, _ depth: Int) {
+            out.append((node, depth))
+            if model.projExpanded.contains(node.id), let kids = node.children {
+                for kid in kids { add(kid, depth + 1) }
+            }
+        }
+        for node in nodes { add(node, 0) }
+        return out
     }
 
     private var tableHeight: CGFloat {
         min(
-            max(CGFloat(model.projectTree.count + 1) * Self.rowHeight + 32, Self.minTableHeight),
+            max(CGFloat(model.projectTree.count + 1) * Self.rowHeight + 44, Self.minTableHeight),
             Self.maxTableHeight)
-    }
-
-    private static func sortKey(for keyPath: PartialKeyPath<ProjNode>) -> ProjSortKey {
-        switch keyPath {
-        case \ProjNode.label: return .name
-        case \ProjNode.tokens: return .tokens
-        case \ProjNode.share: return .share
-        case \ProjNode.days: return .days
-        case \ProjNode.dur: return .dur
-        case \ProjNode.lastActive: return .lastActive
-        default: return .cost
-        }
-    }
-
-    private static func keyPath(for key: ProjSortKey) -> KeyPathComparator<ProjNode> {
-        switch key {
-        case .name: return KeyPathComparator(\ProjNode.label)
-        case .tokens: return KeyPathComparator(\ProjNode.tokens)
-        case .cost: return KeyPathComparator(\ProjNode.cost)
-        case .share: return KeyPathComparator(\ProjNode.share)
-        case .days: return KeyPathComparator(\ProjNode.days)
-        case .dur: return KeyPathComparator(\ProjNode.dur)
-        case .lastActive: return KeyPathComparator(\ProjNode.lastActive)
-        }
-    }
-
-    private func syncSortOrder() {
-        var c = Self.keyPath(for: model.projSortKey)
-        c.order = model.projSortAscending ? .forward : .reverse
-        if sortOrder.first != c { sortOrder = [c] }
     }
 
     private var nodes: [ProjNode] {
@@ -186,46 +196,75 @@ struct ProjectDrilldownView: View {
         return out
     }
 
-    private func tint(_ node: ProjNode) -> Color {
-        switch node.kind {
-        case .project, .worktree: return DashSkin.ink(dark)
-        case .chat: return DashSkin.inkSoft(dark)
-        case .more: return DashSkin.inkFaint(dark)
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+private struct ProjectRow: View {
+    let node: ProjNode
+    let depth: Int
+    let dark: Bool
+    let blur: Bool
+    let expanded: Bool
+    let onToggle: () -> Void
+    let onCopy: (String) -> Void
+    @State private var hovering = false
+
+    private var hasChildren: Bool { node.children?.isEmpty == false }
+
+    var body: some View {
+        content
+            .padding(.horizontal, 8)
+            .frame(height: 27)
+            .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .onTapGesture { if hasChildren { onToggle() } }
+    }
+
+    @ViewBuilder private var content: some View {
+        let row = HStack(spacing: 0) {
+            nameColumn
+            num(DashFmt.tokensFull(node.tokens), width: ProjColumns.tokens, blurred: true)
+            num(DashFmt.usdLong(node.cost), width: ProjColumns.cost, blurred: true)
+            num(DashFmt.pct(node.share), width: ProjColumns.share)
+            num("\(node.days)", width: ProjColumns.days)
+            num(DashFmt.duration(node.dur), width: ProjColumns.dur)
+            num(
+                node.lastActive.isEmpty ? "-" : DashFmt.dateShort(node.lastActive),
+                width: ProjColumns.last)
+        }
+        if let chatId = node.chatId, !chatId.isEmpty {
+            row.contextMenu { Button("Copy chat ID") { onCopy(chatId) } }
+        } else {
+            row
         }
     }
 
-    private func icon(_ node: ProjNode) -> String {
-        switch node.kind {
-        case .project: return "folder"
-        case .worktree: return "arrow.triangle.branch"
-        case .chat, .more: return "message"
-        }
-    }
-
-    @ViewBuilder private func nameCell(_ node: ProjNode) -> some View {
-        let cell = HStack(spacing: 5) {
-            iconView(node)
-            Text(node.label)
-                .font(.system(size: 11))
-                .lineLimit(1)
-                .truncationMode(.tail)
+    private var nameColumn: some View {
+        HStack(spacing: 5) {
+            if hasChildren {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(width: 10)
+            } else {
+                Color.clear.frame(width: 10)
+            }
+            iconView
+            Text(node.label).font(.system(size: 11)).lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(tint(node))
+        .padding(.leading, CGFloat(depth) * 16)
+        .foregroundStyle(tint)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .rowHover(node.id, hovered: $hoveredRow, dark: dark)
-        if let chatId = node.chatId, !chatId.isEmpty {
-            cell.contextMenu {
-                Button("Copy chat ID") { copyToPasteboard(chatId) }
-            }
-        } else {
-            cell
-        }
     }
 
-    @ViewBuilder private func iconView(_ node: ProjNode) -> some View {
+    @ViewBuilder private var iconView: some View {
         let img = ZStack(alignment: .topTrailing) {
-            Image(systemName: icon(node)).font(.system(size: 10))
+            Image(systemName: icon).font(.system(size: 10))
             if node.badge > 0 {
                 Text(node.badge > 99 ? "99+" : "\(node.badge)")
                     .font(.system(size: 7, weight: .semibold))
@@ -235,39 +274,37 @@ struct ProjectDrilldownView: View {
         .frame(width: 16, height: 14, alignment: .leading)
         if let chatId = node.chatId, !chatId.isEmpty {
             Button {
-                copyToPasteboard(chatId)
+                onCopy(chatId)
             } label: {
                 img
-            }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            }.buttonStyle(.plain).pointerCursor()
         } else {
             img
         }
     }
 
-    private func numCell(_ text: String, _ node: ProjNode, blurred: Bool = false) -> some View {
+    private func num(_ text: String, width: CGFloat, blurred: Bool = false) -> some View {
         Text(text)
             .font(DashSkin.mono(11))
             .lineLimit(1)
-            .foregroundStyle(tint(node))
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .foregroundStyle(tint)
+            .frame(width: width, alignment: .trailing)
             .presenterBlur(blurred && blur)
-            .rowHover(node.id, hovered: $hoveredRow, dark: dark)
     }
 
-    private func copyToPasteboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    private var tint: Color {
+        switch node.kind {
+        case .project, .worktree: return DashSkin.ink(dark)
+        case .chat: return DashSkin.inkSoft(dark)
+        case .more: return DashSkin.inkFaint(dark)
+        }
     }
-}
 
-extension View {
-    fileprivate func rowHover(_ id: String, hovered: Binding<String?>, dark: Bool) -> some View {
-        contentShape(Rectangle())
-            .background(
-                hovered.wrappedValue == id ? DashSkin.inkFaint(dark).opacity(0.16) : Color.clear
-            )
-            .onHover { hovered.wrappedValue = $0 ? id : nil }
+    private var icon: String {
+        switch node.kind {
+        case .project: return "folder"
+        case .worktree: return "arrow.triangle.branch"
+        case .chat, .more: return "message"
+        }
     }
 }
