@@ -1,13 +1,14 @@
 import Foundation
 
 enum NotchTab: String, CaseIterable, Equatable {
-    case home, files, clipboard
+    case home, files, clipboard, camera
 
     var title: String {
         switch self {
         case .home: "Home"
         case .files: "Files"
         case .clipboard: "Clipboard"
+        case .camera: "Camera"
         }
     }
 }

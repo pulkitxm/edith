@@ -105,6 +105,7 @@ struct NotchShelfContentView: View {
         case .home: NotchHomeTab(controller: controller)
         case .files: filesCanvas
         case .clipboard: NotchClipboardTab(controller: controller)
+        case .camera: NotchCameraTab()
         }
     }
 
