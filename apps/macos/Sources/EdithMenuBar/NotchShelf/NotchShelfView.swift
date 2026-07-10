@@ -12,20 +12,25 @@ struct NotchShelfContentView: View {
                 .fill(.black)
             if controller.isExpanded {
                 expanded.transition(.opacity)
+            } else if let alert = controller.currentAlert {
+                NotchAlertDropView(alert: alert, controller: controller).transition(.opacity)
             } else {
                 collapsed.transition(.opacity)
             }
         }
         .animation(shapeAnimation, value: controller.isExpanded)
+        .animation(shapeAnimation, value: controller.currentAlert)
         .animation(.easeOut(duration: 0.14), value: controller.isResizing)
         .onHover { controller.hoverChanged($0) }
     }
 
     private var topRadius: CGFloat {
-        controller.isExpanded ? NotchGeometry.expandedTopRadius : NotchGeometry.topFlareRadius
+        controller.isExpanded || controller.currentAlert != nil
+            ? NotchGeometry.expandedTopRadius : NotchGeometry.topFlareRadius
     }
 
     private var bottomRadius: CGFloat {
+        if controller.currentAlert != nil, !controller.isExpanded { return 22 }
         guard controller.isExpanded else { return 14 }
         return controller.isResizing
             ? NotchGeometry.resizingBottomRadius : NotchGeometry.expandedBottomRadius
@@ -68,6 +73,52 @@ struct NotchShelfContentView: View {
             }
             .coordinateSpace(name: "shelfCanvas")
         }
+    }
+}
+
+private struct NotchAlertDropView: View {
+    let alert: NotchAlert
+    @ObservedObject var controller: NotchShelfController
+
+    var body: some View {
+        let tint = Color(hex: alert.tint)
+        return HStack(spacing: 12) {
+            Image(systemName: alert.icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(alert.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white).lineLimit(1)
+                if let subtitle = alert.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 34)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .contentShape(Rectangle())
+        .onHover { controller.alertHover($0) }
+        .onTapGesture { controller.dismissAlert() }
+    }
+}
+
+extension Color {
+    fileprivate init(hex: String) {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        var value: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&value)
+        self.init(
+            red: Double((value >> 16) & 0xff) / 255,
+            green: Double((value >> 8) & 0xff) / 255,
+            blue: Double(value & 0xff) / 255)
     }
 }
 

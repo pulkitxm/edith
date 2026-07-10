@@ -16,6 +16,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var isResizing = false
     @Published private(set) var nowPlaying: NotchNowPlaying?
     @Published private(set) var nowPlayingArtwork: NSImage?
+    @Published private(set) var currentAlert: NotchAlert?
+    private var alertDetectors: NotchAlertDetectors?
+    private var alertWorkItem: DispatchWorkItem?
+    private var alertPinned = false
     @Published private(set) var livePositions: [UUID: CGPoint] = [:]
     @Published private(set) var selectedIDs: Set<UUID> = []
 
@@ -70,12 +74,66 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         ) { [weak self] event in
             Task { @MainActor in self?.handleGlobalMouse(event) }
         }
+        startAlertsIfEnabled()
+    }
+
+    private var alertsEnabled: Bool { flag("notchAlertsEnabled", default: true) }
+
+    private func startAlertsIfEnabled() {
+        guard alertsEnabled else { return }
+        let detectors = NotchAlertDetectors { [weak self] alert in
+            self?.postAlert(alert)
+        }
+        detectors.start()
+        alertDetectors = detectors
+    }
+
+    func postAlert(_ alert: NotchAlert) {
+        guard alertsEnabled, !isExpanded else { return }
+        guard NotchAlertLogic.shouldPreempt(current: currentAlert, incoming: alert) else { return }
+        currentAlert = alert
+        alertPinned = false
+        updateAllFrames(animated: true)
+        scheduleAlertHide(after: alert.autoHide)
+    }
+
+    private func scheduleAlertHide(after delay: TimeInterval) {
+        alertWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.hideAlert() }
+        alertWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func hideAlert() {
+        guard !alertPinned else { return }
+        currentAlert = nil
+        alertWorkItem = nil
+        updateAllFrames(animated: true)
+    }
+
+    func alertHover(_ hovering: Bool) {
+        guard currentAlert != nil else { return }
+        alertPinned = hovering
+        if hovering {
+            alertWorkItem?.cancel()
+        } else {
+            scheduleAlertHide(after: 1.2)
+        }
+    }
+
+    func dismissAlert() {
+        alertPinned = false
+        hideAlert()
     }
 
     func shutdown() {
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
         stopMoveMonitor()
+        alertDetectors?.stop()
+        alertDetectors = nil
+        alertWorkItem?.cancel()
+        alertWorkItem = nil
         external.stop()
         externalCancellable = nil
         localCancellable = nil
@@ -185,10 +243,14 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         _ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID, animated: Bool
     ) {
         let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
-        let size =
-            isExpanded
-            ? expandedSize
-            : NotchGeometry.collapsedSize(base: base, hasLiveActivity: nowPlaying != nil)
+        let size: CGSize
+        if isExpanded {
+            size = expandedSize
+        } else if currentAlert != nil, id == builtinDisplayID {
+            size = NotchGeometry.alertDropSize
+        } else {
+            size = NotchGeometry.collapsedSize(base: base, hasLiveActivity: nowPlaying != nil)
+        }
         let frame = NSRect(
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: size), size: size)
         if animated {
@@ -218,6 +280,11 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         gateWorkItem?.cancel()
         gateWorkItem = nil
         purgeExpired()
+        if currentAlert != nil {
+            currentAlert = nil
+            alertWorkItem?.cancel()
+            alertWorkItem = nil
+        }
         gate.forceOpen()
         startMoveMonitor()
         guard !isExpanded else { return }
