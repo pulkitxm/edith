@@ -40,7 +40,8 @@ struct NotchShelfContentView: View {
     }
 
     private var shapeAnimation: Animation? {
-        reduceMotion ? .easeInOut(duration: 0.24) : .spring(response: 0.42, dampingFraction: 0.82)
+        reduceMotion
+            ? .easeInOut(duration: 0.24) : .timingCurve(0.28, 1.12, 0.4, 1, duration: 0.42)
     }
 
     @ViewBuilder private var collapsed: some View {

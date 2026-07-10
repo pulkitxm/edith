@@ -100,7 +100,7 @@ enum JunkCatalog {
 }
 
 enum JunkScanner {
-    static func directorySize(_ url: URL) -> Int64 {
+    static func directorySize(_ url: URL, isCancelled: () -> Bool = { false }) -> Int64 {
         let keys: [URLResourceKey] = [
             .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .isRegularFileKey,
         ]
@@ -112,7 +112,10 @@ enum JunkScanner {
             return Int64(single?.totalFileAllocatedSize ?? single?.fileAllocatedSize ?? 0)
         }
         var total: Int64 = 0
+        var seen = 0
         for case let item as URL in enumerator {
+            seen += 1
+            if seen & 0x3ff == 0, isCancelled() { break }
             guard let values = try? item.resourceValues(forKeys: Set(keys)),
                 values.isRegularFile == true
             else { continue }
@@ -121,7 +124,9 @@ enum JunkScanner {
         return total
     }
 
-    static func scanCategory(_ entry: JunkCatalog.Entry, home: URL) -> JunkCategory? {
+    static func scanCategory(
+        _ entry: JunkCatalog.Entry, home: URL, isCancelled: () -> Bool = { false }
+    ) -> JunkCategory? {
         let paths = JunkCatalog.resolve(entry, home: home)
         guard !paths.isEmpty else { return nil }
         var items: [JunkItem] = []
@@ -131,7 +136,7 @@ enum JunkScanner {
                     at: path, includingPropertiesForKeys: nil,
                     options: [.skipsHiddenFiles])) ?? []
             if children.isEmpty {
-                let size = directorySize(path)
+                let size = directorySize(path, isCancelled: isCancelled)
                 if size > 0 {
                     items.append(
                         JunkItem(
@@ -140,7 +145,8 @@ enum JunkScanner {
                 }
             } else {
                 for child in children {
-                    let size = directorySize(child)
+                    if isCancelled() { break }
+                    let size = directorySize(child, isCancelled: isCancelled)
                     guard size > 0 else { continue }
                     items.append(
                         JunkItem(
@@ -263,7 +269,7 @@ enum JunkScanner {
                 guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
                 let name = child.lastPathComponent
                 if let target = targets[name] {
-                    let size = directorySize(child)
+                    let size = directorySize(child, isCancelled: isCancelled)
                     if size > 0 {
                         itemsByCategory[target.categoryID, default: []].append(
                             JunkItem(

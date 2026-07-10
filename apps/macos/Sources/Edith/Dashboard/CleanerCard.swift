@@ -117,8 +117,9 @@ final class CleanerModel: ObservableObject {
             for entry in JunkCatalog.entries {
                 if token.cancelled { break }
                 logs.append("Scanning \(entry.name)…")
-                let found = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
-                    .value
+                let found = await Task.detached {
+                    JunkScanner.scanCategory(entry, home: home, isCancelled: { token.cancelled })
+                }.value
                 if token.cancelled { break }
                 if let category = found {
                     categories.append(
