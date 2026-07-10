@@ -7,7 +7,7 @@ struct NotchShelfContentView: View {
 
     var body: some View {
         ZStack {
-            NotchShape(bottomRadius: controller.isExpanded ? 22 : 14)
+            NotchShape(bottomRadius: controller.isExpanded ? 34 : 14)
                 .fill(.black)
             if controller.isExpanded {
                 expanded.transition(.opacity)
