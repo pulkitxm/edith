@@ -22,58 +22,76 @@ struct MenuBarPane: View {
 
     var body: some View {
         Form {
-            Section("Menu bar stats") {
+            Section {
                 Toggle("Show Claude usage (5h / 7d)", isOn: $limitsInMenuBar)
                     .pointerCursor()
                 Toggle("Show CPU & memory", isOn: $systemStats)
                     .pointerCursor()
-                Text("Live system CPU and memory usage, refreshed every couple of seconds.")
-                    .font(.caption).foregroundStyle(.secondary)
-                ColorPicker(
-                    "CPU & memory color", selection: hexBinding($statsColorHex),
-                    supportsOpacity: false)
+            } header: {
+                Text("Show in menu bar")
+            } footer: {
+                Text("CPU and memory refresh every couple of seconds.")
+                    .font(.caption)
             }
 
-            Section("Usage readout color") {
-                Picker("Color", selection: $menuBarColorMode) {
-                    Text("Auto").tag("auto")
-                    Text("White").tag("white")
-                    Text("Black").tag("black")
-                    Text("Custom").tag("custom")
+            if systemStats {
+                Section("CPU & memory") {
+                    ColorPicker(
+                        "Color", selection: hexBinding($statsColorHex), supportsOpacity: false)
                 }
-                .pointerCursor()
-                ColorPicker(
-                    "Text color (5h / 7d)", selection: hexBinding($subColorHex),
-                    supportsOpacity: false)
-                ColorPicker(
-                    "Low risk", selection: hexBinding($lowColorHex), supportsOpacity: false)
-                ColorPicker(
-                    "Medium risk", selection: hexBinding($midColorHex), supportsOpacity: false)
-                ColorPicker(
-                    "High risk", selection: hexBinding($highColorHex), supportsOpacity: false)
-                Text(
-                    "Custom colors apply in Auto and Custom modes; White and Black force a single tint."
-                )
-                .font(.caption).foregroundStyle(.secondary)
-                Toggle("Smart color", isOn: $smartColor)
-                    .pointerCursor()
-                Text("Colors the readout by time-aware risk instead of the raw percentage.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if !smartColor {
-                    HStack {
-                        Text("Thresholds")
-                        Spacer()
-                        Stepper(
-                            "Warn \(warnPercent)%", value: $warnPercent, in: 10...critPercent - 5,
-                            step: 5
-                        )
-                        .pointerCursor()
-                        Stepper(
-                            "Critical \(critPercent)%", value: $critPercent,
-                            in: warnPercent + 5...100, step: 5
-                        )
-                        .pointerCursor()
+            }
+
+            if limitsInMenuBar {
+                Section {
+                    Picker("Color", selection: $menuBarColorMode) {
+                        Text("Auto").tag("auto")
+                        Text("White").tag("white")
+                        Text("Black").tag("black")
+                        Text("Custom").tag("custom")
                     }
+                    .pointerCursor()
+                    Toggle("Smart color", isOn: $smartColor)
+                        .pointerCursor()
+                    if !smartColor {
+                        HStack {
+                            Text("Thresholds")
+                            Spacer()
+                            Stepper(
+                                "Warn \(warnPercent)%", value: $warnPercent,
+                                in: 10...critPercent - 5, step: 5
+                            )
+                            .pointerCursor()
+                            Stepper(
+                                "Critical \(critPercent)%", value: $critPercent,
+                                in: warnPercent + 5...100, step: 5
+                            )
+                            .pointerCursor()
+                        }
+                    }
+                } header: {
+                    Text("Claude usage readout")
+                } footer: {
+                    Text("Smart color tints by time-aware risk instead of the raw percentage.")
+                        .font(.caption)
+                }
+
+                Section {
+                    ColorPicker(
+                        "Text (5h / 7d)", selection: hexBinding($subColorHex),
+                        supportsOpacity: false)
+                    ColorPicker(
+                        "Low risk", selection: hexBinding($lowColorHex), supportsOpacity: false)
+                    ColorPicker(
+                        "Medium risk", selection: hexBinding($midColorHex), supportsOpacity: false)
+                    ColorPicker(
+                        "High risk", selection: hexBinding($highColorHex), supportsOpacity: false)
+                } header: {
+                    Text("Readout colors")
+                } footer: {
+                    Text(
+                        "Used in Auto and Custom modes. White and Black force a single tint and ignore these."
+                    )
+                    .font(.caption)
                 }
             }
 
