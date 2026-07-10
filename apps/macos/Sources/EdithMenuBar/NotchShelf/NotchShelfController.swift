@@ -583,6 +583,11 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     }
 
     private static func appIcon(for app: ExternalApp) -> NSImage? {
+        if let running = NSRunningApplication.runningApplications(
+            withBundleIdentifier: app.bundleID
+        ).first, let icon = running.icon {
+            return icon
+        }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID)
         else { return nil }
         return NSWorkspace.shared.icon(forFile: url.path)
