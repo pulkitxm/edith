@@ -57,6 +57,27 @@ import Testing
             app: .spotify, userInfo: ["Player State": "Playing", "Name": "Track"])
         #expect(track?.artist == "")
     }
+
+    @Test func parsesSpotifyScriptOutputWithMillisecondDuration() {
+        let track = ExternalNowPlaying.parseScriptOutput(
+            app: .spotify, output: "Nobody's Son\nSabrina Carpenter\n215000")
+        #expect(track?.title == "Nobody's Son")
+        #expect(track?.artist == "Sabrina Carpenter")
+        #expect(track?.isPlaying == true)
+        #expect(track?.duration == 215)
+    }
+
+    @Test func parsesMusicScriptOutputWithSecondDuration() {
+        let track = ExternalNowPlaying.parseScriptOutput(
+            app: .music, output: "Track\nArtist\n180.5")
+        #expect(track?.duration == 180.5)
+        #expect(track?.app == .music)
+    }
+
+    @Test func emptyScriptOutputReturnsNil() {
+        #expect(ExternalNowPlaying.parseScriptOutput(app: .spotify, output: "") == nil)
+        #expect(ExternalNowPlaying.parseScriptOutput(app: .spotify, output: "\n\n") == nil)
+    }
 }
 
 @Suite struct NotchMusicResolverTests {
