@@ -15,6 +15,13 @@ final class CleanerModel: ObservableObject {
     @Published private(set) var driveOptions: [DriveInfo] = []
     @Published var search = ""
     @Published var expanded: Set<String> = []
+    @Published private var driveSelection: Set<String>?
+
+    init() {
+        if let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String] {
+            driveSelection = Set(raw)
+        }
+    }
 
     var reclaimableTotal: Int64 { categories.reduce(0) { $0 + $1.sizeBytes } }
     var selectedTotal: Int64 { categories.reduce(0) { $0 + $1.selectedBytes } }
@@ -40,13 +47,14 @@ final class CleanerModel: ObservableObject {
     }
 
     func isDriveSelected(_ id: String) -> Bool {
-        selectedDriveIDs?.contains(id) ?? true
+        driveSelection?.contains(id) ?? true
     }
 
     func toggleDrive(_ id: String) {
-        var selection = selectedDriveIDs ?? Set(driveOptions.map(\.id))
+        var selection = driveSelection ?? Set(driveOptions.map(\.id))
         if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
-        selectedDriveIDs = selection
+        driveSelection = selection
+        SharedDefaults.store.set(Array(selection), forKey: "cleanerSelectedDrives")
     }
 
     func scan() {
@@ -128,21 +136,6 @@ final class CleanerModel: ObservableObject {
                 .compactMapValues { $0 as? Bool }
         }
         set { SharedDefaults.store.set(newValue, forKey: "cleanerSelectionOverrides") }
-    }
-
-    private var selectedDriveIDs: Set<String>? {
-        get {
-            guard let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String]
-            else { return nil }
-            return Set(raw)
-        }
-        set {
-            if let newValue {
-                SharedDefaults.store.set(Array(newValue), forKey: "cleanerSelectedDrives")
-            } else {
-                SharedDefaults.store.removeObject(forKey: "cleanerSelectedDrives")
-            }
-        }
     }
 }
 
