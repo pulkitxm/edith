@@ -1,12 +1,44 @@
 import Foundation
 
+struct JunkItem: Identifiable, Sendable {
+    let id: String
+    let name: String
+    let path: URL
+    var sizeBytes: Int64
+    var selected: Bool
+}
+
+enum JunkSelection {
+    case all, none, some
+}
+
 struct JunkCategory: Identifiable, Sendable {
     let id: String
     let name: String
     let detail: String
-    let paths: [URL]
-    var sizeBytes: Int64
-    var selected: Bool
+    var items: [JunkItem]
+
+    var sizeBytes: Int64 { items.reduce(0) { $0 + $1.sizeBytes } }
+    var selectedBytes: Int64 { items.filter(\.selected).reduce(0) { $0 + $1.sizeBytes } }
+
+    var selection: JunkSelection {
+        let selected = items.filter(\.selected).count
+        if selected == 0 { return .none }
+        if selected == items.count { return .all }
+        return .some
+    }
+}
+
+struct DriveInfo: Identifiable, Sendable {
+    let id: String
+    let name: String
+    let totalBytes: Int64
+    let usedBytes: Int64
+    let isExternal: Bool
+
+    var usedFraction: Double {
+        totalBytes > 0 ? Double(usedBytes) / Double(totalBytes) : 0
+    }
 }
 
 enum JunkCatalog {
@@ -52,7 +84,7 @@ enum JunkCatalog {
             relativePaths: [".cache/puppeteer"], defaultOn: false),
         Entry(
             id: "claudeCode", name: "Claude Code logs",
-            detail: "Debug logs and shell snapshots. Your transcripts are left untouched.",
+            detail: "Debug logs and shell snapshots. Transcripts are left untouched.",
             relativePaths: [".claude/debug", ".claude/shell-snapshots"], defaultOn: true),
         Entry(
             id: "claudeMcp", name: "Claude Code MCP logs",
@@ -75,7 +107,10 @@ enum JunkScanner {
         guard
             let enumerator = FileManager.default.enumerator(
                 at: url, includingPropertiesForKeys: keys, options: [])
-        else { return 0 }
+        else {
+            let single = try? url.resourceValues(forKeys: Set(keys))
+            return Int64(single?.totalFileAllocatedSize ?? single?.fileAllocatedSize ?? 0)
+        }
         var total: Int64 = 0
         for case let item as URL in enumerator {
             guard let values = try? item.resourceValues(forKeys: Set(keys)),
@@ -86,27 +121,68 @@ enum JunkScanner {
         return total
     }
 
-    static func scan(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [JunkCategory]
-    {
-        JunkCatalog.entries.compactMap { entry in
-            let paths = JunkCatalog.resolve(entry, home: home)
-            guard !paths.isEmpty else { return nil }
-            let size = paths.reduce(Int64(0)) { $0 + directorySize($1) }
-            guard size > 0 else { return nil }
-            return JunkCategory(
-                id: entry.id, name: entry.name, detail: entry.detail, paths: paths,
-                sizeBytes: size, selected: entry.defaultOn)
+    static func scanCategory(_ entry: JunkCatalog.Entry, home: URL) -> JunkCategory? {
+        let paths = JunkCatalog.resolve(entry, home: home)
+        guard !paths.isEmpty else { return nil }
+        var items: [JunkItem] = []
+        for path in paths {
+            let children =
+                (try? FileManager.default.contentsOfDirectory(
+                    at: path, includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles])) ?? []
+            if children.isEmpty {
+                let size = directorySize(path)
+                if size > 0 {
+                    items.append(
+                        JunkItem(
+                            id: path.path, name: path.lastPathComponent, path: path,
+                            sizeBytes: size, selected: entry.defaultOn))
+                }
+            } else {
+                for child in children {
+                    let size = directorySize(child)
+                    guard size > 0 else { continue }
+                    items.append(
+                        JunkItem(
+                            id: child.path, name: child.lastPathComponent, path: child,
+                            sizeBytes: size, selected: entry.defaultOn))
+                }
+            }
         }
+        guard !items.isEmpty else { return nil }
+        items.sort { $0.sizeBytes > $1.sizeBytes }
+        return JunkCategory(id: entry.id, name: entry.name, detail: entry.detail, items: items)
     }
 
-    static func clean(_ categories: [JunkCategory]) -> Int64 {
+    static func drives() -> [DriveInfo] {
+        let keys: [URLResourceKey] = [
+            .volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey,
+            .volumeIsInternalKey, .volumeIsBrowsableKey,
+        ]
+        guard
+            let volumes = FileManager.default.mountedVolumeURLs(
+                includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes])
+        else { return [] }
+        return volumes.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                values.volumeIsBrowsable == true,
+                let total = values.volumeTotalCapacity, total > 0
+            else { return nil }
+            let available = values.volumeAvailableCapacity ?? 0
+            return DriveInfo(
+                id: url.path, name: values.volumeName ?? url.lastPathComponent,
+                totalBytes: Int64(total), usedBytes: Int64(total - available),
+                isExternal: !(values.volumeIsInternal ?? true))
+        }
+        .sorted { $0.isExternal == $1.isExternal ? $0.totalBytes > $1.totalBytes : !$0.isExternal }
+    }
+
+    static func clean(_ items: [JunkItem]) -> Int64 {
         var reclaimed: Int64 = 0
-        for category in categories {
-            for path in category.paths {
-                let size = directorySize(path)
-                if (try? FileManager.default.trashItem(at: path, resultingItemURL: nil)) != nil {
-                    reclaimed += size
-                }
+        for item in items {
+            let size = directorySize(item.path)
+            if (try? FileManager.default.trashItem(at: item.path, resultingItemURL: nil)) != nil {
+                reclaimed += size
             }
         }
         return reclaimed
