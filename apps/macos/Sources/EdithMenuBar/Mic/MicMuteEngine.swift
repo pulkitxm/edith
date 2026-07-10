@@ -2,12 +2,6 @@ import AppKit
 import CoreAudio
 import EdithKit
 
-extension UserDefaults {
-    @objc dynamic var micMuteInMenuBar: Bool {
-        object(forKey: "micMuteInMenuBar") as? Bool ?? true
-    }
-}
-
 @MainActor
 final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
     @Published private(set) var muted = false
@@ -15,7 +9,6 @@ final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
     private var savedVolumes: [AudioDeviceID: [UInt32: Float]] = [:]
     private var deviceListListener: AudioObjectPropertyListenerBlock?
     private var statusItem: NSStatusItem?
-    private var menuBarKVO: NSKeyValueObservation?
 
     override init() {
         super.init()
@@ -23,9 +16,6 @@ final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
         if muted { apply(true) }
         observeDeviceList()
         updateStatusItemPresence()
-        menuBarKVO = SharedDefaults.store.observe(\.micMuteInMenuBar) { [weak self] _, _ in
-            Task { @MainActor in self?.updateStatusItemPresence() }
-        }
     }
 
     func shutdown() {
@@ -36,8 +26,6 @@ final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
                 AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, listener)
             deviceListListener = nil
         }
-        menuBarKVO?.invalidate()
-        menuBarKVO = nil
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
     }
@@ -53,8 +41,8 @@ final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
     }
 
-    private func updateStatusItemPresence() {
-        let wanted = SharedDefaults.store.micMuteInMenuBar
+    func updateStatusItemPresence() {
+        let wanted = SharedDefaults.store.object(forKey: "micMuteInMenuBar") as? Bool ?? true
         if wanted, statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             item.button?.action = #selector(statusClicked)

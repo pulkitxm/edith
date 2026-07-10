@@ -2,10 +2,6 @@ import AppKit
 import EdithKit
 import Foundation
 
-extension UserDefaults {
-    @objc dynamic var limitsInMenuBar: Bool { bool(forKey: "limitsInMenuBar") }
-}
-
 struct RangeStat: Identifiable {
     let id: String
     let label: String
@@ -48,7 +44,7 @@ final class UsageStore: ObservableObject, FeatureModule {
     private var lockObservers: [NSObjectProtocol] = []
     private var process: Process?
     private var lastLogFlush: Date?
-    private var limitsKVO: NSKeyValueObservation?
+    private var wakeTask: Task<Void, Never>?
     private var launchObserver: NSObjectProtocol?
     private var refreshRequestObserver: NSObjectProtocol?
     let notifier = LimitNotifier()
@@ -79,9 +75,12 @@ final class UsageStore: ObservableObject, FeatureModule {
                 Log.lifecycle.notice("\(msg, privacy: .public)")
                 self.diag(msg)
                 guard !self.locked else { return }
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                guard !self.locked else { return }
-                self.startPolling()
+                self.wakeTask?.cancel()
+                self.wakeTask = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    guard !Task.isCancelled, let self, !self.locked else { return }
+                    self.startPolling()
+                }
             }
         }
 
@@ -115,10 +114,6 @@ final class UsageStore: ObservableObject, FeatureModule {
             ) { [weak self] _ in
                 Task { @MainActor in self?.syncStatusItem() }
             }
-        }
-
-        limitsKVO = SharedDefaults.store.observe(\.limitsInMenuBar) { [weak self] _, _ in
-            Task { @MainActor in self?.syncStatusItem() }
         }
 
         refreshRequestObserver = IPC.observe(IPC.Name.requestUsageRefresh) { [weak self] in
@@ -171,8 +166,8 @@ final class UsageStore: ObservableObject, FeatureModule {
         statusItem?.remove()
         statusItem = nil
         notifier.cancelReminders()
-        limitsKVO?.invalidate()
-        limitsKVO = nil
+        wakeTask?.cancel()
+        wakeTask = nil
         if let launchObserver {
             NotificationCenter.default.removeObserver(launchObserver)
             self.launchObserver = nil

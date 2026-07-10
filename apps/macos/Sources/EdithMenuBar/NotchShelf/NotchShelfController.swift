@@ -95,12 +95,22 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private var alertsEnabled: Bool { flag("notchAlertsEnabled", default: true) }
 
     private func startAlertsIfEnabled() {
-        guard alertsEnabled else { return }
+        guard alertsEnabled, alertDetectors == nil else { return }
         let detectors = NotchAlertDetectors { [weak self] alert in
             self?.postAlert(alert)
         }
         detectors.start()
         alertDetectors = detectors
+    }
+
+    func syncAlerts() {
+        if alertsEnabled {
+            startAlertsIfEnabled()
+        } else if let detectors = alertDetectors {
+            detectors.stop()
+            alertDetectors = nil
+            dismissAlert()
+        }
     }
 
     func postAlert(_ alert: NotchAlert) {
