@@ -3,13 +3,16 @@ import SwiftUI
 
 @MainActor
 final class CleanerModel: ObservableObject {
+    static let shared = CleanerModel()
+
     @Published private(set) var categories: [JunkCategory] = []
     @Published private(set) var scanning = false
     @Published private(set) var scanned = false
     @Published private(set) var logs: [String] = []
-    @Published var logsCollapsed = false
+    @Published var logsExpanded = false
     @Published private(set) var lastReclaimed: Int64 = 0
-    @Published private(set) var drives: [DriveInfo]?
+    @Published private(set) var drives: [DriveInfo] = []
+    @Published private(set) var driveOptions: [DriveInfo] = []
     @Published var search = ""
     @Published var expanded: Set<String> = []
 
@@ -29,43 +32,56 @@ final class CleanerModel: ObservableObject {
         }
     }
 
+    func loadDriveOptions() {
+        Task {
+            let all = await Task.detached { JunkScanner.drives() }.value
+            driveOptions = all
+        }
+    }
+
+    func isDriveSelected(_ id: String) -> Bool {
+        selectedDriveIDs?.contains(id) ?? true
+    }
+
+    func toggleDrive(_ id: String) {
+        var selection = selectedDriveIDs ?? Set(driveOptions.map(\.id))
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+        selectedDriveIDs = selection
+    }
+
     func scan() {
         guard !scanning else { return }
         scanning = true
         scanned = false
         logs = []
-        logsCollapsed = false
+        logsExpanded = true
         categories = []
-        drives = nil
-        loadDrives()
+        drives = []
         Task {
+            let all = await Task.detached { JunkScanner.drives() }.value
+            driveOptions = all
+            drives = all.filter { isDriveSelected($0.id) }
+            let choices = overrides
             let home = FileManager.default.homeDirectoryForCurrentUser
             for entry in JunkCatalog.entries {
                 logs.append("Scanning \(entry.name)…")
-                let scanned = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
+                let found = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
                     .value
-                if var category = scanned {
+                if var category = found {
                     category.items = category.items.map { item in
                         var updated = item
-                        if let choice = overrides[item.id] { updated.selected = choice }
+                        if let choice = choices[item.id] { updated.selected = choice }
                         return updated
                     }
                     categories.append(category)
-                    logs.append("  \(category.name) — \(JunkScanner.format(category.sizeBytes))")
+                    logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
-            logs.append("Done — \(JunkScanner.format(reclaimableTotal)) reclaimable.")
+            logs.append("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
             scanning = false
             scanned = true
-            try? await Task.sleep(for: .seconds(1.4))
-            withAnimation(.easeInOut(duration: 0.4)) { logsCollapsed = true }
-        }
-    }
-
-    private func loadDrives() {
-        Task {
-            let result = await Task.detached { JunkScanner.drives() }.value
-            drives = result
+            try? await Task.sleep(for: .seconds(0.9))
+            withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
         }
     }
 
@@ -90,14 +106,6 @@ final class CleanerModel: ObservableObject {
         overrides = choices
     }
 
-    private var overrides: [String: Bool] {
-        get {
-            (SharedDefaults.store.dictionary(forKey: "cleanerSelectionOverrides") ?? [:])
-                .compactMapValues { $0 as? Bool }
-        }
-        set { SharedDefaults.store.set(newValue, forKey: "cleanerSelectionOverrides") }
-    }
-
     func toggleExpand(_ id: String) {
         if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
     }
@@ -113,11 +121,35 @@ final class CleanerModel: ObservableObject {
             scan()
         }
     }
+
+    private var overrides: [String: Bool] {
+        get {
+            (SharedDefaults.store.dictionary(forKey: "cleanerSelectionOverrides") ?? [:])
+                .compactMapValues { $0 as? Bool }
+        }
+        set { SharedDefaults.store.set(newValue, forKey: "cleanerSelectionOverrides") }
+    }
+
+    private var selectedDriveIDs: Set<String>? {
+        get {
+            guard let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String]
+            else { return nil }
+            return Set(raw)
+        }
+        set {
+            if let newValue {
+                SharedDefaults.store.set(Array(newValue), forKey: "cleanerSelectedDrives")
+            } else {
+                SharedDefaults.store.removeObject(forKey: "cleanerSelectedDrives")
+            }
+        }
+    }
 }
 
 struct CleanerCard: View {
     let dark: Bool
-    @StateObject private var model = CleanerModel()
+    @ObservedObject private var model = CleanerModel.shared
+    @State private var showDrivePicker = false
 
     var body: some View {
         SkinCard(title: "Reclaim developer space", dark: dark) {
@@ -125,7 +157,8 @@ struct CleanerCard: View {
                 if !model.scanned && !model.scanning {
                     intro
                 } else {
-                    if !model.logsCollapsed { logView }
+                    header
+                    if model.logsExpanded { logView }
                     if model.scanned {
                         drivesView
                         if !model.categories.isEmpty {
@@ -135,7 +168,7 @@ struct CleanerCard: View {
                             }
                             footer
                         } else {
-                            Text("Nothing to clean — you're already tidy.")
+                            Text("Nothing to clean. You're already tidy.")
                                 .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
                         }
                     }
@@ -146,6 +179,9 @@ struct CleanerCard: View {
                 }
             }
         }
+        .sheet(isPresented: $showDrivePicker) {
+            DrivePickerSheet(model: model, dark: dark) { model.scan() }
+        }
     }
 
     private var intro: some View {
@@ -153,20 +189,47 @@ struct CleanerCard: View {
             Text("Scan build caches, package managers, Claude Code logs, and your drives.")
                 .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
-            Button("Scan") { model.scan() }.pointerCursor()
+            Button("Scan") { openPicker() }.pointerCursor()
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            if model.scanning {
+                ProgressView().controlSize(.small)
+                Text("Scanning…").font(.system(size: 12)).foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) { model.logsExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "terminal")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Logs")
+                            .font(.system(size: 11, weight: .medium))
+                        Image(systemName: model.logsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(DashSkin.paper2(dark), in: Capsule())
+                }
+                .buttonStyle(.plain).pointerCursor()
+            }
+            Spacer()
         }
     }
 
     private var logView: some View {
         VStack(alignment: .leading, spacing: 3) {
-            ForEach(Array(model.logs.suffix(6).enumerated()), id: \.offset) { _, line in
+            ForEach(Array(model.logs.suffix(8).enumerated()), id: \.offset) { _, line in
                 Text(line)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -174,12 +237,23 @@ struct CleanerCard: View {
 
     private var drivesView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("DRIVES").font(.system(size: 10, weight: .bold)).tracking(0.6)
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            if let drives = model.drives {
-                ForEach(drives) { drive in DriveRow(drive: drive, dark: dark) }
+            HStack {
+                Text("DRIVES").font(.system(size: 10, weight: .bold)).tracking(0.6)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Spacer()
+                Button("Choose…") { openPicker() }
+                    .font(.system(size: 10.5)).buttonStyle(.plain).pointerCursor()
+                    .foregroundStyle(DashSkin.accent(dark))
+            }
+            if model.drives.isEmpty {
+                if model.scanning {
+                    ForEach(0..<2, id: \.self) { _ in DriveSkeleton(dark: dark) }
+                } else {
+                    Text("No drives selected.")
+                        .font(.system(size: 11)).foregroundStyle(DashSkin.inkFaint(dark))
+                }
             } else {
-                ForEach(0..<2, id: \.self) { _ in DriveSkeleton(dark: dark) }
+                ForEach(model.drives) { drive in DriveRow(drive: drive, dark: dark) }
             }
         }
     }
@@ -206,8 +280,8 @@ struct CleanerCard: View {
     private var footer: some View {
         HStack {
             HStack(spacing: 10) {
-                Button("Rescan") { model.scan() }.disabled(model.scanning).pointerCursor()
-                Text("Moves to the Trash — reversible.")
+                Button("Rescan") { openPicker() }.disabled(model.scanning).pointerCursor()
+                Text("Moves to the Trash, reversible.")
                     .font(.system(size: 10.5)).foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer()
@@ -218,6 +292,87 @@ struct CleanerCard: View {
             }
             .disabled(model.scanning || model.selectedTotal == 0).pointerCursor()
         }
+    }
+
+    private func openPicker() {
+        model.loadDriveOptions()
+        showDrivePicker = true
+    }
+}
+
+private struct DrivePickerSheet: View {
+    @ObservedObject var model: CleanerModel
+    let dark: Bool
+    let onScan: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Choose drives to include")
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.horizontal, 20).padding(.top, 20)
+            Text("Junk categories are scanned in your home folder. Pick which drives to report on.")
+                .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkFaint(dark))
+                .padding(.horizontal, 20).padding(.top, 4)
+
+            ScrollView {
+                VStack(spacing: 6) {
+                    if model.driveOptions.isEmpty {
+                        ProgressView().controlSize(.small).padding(.vertical, 20)
+                    }
+                    ForEach(model.driveOptions) { drive in
+                        Button {
+                            model.toggleDrive(drive.id)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(
+                                    systemName: model.isDriveSelected(drive.id)
+                                        ? "checkmark.square.fill" : "square"
+                                )
+                                .foregroundStyle(
+                                    model.isDriveSelected(drive.id)
+                                        ? DashSkin.accent(dark) : .secondary)
+                                Image(
+                                    systemName: drive.isExternal
+                                        ? "externaldrive.fill" : "internaldrive.fill"
+                                )
+                                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(drive.name).font(.system(size: 13, weight: .medium))
+                                    Text(
+                                        "\(JunkScanner.format(drive.usedBytes)) of \(JunkScanner.format(drive.totalBytes))"
+                                    )
+                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(
+                                DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain).pointerCursor()
+                    }
+                }
+                .padding(20)
+            }
+            .frame(maxHeight: 280)
+
+            Divider()
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.pointerCursor()
+                Button("Scan") {
+                    dismiss()
+                    onScan()
+                }
+                .keyboardShortcut(.defaultAction).pointerCursor()
+            }
+            .padding(.horizontal, 20).padding(.vertical, 14)
+        }
+        .frame(width: 420)
+        .background(DashSkin.paper(dark))
+        .onAppear { model.loadDriveOptions() }
     }
 }
 

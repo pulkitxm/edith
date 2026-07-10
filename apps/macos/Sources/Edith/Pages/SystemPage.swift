@@ -131,11 +131,11 @@ struct SystemPage: View {
                     }
                     Text(app.name).font(.system(size: 13)).lineLimit(1)
                     Spacer()
-                    Text(String(format: "%.0f%%", app.cpuPercent))
+                    Text(Self.cpuLabel(app.cpuPercent))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(app.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
                         .frame(width: 48, alignment: .trailing)
-                    Text(String(format: "%.0f MB", app.memoryMB))
+                    Text(Self.memoryLabel(app.memoryMB))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: 72, alignment: .trailing)
@@ -155,5 +155,14 @@ struct SystemPage: View {
                 }
             }
         }
+    }
+
+    private static func cpuLabel(_ percent: Double) -> String {
+        percent >= 10 || percent == 0
+            ? String(format: "%.0f%%", percent) : String(format: "%.1f%%", percent)
+    }
+
+    private static func memoryLabel(_ mb: Double) -> String {
+        mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : String(format: "%.0f MB", mb)
     }
 }

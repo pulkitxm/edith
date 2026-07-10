@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 import Testing
 
@@ -6,6 +7,9 @@ import Testing
 @MainActor
 @Suite struct DashboardProjectTreeTests {
     private func model(_ json: String) throws -> DashboardModel {
+        for key in ["projSort", "projSortAsc", "dashSort", "dashSortAsc"] {
+            SharedDefaults.store.removeObject(forKey: key)
+        }
         let parsed = try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8))
         let m = DashboardModel()
         m.ingest(parsed)

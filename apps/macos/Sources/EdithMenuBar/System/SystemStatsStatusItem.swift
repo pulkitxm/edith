@@ -45,7 +45,13 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         item.button?.attributedTitle = title
     }
 
+    private var tint: NSColor {
+        LimitsStatusItem.nsColor(hex: SharedDefaults.store.string(forKey: "menuBarStatsColorHex"))
+            ?? .white
+    }
+
     private func appendStat(symbol: String, value: Double, into out: NSMutableAttributedString) {
+        let color = tint
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
         if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
@@ -57,7 +63,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
                 x: 0, y: -1.5, width: image.size.width, height: image.size.height)
             let glyph = NSMutableAttributedString(attachment: attachment)
             glyph.addAttribute(
-                .foregroundColor, value: NSColor.secondaryLabelColor,
+                .foregroundColor, value: color,
                 range: NSRange(location: 0, length: glyph.length))
             out.append(glyph)
             out.append(NSAttributedString(string: " "))
@@ -67,14 +73,14 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
                 string: "\(Int(value.rounded()))",
                 attributes: [
                     .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
-                    .foregroundColor: NSColor.labelColor,
+                    .foregroundColor: color,
                 ]))
         out.append(
             NSAttributedString(
                 string: "%",
                 attributes: [
                     .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
-                    .foregroundColor: NSColor.labelColor.withAlphaComponent(0.75),
+                    .foregroundColor: color.withAlphaComponent(0.75),
                 ]))
     }
 }

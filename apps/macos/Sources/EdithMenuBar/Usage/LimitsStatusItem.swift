@@ -115,9 +115,8 @@ final class LimitsStatusItem {
         switch mode {
         case "white": return .white
         case "black": return .black
-        case "custom":
+        default:
             return Self.nsColor(hex: SharedDefaults.store.string(forKey: "menuBarSubColorHex"))
-        default: return nil
         }
     }
 
@@ -130,7 +129,7 @@ final class LimitsStatusItem {
     }
 
     private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
-        guard mode == "custom" else { return fallback }
+        guard mode == "custom" || mode == "auto" else { return fallback }
         return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
     }
 

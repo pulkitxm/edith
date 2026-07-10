@@ -17,6 +17,8 @@ struct MenuBarPane: View {
         "FF3B30"
     @AppStorage("warnPercent", store: SharedDefaults.store) private var warnPercent = 60
     @AppStorage("critPercent", store: SharedDefaults.store) private var critPercent = 85
+    @AppStorage("menuBarStatsColorHex", store: SharedDefaults.store) private var statsColorHex =
+        "FFFFFF"
 
     var body: some View {
         Form {
@@ -27,6 +29,9 @@ struct MenuBarPane: View {
                     .pointerCursor()
                 Text("Live system CPU and memory usage, refreshed every couple of seconds.")
                     .font(.caption).foregroundStyle(.secondary)
+                ColorPicker(
+                    "CPU & memory color", selection: hexBinding($statsColorHex),
+                    supportsOpacity: false)
             }
 
             Section("Usage readout color") {
@@ -37,17 +42,19 @@ struct MenuBarPane: View {
                     Text("Custom").tag("custom")
                 }
                 .pointerCursor()
-                if menuBarColorMode == "custom" {
-                    ColorPicker(
-                        "Text color (5h / 7d)", selection: hexBinding($subColorHex),
-                        supportsOpacity: false)
-                    ColorPicker(
-                        "Low risk", selection: hexBinding($lowColorHex), supportsOpacity: false)
-                    ColorPicker(
-                        "Medium risk", selection: hexBinding($midColorHex), supportsOpacity: false)
-                    ColorPicker(
-                        "High risk", selection: hexBinding($highColorHex), supportsOpacity: false)
-                }
+                ColorPicker(
+                    "Text color (5h / 7d)", selection: hexBinding($subColorHex),
+                    supportsOpacity: false)
+                ColorPicker(
+                    "Low risk", selection: hexBinding($lowColorHex), supportsOpacity: false)
+                ColorPicker(
+                    "Medium risk", selection: hexBinding($midColorHex), supportsOpacity: false)
+                ColorPicker(
+                    "High risk", selection: hexBinding($highColorHex), supportsOpacity: false)
+                Text(
+                    "Custom colors apply in Auto and Custom modes; White and Black force a single tint."
+                )
+                .font(.caption).foregroundStyle(.secondary)
                 Toggle("Smart color", isOn: $smartColor)
                     .pointerCursor()
                 Text("Colors the readout by time-aware risk instead of the raw percentage.")

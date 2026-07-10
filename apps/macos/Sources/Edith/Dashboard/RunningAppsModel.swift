@@ -94,6 +94,12 @@ final class RunningAppsModel: ObservableObject {
         apps = sorted(rows)
     }
 
+    private static let timebase: mach_timebase_info_data_t = {
+        var tb = mach_timebase_info_data_t()
+        mach_timebase_info(&tb)
+        return tb
+    }()
+
     static func usage(pid: pid_t) -> (cpuNS: UInt64, memMB: Double) {
         var info = rusage_info_current()
         let result = withUnsafeMutablePointer(to: &info) { pointer in
@@ -102,10 +108,9 @@ final class RunningAppsModel: ObservableObject {
             }
         }
         guard result == 0 else { return (0, 0) }
-        return (
-            info.ri_user_time &+ info.ri_system_time,
-            Double(info.ri_phys_footprint) / 1_048_576
-        )
+        let ticks = info.ri_user_time &+ info.ri_system_time
+        let nanos = ticks &* UInt64(timebase.numer) / UInt64(timebase.denom)
+        return (nanos, Double(info.ri_phys_footprint) / 1_048_576)
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
