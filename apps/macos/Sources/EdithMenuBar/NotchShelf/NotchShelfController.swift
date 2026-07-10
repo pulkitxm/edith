@@ -41,6 +41,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private var expandedSize = NotchGeometry.expandedSize
 
     private var screenObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
@@ -73,6 +74,11 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels() }
+        }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.updateFullScreenVisibility() }
         }
         dragMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
@@ -145,6 +151,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         artworkTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        if let spaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver)
+        }
+        spaceObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
         gateWorkItem?.cancel()
@@ -190,6 +200,24 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         for id in panels.keys where !wanted.contains(id) {
             panels.removeValue(forKey: id)?.orderOut(nil)
             collapsedSizes.removeValue(forKey: id)
+        }
+        updateFullScreenVisibility()
+    }
+
+    private func isFullScreenSpace(_ screen: NSScreen) -> Bool {
+        screen.frame.maxY - screen.visibleFrame.maxY < 1
+    }
+
+    private func updateFullScreenVisibility() {
+        for screen in NSScreen.screens {
+            guard let id = screen.displayID, let panel = panels[id] else { continue }
+            if isFullScreenSpace(screen) {
+                if isExpanded { collapseNow() }
+                panel.orderOut(nil)
+            } else if !panel.isVisible {
+                applyFrame(panel, screen: screen, id: id, animated: false)
+                panel.orderFrontRegardless()
+            }
         }
     }
 
