@@ -423,13 +423,14 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             localTitle: localMusic?.current?.title,
             localPlaying: localMusic?.isPlaying ?? false,
             external: external.current)
-        guard resolved != nowPlaying else { return }
+        let active = resolved?.isPlaying == true ? resolved : nil
+        guard active != nowPlaying else { return }
         let hadActivity = nowPlaying != nil
         let trackChanged =
-            resolved?.title != nowPlaying?.title || resolved?.source != nowPlaying?.source
-        nowPlaying = resolved
-        if trackChanged { loadArtwork(for: resolved) }
-        if (resolved != nil) != hadActivity, !isExpanded {
+            active?.title != nowPlaying?.title || active?.source != nowPlaying?.source
+        nowPlaying = active
+        if trackChanged { loadArtwork(for: active) }
+        if (active != nil) != hadActivity, !isExpanded {
             updateAllFrames(animated: true)
         }
     }
