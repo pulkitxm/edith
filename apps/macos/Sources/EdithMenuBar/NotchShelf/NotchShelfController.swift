@@ -13,6 +13,7 @@ extension NSScreen {
 final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
+    @Published private(set) var isArming = false
     @Published private(set) var livePositions: [UUID: CGPoint] = [:]
     @Published private(set) var selectedIDs: Set<UUID> = []
 
@@ -24,6 +25,13 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     private var screenObserver: NSObjectProtocol?
     private var dragMonitor: Any?
+    private var moveMonitorGlobal: Any?
+    private var moveMonitorLocal: Any?
+    private var gate = NotchHoverGate(
+        openDwell: NotchShelfController.openDwell, closeGrace: NotchShelfController.closeGrace)
+    private var gateWorkItem: DispatchWorkItem?
+    static let openDwell: TimeInterval = 0.1
+    static let closeGrace: TimeInterval = 0.4
     private var lastDragChangeCount = -1
     private var collapseWorkItem: DispatchWorkItem?
     private var pendingDragOutIDs: Set<UUID> = []
@@ -59,10 +67,13 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     func shutdown() {
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
+        stopMoveMonitor()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
+        gateWorkItem?.cancel()
+        gateWorkItem = nil
         for panel in panels.values { panel.orderOut(nil) }
         panels.removeAll()
         collapsedSizes.removeAll()
@@ -187,7 +198,12 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     func expand() {
         collapseWorkItem?.cancel()
+        gateWorkItem?.cancel()
+        gateWorkItem = nil
         purgeExpired()
+        gate.forceOpen()
+        isArming = false
+        startMoveMonitor()
         guard !isExpanded else { return }
         isExpanded = true
         updateAllFrames(animated: true)
@@ -205,16 +221,103 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         guard isExpanded, !isSharing else { return }
         isExpanded = false
         selectedIDs = []
+        gate.forceClosed()
+        isArming = false
+        gateWorkItem?.cancel()
+        gateWorkItem = nil
+        stopMoveMonitor()
         updateAllFrames(animated: true)
     }
 
     func hoverChanged(_ hovering: Bool) {
-        if hovering {
-            guard openOnHover, optionSatisfied() else { return }
-            expand()
-        } else {
-            collapseAfterDelay()
+        guard !isExpanded else { return }
+        applyProximity(hovering ? .open : .outside)
+    }
+
+    private func monotonicNow() -> TimeInterval { ProcessInfo.processInfo.systemUptime }
+
+    private func applyProximity(_ raw: NotchProximity) {
+        var proximity = raw
+        if !gate.isOpen, proximity == .open, !(openOnHover && optionSatisfied()) {
+            proximity = .outside
         }
+        handleGate(gate.sample(proximity, now: monotonicNow()))
+        isArming = gate.hasPending && !gate.isOpen
+    }
+
+    private func handleGate(_ transition: NotchGateTransition) {
+        switch transition {
+        case .schedule(let deadline):
+            gateWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in self?.fireGate() }
+            gateWorkItem = work
+            let delay = max(0, deadline - monotonicNow())
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        case .cancelPending:
+            gateWorkItem?.cancel()
+            gateWorkItem = nil
+        case .none, .opened, .closed:
+            break
+        }
+    }
+
+    private func fireGate() {
+        gateWorkItem = nil
+        switch gate.fire(now: monotonicNow()) {
+        case .opened:
+            expand()
+        case .closed:
+            if isSharing {
+                gate.forceOpen()
+            } else {
+                collapseNow()
+            }
+        case .none, .schedule, .cancelPending:
+            break
+        }
+        isArming = gate.hasPending && !gate.isOpen
+    }
+
+    private func handleMouseMoved() {
+        guard isExpanded, let frames = builtinFrames() else { return }
+        applyProximity(
+            NotchGeometry.proximity(
+                point: NSEvent.mouseLocation, collapsedFrame: frames.collapsed,
+                expandedFrame: frames.expanded))
+    }
+
+    private func builtinFrames() -> (collapsed: CGRect, expanded: CGRect)? {
+        guard let id = builtinDisplayID,
+            let screen = NSScreen.screens.first(where: { $0.displayID == id })
+        else { return nil }
+        let collapsedSize = collapsedSizes[id] ?? NotchGeometry.fallbackSize
+        let collapsed = CGRect(
+            origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: collapsedSize),
+            size: collapsedSize)
+        let expanded = CGRect(
+            origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: expandedSize),
+            size: expandedSize)
+        return (collapsed, expanded)
+    }
+
+    private func startMoveMonitor() {
+        guard moveMonitorGlobal == nil else { return }
+        moveMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) {
+            [weak self] _ in
+            Task { @MainActor in self?.handleMouseMoved() }
+        }
+        moveMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) {
+            [weak self] event in
+            Task { @MainActor in self?.handleMouseMoved() }
+            return event
+        }
+    }
+
+    private func stopMoveMonitor() {
+        if let moveMonitorGlobal { NSEvent.removeMonitor(moveMonitorGlobal) }
+        if let moveMonitorLocal { NSEvent.removeMonitor(moveMonitorLocal) }
+        moveMonitorGlobal = nil
+        moveMonitorLocal = nil
     }
 
     private func handleGlobalMouse(_ event: NSEvent) {
@@ -235,6 +338,9 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     func resizeExpanded(toPointer point: CGPoint, resizesWidth: Bool, resizesHeight: Bool) {
         guard isExpanded else { return }
         collapseWorkItem?.cancel()
+        gateWorkItem?.cancel()
+        gateWorkItem = nil
+        gate.forceOpen()
         let screen =
             NSScreen.screens.first { $0.frame.contains(point) }
             ?? NSScreen.screens.first { $0.displayID == builtinDisplayID }

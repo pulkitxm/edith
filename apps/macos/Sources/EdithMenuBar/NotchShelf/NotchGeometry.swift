@@ -23,6 +23,33 @@ enum NotchGeometry {
         CGPoint(x: screenFrame.midX - panelSize.width / 2, y: screenFrame.maxY - panelSize.height)
     }
 
+    static let openMargin: CGFloat = 6
+    static let keepOpenMargin: CGFloat = 24
+
+    static func proximity(
+        point: CGPoint,
+        collapsedFrame: CGRect,
+        expandedFrame: CGRect,
+        openMargin: CGFloat = openMargin,
+        keepOpenMargin: CGFloat = keepOpenMargin
+    ) -> NotchProximity {
+        if collapsedFrame.insetBy(dx: -openMargin, dy: -openMargin).contains(point) {
+            return .open
+        }
+        if expandedFrame.insetBy(dx: -keepOpenMargin, dy: -keepOpenMargin).contains(point) {
+            return .keepOpen
+        }
+        return .outside
+    }
+
+    static func hardwareNotchRect(in panelSize: CGSize, collapsedSize: CGSize) -> CGRect {
+        let width = min(collapsedSize.width, panelSize.width)
+        let height = min(collapsedSize.height, panelSize.height)
+        return CGRect(
+            x: (panelSize.width - width) / 2, y: panelSize.height - height,
+            width: width, height: height)
+    }
+
     static let itemCell = CGSize(width: 78, height: 70)
 
     static func itemPosition(stored: CGPoint?, index: Int, in size: CGSize) -> CGPoint {

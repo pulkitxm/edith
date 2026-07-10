@@ -3,16 +3,28 @@ import SwiftUI
 
 struct NotchShelfContentView: View {
     @ObservedObject var controller: NotchShelfController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             if controller.isExpanded {
-                expanded
+                expanded.transition(expandTransition)
             } else {
-                collapsed
+                collapsed.transition(.opacity)
             }
         }
+        .animation(shapeAnimation, value: controller.isExpanded)
         .onHover { controller.hoverChanged($0) }
+    }
+
+    private var shapeAnimation: Animation? {
+        reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.38, dampingFraction: 0.75)
+    }
+
+    private var expandTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
     }
 
     private var collapsed: some View {
@@ -25,6 +37,16 @@ struct NotchShelfContentView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
+            .background {
+                if controller.isArming, !reduceMotion {
+                    NotchShape()
+                        .fill(.white.opacity(0.16))
+                        .blur(radius: 8)
+                        .scaleEffect(1.14)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.18), value: controller.isArming)
     }
 
     private var expanded: some View {
