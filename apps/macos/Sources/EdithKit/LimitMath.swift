@@ -47,6 +47,77 @@ public enum LimitWindowKind: String {
     public var duration: TimeInterval { self == .session ? 5 * 3600 : 7 * 24 * 3600 }
 }
 
+public enum BudgetMode: String, Sendable, CaseIterable {
+    case cap, pace
+}
+
+public enum BudgetState: String, Sendable {
+    case onPace, under, over, exceeded, noData
+}
+
+public struct BudgetStatus: Equatable, Sendable {
+    public let state: BudgetState
+    public let targetPercent: Double
+    public let actualPercent: Double
+    public let capPercent: Double
+    public let dailyBudgetPercent: Double?
+
+    public init(
+        state: BudgetState, targetPercent: Double, actualPercent: Double, capPercent: Double,
+        dailyBudgetPercent: Double?
+    ) {
+        self.state = state
+        self.targetPercent = targetPercent
+        self.actualPercent = actualPercent
+        self.capPercent = capPercent
+        self.dailyBudgetPercent = dailyBudgetPercent
+    }
+}
+
+extension LimitMath {
+    public static func budgetTarget(
+        capPercent: Double, start: Date, deadline: Date, now: Date
+    ) -> Double {
+        let span = deadline.timeIntervalSince(start)
+        guard span > 0 else { return capPercent }
+        let t = min(max(now.timeIntervalSince(start) / span, 0), 1)
+        return t * capPercent
+    }
+
+    public static func dailyBudget(
+        actual: Double, capPercent: Double, resetsAt: Date, now: Date
+    ) -> Double {
+        let remaining = max(0, capPercent - actual)
+        let daysLeft = max(1, ceil(max(0, resetsAt.timeIntervalSince(now)) / 86400))
+        return remaining / daysLeft
+    }
+
+    public static func budgetStatus(
+        actual: Double, capPercent: Double, start: Date, deadline: Date, now: Date,
+        margin: Double = 5, resetsAt: Date? = nil
+    ) -> BudgetStatus {
+        let target = budgetTarget(
+            capPercent: capPercent, start: start, deadline: deadline, now: now)
+        let delta = actual - target
+        let state: BudgetState
+        if actual >= capPercent {
+            state = .exceeded
+        } else if delta > margin {
+            state = .over
+        } else if delta < -margin {
+            state = .under
+        } else {
+            state = .onPace
+        }
+        let daily = resetsAt.map {
+            dailyBudget(actual: actual, capPercent: capPercent, resetsAt: $0, now: now)
+        }
+        return BudgetStatus(
+            state: state, targetPercent: target, actualPercent: actual, capPercent: capPercent,
+            dailyBudgetPercent: daily)
+    }
+}
+
 public enum LimitMath {
     public static let k = 5.0
     public static let projUpper = 1.4

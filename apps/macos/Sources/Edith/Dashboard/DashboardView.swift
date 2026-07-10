@@ -43,6 +43,7 @@ struct DashboardView: View {
                                         model: model, dark: dark, blur: blurMoney)
                                 }
                                 LimitsCardView(theme: acc, dark: dark)
+                                BudgetCardView(theme: acc, dark: dark)
                                 charts
                             }
                             .padding(.horizontal, compact ? 18 : 24).padding(.bottom, 28)

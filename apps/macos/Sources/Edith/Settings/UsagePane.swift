@@ -20,6 +20,12 @@ struct UsagePane: View {
     @AppStorage("critPercent", store: SharedDefaults.store) private var critPercent = 85
     @AppStorage("pacingMargin", store: SharedDefaults.store) private var pacingMargin = 10.0
 
+    @AppStorage("budgetEnabled", store: SharedDefaults.store) private var budgetEnabled = false
+    @AppStorage("budgetMode", store: SharedDefaults.store) private var budgetMode = "pace"
+    @AppStorage("budgetKind", store: SharedDefaults.store) private var budgetKind = "weekly"
+    @AppStorage("budgetCapPercent", store: SharedDefaults.store) private var budgetCap = 50.0
+    @AppStorage("budgetDeadline", store: SharedDefaults.store) private var budgetDeadlineTS = 0.0
+
     @AppStorage("notifyMaster", store: SharedDefaults.store) private var notifyMaster = false
     @AppStorage("notifyTrackSession", store: SharedDefaults.store) private var trackSession = true
     @AppStorage("notifyTrackWeekly", store: SharedDefaults.store) private var trackWeekly = true
@@ -45,6 +51,43 @@ struct UsagePane: View {
                     .pointerCursor()
                 Text("Session and weekly rate-limit rings, plus their menu bar readout.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Personal budget") {
+                Toggle("Pace my Claude usage", isOn: $budgetEnabled)
+                    .pointerCursor()
+                Text(
+                    "Set a personal cap under the real limit and get told if you're spending too fast."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+                if budgetEnabled {
+                    Picker("Mode", selection: $budgetMode) {
+                        Text("Auto daily pace").tag("pace")
+                        Text("Cap by a deadline").tag("cap")
+                    }.pointerCursor()
+                    Picker("Window", selection: $budgetKind) {
+                        Text("Weekly").tag("weekly")
+                        Text("Session (5h)").tag("session")
+                    }.pointerCursor()
+                    HStack {
+                        Text("Cap")
+                        Slider(value: $budgetCap, in: 10...100, step: 5)
+                        Text("\(Int(budgetCap))%").monospacedDigit().frame(
+                            width: 40, alignment: .trailing)
+                    }
+                    if budgetMode == "cap" {
+                        DatePicker(
+                            "Stay under until",
+                            selection: Binding(
+                                get: {
+                                    budgetDeadlineTS > 0
+                                        ? Date(timeIntervalSinceReferenceDate: budgetDeadlineTS)
+                                        : Date().addingTimeInterval(2 * 86400)
+                                },
+                                set: { budgetDeadlineTS = $0.timeIntervalSinceReferenceDate }),
+                            displayedComponents: [.date, .hourAndMinute])
+                    }
+                }
             }
 
             Section {
