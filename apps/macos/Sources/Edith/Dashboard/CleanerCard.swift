@@ -263,6 +263,7 @@ struct CleanerCard: View {
     @ObservedObject private var model = CleanerModel.shared
     @State private var showDrivePicker = false
     @State private var pickerScans = false
+    @State private var confirmClean = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -300,6 +301,17 @@ struct CleanerCard: View {
             ) {
                 if pickerScans { model.scan() }
             }
+        }
+        .confirmationDialog(
+            "Clean \(JunkScanner.format(model.selectedTotal))?",
+            isPresented: $confirmClean, titleVisibility: .visible
+        ) {
+            Button("Move \(model.selectedItemCount) items to Trash", role: .destructive) {
+                model.clean()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Items go to the Trash, so you can restore them until you empty it.")
         }
     }
 
@@ -438,7 +450,7 @@ struct CleanerCard: View {
 
     private var footer: some View {
         Button {
-            model.clean()
+            confirmClean = true
         } label: {
             Text(
                 model.selectedTotal > 0
