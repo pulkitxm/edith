@@ -13,6 +13,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var focusDim: FocusDimEngine?
     @Published private(set) var presenter: PresenterDetector?
     @Published private(set) var micMute: MicMuteEngine?
+    @Published private(set) var systemStats: SystemStatsStatusItem?
 
     static func tabEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -101,6 +102,13 @@ final class AppServices: ObservableObject {
         if !micOn, let engine = micMute {
             engine.shutdown()
             micMute = nil
+        }
+
+        let statsOn = Self.featureOffByDefault("menuBarSystemStats")
+        if statsOn, systemStats == nil { systemStats = SystemStatsStatusItem() }
+        if !statsOn, let stats = systemStats {
+            stats.shutdown()
+            systemStats = nil
         }
     }
 }

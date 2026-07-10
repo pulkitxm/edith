@@ -91,31 +91,13 @@ struct UsagePane: View {
             }
 
             Section {
-                Toggle("Show in menu bar", isOn: $limitsInMenuBar)
-                    .pointerCursor()
-                Picker("Menu bar color", selection: $menuBarColorMode) {
-                    Text("Auto").tag("auto")
-                    Text("White").tag("white")
-                    Text("Black").tag("black")
-                    Text("Custom").tag("custom")
-                }
-                .pointerCursor()
-                if menuBarColorMode == "custom" {
-                    ColorPicker(
-                        "Text color (5h / 7d)", selection: hexBinding($subColorHex),
-                        supportsOpacity: false)
-                    ColorPicker(
-                        "Low risk", selection: hexBinding($lowColorHex), supportsOpacity: false)
-                    ColorPicker(
-                        "Medium risk", selection: hexBinding($midColorHex), supportsOpacity: false)
-                    ColorPicker(
-                        "High risk", selection: hexBinding($highColorHex), supportsOpacity: false)
-                }
+                Text("Menu bar readout and colors moved to the Menu bar tab.")
+                    .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Toggle("Smart color", isOn: $smartColor)
+                    Toggle("Smart risk model", isOn: $smartColor)
                         .pointerCursor()
                     InfoDot(
-                        "When on, both the menu bar color AND the alerts below key off a time-aware risk model instead of the raw percentage - so a weekly alert can fire before you hit the warn threshold if you're burning faster than an even pace."
+                        "When on, alerts key off a time-aware risk model instead of the raw percentage - so a weekly alert can fire before you hit the warn threshold if you're burning faster than an even pace."
                     )
                 }
                 HStack {
