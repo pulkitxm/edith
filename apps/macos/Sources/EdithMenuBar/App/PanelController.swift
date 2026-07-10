@@ -19,30 +19,15 @@ final class PanelController: NSObject {
         self.services = services
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.autosaveName = "edithGlasses"
-        statusItem.isVisible = true
+        statusItem.isVisible = false
         super.init()
-
-        if let button = statusItem.button {
-            button.image = Logo.menuBar
-            button.action = #selector(statusClicked)
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        }
 
         popover.behavior = .transient
         popover.animates = true
     }
 
-    @objc private func statusClicked() {
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            StatusItemMenu.show(from: statusItem)
-        } else {
-            MainApp.openDashboard()
-        }
-    }
-
     func toggle() {
-        if popover.isShown { close() } else { open() }
+        MainApp.openDashboard()
     }
 
     func open() {

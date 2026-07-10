@@ -332,7 +332,7 @@ func togglePanel() {
 }
 
 func showPanel() {
-    MainActor.assumeIsolated { PanelController.shared?.open() }
+    MainActor.assumeIsolated { MainApp.openDashboard() }
 }
 
 func dismissPanel() {
