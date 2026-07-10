@@ -11,12 +11,43 @@ struct RunningAppRow: Identifiable {
     var id: pid_t { pid }
 }
 
+enum AppSortKey: String {
+    case name, cpu, memory
+}
+
 @MainActor
 final class RunningAppsModel: ObservableObject {
     @Published private(set) var apps: [RunningAppRow] = []
     @Published private(set) var totalMemoryMB: Double = 0
+    @Published private(set) var sortKey: AppSortKey = .cpu
+    @Published private(set) var ascending = false
 
     private var lastCPU: [pid_t: (time: UInt64, at: Date)] = [:]
+
+    func sort(by key: AppSortKey) {
+        if sortKey == key {
+            ascending.toggle()
+        } else {
+            sortKey = key
+            ascending = key == .name
+        }
+        apps = sorted(apps)
+    }
+
+    private func sorted(_ rows: [RunningAppRow]) -> [RunningAppRow] {
+        let ordered: [RunningAppRow]
+        switch sortKey {
+        case .name:
+            ordered = rows.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .cpu:
+            ordered = rows.sorted { $0.cpuPercent < $1.cpuPercent }
+        case .memory:
+            ordered = rows.sorted { $0.memoryMB < $1.memoryMB }
+        }
+        return ascending ? ordered : ordered.reversed()
+    }
 
     func refresh() {
         let running = NSWorkspace.shared.runningApplications.filter {
@@ -46,7 +77,7 @@ final class RunningAppsModel: ObservableObject {
         }
         lastCPU = lastCPU.filter { seen.contains($0.key) }
         totalMemoryMB = memTotal
-        apps = rows.sorted { $0.cpuPercent > $1.cpuPercent }
+        apps = sorted(rows)
     }
 
     static func usage(pid: pid_t) -> (cpuNS: UInt64, memMB: Double) {

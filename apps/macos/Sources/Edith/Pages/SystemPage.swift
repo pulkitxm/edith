@@ -71,8 +71,44 @@ struct SystemPage: View {
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 14))
     }
 
+    private var columnHeaders: some View {
+        HStack(spacing: 10) {
+            headerButton("App", .name, width: nil, alignment: .leading)
+                .padding(.leading, 32)
+            Spacer()
+            headerButton("CPU", .cpu, width: 48, alignment: .trailing)
+            headerButton("Memory", .memory, width: 72, alignment: .trailing)
+            Color.clear.frame(width: 16)
+        }
+        .padding(.bottom, 6)
+    }
+
+    private func headerButton(
+        _ label: String, _ key: AppSortKey, width: CGFloat?, alignment: Alignment
+    ) -> some View {
+        Button {
+            model.sort(by: key)
+        } label: {
+            HStack(spacing: 3) {
+                if alignment == .trailing { Spacer(minLength: 0) }
+                Text(label.uppercased())
+                    .font(.system(size: 10, weight: .semibold)).tracking(0.5)
+                if model.sortKey == key {
+                    Image(systemName: model.ascending ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                if alignment == .leading { Spacer(minLength: 0) }
+            }
+            .foregroundStyle(model.sortKey == key ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+            .frame(width: width, alignment: alignment)
+        }
+        .buttonStyle(.plain).pointerCursor()
+    }
+
     private var appList: some View {
         VStack(spacing: 0) {
+            columnHeaders
+            Divider().opacity(0.4)
             ForEach(model.apps) { app in
                 HStack(spacing: 10) {
                     if let icon = app.icon {
