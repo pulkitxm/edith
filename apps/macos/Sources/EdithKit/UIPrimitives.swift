@@ -63,6 +63,16 @@ extension View {
     }
 }
 
+extension Color {
+    public var hex6: String {
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .black
+        let r = Int((ns.redComponent * 255).rounded())
+        let g = Int((ns.greenComponent * 255).rounded())
+        let b = Int((ns.blueComponent * 255).rounded())
+        return String(format: "%02X%02X%02X", r, g, b)
+    }
+}
+
 public func eyebrow(_ text: String) -> some View {
     Text(text)
         .font(.system(size: 10, weight: .semibold))

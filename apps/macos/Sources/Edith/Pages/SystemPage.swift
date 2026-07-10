@@ -58,7 +58,7 @@ struct SystemPage: View {
             .confirmationDialog(
                 "Quit all apps?", isPresented: $confirmQuitAll, titleVisibility: .visible
             ) {
-                Button("Quit \(model.apps.count - 1) apps", role: .destructive) {
+                Button("Quit \(max(0, model.apps.count - 1)) apps", role: .destructive) {
                     model.quitAll()
                 }
             } message: {
@@ -124,32 +124,17 @@ struct SystemPage: View {
         VStack(spacing: 0) {
             columnHeaders
             Divider().opacity(0.4)
-            ForEach(model.apps) { app in
-                HStack(spacing: 10) {
-                    if let icon = app.icon {
-                        Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-                    }
-                    Text(app.name).font(.system(size: 13)).lineLimit(1)
-                    Spacer()
-                    Text(Self.cpuLabel(app.cpuPercent))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(app.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
-                        .frame(width: 48, alignment: .trailing)
-                    Text(Self.memoryLabel(app.memoryMB))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: 72, alignment: .trailing)
-                    Button {
-                        pendingQuit = app
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
-                    .help("Quit \(app.name)")
+            if model.apps.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading running apps…")
+                        .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 24)
+            }
+            ForEach(model.apps) { app in
+                SystemAppRow(app: app, dark: dark) { pendingQuit = app }
                 if app.id != model.apps.last?.id {
                     Divider().opacity(0.3)
                 }
@@ -157,12 +142,53 @@ struct SystemPage: View {
         }
     }
 
-    private static func cpuLabel(_ percent: Double) -> String {
+    fileprivate static func cpuLabel(_ percent: Double) -> String {
         percent >= 10 || percent == 0
             ? String(format: "%.0f%%", percent) : String(format: "%.1f%%", percent)
     }
 
-    private static func memoryLabel(_ mb: Double) -> String {
+    fileprivate static func memoryLabel(_ mb: Double) -> String {
         mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : String(format: "%.0f MB", mb)
+    }
+}
+
+private struct SystemAppRow: View {
+    let app: RunningAppRow
+    let dark: Bool
+    let onQuit: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let icon = app.icon {
+                Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+            }
+            Text(app.name).font(.system(size: 13)).lineLimit(1)
+            Spacer()
+            Text(SystemPage.cpuLabel(app.cpuPercent))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(app.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
+                .frame(width: 48, alignment: .trailing)
+            Text(SystemPage.memoryLabel(app.memoryMB))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: 72, alignment: .trailing)
+            Button {
+                onQuit()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help("Quit \(app.name)")
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+        )
+        .onHover { hovering = $0 }
     }
 }

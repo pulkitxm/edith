@@ -111,9 +111,9 @@ struct BudgetCardView: View {
 
     private func color(_ state: BudgetState) -> Color {
         switch state {
-        case .onPace, .under: DashPalette.color("#34C759")
-        case .over: DashPalette.color("#FF9500")
-        case .exceeded: DashPalette.color("#FF3B30")
+        case .onPace, .under: DashSkin.ok
+        case .over: DashSkin.warn
+        case .exceeded: DashSkin.danger
         case .noData: DashSkin.inkFaint(dark)
         }
     }

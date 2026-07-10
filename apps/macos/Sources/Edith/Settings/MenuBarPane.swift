@@ -111,16 +111,6 @@ struct MenuBarPane: View {
     private func hexBinding(_ hex: Binding<String>) -> Binding<Color> {
         Binding(
             get: { DashPalette.color(hex.wrappedValue) },
-            set: { hex.wrappedValue = $0.menuBarPaneHex6 })
-    }
-}
-
-extension Color {
-    fileprivate var menuBarPaneHex6: String {
-        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .black
-        let r = Int((ns.redComponent * 255).rounded())
-        let g = Int((ns.greenComponent * 255).rounded())
-        let b = Int((ns.blueComponent * 255).rounded())
-        return String(format: "%02X%02X%02X", r, g, b)
+            set: { hex.wrappedValue = $0.hex6 })
     }
 }

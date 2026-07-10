@@ -799,7 +799,7 @@ private struct DriveRow: View {
 
     private var barColor: Color {
         drive.usedFraction > 0.9
-            ? DashPalette.color("#FF3B30") : DashSkin.accent(dark)
+            ? DashSkin.danger : DashSkin.accent(dark)
     }
 }
 

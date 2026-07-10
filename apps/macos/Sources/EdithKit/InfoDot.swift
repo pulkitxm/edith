@@ -18,6 +18,8 @@ public struct InfoDot: View {
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .accessibilityLabel("More info")
+        .help("More info")
         .popover(isPresented: $showing, arrowEdge: .trailing) {
             Text(text)
                 .font(.system(size: 12))

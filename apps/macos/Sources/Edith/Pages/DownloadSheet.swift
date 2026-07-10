@@ -10,6 +10,7 @@ struct DownloadSheet: View {
     @State private var urlText = ""
     @State private var filenamePrefix = ""
     @State private var logItem: YoutubeDownloader.DownloadItem?
+    @State private var confirmClearHistory = false
 
     private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
@@ -662,12 +663,23 @@ struct DownloadSheet: View {
         HStack(spacing: 8) {
             if !downloader.items.isEmpty {
                 Button("Clear History") {
-                    downloader.clearHistory()
+                    confirmClearHistory = true
                 }
                 .buttonStyle(HoverButtonStyle())
                 .font(.system(size: 11))
                 .pointerCursor()
                 .disabled(downloader.isRunning)
+                .confirmationDialog(
+                    "Clear download history?", isPresented: $confirmClearHistory,
+                    titleVisibility: .visible
+                ) {
+                    Button("Clear \(downloader.items.count) entries", role: .destructive) {
+                        downloader.clearHistory()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Downloaded files stay on disk; only the list is cleared.")
+                }
             }
             if downloader.isRunning {
                 Button {

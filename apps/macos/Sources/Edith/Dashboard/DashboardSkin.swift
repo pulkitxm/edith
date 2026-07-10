@@ -32,6 +32,9 @@ enum DashSkin {
     static func grid(_ d: Bool) -> Color { DashPalette.color(d ? "#2b2620" : "#ece5d8") }
     static let gold = DashPalette.color("#c89b3c")
     static let sage = DashPalette.color("#6a8d73")
+    static let ok = DashPalette.color("#34C759")
+    static let warn = DashPalette.color("#FF9500")
+    static let danger = DashPalette.color("#FF3B30")
 
     static func serif(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .custom("Iowan Old Style", size: size).weight(weight)

@@ -212,10 +212,6 @@ struct MusicPage: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .focused($searchFocused)
-                    .onKeyPress(.escape) {
-                        searchFocused = false
-                        return .handled
-                    }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
@@ -456,6 +452,7 @@ struct MusicFooter: View {
                 Image(systemName: "backward.fill").font(.system(size: 13)).foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
+            .help("Previous track")
             Button {
                 remote.playPause()
             } label: {
@@ -468,12 +465,14 @@ struct MusicFooter: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
+            .help("Play or pause")
             Button {
                 remote.next()
             } label: {
                 Image(systemName: "forward.fill").font(.system(size: 13)).foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
+            .help("Next track")
         }
     }
 

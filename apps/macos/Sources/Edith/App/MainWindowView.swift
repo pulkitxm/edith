@@ -295,6 +295,8 @@ struct MainWindowView: View {
                 .keyboardShortcut("[", modifiers: .command)
             Button("", action: goForward)
                 .keyboardShortcut("]", modifiers: .command)
+            Button("") { mainWindowSection = MainDestination.settings.rawValue }
+                .keyboardShortcut(",", modifiers: .command)
         }
         .opacity(0)
         .allowsHitTesting(false)

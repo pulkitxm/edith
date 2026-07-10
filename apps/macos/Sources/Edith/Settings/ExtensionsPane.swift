@@ -149,7 +149,7 @@ private struct UsageRows: View {
 
     var body: some View {
         Section {
-            Toggle("Show 5h / 7d in the menu bar", isOn: $limitsInMenuBar)
+            Toggle("Show Claude usage (5h / 7d)", isOn: $limitsInMenuBar)
                 .pointerCursor()
             LabeledContent("Alerts, budget, and readout colors") {
                 Button("Open Usage settings") {
@@ -176,23 +176,13 @@ private struct SystemStatsRows: View {
                 "Color",
                 selection: Binding(
                     get: { DashPalette.color(statsColorHex) },
-                    set: { statsColorHex = $0.settingsHex6 }),
+                    set: { statsColorHex = $0.hex6 }),
                 supportsOpacity: false)
             Text("Sampled every couple of seconds; costs nothing measurable.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-    }
-}
-
-extension Color {
-    var settingsHex6: String {
-        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .black
-        let r = Int((ns.redComponent * 255).rounded())
-        let g = Int((ns.greenComponent * 255).rounded())
-        let b = Int((ns.blueComponent * 255).rounded())
-        return String(format: "%02X%02X%02X", r, g, b)
     }
 }
 
