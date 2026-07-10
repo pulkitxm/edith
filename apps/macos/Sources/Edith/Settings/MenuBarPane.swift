@@ -4,6 +4,9 @@ import SwiftUI
 struct MenuBarPane: View {
     @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
     @AppStorage("menuBarSystemStats", store: SharedDefaults.store) private var systemStats = false
+    @AppStorage("micMuteEnabled", store: SharedDefaults.store) private var micMuteEnabled = false
+    @AppStorage("micMuteInMenuBar", store: SharedDefaults.store) private var micMuteInMenuBar =
+        true
     @AppStorage("menuBarColorMode", store: SharedDefaults.store) private var menuBarColorMode =
         "auto"
     @AppStorage("smartColor", store: SharedDefaults.store) private var smartColor = true
@@ -27,6 +30,10 @@ struct MenuBarPane: View {
                     .pointerCursor()
                 Toggle("Show CPU & memory", isOn: $systemStats)
                     .pointerCursor()
+                if micMuteEnabled {
+                    Toggle("Show microphone mute", isOn: $micMuteInMenuBar)
+                        .pointerCursor()
+                }
             } header: {
                 Text("Show in menu bar")
             } footer: {

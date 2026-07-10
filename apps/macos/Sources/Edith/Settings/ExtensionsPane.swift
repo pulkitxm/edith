@@ -218,6 +218,7 @@ private struct MusicRows: View {
 private struct SystemRows: View {
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var enabled = true
     @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
+    @State private var cleaningStarted = false
 
     var body: some View {
         Section {
@@ -227,6 +228,25 @@ private struct SystemRows: View {
                 InfoDot(
                     "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
                 )
+            }
+            HStack {
+                Text("Keyboard cleaning")
+                InfoDot(
+                    "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
+                )
+                Spacer()
+                if cleaningStarted {
+                    Text("Locked - check the overlay")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Button("Clean now") {
+                    IPC.post(IPC.Name.requestKeyboardClean)
+                    cleaningStarted = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                        cleaningStarted = false
+                    }
+                }
+                .pointerCursor()
             }
         }
         .disabled(!enabled)
