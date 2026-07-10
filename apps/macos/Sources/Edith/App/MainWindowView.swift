@@ -404,10 +404,6 @@ struct MainWindowView: View {
         VStack(spacing: 0) {
             band(Color(nsColor: .windowBackgroundColor), height: bandHeight)
             VStack(spacing: 0) {
-                openPanelRow
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                Divider()
                 sidebarList
                 if footerVisible {
                     Divider()
@@ -549,28 +545,6 @@ struct MainWindowView: View {
                             .onEnded { _ in dragBaseWidth = nil }
                     )
             }
-    }
-
-    private var openPanelRow: some View {
-        Button {
-            IPC.post(IPC.Name.openPanel)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "menubar.arrow.up.rectangle")
-                    .font(.system(size: 13))
-                    .frame(width: 20)
-                Text("Open Menu Bar Panel")
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(HoverButtonStyle())
-        .pointerCursor()
-        .help("Open the Edith panel from the menu bar")
     }
 
     @ViewBuilder

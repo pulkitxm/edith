@@ -63,44 +63,61 @@ final class RunningAppsModel: ObservableObject {
         return ascending ? ordered : ordered.reversed()
     }
 
-    func refresh() {
+    func refresh() async {
+        struct AppSnapshot: Sendable {
+            let pid: pid_t
+            let name: String
+            let bundleID: String?
+        }
         let running = NSWorkspace.shared.runningApplications.filter {
             $0.activationPolicy == .regular
         }
+        var icons: [pid_t: NSImage] = [:]
+        var snapshots: [AppSnapshot] = []
+        for app in running where app.processIdentifier > 0 {
+            snapshots.append(
+                AppSnapshot(
+                    pid: app.processIdentifier, name: app.localizedName ?? "Unknown",
+                    bundleID: app.bundleIdentifier))
+            icons[app.processIdentifier] = app.icon
+        }
+        let previous = lastCPU
         let now = Date()
+        let measured = await Task.detached(priority: .utility) {
+            snapshots.map { snap in
+                (snap, Self.usage(pid: snap.pid))
+            }
+        }.value
         var rows: [RunningAppRow] = []
         var seen = Set<pid_t>()
         var memTotal = 0.0
-        for app in running {
-            let pid = app.processIdentifier
-            guard pid > 0 else { continue }
-            seen.insert(pid)
-            let usage = Self.usage(pid: pid)
+        var nextCPU: [pid_t: (time: UInt64, at: Date)] = [:]
+        for (snap, usage) in measured {
+            seen.insert(snap.pid)
             var cpu = 0.0
-            if let prev = lastCPU[pid] {
+            if let prev = previous[snap.pid] {
                 let dt = now.timeIntervalSince(prev.at)
                 if dt > 0 { cpu = Double(usage.cpuNS &- prev.time) / (dt * 1e9) * 100 }
             }
-            lastCPU[pid] = (usage.cpuNS, now)
+            nextCPU[snap.pid] = (usage.cpuNS, now)
             memTotal += usage.memMB
             rows.append(
                 RunningAppRow(
-                    pid: pid, name: app.localizedName ?? "Unknown",
-                    bundleID: app.bundleIdentifier, icon: app.icon,
-                    cpuPercent: max(0, cpu), memoryMB: usage.memMB))
+                    pid: snap.pid, name: snap.name, bundleID: snap.bundleID,
+                    icon: icons[snap.pid], cpuPercent: max(0, cpu), memoryMB: usage.memMB))
         }
-        lastCPU = lastCPU.filter { seen.contains($0.key) }
+        lastCPU = nextCPU.filter { seen.contains($0.key) }
         totalMemoryMB = memTotal
         apps = sorted(rows)
     }
 
-    private static let timebase: mach_timebase_info_data_t = {
+    private nonisolated static let timebase: mach_timebase_info_data_t = {
         var tb = mach_timebase_info_data_t()
         mach_timebase_info(&tb)
         return tb
     }()
 
-    static func usage(pid: pid_t) -> (cpuNS: UInt64, memMB: Double) {
+    nonisolated static func usage(pid: pid_t) -> (cpuNS: UInt64, memMB: Double) {
         var info = rusage_info_current()
         let result = withUnsafeMutablePointer(to: &info) { pointer in
             pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {

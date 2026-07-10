@@ -302,8 +302,8 @@ final class DashboardModel: ObservableObject {
     @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
     @Published var sortAscending = false { didSet { persist(); resortTotals() } }
     @Published var heatMetric: DashMetric = .tokens
-    @Published var projSortKey: ProjSortKey = .cost { didSet { persist(); recompute() } }
-    @Published var projSortAscending = false { didSet { persist(); recompute() } }
+    @Published var projSortKey: ProjSortKey = .cost { didSet { persist(); resortProjectTree() } }
+    @Published var projSortAscending = false { didSet { persist(); resortProjectTree() } }
     @Published var projListOpen = false
     @Published var projExpanded: Set<String> = []
 
@@ -956,6 +956,11 @@ final class DashboardModel: ObservableObject {
         case .dur: return cmp(a.dur, b.dur)
         case .lastActive: return cmp(a.lastActive, b.lastActive)
         }
+    }
+
+    private func resortProjectTree() {
+        guard !loading, !projectTree.isEmpty else { return }
+        projectTree = sortTree(projectTree)
     }
 
     private func sortTree(_ rows: [ProjTreeRow]) -> [ProjTreeRow] {

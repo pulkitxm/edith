@@ -116,7 +116,7 @@ final class CleanerModel: ObservableObject {
             let home = FileManager.default.homeDirectoryForCurrentUser
             for entry in JunkCatalog.entries {
                 if token.cancelled { break }
-                logs.append("Scanning \(entry.name)…")
+                log("Scanning \(entry.name)…")
                 let found = await Task.detached {
                     JunkScanner.scanCategory(entry, home: home, isCancelled: { token.cancelled })
                 }.value
@@ -124,7 +124,7 @@ final class CleanerModel: ObservableObject {
                 if let category = found {
                     categories.append(
                         Self.applyChoices(category, items: choices, categories: categoryChoices))
-                    logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
+                    log("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
             var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
@@ -133,7 +133,7 @@ final class CleanerModel: ObservableObject {
                 let projects = await Task.detached {
                     JunkScanner.scanProjectJunk(roots: roots, isCancelled: { token.cancelled }) {
                         line in
-                        Task { @MainActor in CleanerModel.shared.logs.append(line) }
+                        Task { @MainActor in CleanerModel.shared.log(line) }
                     }
                 }.value
                 if !token.cancelled {
@@ -141,16 +141,16 @@ final class CleanerModel: ObservableObject {
                         categories.append(
                             Self.applyChoices(
                                 category, items: choices, categories: categoryChoices))
-                        logs.append(
+                        log(
                             "  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                     }
                 }
             }
             if token.cancelled {
-                logs.append("Cancelled.")
+                log("Cancelled.")
                 scanned = !categories.isEmpty
             } else {
-                logs.append("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
+                log("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
                 scanned = true
             }
             scanning = false
@@ -159,6 +159,11 @@ final class CleanerModel: ObservableObject {
                 withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
             }
         }
+    }
+
+    private func log(_ line: String) {
+        logs.append(line)
+        if logs.count > 200 { logs.removeFirst(logs.count - 200) }
     }
 
     func cancelScan() {

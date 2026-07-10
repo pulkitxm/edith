@@ -28,7 +28,11 @@ public enum TrackMeta {
     public static let playableExtensions: Set<String> =
         ["mp3", "m4a", "m4b", "aac", "wav", "aiff", "flac", "mp4", "mov", "webm"]
 
-    private static var artworkCache: [URL: NSImage] = [:]
+    private static let artworkCache: NSCache<NSURL, NSImage> = {
+        let cache = NSCache<NSURL, NSImage>()
+        cache.countLimit = 100
+        return cache
+    }()
     private static var durationCache: [URL: TimeInterval] = [:]
 
     public static func scanMusicFolder() -> [Track] {
@@ -67,12 +71,12 @@ public enum TrackMeta {
     }
 
     public static func artwork(for track: Track) async -> NSImage? {
-        if let hit = artworkCache[track.url] { return hit }
+        if let hit = artworkCache.object(forKey: track.url as NSURL) { return hit }
         let asset = AVURLAsset(url: track.url)
         if let metadata = try? await asset.load(.metadata) {
             for item in metadata where item.commonKey == .commonKeyArtwork {
                 if let data = try? await item.load(.dataValue), let image = NSImage(data: data) {
-                    artworkCache[track.url] = image
+                    artworkCache.setObject(image, forKey: track.url as NSURL)
                     return image
                 }
             }
@@ -87,7 +91,7 @@ public enum TrackMeta {
             let at = CMTime(seconds: max(1, seconds * 0.2), preferredTimescale: 600)
             if let cg = try? await generator.image(at: at).image {
                 let image = NSImage(cgImage: cg, size: .zero)
-                artworkCache[track.url] = image
+                artworkCache.setObject(image, forKey: track.url as NSURL)
                 return image
             }
         }
@@ -95,6 +99,6 @@ public enum TrackMeta {
     }
 
     public static func artworkCached(for track: Track) -> NSImage? {
-        artworkCache[track.url]
+        artworkCache.object(forKey: track.url as NSURL)
     }
 }

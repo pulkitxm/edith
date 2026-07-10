@@ -186,9 +186,8 @@ enum JunkScanner {
     static func clean(_ items: [JunkItem]) -> Int64 {
         var reclaimed: Int64 = 0
         for item in items {
-            let size = directorySize(item.path)
             if (try? FileManager.default.trashItem(at: item.path, resultingItemURL: nil)) != nil {
-                reclaimed += size
+                reclaimed += item.sizeBytes
             }
         }
         return reclaimed

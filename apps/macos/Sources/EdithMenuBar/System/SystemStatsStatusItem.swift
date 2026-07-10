@@ -6,12 +6,45 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private let item: NSStatusItem
     private var timer: Timer?
     private var previous: CPUTicks?
+    private var sleepObservers: [NSObjectProtocol] = []
+    private var lockObservers: [NSObjectProtocol] = []
 
     override init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         item.button?.target = self
         item.button?.action = #selector(clicked)
+        previous = SystemStatsReader.readCPUTicks()
+        update()
+        startTimer()
+        let workspace = NSWorkspace.shared.notificationCenter
+        sleepObservers = [
+            workspace.addObserver(
+                forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.stopTimer() }
+            },
+            workspace.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.startTimer() }
+            },
+        ]
+        let dnc = DistributedNotificationCenter.default()
+        lockObservers = [
+            dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) {
+                [weak self] _ in
+                Task { @MainActor in self?.stopTimer() }
+            },
+            dnc.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main)
+            { [weak self] _ in
+                Task { @MainActor in self?.startTimer() }
+            },
+        ]
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
         previous = SystemStatsReader.readCPUTicks()
         update()
         let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -22,9 +55,21 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         self.timer = timer
     }
 
-    func shutdown() {
+    private func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+
+    func shutdown() {
+        stopTimer()
+        for observer in sleepObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        sleepObservers = []
+        for observer in lockObservers {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+        lockObservers = []
         NSStatusBar.system.removeStatusItem(item)
     }
 

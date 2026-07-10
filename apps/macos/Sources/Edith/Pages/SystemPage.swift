@@ -39,7 +39,7 @@ struct SystemPage: View {
         }
         .task {
             while !Task.isCancelled {
-                model.refresh()
+                await model.refresh()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
