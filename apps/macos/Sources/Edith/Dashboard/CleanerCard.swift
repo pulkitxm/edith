@@ -2,6 +2,10 @@ import AppKit
 import EdithKit
 import SwiftUI
 
+final class CancelToken: @unchecked Sendable {
+    var cancelled = false
+}
+
 @MainActor
 final class CleanerModel: ObservableObject {
     static let shared = CleanerModel()
@@ -18,6 +22,7 @@ final class CleanerModel: ObservableObject {
     @Published var search = ""
     @Published var expanded: Set<String> = []
     @Published private var driveSelection: Set<String>?
+    private var scanToken: CancelToken?
 
     init() {
         if let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String] {
@@ -100,6 +105,8 @@ final class CleanerModel: ObservableObject {
         logsExpanded = true
         categories = []
         drives = []
+        let token = CancelToken()
+        scanToken = token
         Task {
             let all = await Task.detached { JunkScanner.drives() }.value
             driveOptions = all
@@ -108,9 +115,11 @@ final class CleanerModel: ObservableObject {
             let categoryChoices = categoryDefaults
             let home = FileManager.default.homeDirectoryForCurrentUser
             for entry in JunkCatalog.entries {
+                if token.cancelled { break }
                 logs.append("Scanning \(entry.name)…")
                 let found = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
                     .value
+                if token.cancelled { break }
                 if let category = found {
                     categories.append(
                         Self.applyChoices(category, items: choices, categories: categoryChoices))
@@ -119,24 +128,41 @@ final class CleanerModel: ObservableObject {
             }
             var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
             roots += customFolders.filter { isDriveSelected($0) }.map { URL(fileURLWithPath: $0) }
-            if !roots.isEmpty {
+            if !roots.isEmpty, !token.cancelled {
                 let projects = await Task.detached {
-                    JunkScanner.scanProjectJunk(roots: roots) { line in
+                    JunkScanner.scanProjectJunk(roots: roots, isCancelled: { token.cancelled }) {
+                        line in
                         Task { @MainActor in CleanerModel.shared.logs.append(line) }
                     }
                 }.value
-                for category in projects {
-                    categories.append(
-                        Self.applyChoices(category, items: choices, categories: categoryChoices))
-                    logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
+                if !token.cancelled {
+                    for category in projects {
+                        categories.append(
+                            Self.applyChoices(
+                                category, items: choices, categories: categoryChoices))
+                        logs.append(
+                            "  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
+                    }
                 }
             }
-            logs.append("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
+            if token.cancelled {
+                logs.append("Cancelled.")
+                scanned = !categories.isEmpty
+            } else {
+                logs.append("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
+                scanned = true
+            }
             scanning = false
-            scanned = true
             try? await Task.sleep(for: .seconds(0.9))
-            withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
+            if !token.cancelled {
+                withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
+            }
         }
+    }
+
+    func cancelScan() {
+        guard scanning else { return }
+        scanToken?.cancelled = true
     }
 
     private static func applyChoices(
@@ -285,6 +311,9 @@ struct CleanerCard: View {
             if model.scanning {
                 ProgressView().controlSize(.small)
                 Text("Scanning…").font(.system(size: 12)).foregroundStyle(DashSkin.inkSoft(dark))
+                Button("Cancel") { model.cancelScan() }
+                    .font(.system(size: 11, weight: .medium)).buttonStyle(.plain).pointerCursor()
+                    .foregroundStyle(DashSkin.accent(dark))
             } else {
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) { model.logsExpanded.toggle() }

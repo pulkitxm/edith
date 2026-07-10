@@ -236,9 +236,10 @@ enum JunkScanner {
         "dev", "Volumes", "Network", "Photos Library.photoslibrary",
     ]
 
-    static func scanProjectJunk(roots: [URL], progress: @escaping (String) -> Void)
-        -> [JunkCategory]
-    {
+    static func scanProjectJunk(
+        roots: [URL], isCancelled: @escaping () -> Bool = { false },
+        progress: @escaping (String) -> Void
+    ) -> [JunkCategory] {
         let targets = Dictionary(
             projectTargets.map { ($0.dir, $0) }, uniquingKeysWith: { first, _ in first })
         var itemsByCategory: [String: [JunkItem]] = [:]
@@ -248,14 +249,14 @@ enum JunkScanner {
         let fm = FileManager.default
 
         func walk(_ dir: URL, depth: Int) {
-            guard depth <= maxDepth, count < budget else { return }
+            guard depth <= maxDepth, count < budget, !isCancelled() else { return }
             guard
                 let children = try? fm.contentsOfDirectory(
                     at: dir, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
                     options: [])
             else { return }
             for child in children {
-                guard count < budget else { return }
+                guard count < budget, !isCancelled() else { return }
                 let values = try? child.resourceValues(forKeys: [
                     .isDirectoryKey, .isSymbolicLinkKey,
                 ])
@@ -278,6 +279,7 @@ enum JunkScanner {
         }
 
         for root in roots {
+            if isCancelled() { break }
             progress(
                 "Scanning \(root.lastPathComponent.isEmpty ? root.path : root.lastPathComponent) for project junk…"
             )
