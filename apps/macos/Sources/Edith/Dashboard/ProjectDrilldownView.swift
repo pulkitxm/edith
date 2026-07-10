@@ -99,24 +99,20 @@ struct ProjectDrilldownView: View {
     @ViewBuilder private func headerCell(_ title: String, _ key: ProjSortKey, width: CGFloat?)
         -> some View
     {
-        let leading = width == nil
         Button {
             sortBy(key)
         } label: {
             HStack(spacing: 3) {
-                if !leading { Spacer(minLength: 0) }
                 Text(title).font(.system(size: 11, weight: .medium))
                 if model.projSortKey == key {
                     Image(systemName: model.projSortAscending ? "chevron.up" : "chevron.down")
                         .font(.system(size: 7, weight: .bold))
                 }
-                if leading { Spacer(minLength: 0) }
+                Spacer(minLength: 0)
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
-            .frame(
-                maxWidth: leading ? .infinity : nil, alignment: leading ? .leading : .trailing
-            )
-            .frame(width: width, alignment: leading ? .leading : .trailing)
+            .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
+            .frame(width: width, alignment: .leading)
         }
         .buttonStyle(.plain).pointerCursor()
     }
@@ -288,7 +284,7 @@ private struct ProjectRow: View {
             .font(DashSkin.mono(11))
             .lineLimit(1)
             .foregroundStyle(tint)
-            .frame(width: width, alignment: .trailing)
+            .frame(width: width, alignment: .leading)
             .presenterBlur(blurred && blur)
     }
 
