@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import EdithKit
 
 struct RunningAppRow: Identifiable {
     let pid: pid_t
@@ -24,6 +25,16 @@ final class RunningAppsModel: ObservableObject {
 
     private var lastCPU: [pid_t: (time: UInt64, at: Date)] = [:]
 
+    init() {
+        let d = SharedDefaults.store
+        if let raw = d.string(forKey: "systemAppsSort"), let key = AppSortKey(rawValue: raw) {
+            sortKey = key
+        }
+        if d.object(forKey: "systemAppsSortAsc") != nil {
+            ascending = d.bool(forKey: "systemAppsSortAsc")
+        }
+    }
+
     func sort(by key: AppSortKey) {
         if sortKey == key {
             ascending.toggle()
@@ -31,6 +42,9 @@ final class RunningAppsModel: ObservableObject {
             sortKey = key
             ascending = key == .name
         }
+        let d = SharedDefaults.store
+        d.set(sortKey.rawValue, forKey: "systemAppsSort")
+        d.set(ascending, forKey: "systemAppsSortAsc")
         apps = sorted(apps)
     }
 

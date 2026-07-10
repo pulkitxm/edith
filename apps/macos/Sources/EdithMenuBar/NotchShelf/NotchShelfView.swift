@@ -47,9 +47,13 @@ struct NotchShelfContentView: View {
         if let track = controller.nowPlaying {
             NotchMusicWings(controller: controller, track: track)
         } else if !controller.items.isEmpty {
-            Text("\(controller.items.count)")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
+            HStack(spacing: 3) {
+                Image(systemName: "tray.full.fill")
+                    .font(.system(size: 8.5, weight: .semibold))
+                Text("\(controller.items.count)")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(.white.opacity(0.7))
         }
     }
 

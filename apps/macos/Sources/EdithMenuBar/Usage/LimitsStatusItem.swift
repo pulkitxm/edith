@@ -33,9 +33,6 @@ final class LimitsStatusItem {
 
     func update(session: LimitWindow?, week: LimitWindow?) {
         let title = NSMutableAttributedString()
-        if PresenterState.shared.autoActive {
-            title.append(presenterGlyph())
-        }
         let masked =
             PresenterState.shared.active
             && (SharedDefaults.store.object(forKey: "presenterHideMenuBarNumbers") as? Bool ?? false)
@@ -46,21 +43,6 @@ final class LimitsStatusItem {
     }
 
     func showUnavailable() { update(session: nil, week: nil) }
-
-    private func presenterGlyph() -> NSAttributedString {
-        let attachment = NSTextAttachment()
-        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
-        let image = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: "Presenting")?
-            .withSymbolConfiguration(config)
-        image?.isTemplate = true
-        attachment.image = image
-        let out = NSMutableAttributedString(attachment: attachment)
-        out.addAttribute(
-            .foregroundColor, value: subColor ?? NSColor.secondaryLabelColor,
-            range: NSRange(location: 0, length: out.length))
-        out.append(NSAttributedString(string: " "))
-        return out
-    }
 
     private func segment(
         _ label: String, window: LimitWindow?, kind: LimitWindowKind,

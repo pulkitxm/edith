@@ -302,8 +302,8 @@ final class DashboardModel: ObservableObject {
     @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
     @Published var sortAscending = false { didSet { persist(); resortTotals() } }
     @Published var heatMetric: DashMetric = .tokens
-    @Published var projSortKey: ProjSortKey = .cost { didSet { recompute() } }
-    @Published var projSortAscending = false { didSet { recompute() } }
+    @Published var projSortKey: ProjSortKey = .cost { didSet { persist(); recompute() } }
+    @Published var projSortAscending = false { didSet { persist(); recompute() } }
     @Published var projListOpen = false
     @Published var projExpanded: Set<String> = []
 
@@ -472,6 +472,10 @@ final class DashboardModel: ObservableObject {
             sortColumn = col
         }
         sortAscending = d.bool(forKey: "dashSortAsc")
+        if let ps = d.string(forKey: "projSort"), let key = ProjSortKey(rawValue: ps) {
+            projSortKey = key
+        }
+        projSortAscending = d.bool(forKey: "projSortAsc")
     }
 
     private func persist() {
@@ -483,6 +487,8 @@ final class DashboardModel: ObservableObject {
         d.set(billingDay, forKey: "dashBillingDay")
         d.set(sortColumn.rawValue, forKey: "dashSort")
         d.set(sortAscending, forKey: "dashSortAsc")
+        d.set(projSortKey.rawValue, forKey: "projSort")
+        d.set(projSortAscending, forKey: "projSortAsc")
     }
 
     private func encodeRange(_ r: DashRange) -> String {

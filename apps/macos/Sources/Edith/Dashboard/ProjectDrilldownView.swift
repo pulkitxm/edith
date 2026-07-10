@@ -28,6 +28,7 @@ struct ProjectDrilldownView: View {
 
     private static let chatsPerGroup = 20
     private static let rowHeight: CGFloat = 24
+    private static let minTableHeight: CGFloat = 220
     private static let maxTableHeight: CGFloat = 560
 
     var body: some View {
@@ -109,7 +110,9 @@ struct ProjectDrilldownView: View {
     }
 
     private var tableHeight: CGFloat {
-        min(CGFloat(model.projectTree.count + 1) * Self.rowHeight + 32, Self.maxTableHeight)
+        min(
+            max(CGFloat(model.projectTree.count + 1) * Self.rowHeight + 32, Self.minTableHeight),
+            Self.maxTableHeight)
     }
 
     private static func sortKey(for keyPath: PartialKeyPath<ProjNode>) -> ProjSortKey {

@@ -1,3 +1,4 @@
+import EdithKit
 import SwiftUI
 
 @MainActor
@@ -41,9 +42,14 @@ final class CleanerModel: ObservableObject {
             let home = FileManager.default.homeDirectoryForCurrentUser
             for entry in JunkCatalog.entries {
                 logs.append("Scanning \(entry.name)…")
-                let category = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
+                let scanned = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
                     .value
-                if let category {
+                if var category = scanned {
+                    category.items = category.items.map { item in
+                        var updated = item
+                        if let choice = overrides[item.id] { updated.selected = choice }
+                        return updated
+                    }
                     categories.append(category)
                     logs.append("  \(category.name) — \(JunkScanner.format(category.sizeBytes))")
                 }
@@ -66,9 +72,12 @@ final class CleanerModel: ObservableObject {
     func toggleCategory(_ id: String) {
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let selectAll = categories[index].selection != .all
+        var choices = overrides
         for item in categories[index].items.indices {
             categories[index].items[item].selected = selectAll
+            choices[categories[index].items[item].id] = selectAll
         }
+        overrides = choices
     }
 
     func toggleItem(categoryID: String, itemID: String) {
@@ -76,6 +85,17 @@ final class CleanerModel: ObservableObject {
             let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
         else { return }
         categories[categoryIndex].items[itemIndex].selected.toggle()
+        var choices = overrides
+        choices[itemID] = categories[categoryIndex].items[itemIndex].selected
+        overrides = choices
+    }
+
+    private var overrides: [String: Bool] {
+        get {
+            (SharedDefaults.store.dictionary(forKey: "cleanerSelectionOverrides") ?? [:])
+                .compactMapValues { $0 as? Bool }
+        }
+        set { SharedDefaults.store.set(newValue, forKey: "cleanerSelectionOverrides") }
     }
 
     func toggleExpand(_ id: String) {

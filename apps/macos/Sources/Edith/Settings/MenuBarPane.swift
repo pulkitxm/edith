@@ -15,6 +15,8 @@ struct MenuBarPane: View {
         "FF9500"
     @AppStorage("menuBarHighColorHex", store: SharedDefaults.store) private var highColorHex =
         "FF3B30"
+    @AppStorage("warnPercent", store: SharedDefaults.store) private var warnPercent = 60
+    @AppStorage("critPercent", store: SharedDefaults.store) private var critPercent = 85
 
     var body: some View {
         Form {
@@ -50,6 +52,22 @@ struct MenuBarPane: View {
                     .pointerCursor()
                 Text("Colors the readout by time-aware risk instead of the raw percentage.")
                     .font(.caption).foregroundStyle(.secondary)
+                if !smartColor {
+                    HStack {
+                        Text("Thresholds")
+                        Spacer()
+                        Stepper(
+                            "Warn \(warnPercent)%", value: $warnPercent, in: 10...critPercent - 5,
+                            step: 5
+                        )
+                        .pointerCursor()
+                        Stepper(
+                            "Critical \(critPercent)%", value: $critPercent,
+                            in: warnPercent + 5...100, step: 5
+                        )
+                        .pointerCursor()
+                    }
+                }
             }
 
             PanelTabsSection()
