@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -13,6 +14,7 @@ final class CleanerModel: ObservableObject {
     @Published private(set) var lastReclaimed: Int64 = 0
     @Published private(set) var drives: [DriveInfo] = []
     @Published private(set) var driveOptions: [DriveInfo] = []
+    @Published private(set) var customFolders: [String] = []
     @Published var search = ""
     @Published var expanded: Set<String> = []
     @Published private var driveSelection: Set<String>?
@@ -20,6 +22,25 @@ final class CleanerModel: ObservableObject {
     init() {
         if let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String] {
             driveSelection = Set(raw)
+        }
+        if let raw = SharedDefaults.store.array(forKey: "cleanerCustomFolders") as? [String] {
+            customFolders = raw
+        }
+    }
+
+    func addCustomFolder(_ path: String) {
+        guard !customFolders.contains(path) else { return }
+        customFolders.append(path)
+        SharedDefaults.store.set(customFolders, forKey: "cleanerCustomFolders")
+        if driveSelection != nil { driveSelection?.insert(path) }
+    }
+
+    func removeCustomFolder(_ path: String) {
+        customFolders.removeAll { $0 == path }
+        SharedDefaults.store.set(customFolders, forKey: "cleanerCustomFolders")
+        driveSelection?.remove(path)
+        if driveSelection != nil {
+            SharedDefaults.store.set(Array(driveSelection ?? []), forKey: "cleanerSelectedDrives")
         }
     }
 
@@ -96,7 +117,8 @@ final class CleanerModel: ObservableObject {
                     logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
-            let roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
+            var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
+            roots += customFolders.filter { isDriveSelected($0) }.map { URL(fileURLWithPath: $0) }
             if !roots.isEmpty {
                 let projects = await Task.detached {
                     JunkScanner.scanProjectJunk(roots: roots) { line in
@@ -406,11 +428,11 @@ private struct DrivePickerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Choose drives to include")
+            Text("Choose where to search")
                 .font(.system(size: 15, weight: .semibold))
                 .padding(.horizontal, 20).padding(.top, 20)
             Text(
-                "Selected drives are searched for project junk like node_modules and virtualenvs. System caches always come from your home folder."
+                "Selected drives and folders are searched for project junk like node_modules and virtualenvs. System caches always come from your home folder."
             )
             .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.horizontal, 20).padding(.top, 4)
@@ -453,6 +475,28 @@ private struct DrivePickerSheet: View {
                         }
                         .buttonStyle(.plain).pointerCursor()
                     }
+                    if !model.customFolders.isEmpty {
+                        Text("FOLDERS").font(.system(size: 10, weight: .bold)).tracking(0.6)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 6)
+                        ForEach(model.customFolders, id: \.self) { folder in
+                            folderRow(folder)
+                        }
+                    }
+                    Button {
+                        chooseFolder()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus.circle")
+                            Text("Add folder…")
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(DashSkin.accent(dark))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                    }
+                    .buttonStyle(.plain).pointerCursor()
                 }
                 .padding(20)
             }
@@ -473,6 +517,53 @@ private struct DrivePickerSheet: View {
         .frame(width: 420)
         .background(DashSkin.paper(dark))
         .onAppear { model.loadDriveOptions() }
+    }
+
+    private func folderRow(_ folder: String) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                model.toggleDrive(folder)
+            } label: {
+                Image(
+                    systemName: model.isDriveSelected(folder)
+                        ? "checkmark.square.fill" : "square"
+                )
+                .foregroundStyle(model.isDriveSelected(folder) ? DashSkin.accent(dark) : .secondary)
+            }
+            .buttonStyle(.plain).pointerCursor()
+            Image(systemName: "folder.fill")
+                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+            VStack(alignment: .leading, spacing: 1) {
+                Text((folder as NSString).lastPathComponent)
+                    .font(.system(size: 13, weight: .medium))
+                Text((folder as NSString).abbreviatingWithTildeInPath)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            Button {
+                model.removeCustomFolder(folder)
+            } label: {
+                Image(systemName: "trash").font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain).pointerCursor().help("Remove this folder")
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose a folder to search for project junk"
+        if panel.runModal() == .OK, let url = panel.url {
+            model.addCustomFolder(url.path)
+        }
     }
 }
 
