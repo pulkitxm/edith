@@ -21,6 +21,7 @@ struct ProjNode: Identifiable {
 }
 
 enum ProjColumns {
+    static let project: CGFloat = 300
     static let tokens: CGFloat = 96
     static let cost: CGFloat = 82
     static let share: CGFloat = 58
@@ -84,13 +85,14 @@ struct ProjectDrilldownView: View {
 
     private var headerRow: some View {
         HStack(spacing: 0) {
-            headerCell("Project", .name, width: nil)
+            headerCell("Project", .name, width: ProjColumns.project)
             headerCell("Tokens", .tokens, width: ProjColumns.tokens)
             headerCell("Cost", .cost, width: ProjColumns.cost)
             headerCell("% share", .share, width: ProjColumns.share)
             headerCell("Days", .days, width: ProjColumns.days)
             headerCell("Time spent", .dur, width: ProjColumns.dur)
             headerCell("Last used", .lastActive, width: ProjColumns.last)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -231,6 +233,7 @@ private struct ProjectRow: View {
             num(
                 node.lastActive.isEmpty ? "-" : DashFmt.dateShort(node.lastActive),
                 width: ProjColumns.last)
+            Spacer(minLength: 0)
         }
         if let chatId = node.chatId, !chatId.isEmpty {
             row.contextMenu { Button("Copy chat ID") { onCopy(chatId) } }
@@ -255,7 +258,7 @@ private struct ProjectRow: View {
         }
         .padding(.leading, CGFloat(depth) * 16)
         .foregroundStyle(tint)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: ProjColumns.project, alignment: .leading)
     }
 
     @ViewBuilder private var iconView: some View {
