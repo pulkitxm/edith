@@ -20,6 +20,8 @@ struct SystemPage: View {
             }
             .padding(24)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DashSkin.paper(dark))
         .task {
             while !Task.isCancelled {
                 model.refresh()
