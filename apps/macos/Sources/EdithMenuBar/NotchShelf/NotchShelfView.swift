@@ -137,13 +137,20 @@ private struct NotchHomeTab: View {
     @ObservedObject var controller: NotchShelfController
 
     var body: some View {
-        if let track = controller.nowPlaying {
-            nowPlaying(track)
-        } else {
-            Text("Nothing playing right now")
-                .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 6) {
+            if let track = controller.nowPlaying {
+                nowPlaying(track)
+            }
+            if let usage = controller.usageStore {
+                NotchUsageRings(usage: usage)
+            }
+            if controller.nowPlaying == nil, controller.usageStore == nil {
+                Text("Nothing to show yet")
+                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func nowPlaying(_ track: NotchNowPlaying) -> some View {
@@ -193,6 +200,41 @@ private struct NotchHomeTab: View {
             Image(systemName: name).font(.system(size: size)).foregroundStyle(.white)
         }
         .buttonStyle(.plain).pointerCursor()
+    }
+}
+
+private struct NotchUsageRings: View {
+    @ObservedObject var usage: UsageStore
+
+    var body: some View {
+        HStack(spacing: 26) {
+            ring("Session", usage.session?.percent)
+            ring("Week", usage.week?.percent)
+        }
+        .padding(.bottom, 12)
+    }
+
+    private func ring(_ label: String, _ percent: Double?) -> some View {
+        let value = percent ?? 0
+        return VStack(spacing: 4) {
+            ZStack {
+                Circle().stroke(.white.opacity(0.12), lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: min(1, value / 100))
+                    .stroke(color(value), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int(value.rounded()))")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+            }
+            .frame(width: 42, height: 42)
+            Text(label).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6))
+        }
+    }
+
+    private func color(_ percent: Double) -> Color {
+        if percent >= 85 { return Color(red: 0.88, green: 0.4, blue: 0.31) }
+        if percent >= 60 { return Color(red: 0.88, green: 0.66, blue: 0.25) }
+        return Color(red: 0.3, green: 0.77, blue: 0.49)
     }
 }
 

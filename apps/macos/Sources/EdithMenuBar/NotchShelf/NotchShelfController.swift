@@ -19,6 +19,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     @Published var activeTab: NotchTab = .home
     @Published private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
+    @Published private(set) var usageStore: UsageStore?
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -535,6 +536,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     func attachClipboard(_ store: ClipboardStore?) {
         clipboardStore = store
+    }
+
+    func attachUsage(_ store: UsageStore?) {
+        usageStore = store
     }
 
     func selectTab(_ tab: NotchTab) {
