@@ -94,8 +94,6 @@ struct MenuBarPane: View {
                     .font(.caption)
                 }
             }
-
-            PanelTabsSection()
         }
         .formStyle(.grouped)
         .navigationTitle("Menu bar")

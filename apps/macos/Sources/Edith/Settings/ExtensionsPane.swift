@@ -165,148 +165,24 @@ private struct SystemRows: View {
     }
 }
 
-func movedTabOrder(_ order: [String], from: Int, by delta: Int) -> [String] {
-    guard order.indices.contains(from) else { return order }
-    let to = max(0, min(order.count - 1, from + delta))
-    guard to != from else { return order }
-    var next = order
-    next.insert(next.remove(at: from), at: to)
-    return next
-}
-
 struct PanelTabsSection: View {
-    @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
-        "usage,music,system"
     @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = true
     @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = true
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
     @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
         true
-    @State private var draggingTab: String?
-    @State private var dragTranslation: CGFloat = 0
-    @State private var rowPitch: CGFloat = 38
-
-    private static let tabs: [(id: String, title: String)] = [
-        ("usage", "Agent Usage"),
-        ("music", "Music"),
-        ("system", "System"),
-        ("calendar", "Calendar"),
-    ]
-
-    private var orderedIDs: [String] {
-        var ids = tabOrderRaw.split(separator: ",").map(String.init)
-            .filter { id in Self.tabs.contains { $0.id == id } }
-        for tab in Self.tabs where !ids.contains(tab.id) {
-            ids.append(tab.id)
-        }
-        return ids
-    }
 
     var body: some View {
         Section {
-            let order = orderedIDs
-            VStack(spacing: 12) {
-                ForEach(Array(order.enumerated()), id: \.element) { index, id in
-                    tabRow(id)
-                        .offset(y: rowOffset(index: index, id: id, order: order))
-                        .zIndex(draggingTab == id ? 1 : 0)
-                        .animation(
-                            draggingTab == id ? nil : .easeOut(duration: 0.15),
-                            value: projectedDelta)
-                }
-            }
-            Text("Drag to reorder the tabs in the menu bar panel.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Toggle("Agent Usage", isOn: $usageEnabled).pointerCursor()
+            Toggle("Music", isOn: $musicEnabled).pointerCursor()
+            Toggle("System", isOn: $systemEnabled).pointerCursor()
+            Toggle("Calendar", isOn: $calendarEnabled).pointerCursor()
         } header: {
-            Text("Menu bar panel")
-        }
-    }
-
-    private func tabRow(_ id: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 11))
-                .foregroundStyle(
-                    draggingTab == id ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
-                )
-                .frame(width: 18, height: 26)
-                .contentShape(Rectangle())
-                .onHover { over in
-                    over ? NSCursor.openHand.set() : NSCursor.arrow.set()
-                }
-                .gesture(
-                    DragGesture(coordinateSpace: .global)
-                        .onChanged { value in
-                            if draggingTab == nil {
-                                draggingTab = id
-                                NSCursor.closedHand.set()
-                            }
-                            dragTranslation = value.translation.height
-                        }
-                        .onEnded { _ in commitDrag() }
-                )
-            Text(Self.tabs.first { $0.id == id }?.title ?? id)
-                .opacity(binding(for: id).wrappedValue ? 1 : 0.5)
-            Spacer()
-            Toggle("", isOn: binding(for: id))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .pointerCursor()
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(draggingTab == id ? Color.primary.opacity(0.08) : .clear)
-                .padding(.horizontal, -8)
-                .padding(.vertical, -5)
-        )
-        .scaleEffect(draggingTab == id ? 1.02 : 1)
-        .shadow(color: .black.opacity(draggingTab == id ? 0.3 : 0), radius: 6, y: 2)
-        .background(
-            GeometryReader { geo in
-                Color.clear.onAppear { rowPitch = geo.size.height + 12 }
-            })
-    }
-
-    private var projectedDelta: Int {
-        guard rowPitch > 0 else { return 0 }
-        return Int((dragTranslation / rowPitch).rounded())
-    }
-
-    private func rowOffset(index: Int, id: String, order: [String]) -> CGFloat {
-        guard let dragging = draggingTab,
-            let from = order.firstIndex(of: dragging)
-        else { return 0 }
-        if id == dragging { return dragTranslation }
-        let to = max(0, min(order.count - 1, from + projectedDelta))
-        if from < to, index > from, index <= to { return -rowPitch }
-        if to < from, index >= to, index < from { return rowPitch }
-        return 0
-    }
-
-    private func commitDrag() {
-        defer {
-            withAnimation(.easeOut(duration: 0.18)) {
-                draggingTab = nil
-                dragTranslation = 0
-            }
-            NSCursor.arrow.set()
-        }
-        guard let dragging = draggingTab else { return }
-        let order = orderedIDs
-        guard let from = order.firstIndex(of: dragging) else { return }
-        let next = movedTabOrder(order, from: from, by: projectedDelta)
-        guard next != order else { return }
-        tabOrderRaw = next.joined(separator: ",")
-    }
-
-    private func binding(for id: String) -> Binding<Bool> {
-        switch id {
-        case "usage": return $usageEnabled
-        case "music": return $musicEnabled
-        case "system": return $systemEnabled
-        default: return $calendarEnabled
+            Text("Features")
+        } footer: {
+            Text("Turn built-in sections on or off across the app and notch.")
+                .font(.caption)
         }
     }
 }
