@@ -229,13 +229,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private func updateFullScreenVisibility() {
         for screen in NSScreen.screens {
             guard let id = screen.displayID, let panel = panels[id] else { continue }
-            if isFullScreenSpace(screen) {
-                if isExpanded { collapseNow() }
-                panel.orderOut(nil)
-            } else if !panel.isVisible {
-                applyFrame(panel, screen: screen, id: id, animated: false)
-                panel.orderFrontRegardless()
-            }
+            let fullScreen = isFullScreenSpace(screen)
+            if fullScreen, isExpanded { collapseNow() }
+            panel.alphaValue = fullScreen ? 0 : 1
+            panel.ignoresMouseEvents = fullScreen
         }
     }
 
