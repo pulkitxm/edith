@@ -213,6 +213,7 @@ struct CleanerCard: View {
     let dark: Bool
     @ObservedObject private var model = CleanerModel.shared
     @State private var showDrivePicker = false
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         SkinCard(title: "Reclaim developer space", dark: dark) {
@@ -329,6 +330,12 @@ struct CleanerCard: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             TextField("Filter", text: $model.search)
                 .textFieldStyle(.plain).font(.system(size: 12))
+                .focused($searchFocused)
+                .focusEffectDisabled()
+                .onExitCommand {
+                    model.search = ""
+                    searchFocused = false
+                }
             if !model.search.isEmpty {
                 Button {
                     model.search = ""
@@ -474,6 +481,8 @@ private struct CleanerCategoryRow: View {
     let category: JunkCategory
     let dark: Bool
     @State private var itemFilter = ""
+    @State private var headerHover = false
+    @FocusState private var itemFilterFocused: Bool
 
     private var isExpanded: Bool { model.expanded.contains(category.id) }
 
@@ -496,29 +505,32 @@ private struct CleanerCategoryRow: View {
                             category.selection == .none ? .secondary : DashSkin.accent(dark))
                 }
                 .buttonStyle(.plain).pointerCursor()
-                Button {
-                    model.toggleExpand(category.id)
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9)).foregroundStyle(DashSkin.inkFaint(dark))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(category.name).font(.system(size: 13, weight: .medium))
-                            Text(category.detail).font(.system(size: 10.5))
-                                .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
-                        }
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9)).foregroundStyle(DashSkin.inkFaint(dark))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(category.name).font(.system(size: 13, weight: .medium))
+                        Text(category.detail).font(.system(size: 10.5))
+                            .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
                     }
+                    Spacer()
+                    Text("\(category.items.count) items")
+                        .font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(JunkScanner.format(category.sizeBytes))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(width: 72, alignment: .trailing)
                 }
-                .buttonStyle(.plain).pointerCursor()
-                Spacer()
-                Text("\(category.items.count) items")
-                    .font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
-                Text(JunkScanner.format(category.sizeBytes))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: 72, alignment: .trailing)
+                .contentShape(Rectangle())
+                .onTapGesture { model.toggleExpand(category.id) }
+                .pointerCursor()
             }
-            .padding(.vertical, 7)
+            .padding(.horizontal, 6).padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(headerHover ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+            )
+            .onHover { headerHover = $0 }
             if isExpanded {
                 if showItemFilter {
                     HStack(spacing: 6) {
@@ -526,6 +538,12 @@ private struct CleanerCategoryRow: View {
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         TextField("Filter \(category.items.count) items", text: $itemFilter)
                             .textFieldStyle(.plain).font(.system(size: 11))
+                            .focused($itemFilterFocused)
+                            .focusEffectDisabled()
+                            .onExitCommand {
+                                itemFilter = ""
+                                itemFilterFocused = false
+                            }
                         if !itemFilter.isEmpty {
                             Button {
                                 itemFilter = ""
@@ -540,25 +558,8 @@ private struct CleanerCategoryRow: View {
                     .padding(.leading, 26).padding(.bottom, 4)
                 }
                 ForEach(visibleItems) { item in
-                    HStack(spacing: 10) {
-                        Button {
-                            model.toggleItem(categoryID: category.id, itemID: item.id)
-                        } label: {
-                            Image(systemName: item.selected ? "checkmark.square.fill" : "square")
-                                .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
-                        }
-                        .buttonStyle(.plain).pointerCursor()
-                        Text(item.name).font(.system(size: 11)).lineLimit(1)
-                            .truncationMode(.middle)
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                            .help(item.path.path)
-                        Spacer()
-                        Text(JunkScanner.format(item.sizeBytes))
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .frame(width: 66, alignment: .trailing)
-                    }
-                    .padding(.leading, 26).padding(.vertical, 3)
+                    CleanerItemRow(
+                        model: model, categoryID: category.id, item: item, dark: dark)
                 }
                 .padding(.bottom, 4)
             }
@@ -572,6 +573,39 @@ private struct CleanerCategoryRow: View {
         case .some: "minus.square.fill"
         case .none: "square"
         }
+    }
+}
+
+private struct CleanerItemRow: View {
+    @ObservedObject var model: CleanerModel
+    let categoryID: String
+    let item: JunkItem
+    let dark: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.selected ? "checkmark.square.fill" : "square")
+                .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
+            Text(item.name).font(.system(size: 11)).lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .help(item.path.path)
+            Spacer()
+            Text(JunkScanner.format(item.sizeBytes))
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: 66, alignment: .trailing)
+        }
+        .padding(.leading, 26).padding(.trailing, 6).padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.12) : .clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { model.toggleItem(categoryID: categoryID, itemID: item.id) }
+        .pointerCursor()
     }
 }
 

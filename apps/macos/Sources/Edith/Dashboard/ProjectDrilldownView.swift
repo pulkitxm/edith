@@ -25,6 +25,7 @@ struct ProjectDrilldownView: View {
     let dark: Bool
     var blur = false
     @State private var sortOrder = [KeyPathComparator(\ProjNode.cost, order: .reverse)]
+    @State private var hoveredRow: String?
 
     private static let chatsPerGroup = 20
     private static let rowHeight: CGFloat = 24
@@ -208,8 +209,11 @@ struct ProjectDrilldownView: View {
                 .font(.system(size: 11))
                 .lineLimit(1)
                 .truncationMode(.tail)
+            Spacer(minLength: 0)
         }
         .foregroundStyle(tint(node))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .rowHover(node.id, hovered: $hoveredRow, dark: dark)
         if let chatId = node.chatId, !chatId.isEmpty {
             cell.contextMenu {
                 Button("Copy chat ID") { copyToPasteboard(chatId) }
@@ -249,10 +253,18 @@ struct ProjectDrilldownView: View {
             .foregroundStyle(tint(node))
             .frame(maxWidth: .infinity, alignment: .trailing)
             .presenterBlur(blurred && blur)
+            .rowHover(node.id, hovered: $hoveredRow, dark: dark)
     }
 
     private func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+extension View {
+    fileprivate func rowHover(_ id: String, hovered: Binding<String?>, dark: Bool) -> some View {
+        background(hovered.wrappedValue == id ? DashSkin.inkFaint(dark).opacity(0.1) : Color.clear)
+            .onHover { hovered.wrappedValue = $0 ? id : nil }
     }
 }
