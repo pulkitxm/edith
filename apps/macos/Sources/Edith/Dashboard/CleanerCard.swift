@@ -26,6 +26,20 @@ final class CleanerModel: ObservableObject {
     var reclaimableTotal: Int64 { categories.reduce(0) { $0 + $1.sizeBytes } }
     var selectedTotal: Int64 { categories.reduce(0) { $0 + $1.selectedBytes } }
 
+    var totalItemCount: Int { categories.reduce(0) { $0 + $1.items.count } }
+    var selectedItemCount: Int {
+        categories.reduce(0) { $0 + $1.items.filter(\.selected).count }
+    }
+
+    var overallSelection: JunkSelection {
+        let total = totalItemCount
+        guard total > 0 else { return .none }
+        let selected = selectedItemCount
+        if selected == 0 { return .none }
+        if selected == total { return .all }
+        return .some
+    }
+
     var filteredCategories: [JunkCategory] {
         guard !search.isEmpty else { return categories }
         let query = search.lowercased()
@@ -121,6 +135,21 @@ final class CleanerModel: ObservableObject {
         return updated
     }
 
+    func toggleAll() {
+        let selectAll = overallSelection != .all
+        var itemChoices = overrides
+        var categoryChoices = categoryDefaults
+        for index in categories.indices {
+            categoryChoices[categories[index].id] = selectAll
+            for item in categories[index].items { itemChoices[item.id] = nil }
+            for item in categories[index].items.indices {
+                categories[index].items[item].selected = selectAll
+            }
+        }
+        overrides = itemChoices
+        categoryDefaults = categoryChoices
+    }
+
     func toggleCategory(_ id: String) {
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let selectAll = categories[index].selection != .all
@@ -197,6 +226,7 @@ struct CleanerCard: View {
                         drivesView
                         if !model.categories.isEmpty {
                             searchBar
+                            selectAllRow
                             ForEach(model.filteredCategories) { category in
                                 CleanerCategoryRow(model: model, category: category, dark: dark)
                             }
@@ -310,6 +340,32 @@ struct CleanerCard: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var selectAllRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                model.toggleAll()
+            } label: {
+                Image(systemName: selectAllSymbol)
+                    .foregroundStyle(
+                        model.overallSelection == .none ? .secondary : DashSkin.accent(dark))
+            }
+            .buttonStyle(.plain).pointerCursor()
+            Text("Select all").font(.system(size: 12, weight: .medium))
+            Spacer()
+            Text("\(model.selectedItemCount) of \(model.totalItemCount) selected")
+                .font(.system(size: 10.5)).foregroundStyle(DashSkin.inkFaint(dark))
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var selectAllSymbol: String {
+        switch model.overallSelection {
+        case .all: "checkmark.square.fill"
+        case .some: "minus.square.fill"
+        case .none: "square"
+        }
     }
 
     private var footer: some View {
