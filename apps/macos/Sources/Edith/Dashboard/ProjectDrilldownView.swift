@@ -29,7 +29,7 @@ struct ProjectDrilldownView: View {
 
     private static let chatsPerGroup = 20
     private static let rowHeight: CGFloat = 24
-    private static let minTableHeight: CGFloat = 220
+    private static let minTableHeight: CGFloat = 340
     private static let maxTableHeight: CGFloat = 560
 
     var body: some View {
@@ -264,7 +264,10 @@ struct ProjectDrilldownView: View {
 
 extension View {
     fileprivate func rowHover(_ id: String, hovered: Binding<String?>, dark: Bool) -> some View {
-        background(hovered.wrappedValue == id ? DashSkin.inkFaint(dark).opacity(0.1) : Color.clear)
+        contentShape(Rectangle())
+            .background(
+                hovered.wrappedValue == id ? DashSkin.inkFaint(dark).opacity(0.16) : Color.clear
+            )
             .onHover { hovered.wrappedValue = $0 ? id : nil }
     }
 }
