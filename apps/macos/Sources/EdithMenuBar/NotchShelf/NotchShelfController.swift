@@ -14,8 +14,16 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
     @Published private(set) var isResizing = false
+    @Published private(set) var nowPlaying: NotchNowPlaying?
+    @Published private(set) var nowPlayingArtwork: NSImage?
     @Published private(set) var livePositions: [UUID: CGPoint] = [:]
     @Published private(set) var selectedIDs: Set<UUID> = []
+
+    let external = ExternalMusic()
+    private weak var localMusic: MusicPlayer?
+    private var externalCancellable: AnyCancellable?
+    private var localCancellable: AnyCancellable?
+    private var artworkTask: Task<Void, Never>?
 
     private let store = ShelfStore()
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
@@ -68,6 +76,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
         stopMoveMonitor()
+        external.stop()
+        externalCancellable = nil
+        localCancellable = nil
+        artworkTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         collapseWorkItem?.cancel()
@@ -84,6 +96,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     }
     private var openOnDrag: Bool { flag("notchShelfOpenOnDrag", default: true) }
     private var openOnHover: Bool { flag("notchShelfOpenOnHover", default: true) }
+    private var showMusic: Bool { flag("notchShelfShowMusic", default: true) }
     private var requireOption: Bool { flag("notchShelfRequireOption", default: false) }
     private var removeAfterDragOut: Bool { flag("notchShelfRemoveAfterDragOut", default: true) }
     private var showOnExternal: Bool { flag("notchShelfShowOnExternal", default: false) }
@@ -171,7 +184,11 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private func applyFrame(
         _ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID, animated: Bool
     ) {
-        let size = isExpanded ? expandedSize : (collapsedSizes[id] ?? NotchGeometry.fallbackSize)
+        let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
+        let size =
+            isExpanded
+            ? expandedSize
+            : NotchGeometry.collapsedSize(base: base, hasLiveActivity: nowPlaying != nil)
         let frame = NSRect(
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: size), size: size)
         if animated {
@@ -287,7 +304,9 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         guard let id = builtinDisplayID,
             let screen = NSScreen.screens.first(where: { $0.displayID == id })
         else { return nil }
-        let collapsedSize = collapsedSizes[id] ?? NotchGeometry.fallbackSize
+        let collapsedSize = NotchGeometry.collapsedSize(
+            base: collapsedSizes[id] ?? NotchGeometry.fallbackSize,
+            hasLiveActivity: nowPlaying != nil)
         let collapsed = CGRect(
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: collapsedSize),
             size: collapsedSize)
@@ -376,6 +395,71 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private func fireHaptic() {
         guard hapticsOn else { return }
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+    }
+
+    func attachLocalMusic(_ player: MusicPlayer?) {
+        if showMusic {
+            external.start()
+            if externalCancellable == nil {
+                externalCancellable = external.objectWillChange.sink { [weak self] in
+                    Task { @MainActor in self?.recomputeNowPlaying() }
+                }
+            }
+            localMusic = player
+            localCancellable = player?.objectWillChange.sink { [weak self] in
+                Task { @MainActor in self?.recomputeNowPlaying() }
+            }
+        } else {
+            external.stop()
+            externalCancellable = nil
+            localMusic = nil
+            localCancellable = nil
+        }
+        recomputeNowPlaying()
+    }
+
+    private func recomputeNowPlaying() {
+        let resolved = NotchMusicResolver.resolve(
+            localTitle: localMusic?.current?.title,
+            localPlaying: localMusic?.isPlaying ?? false,
+            external: external.current)
+        guard resolved != nowPlaying else { return }
+        let hadActivity = nowPlaying != nil
+        let trackChanged =
+            resolved?.title != nowPlaying?.title || resolved?.source != nowPlaying?.source
+        nowPlaying = resolved
+        if trackChanged { loadArtwork(for: resolved) }
+        if (resolved != nil) != hadActivity, !isExpanded {
+            updateAllFrames(animated: true)
+        }
+    }
+
+    private func loadArtwork(for track: NotchNowPlaying?) {
+        artworkTask?.cancel()
+        guard let track else {
+            nowPlayingArtwork = nil
+            return
+        }
+        switch track.source {
+        case .external(let app):
+            nowPlayingArtwork = Self.appIcon(for: app)
+        case .local:
+            nowPlayingArtwork = nil
+            guard let player = localMusic, let current = player.current else { return }
+            artworkTask = Task { [weak self] in
+                let image = await player.artwork(for: current)
+                await MainActor.run {
+                    guard !Task.isCancelled else { return }
+                    self?.nowPlayingArtwork = image
+                }
+            }
+        }
+    }
+
+    private static func appIcon(for app: ExternalApp) -> NSImage? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID)
+        else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
     }
 
     func fileURL(for item: ShelfItem) -> URL { store.fileURL(for: item) }

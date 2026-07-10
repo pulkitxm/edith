@@ -30,6 +30,13 @@ enum NotchGeometry {
     static let expandedBottomRadius: CGFloat = 34
     static let resizingBottomRadius: CGFloat = 10
 
+    static let musicWingWidth: CGFloat = 42
+
+    static func collapsedSize(base: CGSize, hasLiveActivity: Bool) -> CGSize {
+        guard hasLiveActivity else { return base }
+        return CGSize(width: base.width + 2 * musicWingWidth, height: base.height)
+    }
+
     static func proximity(
         point: CGPoint,
         collapsedFrame: CGRect,

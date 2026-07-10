@@ -14,6 +14,7 @@ struct NotchShelfRows: View {
     @AppStorage("notchShelfShowOnExternal", store: SharedDefaults.store)
     private var showOnExternal = false
     @AppStorage("notchShelfHaptics", store: SharedDefaults.store) private var haptics = true
+    @AppStorage("notchShelfShowMusic", store: SharedDefaults.store) private var showMusic = true
 
     var body: some View {
         Group {
@@ -60,6 +61,12 @@ struct NotchShelfRows: View {
             .opacity(enabled ? 1 : 0.5)
 
             Section {
+                Toggle("Show what's playing", isOn: $showMusic)
+                    .pointerCursor()
+                Text(
+                    "Album art and a live equalizer hug the notch while music plays in the library, Spotify, or Apple Music."
+                )
+                .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show on external displays", isOn: $showOnExternal)
                     .pointerCursor()
                 Text("Draws a small pill at the top of screens without a notch.")

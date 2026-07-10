@@ -60,6 +60,7 @@ final class AppServices: ObservableObject {
             controller.shutdown()
             notchShelf = nil
         }
+        notchShelf?.attachLocalMusic(music)
 
         let colorPickerOn =
             SharedDefaults.store.object(forKey: "colorPickerEnabled") as? Bool ?? false

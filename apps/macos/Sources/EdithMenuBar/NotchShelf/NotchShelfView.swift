@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import SwiftUI
 
 struct NotchShelfContentView: View {
@@ -34,13 +35,13 @@ struct NotchShelfContentView: View {
         reduceMotion ? .easeInOut(duration: 0.22) : .spring(response: 0.36, dampingFraction: 0.9)
     }
 
-    private var collapsed: some View {
-        Group {
-            if !controller.items.isEmpty {
-                Text("\(controller.items.count)")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
-            }
+    @ViewBuilder private var collapsed: some View {
+        if let track = controller.nowPlaying {
+            NotchMusicWings(controller: controller, track: track)
+        } else if !controller.items.isEmpty {
+            Text("\(controller.items.count)")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
         }
     }
 
@@ -66,6 +67,36 @@ struct NotchShelfContentView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
             }
             .coordinateSpace(name: "shelfCanvas")
+        }
+    }
+}
+
+private struct NotchMusicWings: View {
+    @ObservedObject var controller: NotchShelfController
+    let track: NotchNowPlaying
+
+    var body: some View {
+        HStack(spacing: 0) {
+            artwork
+                .frame(width: NotchGeometry.musicWingWidth)
+            Spacer(minLength: 0)
+            PlaybackWave(playing: track.isPlaying, color: .white.opacity(0.85), barCount: 4)
+                .frame(width: NotchGeometry.musicWingWidth)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder private var artwork: some View {
+        if let image = controller.nowPlayingArtwork {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 20, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        } else {
+            Image(systemName: "music.note")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.8))
         }
     }
 }
