@@ -22,6 +22,8 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Edith taps an app's audio only to adjust its volume in the per-app mixer.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
 	<key>NSAppleEventsUsageDescription</key>

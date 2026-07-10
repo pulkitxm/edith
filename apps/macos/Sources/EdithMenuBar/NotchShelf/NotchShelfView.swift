@@ -66,9 +66,14 @@ struct NotchShelfContentView: View {
         }
     }
 
+    private var visibleTabs: [NotchTab] {
+        let mixerOn = SharedDefaults.store.bool(forKey: "notchAudioMixerEnabled")
+        return NotchTab.allCases.filter { $0 != .audio || mixerOn }
+    }
+
     private var tabStrip: some View {
         HStack(spacing: 6) {
-            ForEach(NotchTab.allCases, id: \.self) { tab in
+            ForEach(visibleTabs, id: \.self) { tab in
                 Button {
                     controller.selectTab(tab)
                 } label: {
@@ -105,6 +110,7 @@ struct NotchShelfContentView: View {
         case .home: NotchHomeTab(controller: controller)
         case .files: filesCanvas
         case .clipboard: NotchClipboardTab(controller: controller)
+        case .audio: NotchAudioTab()
         case .camera: NotchCameraTab()
         }
     }
