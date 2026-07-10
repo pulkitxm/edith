@@ -26,6 +26,7 @@ final class PanelController: NSObject {
             button.image = Logo.menuBar
             button.action = #selector(statusClicked)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         popover.behavior = .transient
@@ -33,7 +34,11 @@ final class PanelController: NSObject {
     }
 
     @objc private func statusClicked() {
-        toggle()
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            StatusItemMenu.show(from: statusItem)
+        } else {
+            MainApp.openDashboard()
+        }
     }
 
     func toggle() {

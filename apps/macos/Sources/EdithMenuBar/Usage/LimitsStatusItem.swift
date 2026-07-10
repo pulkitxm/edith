@@ -13,6 +13,7 @@ final class LimitsStatusItem {
         item.isVisible = true
         item.button?.target = self
         item.button?.action = #selector(clicked)
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         Self.button = item.button
         showUnavailable()
     }
@@ -22,7 +23,13 @@ final class LimitsStatusItem {
         Self.button = nil
     }
 
-    @objc private func clicked() { togglePanel() }
+    @objc private func clicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            StatusItemMenu.show(from: item)
+        } else {
+            MainApp.openDashboard()
+        }
+    }
 
     func update(session: LimitWindow?, week: LimitWindow?) {
         let title = NSMutableAttributedString()
