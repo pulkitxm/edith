@@ -207,21 +207,30 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         updateFullScreenVisibility()
     }
 
+    private static let managedDisplaySpaces: () -> [[String: Any]]? = {
+        guard let handle = dlopen(nil, RTLD_NOW),
+            let defaultConnection = dlsym(handle, "_CGSDefaultConnection"),
+            let copySpaces = dlsym(handle, "CGSCopyManagedDisplaySpaces")
+        else { return { nil } }
+        typealias ConnectionFn = @convention(c) () -> Int32
+        typealias CopyFn = @convention(c) (Int32) -> CFArray?
+        let connectionFn = unsafeBitCast(defaultConnection, to: ConnectionFn.self)
+        let copyFn = unsafeBitCast(copySpaces, to: CopyFn.self)
+        return { copyFn(connectionFn()) as? [[String: Any]] }
+    }()
+
     private func isFullScreenSpace(_ screen: NSScreen) -> Bool {
-        let target = screen.frame.size
-        guard
-            let list = CGWindowListCopyWindowInfo(
-                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-                as? [[String: Any]]
+        guard let id = screen.displayID,
+            let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
+            let uuidString = CFUUIDCreateString(nil, uuid) as String?,
+            let displays = Self.managedDisplaySpaces()
         else { return false }
-        for info in list {
-            guard (info[kCGWindowLayer as String] as? Int) == 0,
-                let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
-                let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+        for display in displays {
+            guard (display["Display Identifier"] as? String) == uuidString,
+                let current = display["Current Space"] as? [String: Any],
+                let type = current["type"] as? Int
             else { continue }
-            if abs(bounds.width - target.width) < 2, abs(bounds.height - target.height) < 2 {
-                return true
-            }
+            return type == 4
         }
         return false
     }

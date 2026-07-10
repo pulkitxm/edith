@@ -82,6 +82,60 @@ final class ExternalMusic: ObservableObject {
             }
             observers.append((app, observer))
         }
+        refreshCurrent()
+    }
+
+    func refreshCurrent() {
+        let running = ExternalApp.allCases.filter {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleID).isEmpty
+        }
+        guard !running.isEmpty else { return }
+        Task.detached { [weak self] in
+            var best: ExternalTrack?
+            for app in running {
+                guard let track = Self.query(app) else { continue }
+                if track.isPlaying {
+                    best = track
+                    break
+                }
+                if best == nil { best = track }
+            }
+            if let best { await self?.applyRefreshed(best) }
+        }
+    }
+
+    private func applyRefreshed(_ track: ExternalTrack) {
+        guard current == nil else { return }
+        current = track
+    }
+
+    private nonisolated static func query(_ app: ExternalApp) -> ExternalTrack? {
+        let source = """
+            tell application "System Events"
+                if not (exists process "\(app.processName)") then return "none"
+            end tell
+            tell application "\(app.processName)"
+                set st to player state as text
+                if st is "stopped" then return "none"
+                set nm to name of current track
+                set ar to artist of current track
+                set du to duration of current track
+                return st & "|~|" & nm & "|~|" & ar & "|~|" & du
+            end tell
+            """
+        var error: NSDictionary?
+        guard
+            let result = NSAppleScript(source: source)?.executeAndReturnError(&error).stringValue,
+            result != "none"
+        else { return nil }
+        let parts = result.components(separatedBy: "|~|")
+        guard parts.count == 4, !parts[1].isEmpty else { return nil }
+        let state = parts[0].lowercased()
+        let rawDuration = Double(parts[3]) ?? 0
+        let duration: TimeInterval = app == .spotify ? rawDuration / 1000 : rawDuration
+        return ExternalTrack(
+            app: app, title: parts[1], artist: parts[2], isPlaying: state == "playing",
+            duration: duration > 0 ? duration : 0)
     }
 
     func stop() {
