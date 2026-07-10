@@ -87,9 +87,27 @@ struct EdithApp: App {
 
     var body: some Scene {
         Settings {
-            Text("Edith settings live in the menu bar for now - click the panel icon.")
-                .padding(24)
-                .frame(width: 340)
+            SettingsRedirect()
         }
+    }
+}
+
+private struct SettingsRedirect: View {
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .onAppear {
+                SharedDefaults.store.set(
+                    MainDestination.settings.rawValue, forKey: "mainWindowSection")
+                DispatchQueue.main.async {
+                    for window in NSApp.windows
+                    where window.identifier?.rawValue.contains("Settings") == true
+                        || window.title == "Edith Settings"
+                    {
+                        window.close()
+                    }
+                    MainWindow.open()
+                }
+            }
     }
 }

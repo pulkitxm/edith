@@ -48,11 +48,13 @@ struct FocusDimRows: View {
                 )
                 .font(.caption).foregroundStyle(.secondary)
             }
-            HStack {
-                LabeledContent("Toggle hotkey") {
-                    HotKeyRecorderControl(keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
+            LabeledContent {
+                HotKeyRecorderControl(keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Toggle hotkey")
+                    InfoDot("Flip dimming on or off from anywhere.")
                 }
-                InfoDot("Flip dimming on or off from anywhere.")
             }
         }
         .disabled(!enabled)

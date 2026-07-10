@@ -212,15 +212,20 @@ private struct SystemRows: View {
 
     var body: some View {
         Section {
-            HStack {
-                Toggle("Prevent sleep", isOn: $preventSleep)
-                    .pointerCursor()
-                InfoDot(
-                    "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
-                )
+            Toggle(isOn: $preventSleep) {
+                HStack(spacing: 6) {
+                    Text("Prevent sleep")
+                    InfoDot(
+                        "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
+                    )
+                }
             }
+            .pointerCursor()
             HStack {
                 Text("Keyboard cleaning")
+                InfoDot(
+                    "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
+                )
                 Spacer()
                 if cleaningStarted {
                     Text("Locked - check the overlay")
@@ -234,9 +239,6 @@ private struct SystemRows: View {
                     }
                 }
                 .pointerCursor()
-                InfoDot(
-                    "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
-                )
             }
         }
         .disabled(!enabled)

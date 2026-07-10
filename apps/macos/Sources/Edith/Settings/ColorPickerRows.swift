@@ -16,11 +16,13 @@ struct ColorPickerRows: View {
     var body: some View {
         Group {
             Section {
-                HStack {
-                    LabeledContent("Pick hotkey") {
-                        HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+                LabeledContent {
+                    HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Pick hotkey")
+                        InfoDot("Summons the magnifier from anywhere.")
                     }
-                    InfoDot("Summons the magnifier from anywhere.")
                 }
                 Picker("Copy format", selection: $copyFormat) {
                     ForEach(ColorCopyFormat.allCases, id: \.self) { format in
@@ -28,22 +30,26 @@ struct ColorPickerRows: View {
                     }
                 }
                 .pointerCursor()
-                HStack {
-                    Picker("Color profile", selection: $profile) {
-                        ForEach(ColorProfile.allCases, id: \.self) { option in
-                            Text(option.displayName).tag(option)
-                        }
+                Picker(selection: $profile) {
+                    ForEach(ColorProfile.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
                     }
-                    .pointerCursor()
-                    InfoDot(
-                        "Compute values in sRGB or Display P3 - they differ on wide-gamut screens like this MacBook's."
-                    )
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Color profile")
+                        InfoDot(
+                            "Compute values in sRGB or Display P3 - they differ on wide-gamut screens like this MacBook's."
+                        )
+                    }
                 }
-                HStack {
-                    Stepper("History size: \(historySize)", value: $historySize, in: 1...100)
-                        .pointerCursor()
-                    InfoDot("How many past colors to keep.")
+                .pointerCursor()
+                Stepper(value: $historySize, in: 1...100) {
+                    HStack(spacing: 6) {
+                        Text("History size: \(historySize)")
+                        InfoDot("How many past colors to keep.")
+                    }
                 }
+                .pointerCursor()
             }
             .disabled(!colorPickerEnabled)
             .opacity(colorPickerEnabled ? 1 : 0.5)

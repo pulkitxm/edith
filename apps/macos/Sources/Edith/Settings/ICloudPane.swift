@@ -20,14 +20,16 @@ struct ICloudPane: View {
     var body: some View {
         Form {
             Section {
-                HStack {
-                    Toggle("Back up to iCloud", isOn: $icloudBackup)
-                        .pointerCursor()
-                        .disabled(!cloudAvailable)
-                    InfoDot(
-                        "Keeps your data in iCloud Drive so a reinstall or another Mac can restore it. Newest copy wins - it's a backup, not a live sync."
-                    )
+                Toggle(isOn: $icloudBackup) {
+                    HStack(spacing: 6) {
+                        Text("Back up to iCloud")
+                        InfoDot(
+                            "Keeps your data in iCloud Drive so a reinstall or another Mac can restore it. Newest copy wins - it's a backup, not a live sync."
+                        )
+                    }
                 }
+                .pointerCursor()
+                .disabled(!cloudAvailable)
                 Text(backupSubtitle).font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("iCloud backup")
@@ -67,14 +69,16 @@ struct ICloudPane: View {
                     .pointerCursor()
                     .disabled(!cloudAvailable)
                 Text(musicSubtitle).font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Toggle("Clipboard history", isOn: $clipboardBackup)
-                        .pointerCursor()
-                        .disabled(!cloudAvailable)
-                    InfoDot(
-                        "Text history only, items up to 1 MB each - larger copies stay on this Mac."
-                    )
+                Toggle(isOn: $clipboardBackup) {
+                    HStack(spacing: 6) {
+                        Text("Clipboard history")
+                        InfoDot(
+                            "Text history only, items up to 1 MB each - larger copies stay on this Mac."
+                        )
+                    }
                 }
+                .pointerCursor()
+                .disabled(!cloudAvailable)
                 Text(clipboardSubtitle).font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("Extensions")

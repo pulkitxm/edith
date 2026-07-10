@@ -82,20 +82,24 @@ struct UsagePane: View {
                 Toggle("Enable alerts", isOn: $notifyMaster)
                     .pointerCursor()
                 Group {
-                    HStack {
-                        Toggle("Session (5h) alerts", isOn: $trackSession)
-                            .pointerCursor()
-                        InfoDot(
-                            "Fires once when the session window crosses warn or critical - it won't repeat while you stay in that zone."
-                        )
+                    Toggle(isOn: $trackSession) {
+                        HStack(spacing: 6) {
+                            Text("Session (5h) alerts")
+                            InfoDot(
+                                "Fires once when the session window crosses warn or critical - it won't repeat while you stay in that zone."
+                            )
+                        }
                     }
-                    HStack {
-                        Toggle("Weekly alerts", isOn: $trackWeekly)
-                            .pointerCursor()
-                        InfoDot(
-                            "Fires once when the weekly window crosses warn or critical - same one-shot-per-zone behavior as session alerts."
-                        )
+                    .pointerCursor()
+                    Toggle(isOn: $trackWeekly) {
+                        HStack(spacing: 6) {
+                            Text("Weekly alerts")
+                            InfoDot(
+                                "Fires once when the weekly window crosses warn or critical - same one-shot-per-zone behavior as session alerts."
+                            )
+                        }
                     }
+                    .pointerCursor()
                     Toggle("Back to green", isOn: $recovery)
                         .pointerCursor()
                     HStack {
@@ -106,13 +110,15 @@ struct UsagePane: View {
                         )
                         .pointerCursor()
                     }
-                    HStack {
-                        Toggle("Drifting / burning hot", isOn: $pacingWarning)
-                            .pointerCursor()
-                        InfoDot(
-                            "A separate signal from the level alerts above: how far ahead of an even burn-rate pace you are, regardless of the absolute percentage."
-                        )
+                    Toggle(isOn: $pacingWarning) {
+                        HStack(spacing: 6) {
+                            Text("Drifting / burning hot")
+                            InfoDot(
+                                "A separate signal from the level alerts above: how far ahead of an even burn-rate pace you are, regardless of the absolute percentage."
+                            )
+                        }
                     }
+                    .pointerCursor()
                     Toggle("Token expired", isOn: $tokenExpired)
                         .pointerCursor()
                     HStack {

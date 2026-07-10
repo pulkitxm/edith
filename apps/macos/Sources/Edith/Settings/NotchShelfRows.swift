@@ -35,31 +35,35 @@ struct NotchShelfRows: View {
                     .pointerCursor()
                 Text("Expand when the mouse rests on the notch, without a drag.")
                     .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Toggle("Require \u{2325} to trigger", isOn: $requireOption)
-                        .pointerCursor()
-                    InfoDot(
-                        "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
-                    )
+                Toggle(isOn: $requireOption) {
+                    HStack(spacing: 6) {
+                        Text("Require \u{2325} to trigger")
+                        InfoDot(
+                            "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
+                        )
+                    }
                 }
+                .pointerCursor()
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
 
             Section {
-                HStack {
-                    Picker("Keep items for", selection: $keepDuration) {
-                        Text("Forever").tag("forever")
-                        Text("1 hour").tag("oneHour")
-                        Text("1 day").tag("oneDay")
-                        Text("1 week").tag("oneWeek")
-                        Text("1 month").tag("oneMonth")
+                Picker(selection: $keepDuration) {
+                    Text("Forever").tag("forever")
+                    Text("1 hour").tag("oneHour")
+                    Text("1 day").tag("oneDay")
+                    Text("1 week").tag("oneWeek")
+                    Text("1 month").tag("oneMonth")
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Keep items for")
+                        InfoDot(
+                            "Parked files auto-delete after this long. They're copies - originals are never touched."
+                        )
                     }
-                    .pointerCursor()
-                    InfoDot(
-                        "Parked files auto-delete after this long. They're copies - originals are never touched."
-                    )
                 }
+                .pointerCursor()
                 Toggle("Remove after dragging out", isOn: $removeAfterDragOut)
                     .pointerCursor()
                 Text("Treats the shelf as a hand-off tray rather than storage.")

@@ -90,13 +90,15 @@ struct GeneralPane: View {
                     .onChange(of: showDockIcon) { _, on in
                         NSApp.setActivationPolicy(on ? .regular : .accessory)
                     }
-                HStack {
-                    LabeledContent("Panel shortcut") {
-                        HotKeyRecorderControl(keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
+                LabeledContent {
+                    HotKeyRecorderControl(keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Panel shortcut")
+                        InfoDot(
+                            "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
+                        )
                     }
-                    InfoDot(
-                        "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
-                    )
                 }
             } header: {
                 Text("Window")
