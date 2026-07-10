@@ -79,6 +79,9 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.updateFullScreenVisibility() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                Task { @MainActor in self?.updateFullScreenVisibility() }
+            }
         }
         dragMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
@@ -205,7 +208,22 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     }
 
     private func isFullScreenSpace(_ screen: NSScreen) -> Bool {
-        screen.frame.maxY - screen.visibleFrame.maxY < 1
+        let target = screen.frame.size
+        guard
+            let list = CGWindowListCopyWindowInfo(
+                [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]]
+        else { return false }
+        for info in list {
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+                let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+            else { continue }
+            if abs(bounds.width - target.width) < 2, abs(bounds.height - target.height) < 2 {
+                return true
+            }
+        }
+        return false
     }
 
     private func updateFullScreenVisibility() {
