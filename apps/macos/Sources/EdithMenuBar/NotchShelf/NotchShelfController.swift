@@ -13,6 +13,7 @@ extension NSScreen {
 final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
+    @Published private(set) var isResizing = false
     @Published private(set) var livePositions: [UUID: CGPoint] = [:]
     @Published private(set) var selectedIDs: Set<UUID> = []
 
@@ -218,6 +219,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private func collapseNow() {
         guard isExpanded, !isSharing else { return }
         isExpanded = false
+        isResizing = false
         selectedIDs = []
         gate.forceClosed()
         gateWorkItem?.cancel()
@@ -336,6 +338,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         gateWorkItem?.cancel()
         gateWorkItem = nil
         gate.forceOpen()
+        isResizing = true
         let screen =
             NSScreen.screens.first { $0.frame.contains(point) }
             ?? NSScreen.screens.first { $0.displayID == builtinDisplayID }
@@ -353,6 +356,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         SharedDefaults.store.set(Double(size.width), forKey: "notchShelfExpandedWidth")
         SharedDefaults.store.set(Double(size.height), forKey: "notchShelfExpandedHeight")
         updateAllFrames(animated: false)
+    }
+
+    func endResize() {
+        isResizing = false
     }
 
     private func isNearNotch(_ point: CGPoint) -> Bool {

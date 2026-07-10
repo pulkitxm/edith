@@ -7,7 +7,7 @@ struct NotchShelfContentView: View {
 
     var body: some View {
         ZStack {
-            NotchShape(bottomRadius: controller.isExpanded ? 34 : 14)
+            NotchShape(bottomRadius: bottomRadius)
                 .fill(.black)
             if controller.isExpanded {
                 expanded.transition(.opacity)
@@ -16,7 +16,13 @@ struct NotchShelfContentView: View {
             }
         }
         .animation(shapeAnimation, value: controller.isExpanded)
+        .animation(.easeOut(duration: 0.14), value: controller.isResizing)
         .onHover { controller.hoverChanged($0) }
+    }
+
+    private var bottomRadius: CGFloat {
+        guard controller.isExpanded else { return 14 }
+        return controller.isResizing ? 10 : 34
     }
 
     private var shapeAnimation: Animation? {
@@ -110,6 +116,7 @@ private struct ResizeEdges: View {
                             toPointer: NSEvent.mouseLocation,
                             resizesWidth: resizesWidth, resizesHeight: resizesHeight)
                     }
+                    .onEnded { _ in controller.endResize() }
             )
     }
 
