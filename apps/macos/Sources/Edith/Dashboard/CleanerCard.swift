@@ -325,13 +325,17 @@ struct CleanerCard: View {
 
     private var drivesView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 10) {
                 Text("DRIVES").font(.system(size: 10, weight: .bold)).tracking(0.6)
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
+                Button("Rescan") { model.scan() }
+                    .font(.system(size: 11, weight: .medium)).buttonStyle(.plain).pointerCursor()
+                    .foregroundStyle(DashSkin.accent(dark)).disabled(model.scanning)
+                InfoDot("Cleaning moves items to the Trash, so it stays reversible.")
                 Button("Choose…") { openPicker() }
-                    .font(.system(size: 10.5)).buttonStyle(.plain).pointerCursor()
-                    .foregroundStyle(DashSkin.accent(dark))
+                    .font(.system(size: 11)).buttonStyle(.plain).pointerCursor()
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             if model.drives.isEmpty {
                 if model.scanning {
@@ -398,20 +402,23 @@ struct CleanerCard: View {
     }
 
     private var footer: some View {
-        HStack {
-            HStack(spacing: 10) {
-                Button("Rescan") { openPicker() }.disabled(model.scanning).pointerCursor()
-                Text("Moves to the Trash, reversible.")
-                    .font(.system(size: 10.5)).foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            Spacer()
-            Button(role: .destructive) {
-                model.clean()
-            } label: {
-                Text("Clean \(JunkScanner.format(model.selectedTotal))")
-            }
-            .disabled(model.scanning || model.selectedTotal == 0).pointerCursor()
+        Button {
+            model.clean()
+        } label: {
+            Text(
+                model.selectedTotal > 0
+                    ? "Clean \(JunkScanner.format(model.selectedTotal))" : "Select items to clean"
+            )
+            .font(.system(size: 14, weight: .semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
         }
+        .buttonStyle(.borderedProminent)
+        .tint(DashSkin.accent(dark))
+        .controlSize(.large)
+        .disabled(model.scanning || model.selectedTotal == 0)
+        .pointerCursor()
+        .padding(.top, 2)
     }
 
     private func openPicker() {
