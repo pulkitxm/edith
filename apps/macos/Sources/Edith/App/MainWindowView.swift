@@ -3,7 +3,7 @@ import EdithKit
 import SwiftUI
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, dashboard, music, calendar
+    case home, dashboard, music, calendar, system
     case extensions, usage, shortcuts, general, settings, permissions, icloud, about
 
     var id: String { rawValue }
@@ -14,6 +14,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "Agent Usage"
         case .music: return "Music"
         case .calendar: return "Calendar"
+        case .system: return "System"
         case .extensions: return "Extensions"
         case .usage: return "Usage"
         case .shortcuts: return "Shortcuts"
@@ -31,6 +32,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "chart.bar.fill"
         case .music: return "music.note"
         case .calendar: return "calendar"
+        case .system: return "cpu"
         case .extensions: return "puzzlepiece.extension"
         case .usage: return "gauge.with.dots.needle.67percent"
         case .shortcuts: return "command"
@@ -42,7 +44,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         }
     }
 
-    static let homeItems: [MainDestination] = [.home, .dashboard, .music, .calendar]
+    static let homeItems: [MainDestination] = [.home, .dashboard, .music, .calendar, .system]
     static let appItems: [MainDestination] = [
         .settings, .extensions, .permissions, .shortcuts, .about,
     ]
@@ -607,6 +609,7 @@ struct MainWindowView: View {
         case .dashboard: DashboardView()
         case .music: MusicPage()
         case .calendar: CalendarPage()
+        case .system: SystemPage()
         case .extensions: ExtensionsPane()
         case .usage: UsagePane()
         case .shortcuts: ShortcutsPane()
