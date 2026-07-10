@@ -74,4 +74,20 @@ import Testing
     @Test func formatIsHumanReadable() {
         #expect(JunkScanner.format(1_500_000).contains("MB"))
     }
+
+    @Test func projectJunkFindsTargetsWithoutDescending() throws {
+        let root = tempHome()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let nested = root.appendingPathComponent("proj/node_modules/dep/node_modules")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 3000).write(
+            to: root.appendingPathComponent("proj/node_modules/a.js"))
+        let pycache = root.appendingPathComponent("proj/pkg/__pycache__")
+        try FileManager.default.createDirectory(at: pycache, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 1000).write(to: pycache.appendingPathComponent("x.pyc"))
+
+        let categories = JunkScanner.scanProjectJunk(roots: [root]) { _ in }
+        #expect(categories.first { $0.id == "nodeModules" }?.items.count == 1)
+        #expect(categories.contains { $0.id == "pycache" })
+    }
 }

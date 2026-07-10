@@ -193,4 +193,111 @@ enum JunkScanner {
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
+
+    struct ProjectTarget {
+        let dir: String
+        let categoryID: String
+        let categoryName: String
+        let detail: String
+    }
+
+    static let projectTargets: [ProjectTarget] = [
+        ProjectTarget(
+            dir: "node_modules", categoryID: "nodeModules", categoryName: "node_modules",
+            detail: "JavaScript dependencies, restored by install."),
+        ProjectTarget(
+            dir: "__pycache__", categoryID: "pycache", categoryName: "Python __pycache__",
+            detail: "Compiled bytecode caches."),
+        ProjectTarget(
+            dir: ".venv", categoryID: "pyvenv", categoryName: "Python virtualenvs",
+            detail: "Recreated from requirements."),
+        ProjectTarget(
+            dir: "venv", categoryID: "pyvenv", categoryName: "Python virtualenvs",
+            detail: "Recreated from requirements."),
+        ProjectTarget(
+            dir: "target", categoryID: "rustTarget", categoryName: "Cargo / Maven target",
+            detail: "Build output, rebuilt on next build."),
+        ProjectTarget(
+            dir: ".gradle", categoryID: "gradle", categoryName: "Gradle caches",
+            detail: "Rebuilt on next build."),
+        ProjectTarget(
+            dir: "Pods", categoryID: "pods", categoryName: "CocoaPods",
+            detail: "Restored by pod install."),
+        ProjectTarget(
+            dir: ".next", categoryID: "nextBuild", categoryName: "Next.js .next",
+            detail: "Rebuilt on next build."),
+        ProjectTarget(
+            dir: ".turbo", categoryID: "turbo", categoryName: "Turborepo cache",
+            detail: "Rebuilt on next build."),
+    ]
+
+    private static let walkSkip: Set<String> = [
+        "System", "Library", "Applications", "usr", "bin", "sbin", "opt", "private", "cores",
+        "dev", "Volumes", "Network", "Photos Library.photoslibrary",
+    ]
+
+    static func scanProjectJunk(roots: [URL], progress: @escaping (String) -> Void)
+        -> [JunkCategory]
+    {
+        let targets = Dictionary(
+            projectTargets.map { ($0.dir, $0) }, uniquingKeysWith: { first, _ in first })
+        var itemsByCategory: [String: [JunkItem]] = [:]
+        var count = 0
+        let budget = 600
+        let maxDepth = 9
+        let fm = FileManager.default
+
+        func walk(_ dir: URL, depth: Int) {
+            guard depth <= maxDepth, count < budget else { return }
+            guard
+                let children = try? fm.contentsOfDirectory(
+                    at: dir, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+                    options: [])
+            else { return }
+            for child in children {
+                guard count < budget else { return }
+                let values = try? child.resourceValues(forKeys: [
+                    .isDirectoryKey, .isSymbolicLinkKey,
+                ])
+                guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
+                let name = child.lastPathComponent
+                if let target = targets[name] {
+                    let size = directorySize(child)
+                    if size > 0 {
+                        itemsByCategory[target.categoryID, default: []].append(
+                            JunkItem(
+                                id: child.path, name: projectLabel(child), path: child,
+                                sizeBytes: size, selected: false))
+                        count += 1
+                    }
+                    continue
+                }
+                if walkSkip.contains(name) || name.hasPrefix(".") { continue }
+                walk(child, depth: depth + 1)
+            }
+        }
+
+        for root in roots {
+            progress(
+                "Scanning \(root.lastPathComponent.isEmpty ? root.path : root.lastPathComponent) for project junk…"
+            )
+            walk(root, depth: 0)
+        }
+
+        return projectTargets.reduce(into: [String: JunkCategory]()) { result, target in
+            guard result[target.categoryID] == nil, let items = itemsByCategory[target.categoryID]
+            else { return }
+            let sorted = items.sorted { $0.sizeBytes > $1.sizeBytes }
+            result[target.categoryID] = JunkCategory(
+                id: target.categoryID, name: target.categoryName, detail: target.detail,
+                items: sorted)
+        }
+        .values
+        .sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    private static func projectLabel(_ url: URL) -> String {
+        let parent = url.deletingLastPathComponent().lastPathComponent
+        return parent.isEmpty ? url.lastPathComponent : "\(parent)/\(url.lastPathComponent)"
+    }
 }

@@ -75,13 +75,20 @@ final class CleanerModel: ObservableObject {
                 logs.append("Scanning \(entry.name)…")
                 let found = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
                     .value
-                if var category = found {
-                    category.items = category.items.map { item in
-                        var updated = item
-                        if let choice = choices[item.id] { updated.selected = choice }
-                        return updated
+                if let category = found {
+                    categories.append(Self.applyChoices(category, choices))
+                    logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
+                }
+            }
+            let roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
+            if !roots.isEmpty {
+                let projects = await Task.detached {
+                    JunkScanner.scanProjectJunk(roots: roots) { line in
+                        Task { @MainActor in CleanerModel.shared.logs.append(line) }
                     }
-                    categories.append(category)
+                }.value
+                for category in projects {
+                    categories.append(Self.applyChoices(category, choices))
                     logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
@@ -91,6 +98,18 @@ final class CleanerModel: ObservableObject {
             try? await Task.sleep(for: .seconds(0.9))
             withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
         }
+    }
+
+    private static func applyChoices(_ category: JunkCategory, _ choices: [String: Bool])
+        -> JunkCategory
+    {
+        var updated = category
+        updated.items = category.items.map { item in
+            var copy = item
+            if let choice = choices[item.id] { copy.selected = choice }
+            return copy
+        }
+        return updated
     }
 
     func toggleCategory(_ id: String) {
@@ -225,7 +244,8 @@ struct CleanerCard: View {
         }
         .padding(10)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
-        .transition(.opacity.combined(with: .move(edge: .top)))
+        .clipped()
+        .transition(.opacity)
     }
 
     private var drivesView: some View {
@@ -304,9 +324,11 @@ private struct DrivePickerSheet: View {
             Text("Choose drives to include")
                 .font(.system(size: 15, weight: .semibold))
                 .padding(.horizontal, 20).padding(.top, 20)
-            Text("Junk categories are scanned in your home folder. Pick which drives to report on.")
-                .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkFaint(dark))
-                .padding(.horizontal, 20).padding(.top, 4)
+            Text(
+                "Selected drives are searched for project junk like node_modules and virtualenvs. System caches always come from your home folder."
+            )
+            .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkFaint(dark))
+            .padding(.horizontal, 20).padding(.top, 4)
 
             ScrollView {
                 VStack(spacing: 6) {
