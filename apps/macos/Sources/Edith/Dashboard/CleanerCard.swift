@@ -262,6 +262,7 @@ struct CleanerCard: View {
     let dark: Bool
     @ObservedObject private var model = CleanerModel.shared
     @State private var showDrivePicker = false
+    @State private var pickerScans = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -294,7 +295,11 @@ struct CleanerCard: View {
             }
         }
         .sheet(isPresented: $showDrivePicker) {
-            DrivePickerSheet(model: model, dark: dark) { model.scan() }
+            DrivePickerSheet(
+                model: model, dark: dark, confirmTitle: pickerScans ? "Scan" : "Done"
+            ) {
+                if pickerScans { model.scan() }
+            }
         }
     }
 
@@ -303,7 +308,7 @@ struct CleanerCard: View {
             Text("Scan build caches, package managers, Claude Code logs, and your drives.")
                 .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
-            Button("Scan") { openPicker() }.pointerCursor()
+            Button("Scan") { openPicker(scan: true) }.pointerCursor()
         }
     }
 
@@ -363,7 +368,7 @@ struct CleanerCard: View {
                     .font(.system(size: 11, weight: .medium)).buttonStyle(.plain).pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark)).disabled(model.scanning)
                 InfoDot("Cleaning moves items to the Trash, so it stays reversible.")
-                Button("Choose…") { openPicker() }
+                Button("Choose drives…") { openPicker(scan: false) }
                     .font(.system(size: 11)).buttonStyle(.plain).pointerCursor()
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
@@ -451,7 +456,8 @@ struct CleanerCard: View {
         .padding(.top, 2)
     }
 
-    private func openPicker() {
+    private func openPicker(scan: Bool) {
+        pickerScans = scan
         model.loadDriveOptions()
         showDrivePicker = true
     }
@@ -460,7 +466,8 @@ struct CleanerCard: View {
 private struct DrivePickerSheet: View {
     @ObservedObject var model: CleanerModel
     let dark: Bool
-    let onScan: () -> Void
+    let confirmTitle: String
+    let onConfirm: () -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -543,9 +550,9 @@ private struct DrivePickerSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.pointerCursor()
-                Button("Scan") {
+                Button(confirmTitle) {
                     dismiss()
-                    onScan()
+                    onConfirm()
                 }
                 .keyboardShortcut(.defaultAction).pointerCursor()
             }
