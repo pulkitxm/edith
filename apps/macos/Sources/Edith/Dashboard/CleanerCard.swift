@@ -70,13 +70,15 @@ final class CleanerModel: ObservableObject {
             driveOptions = all
             drives = all.filter { isDriveSelected($0.id) }
             let choices = overrides
+            let categoryChoices = categoryDefaults
             let home = FileManager.default.homeDirectoryForCurrentUser
             for entry in JunkCatalog.entries {
                 logs.append("Scanning \(entry.name)…")
                 let found = await Task.detached { JunkScanner.scanCategory(entry, home: home) }
                     .value
                 if let category = found {
-                    categories.append(Self.applyChoices(category, choices))
+                    categories.append(
+                        Self.applyChoices(category, items: choices, categories: categoryChoices))
                     logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
@@ -88,7 +90,8 @@ final class CleanerModel: ObservableObject {
                     }
                 }.value
                 for category in projects {
-                    categories.append(Self.applyChoices(category, choices))
+                    categories.append(
+                        Self.applyChoices(category, items: choices, categories: categoryChoices))
                     logs.append("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
@@ -100,13 +103,19 @@ final class CleanerModel: ObservableObject {
         }
     }
 
-    private static func applyChoices(_ category: JunkCategory, _ choices: [String: Bool])
-        -> JunkCategory
-    {
+    private static func applyChoices(
+        _ category: JunkCategory, items itemChoices: [String: Bool],
+        categories categoryChoices: [String: Bool]
+    ) -> JunkCategory {
         var updated = category
+        let categoryDefault = categoryChoices[category.id]
         updated.items = category.items.map { item in
             var copy = item
-            if let choice = choices[item.id] { copy.selected = choice }
+            if let choice = itemChoices[item.id] {
+                copy.selected = choice
+            } else if let categoryDefault {
+                copy.selected = categoryDefault
+            }
             return copy
         }
         return updated
@@ -115,12 +124,17 @@ final class CleanerModel: ObservableObject {
     func toggleCategory(_ id: String) {
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let selectAll = categories[index].selection != .all
-        var choices = overrides
+        var itemChoices = overrides
+        for item in categories[index].items {
+            itemChoices[item.id] = nil
+        }
+        overrides = itemChoices
+        var categoryChoices = categoryDefaults
+        categoryChoices[id] = selectAll
+        categoryDefaults = categoryChoices
         for item in categories[index].items.indices {
             categories[index].items[item].selected = selectAll
-            choices[categories[index].items[item].id] = selectAll
         }
-        overrides = choices
     }
 
     func toggleItem(categoryID: String, itemID: String) {
@@ -155,6 +169,14 @@ final class CleanerModel: ObservableObject {
                 .compactMapValues { $0 as? Bool }
         }
         set { SharedDefaults.store.set(newValue, forKey: "cleanerSelectionOverrides") }
+    }
+
+    private var categoryDefaults: [String: Bool] {
+        get {
+            (SharedDefaults.store.dictionary(forKey: "cleanerCategoryDefaults") ?? [:])
+                .compactMapValues { $0 as? Bool }
+        }
+        set { SharedDefaults.store.set(newValue, forKey: "cleanerCategoryDefaults") }
     }
 }
 
@@ -443,7 +465,9 @@ private struct CleanerCategoryRow: View {
                         }
                         .buttonStyle(.plain).pointerCursor()
                         Text(item.name).font(.system(size: 11)).lineLimit(1)
+                            .truncationMode(.middle)
                             .foregroundStyle(DashSkin.inkSoft(dark))
+                            .help(item.path.path)
                         Spacer()
                         Text(JunkScanner.format(item.sizeBytes))
                             .font(.system(size: 10.5, design: .monospaced))

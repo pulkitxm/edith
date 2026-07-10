@@ -297,7 +297,6 @@ enum JunkScanner {
     }
 
     private static func projectLabel(_ url: URL) -> String {
-        let parent = url.deletingLastPathComponent().lastPathComponent
-        return parent.isEmpty ? url.lastPathComponent : "\(parent)/\(url.lastPathComponent)"
+        (url.path as NSString).abbreviatingWithTildeInPath
     }
 }
