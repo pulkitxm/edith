@@ -57,27 +57,6 @@ import Testing
             app: .spotify, userInfo: ["Player State": "Playing", "Name": "Track"])
         #expect(track?.artist == "")
     }
-
-    @Test func parsesSpotifyScriptOutputWithMillisecondDuration() {
-        let track = ExternalNowPlaying.parseScriptOutput(
-            app: .spotify, output: "Nobody's Son\nSabrina Carpenter\n215000")
-        #expect(track?.title == "Nobody's Son")
-        #expect(track?.artist == "Sabrina Carpenter")
-        #expect(track?.isPlaying == true)
-        #expect(track?.duration == 215)
-    }
-
-    @Test func parsesMusicScriptOutputWithSecondDuration() {
-        let track = ExternalNowPlaying.parseScriptOutput(
-            app: .music, output: "Track\nArtist\n180.5")
-        #expect(track?.duration == 180.5)
-        #expect(track?.app == .music)
-    }
-
-    @Test func emptyScriptOutputReturnsNil() {
-        #expect(ExternalNowPlaying.parseScriptOutput(app: .spotify, output: "") == nil)
-        #expect(ExternalNowPlaying.parseScriptOutput(app: .spotify, output: "\n\n") == nil)
-    }
 }
 
 @Suite struct NotchMusicResolverTests {
@@ -85,11 +64,26 @@ import Testing
         ExternalTrack(app: .spotify, title: title, artist: "A", isPlaying: playing, duration: 100)
     }
 
-    @Test func localTakesPriorityOverExternal() {
+    @Test func playingLocalTakesPriorityOverPlayingExternal() {
         let np = NotchMusicResolver.resolve(
             localTitle: "Local Song", localPlaying: true, external: external("Spotify Song"))
         #expect(np?.source == .local)
         #expect(np?.title == "Local Song")
+    }
+
+    @Test func playingExternalBeatsPausedLocal() {
+        let np = NotchMusicResolver.resolve(
+            localTitle: "Paused Local", localPlaying: false, external: external("Spotify Song"))
+        #expect(np?.source == .external(.spotify))
+        #expect(np?.isPlaying == true)
+    }
+
+    @Test func pausedLocalWinsWhenNothingIsPlaying() {
+        let np = NotchMusicResolver.resolve(
+            localTitle: "Paused Local", localPlaying: false,
+            external: external("Paused Spotify", playing: false))
+        #expect(np?.source == .local)
+        #expect(np?.isPlaying == false)
     }
 
     @Test func fallsBackToExternalWhenNoLocal() {

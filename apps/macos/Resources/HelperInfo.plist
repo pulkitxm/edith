@@ -22,8 +22,6 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Edith reads what's playing in Spotify and Apple Music to show it in the notch.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSHighResolutionCapable</key>
