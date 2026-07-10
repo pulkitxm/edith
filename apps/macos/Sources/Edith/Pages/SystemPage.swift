@@ -5,6 +5,7 @@ struct SystemPage: View {
     @StateObject private var model = RunningAppsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var confirmQuitAll = false
+    @State private var pendingQuit: RunningAppRow?
 
     private var dark: Bool { scheme == .dark }
 
@@ -22,6 +23,20 @@ struct SystemPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+        .confirmationDialog(
+            "Quit \(pendingQuit?.name ?? "app")?",
+            isPresented: Binding(
+                get: { pendingQuit != nil }, set: { if !$0 { pendingQuit = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Quit \(pendingQuit?.name ?? "app")", role: .destructive) {
+                if let app = pendingQuit { model.quit(app) }
+                pendingQuit = nil
+            }
+            Button("Cancel", role: .cancel) { pendingQuit = nil }
+        } message: {
+            Text("The app will close. Unsaved changes will prompt you first.")
+        }
         .task {
             while !Task.isCancelled {
                 model.refresh()
@@ -125,7 +140,7 @@ struct SystemPage: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: 72, alignment: .trailing)
                     Button {
-                        model.quit(app)
+                        pendingQuit = app
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
