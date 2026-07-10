@@ -7,8 +7,10 @@ struct NotchShelfContentView: View {
 
     var body: some View {
         ZStack {
+            NotchShape(bottomRadius: controller.isExpanded ? 22 : 14)
+                .fill(.black)
             if controller.isExpanded {
-                expanded.transition(expandTransition)
+                expanded.transition(.opacity)
             } else {
                 collapsed.transition(.opacity)
             }
@@ -18,35 +20,17 @@ struct NotchShelfContentView: View {
     }
 
     private var shapeAnimation: Animation? {
-        reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.38, dampingFraction: 0.75)
-    }
-
-    private var expandTransition: AnyTransition {
-        reduceMotion
-            ? .opacity
-            : .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+        reduceMotion ? .easeInOut(duration: 0.22) : .spring(response: 0.36, dampingFraction: 0.9)
     }
 
     private var collapsed: some View {
-        NotchShape()
-            .fill(.black)
-            .overlay {
-                if !controller.items.isEmpty {
-                    Text("\(controller.items.count)")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                }
+        Group {
+            if !controller.items.isEmpty {
+                Text("\(controller.items.count)")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
             }
-            .background {
-                if controller.isArming, !reduceMotion {
-                    NotchShape()
-                        .fill(.white.opacity(0.16))
-                        .blur(radius: 8)
-                        .scaleEffect(1.14)
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeOut(duration: 0.18), value: controller.isArming)
+        }
     }
 
     private var expanded: some View {
@@ -72,7 +56,6 @@ struct NotchShelfContentView: View {
             }
             .coordinateSpace(name: "shelfCanvas")
         }
-        .background(.black, in: NotchShape(bottomRadius: 22))
     }
 }
 

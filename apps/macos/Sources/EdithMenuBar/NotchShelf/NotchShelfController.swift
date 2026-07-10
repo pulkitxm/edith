@@ -13,7 +13,6 @@ extension NSScreen {
 final class NotchShelfController: ObservableObject, FeatureModule {
     @Published private(set) var items: [ShelfItem] = []
     @Published private(set) var isExpanded = false
-    @Published private(set) var isArming = false
     @Published private(set) var livePositions: [UUID: CGPoint] = [:]
     @Published private(set) var selectedIDs: Set<UUID> = []
 
@@ -202,7 +201,6 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         gateWorkItem = nil
         purgeExpired()
         gate.forceOpen()
-        isArming = false
         startMoveMonitor()
         guard !isExpanded else { return }
         isExpanded = true
@@ -222,7 +220,6 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         isExpanded = false
         selectedIDs = []
         gate.forceClosed()
-        isArming = false
         gateWorkItem?.cancel()
         gateWorkItem = nil
         stopMoveMonitor()
@@ -242,7 +239,6 @@ final class NotchShelfController: ObservableObject, FeatureModule {
             proximity = .outside
         }
         handleGate(gate.sample(proximity, now: monotonicNow()))
-        isArming = gate.hasPending && !gate.isOpen
     }
 
     private func handleGate(_ transition: NotchGateTransition) {
@@ -275,7 +271,6 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         case .none, .schedule, .cancelPending:
             break
         }
-        isArming = gate.hasPending && !gate.isOpen
     }
 
     private func handleMouseMoved() {
