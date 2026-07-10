@@ -473,8 +473,17 @@ private struct CleanerCategoryRow: View {
     @ObservedObject var model: CleanerModel
     let category: JunkCategory
     let dark: Bool
+    @State private var itemFilter = ""
 
     private var isExpanded: Bool { model.expanded.contains(category.id) }
+
+    private var showItemFilter: Bool { category.items.count > 10 }
+
+    private var visibleItems: [JunkItem] {
+        guard !itemFilter.isEmpty else { return category.items }
+        let query = itemFilter.lowercased()
+        return category.items.filter { $0.name.lowercased().contains(query) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -511,7 +520,26 @@ private struct CleanerCategoryRow: View {
             }
             .padding(.vertical, 7)
             if isExpanded {
-                ForEach(category.items) { item in
+                if showItemFilter {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 10))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        TextField("Filter \(category.items.count) items", text: $itemFilter)
+                            .textFieldStyle(.plain).font(.system(size: 11))
+                        if !itemFilter.isEmpty {
+                            Button {
+                                itemFilter = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 7))
+                    .padding(.leading, 26).padding(.bottom, 4)
+                }
+                ForEach(visibleItems) { item in
                     HStack(spacing: 10) {
                         Button {
                             model.toggleItem(categoryID: category.id, itemID: item.id)
