@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SystemPage: View {
     @StateObject private var model = RunningAppsModel()
+    @StateObject private var agentModel = AgentProcessModel()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var confirmQuitAll = false
@@ -16,6 +17,11 @@ struct SystemPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     summary
+                    if !agentModel.processes.isEmpty {
+                        SkinCard(title: "Agent processes", dark: dark) {
+                            AgentProcessList(model: agentModel, dark: dark)
+                        }
+                    }
                     SkinCard(title: "Running apps", dark: dark) {
                         appList
                     }
@@ -43,6 +49,12 @@ struct SystemPage: View {
         .task {
             while !Task.isCancelled {
                 await model.refresh()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                await agentModel.refresh()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -188,6 +200,82 @@ private struct SystemAppRow: View {
             .buttonStyle(.plain)
             .pointerCursor()
             .help("Quit \(app.name)")
+        }
+        .padding(.horizontal, UIScale.pt(6))
+        .padding(.vertical, UIScale.pt(7))
+        .background(
+            RoundedRectangle(cornerRadius: UIScale.pt(7))
+                .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+        )
+        .onHover { hovering = $0 }
+    }
+}
+
+struct AgentProcessList: View {
+    @ObservedObject var model: AgentProcessModel
+    let dark: Bool
+    @State private var pendingKill: AgentProcessRow?
+
+    var body: some View {
+        VStack(spacing: UIScale.pt(0)) {
+            ForEach(model.processes) { row in
+                AgentProcessRowView(row: row, dark: dark) { pendingKill = row }
+                if row.id != model.processes.last?.id {
+                    Divider().opacity(0.3)
+                }
+            }
+        }
+        .confirmationDialog(
+            "Stop \(pendingKill?.name ?? "process") (pid \(pendingKill?.pid ?? 0))?",
+            isPresented: Binding(
+                get: { pendingKill != nil }, set: { if !$0 { pendingKill = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Stop", role: .destructive) {
+                if let row = pendingKill { model.kill(row) }
+                pendingKill = nil
+            }
+            Button("Cancel", role: .cancel) { pendingKill = nil }
+        } message: {
+            Text("Sends a terminate signal. Any in-progress agent work in this process is lost.")
+        }
+    }
+}
+
+private struct AgentProcessRowView: View {
+    let row: AgentProcessRow
+    let dark: Bool
+    let onKill: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(10)) {
+            Image(systemName: "cpu")
+                .font(.system(size: UIScale.pt(13)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(22))
+            Text(row.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
+            Text("pid \(row.pid)")
+                .font(.system(size: UIScale.pt(11), design: .monospaced))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Spacer()
+            Text(SystemPage.cpuLabel(row.cpuPercent))
+                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .foregroundStyle(row.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(48), alignment: .trailing)
+            Text(SystemPage.memoryLabel(row.memoryMB))
+                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(72), alignment: .trailing)
+            Button {
+                onKill()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help("Stop \(row.name)")
         }
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(7))

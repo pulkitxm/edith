@@ -23,6 +23,8 @@ struct ClipboardRows: View {
     @AppStorage("clipboardSaveFiles", store: SharedDefaults.store) private var saveFiles = true
     @AppStorage("clipboardSaveImages", store: SharedDefaults.store) private var saveImages = true
     @AppStorage("clipboardSaveText", store: SharedDefaults.store) private var saveText = true
+    @AppStorage("pasteQueueEnabled", store: SharedDefaults.store) private var pasteQueueEnabled =
+        false
 
     @State private var tab = "general"
     @State private var recentEntries: [ClipboardEntry] = []
@@ -131,6 +133,35 @@ struct ClipboardRows: View {
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
         } header: {
             Text("Behavior")
+        }
+        Section {
+            Toggle(
+                isOn: Binding(
+                    get: { pasteQueueEnabled },
+                    set: { newValue in
+                        pasteQueueEnabled = newValue
+                        if newValue, !accessibilityGranted {
+                            IPC.post(IPC.Name.grantAccessibility)
+                        }
+                    })
+            ) {
+                HStack(spacing: 6) {
+                    Text("Paste queue")
+                    InfoDot(
+                        "Every copy while this is on joins a queue. The shortcut below pastes the oldest queued item and moves to the next. Needs Accessibility."
+                    )
+                }
+            }
+            .pointerCursor()
+            LabeledContent {
+                HotKeyRecorderControl(keyPrefix: "pasteQueueHotKey", defaultLabel: "⇧⌥⌘V")
+            } label: {
+                Text("Paste next")
+            }
+            .disabled(!pasteQueueEnabled)
+            .opacity(pasteQueueEnabled ? 1 : 0.5)
+        } header: {
+            Text("Paste queue")
         }
     }
 

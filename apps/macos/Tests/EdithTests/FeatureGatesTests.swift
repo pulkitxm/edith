@@ -45,16 +45,27 @@ import Testing
     @Test func extensionShortcutsOnlyIncludeEnabledOwners() {
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: false, focusDim: false, presenter: false, colorPicker: false
+                clipboard: false, pasteQueue: false, focusDim: false, presenter: false,
+                colorPicker: false, scratchpad: false
             ).isEmpty)
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, focusDim: false, presenter: true, colorPicker: false)
+                clipboard: true, pasteQueue: false, focusDim: false, presenter: true,
+                colorPicker: false, scratchpad: false)
                 == [.clipboard, .presenter])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, focusDim: true, presenter: true, colorPicker: true)
+                clipboard: true, pasteQueue: true, focusDim: true, presenter: true,
+                colorPicker: true, scratchpad: true)
                 == ExtensionShortcut.allCases)
+    }
+
+    @Test func pasteQueueShortcutNeedsTheClipboardExtension() {
+        #expect(
+            ExtensionShortcutVisibility.visible(
+                clipboard: false, pasteQueue: true, focusDim: false, presenter: false,
+                colorPicker: false, scratchpad: false
+            ).isEmpty)
     }
 
     @Test func lastUsageProviderTurnsOffDependentFeatures() {

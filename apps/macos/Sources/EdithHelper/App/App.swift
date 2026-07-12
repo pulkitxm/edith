@@ -140,6 +140,8 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let pasteQueueNext: UInt32 = 8
+        static let scratchpad: UInt32 = 9
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -276,6 +278,78 @@ enum MicHotKey {
         SharedDefaults.store.set(code, forKey: "micHotKeyCode")
         SharedDefaults.store.set(mods, forKey: "micHotKeyMods")
         SharedDefaults.store.set(label, forKey: "micHotKeyLabel")
+    }
+}
+
+enum PasteQueueHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "pasteQueueHotKeyCode") as? Int ?? kVK_ANSI_V
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "pasteQueueHotKeyMods") as? Int
+            ?? (cmdKey | optionKey | shiftKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "pasteQueueHotKeyLabel") ?? "⇧⌥⌘V"
+    }
+
+    static func register() {
+        let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        let queueOn = SharedDefaults.store.bool(forKey: "pasteQueueEnabled")
+        guard clipboardOn, queueOn else {
+            unregister()
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.pasteQueueNext, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated {
+                guard let store = AppState.services.clipboard else { return }
+                let remaining = store.pasteQueue.count
+                let pasted = store.pasteNextFromQueue()
+                AppState.services.notchShelf?.postAlert(
+                    pasted
+                        ? NotchAlert(
+                            id: "pasteQueue.next", icon: "arrow.turn.down.right",
+                            tint: "#4db3e6", title: "Pasted from queue",
+                            subtitle: remaining > 1 ? "\(remaining - 1) left" : "Queue empty",
+                            priority: .low, autoHide: 1.6)
+                        : NotchAlert(
+                            id: "pasteQueue.empty", icon: "tray",
+                            tint: "#8a7d6c", title: "Paste queue is empty", subtitle: nil,
+                            priority: .low, autoHide: 1.6))
+            }
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.pasteQueueNext)
+    }
+}
+
+enum ScratchpadHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "scratchpadHotKeyCode") as? Int ?? kVK_Space
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "scratchpadHotKeyMods") as? Int
+            ?? (cmdKey | optionKey | shiftKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "scratchpadHotKeyLabel") ?? "⇧⌥⌘Space"
+    }
+
+    static func register() {
+        let enabled = SharedDefaults.store.object(forKey: "scratchpadEnabled") as? Bool ?? false
+        guard enabled else {
+            unregister()
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.scratchpad, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { ScratchpadPanel.shared.toggle() }
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.scratchpad)
     }
 }
 

@@ -244,5 +244,15 @@ public enum ExtensionRegistry {
             subtitle: "System loupe on a hotkey, sampled color to your clipboard.",
             symbolName: "eyedropper", group: .utilities, featured: false,
             defaultsKey: "colorPickerEnabled", requiredPermissions: [.screenRecording]),
+        ExtensionRegistryEntry(
+            id: "hyperKey", title: "Hyper Key",
+            subtitle: "Caps Lock becomes ⌃⌥⌘⇧ while held, for hotkeys other apps never claim.",
+            symbolName: "capslock.fill", group: .system, featured: false,
+            defaultsKey: "hyperKeyEnabled", requiredPermissions: [.accessibility]),
+        ExtensionRegistryEntry(
+            id: "scratchpad", title: "Scratchpad",
+            subtitle: "Quick notes on a hotkey, with inline math and unit conversion.",
+            symbolName: "text.cursor", group: .utilities, featured: false,
+            defaultsKey: "scratchpadEnabled"),
     ]
 }

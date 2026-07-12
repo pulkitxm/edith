@@ -6,6 +6,7 @@ import Foundation
 final class ClipboardStore: ObservableObject, FeatureModule {
     @Published private(set) var entries: [ClipboardEntry] = []
     @Published private(set) var skippedOversizeAt: Date?
+    @Published private(set) var pasteQueue = PasteQueue()
 
     private var sorter: EntrySorter = EntrySorter()
     private var timer: DispatchSourceTimer?
@@ -152,6 +153,9 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         entries = sorter.sort(entries + [entry])
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
+        if SharedDefaults.store.bool(forKey: "pasteQueueEnabled") {
+            pasteQueue.enqueue(entry.id)
+        }
     }
 
     private static let senderID =
@@ -192,6 +196,7 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         try? ClipboardRepository.saveEntries(entries)
         ClipboardRepository.pruneOrphanBlobs(keeping: entries)
         SettingsBackup.shared.scheduleClipboardBackup()
+        if includingPinned { pasteQueue.clear() }
         postChanged()
     }
 
@@ -199,7 +204,23 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         entries.removeAll { $0.id == id }
         try? ClipboardRepository.saveEntries(entries)
         ClipboardRepository.pruneOrphanBlobs(keeping: entries)
+        pasteQueue.remove(id)
         postChanged()
+    }
+
+    @discardableResult
+    func pasteNextFromQueue() -> Bool {
+        while let id = pasteQueue.dequeue() {
+            guard let entry = entries.first(where: { $0.id == id }) else { continue }
+            let plain = SharedDefaults.store.bool(forKey: "clipboardPastePlainText")
+            guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { continue }
+            lastChangeCount = NSPasteboard.general.changeCount
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                ClipboardPasteSynth.synthesizeCommandV()
+            }
+            return true
+        }
+        return false
     }
 
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {

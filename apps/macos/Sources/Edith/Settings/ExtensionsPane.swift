@@ -42,6 +42,9 @@ struct ExtensionsPane: View {
     @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
         false
     @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
+    @AppStorage("hyperKeyEnabled", store: SharedDefaults.store) private var hyperKeyEnabled = false
+    @AppStorage("scratchpadEnabled", store: SharedDefaults.store) private var scratchpadEnabled =
+        false
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -245,6 +248,8 @@ struct ExtensionsPane: View {
         case "focusDimEnabled": $focusDimEnabled
         case "presenterEnabled": $presenterEnabled
         case "colorPickerEnabled": $colorPickerEnabled
+        case "hyperKeyEnabled": $hyperKeyEnabled
+        case "scratchpadEnabled": $scratchpadEnabled
         default: .constant(false)
         }
     }

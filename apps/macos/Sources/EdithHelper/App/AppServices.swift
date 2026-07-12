@@ -14,6 +14,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var presenter: PresenterDetector?
     @Published private(set) var micMute: MicMuteEngine?
     @Published private(set) var systemStats: SystemStatsStatusItem?
+    @Published private(set) var hyperKey: HyperKeyEngine?
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -94,8 +95,10 @@ final class AppServices: ObservableObject {
                 clipboard = ClipboardStore()
             }
             ClipboardHotKey.register()
+            PasteQueueHotKey.register()
         } else {
             ClipboardHotKey.unregister()
+            PasteQueueHotKey.unregister()
             if let store = clipboard {
                 store.shutdown()
                 clipboard = nil
@@ -145,6 +148,15 @@ final class AppServices: ObservableObject {
             stats.shutdown()
             systemStats = nil
         }
+
+        let hyperOn = Self.extensionEnabled("hyperKeyEnabled")
+        if hyperOn, hyperKey == nil { hyperKey = HyperKeyEngine() }
+        if !hyperOn, let engine = hyperKey {
+            engine.shutdown()
+            hyperKey = nil
+        }
+
+        ScratchpadHotKey.register()
 
         usage?.syncStatusItem()
         usage?.refreshMenuBarItem()
