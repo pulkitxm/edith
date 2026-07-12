@@ -145,7 +145,7 @@ struct ClipboardRows: View {
                         }
                     })
             ) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Paste queue")
                     InfoDot(
                         "Every copy while this is on joins a queue. The shortcut below pastes the oldest queued item and moves to the next. Needs Accessibility."

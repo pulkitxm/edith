@@ -15,6 +15,7 @@ final class AppServices: ObservableObject {
     @Published private(set) var micMute: MicMuteEngine?
     @Published private(set) var systemStats: SystemStatsStatusItem?
     @Published private(set) var hyperKey: HyperKeyEngine?
+    @Published private(set) var pushToTalk: PushToTalkEngine?
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -141,6 +142,13 @@ final class AppServices: ObservableObject {
             micMute = nil
         }
         micMute?.syncSettings()
+
+        let pushToTalkOn = micOn && Self.extensionEnabled("pushToTalkEnabled")
+        if pushToTalkOn, pushToTalk == nil { pushToTalk = PushToTalkEngine() }
+        if !pushToTalkOn, let engine = pushToTalk {
+            engine.shutdown()
+            pushToTalk = nil
+        }
 
         let statsOn = Self.extensionEnabled("menuBarSystemStats")
         if statsOn, systemStats == nil { systemStats = SystemStatsStatusItem() }

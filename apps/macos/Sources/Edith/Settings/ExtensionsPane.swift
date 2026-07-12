@@ -1033,6 +1033,10 @@ private struct MusicRows: View {
 private struct MicMuteRows: View {
     @AppStorage("micMuteEnabled", store: SharedDefaults.store) private var enabled = false
     @AppStorage("micMuteInMenuBar", store: SharedDefaults.store) private var inMenuBar = true
+    @AppStorage("pushToTalkEnabled", store: SharedDefaults.store) private var pushToTalkEnabled =
+        false
+    @AppStorage("permAccessibilityGranted", store: SharedDefaults.store)
+    private var accessibilityGranted = false
 
     var body: some View {
         Section {
@@ -1040,6 +1044,37 @@ private struct MicMuteRows: View {
                 .pointerCursor()
             Text("The menu bar icon shows the current mute state and toggles it on click.")
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        Section {
+            Toggle(
+                isOn: Binding(
+                    get: { pushToTalkEnabled },
+                    set: { newValue in
+                        pushToTalkEnabled = newValue
+                        if newValue, !accessibilityGranted {
+                            IPC.post(IPC.Name.grantAccessibility)
+                        }
+                    })
+            ) {
+                HStack(spacing: UIScale.pt(6)) {
+                    Text("Push to talk")
+                    InfoDot(
+                        "Hold this key to unmute; release to mute again. Separate from the mute toggle above. Needs Accessibility."
+                    )
+                }
+            }
+            .pointerCursor()
+            LabeledContent {
+                HotKeyRecorderControl(keyPrefix: "pushToTalkHotKey", defaultLabel: "⌃⌥M")
+            } label: {
+                Text("Hold to talk")
+            }
+            .disabled(!pushToTalkEnabled)
+            .opacity(pushToTalkEnabled ? 1 : 0.5)
+        } header: {
+            Text("Push to talk")
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
