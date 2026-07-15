@@ -87,11 +87,13 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Edith "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+cp -R .build/release/Edith_EdithKit.bundle "$APP/Contents/Resources/"
 
 mkdir -p "$HELPER/Contents/MacOS" "$HELPER/Contents/Resources"
 cp .build/release/EdithHelper "$HELPER/Contents/MacOS/"
 cp Resources/HelperInfo.plist "$HELPER/Contents/Info.plist"
 cp Resources/AppIcon.icns "$HELPER/Contents/Resources/"
+cp -R .build/release/Edith_EdithKit.bundle "$HELPER/Contents/Resources/"
 cp Resources/refresh-usage "$HELPER/Contents/Resources/"
 chmod +x "$HELPER/Contents/Resources/refresh-usage"
 # menu bar / header glyph: trim the icon's canvas margin, then scale

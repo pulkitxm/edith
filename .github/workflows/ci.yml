@@ -71,8 +71,12 @@ jobs:
       - name: Verify nested helper bundle and signing
         run: |
           test -f dist/Edith.app/Contents/MacOS/Edith
+          test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/claude.svg
+          test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/codex.svg
           test -f dist/Edith.app/Contents/Library/LoginItems/EdithHelper.app/Contents/MacOS/EdithHelper
           test -f dist/Edith.app/Contents/Library/LoginItems/EdithHelper.app/Contents/Resources/AppIcon.icns
+          test -f dist/Edith.app/Contents/Library/LoginItems/EdithHelper.app/Contents/Resources/Edith_EdithKit.bundle/claude.svg
+          test -f dist/Edith.app/Contents/Library/LoginItems/EdithHelper.app/Contents/Resources/Edith_EdithKit.bundle/codex.svg
           /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' dist/Edith.app/Contents/Library/LoginItems/EdithHelper.app/Contents/Info.plist | grep -qx Edith
           codesign --verify dist/Edith.app/Contents/Library/LoginItems/EdithHelper.app
           codesign --verify dist/Edith.app

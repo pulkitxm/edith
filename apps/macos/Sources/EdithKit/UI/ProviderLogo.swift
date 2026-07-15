@@ -2,8 +2,14 @@ import AppKit
 import SwiftUI
 
 public enum ProviderLogo {
+    private static let resources = [Bundle.main.resourceURL, Bundle.main.bundleURL]
+        .compactMap { $0?.appendingPathComponent("Edith_EdithKit.bundle") }
+        .compactMap(Bundle.init(url:))
+        .first
+
     public static func image(_ provider: LimitProvider) -> NSImage? {
-        guard let url = Bundle.module.url(forResource: provider.rawValue, withExtension: "svg"),
+        guard
+            let url = resources?.url(forResource: provider.rawValue, withExtension: "svg"),
             let image = NSImage(contentsOf: url)
         else { return nil }
         image.isTemplate = true
