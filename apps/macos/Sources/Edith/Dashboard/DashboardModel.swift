@@ -347,8 +347,10 @@ final class DashboardModel: ObservableObject {
     private var reloadDebounce: Task<Void, Never>?
 
     private let cal = Calendar.current
+    private let preferences: UserDefaults
 
-    init() {
+    init(preferences: UserDefaults = SharedDefaults.store) {
+        self.preferences = preferences
         watchDataDir()
     }
 
@@ -460,14 +462,16 @@ final class DashboardModel: ObservableObject {
     private func restore() {
         loading = true
         defer { loading = false }
-        let d = SharedDefaults.store
+        let d = preferences
         if let rs = d.string(forKey: "dashRange") { range = decodeRange(rs) }
         let validSources = Set(allSources.map(\.id))
         let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
         let savedKnownSources = d.string(forKey: "dashKnownSources").flatMap(Self.decodeSet)
-        selectedSources = UsageSourceSelection.reconcile(
-            selected: savedSources, known: savedKnownSources, available: validSources,
-            defaults: Set(defaultSources))
+        let savedSourceVersion = (d.object(forKey: "dashSourceSelectionVersion") as? NSNumber)?
+            .intValue
+        selectedSources = UsageSourceSelection.restore(
+            selected: savedSources, known: savedKnownSources, storedVersion: savedSourceVersion,
+            available: validSources, defaults: Set(defaultSources))
         let validModels = Set(allModels)
         if let raw = d.string(forKey: "dashModels"), !raw.isEmpty {
             let saved = Set(raw.split(separator: ",").map(String.init)).intersection(validModels)
@@ -491,7 +495,9 @@ final class DashboardModel: ObservableObject {
         }
         knownSources = validSources
         knownModels = validModels
+        d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
         d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+        d.set(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
     }
 
     private func reconcile() {
@@ -504,7 +510,7 @@ final class DashboardModel: ObservableObject {
                 defaults: Set(defaultSources))
         selectedSources = keptSources
         knownSources = validSources
-        SharedDefaults.store.set(
+        preferences.set(
             knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         let validModels = Set(allModels)
         let keptModels =
@@ -515,10 +521,11 @@ final class DashboardModel: ObservableObject {
 
     private func persist() {
         guard !loading else { return }
-        let d = SharedDefaults.store
+        let d = preferences
         d.set(encodeRange(range), forKey: "dashRange")
         d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
         d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+        d.set(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
         d.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
         d.set(billingDay, forKey: "dashBillingDay")
         d.set(sortColumn.rawValue, forKey: "dashSort")
