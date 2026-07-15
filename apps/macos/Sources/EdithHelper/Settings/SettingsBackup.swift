@@ -9,9 +9,10 @@ final class SettingsBackup: ObservableObject {
     @Published private(set) var musicBackupRunning = false
     @Published private(set) var clipboardBackupRunning = false
 
-    private static let keys = [
+    nonisolated static let backedKeys = [
         "theme", "tab", "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
         "presenterBlurUsage",
+        "presenterEnabled",
         "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
         "presenterDetectScreenSharing", "presenterDetectMirroring",
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
@@ -20,6 +21,8 @@ final class SettingsBackup: ObservableObject {
         "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
         "tabSystemEnabled", "preventSleep", "tabOrder",
         "backupSettings", "backupUsage", "backupLimits",
+        "budgetEnabled", "budgetMode", "budgetKind", "budgetCapPercent", "budgetDeadline",
+        "claudeLimitsEnabled", "codexLimitsEnabled", "limitsProvider",
         "limitsInMenuBar", "menuBarColorMode", "smartColor",
         "menuBarSubColorHex", "menuBarLowColorHex", "menuBarMidColorHex", "menuBarHighColorHex",
         "menuBarStatsColorHex", "warnPercent", "critPercent", "pacingMargin",
@@ -30,12 +33,15 @@ final class SettingsBackup: ObservableObject {
         "notifyTokenExpired",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
-        "menuBarSystemStats", "micMuteInMenuBar", "cleanerSelectionOverrides",
+        "menuBarSystemStats", "micMuteEnabled", "micMuteInMenuBar",
+        "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
         "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
         "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
-        "notchShelfShowOnExternal", "notchShelfHaptics",
+        "notchShelfShowOnExternal", "notchShelfHaptics", "notchShelfShowMusic",
+        "notchAlertsEnabled", "notchAlertAudio", "notchAlertPower", "notchAlertBattery",
+        "notchAlertBluetooth", "notchAudioMixerEnabled",
         "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
         "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
         "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
@@ -51,18 +57,21 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
         "tabCalendarEnabled", "musicLooping",
-        "mainSidebarOpen", "mainSidebarWidth",
+        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
     ]
 
-    private static let sharedKeys: Set<String> = [
+    nonisolated static let sharedKeys: Set<String> = [
         "theme", "lastPaletteTheme", "appearance",
-        "presenterMode", "presenterBlurMusic", "presenterBlurMoney", "presenterBlurUsage",
+        "presenterMode", "presenterEnabled", "presenterBlurMusic", "presenterBlurMoney",
+        "presenterBlurUsage",
         "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
         "presenterDetectScreenSharing", "presenterDetectMirroring",
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         "tabUsageEnabled", "tabMusicEnabled", "tabSystemEnabled", "tabCalendarEnabled", "tabOrder",
         "icloudBackup", "lastBackupAt", "musicBackup", "lastMusicBackupAt",
         "backupSettings", "backupUsage", "backupLimits",
+        "budgetEnabled", "budgetMode", "budgetKind", "budgetCapPercent", "budgetDeadline",
+        "claudeLimitsEnabled", "codexLimitsEnabled", "limitsProvider",
         "limitsInMenuBar", "menuBarColorMode", "smartColor",
         "menuBarSubColorHex", "menuBarLowColorHex", "menuBarMidColorHex", "menuBarHighColorHex",
         "menuBarStatsColorHex", "warnPercent", "critPercent", "pacingMargin",
@@ -73,13 +82,16 @@ final class SettingsBackup: ObservableObject {
         "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashModels", "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
-        "menuBarSystemStats", "micMuteInMenuBar", "cleanerSelectionOverrides",
+        "menuBarSystemStats", "micMuteEnabled", "micMuteInMenuBar",
+        "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
         "preventSleep", "repoPath",
         "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
         "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
-        "notchShelfShowOnExternal", "notchShelfHaptics",
+        "notchShelfShowOnExternal", "notchShelfHaptics", "notchShelfShowMusic",
+        "notchAlertsEnabled", "notchAlertAudio", "notchAlertPower", "notchAlertBattery",
+        "notchAlertBluetooth", "notchAudioMixerEnabled",
         "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
         "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
         "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
@@ -94,7 +106,17 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "mainSidebarOpen", "mainSidebarWidth",
+        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+    ]
+
+    nonisolated static let deviceLocalKeys: Set<String> = [
+        "extensionsExpand", "hasPromptedPermissions", "lastBackupAt", "lastMusicBackupAt",
+        "lastClipboardBackupAt", "micMuted", "migratedFromControlCenter",
+        "notifSessionLevel", "notifSessionPacing", "notifTokenExpiredAt", "notifWeeklyLevel",
+        "notifWeeklyPacing", "permAccessibilityGranted", "permCalendarGranted",
+        "permFullDiskGranted", "permInputMonitoringGranted", "permNotificationsGranted",
+        "permScreenRecordingGranted", "presenterAutoActive", "presenterAutoPaused",
+        "presenterAutoReason", "settingsSection",
     ]
 
     private func store(for key: String) -> UserDefaults {
@@ -304,7 +326,7 @@ final class SettingsBackup: ObservableObject {
 
     private func snapshot() -> Data? {
         var dict: [String: Any] = [:]
-        for key in Self.keys {
+        for key in Self.backedKeys {
             if let value = store(for: key).object(forKey: key) { dict[key] = value }
         }
         return try? JSONSerialization.data(
@@ -393,7 +415,7 @@ final class SettingsBackup: ObservableObject {
             try? fm.startDownloadingUbiquitousItem(at: cloudFile)
             return
         }
-        for (key, value) in dict where Self.keys.contains(key) {
+        for (key, value) in dict where Self.backedKeys.contains(key) {
             store(for: key).set(value, forKey: key)
         }
         try? data.write(to: localFile)
