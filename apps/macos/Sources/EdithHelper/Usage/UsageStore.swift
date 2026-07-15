@@ -37,7 +37,7 @@ final class UsageStore: ObservableObject, FeatureModule {
     private var daily: [DailyRow] = []
     private var billingDay = 26
 
-    private var cachedToken: String?
+    private var cachedClaudeCredential: ClaudeOAuthCredential?
     private var retryNotBefore: Date?
     private var usageMtime: Date?
     private var timer: Timer?
@@ -281,14 +281,17 @@ final class UsageStore: ObservableObject, FeatureModule {
     }
 
     private func fetchLimitsOnce() async {
-        guard let token = currentToken() else {
+        guard var credential = currentClaudeCredential() else {
             limitsError = "Claude Code token not found"
             diag("token not found (keychain + credentials file both empty)")
             keepOrBlankMenuBar()
             return
         }
         do {
-            let usage = try await Self.fetchUsage(token: token)
+            if credential.shouldRefresh(at: Date()) {
+                credential = try await refreshClaudeCredential(credential)
+            }
+            let usage = try await Self.fetchUsage(token: credential.accessToken)
             apply(usage)
             let msg =
                 "usage ok: session=\(Int((session?.percent ?? 0).rounded()))% week=\(Int((week?.percent ?? 0).rounded()))%"
@@ -296,25 +299,33 @@ final class UsageStore: ObservableObject, FeatureModule {
             diag(msg)
             return
         } catch FetchError.unauthorized {
-            diag("401 unauthorized - re-reading token and retrying once")
-            Log.usage.error("401 unauthorized - re-reading token and retrying once")
-            cachedToken = nil
+            diag("401 unauthorized - re-reading credentials and refreshing token")
+            Log.usage.error("401 unauthorized - re-reading credentials and refreshing token")
+            cachedClaudeCredential = nil
         } catch {
             report(error)
             return
         }
 
-        guard let fresh = currentToken() else {
+        guard let latest = currentClaudeCredential() else {
             limitsError = "Claude Code token not found"
             diag("token re-read failed - keychain + credentials file both empty")
             keepOrBlankMenuBar()
             return
         }
         do {
-            let usage = try await Self.fetchUsage(token: fresh)
+            let fresh: ClaudeOAuthCredential
+            if latest.accessToken != credential.accessToken,
+                !latest.shouldRefresh(at: Date())
+            {
+                fresh = latest
+            } else {
+                fresh = try await refreshClaudeCredential(latest)
+            }
+            let usage = try await Self.fetchUsage(token: fresh.accessToken)
             apply(usage)
-            Log.usage.notice("recovered after token re-read")
-            diag("recovered after token re-read")
+            Log.usage.notice("recovered after token refresh")
+            diag("recovered after token refresh")
         } catch {
             report(error)
         }
@@ -324,9 +335,9 @@ final class UsageStore: ObservableObject, FeatureModule {
         let msg: String
         switch error {
         case FetchError.unauthorized:
-            limitsError = "Token expired - run claude to re-login"
+            limitsError = "Claude session expired - run claude to re-login"
             notifier.notifyTokenExpired()
-            msg = "still unauthorized after re-read - token expired, keeping last-known numbers"
+            msg = "token refresh unavailable or rejected - keeping last-known numbers"
         case FetchError.rateLimited(let after):
             retryNotBefore = Date().addingTimeInterval(after ?? 1800)
             limitsError =
@@ -573,49 +584,69 @@ final class UsageStore: ObservableObject, FeatureModule {
         }
     }
 
-    private func currentToken() -> String? {
-        if let t = cachedToken { return t }
-        if let t = Self.tokenFromSecurityCLI() {
+    private func currentClaudeCredential() -> ClaudeOAuthCredential? {
+        if let cachedClaudeCredential { return cachedClaudeCredential }
+        guard let credential = ClaudeCredentialStore.read() else {
+            Log.usage.error("no token found - keychain and credentials file both empty")
+            return nil
+        }
+        switch credential.source {
+        case .keychain:
             Log.usage.notice("token read from keychain (security CLI)")
-            cachedToken = t
-            return t
-        }
-        if let t = Self.tokenFromCredentialsFile() {
+        case .file:
             Log.usage.notice("token read from ~/.claude/.credentials.json")
-            cachedToken = t
-            return t
         }
-        Log.usage.error("no token found - keychain and credentials file both empty")
-        return nil
+        cachedClaudeCredential = credential
+        return credential
     }
 
-    private nonisolated static func tokenFromSecurityCLI() -> String? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        p.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-        guard (try? p.run()) != nil else { return nil }
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        return extractToken(from: data)
+    private func refreshClaudeCredential(_ credential: ClaudeOAuthCredential) async throws
+        -> ClaudeOAuthCredential
+    {
+        let now = Date()
+        guard let refreshToken = credential.usableRefreshToken(at: now) else {
+            throw FetchError.unauthorized
+        }
+        diag("refreshing Claude access token")
+        let response = try await Self.fetchRefreshedClaudeToken(refreshToken: refreshToken)
+        let data = try credential.updatedData(with: response, now: now)
+        try ClaudeCredentialStore.persist(data, source: credential.source)
+        guard let refreshed = ClaudeOAuthCredential.decode(data, source: credential.source) else {
+            throw FetchError.unauthorized
+        }
+        cachedClaudeCredential = refreshed
+        Log.usage.notice("Claude access token refreshed and saved")
+        diag("Claude access token refreshed and saved")
+        return refreshed
     }
 
-    private nonisolated static func tokenFromCredentialsFile() -> String? {
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/.credentials.json")
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return extractToken(from: data)
-    }
-
-    private nonisolated static func extractToken(from data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let oauth = json["claudeAiOauth"] as? [String: Any],
-            let token = oauth["accessToken"] as? String, !token.isEmpty
-        else { return nil }
-        return token
+    private nonisolated static func fetchRefreshedClaudeToken(refreshToken: String) async throws
+        -> ClaudeOAuthRefreshResponse
+    {
+        var request = URLRequest(
+            url: URL(string: "https://platform.claude.com/v1/oauth/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 15
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken,
+            "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+        ])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        switch code {
+        case 200:
+            return try JSONDecoder().decode(ClaudeOAuthRefreshResponse.self, from: data)
+        case 400, 401, 403:
+            throw FetchError.unauthorized
+        case 429:
+            let after = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
+                .flatMap(TimeInterval.init)
+            throw FetchError.rateLimited(after: after)
+        default:
+            throw FetchError.http(code)
+        }
     }
 
     static let ymdParser: DateFormatter = {
