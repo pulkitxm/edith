@@ -501,8 +501,7 @@ struct RootView: View {
                     if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
                         showDeveloper.toggle()
                     } else {
-                        mainWindowSection = "general"
-                        MainApp.openDashboard()
+                        MainApp.openSettings()
                         dismissPanel()
                     }
                 } label: {

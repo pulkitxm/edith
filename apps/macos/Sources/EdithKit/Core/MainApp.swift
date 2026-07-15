@@ -17,4 +17,8 @@ public enum MainApp {
         SharedDefaults.store.set(section, forKey: "mainWindowSection")
         openDashboard()
     }
+
+    public static func openSettings() {
+        open(section: "settings")
+    }
 }

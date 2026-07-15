@@ -180,7 +180,7 @@ struct NotchShelfContentView: View {
             Spacer(minLength: 0)
             Button {
                 controller.collapseNow()
-                MainApp.openDashboard()
+                MainApp.openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 11.5))
