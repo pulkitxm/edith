@@ -77,6 +77,12 @@ final class UsageStore: ObservableObject, FeatureModule {
         return SharedDefaults.store.object(forKey: key) as? Bool ?? true
     }
 
+    nonisolated static func enabledLimitProviders(claude: Bool, codex: Bool) -> [LimitProvider] {
+        [(LimitProvider.claude, claude), (.codex, codex)].compactMap { provider, enabled in
+            enabled ? provider : nil
+        }
+    }
+
     init() {
         seedFromHistory()
         startPolling()
@@ -261,8 +267,14 @@ final class UsageStore: ObservableObject, FeatureModule {
         if !force, let gate = retryNotBefore, gate > Date() { return }
         guard !refreshingLimits else { return }
         refreshingLimits = true
-        if providerEnabled(.claude) { await fetchLimitsOnce() }
-        if providerEnabled(.codex) { await fetchCodexLimitsOnce() }
+        let providers = Self.enabledLimitProviders(
+            claude: providerEnabled(.claude), codex: providerEnabled(.codex))
+        for provider in providers {
+            switch provider {
+            case .claude: await fetchLimitsOnce()
+            case .codex: await fetchCodexLimitsOnce()
+            }
+        }
         try? await Task.sleep(nanoseconds: 400_000_000)
         refreshingLimits = false
     }
