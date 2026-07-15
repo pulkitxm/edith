@@ -2,6 +2,27 @@ import EventKit
 import Foundation
 
 public enum CalendarDayEvents {
+    private struct EventIdentity: Hashable {
+        let title: String?
+        let startDate: Date
+        let endDate: Date
+        let isAllDay: Bool
+    }
+
+    public static func deduplicated(_ events: [EKEvent]) -> [EKEvent] {
+        var identities = Set<EventIdentity>()
+        return events.filter { event in
+            identities.insert(
+                EventIdentity(
+                    title: event.title,
+                    startDate: event.startDate,
+                    endDate: event.endDate,
+                    isAllDay: event.isAllDay
+                )
+            ).inserted
+        }
+    }
+
     public static func sorted(_ events: [EKEvent]) -> [EKEvent] {
         events.sorted { a, b in
             if a.isAllDay != b.isAllDay { return a.isAllDay }
@@ -12,7 +33,7 @@ public enum CalendarDayEvents {
     public static func groupedByDay(
         _ events: [EKEvent], calendar: Calendar = .current
     ) -> [(day: Date, events: [EKEvent])] {
-        let byDay = Dictionary(grouping: sorted(events)) {
+        let byDay = Dictionary(grouping: sorted(deduplicated(events))) {
             calendar.startOfDay(for: $0.startDate)
         }
         return byDay.keys.sorted().map { (day: $0, events: byDay[$0]!) }

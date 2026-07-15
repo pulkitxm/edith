@@ -36,6 +36,35 @@ import EventKit
         #expect(sorted.map(\.title) == ["First", "Second"])
     }
 
+    @Test func removesMatchingEventsAcrossCalendars() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let first = Self.event(title: "Daily Standup", start: start)
+        let duplicate = Self.event(title: "Daily Standup", start: start)
+        duplicate.location = "Synced from another account"
+
+        let deduplicated = CalendarDayEvents.deduplicated([first, duplicate])
+
+        #expect(deduplicated.count == 1)
+        #expect(deduplicated.first === first)
+    }
+
+    @Test func retainsEventsWhenIdentityFieldsDiffer() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let original = Self.event(title: "Daily Standup", start: start)
+        let differentTitle = Self.event(title: "Team Standup", start: start)
+        let differentStart = Self.event(
+            title: "Daily Standup", start: start.addingTimeInterval(60))
+        let differentEnd = Self.event(title: "Daily Standup", start: start)
+        differentEnd.endDate = start.addingTimeInterval(3600)
+        let allDay = Self.event(title: "Daily Standup", start: start, allDay: true)
+
+        let deduplicated = CalendarDayEvents.deduplicated([
+            original, differentTitle, differentStart, differentEnd, allDay,
+        ])
+
+        #expect(deduplicated.count == 5)
+    }
+
     @Test func groupsByDayAscendingSortedWithin() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -51,6 +80,17 @@ import EventKit
         #expect(groups.count == 2)
         #expect(groups[0].events.map(\.title) == ["d0-early", "d0-late"])
         #expect(groups[1].events.map(\.title) == ["d1"])
+    }
+
+    @Test func groupsMatchingEventsOnce() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let first = Self.event(title: "Holiday", start: start, allDay: true)
+        let duplicate = Self.event(title: "Holiday", start: start, allDay: true)
+
+        let groups = CalendarDayEvents.groupedByDay([first, duplicate])
+
+        #expect(groups.count == 1)
+        #expect(groups[0].events.count == 1)
     }
 }
 

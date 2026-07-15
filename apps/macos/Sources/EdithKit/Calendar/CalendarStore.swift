@@ -68,7 +68,8 @@ public final class CalendarStore: ObservableObject, FeatureModule {
         let end = Calendar.current.date(byAdding: .day, value: daysLoaded, to: start)!
         let predicate = store.predicateForEvents(
             withStart: start, end: end, calendars: store.calendars(for: .event))
-        events = CalendarDayEvents.sorted(store.events(matching: predicate))
+        events = CalendarDayEvents.sorted(
+            CalendarDayEvents.deduplicated(store.events(matching: predicate)))
     }
 
     public func loadMore() {
