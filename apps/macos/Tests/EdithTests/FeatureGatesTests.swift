@@ -26,4 +26,33 @@ import Testing
         #expect(FeatureGates.preventSleepPersisted(systemOn: true, current: true))
         #expect(!FeatureGates.preventSleepPersisted(systemOn: true, current: false))
     }
+
+    @Test func lastUsageProviderTurnsOffDependentFeatures() {
+        let state = AgentUsageSettingsState(
+            enabled: true, claudeEnabled: false, codexEnabled: false, menuBarEnabled: true,
+            alertsEnabled: true, selectedProvider: .codex)
+        let next = AgentUsageSettingsFlow.providersChanged(state)
+        #expect(!next.enabled)
+        #expect(!next.menuBarEnabled)
+        #expect(!next.alertsEnabled)
+    }
+
+    @Test func remainingUsageProviderKeepsDependentFeatures() {
+        let state = AgentUsageSettingsState(
+            enabled: true, claudeEnabled: false, codexEnabled: true, menuBarEnabled: true,
+            alertsEnabled: true, selectedProvider: .codex)
+        #expect(AgentUsageSettingsFlow.providersChanged(state) == state)
+    }
+
+    @Test func reenablingUsageRestoresSelectedProvider() {
+        let state = AgentUsageSettingsState(
+            enabled: false, claudeEnabled: false, codexEnabled: false, menuBarEnabled: false,
+            alertsEnabled: false, selectedProvider: .codex)
+        let next = AgentUsageSettingsFlow.setEnabled(true, in: state)
+        #expect(next.enabled)
+        #expect(!next.claudeEnabled)
+        #expect(next.codexEnabled)
+        #expect(!next.menuBarEnabled)
+        #expect(!next.alertsEnabled)
+    }
 }

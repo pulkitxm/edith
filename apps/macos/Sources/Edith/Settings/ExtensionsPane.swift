@@ -4,6 +4,12 @@ import SwiftUI
 
 struct ExtensionsPane: View {
     @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = true
+    @AppStorage("claudeLimitsEnabled", store: SharedDefaults.store) private var claudeEnabled = true
+    @AppStorage("codexLimitsEnabled", store: SharedDefaults.store) private var codexEnabled = true
+    @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
+    @AppStorage("notifyMaster", store: SharedDefaults.store) private var notifyMaster = false
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var limitsProviderRaw =
+        LimitProvider.claude.rawValue
     @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = true
     @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
         true
@@ -27,7 +33,7 @@ struct ExtensionsPane: View {
             header(
                 "usage", title: "Agent Usage", icon: "chart.bar.fill",
                 subtitle: "Claude and Codex limits, usage stats, and alerts.",
-                enabled: $usageEnabled, group: "Agent")
+                enabled: agentUsageBinding, group: "Agent")
             if expanded.contains("usage") { UsageRows() }
 
             header(
@@ -103,6 +109,30 @@ struct ExtensionsPane: View {
         }
     }
 
+    private var agentUsageBinding: Binding<Bool> {
+        Binding(
+            get: { usageEnabled },
+            set: {
+                applyAgentUsageState(AgentUsageSettingsFlow.setEnabled($0, in: agentUsageState))
+            }
+        )
+    }
+
+    private var agentUsageState: AgentUsageSettingsState {
+        AgentUsageSettingsState(
+            enabled: usageEnabled, claudeEnabled: claudeEnabled, codexEnabled: codexEnabled,
+            menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
+            selectedProvider: LimitProvider(rawValue: limitsProviderRaw) ?? .claude)
+    }
+
+    private func applyAgentUsageState(_ state: AgentUsageSettingsState) {
+        usageEnabled = state.enabled
+        claudeEnabled = state.claudeEnabled
+        codexEnabled = state.codexEnabled
+        limitsInMenuBar = state.menuBarEnabled
+        notifyMaster = state.alertsEnabled
+    }
+
     private func header(
         _ id: String, title: String, icon: String, subtitle: String,
         enabled: Binding<Bool>?, expandable: Bool = true, group: String? = nil
@@ -155,26 +185,59 @@ private struct UsageRows: View {
     @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
     @AppStorage("claudeLimitsEnabled", store: SharedDefaults.store) private var claudeEnabled = true
     @AppStorage("codexLimitsEnabled", store: SharedDefaults.store) private var codexEnabled = true
+    @AppStorage("notifyMaster", store: SharedDefaults.store) private var notifyMaster = false
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var limitsProviderRaw =
+        LimitProvider.claude.rawValue
+
+    private var hasProvider: Bool { claudeEnabled || codexEnabled }
 
     var body: some View {
         Section {
-            Toggle("Claude limits", isOn: $claudeEnabled)
-                .pointerCursor()
-            Toggle("Codex limits", isOn: $codexEnabled)
-                .pointerCursor()
-            Toggle("Show limits in the menu bar", isOn: $limitsInMenuBar)
-                .pointerCursor()
-            LabeledContent("Alerts, budget, and readout colors") {
-                Button("Open Usage settings") {
-                    SharedDefaults.store.set("usage", forKey: "settingsTab")
-                    SharedDefaults.store.set(
-                        MainDestination.settings.rawValue, forKey: "mainWindowSection")
+            Group {
+                Toggle("Claude limits", isOn: $claudeEnabled)
+                    .pointerCursor()
+                Toggle("Codex limits", isOn: $codexEnabled)
+                    .pointerCursor()
+                Toggle("Show limits in the menu bar", isOn: $limitsInMenuBar)
+                    .pointerCursor()
+                LabeledContent("Alerts, budget, and readout colors") {
+                    Button("Open Usage settings") {
+                        SharedDefaults.store.set("usage", forKey: "settingsTab")
+                        SharedDefaults.store.set(
+                            MainDestination.settings.rawValue, forKey: "mainWindowSection")
+                    }
+                    .pointerCursor()
                 }
-                .pointerCursor()
+            }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
+            if !hasProvider {
+                Label("Agent Usage is paused", systemImage: "pause.circle.fill")
+                    .foregroundStyle(.secondary)
+                Text(
+                    "Turn on Agent Usage above to restore \(selectedProvider.label) limits. Menu bar limits and alerts are off."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
+        .onChange(of: claudeEnabled) { reconcileProviders() }
+        .onChange(of: codexEnabled) { reconcileProviders() }
+    }
+
+    private var selectedProvider: LimitProvider {
+        LimitProvider(rawValue: limitsProviderRaw) ?? .claude
+    }
+
+    private func reconcileProviders() {
+        let state = AgentUsageSettingsFlow.providersChanged(
+            AgentUsageSettingsState(
+                enabled: enabled, claudeEnabled: claudeEnabled, codexEnabled: codexEnabled,
+                menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
+                selectedProvider: selectedProvider))
+        enabled = state.enabled
+        limitsInMenuBar = state.menuBarEnabled
+        notifyMaster = state.alertsEnabled
     }
 }
 

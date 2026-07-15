@@ -28,7 +28,8 @@ final class AppServices: ObservableObject {
     }
 
     func sync() {
-        let usageOn = Self.tabEnabled("tabUsageEnabled")
+        let usageState = Self.reconcileAgentUsageSettings()
+        let usageOn = usageState.enabled
         let musicOn = Self.tabEnabled("tabMusicEnabled")
 
         if usageOn, usage == nil { usage = UsageStore() }
@@ -119,5 +120,27 @@ final class AppServices: ObservableObject {
             stats.shutdown()
             systemStats = nil
         }
+    }
+
+    private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {
+        let defaults = SharedDefaults.store
+        let state = AgentUsageSettingsFlow.providersChanged(
+            AgentUsageSettingsState(
+                enabled: tabEnabled("tabUsageEnabled"),
+                claudeEnabled: tabEnabled("claudeLimitsEnabled"),
+                codexEnabled: tabEnabled("codexLimitsEnabled"),
+                menuBarEnabled: tabEnabled("limitsInMenuBar"),
+                alertsEnabled: defaults.bool(forKey: "notifyMaster"),
+                selectedProvider: LimitProvider(
+                    rawValue: defaults.string(forKey: "limitsProvider") ?? "") ?? .claude))
+        let values = [
+            "tabUsageEnabled": state.enabled,
+            "limitsInMenuBar": state.menuBarEnabled,
+            "notifyMaster": state.alertsEnabled,
+        ]
+        for (key, value) in values where defaults.bool(forKey: key) != value {
+            defaults.set(value, forKey: key)
+        }
+        return state
     }
 }
