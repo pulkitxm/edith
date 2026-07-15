@@ -26,7 +26,7 @@ struct ExtensionsPane: View {
         Form {
             header(
                 "usage", title: "Agent Usage", icon: "chart.bar.fill",
-                subtitle: "Claude session and weekly limits, usage stats, and alerts.",
+                subtitle: "Claude and Codex limits, usage stats, and alerts.",
                 enabled: $usageEnabled, group: "Agent")
             if expanded.contains("usage") { UsageRows() }
 
@@ -153,10 +153,16 @@ struct ExtensionsPane: View {
 private struct UsageRows: View {
     @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var enabled = true
     @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
+    @AppStorage("claudeLimitsEnabled", store: SharedDefaults.store) private var claudeEnabled = true
+    @AppStorage("codexLimitsEnabled", store: SharedDefaults.store) private var codexEnabled = true
 
     var body: some View {
         Section {
-            Toggle("Show Claude usage (5h / 7d)", isOn: $limitsInMenuBar)
+            Toggle("Claude limits", isOn: $claudeEnabled)
+                .pointerCursor()
+            Toggle("Codex limits", isOn: $codexEnabled)
+                .pointerCursor()
+            Toggle("Show limits in the menu bar", isOn: $limitsInMenuBar)
                 .pointerCursor()
             LabeledContent("Alerts, budget, and readout colors") {
                 Button("Open Usage settings") {

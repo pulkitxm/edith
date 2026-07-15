@@ -491,14 +491,34 @@ private struct NotchSeekBar: View {
 private struct NotchUsageRings: View {
     @ObservedObject var usage: UsageStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+        LimitProvider.claude.rawValue
     @State private var drawn = false
+
+    private var providers: [LimitProvider] { usage.availableProviders }
+    private var selected: LimitProvider {
+        get {
+            let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
+            return providers.contains(saved) ? saved : providers.first ?? saved
+        }
+        nonmutating set { selectedRaw = newValue.rawValue }
+    }
+
+    private var limits: ProviderLimits { usage.limits(for: selected) }
 
     var body: some View {
         HStack(spacing: 20) {
-            ring("5h", usage.session)
-            ring("7d", usage.week)
+            ring("5h", limits.session)
+            ring("7d", limits.week)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            ProviderSwitchButton(
+                selection: Binding(get: { selected }, set: { selected = $0 }),
+                providers: providers, color: .white.opacity(0.72), size: 14
+            )
+            .padding(8)
+        }
         .overlay(alignment: .topTrailing) { refreshButton.padding(6) }
         .onAppear {
             guard !reduceMotion else {

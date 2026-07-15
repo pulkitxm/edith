@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LimitWindow {
+public struct LimitWindow: Sendable {
     public let percent: Double
     public let resetsAt: Date?
 
@@ -8,6 +8,28 @@ public struct LimitWindow {
         self.percent = percent
         self.resetsAt = resetsAt
     }
+}
+
+public enum LimitProvider: String, CaseIterable, Codable, Identifiable, Sendable {
+    case codex
+    case claude
+
+    public var id: String { rawValue }
+    public var label: String { self == .codex ? "Codex" : "Claude" }
+}
+
+public struct ProviderLimits: Sendable {
+    public let provider: LimitProvider
+    public let session: LimitWindow?
+    public let week: LimitWindow?
+
+    public init(provider: LimitProvider, session: LimitWindow?, week: LimitWindow?) {
+        self.provider = provider
+        self.session = session
+        self.week = week
+    }
+
+    public var isAvailable: Bool { session != nil || week != nil }
 }
 
 public struct UsageThresholds: Equatable {

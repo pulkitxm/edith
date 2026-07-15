@@ -85,7 +85,7 @@ struct MenuBarPane: View {
                         }
                     }
                 } header: {
-                    Text("Claude usage readout")
+                    Text("Agent limit readout")
                 } footer: {
                     Text(
                         isCustomColor

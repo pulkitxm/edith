@@ -25,18 +25,72 @@ final class LimitsStatusItem {
         StatusItemMenu.handleClick(on: item) { MainApp.open(section: "dashboard") }
     }
 
-    func update(session: LimitWindow?, week: LimitWindow?) {
+    func update(_ providers: [ProviderLimits]) {
         let title = NSMutableAttributedString()
         let masked =
             PresenterState.shared.active
             && (SharedDefaults.store.object(forKey: "presenterHideMenuBarNumbers") as? Bool ?? false)
-        segment("5h", window: session, kind: .session, into: title, masked: masked)
-        title.append(NSAttributedString(string: "  "))
-        segment("7d", window: week, kind: .weekly, into: title, masked: masked)
+        if providers.count == 1, let limits = providers.first {
+            segment("5h", window: limits.session, kind: .session, into: title, masked: masked)
+            title.append(NSAttributedString(string: "  "))
+            segment("7d", window: limits.week, kind: .weekly, into: title, masked: masked)
+        } else if providers.count > 1 {
+            for (index, limits) in providers.enumerated() {
+                if index > 0 { title.append(NSAttributedString(string: "   ")) }
+                providerSegment(limits, into: title, masked: masked)
+            }
+        } else {
+            segment("5h", window: nil, kind: .session, into: title, masked: masked)
+            title.append(NSAttributedString(string: "  "))
+            segment("7d", window: nil, kind: .weekly, into: title, masked: masked)
+        }
         item.button?.attributedTitle = title
     }
 
-    func showUnavailable() { update(session: nil, week: nil) }
+    func showUnavailable() { update([]) }
+
+    private func providerSegment(
+        _ limits: ProviderLimits, into out: NSMutableAttributedString, masked: Bool
+    ) {
+        let textColor = subColor ?? numberOverride ?? NSColor.labelColor
+        if let image = ProviderLogo.tintedImage(limits.provider, color: textColor) {
+            let attachment = NSTextAttachment()
+            attachment.image = image
+            attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
+            out.append(NSAttributedString(attachment: attachment))
+            out.append(NSAttributedString(string: " "))
+        }
+        compactValue(limits.session, kind: .session, into: out, masked: masked)
+        out.append(
+            NSAttributedString(
+                string: "/",
+                attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+                    .foregroundColor: textColor.withAlphaComponent(0.65),
+                ]))
+        compactValue(limits.week, kind: .weekly, into: out, masked: masked)
+    }
+
+    private func compactValue(
+        _ window: LimitWindow?, kind: LimitWindowKind, into out: NSMutableAttributedString,
+        masked: Bool
+    ) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        let text: String
+        let color: NSColor
+        if masked {
+            text = "·"
+            color = subColor ?? NSColor.tertiaryLabelColor
+        } else if let window {
+            text = "\(Int(window.percent.rounded()))"
+            color = numberOverride ?? self.color(for: window, kind: kind)
+        } else {
+            text = "\u{2013}"
+            color = subColor ?? NSColor.tertiaryLabelColor
+        }
+        out.append(
+            NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
+    }
 
     private func segment(
         _ label: String, window: LimitWindow?, kind: LimitWindowKind,

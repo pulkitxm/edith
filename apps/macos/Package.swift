@@ -7,6 +7,7 @@ let package = Package(
     targets: [
         .target(
             name: "EdithKit",
+            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(

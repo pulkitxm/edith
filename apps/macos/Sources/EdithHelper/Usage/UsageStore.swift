@@ -13,6 +13,8 @@ struct RangeStat: Identifiable {
 final class UsageStore: ObservableObject, FeatureModule {
     @Published private(set) var session: LimitWindow?
     @Published private(set) var week: LimitWindow?
+    @Published private(set) var codexSession: LimitWindow?
+    @Published private(set) var codexWeek: LimitWindow?
     @Published private(set) var limitsError: String?
     @Published private(set) var limitsUpdatedAt: Date?
     @Published private(set) var refreshingLimits = false
@@ -56,6 +58,24 @@ final class UsageStore: ObservableObject, FeatureModule {
     @Published private(set) var limitPoints: [LimitPoint] = []
     private var historyMtime: Date?
     private var statusItem: LimitsStatusItem?
+
+    var availableProviders: [LimitProvider] {
+        LimitProvider.allCases.filter { limits(for: $0).isAvailable && providerEnabled($0) }
+    }
+
+    func limits(for provider: LimitProvider) -> ProviderLimits {
+        switch provider {
+        case .claude:
+            return ProviderLimits(provider: provider, session: session, week: week)
+        case .codex:
+            return ProviderLimits(provider: provider, session: codexSession, week: codexWeek)
+        }
+    }
+
+    func providerEnabled(_ provider: LimitProvider) -> Bool {
+        let key = provider == .claude ? "claudeLimitsEnabled" : "codexLimitsEnabled"
+        return SharedDefaults.store.object(forKey: key) as? Bool ?? true
+    }
 
     init() {
         seedFromHistory()
@@ -132,16 +152,23 @@ final class UsageStore: ObservableObject, FeatureModule {
     }
 
     private func seedFromHistory() {
-        guard let last = LimitsHistory.latest() else { return }
         let now = Date()
         let fresh = { (w: LimitWindow?) -> LimitWindow? in
             w.flatMap { ($0.resetsAt ?? .distantFuture) > now ? $0 : nil }
         }
-        session = fresh(last.session)
-        week = fresh(last.week)
-        guard session != nil || week != nil else { return }
-        limitsUpdatedAt = last.date
-        diag("seeded last-known limits from history (\(last.date.formatted()))")
+        if let last = LimitsHistory.latest(provider: .claude) {
+            session = fresh(last.session)
+            week = fresh(last.week)
+            limitsUpdatedAt = last.date
+        }
+        if let last = LimitsHistory.latest(provider: .codex) {
+            codexSession = fresh(last.session)
+            codexWeek = fresh(last.week)
+            limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
+        }
+        if let limitsUpdatedAt {
+            diag("seeded last-known limits from history (\(limitsUpdatedAt.formatted()))")
+        }
     }
 
     private func startPolling() {
@@ -212,7 +239,7 @@ final class UsageStore: ObservableObject, FeatureModule {
         let on = SharedDefaults.store.object(forKey: "limitsInMenuBar") as? Bool ?? true
         if on, statusItem == nil {
             statusItem = LimitsStatusItem()
-            statusItem?.update(session: session, week: week)
+            updateStatusItem()
         }
         if !on, let item = statusItem {
             item.remove()
@@ -221,7 +248,7 @@ final class UsageStore: ObservableObject, FeatureModule {
     }
 
     func refreshMenuBarItem() {
-        statusItem?.update(session: session, week: week)
+        updateStatusItem()
     }
 
     var nextLimitsRefresh: Date? {
@@ -234,7 +261,8 @@ final class UsageStore: ObservableObject, FeatureModule {
         if !force, let gate = retryNotBefore, gate > Date() { return }
         guard !refreshingLimits else { return }
         refreshingLimits = true
-        await fetchLimitsOnce()
+        if providerEnabled(.claude) { await fetchLimitsOnce() }
+        if providerEnabled(.codex) { await fetchCodexLimitsOnce() }
         try? await Task.sleep(nanoseconds: 400_000_000)
         refreshingLimits = false
     }
@@ -326,11 +354,15 @@ final class UsageStore: ObservableObject, FeatureModule {
     }()
 
     private func keepOrBlankMenuBar() {
-        if session == nil, week == nil {
+        if availableProviders.isEmpty {
             statusItem?.showUnavailable()
         } else {
-            statusItem?.update(session: session, week: week)
+            updateStatusItem()
         }
+    }
+
+    private func updateStatusItem() {
+        statusItem?.update(availableProviders.map(limits(for:)))
     }
 
     private func apply(_ usage: OAuthUsage) {
@@ -347,10 +379,143 @@ final class UsageStore: ObservableObject, FeatureModule {
         quickRetryTask?.cancel()
         quickRetryTask = nil
         notifier.evaluate(session: session, week: week)
-        history.append(session: session, week: week)
+        history.append(provider: .claude, session: session, week: week)
         SettingsBackup.shared.syncLimits()
-        statusItem?.update(session: session, week: week)
+        updateStatusItem()
         IPC.post(IPC.Name.limitsUpdated)
+    }
+
+    private func fetchCodexLimitsOnce() async {
+        do {
+            let limits = try await Task.detached(priority: .utility) {
+                try Self.readCodexLimits()
+            }.value
+            codexSession = limits.session
+            codexWeek = limits.week
+            limitsUpdatedAt = Date()
+            history.append(provider: .codex, session: codexSession, week: codexWeek)
+            SettingsBackup.shared.syncLimits()
+            updateStatusItem()
+            IPC.post(IPC.Name.limitsUpdated)
+            diag(
+                "codex usage ok: session=\(Int((codexSession?.percent ?? 0).rounded()))% week=\(Int((codexWeek?.percent ?? 0).rounded()))%"
+            )
+        } catch {
+            diag("codex limits unavailable: \(error.localizedDescription)")
+            keepOrBlankMenuBar()
+        }
+    }
+
+    private struct CodexWindow: Decodable {
+        let usedPercent: Double
+        let windowDurationMins: Double?
+        let resetsAt: Double?
+    }
+
+    private struct CodexSnapshot: Decodable {
+        let primary: CodexWindow?
+        let secondary: CodexWindow?
+    }
+
+    private struct CodexRateLimitsResult: Decodable {
+        let rateLimits: CodexSnapshot?
+    }
+
+    private struct CodexResponse: Decodable {
+        let id: Int?
+        let result: CodexRateLimitsResult?
+    }
+
+    private enum CodexLimitsError: LocalizedError {
+        case executableMissing
+        case unavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .executableMissing: return "Codex is not installed"
+            case .unavailable: return "Codex limits are unavailable"
+            }
+        }
+    }
+
+    private nonisolated static func readCodexLimits() throws -> ProviderLimits {
+        guard let executable = codexExecutable() else { throw CodexLimitsError.executableMissing }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = ["app-server"]
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = Pipe()
+        try process.run()
+        defer { process.terminate() }
+
+        func send(_ object: [String: Any]) throws {
+            let data = try JSONSerialization.data(withJSONObject: object)
+            input.fileHandleForWriting.write(data + Data("\n".utf8))
+        }
+
+        func response(id: Int) throws -> CodexResponse {
+            var buffer = Data()
+            while process.isRunning {
+                let data = output.fileHandleForReading.availableData
+                if data.isEmpty { break }
+                buffer.append(data)
+                while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                    let line = buffer[..<newline]
+                    buffer.removeSubrange(...newline)
+                    if let value = try? JSONDecoder().decode(CodexResponse.self, from: line),
+                        value.id == id
+                    {
+                        return value
+                    }
+                }
+            }
+            throw CodexLimitsError.unavailable
+        }
+
+        try send([
+            "method": "initialize", "id": 0,
+            "params": [
+                "clientInfo": ["name": "edith", "title": "Edith", "version": "1.0"]
+            ],
+        ])
+        _ = try response(id: 0)
+        try send(["method": "initialized", "params": [:]])
+        try send(["method": "account/rateLimits/read", "id": 1, "params": [:]])
+        guard let snapshot = try response(id: 1).result?.rateLimits else {
+            throw CodexLimitsError.unavailable
+        }
+        let windows = [snapshot.primary, snapshot.secondary].compactMap { $0 }
+        let mapped = windows.map { window in
+            (
+                duration: window.windowDurationMins ?? 0,
+                value: LimitWindow(
+                    percent: window.usedPercent,
+                    resetsAt: window.resetsAt.map(Date.init(timeIntervalSince1970:)))
+            )
+        }.sorted { $0.duration < $1.duration }
+        let session = mapped.first { $0.duration > 0 && $0.duration < 7 * 24 * 60 }?.value
+        let week = mapped.last { $0.duration >= 7 * 24 * 60 }?.value ?? mapped.last?.value
+        return ProviderLimits(provider: .codex, session: session, week: week)
+    }
+
+    private nonisolated static func codexExecutable() -> URL? {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser
+        let candidates = [
+            home.appendingPathComponent(".local/bin/codex").path,
+            "/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex",
+        ]
+        if let path = ProcessInfo.processInfo.environment["PATH"] {
+            for directory in path.split(separator: ":") {
+                let candidate = URL(fileURLWithPath: String(directory))
+                    .appendingPathComponent("codex").path
+                if fm.isExecutableFile(atPath: candidate) { return URL(fileURLWithPath: candidate) }
+            }
+        }
+        return candidates.first { fm.isExecutableFile(atPath: $0) }.map(URL.init(fileURLWithPath:))
     }
 
     private struct OAuthUsage: Decodable {
@@ -577,19 +742,18 @@ final class UsageStore: ObservableObject, FeatureModule {
         calendarDays = points
     }
 
-    func loadLimitHistory() async {
+    func loadLimitHistory(provider: LimitProvider = .claude) async {
         let url = LimitsHistory.url
         let mtime =
             (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
             as? Date
-        if let mtime, mtime == historyMtime { return }
         historyMtime = mtime
         let since = Date().addingTimeInterval(-24 * 3600)
         let points = await Task.detached(priority: .utility) {
             guard let text = try? String(contentsOf: url, encoding: .utf8) else {
                 return [LimitPoint]()
             }
-            return LimitsHistory.parse(text, since: since)
+            return LimitsHistory.parse(text, since: since, provider: provider)
         }.value
         limitPoints = points
     }

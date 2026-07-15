@@ -20,13 +20,14 @@ struct ResetMarker: Identifiable {
 enum DashLimits {
     private struct Row: Decodable {
         let ts: String
+        let p: LimitProvider?
         let s: Double?
         let w: Double?
         let sr: String?
         let wr: String?
     }
 
-    static func loadAll() -> [DashLimitPoint] {
+    static func loadAll(provider: LimitProvider = .claude) -> [DashLimitPoint] {
         guard let text = try? String(contentsOf: LimitsHistory.url, encoding: .utf8) else {
             return []
         }
@@ -34,7 +35,7 @@ enum DashLimits {
         var out: [DashLimitPoint] = []
         for line in text.split(separator: "\n") {
             guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = EdithDate.parseISO(r.ts)
+                let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
             else { continue }
             out.append(
                 DashLimitPoint(
@@ -44,18 +45,28 @@ enum DashLimits {
         return out.sorted { $0.t < $1.t }
     }
 
-    static func loadLatest() -> DashLimitPoint? {
+    static func loadLatest(provider: LimitProvider = .claude) -> DashLimitPoint? {
         let text = FileTail.read(LimitsHistory.url, maxBytes: 8192)
         let dec = JSONDecoder()
         for line in text.split(separator: "\n").reversed() {
             guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = EdithDate.parseISO(r.ts)
+                let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
             else { continue }
             return DashLimitPoint(
                 t: t, s: r.s, w: r.w,
                 sr: r.sr.flatMap(EdithDate.parseISO), wr: r.wr.flatMap(EdithDate.parseISO))
         }
         return nil
+    }
+
+    static func availableProviders() -> [LimitProvider] {
+        let text = FileTail.read(LimitsHistory.url, maxBytes: 65_536)
+        let decoder = JSONDecoder()
+        let found = Set(
+            text.split(separator: "\n").compactMap { line in
+                (try? decoder.decode(Row.self, from: Data(line.utf8))).map { $0.p ?? .claude }
+            })
+        return LimitProvider.allCases.filter(found.contains)
     }
 
     static func downsample(_ rows: [DashLimitPoint], now: Date, rawWindow: TimeInterval = 7 * 86400)
@@ -115,15 +126,31 @@ struct RateLimitsDialsView: View {
     @AppStorage("warnPercent") private var warn = 60
     @AppStorage("critPercent") private var crit = 85
     @State private var point: DashLimitPoint?
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+        LimitProvider.claude.rawValue
+
+    private var providers: [LimitProvider] { DashLimits.availableProviders() }
+    private var selected: LimitProvider {
+        get {
+            let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
+            return providers.contains(saved) ? saved : providers.first ?? saved
+        }
+        nonmutating set { selectedRaw = newValue.rawValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
+                ProviderSwitchButton(
+                    selection: Binding(get: { selected }, set: { selected = $0 }),
+                    providers: providers, color: DashSkin.ink(dark), size: 16)
                 Text("Rate limits").font(DashSkin.serif(18)).foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Text("session · weekly").font(.system(size: 11.5))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                LimitsRefreshButton(dark: dark) { point = DashLimits.loadLatest() }
+                LimitsRefreshButton(dark: dark) {
+                    point = DashLimits.loadLatest(provider: selected)
+                }
             }
             HStack(spacing: 24) {
                 dial("SESSION (5H)", pct: point?.s, reset: point?.sr)
@@ -142,11 +169,12 @@ struct RateLimitsDialsView: View {
             RoundedRectangle(cornerRadius: 16).strokeBorder(DashSkin.line(dark), lineWidth: 1)
         )
         .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: 12, y: 8)
-        .task { point = DashLimits.loadLatest() }
+        .task { point = DashLimits.loadLatest(provider: selected) }
+        .onChange(of: selectedRaw) { point = DashLimits.loadLatest(provider: selected) }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.limitsUpdated)
         ) { _ in
-            point = DashLimits.loadLatest()
+            point = DashLimits.loadLatest(provider: selected)
         }
     }
 
@@ -235,6 +263,17 @@ struct LimitsCardView: View {
     @State private var marks: [ResetMarker] = []
     @State private var range = "24h"
     @State private var selected: Date?
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedProviderRaw =
+        LimitProvider.claude.rawValue
+
+    private var providers: [LimitProvider] { DashLimits.availableProviders() }
+    private var selectedProvider: LimitProvider {
+        get {
+            let saved = LimitProvider(rawValue: selectedProviderRaw) ?? .claude
+            return providers.contains(saved) ? saved : providers.first ?? saved
+        }
+        nonmutating set { selectedProviderRaw = newValue.rawValue }
+    }
 
     private var sessionC: Color { DashSkin.accent(dark) }
     private let weeklyC = DashPalette.color("#c89b3c")
@@ -251,22 +290,28 @@ struct LimitsCardView: View {
 
     var body: some View {
         SkinCard(title: "Rate limits - session & weekly", dark: dark) {
-            if all.count > 1 {
-                VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                ProviderSwitchButton(
+                    selection: Binding(
+                        get: { selectedProvider }, set: { selectedProvider = $0 }),
+                    providers: providers, color: DashSkin.ink(dark), size: 15)
+                if all.count > 1 {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            segmented
+                            Spacer()
+                            readout
+                            LimitsRefreshButton(dark: dark) { reloadAll() }
+                        }
+                        chart
+                    }
+                } else {
                     HStack {
-                        segmented
-                        Spacer()
-                        readout
+                        Text("Collecting limit history…")
+                            .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, minHeight: 60)
                         LimitsRefreshButton(dark: dark) { reloadAll() }
                     }
-                    chart
-                }
-            } else {
-                HStack {
-                    Text("Collecting limit history…")
-                        .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: 60)
-                    LimitsRefreshButton(dark: dark) { reloadAll() }
                 }
             }
         }
@@ -275,10 +320,11 @@ struct LimitsCardView: View {
             selected = nil
             rebuildVisible()
         }
+        .onChange(of: selectedProviderRaw) { reloadAll() }
     }
 
     private func reloadAll() {
-        all = DashLimits.loadAll()
+        all = DashLimits.loadAll(provider: selectedProvider)
         let now = all.last?.t ?? Date()
         downsampled = DashLimits.downsample(all, now: now)
         rebuildVisible()

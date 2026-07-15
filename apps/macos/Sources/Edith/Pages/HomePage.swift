@@ -825,10 +825,24 @@ private struct LimitsSummaryCard: View {
     @AppStorage("warnPercent") private var warn = 60
     @AppStorage("critPercent") private var crit = 85
     @State private var latest: DashLimitPoint?
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+        LimitProvider.claude.rawValue
+
+    private var providers: [LimitProvider] { DashLimits.availableProviders() }
+    private var selected: LimitProvider {
+        get {
+            let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
+            return providers.contains(saved) ? saved : providers.first ?? saved
+        }
+        nonmutating set { selectedRaw = newValue.rawValue }
+    }
 
     var body: some View {
         SkinCard(title: "Rate limits", note: "session · weekly", dark: dark) {
             VStack(alignment: .leading, spacing: 14) {
+                ProviderSwitchButton(
+                    selection: Binding(get: { selected }, set: { selected = $0 }),
+                    providers: providers, color: DashSkin.ink(dark), size: 15)
                 if let latest {
                     HStack(alignment: .top, spacing: 20) {
                         gauge("Session (5h)", value: latest.s, reset: latest.sr)
@@ -855,13 +869,14 @@ private struct LimitsSummaryCard: View {
             }
         }
         .task { reload() }
+        .onChange(of: selectedRaw) { reload() }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
             reload()
         }
     }
 
     private func reload() {
-        latest = DashLimits.loadLatest()
+        latest = DashLimits.loadLatest(provider: selected)
     }
 
     private func barColor(_ value: Double) -> Color {

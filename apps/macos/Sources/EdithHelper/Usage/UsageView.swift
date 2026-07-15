@@ -13,10 +13,21 @@ struct UsageView: View {
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("warnPercent", store: SharedDefaults.store) private var warn = 60
     @AppStorage("critPercent", store: SharedDefaults.store) private var crit = 85
+    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+        LimitProvider.claude.rawValue
 
     private var theme: Color { themeColor(themeName) }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
+    private var providers: [LimitProvider] { store.availableProviders }
+    private var selected: LimitProvider {
+        get {
+            let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
+            return providers.contains(saved) ? saved : providers.first ?? saved
+        }
+        nonmutating set { selectedRaw = newValue.rawValue }
+    }
+    private var limits: ProviderLimits { store.limits(for: selected) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -28,13 +39,19 @@ struct UsageView: View {
         }
         .task {
             await store.loadStats()
-            await store.loadLimitHistory()
+            await store.loadLimitHistory(provider: selected)
+        }
+        .onChange(of: selectedRaw) {
+            Task { await store.loadLimitHistory(provider: selected) }
         }
     }
 
     private var limitsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                ProviderSwitchButton(
+                    selection: Binding(get: { selected }, set: { selected = $0 }),
+                    providers: providers, color: .primary, size: 15)
                 eyebrow("LIMITS")
                 Spacer()
                 if let at = store.limitsUpdatedAt {
@@ -76,8 +93,8 @@ struct UsageView: View {
                 .help("Refresh limits now")
             }
             HStack(spacing: 12) {
-                ring("SESSION", window: store.session)
-                ring("WEEK", window: store.week)
+                ring("SESSION", window: limits.session)
+                ring("WEEK", window: limits.week)
             }
             if !store.limitPoints.isEmpty {
                 LimitsChartView(points: store.limitPoints, theme: theme)

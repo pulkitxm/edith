@@ -131,4 +131,18 @@ import Testing
         #expect(lines.count == 1)
         #expect(lines[0].contains("10:00:00"))
     }
+
+    @Test func providersAreStoredAndFilteredIndependently() throws {
+        let claude = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 12, resetsAt: nil), week: nil,
+            now: now)
+        let codex = LimitsHistory.row(
+            provider: .codex, session: nil, week: LimitWindow(percent: 48, resetsAt: nil),
+            now: now)
+        let text = claude.line + codex.line
+        let claudePoints = LimitsHistory.parse(text, since: .distantPast, provider: .claude)
+        let codexPoints = LimitsHistory.parse(text, since: .distantPast, provider: .codex)
+        #expect(claudePoints.map(\.s) == [12])
+        #expect(codexPoints.map(\.w) == [48])
+    }
 }

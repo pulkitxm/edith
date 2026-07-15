@@ -9,11 +9,12 @@ public struct LimitsHistory {
         self.fileURL = url
     }
 
-    private var lastKey: String?
+    private var lastKeys: [LimitProvider: String] = [:]
     private var seeded = false
 
     private struct Row: Codable {
         let ts: String
+        let p: LimitProvider?
         let s: Double?
         let w: Double?
         let sr: String?
@@ -22,26 +23,32 @@ public struct LimitsHistory {
 
     private static let iso = ISO8601DateFormatter()
 
-    public static func row(session: LimitWindow?, week: LimitWindow?, now: Date) -> (
+    public static func row(
+        provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?, now: Date
+    ) -> (
         key: String, line: String
     ) {
         let round1 = { (v: Double) in (v * 10).rounded() / 10 }
         let r = Row(
             ts: iso.string(from: now),
+            p: provider,
             s: session.map { round1($0.percent) },
             w: week.map { round1($0.percent) },
             sr: session?.resetsAt.map { iso.string(from: $0) },
             wr: week?.resetsAt.map { iso.string(from: $0) })
-        let key = "\(r.s ?? -1)|\(r.w ?? -1)|\(r.sr ?? "-")|\(r.wr ?? "-")"
+        let key = "\(provider.rawValue)|\(r.s ?? -1)|\(r.w ?? -1)|\(r.sr ?? "-")|\(r.wr ?? "-")"
         let data = (try? JSONEncoder().encode(r)) ?? Data("{}".utf8)
         return (key, String(decoding: data, as: UTF8.self) + "\n")
     }
 
-    public mutating func append(session: LimitWindow?, week: LimitWindow?, now: Date = Date()) {
+    public mutating func append(
+        provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
+        now: Date = Date()
+    ) {
         if !seeded { seed() }
-        let (key, line) = Self.row(session: session, week: week, now: now)
-        guard key != lastKey else { return }
-        lastKey = key
+        let (key, line) = Self.row(provider: provider, session: session, week: week, now: now)
+        guard key != lastKeys[provider] else { return }
+        lastKeys[provider] = key
         let url = fileURL
         let fm = FileManager.default
         try? fm.createDirectory(
@@ -69,20 +76,26 @@ public struct LimitsHistory {
         guard let data = try? Data(contentsOf: fileURL),
             let text = String(data: data, encoding: .utf8)
         else { return }
-        guard let line = text.split(separator: "\n").last,
-            let row = try? JSONDecoder().decode(Row.self, from: Data(line.utf8))
-        else { return }
-        lastKey = "\(row.s ?? -1)|\(row.w ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")"
+        let decoder = JSONDecoder()
+        for line in text.split(separator: "\n").reversed() {
+            guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)) else { continue }
+            let provider = row.p ?? .claude
+            guard lastKeys[provider] == nil else { continue }
+            lastKeys[provider] =
+                "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")"
+        }
     }
 
-    public static func latest(url: URL = LimitsHistory.url) -> (
+    public static func latest(
+        provider: LimitProvider = .claude, url: URL = LimitsHistory.url
+    ) -> (
         date: Date, session: LimitWindow?, week: LimitWindow?
     )? {
         let text = FileTail.read(url, maxBytes: 8192)
         let decoder = JSONDecoder()
         for line in text.split(separator: "\n").reversed() {
             guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)),
-                let date = EdithDate.parseISO(row.ts)
+                let date = EdithDate.parseISO(row.ts), (row.p ?? .claude) == provider
             else { continue }
             return (
                 date: date,
@@ -97,12 +110,15 @@ public struct LimitsHistory {
         return nil
     }
 
-    public static func parse(_ text: String, since: Date) -> [LimitPoint] {
+    public static func parse(
+        _ text: String, since: Date, provider: LimitProvider = .claude
+    ) -> [LimitPoint] {
         var out: [LimitPoint] = []
         let decoder = JSONDecoder()
         for line in text.split(separator: "\n") {
             guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)),
-                let date = EdithDate.parseISO(row.ts), date >= since
+                let date = EdithDate.parseISO(row.ts), date >= since,
+                (row.p ?? .claude) == provider
             else { continue }
             out.append(LimitPoint(date: date, s: row.s, w: row.w))
         }
