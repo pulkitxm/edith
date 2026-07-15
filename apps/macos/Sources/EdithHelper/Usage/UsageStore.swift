@@ -33,6 +33,7 @@ final class UsageStore: ObservableObject, FeatureModule {
     @Published private(set) var diagnostics = ""
 
     private var defaultSources: [String] = []
+    private var knownSources: Set<String> = []
     private var daily: [DailyRow] = []
     private var billingDay = 26
 
@@ -677,11 +678,11 @@ final class UsageStore: ObservableObject, FeatureModule {
         let meta = parsed.sourceMeta ?? [:]
         sources = (parsed.sources ?? []).map { SourceInfo(id: $0, label: meta[$0]?.label ?? $0) }
         statsGeneratedAt = Self.parseISO(parsed.generatedAt)
-        if selectedSources.isEmpty {
-            selectedSources = Set(defaultSources)
-        } else {
-            recomputeStats()
-        }
+        let availableSources = Set(sources.map(\.id))
+        selectedSources = UsageSourceSelection.reconcile(
+            selected: selectedSources, known: knownSources, available: availableSources,
+            defaults: Set(defaultSources))
+        knownSources = availableSources
     }
 
     private func recomputeStats() {

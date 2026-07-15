@@ -463,12 +463,11 @@ final class DashboardModel: ObservableObject {
         let d = SharedDefaults.store
         if let rs = d.string(forKey: "dashRange") { range = decodeRange(rs) }
         let validSources = Set(allSources.map(\.id))
-        if let raw = d.string(forKey: "dashSources"), !raw.isEmpty {
-            let saved = Set(raw.split(separator: ",").map(String.init)).intersection(validSources)
-            selectedSources = saved.isEmpty ? Set(defaultSources) : saved
-        } else if selectedSources.isEmpty || selectedSources.isDisjoint(with: validSources) {
-            selectedSources = Set(defaultSources)
-        }
+        let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
+        let savedKnownSources = d.string(forKey: "dashKnownSources").flatMap(Self.decodeSet)
+        selectedSources = UsageSourceSelection.reconcile(
+            selected: savedSources, known: savedKnownSources, available: validSources,
+            defaults: Set(defaultSources))
         let validModels = Set(allModels)
         if let raw = d.string(forKey: "dashModels"), !raw.isEmpty {
             let saved = Set(raw.split(separator: ",").map(String.init)).intersection(validModels)
@@ -492,6 +491,7 @@ final class DashboardModel: ObservableObject {
         }
         knownSources = validSources
         knownModels = validModels
+        d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
     }
 
     private func reconcile() {
@@ -499,9 +499,13 @@ final class DashboardModel: ObservableObject {
         defer { loading = false }
         let validSources = Set(allSources.map(\.id))
         let keptSources =
-            selectedSources.union(validSources.subtracting(knownSources)).intersection(validSources)
-        selectedSources = keptSources.isEmpty ? Set(defaultSources) : keptSources
+            UsageSourceSelection.reconcile(
+                selected: selectedSources, known: knownSources, available: validSources,
+                defaults: Set(defaultSources))
+        selectedSources = keptSources
         knownSources = validSources
+        SharedDefaults.store.set(
+            knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         let validModels = Set(allModels)
         let keptModels =
             selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
@@ -514,6 +518,7 @@ final class DashboardModel: ObservableObject {
         let d = SharedDefaults.store
         d.set(encodeRange(range), forKey: "dashRange")
         d.set(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
+        d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         d.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
         d.set(billingDay, forKey: "dashBillingDay")
         d.set(sortColumn.rawValue, forKey: "dashSort")
@@ -534,6 +539,11 @@ final class DashboardModel: ObservableObject {
         case .month(let ym): return "month:\(ym)"
         case .custom(let f, let t): return "custom:\(f)~\(t)"
         }
+    }
+
+    private static func decodeSet(_ raw: String) -> Set<String>? {
+        let values = Set(raw.split(separator: ",").map(String.init))
+        return values.isEmpty ? nil : values
     }
 
     private func decodeRange(_ s: String) -> DashRange {

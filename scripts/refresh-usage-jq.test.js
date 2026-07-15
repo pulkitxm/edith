@@ -14,6 +14,8 @@ function extractBlock(name) {
 }
 
 const NORM = extractBlock("NORM");
+const ASSEMBLE = extractBlock("ASSEMBLE");
+const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
 
@@ -28,6 +30,12 @@ function jq(program, input, args = []) {
     .split("\n")
     .filter(Boolean)
     .map((l) => JSON.parse(l));
+}
+
+function jqExit(program, input, args = []) {
+  return Bun.spawnSync(["jq", "-e", ...args, program], {
+    stdin: Buffer.from(input),
+  }).exitCode;
 }
 
 const walk = (lines, src = "cli", off = 0) =>
@@ -327,5 +335,135 @@ describe("NORM", () => {
       "real",
     ]);
     expect(day.breakdowns[0].inputTokens).toBe(7);
+  });
+});
+
+describe("usage pipeline", () => {
+  const assemble = (sources, sessions = []) =>
+    jq(ASSEMBLE, sources.map((source) => JSON.stringify(source)).join("\n"), [
+      "-s",
+      "--arg",
+      "now",
+      "2026-07-15T12:00:00Z",
+      "--argjson",
+      "ss",
+      JSON.stringify([[{ sessions }]]),
+    ])[0];
+
+  test("large multi-agent totals survive normalization and assembly exactly", () => {
+    const normalized = (source, label, daily) => ({
+      source,
+      label,
+      norm: jq(
+        `${NORM} [.daily[] | normDay | .breakdowns |= dropSynthetic]`,
+        JSON.stringify({ daily }),
+      )[0],
+    });
+    const cli = normalized("cli", "Claude Code", [
+      {
+        date: "2026-07-15",
+        modelBreakdowns: [
+          {
+            modelName: "opus",
+            inputTokens: 12_989,
+            outputTokens: 100_000,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 300_000,
+            cost: 1,
+          },
+        ],
+      },
+    ]);
+    const codex = normalized("codex", "Codex", [
+      {
+        date: "2026-07-15",
+        costUSD: 1000,
+        models: {
+          "gpt-5.6-sol": {
+            inputTokens: 43_272_379,
+            outputTokens: 2_830_907,
+            reasoningOutputTokens: 692_521,
+            cacheReadTokens: 1_473_051_648,
+          },
+        },
+      },
+    ]);
+    const out = assemble(
+      [cli, codex],
+      [
+        { id: "cli-session", source: "cli" },
+        { id: "codex-session", source: "codex" },
+      ],
+    );
+    expect(out.sources).toEqual(["cli", "codex"]);
+    expect(out.defaultSources).toEqual(["cli", "codex"]);
+    expect(out.totals.tokens).toBe(1_520_260_444);
+    expect(out.totals.inputTokens).toBe(43_285_368);
+    expect(out.totals.outputTokens).toBe(3_623_428);
+    expect(out.totals.cacheReadTokens).toBe(1_473_351_648);
+    expect(out.daily[0].bySource.cli[0].inputTokens).toBe(12_989);
+    expect(out.daily[0].bySource.codex[0].outputTokens).toBe(3_523_428);
+    expect(out.sessions).toHaveLength(2);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("empty tokens and sessions produce rigid zero totals", () => {
+    const out = assemble([
+      {
+        source: "codex",
+        label: "Codex",
+        norm: [{ period: "2026-07-15", breakdowns: [] }],
+      },
+    ]);
+    expect(out.totals).toEqual({
+      cost: 0,
+      tokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    });
+    expect(out.sessions).toEqual([]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("validation rejects every inconsistent token invariant", () => {
+    const valid = assemble([
+      {
+        source: "codex",
+        label: "Codex",
+        norm: [
+          {
+            period: "2026-07-15",
+            breakdowns: [
+              {
+                modelName: "gpt",
+                inputTokens: 10,
+                outputTokens: 20,
+                cacheCreationTokens: 30,
+                cacheReadTokens: 40,
+                cost: 1,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const corruptions = [
+      (value) => value.totals.tokens++,
+      (value) => value.totals.inputTokens++,
+      (value) => value.totals.outputTokens++,
+      (value) => value.totals.cacheCreationTokens++,
+      (value) => value.totals.cacheReadTokens++,
+      (value) => (value.daily[0].bySource.codex[0].inputTokens = -1),
+      (value) => value.daily.push(structuredClone(value.daily[0])),
+      (value) => value.sources.push("codex"),
+      (value) => value.defaultSources.push("missing"),
+    ];
+    for (const corrupt of corruptions) {
+      const value = structuredClone(valid);
+      corrupt(value);
+      expect(jqExit(VALIDATE, JSON.stringify(value))).toBe(1);
+    }
   });
 });

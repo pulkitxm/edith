@@ -80,6 +80,53 @@ def normDay:
   end;
 '
 
+ASSEMBLE='
+  . as $srcs
+  | [ $srcs[].source ] as $sources
+  | ( reduce $srcs[] as $s ({};
+        reduce $s.norm[] as $day (.;
+          .[$day.period][$s.source] = $day.breakdowns)) ) as $byDate
+  | ( [ $byDate[] | .[] | .[] ] ) as $all
+  | {
+      schemaVersion: 2,
+      generatedAt: $now,
+      sources: $sources,
+      defaultSources: $sources,
+      sourceMeta: ( reduce $srcs[] as $s ({}; .[$s.source] = { label: $s.label, tool: $s.label }) ),
+      totals: {
+        cost: ([ $all[].cost ] | add // 0),
+        tokens: ([ $all[] | (.inputTokens + .outputTokens + .cacheCreationTokens + .cacheReadTokens) ] | add // 0),
+        inputTokens: ([ $all[].inputTokens ] | add // 0),
+        outputTokens: ([ $all[].outputTokens ] | add // 0),
+        cacheCreationTokens: ([ $all[].cacheCreationTokens ] | add // 0),
+        cacheReadTokens: ([ $all[].cacheReadTokens ] | add // 0)
+      },
+      daily: ( $byDate | to_entries | sort_by(.key) | map({ period: .key, bySource: .value }) ),
+      sessions: [ $ss[0][] | .sessions[] ]
+    }
+'
+
+VALIDATE='
+  def tokenSum($rows; $field): [ $rows[] | (.[$field] // 0) ] | add // 0;
+  [ .daily[].bySource[][] ] as $rows
+  | ([ .daily[].period ] | length) as $dayCount
+  | ([ .daily[].period ] | unique | length) as $uniqueDayCount
+  | (. as $root | all($root.defaultSources[]; . as $source | ($root.sources | index($source)) != null))
+    and ($dayCount == $uniqueDayCount)
+    and ([ .daily[].period ] == ([ .daily[].period ] | sort))
+    and ((.sources | length) == (.sources | unique | length))
+    and all($rows[];
+      all([.inputTokens, .outputTokens, .cacheCreationTokens, .cacheReadTokens, .cost][];
+        type == "number" and . >= 0))
+    and ((.totals.inputTokens // -1) == tokenSum($rows; "inputTokens"))
+    and ((.totals.outputTokens // -1) == tokenSum($rows; "outputTokens"))
+    and ((.totals.cacheCreationTokens // -1) == tokenSum($rows; "cacheCreationTokens"))
+    and ((.totals.cacheReadTokens // -1) == tokenSum($rows; "cacheReadTokens"))
+    and ((.totals.tokens // -1) ==
+      (tokenSum($rows; "inputTokens") + tokenSum($rows; "outputTokens")
+        + tokenSum($rows; "cacheCreationTokens") + tokenSum($rows; "cacheReadTokens")))
+'
+
 printf '\n  EDITH · refresh usage · %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
 printf '  ────────────────────────────────────────────────────\n'
 
@@ -147,33 +194,8 @@ printf '  · assembling usage.json…\n'
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 jq -s \
   --arg now "$NOW" \
-  --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") '
-  . as $srcs
-  | [ $srcs[].source ] as $sources
-  | ( reduce $srcs[] as $s ({};
-        reduce $s.norm[] as $day (.;
-          .[$day.period][$s.source] = $day.breakdowns)) ) as $byDate
-  | ( [ $byDate[] | .[] | .[] ] ) as $all
-  | {
-      schemaVersion: 2,
-      generatedAt: $now,
-      sources: $sources,
-      defaultSources: $sources,
-      sourceMeta: ( reduce $srcs[] as $s ({}; .[$s.source] = { label: $s.label, tool: $s.label }) ),
-      totals: {
-        cost: ([ $all[].cost ] | add // 0),
-        tokens: ([ $all[] | (.inputTokens + .outputTokens + .cacheCreationTokens + .cacheReadTokens) ] | add // 0),
-        inputTokens: ([ $all[].inputTokens ] | add // 0),
-        outputTokens: ([ $all[].outputTokens ] | add // 0),
-        cacheCreationTokens: ([ $all[].cacheCreationTokens ] | add // 0),
-        cacheReadTokens: ([ $all[].cacheReadTokens ] | add // 0)
-      },
-      daily: ( $byDate | to_entries | sort_by(.key) | map({ period: .key, bySource: .value }) ),
-      sessions: [ $ss[0][] | .sessions[] ]
-    }
-' "$TMP/manifest.jsonl" >"$TMP/usage.json"
-
-mv "$TMP/usage.json" "$OUT"
+  --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") \
+  "$ASSEMBLE" "$TMP/manifest.jsonl" >"$TMP/usage.json"
 
 PROJECTS_DIR="$HOME/.claude/projects"
 if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
@@ -390,7 +412,7 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
   _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
 
   jq \
-    --slurpfile usage "$OUT" \
+    --slurpfile usage "$TMP/usage.json" \
     --slurpfile titles "$TMP/titles.json" \
     --slurpfile cloud "$TMP/cloud.json" \
     --slurpfile nm <(jq -s 'map({(.cwd): .name}) | add // {}' "$TMP/cwdmap.jsonl") '
@@ -439,7 +461,7 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
         | {tokens: ($x.tokens // 0), cost: ($x.cost // 0)} ) )
       | .projects = ($b.projects // [])
     ]
-  ' "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$OUT"
+  ' "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$TMP/usage.json"
   _phase "merge" "hours + projects merged"
 
   NCLOUD=$(jq 'length' "$TMP/cloud.json" 2>/dev/null || echo 0)
@@ -486,10 +508,16 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
           cacheCreationTokens: ([$all[].cacheCreationTokens] | add // 0),
           cacheReadTokens: ([$all[].cacheReadTokens] | add // 0)
         }
-    ' "$OUT" >"$TMP/split.json" && mv "$TMP/split.json" "$OUT"
+    ' "$TMP/usage.json" >"$TMP/split.json" && mv "$TMP/split.json" "$TMP/usage.json"
     _phase "cc-cloud" "$NCLOUD cloud sessions split out"
   fi
 fi
+
+if ! jq -e "$VALIDATE" "$TMP/usage.json" >/dev/null; then
+  printf '  ✖ usage validation failed; previous data preserved\n' >&2
+  exit 1
+fi
+mv "$TMP/usage.json" "$OUT"
 
 DAYS=$(jq '.daily | length' "$OUT")
 SESS=$(jq '.sessions | length' "$OUT")
