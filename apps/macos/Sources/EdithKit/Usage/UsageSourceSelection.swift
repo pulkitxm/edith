@@ -1,5 +1,5 @@
 public enum UsageSourceSelection {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public static func restore(
         selected: Set<String>?, known: Set<String>?, storedVersion: Int?,
