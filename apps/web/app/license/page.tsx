@@ -17,12 +17,21 @@ export default function LicensePage() {
         <p className="font-medium text-[12px] text-accent uppercase tracking-[0.18em]">License</p>
         <h1>One key, your Macs.</h1>
         <p>
-          Edith requires a license key. Each key is limited to a set number of
-          Macs, based on the license you received.
+          Edith requires a license key. Each key can be active on the number of
+          Macs included with your plan: 1 for Individual, 3 for Personal, and 5
+          for Power. Your exact allowance is shown at checkout and in your order
+          confirmation.
         </p>
         <p>
           Reinstalling Edith on the same Mac does not use another seat. Edith
           recognizes the Mac and keeps it on the existing activation.
+        </p>
+        <p>
+          Moving to a new Mac is self-service: deactivate the old Mac from
+          Settings in the app and the seat is released immediately. If a Mac is
+          lost, broken, or otherwise unreachable, email{" "}
+          <a href="mailto:support@edith.app">support@edith.app</a> and we will
+          release the seat for you.
         </p>
       </main>
       <SiteFooter />

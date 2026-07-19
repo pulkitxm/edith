@@ -15,7 +15,7 @@ export default function TermsPage() {
       <SiteHeader />
       <main className="mx-auto max-w-190 px-6 pt-35 pb-24 [&>h1]:mb-2! [&>h1]:text-[clamp(2rem,5vw,2.8rem)]! [&>h1]:tracking-[-0.02em]! [&>h2]:mt-10! [&>h2]:mb-3! [&>h2]:text-[20px]! [&>p]:mb-3 [&>p]:text-muted [&>p]:leading-[1.7] [&>ul]:mb-4 [&>ul]:list-disc [&>ul]:pl-5.5 [&_a]:text-accent [&_li]:mb-3 [&_li]:text-muted [&_li]:leading-[1.7]">
         <h1>Terms of Service</h1>
-        <p className="mb-10! text-[0.9rem]! text-subtle!">Last updated: July 11, 2026</p>
+        <p className="mb-10! text-[0.9rem]! text-subtle!">Last updated: July 19, 2026</p>
 
         <p>
           These terms govern your purchase and use of the Edith macOS
@@ -26,20 +26,46 @@ export default function TermsPage() {
         <h2>License</h2>
         <p>
           Your one-time purchase grants you a personal, non-exclusive,
-          non-transferable license to install and use the app on Macs that you
-          own or control, for as long as you like. This is a license, not a sale
-          of the software itself.
+          non-transferable, perpetual license to install and use the purchased
+          version of the app on Macs that you own or control. This is a
+          license, not a sale of the software itself.
         </p>
         <ul>
           <li>
-            One license covers one person, on any number of their own Macs.
+            A license may be active on the number of Macs included with the
+            purchased plan. The applicable allowance is shown at checkout and
+            in the order confirmation.
           </li>
-          <li>Team or company use requires one license per person.</li>
+          <li>
+            Active Macs may be replaced through the device-management service,
+            subject to reasonable safeguards against abuse.
+          </li>
+          <li>
+            Team or company use requires the applicable user or team licenses
+            unless the order states otherwise.
+          </li>
           <li>
             You may not resell, sublicense, or redistribute the app or your
             license key.
           </li>
         </ul>
+
+        <h2>License verification</h2>
+        <p>
+          You own a perpetual license to the version you purchased. To prevent
+          abuse of the per-plan device allowance, the app periodically refreshes
+          a signed entitlement from our licensing service, and continues to work
+          offline for at least 30 days after the last successful refresh. If the
+          entitlement cannot be refreshed after that grace period, the app
+          enters a recovery mode in which your local data, settings, and export
+          remain fully accessible while feature engines pause until the license
+          is verified again.
+        </p>
+        <p>
+          If we ever discontinue the licensing service, we commit to releasing a
+          final build or update that removes the online verification requirement
+          so paid licenses keep working.
+        </p>
 
         <h2>Updates</h2>
         <p>

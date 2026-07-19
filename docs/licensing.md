@@ -190,3 +190,83 @@ defense is raising the effort past where casual piracy happens, not making it im
   means shipping a new app build with the new public key and setting the new private key in
   the server at the same time.
 - Mint a key: `cd apps/web && bun scripts/create-license.ts --machines N --label "name"`.
+
+## Version 2
+
+v2 replaces hardware-UUID activation with device keys and signed entitlements. v1 stays
+fully working during the migration (dual protocol).
+
+### Identity and cryptography
+
+- Each install generates a random device id and a P-256 device key pair (Secure Enclave
+  when available, software key otherwise). No hostname or hardware UUID is sent to the
+  server in v2.
+- Public key on the wire is base64url(SPKI DER); its thumbprint is
+  base64url(SHA-256(SPKI DER)). Signatures are base64url DER ECDSA over SHA-256.
+- License keys are stored server-side as lowercase hex
+  HMAC-SHA256(`LICENSE_KEY_LOOKUP_PEPPER`, normalized key), plus `key_last4` for support.
+- Entitlements are Ed25519-signed with a `keyId` (`LICENSE_SIGNING_KEY_ID`, default
+  `edith-2026-07`); the client trusts a static (keyId, publicKey) list so keys can rotate.
+- Each device holds a rotating refresh credential (`edithrc_` + base64url random) stored
+  server-side as an HMAC digest; the previous generation stays valid 60 seconds after
+  rotation. Downloads and appcast use a short-lived HMAC access token
+  (`Authorization: Bearer`, default TTL 30 minutes) alongside the legacy headers until
+  migration completes.
+
+### Endpoints (`/api/v2`)
+
+Every mutating call is challenge-response: the client requests a challenge
+(`POST activation/challenge` or `POST devices/refresh/challenge`), then signs
+`edith-v2.<purpose>.<challengeId>.<nonce>` with the device private key. Challenges expire
+in 5 minutes and are single-use.
+
+- `POST activation`: license key + signed challenge -> entitlement, refresh credential,
+  access token. Seat-limit failures return `machine_limit_reached` only for a valid key;
+  unknown keys get a generic `invalid_credentials`.
+- `POST devices/migrate`: converts an existing v1 machines row (matched by hardware UUID)
+  into a v2 device transactionally, consuming no extra seat.
+- `POST devices/refresh`: rotates the credential and issues a fresh entitlement + token.
+- `POST devices/deactivate`: revokes credentials, frees the seat, records a security event.
+- `POST payments/lemonsqueezy/webhook`: HMAC-verified, idempotent on event id; creates
+  licenses from orders and maps refunds/chargebacks to statuses.
+
+All routes are no-store, strict-zod validated, and rate limited (per-ip, per-key/device,
+and a stricter failure bucket; Upstash Redis in production, in-memory in dev).
+
+### Entitlement format
+
+`b64url(json) + "." + b64url(ed25519 sig)` with fixed key order:
+
+```json
+{"version":2,"keyId":"edith-2026-07","receiptId":"<uuid>","licenseId":"<uuid>","deviceId":"<device id>","deviceKeyThumbprint":"<b64url sha256 spki>","productId":"edith","planId":"personal_3","maxMachines":3,"features":["edith-core"],"issuedAt":0,"notBefore":0,"expiresAt":0,"policyVersion":2}
+```
+
+TTL defaults to 30 days (`LICENSE_ENTITLEMENT_TTL_DAYS`). The client checks version,
+keyId, signature, productId, deviceId, thumbprint, notBefore, and expiry/grace.
+
+### Plans and ceilings
+
+Seeded plans: `individual_1` (1 Mac), `personal_3` (3), `power_5` (5), mapped from
+LemonSqueezy price ids. `custom` allowances live on the license as an explicit override.
+Env ceilings (`LICENSE_STANDARD_MAX_MACHINES_CAP`, `LICENSE_CUSTOM_MAX_MACHINES_CAP`,
+both default 5) are validated at issuance: a plan allowance above its ceiling throws,
+never clamps. The validated allowance is copied into a non-null `max_machines` snapshot
+on the license.
+
+### Statuses and seats
+
+License statuses: `active | expired | refunded | chargeback | suspended | compromised |
+revoked | migrated`, each with a `status_reason`; transitions land in `security_events`.
+Active seats = active v2 devices + remaining v1 machines rows, counted inside the existing
+per-license advisory-lock transaction. Deactivated and revoked devices never count.
+
+### Client states and migration
+
+The client derives one shared licensing state from the stored entitlement plus a trusted
+time record (last server time, wall clock, monotonic anchor, boot session): `valid ->
+refreshNeeded` (expired, inside the 30-day offline grace, silent until the last 5 days)
+`-> recovery` (grace exhausted; data, export, settings, and support stay available while
+feature engines stop), plus `revoked` and `noLicense`. Wall-clock rollback more than 24
+hours behind the last server time caps the state at grace. Existing v1 installs call
+`devices/migrate` once with their stored key and hardware UUID; on success the legacy
+key/receipt files are retired and the machines row is deleted without consuming a seat.
