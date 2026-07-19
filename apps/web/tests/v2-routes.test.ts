@@ -163,7 +163,9 @@ describe("v2 activation routes", () => {
     });
     expect(String(body.refreshCredential)).toStartWith("edithrc_");
     expect(String(body.accessToken)).toContain(".");
-    expect(typeof body.accessTokenExpiresAt).toBe("number");
+    expect(
+      Number.isNaN(Date.parse(String(body.accessTokenExpiresAt))),
+    ).toBe(false);
 
     const payloadSegment = String(body.entitlement).split(".")[0];
     const entitlement = JSON.parse(
@@ -496,6 +498,22 @@ describe("protected downloads", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  test("a refunded license's bearer token gets 403", async () => {
+    const license = store.addLicense({ key: licenseKey, maxMachines: 1 });
+    const { activationResponse } = await activateViaRoutes("device-1");
+    const session = (await activationResponse.json()) as {
+      accessToken: string;
+    };
+    await store.updateLicenseStatus(license.id, "refunded", null);
+    const response = await dmgRoute.GET(
+      getRequest("/api/v1/download/dmg", nextIp(), {
+        authorization: `Bearer ${session.accessToken}`,
+      }),
+    );
+
+    expect(response.status).toBe(403);
   });
 
   test("a deactivated device's token stops working", async () => {

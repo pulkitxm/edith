@@ -86,25 +86,14 @@ jobs:
           codesign --verify --deep --strict dist/Edith.app
           spctl -a -t open --context context:primary-signature "Edith-${GITHUB_REF_NAME}.dmg"
           spctl -a -t open --context context:primary-signature dist/EdithInstaller.dmg
-      - name: Generate appcast
+      - name: Appcast reminder
         run: |
-          GENERATE_APPCAST=.build/artifacts/sparkle/Sparkle/bin/generate_appcast
-          if [ -x "$GENERATE_APPCAST" ]; then
-            rm -rf dist/appcast && mkdir dist/appcast
-            cp "Edith-${GITHUB_REF_NAME}.dmg" dist/appcast/
-            "$GENERATE_APPCAST" dist/appcast
-            test -f dist/appcast/appcast.xml || mv dist/appcast/appcast dist/appcast/appcast.xml
-          else
-            echo "WARNING: generate_appcast not found in SwiftPM artifacts; appcast.xml skipped, run make release locally to publish it" >&2
-          fi
+          echo "WARNING: CI does not hold the Sparkle EdDSA private key, so no appcast is generated here; publish appcast.xml via make release on the machine holding the Sparkle key" >&2
       - name: Upload to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ASSETS=("Edith-${GITHUB_REF_NAME}.dmg" dist/EdithInstaller.dmg)
-          if [ -f dist/appcast/appcast.xml ]; then
-            ASSETS+=(dist/appcast/appcast.xml)
-          fi
           gh release create "${GITHUB_REF_NAME}" --title "Edith ${GITHUB_REF_NAME}" --generate-notes \
             "${ASSETS[@]}" \
           || gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}" --clobber

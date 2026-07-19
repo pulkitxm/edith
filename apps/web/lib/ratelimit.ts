@@ -21,9 +21,9 @@ type WindowCounter = {
 const memoryCounters = new Map<string, WindowCounter>();
 
 export function getClientIp(headers: Headers): string {
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0];
   const realIp = headers.get("x-real-ip");
-  const parsed = forwardedIpSchema.safeParse(forwarded ?? realIp ?? "unknown");
+  const forwarded = headers.get("x-forwarded-for")?.split(",").at(-1);
+  const parsed = forwardedIpSchema.safeParse(realIp ?? forwarded ?? "unknown");
   return parsed.success ? parsed.data : "unknown";
 }
 
@@ -80,11 +80,13 @@ async function incrementCounter(
   const config = upstashConfig();
 
   if (config) {
-    const results = await runUpstashPipeline(config, [
-      ["INCR", key],
-      ["EXPIRE", key, String(Math.ceil(windowMs / 1_000))],
-    ]);
-    return { count: Number(results[0]?.result ?? 0), windowEndsAt };
+    try {
+      const results = await runUpstashPipeline(config, [
+        ["INCR", key],
+        ["EXPIRE", key, String(Math.ceil(windowMs / 1_000))],
+      ]);
+      return { count: Number(results[0]?.result ?? 0), windowEndsAt };
+    } catch {}
   }
 
   pruneMemoryCounters(now);
@@ -106,8 +108,10 @@ async function readCounter(
   const config = upstashConfig();
 
   if (config) {
-    const results = await runUpstashPipeline(config, [["GET", key]]);
-    return { count: Number(results[0]?.result ?? 0), windowEndsAt };
+    try {
+      const results = await runUpstashPipeline(config, [["GET", key]]);
+      return { count: Number(results[0]?.result ?? 0), windowEndsAt };
+    } catch {}
   }
 
   const existing = memoryCounters.get(key);

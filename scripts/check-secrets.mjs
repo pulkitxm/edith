@@ -3,17 +3,18 @@ import { readFileSync } from "node:fs";
 
 const SELF = "scripts/check-secrets.mjs";
 
-const RULES = [
+const isTestPath = (file) => /(^|\/)[Tt]ests\//.test(file);
+
+export const RULES = [
   {
     name: "license key",
     re: /EDITH-[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}/g,
-    allowed: (match, file) =>
-      match.includes("XXXX") || /(^|\/)[Tt]ests\//.test(file),
+    allowed: (match, file) => match.includes("XXXX") || isTestPath(file),
   },
   {
     name: "refresh credential",
     re: /edithrc_[A-Za-z0-9_-]{16,}/g,
-    allowed: (match) => match.includes("XXXX"),
+    allowed: (match, file) => match.includes("XXXX") || isTestPath(file),
   },
   {
     name: "private key block",
@@ -27,19 +28,9 @@ const RULES = [
   },
 ];
 
-const files = execSync("git ls-files -z", { encoding: "utf8" })
-  .split("\0")
-  .filter((f) => f && f !== SELF);
-
-const findings = [];
-for (const file of files) {
-  let text;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch {
-    continue;
-  }
-  if (text.includes("\u0000")) continue;
+export function scanText(text, file) {
+  const findings = [];
+  if (text.includes("\u0000")) return findings;
   for (const rule of RULES) {
     for (const match of text.matchAll(rule.re)) {
       if (rule.allowed(match[0], file)) continue;
@@ -47,11 +38,29 @@ for (const file of files) {
       findings.push(`${file}:${line}: ${rule.name}`);
     }
   }
+  return findings;
 }
 
-if (findings.length > 0) {
-  for (const finding of findings) console.error(finding);
-  console.error(`${findings.length} potential secret(s) found`);
-  process.exit(1);
+if (import.meta.main) {
+  const files = execSync("git ls-files -z", { encoding: "utf8" })
+    .split("\0")
+    .filter((f) => f && f !== SELF);
+
+  const findings = [];
+  for (const file of files) {
+    let text;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    findings.push(...scanText(text, file));
+  }
+
+  if (findings.length > 0) {
+    for (const finding of findings) console.error(finding);
+    console.error(`${findings.length} potential secret(s) found`);
+    process.exit(1);
+  }
+  console.log(`check-secrets: ${files.length} tracked files clean`);
 }
-console.log(`check-secrets: ${files.length} tracked files clean`);

@@ -36,6 +36,7 @@ async function activate(
 ) {
   const { challengeId, nonce } = await issueChallenge(store, "activate", {
     licenseId: license.id,
+    deviceId,
   });
   const result = await activateDeviceV2(store, {
     licenseKey: license.key,
@@ -116,6 +117,7 @@ describe("v2 activation", () => {
     const keyPair = makeDeviceKey();
     const { challengeId, nonce } = await issueChallenge(store, "activate", {
       licenseId: license.id,
+      deviceId: "device-1",
     });
     const input = {
       licenseKey: license.key,
@@ -134,6 +136,56 @@ describe("v2 activation", () => {
     });
   });
 
+  test("a challenge minted for one device cannot be consumed by another", async () => {
+    const store = new FakeStoreV2();
+    const license = store.addLicense({ key: licenseKey, maxMachines: 3 });
+    const keyPair = makeDeviceKey();
+    const { challengeId, nonce } = await issueChallenge(store, "activate", {
+      licenseId: license.id,
+      deviceId: "device-a",
+    });
+
+    const result = await activateDeviceV2(store, {
+      licenseKey: license.key,
+      challengeId,
+      nonce,
+      deviceId: "device-b",
+      devicePublicKey: keyPair.encodedPublicKey,
+      signature: signChallenge(keyPair.privateKey, "activate", challengeId, nonce),
+      appVersion: "2.0.0",
+    });
+
+    expect(result).toEqual({ ok: false, error: "invalid_credentials" });
+    expect(await store.countActiveSeats(license.id)).toBe(0);
+  });
+
+  test("a challenge minted under one license cannot activate another", async () => {
+    const store = new FakeStoreV2();
+    const licenseA = store.addLicense({ key: licenseKey, maxMachines: 3 });
+    const licenseB = store.addLicense({
+      key: "EDITH-5555-6666-7777-8888",
+      maxMachines: 3,
+    });
+    const keyPair = makeDeviceKey();
+    const { challengeId, nonce } = await issueChallenge(store, "activate", {
+      licenseId: licenseB.id,
+      deviceId: "device-1",
+    });
+
+    const result = await activateDeviceV2(store, {
+      licenseKey: licenseA.key,
+      challengeId,
+      nonce,
+      deviceId: "device-1",
+      devicePublicKey: keyPair.encodedPublicKey,
+      signature: signChallenge(keyPair.privateKey, "activate", challengeId, nonce),
+      appVersion: "2.0.0",
+    });
+
+    expect(result).toEqual({ ok: false, error: "invalid_credentials" });
+    expect(await store.countActiveSeats(licenseA.id)).toBe(0);
+  });
+
   test("an expired challenge fails", async () => {
     const store = new FakeStoreV2();
     const license = store.addLicense({ key: licenseKey, maxMachines: 3 });
@@ -141,7 +193,7 @@ describe("v2 activation", () => {
     const { challengeId, nonce } = await issueChallenge(
       store,
       "activate",
-      { licenseId: license.id },
+      { licenseId: license.id, deviceId: "device-1" },
       new Date(Date.now() - 1_000),
     );
 
@@ -165,6 +217,7 @@ describe("v2 activation", () => {
     const attacker = makeDeviceKey();
     const { challengeId, nonce } = await issueChallenge(store, "activate", {
       licenseId: license.id,
+      deviceId: "device-1",
     });
 
     const result = await activateDeviceV2(store, {
@@ -331,6 +384,7 @@ describe("v2 migration", () => {
     const keyPair = makeDeviceKey();
     const { challengeId, nonce } = await issueChallenge(store, "migrate", {
       licenseId: license.id,
+      deviceId: "device-1",
     });
     const result = await migrateMachineV2(store, {
       licenseKey: license.key,
@@ -359,6 +413,7 @@ describe("v2 migration", () => {
     const keyPair = makeDeviceKey();
     const { challengeId, nonce } = await issueChallenge(store, "migrate", {
       licenseId: license.id,
+      deviceId: "device-1",
     });
 
     const result = await migrateMachineV2(store, {

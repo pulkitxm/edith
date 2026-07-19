@@ -17,6 +17,7 @@ export type LicenseRecord = {
   id: string;
   label: string | null;
   maxMachines: number;
+  customMaxMachines: number | null;
   active: boolean;
   status?: string;
 };
@@ -39,6 +40,7 @@ export interface LicenseAccess {
     hardwareUuid: string,
   ): Promise<MachineRecord | null>;
   countMachines(licenseId: string): Promise<number>;
+  countActiveSeats(licenseId: string): Promise<number>;
   upsertMachine(input: MachineInput): Promise<void>;
 }
 
@@ -187,7 +189,6 @@ export interface LicenseAccessV2 extends LicenseAccess {
     appVersion: string | null,
     now: Date,
   ): Promise<void>;
-  countActiveSeats(licenseId: string): Promise<number>;
   deleteMachine(licenseId: string, hardwareUuid: string): Promise<void>;
   insertChallenge(input: ChallengeInput): Promise<void>;
   consumeChallenge(
@@ -272,10 +273,12 @@ export async function activateLicense(
       input.hardwareUuid,
     );
 
-    if (!existingMachine) {
-      const machinesUsed = await access.countMachines(license.id);
+    const maxMachines = effectiveAllowance(license);
 
-      if (machinesUsed >= license.maxMachines) {
+    if (!existingMachine) {
+      const machinesUsed = await access.countActiveSeats(license.id);
+
+      if (machinesUsed >= maxMachines) {
         return { ok: false, error: "license_limit_reached" };
       }
     }
@@ -286,13 +289,13 @@ export async function activateLicense(
       hostname: input.hostname ?? null,
     });
 
-    const machinesUsed = await access.countMachines(license.id);
+    const machinesUsed = await access.countActiveSeats(license.id);
 
     return {
       ok: true,
       label: license.label,
       machinesUsed,
-      maxMachines: license.maxMachines,
+      maxMachines,
     };
   });
 }
@@ -477,7 +480,11 @@ export async function activateDeviceV2(
       now,
     );
 
-    if (!challenge || (challenge.licenseId ?? license.id) !== license.id) {
+    if (
+      !challenge ||
+      challenge.deviceId !== input.deviceId ||
+      (challenge.licenseId ?? license.id) !== license.id
+    ) {
       return invalidCredentials;
     }
 
@@ -594,7 +601,11 @@ export async function migrateMachineV2(
       now,
     );
 
-    if (!challenge || (challenge.licenseId ?? license.id) !== license.id) {
+    if (
+      !challenge ||
+      challenge.deviceId !== input.deviceId ||
+      (challenge.licenseId ?? license.id) !== license.id
+    ) {
       return invalidCredentials;
     }
 

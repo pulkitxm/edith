@@ -98,5 +98,5 @@ INSERT INTO "plans" ("id", "name", "provider", "external_product_id", "external_
   ('personal_3', 'Personal', 'lemonsqueezy', 'product_personal_3', 'price_personal_3', 3, 'one_time'),
   ('power_5', 'Power', 'lemonsqueezy', 'product_power_5', 'price_power_5', 5, 'one_time');
 
-UPDATE "licenses" SET "status" = 'active' WHERE "active";
+UPDATE "licenses" SET "status" = 'revoked', "status_reason" = 'v1_migration' WHERE NOT "active";
 UPDATE "licenses" SET "key_last4" = right("key", 4);

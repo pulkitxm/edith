@@ -253,6 +253,15 @@ both default 5) are validated at issuance: a plan allowance above its ceiling th
 never clamps. The validated allowance is copied into a non-null `max_machines` snapshot
 on the license.
 
+Go-live note: the seeded plan rows carry placeholder LemonSqueezy product and variant ids
+(`product_personal_3`, `price_personal_3`, and so on). Update them to the real variant ids
+before public sales, for example:
+
+```sql
+UPDATE "plans" SET "external_product_id" = '<real product id>', "external_price_id" = '<real variant id>'
+WHERE "id" = 'personal_3';
+```
+
 ### Statuses and seats
 
 License statuses: `active | expired | refunded | chargeback | suspended | compromised |

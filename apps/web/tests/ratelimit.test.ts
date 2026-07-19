@@ -10,13 +10,21 @@ import {
 const windowStart = 1_700_000_400_000;
 
 describe("client ip", () => {
-  test("prefers x-forwarded-for", () => {
+  test("prefers x-real-ip over forwarded entries", () => {
     const headers = new Headers({
       "x-forwarded-for": "1.2.3.4, 5.6.7.8",
       "x-real-ip": "9.9.9.9",
     });
 
-    expect(getClientIp(headers)).toBe("1.2.3.4");
+    expect(getClientIp(headers)).toBe("9.9.9.9");
+  });
+
+  test("falls back to the rightmost x-forwarded-for entry", () => {
+    const headers = new Headers({
+      "x-forwarded-for": "1.2.3.4, 5.6.7.8",
+    });
+
+    expect(getClientIp(headers)).toBe("5.6.7.8");
     expect(getClientIp(new Headers())).toBe("unknown");
   });
 });
@@ -69,6 +77,50 @@ describe("memory rate limiting", () => {
 
     expect(rejected.allowed).toBe(false);
     expect(other.allowed).toBe(true);
+  });
+
+  test("falls back to the memory counter when upstash is unreachable", async () => {
+    const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+    const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const previousFetch = globalThis.fetch;
+    process.env.UPSTASH_REDIS_REST_URL = "https://upstash.invalid";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+    globalThis.fetch = (async () => {
+      throw new Error("upstash down");
+    }) as unknown as typeof fetch;
+
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        const result = await checkRateLimit(
+          "ip-upstash",
+          "/route-upstash",
+          windowStart,
+        );
+        expect(result.allowed).toBe(true);
+      }
+
+      const rejected = await checkRateLimit(
+        "ip-upstash",
+        "/route-upstash",
+        windowStart,
+      );
+
+      expect(rejected.allowed).toBe(false);
+    } finally {
+      globalThis.fetch = previousFetch;
+
+      if (previousUrl === undefined) {
+        delete process.env.UPSTASH_REDIS_REST_URL;
+      } else {
+        process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+      }
+
+      if (previousToken === undefined) {
+        delete process.env.UPSTASH_REDIS_REST_TOKEN;
+      } else {
+        process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+      }
+    }
   });
 
   test("failure bucket blocks after 5 failures with exponential retry-after", async () => {

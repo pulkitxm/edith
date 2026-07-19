@@ -94,6 +94,7 @@ function createAccess(database: Database): LicenseAccessV2 {
           id: licenses.id,
           label: licenses.label,
           maxMachines: licenses.maxMachines,
+          customMaxMachines: licenses.customMaxMachines,
           active: licenses.active,
           status: licenses.status,
         })

@@ -24,14 +24,14 @@ afterAll(() => {
 });
 
 describe("access tokens", () => {
-  test("round-trips with the default 30 minute TTL", () => {
+  test("round-trips with the default 14 hour TTL", () => {
     const { token, expiresAt } = signAccessToken({
       deviceId: "device-1",
       licenseId: "license-1",
       now: 1_700_000_000,
     });
 
-    expect(expiresAt).toBe(1_700_000_000 + 30 * 60);
+    expect(expiresAt).toBe(1_700_000_000 + 14 * 60 * 60);
     expect(verifyAccessToken(token, 1_700_000_100)).toEqual({
       v: 1,
       deviceId: "device-1",

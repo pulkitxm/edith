@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { closeDatabase, getDb } from "@/lib/db";
-import { generateLicenseKey } from "@/lib/license-key";
+import {
+  displaySuffix,
+  generateLicenseKey,
+  keyLookupDigest,
+} from "@/lib/license-key";
 import { licenses } from "@/lib/schema";
 
 const argumentsSchema = z.object({
@@ -51,6 +55,8 @@ async function createLicense(): Promise<string> {
     try {
       await getDb().insert(licenses).values({
         key,
+        keyDigest: keyLookupDigest(key),
+        keyLast4: displaySuffix(key),
         label: input.label ?? null,
         maxMachines: input.machines,
       });

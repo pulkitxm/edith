@@ -28,7 +28,7 @@ function getSecret(): string {
 
 function tokenTtlSeconds(): number {
   const raw = process.env.LICENSE_ACCESS_TOKEN_TTL_MINUTES;
-  const minutes = raw ? Number.parseInt(raw, 10) : 30;
+  const minutes = raw ? Number.parseInt(raw, 10) : 14 * 60;
 
   if (!Number.isInteger(minutes) || minutes < 1) {
     throw new Error(

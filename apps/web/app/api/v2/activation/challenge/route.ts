@@ -6,7 +6,7 @@ import {
   validateDevicePublicKey,
 } from "@/lib/device-auth";
 import { apiJson } from "@/lib/http";
-import { keyLookupDigest } from "@/lib/license-key";
+import { keyLookupDigest, normalizeLicenseKey } from "@/lib/license-key";
 import {
   authFailureResponse,
   ipGuard,
@@ -36,10 +36,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const keyed = await subjectGuard(
-      keyLookupDigest(parsed.data.licenseKey),
-      route,
-    );
+    const key = normalizeLicenseKey(parsed.data.licenseKey);
+    const digest = keyLookupDigest(key);
+    const keyed = await subjectGuard(digest, route);
 
     if (keyed) {
       return keyed;
@@ -49,6 +48,7 @@ export async function POST(request: Request): Promise<Response> {
       return authFailureResponse(request.headers, route);
     }
 
+    const license = await licenseStore.getLicenseByKeyDigest(digest, key);
     const challengeId = randomUUID();
     const nonce = createChallengeNonce();
     const expiresAt = new Date(Date.now() + 300_000);
@@ -56,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
       id: challengeId,
       purpose: parsed.data.purpose ?? "activate",
       nonceDigest: nonceDigest(nonce),
-      licenseId: null,
+      licenseId: license?.id ?? null,
       deviceId: parsed.data.deviceId,
       expiresAt,
     });

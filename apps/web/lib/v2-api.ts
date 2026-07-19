@@ -73,11 +73,17 @@ export async function isDownloadAuthorized(
     }
 
     const device = await licenseStore.getDevice(payload.deviceId);
-    return (
-      device !== null &&
-      device.status === "active" &&
-      device.licenseId === payload.licenseId
-    );
+
+    if (
+      device === null ||
+      device.status !== "active" ||
+      device.licenseId !== payload.licenseId
+    ) {
+      return false;
+    }
+
+    const license = await licenseStore.getLicenseById(device.licenseId);
+    return license !== null && license.active && license.status === "active";
   }
 
   const credentials = parseLicenseHeaders(headers);
@@ -114,12 +120,12 @@ export function deviceSessionJson(
   });
   return apiJson({
     ok: true,
-    planId: result.planId,
+    planId: result.planId ?? "custom",
     machinesUsed: result.machinesUsed,
     maxMachines: result.maxMachines,
     entitlement,
     refreshCredential: result.refreshCredential,
     accessToken: accessToken.token,
-    accessTokenExpiresAt: accessToken.expiresAt,
+    accessTokenExpiresAt: new Date(accessToken.expiresAt * 1000).toISOString(),
   });
 }
