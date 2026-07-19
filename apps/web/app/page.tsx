@@ -74,6 +74,52 @@ const structuredData = {
       thumbnailUrl: "https://edith.pulkit.page/announcement-poster.jpg",
       uploadDate: "2026-07-16",
     },
+    {
+      "@type": "VideoObject",
+      name: "Installing Edith past the macOS privacy warning",
+      description:
+        "A walkthrough of installing Edith on macOS, including approving the app in System Settings under Privacy & Security.",
+      contentUrl: "https://edith.pulkit.page/install-guide.mp4",
+      thumbnailUrl: "https://edith.pulkit.page/install-guide-poster.jpg",
+      uploadDate: "2026-07-19",
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: [
+        {
+          "@type": "Question",
+          name: "When can I purchase Edith?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Edith is in early preview. Mail kpulkit15234@gmail.com and you will get a license key. Purchasing will be supported very soon, and the app will be opened to public use shortly after.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Why can I not install Edith without the privacy and security warning?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Our Apple Developer account approval is still in progress, so builds are not yet notarized by Apple. We are working closely with Apple and this will be resolved soon. Until then, allow the app in System Settings under Privacy & Security by clicking Open Anyway, as shown in the install video on this page.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Does Edith send my usage data anywhere?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "No. Usage stays on your Mac, with no account and no telemetry. Optional iCloud backup merges your history across your own machines.",
+          },
+        },
+        {
+          "@type": "Question",
+          name: "Which Macs does Edith support?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Edith runs on macOS 13 and later, on both Apple Silicon and Intel.",
+          },
+        },
+      ],
+    },
   ],
 };
 
@@ -99,6 +145,7 @@ export default function HomePage() {
           <nav className="hidden gap-8 md:flex [&>a:hover]:text-fg [&>a]:text-[13px] [&>a]:text-muted">
             <a href="#features">Features</a>
             <a href="#performance">Performance</a>
+            <a href="#faq">FAQ</a>
           </nav>
           <a href="/api/download/installer" className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-transparent bg-fg px-4! px-6 py-1.5! py-3 font-medium text-[13px]! text-[14px] text-bg transition-[transform_0.35s_cubic-bezier(0.16,1,0.3,1),border-color_0.35s_ease,box-shadow_0.35s_ease] hover:-translate-y-px motion-reduce:transition-none">
             Download
@@ -1110,6 +1157,85 @@ export default function HomePage() {
           </p>
         </section>
 
+        <section id="faq" className="mx-auto w-full max-w-280 border-line border-t px-6 py-24">
+          <div className="mx-auto mb-14 max-w-155 text-center [&>h2]:mt-3" data-reveal-item="">
+            <p className="font-medium text-[12px] text-accent uppercase tracking-[0.18em]">FAQ</p>
+            <h2>Questions, answered.</h2>
+          </div>
+          <div className="mx-auto flex max-w-190 flex-col gap-3 [&_summary::-webkit-details-marker]:hidden [&_summary]:flex [&_summary]:cursor-pointer [&_summary]:list-none [&_summary]:items-baseline [&_summary]:justify-between [&_summary]:gap-4 [&_summary]:font-medium [&_summary]:text-[16px]" data-reveal-group="">
+            <details className="group rounded-card border border-line bg-surface px-6 py-5">
+              <summary>
+                When can I purchase Edith?
+                <span className="shrink-0 text-subtle transition-transform group-open:rotate-45 motion-reduce:transition-none" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 max-w-160 text-[15px] text-muted leading-[1.6]">
+                Edith is in early preview. Mail{" "}
+                <a href="mailto:kpulkit15234@gmail.com" className="text-fg underline underline-offset-2">
+                  kpulkit15234@gmail.com
+                </a>{" "}
+                and you will get a license key. Purchasing will be supported
+                very soon, and the app will be opened to public use shortly
+                after.
+              </p>
+            </details>
+            <details className="group rounded-card border border-line bg-surface px-6 py-5">
+              <summary>
+                Why can I not install Edith without the privacy and security
+                warning?
+                <span className="shrink-0 text-subtle transition-transform group-open:rotate-45 motion-reduce:transition-none" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 max-w-160 text-[15px] text-muted leading-[1.6]">
+                Our Apple Developer account approval is still in progress, so
+                builds are not yet notarized by Apple. We are working closely
+                with Apple and this will be resolved soon. Until then, allow
+                the app in System Settings under Privacy &amp; Security by
+                clicking Open Anyway. The video below walks through the exact
+                steps.
+              </p>
+              <video
+                controls
+                playsInline
+                preload="none"
+                src="/install-guide.mp4"
+                poster="/install-guide-poster.jpg"
+                width="1728"
+                height="1118"
+                className="mt-5 block h-auto w-full rounded-xl border border-line-2 bg-black"
+                aria-label="Installing Edith past the macOS privacy warning"
+              ></video>
+            </details>
+            <details className="group rounded-card border border-line bg-surface px-6 py-5">
+              <summary>
+                Does Edith send my usage data anywhere?
+                <span className="shrink-0 text-subtle transition-transform group-open:rotate-45 motion-reduce:transition-none" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 max-w-160 text-[15px] text-muted leading-[1.6]">
+                No. Usage stays on your Mac, with no account and no telemetry.
+                Optional iCloud backup merges your history across your own
+                machines.
+              </p>
+            </details>
+            <details className="group rounded-card border border-line bg-surface px-6 py-5">
+              <summary>
+                Which Macs does Edith support?
+                <span className="shrink-0 text-subtle transition-transform group-open:rotate-45 motion-reduce:transition-none" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 max-w-160 text-[15px] text-muted leading-[1.6]">
+                Edith runs on macOS 13 and later, on both Apple Silicon and
+                Intel.
+              </p>
+            </details>
+          </div>
+        </section>
+
         <section id="download" className="mx-auto w-full max-w-280 border-line border-t px-6 pt-24 pb-28 text-center [&>a]:mt-8 [&>h2]:mx-auto [&>h2]:max-w-160 [&>p]:mt-3" data-reveal-group="">
           <h2>Try Edith on your Mac.</h2>
           <a href="/api/download/installer" className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-transparent bg-accent px-6 py-3 font-medium text-[14px] text-accent-fg transition-[transform_0.35s_cubic-bezier(0.16,1,0.3,1),border-color_0.35s_ease,box-shadow_0.35s_ease] hover:-translate-y-px motion-reduce:transition-none">
@@ -1136,6 +1262,7 @@ export default function HomePage() {
           </div>
           <div className="flex gap-6 text-[13px] text-muted [&>a:hover]:text-fg">
             <a href="#features">Features</a>
+            <a href="#faq">FAQ</a>
             <a href="#download">Download</a>
             <a href="/terms">Terms</a>
             <a href="/privacy">Privacy</a>
