@@ -1,4 +1,3 @@
-import { licenseStore } from "@/lib/db";
 import {
   fetchReleaseAsset,
   findReleaseAsset,
@@ -6,33 +5,36 @@ import {
   rewriteAppcastEnclosureUrls,
 } from "@/lib/github";
 import { apiHeaders, apiJson } from "@/lib/http";
-import { verifyLicense } from "@/lib/license";
-import { parseLicenseHeaders } from "@/lib/validation";
+import {
+  authFailureResponse,
+  ipGuard,
+  isDownloadAuthorized,
+} from "@/lib/v2-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request): Promise<Response> {
-  const credentials = parseLicenseHeaders(request.headers);
+const route = "/api/v1/appcast";
 
-  if (!credentials.success) {
-    return apiJson({ error: "unlicensed" }, 403);
+export async function GET(request: Request): Promise<Response> {
+  const guard = await ipGuard(request.headers, route);
+
+  if (guard) {
+    return guard;
   }
 
   let licensed: boolean;
 
   try {
-    licensed = await verifyLicense(
-      licenseStore,
-      credentials.data.key,
-      credentials.data.hardwareUuid,
-    );
+    licensed = await isDownloadAuthorized(request.headers, "appcast");
   } catch {
     return apiJson({ error: "internal" }, 500);
   }
 
   if (!licensed) {
-    return apiJson({ error: "unlicensed" }, 403);
+    return authFailureResponse(request.headers, route, {
+      error: "unlicensed",
+    });
   }
 
   try {

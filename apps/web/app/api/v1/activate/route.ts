@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
-  const rateLimit = checkRateLimit(
+  const rateLimit = await checkRateLimit(
     getClientIp(request.headers),
     "/api/v1/activate",
   );

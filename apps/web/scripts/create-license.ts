@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { closeDatabase, getDb } from "@/lib/db";
+import { generateLicenseKey } from "@/lib/license-key";
 import { licenses } from "@/lib/schema";
 
 const argumentsSchema = z.object({
@@ -31,17 +31,6 @@ function readArguments(values: string[]): z.infer<typeof argumentsSchema> {
   }
 
   return argumentsSchema.parse(parsed);
-}
-
-function generateLicenseKey(): string {
-  const characters = randomBytes(8).toString("hex").toUpperCase();
-  const groups = characters.match(/.{4}/g);
-
-  if (!groups) {
-    throw new Error("Unable to generate a license key");
-  }
-
-  return `EDITH-${groups.join("-")}`;
 }
 
 function isUniqueViolation(error: unknown): boolean {
