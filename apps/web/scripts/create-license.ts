@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { closeDatabase, getDb } from "@/lib/db";
 import {
@@ -5,15 +6,19 @@ import {
   generateLicenseKey,
   keyLookupDigest,
 } from "@/lib/license-key";
-import { licenses } from "@/lib/schema";
+import { licenses, users } from "@/lib/schema";
 
-const argumentsSchema = z.object({
-  machines: z.coerce.number().int().min(1).max(1_000).default(1),
-  label: z.string().trim().min(1).max(200).optional(),
-  name: z.string().trim().min(1).max(200).optional(),
-  email: z.string().trim().email().max(320).optional(),
-  phone: z.string().trim().min(1).max(50).optional(),
-});
+const argumentsSchema = z
+  .object({
+    machines: z.coerce.number().int().min(1).max(1_000).default(1),
+    label: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().toLowerCase().email().max(320).optional(),
+    phone: z.string().trim().min(1).max(50).optional(),
+  })
+  .refine((input) => input.email || (!input.name && !input.phone), {
+    message: "--name and --phone require --email",
+  });
 
 function readArguments(values: string[]): z.infer<typeof argumentsSchema> {
   const parsed: Partial<Record<"machines" | "label" | "name" | "email" | "phone", string>> = {};
@@ -47,8 +52,38 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+async function upsertUser(input: {
+  email?: string;
+  name?: string;
+  phone?: string;
+}): Promise<string | null> {
+  if (!input.email) {
+    return null;
+  }
+
+  const [user] = await getDb()
+    .insert(users)
+    .values({
+      email: input.email,
+      name: input.name ?? null,
+      phone: input.phone ?? null,
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        name: input.name ?? sql`${users.name}`,
+        phone: input.phone ?? sql`${users.phone}`,
+        updatedAt: sql`now()`,
+      },
+    })
+    .returning({ id: users.id });
+
+  return user?.id ?? null;
+}
+
 async function createLicense(): Promise<string> {
   const input = readArguments(process.argv.slice(2));
+  const userId = await upsertUser(input);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const key = generateLicenseKey();
@@ -59,9 +94,7 @@ async function createLicense(): Promise<string> {
         keyDigest: keyLookupDigest(key),
         keyLast4: displaySuffix(key),
         label: input.label ?? null,
-        name: input.name ?? null,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
+        userId,
         maxMachines: input.machines,
       });
       return key;

@@ -27,6 +27,7 @@ import {
   paymentEvents,
   plans,
   securityEvents,
+  users,
 } from "@/lib/schema";
 
 type Database = PostgresJsDatabase<typeof schema>;
@@ -107,13 +108,14 @@ function createAccess(database: Database): LicenseAccessV2 {
         .select({
           id: licenses.id,
           label: licenses.label,
-          name: licenses.name,
+          name: users.name,
           maxMachines: licenses.maxMachines,
           customMaxMachines: licenses.customMaxMachines,
           active: licenses.active,
           status: licenses.status,
         })
         .from(licenses)
+        .leftJoin(users, eq(licenses.userId, users.id))
         .where(eq(licenses.key, key))
         .limit(1);
 

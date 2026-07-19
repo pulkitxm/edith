@@ -21,15 +21,22 @@ export const plans = pgTable("plans", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  phone: text("phone"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const licenses = pgTable("licenses", {
   id: uuid("id").primaryKey().defaultRandom(),
   key: text("key").notNull().unique(),
   keyDigest: text("key_digest").unique(),
   keyLast4: text("key_last4"),
   label: text("label"),
-  name: text("name"),
-  email: text("email"),
-  phone: text("phone"),
+  userId: uuid("user_id").references(() => users.id),
   planId: text("plan_id").references(() => plans.id),
   maxMachines: integer("max_machines").notNull().default(1),
   customMaxMachines: integer("custom_max_machines"),
