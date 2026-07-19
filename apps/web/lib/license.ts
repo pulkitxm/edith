@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   challengeMessage,
   nonceDigest,
@@ -16,6 +17,7 @@ import {
 export type LicenseRecord = {
   id: string;
   label: string | null;
+  name?: string | null;
   maxMachines: number;
   customMaxMachines: number | null;
   active: boolean;
@@ -166,6 +168,10 @@ export type SecurityEventInput = {
   detail?: string | null;
 };
 
+export function productHardwareDigest(rawUuid: string): string {
+  return createHash("sha256").update(`edith:${rawUuid}`, "utf8").digest("hex");
+}
+
 export interface LicenseAccessV2 extends LicenseAccess {
   getLicenseByKeyDigest(
     digest: string,
@@ -190,6 +196,14 @@ export interface LicenseAccessV2 extends LicenseAccess {
     now: Date,
   ): Promise<void>;
   deleteMachine(licenseId: string, hardwareUuid: string): Promise<void>;
+  setDeviceHardwareDigest(deviceId: string, digest: string): Promise<void>;
+  listMachines(licenseId: string): Promise<MachineRecord[]>;
+  reclaimSeatsByHardwareDigest(
+    licenseId: string,
+    hardwareUuidDigest: string,
+    exceptDeviceId: string,
+    now: Date,
+  ): Promise<void>;
   insertChallenge(input: ChallengeInput): Promise<void>;
   consumeChallenge(
     challengeId: string,
@@ -239,6 +253,7 @@ export type ActivationResult =
   | {
       ok: true;
       label: string | null;
+      name: string | null;
       machinesUsed: number;
       maxMachines: number;
     }
@@ -294,6 +309,7 @@ export async function activateLicense(
     return {
       ok: true,
       label: license.label,
+      name: license.name ?? null,
       machinesUsed,
       maxMachines,
     };
@@ -351,6 +367,7 @@ export type ActivateDeviceV2Input = {
   signature: string;
   appVersion: string;
   deviceName?: string;
+  hardwareUuidDigest?: string;
 };
 
 export type MigrateMachineV2Input = ActivateDeviceV2Input & {
@@ -509,6 +526,15 @@ export async function activateDeviceV2(
         return sessionSuccess(access, license, thumbprint, credential);
       }
 
+      if (input.hardwareUuidDigest) {
+        await access.reclaimSeatsByHardwareDigest(
+          license.id,
+          input.hardwareUuidDigest,
+          input.deviceId,
+          now,
+        );
+      }
+
       const machinesUsed = await access.countActiveSeats(license.id);
       const maxMachines = effectiveAllowance(license);
 
@@ -522,6 +548,12 @@ export async function activateDeviceV2(
       }
 
       await access.updateDeviceStatus(existing.id, "active", now);
+      if (input.hardwareUuidDigest) {
+        await access.setDeviceHardwareDigest(
+          existing.id,
+          input.hardwareUuidDigest,
+        );
+      }
       const credential = await issueCredential(access, existing, now);
       await access.touchDeviceVerification(existing.id, input.appVersion, now);
       await access.insertSecurityEvent({
@@ -531,6 +563,15 @@ export async function activateDeviceV2(
         actor: "customer",
       });
       return sessionSuccess(access, license, thumbprint, credential);
+    }
+
+    if (input.hardwareUuidDigest) {
+      await access.reclaimSeatsByHardwareDigest(
+        license.id,
+        input.hardwareUuidDigest,
+        input.deviceId,
+        now,
+      );
     }
 
     const machinesUsed = await access.countActiveSeats(license.id);
@@ -550,7 +591,7 @@ export async function activateDeviceV2(
       licenseId: license.id,
       publicKey: input.devicePublicKey,
       publicKeyThumbprint: thumbprint,
-      hardwareUuidDigest: null,
+      hardwareUuidDigest: input.hardwareUuidDigest ?? null,
       deviceName: input.deviceName ?? null,
       appVersion: input.appVersion,
     });
@@ -613,13 +654,21 @@ export async function migrateMachineV2(
       return invalidCredentials;
     }
 
+    const hardwareUuidDigest = productHardwareDigest(input.hardwareUuid);
+    await access.reclaimSeatsByHardwareDigest(
+      license.id,
+      hardwareUuidDigest,
+      input.deviceId,
+      now,
+    );
+
     const thumbprint = publicKeyThumbprint(input.devicePublicKey);
     await access.insertDevice({
       id: input.deviceId,
       licenseId: license.id,
       publicKey: input.devicePublicKey,
       publicKeyThumbprint: thumbprint,
-      hardwareUuidDigest: nonceDigest(input.hardwareUuid),
+      hardwareUuidDigest,
       deviceName: input.deviceName ?? null,
       appVersion: input.appVersion,
     });

@@ -10,28 +10,29 @@ import { licenses } from "@/lib/schema";
 const argumentsSchema = z.object({
   machines: z.coerce.number().int().min(1).max(1_000).default(1),
   label: z.string().trim().min(1).max(200).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  email: z.string().trim().email().max(320).optional(),
+  phone: z.string().trim().min(1).max(50).optional(),
 });
 
 function readArguments(values: string[]): z.infer<typeof argumentsSchema> {
-  const parsed: { machines?: string; label?: string } = {};
+  const parsed: Partial<Record<"machines" | "label" | "name" | "email" | "phone", string>> = {};
+  const flags = ["machines", "label", "name", "email", "phone"] as const;
 
   for (let index = 0; index < values.length; index += 1) {
     const argument = values[index];
     const value = values[index + 1];
+    const flag = flags.find((candidate) => argument === `--${candidate}`);
 
-    if (argument === "--machines" && value) {
-      parsed.machines = value;
+    if (flag && value) {
+      parsed[flag] = value;
       index += 1;
       continue;
     }
 
-    if (argument === "--label" && value) {
-      parsed.label = value;
-      index += 1;
-      continue;
-    }
-
-    throw new Error("Usage: bun scripts/create-license.ts --machines N --label name");
+    throw new Error(
+      "Usage: bun scripts/create-license.ts --machines N --label label --name name --email email --phone phone",
+    );
   }
 
   return argumentsSchema.parse(parsed);
@@ -58,6 +59,9 @@ async function createLicense(): Promise<string> {
         keyDigest: keyLookupDigest(key),
         keyLast4: displaySuffix(key),
         label: input.label ?? null,
+        name: input.name ?? null,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
         maxMachines: input.machines,
       });
       return key;

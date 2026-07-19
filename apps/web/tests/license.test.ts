@@ -71,6 +71,7 @@ describe("license activation", () => {
     expect(first).toEqual({
       ok: true,
       label: "Personal",
+      name: null,
       machinesUsed: 1,
       maxMachines: 1,
     });
@@ -161,6 +162,7 @@ describe("license activation", () => {
     expect(result).toEqual({
       ok: true,
       label: null,
+      name: null,
       machinesUsed: 2,
       maxMachines: 2,
     });

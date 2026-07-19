@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MACHINES="${1:?usage: mint-license.sh MACHINES [LABEL]}"
+MACHINES="${1:?usage: mint-license.sh MACHINES [LABEL] [NAME] [EMAIL] [PHONE]}"
 LABEL="${2:-}"
+NAME="${3:-}"
+EMAIL="${4:-}"
+PHONE="${5:-}"
 
 case "$MACHINES" in
   ''|*[!0-9]*)
@@ -23,12 +26,19 @@ KEY=$(echo "$KEY_PARTS" | awk "{print \$1}")
 DIGEST=$(echo "$KEY_PARTS" | awk "{print \$2}")
 LAST4=$(echo "$KEY_PARTS" | awk "{print \$3}")
 
-if [ -n "$LABEL" ]; then
-  LABEL_SQL="'$(printf '%s' "$LABEL" | sed "s/'/''/g")'"
-else
-  LABEL_SQL="NULL"
-fi
+sql_text() {
+  if [ -n "$1" ]; then
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+  else
+    printf "NULL"
+  fi
+}
 
-psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "INSERT INTO licenses (key, key_digest, key_last4, label, max_machines) VALUES ('$KEY', '$DIGEST', '$LAST4', $LABEL_SQL, $MACHINES);"
+LABEL_SQL=$(sql_text "$LABEL")
+NAME_SQL=$(sql_text "$NAME")
+EMAIL_SQL=$(sql_text "$EMAIL")
+PHONE_SQL=$(sql_text "$PHONE")
 
-echo "license created: $KEY (machines: $MACHINES, label: ${LABEL:-none})"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "INSERT INTO licenses (key, key_digest, key_last4, label, name, email, phone, max_machines) VALUES ('$KEY', '$DIGEST', '$LAST4', $LABEL_SQL, $NAME_SQL, $EMAIL_SQL, $PHONE_SQL, $MACHINES);"
+
+echo "license created: $KEY (machines: $MACHINES, label: ${LABEL:-none}, name: ${NAME:-none}, email: ${EMAIL:-none}, phone: ${PHONE:-none})"

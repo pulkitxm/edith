@@ -23,8 +23,8 @@ env-sync: env-check
 	bash scripts/sync-env.sh $(if $(filter 1,$(CONFIRM)),--confirm,--dry)
 
 license:
-	@test -n "$(MACHINES)" || { echo "license blocked: set MACHINES, for example make license MACHINES=3 LABEL=\"Pulkit\"" >&2; exit 1; }
-	bash scripts/mint-license.sh $(MACHINES) $(if $(LABEL),"$(LABEL)")
+	@test -n "$(MACHINES)" || { echo "license blocked: set MACHINES, for example make license MACHINES=3 LABEL=\"Pulkit\" NAME=\"Pulkit Garg\" EMAIL=\"pulkit@example.com\" PHONE=\"+911234567890\"" >&2; exit 1; }
+	bash scripts/mint-license.sh $(MACHINES) "$(LABEL)" "$(NAME)" "$(EMAIL)" "$(PHONE)"
 
 web-dev:
 	cd apps/web && bun run dev

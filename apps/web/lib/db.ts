@@ -1,8 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { and, countDistinct, eq, gt, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  countDistinct,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import type { LicenseAccessV2, LicenseStoreV2 } from "@/lib/license";
+import {
+  type LicenseAccessV2,
+  type LicenseStoreV2,
+  productHardwareDigest,
+} from "@/lib/license";
 import * as schema from "@/lib/schema";
 import {
   activationChallenges,
@@ -93,6 +107,7 @@ function createAccess(database: Database): LicenseAccessV2 {
         .select({
           id: licenses.id,
           label: licenses.label,
+          name: licenses.name,
           maxMachines: licenses.maxMachines,
           customMaxMachines: licenses.customMaxMachines,
           active: licenses.active,
@@ -184,6 +199,74 @@ function createAccess(database: Database): LicenseAccessV2 {
             eq(machines.hardwareUuid, hardwareUuid),
           ),
         );
+    },
+    async listMachines(licenseId) {
+      return database
+        .select({
+          licenseId: machines.licenseId,
+          hardwareUuid: machines.hardwareUuid,
+        })
+        .from(machines)
+        .where(eq(machines.licenseId, licenseId));
+    },
+    async setDeviceHardwareDigest(deviceId, digest) {
+      await database
+        .update(devices)
+        .set({ hardwareUuidDigest: digest })
+        .where(eq(devices.id, deviceId));
+    },
+    async reclaimSeatsByHardwareDigest(
+      licenseId,
+      hardwareUuidDigest,
+      exceptDeviceId,
+      now,
+    ) {
+      const freed = await database
+        .update(devices)
+        .set({ status: "deactivated", deactivatedAt: now })
+        .where(
+          and(
+            eq(devices.licenseId, licenseId),
+            eq(devices.hardwareUuidDigest, hardwareUuidDigest),
+            eq(devices.status, "active"),
+            ne(devices.id, exceptDeviceId),
+          ),
+        )
+        .returning({ id: devices.id });
+
+      for (const device of freed) {
+        await database
+          .update(deviceCredentials)
+          .set({ revokedAt: now, revocationReason: "device_reclaimed" })
+          .where(
+            and(
+              eq(deviceCredentials.deviceId, device.id),
+              isNull(deviceCredentials.revokedAt),
+            ),
+          );
+        await database.insert(securityEvents).values({
+          eventType: "device_reclaimed",
+          licenseId,
+          deviceId: device.id,
+          actor: "system",
+        });
+      }
+
+      const rows = await database
+        .select({ id: machines.id, hardwareUuid: machines.hardwareUuid })
+        .from(machines)
+        .where(eq(machines.licenseId, licenseId));
+      const matchingIds = rows
+        .filter(
+          (row) => productHardwareDigest(row.hardwareUuid) === hardwareUuidDigest,
+        )
+        .map((row) => row.id);
+
+      if (matchingIds.length > 0) {
+        await database
+          .delete(machines)
+          .where(inArray(machines.id, matchingIds));
+      }
     },
     async getDevice(deviceId) {
       const [device] = await database
@@ -473,6 +556,25 @@ export const licenseStore: LicenseStoreV2 = {
   },
   async deleteMachine(licenseId, hardwareUuid) {
     return createAccess(getDb()).deleteMachine(licenseId, hardwareUuid);
+  },
+  async listMachines(licenseId) {
+    return createAccess(getDb()).listMachines(licenseId);
+  },
+  async setDeviceHardwareDigest(deviceId, digest) {
+    return createAccess(getDb()).setDeviceHardwareDigest(deviceId, digest);
+  },
+  async reclaimSeatsByHardwareDigest(
+    licenseId,
+    hardwareUuidDigest,
+    exceptDeviceId,
+    now,
+  ) {
+    return createAccess(getDb()).reclaimSeatsByHardwareDigest(
+      licenseId,
+      hardwareUuidDigest,
+      exceptDeviceId,
+      now,
+    );
   },
   async getDevice(deviceId) {
     return createAccess(getDb()).getDevice(deviceId);
