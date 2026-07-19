@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { findReleaseAsset, rewriteAppcastEnclosureUrls } from "@/lib/github";
 
 describe("appcast enclosure rewriting", () => {
-  test("rewrites GitHub enclosure URLs and preserves unrelated URLs", () => {
+  test("rewrites every enclosure URL and preserves non-enclosure URLs", () => {
     const input = `<rss><channel><item><enclosure url="https://github.com/pulkitxm/edith/releases/download/v1.2.3/Edith-v1.2.3.dmg" length="12" /></item><item><enclosure url='https://www.github.com/pulkitxm/edith/releases/download/v1.2.2/Edith-v1.2.2.dmg' /></item><link>https://github.com/pulkitxm/edith</link><enclosure url="https://cdn.example.com/Edith.dmg" /></channel></rss>`;
 
     const result = rewriteAppcastEnclosureUrls(input);
@@ -14,7 +14,18 @@ describe("appcast enclosure rewriting", () => {
       `url='https://edith.pulkit.page/api/v1/download/dmg'`,
     );
     expect(result).toContain("<link>https://github.com/pulkitxm/edith</link>");
-    expect(result).toContain('url="https://cdn.example.com/Edith.dmg"');
+    expect(result).not.toContain("cdn.example.com");
+  });
+
+  test("rewrites bare-filename and feed-relative enclosure URLs", () => {
+    const input = `<rss><channel><item><enclosure url="Edith-v0.0.2.dmg" length="8215056" sparkle:edSignature="sig" /></item><item><enclosure url="https://edith.pulkit.page/api/v1/Edith-v0.0.2.dmg" /></item></channel></rss>`;
+
+    const result = rewriteAppcastEnclosureUrls(input);
+
+    expect(result).toContain(
+      `url="https://edith.pulkit.page/api/v1/download/dmg" length="8215056" sparkle:edSignature="sig"`,
+    );
+    expect(result).not.toContain("api/v1/Edith-v0.0.2.dmg");
   });
 });
 
