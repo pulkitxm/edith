@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { rewriteAppcastEnclosureUrls } from "@/lib/github";
+import { findReleaseAsset, rewriteAppcastEnclosureUrls } from "@/lib/github";
 
 describe("appcast enclosure rewriting", () => {
   test("rewrites GitHub enclosure URLs and preserves unrelated URLs", () => {
@@ -15,5 +15,33 @@ describe("appcast enclosure rewriting", () => {
     );
     expect(result).toContain("<link>https://github.com/pulkitxm/edith</link>");
     expect(result).toContain('url="https://cdn.example.com/Edith.dmg"');
+  });
+});
+
+describe("findReleaseAsset", () => {
+  const assets = [
+    { name: "Edith-v1.2.3.dmg.sig", url: "https://api.example.com/assets/1" },
+    { name: "Edith-v1.2.3.dmg", url: "https://api.example.com/assets/2" },
+    { name: "EdithInstaller.dmg", url: "https://api.example.com/assets/3" },
+  ];
+
+  test("returns the first asset whose name matches the predicate", () => {
+    const asset = findReleaseAsset(assets, (name) => name.endsWith(".dmg"));
+    expect(asset).toEqual(assets[1]);
+  });
+
+  test("matches by exact name", () => {
+    const asset = findReleaseAsset(
+      assets,
+      (name) => name === "EdithInstaller.dmg",
+    );
+    expect(asset).toEqual(assets[2]);
+  });
+
+  test("returns null when nothing matches", () => {
+    expect(findReleaseAsset(assets, (name) => name === "missing.dmg")).toBe(
+      null,
+    );
+    expect(findReleaseAsset([], () => true)).toBe(null);
   });
 });

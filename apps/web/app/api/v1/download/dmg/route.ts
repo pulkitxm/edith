@@ -3,7 +3,7 @@ import {
   findReleaseAsset,
   getLatestRelease,
 } from "@/lib/github";
-import { apiHeaders, apiJson } from "@/lib/http";
+import { apiHeaders, apiJson, attachmentHeader } from "@/lib/http";
 import {
   authFailureResponse,
   ipGuard,
@@ -14,11 +14,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const route = "/api/v1/download/dmg";
-
-function attachmentHeader(filename: string): string {
-  const safeFilename = filename.replace(/["\\\r\n]/g, "_");
-  return `attachment; filename="${safeFilename}"`;
-}
 
 export async function GET(request: Request): Promise<Response> {
   const guard = await ipGuard(request.headers, route);

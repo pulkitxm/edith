@@ -3,15 +3,10 @@ import {
   findReleaseAsset,
   getLatestRelease,
 } from "@/lib/github";
-import { apiHeaders, apiJson } from "@/lib/http";
+import { apiHeaders, apiJson, attachmentHeader } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function attachmentHeader(filename: string): string {
-  const safeFilename = filename.replace(/["\\\r\n]/g, "_");
-  return `attachment; filename="${safeFilename}"`;
-}
 
 export async function GET(): Promise<Response> {
   try {

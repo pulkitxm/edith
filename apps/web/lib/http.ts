@@ -5,6 +5,11 @@ export function apiHeaders(initial?: HeadersInit): Headers {
   return headers;
 }
 
+export function attachmentHeader(filename: string): string {
+  const safeFilename = filename.replace(/["\\\r\n]/g, "_");
+  return `attachment; filename="${safeFilename}"`;
+}
+
 export function apiJson(
   body: unknown,
   status = 200,
