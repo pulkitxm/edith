@@ -159,7 +159,8 @@ private struct HomeHeader: View {
     private var titleSize: CGFloat { compact ? 28 : 40 }
 
     private var firstName: String {
-        let full = NSFullUserName()
+        let licensed = SharedDefaults.store.string(forKey: LicenseState.nameKey) ?? ""
+        let full = licensed.isEmpty ? NSFullUserName() : licensed
         let name = full.isEmpty ? NSUserName() : full
         return name.split(separator: " ").first.map(String.init) ?? name
     }

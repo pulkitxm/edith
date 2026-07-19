@@ -161,7 +161,8 @@ struct ActivationView: View {
                 return
             }
             try licenseState.activate(
-                key: formattedKey, label: response.label, receipt: response.receipt)
+                key: formattedKey, label: response.label, name: response.name,
+                receipt: response.receipt)
             onActivated()
         } catch {
             handleActivationError(error)

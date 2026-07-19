@@ -26,15 +26,18 @@ public enum LicenseClientError: Error, Equatable {
 public struct LicenseActivationResponse: Codable, Equatable {
     public let ok: Bool
     public let label: String
+    public let name: String?
     public let machinesUsed: Int
     public let maxMachines: Int
     public let receipt: String?
 
     public init(
-        ok: Bool, label: String, machinesUsed: Int, maxMachines: Int, receipt: String? = nil
+        ok: Bool, label: String, name: String? = nil, machinesUsed: Int, maxMachines: Int,
+        receipt: String? = nil
     ) {
         self.ok = ok
         self.label = label
+        self.name = name
         self.machinesUsed = machinesUsed
         self.maxMachines = maxMachines
         self.receipt = receipt
@@ -202,27 +205,29 @@ extension LicenseClient {
 
     public func activateV2(
         licenseKey: String, challengeId: String, nonce: String, deviceId: String,
-        devicePublicKey: String, signature: String, appVersion: String, deviceName: String? = nil
+        devicePublicKey: String, signature: String, appVersion: String, deviceName: String? = nil,
+        hardwareUuidDigest: String? = nil
     ) async throws -> LicenseV2ActivationResponse {
         try await requestV2(
             path: "activation",
             payload: ActivationV2Payload(
                 licenseKey: licenseKey, challengeId: challengeId, nonce: nonce, deviceId: deviceId,
                 devicePublicKey: devicePublicKey, signature: signature, appVersion: appVersion,
-                deviceName: deviceName))
+                deviceName: deviceName, hardwareUuidDigest: hardwareUuidDigest))
     }
 
     public func migrateV2(
         licenseKey: String, hardwareUuid: String, deviceId: String, devicePublicKey: String,
         challengeId: String, nonce: String, signature: String, appVersion: String,
-        deviceName: String? = nil
+        deviceName: String? = nil, hardwareUuidDigest: String? = nil
     ) async throws -> LicenseV2ActivationResponse {
         try await requestV2(
             path: "devices/migrate",
             payload: MigrationV2Payload(
                 licenseKey: licenseKey, hardwareUuid: hardwareUuid, deviceId: deviceId,
                 devicePublicKey: devicePublicKey, challengeId: challengeId, nonce: nonce,
-                signature: signature, appVersion: appVersion, deviceName: deviceName))
+                signature: signature, appVersion: appVersion, deviceName: deviceName,
+                hardwareUuidDigest: hardwareUuidDigest))
     }
 
     public func refreshChallenge(
@@ -292,6 +297,7 @@ private struct ActivationV2Payload: Codable {
     let signature: String
     let appVersion: String
     let deviceName: String?
+    let hardwareUuidDigest: String?
 }
 
 private struct MigrationV2Payload: Codable {
@@ -304,6 +310,7 @@ private struct MigrationV2Payload: Codable {
     let signature: String
     let appVersion: String
     let deviceName: String?
+    let hardwareUuidDigest: String?
 }
 
 private struct RefreshChallengePayload: Codable {
@@ -432,6 +439,7 @@ public enum LicenseStateError: Error, Equatable {
 public final class LicenseState {
     public static let activatedKey = "licenseActivated"
     public static let labelKey = "licenseLabel"
+    public static let nameKey = "licenseName"
 
     private let keyStore: any LicenseKeyStoring
     private let defaults: UserDefaults
@@ -452,6 +460,7 @@ public final class LicenseState {
 
     public var isActivated: Bool { defaults.bool(forKey: Self.activatedKey) }
     public var label: String? { defaults.string(forKey: Self.labelKey) }
+    public var name: String? { defaults.string(forKey: Self.nameKey) }
 
     public func licenseKey() throws -> String? {
         try keyStore.readKey()
@@ -494,7 +503,9 @@ public final class LicenseState {
         }
     }
 
-    public func activate(key: String, label: String, receipt: String? = nil) throws {
+    public func activate(key: String, label: String, name: String? = nil, receipt: String? = nil)
+        throws
+    {
         if let receipt {
             _ = try verifiedReceipt(receipt)
         }
@@ -505,6 +516,11 @@ public final class LicenseState {
             try keyStore.deleteReceipt()
         }
         defaults.set(label, forKey: Self.labelKey)
+        if let name, !name.isEmpty {
+            defaults.set(name, forKey: Self.nameKey)
+        } else {
+            defaults.removeObject(forKey: Self.nameKey)
+        }
         defaults.set(true, forKey: Self.activatedKey)
     }
 
@@ -531,6 +547,7 @@ public final class LicenseState {
         }
         defaults.removeObject(forKey: Self.activatedKey)
         defaults.removeObject(forKey: Self.labelKey)
+        defaults.removeObject(forKey: Self.nameKey)
         if let deletionError { throw deletionError }
     }
 
