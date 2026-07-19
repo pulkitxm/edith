@@ -1,10 +1,22 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check ci-web db-migrate
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift-check
+	$(MAKE) ci-comments ci-secrets ci-lint ci-scripts ci-web ci-promo ci-swift-check
+
+ci-web:
+	cd apps/web && bun test tests
+	cd apps/web && bunx tsc --noEmit
+
+db-migrate:
+	@set -eu; \
+	test -n "$(FILE)" || { echo "db-migrate blocked: set FILE, for example make db-migrate FILE=apps/web/drizzle/0001_licensing_v2.sql" >&2; exit 1; }; \
+	test -f "$(FILE)" || { echo "db-migrate blocked: $(FILE) does not exist" >&2; exit 1; }; \
+	DB_URL=$$(grep '^DATABASE_URL=' apps/web/.env | cut -d= -f2- | tr -d '"' | sed 's/&channel_binding=[^&]*//;s/channel_binding=[^&]*&//'); \
+	test -n "$$DB_URL" || { echo "db-migrate blocked: DATABASE_URL missing from apps/web/.env" >&2; exit 1; }; \
+	psql "$$DB_URL" -v ON_ERROR_STOP=1 -f "$(FILE)"
 
 ci-comments:
 	bun scripts/strip-comments.mjs --selftest
