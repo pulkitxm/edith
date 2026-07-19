@@ -20,13 +20,25 @@ SIGN_FLAGS=""
 if [ "$RELEASE" = 1 ]; then
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
   case "$SIGN_IDENTITY" in
-    *"Developer ID Application"*) ;;
+    *"Developer ID Application"*)
+      SIGN_FLAGS="--options runtime --timestamp"
+      ;;
     *)
-      echo "release build blocked: a Developer ID Application signing identity is required" >&2
-      exit 1
+      if [ "${EDITH_RELEASE_ALLOW_DEV_SIGNING:-0}" = 1 ]; then
+        echo "WARNING: release build without Developer ID signing" >&2
+        echo "         (EDITH_RELEASE_ALLOW_DEV_SIGNING=1); artifact will not be" >&2
+        echo "         notarizable and Gatekeeper will warn on other Macs." >&2
+        SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
+        SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Edith Dev')}"
+        SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Apple Development')}"
+        SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+      else
+        echo "release build blocked: a Developer ID Application signing identity is required" >&2
+        echo "set EDITH_RELEASE_ALLOW_DEV_SIGNING=1 to knowingly release with dev signing" >&2
+        exit 1
+      fi
       ;;
   esac
-  SIGN_FLAGS="--options runtime --timestamp"
 else
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
   SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
