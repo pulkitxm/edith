@@ -1,14 +1,17 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-lint ci-scripts ci-promo ci-swift ci-swift-check
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-lint ci-scripts ci-promo ci-swift-check
+	$(MAKE) ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift-check
 
 ci-comments:
 	bun scripts/strip-comments.mjs --selftest
 	bun scripts/strip-comments.mjs --check
+
+ci-secrets:
+	bun run check-secrets
 
 ci-lint:
 	bun run lint
@@ -68,7 +71,7 @@ release:
 	done; \
 	git commit -m "Bump version to $(V)" apps/macos/Resources/Info.plist apps/macos/Resources/HelperInfo.plist apps/macos/Resources/InstallerInfo.plist; \
 	git tag "v$(V)"; \
-	(cd apps/macos && ./build.sh --no-open); \
+	(cd apps/macos && ./build.sh --no-open --release); \
 	rm -rf apps/macos/dmg-root; \
 	rm -f "apps/macos/Edith-v$(V).dmg"; \
 	mkdir apps/macos/dmg-root; \
@@ -82,7 +85,7 @@ release:
 	"$$GENERATE_APPCAST" apps/macos/dist/appcast; \
 	test -f apps/macos/dist/appcast/appcast.xml || mv apps/macos/dist/appcast/appcast apps/macos/dist/appcast/appcast.xml; \
 	test -f apps/macos/dist/appcast/appcast.xml || { echo "release blocked: generate_appcast did not create apps/macos/dist/appcast/appcast.xml" >&2; exit 1; }; \
-	(cd apps/macos && ./build-installer.sh); \
+	(cd apps/macos && ./build-installer.sh --release); \
 	git push origin HEAD "v$(V)"; \
 	gh release create "v$(V)" --title "Edith v$(V)" --generate-notes \
 	  "apps/macos/Edith-v$(V).dmg" \

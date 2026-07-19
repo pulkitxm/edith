@@ -7,11 +7,33 @@ find_identity() {
     | awk -F'"' -v pat="$1" '$0 ~ pat {print $2; exit}'
 }
 
-SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Edith Dev')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Apple Development')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+RELEASE="${EDITH_RELEASE:-0}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --release) RELEASE=1 ;;
+    *) echo "unknown option: $1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+SIGN_FLAGS=""
+if [ "$RELEASE" = 1 ]; then
+  SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
+  case "$SIGN_IDENTITY" in
+    *"Developer ID Application"*) ;;
+    *)
+      echo "release build blocked: a Developer ID Application signing identity is required" >&2
+      exit 1
+      ;;
+  esac
+  SIGN_FLAGS="--options runtime --timestamp"
+else
+  SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Edith Dev')}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Apple Development')}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+fi
 
 swift build -c release --product EdithInstaller
 
@@ -25,7 +47,7 @@ cp Resources/InstallerInfo.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 cp -R .build/release/Edith_EdithKit.bundle "$APP/Contents/Resources/"
 
-codesign --force --sign "$SIGN_IDENTITY" "$APP"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$APP"
 
 cp -R "$APP" "$DMG_ROOT/"
 ln -s /Applications "$DMG_ROOT/Applications"

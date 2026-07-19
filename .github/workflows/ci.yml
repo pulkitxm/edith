@@ -21,6 +21,15 @@ jobs:
       - name: No disallowed comments
         run: bun scripts/strip-comments.mjs --check
 
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: No committed secrets
+        run: bun run check-secrets
+
   lint:
     runs-on: ubuntu-latest
     steps:

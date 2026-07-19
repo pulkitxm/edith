@@ -22,22 +22,37 @@ find_identity() {
   security find-identity -v -p codesigning 2>/dev/null \
     | awk -F'"' -v pat="$1" '$0 ~ pat {print $2; exit}'
 }
-SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Edith Dev')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Apple Development')}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
-INSTALL=0 NO_OPEN=0 PR="" BRANCH=""
+INSTALL=0 NO_OPEN=0 PR="" BRANCH="" RELEASE="${EDITH_RELEASE:-0}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --install) INSTALL=1 ;;
     --no-open) NO_OPEN=1 ;;
+    --release) RELEASE=1 ;;
     --pr) PR="${2:?--pr needs a PR number}"; shift ;;
     --branch) BRANCH="${2:?--branch needs a branch name}"; shift ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
   shift
 done
+
+SIGN_FLAGS=""
+if [ "$RELEASE" = 1 ]; then
+  SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
+  case "$SIGN_IDENTITY" in
+    *"Developer ID Application"*) ;;
+    *)
+      echo "release build blocked: a Developer ID Application signing identity is required" >&2
+      exit 1
+      ;;
+  esac
+  SIGN_FLAGS="--options runtime --timestamp"
+else
+  SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Edith Dev')}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:-$(find_identity 'Apple Development')}"
+  SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+fi
 
 if [ -n "$PR" ]; then
   BRANCH="$(gh pr view "$PR" --json headRefName -q .headRefName)"
@@ -112,8 +127,8 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
 fi
 
 # sign inside-out: the nested helper first, then the outer bundle - never --deep.
-codesign --force --sign "$SIGN_IDENTITY" "$HELPER"
-codesign --force --sign "$SIGN_IDENTITY" "$APP"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$HELPER"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$APP"
 
 killall Edith 2>/dev/null || true
 pkill -if "edith.?menubar" 2>/dev/null || true

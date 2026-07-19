@@ -15,8 +15,19 @@ jobs:
         working-directory: apps/macos
     env:
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
+      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
     steps:
       - uses: actions/checkout@v5
+      - name: Require signing certificate
+        if: env.HAS_SIGNING != 'true'
+        run: |
+          echo "release blocked: the MACOS_CERT_P12 secret is required, refusing to publish ad-hoc signed artifacts" >&2
+          exit 1
+      - name: Require notarization secrets for tags
+        if: env.HAS_NOTARY != 'true' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "release blocked: NOTARY_KEY_ID, NOTARY_ISSUER_ID, and NOTARY_KEY secrets are required for tagged releases" >&2
+          exit 1
       - name: Verify tag matches app version
         run: |
           PLIST_V="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
@@ -25,7 +36,6 @@ jobs:
             exit 1
           fi
       - name: Import signing certificate
-        if: env.HAS_SIGNING == 'true'
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -42,17 +52,59 @@ jobs:
             $(security list-keychains -d user | sed 's/"//g')
           rm -f "$RUNNER_TEMP/cert.p12"
       - name: Build .app bundle
-        run: ./build.sh --no-open
+        run: ./build.sh --no-open --release
       - name: Package DMG
         run: |
           rm -rf dmg-root && mkdir dmg-root
           cp -R dist/Edith.app dmg-root/
           ln -s /Applications dmg-root/Applications
           hdiutil create -volname Edith -srcfolder dmg-root -format UDZO "Edith-${GITHUB_REF_NAME}.dmg"
+      - name: Build installer DMG
+        run: ./build-installer.sh --release
+      - name: Skip notarization
+        if: env.HAS_NOTARY != 'true'
+        run: |
+          echo "WARNING: NOTARY_KEY_ID/NOTARY_ISSUER_ID/NOTARY_KEY secrets absent; skipping notarization and stapling" >&2
+      - name: Notarize and staple
+        if: env.HAS_NOTARY == 'true'
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+        run: |
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          for dmg in "Edith-${GITHUB_REF_NAME}.dmg" dist/EdithInstaller.dmg; do
+            xcrun notarytool submit "$dmg" --wait \
+              --key "$RUNNER_TEMP/notary-key.p8" \
+              --key-id "$NOTARY_KEY_ID" \
+              --issuer "$NOTARY_ISSUER_ID"
+            xcrun stapler staple "$dmg"
+          done
+          rm -f "$RUNNER_TEMP/notary-key.p8"
+      - name: Verify signatures
+        run: |
+          codesign --verify --deep --strict dist/Edith.app
+          spctl -a -t open --context context:primary-signature "Edith-${GITHUB_REF_NAME}.dmg"
+          spctl -a -t open --context context:primary-signature dist/EdithInstaller.dmg
+      - name: Generate appcast
+        run: |
+          GENERATE_APPCAST=.build/artifacts/sparkle/Sparkle/bin/generate_appcast
+          if [ -x "$GENERATE_APPCAST" ]; then
+            rm -rf dist/appcast && mkdir dist/appcast
+            cp "Edith-${GITHUB_REF_NAME}.dmg" dist/appcast/
+            "$GENERATE_APPCAST" dist/appcast
+            test -f dist/appcast/appcast.xml || mv dist/appcast/appcast dist/appcast/appcast.xml
+          else
+            echo "WARNING: generate_appcast not found in SwiftPM artifacts; appcast.xml skipped, run make release locally to publish it" >&2
+          fi
       - name: Upload to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ASSETS=("Edith-${GITHUB_REF_NAME}.dmg" dist/EdithInstaller.dmg)
+          if [ -f dist/appcast/appcast.xml ]; then
+            ASSETS+=(dist/appcast/appcast.xml)
+          fi
           gh release create "${GITHUB_REF_NAME}" --title "Edith ${GITHUB_REF_NAME}" --generate-notes \
-            "Edith-${GITHUB_REF_NAME}.dmg" \
-          || gh release upload "${GITHUB_REF_NAME}" "Edith-${GITHUB_REF_NAME}.dmg" --clobber
+            "${ASSETS[@]}" \
+          || gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}" --clobber

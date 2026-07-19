@@ -4,6 +4,8 @@ pre-push:
     comments:
       glob: "*.{swift,js,mjs,ts,tsx,css,json,yaml,yml,html}"
       run: make ci-comments
+    secrets:
+      run: make ci-secrets
     lint:
       glob: "{scripts/**,apps/web/**}"
       run: make ci-lint
