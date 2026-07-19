@@ -16,7 +16,7 @@ struct DownloadSheet: View {
     private var dark: Bool { scheme == .dark }
     private var parsedCount: Int {
         guard downloader.unavailableReason == nil else { return 0 }
-        return downloader.parseURLs(from: urlText).count
+        return YoutubeDownloader.parseURLs(from: urlText).count
     }
     private var canStart: Bool {
         parsedCount > 0
@@ -735,14 +735,14 @@ struct DownloadSheet: View {
     }
 
     private func startDownload() {
-        let urls = downloader.parseURLs(from: urlText)
+        let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
         downloader.enqueue(urls: urls, prefix: filenamePrefix)
         urlText = ""
     }
 
     private func addMore() {
-        let urls = downloader.parseURLs(from: urlText)
+        let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
         downloader.enqueue(urls: urls, prefix: filenamePrefix)
         urlText = ""

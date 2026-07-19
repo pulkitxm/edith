@@ -245,7 +245,7 @@ public final class YoutubeDownloader: ObservableObject {
         }
     }
 
-    public func parseURLs(from text: String) -> [URL] {
+    nonisolated public static func parseURLs(from text: String) -> [URL] {
         text
             .components(separatedBy: CharacterSet([",", "\n", "\r"]))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -254,7 +254,7 @@ public final class YoutubeDownloader: ObservableObject {
             .filter { isYouTubeURL($0) }
     }
 
-    private func isYouTubeURL(_ url: URL) -> Bool {
+    nonisolated private static func isYouTubeURL(_ url: URL) -> Bool {
         let host = url.host?.lowercased() ?? ""
         return host.contains("youtube.com") || host.contains("youtu.be")
     }
@@ -352,7 +352,8 @@ public final class YoutubeDownloader: ObservableObject {
                 guard let self, let index = self.indexOfItem(with: itemID) else { return }
                 if case .interrupted = self.items[index].status { return }
                 self.items[index].logs += text
-                let (progress, videoIndex, videoCount) = self.parseProgress(from: text)
+                let (progress, videoIndex, videoCount) = YoutubeDownloader.parseProgress(
+                    from: text)
                 self.items[index].status = .downloading(
                     progress: progress, videoIndex: videoIndex, videoCount: videoCount)
             }
@@ -453,7 +454,7 @@ public final class YoutubeDownloader: ObservableObject {
         save()
     }
 
-    private func parseProgress(from text: String) -> (
+    nonisolated static func parseProgress(from text: String) -> (
         progress: String, videoIndex: Int, videoCount: Int
     ) {
         if let range = text.range(
