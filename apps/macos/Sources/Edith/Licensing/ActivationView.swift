@@ -10,6 +10,7 @@ struct ActivationView: View {
     @Environment(\.colorScheme) private var colorScheme
     @FocusState private var keyFieldFocused: Bool
     @State private var key = "EDITH-"
+    @State private var deviceName = Host.current().localizedName ?? ""
     @State private var activating = false
     @State private var errorMessage: String?
     @State private var seatLimitHit = false
@@ -53,6 +54,19 @@ struct ActivationView: View {
                     errorMessage = nil
                 }
                 .onSubmit(activate)
+            TextField("Device name (optional)", text: $deviceName)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .multilineTextAlignment(.center)
+                .disabled(activating)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                }
+                .padding(.top, 10)
             Button(action: activate) {
                 Group {
                     if activating {
@@ -91,7 +105,7 @@ struct ActivationView: View {
             }
         }
         .padding(.horizontal, 52)
-        .frame(width: 440, height: 390)
+        .frame(width: 440, height: 440)
         .background(DashSkin.paper(dark))
         .task { keyFieldFocused = true }
     }
@@ -115,39 +129,58 @@ struct ActivationView: View {
 
     private func activate() {
         guard !activating, LicenseKeyFormatting.isComplete(key) else { return }
-        guard let machine = hardwareUUID() else {
-            errorMessage = "This Mac could not be identified."
-            return
-        }
         activating = true
         errorMessage = nil
         let formattedKey = LicenseKeyFormatting.format(key)
+        let trimmedName = deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             do {
-                let response = try await client.activate(
-                    key: formattedKey,
-                    hardwareUuid: machine,
-                    hostname: Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-                )
-                guard response.ok else {
-                    errorMessage = "That license key is invalid or inactive."
-                    activating = false
-                    return
-                }
-                try licenseState.activate(
-                    key: formattedKey, label: response.label, receipt: response.receipt)
+                try await LicenseV2Session(client: client).activate(
+                    licenseKey: formattedKey,
+                    deviceName: trimmedName.isEmpty ? nil : trimmedName)
                 onActivated()
-            } catch LicenseClientError.seatLimitReached {
-                errorMessage = "This key has reached its Mac limit."
-                seatLimitHit = true
-                activating = false
-            } catch LicenseClientError.invalidKey {
-                errorMessage = "That license key is invalid or inactive."
-                activating = false
+            } catch LicenseClientError.server(statusCode: 404) {
+                await activateLegacy(key: formattedKey)
             } catch {
-                errorMessage = "Could not activate. Check your connection and try again."
-                activating = false
+                handleActivationError(error)
             }
         }
+    }
+
+    private func activateLegacy(key formattedKey: String) async {
+        guard let machine = hardwareUUID() else {
+            errorMessage = "This Mac could not be identified."
+            activating = false
+            return
+        }
+        do {
+            let response = try await client.activate(key: formattedKey, hardwareUuid: machine)
+            guard response.ok else {
+                errorMessage = "That license key is invalid or inactive."
+                activating = false
+                return
+            }
+            try licenseState.activate(
+                key: formattedKey, label: response.label, receipt: response.receipt)
+            onActivated()
+        } catch {
+            handleActivationError(error)
+        }
+    }
+
+    private func handleActivationError(_ error: Error) {
+        switch error {
+        case LicenseClientError.machineLimitReached(let machinesUsed, let maxMachines):
+            errorMessage = "This key is already active on \(machinesUsed) of \(maxMachines) Macs."
+            seatLimitHit = true
+        case LicenseClientError.seatLimitReached:
+            errorMessage = "This key has reached its Mac limit."
+            seatLimitHit = true
+        case LicenseClientError.invalidKey:
+            errorMessage = "That license key is invalid or inactive."
+        default:
+            errorMessage = "Could not activate. Check your connection and try again."
+        }
+        activating = false
     }
 }

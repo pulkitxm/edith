@@ -11,24 +11,41 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var settingsChangeDebounce: Timer?
     private var licenseVerificationTimer: Timer?
     private var licenseVerificationTask: Task<Void, Never>?
+    private var licenseMigrationTask: Task<Void, Never>?
     private let licenseState = LicenseState()
     private let licenseClient = LicenseClient()
+    private let licenseCredentialStore = FileLicenseCredentialStore()
     private var licensedAppStarted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
-        switch try? licenseState.offlineStatus() {
-        case .valid:
+        switch currentLaunchDecision() {
+        case .start:
             startLicensedApp()
-        case .needsRefresh:
+        case .startAndMigrate:
             startLicensedApp()
-        case .invalid:
-            try? licenseState.deactivate()
+            migrateLegacyLicense()
+        case .gate:
             terminateHelper()
             presentActivationGate()
-        case .noKey, nil:
-            terminateHelper()
-            presentActivationGate()
+        }
+    }
+
+    private func currentLaunchDecision() -> LicenseLaunchDecision {
+        LicenseCoordinator.currentRiskState(credentialStore: licenseCredentialStore)
+            .launchDecision
+    }
+
+    private func licenseV2Session() -> LicenseV2Session {
+        LicenseV2Session(client: licenseClient, credentialStore: licenseCredentialStore)
+    }
+
+    private func migrateLegacyLicense() {
+        guard licenseMigrationTask == nil else { return }
+        licenseMigrationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { licenseMigrationTask = nil }
+            _ = try? await licenseV2Session().migrateFromV1()
         }
     }
 
@@ -89,47 +106,62 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     private func verifyLicenseInBackground() {
         guard licenseVerificationTask == nil else { return }
-        guard let decision = try? licenseState.gateDecision(), decision != .gate else {
+        guard currentLaunchDecision() != .gate else {
             invalidateLicenseAndRegate()
-            return
-        }
-        guard let key = try? licenseState.licenseKey(), let machine = hardwareUUID() else {
             return
         }
         licenseVerificationTask = Task { [weak self] in
             guard let self else { return }
             defer { licenseVerificationTask = nil }
-            do {
-                let response = try await licenseClient.verify(key: key, hardwareUuid: machine)
+            if ((try? licenseCredentialStore.read(.refreshCredential)) ?? nil) != nil {
+                try? await licenseV2Session().refresh()
                 guard !Task.isCancelled else { return }
-                guard response.ok else {
+                if currentLaunchDecision() == .gate {
                     invalidateLicenseAndRegate()
-                    return
                 }
-                do {
-                    try licenseState.recordSuccessfulVerification(receipt: response.receipt)
-                } catch LicenseStateError.invalidReceipt {
-                    invalidateLicenseAndRegate()
-                    return
-                }
-                if response.receipt != nil {
-                    launchHelperIfNeeded()
-                }
-            } catch LicenseClientError.invalidKey {
-                invalidateLicenseAndRegate()
-            } catch {
                 return
             }
+            await verifyLegacyLicense()
+        }
+    }
+
+    private func verifyLegacyLicense() async {
+        guard let key = try? licenseState.licenseKey(), let machine = hardwareUUID() else {
+            return
+        }
+        do {
+            let response = try await licenseClient.verify(key: key, hardwareUuid: machine)
+            guard !Task.isCancelled else { return }
+            guard response.ok else {
+                invalidateLicenseAndRegate()
+                return
+            }
+            do {
+                try licenseState.recordSuccessfulVerification(receipt: response.receipt)
+            } catch LicenseStateError.invalidReceipt {
+                invalidateLicenseAndRegate()
+                return
+            }
+            if response.receipt != nil {
+                launchHelperIfNeeded()
+            }
+            migrateLegacyLicense()
+        } catch LicenseClientError.invalidKey {
+            invalidateLicenseAndRegate()
+        } catch {
+            return
         }
     }
 
     private func scheduleLicenseVerification() {
-        guard licenseVerificationTimer == nil else { return }
+        licenseVerificationTimer?.invalidate()
+        let jitter = Double.random(in: -3_600...3_600)
         licenseVerificationTimer = Timer.scheduledTimer(
-            withTimeInterval: 12 * 60 * 60, repeats: true
+            withTimeInterval: 12 * 60 * 60 + jitter, repeats: false
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.verifyLicenseInBackground()
+                self?.scheduleLicenseVerification()
             }
         }
     }
@@ -143,6 +175,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private func stopLicensedApp() {
         licenseVerificationTask?.cancel()
         licenseVerificationTask = nil
+        licenseMigrationTask?.cancel()
+        licenseMigrationTask = nil
         licenseVerificationTimer?.invalidate()
         licenseVerificationTimer = nil
         settingsChangeDebounce?.invalidate()
@@ -167,7 +201,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        guard let decision = try? licenseState.gateDecision(), decision != .gate else {
+        guard currentLaunchDecision() != .gate else {
             invalidateLicenseAndRegate()
             return true
         }
@@ -181,7 +215,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         guard licensedAppStarted else { return }
-        guard let decision = try? licenseState.gateDecision(), decision != .gate else {
+        guard currentLaunchDecision() != .gate else {
             invalidateLicenseAndRegate()
             return
         }
@@ -191,6 +225,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         licenseVerificationTask?.cancel()
         licenseVerificationTask = nil
+        licenseMigrationTask?.cancel()
+        licenseMigrationTask = nil
         licenseVerificationTimer?.invalidate()
         licenseVerificationTimer = nil
         settingsChangeDebounce?.invalidate()
@@ -284,7 +320,7 @@ private struct SettingsRedirect: View {
                     {
                         window.close()
                     }
-                    if let decision = try? LicenseState().gateDecision(), decision != .gate {
+                    if LicenseCoordinator.currentRiskState().launchDecision != .gate {
                         MainWindow.open()
                     }
                 }

@@ -99,8 +99,7 @@ final class InstallerModel: ObservableObject {
             do {
                 let response = try await client.activate(
                     key: formattedKey,
-                    hardwareUuid: machine,
-                    hostname: Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+                    hardwareUuid: machine
                 )
                 guard response.ok else {
                     errorMessage = "That license key is invalid or inactive."
@@ -109,6 +108,10 @@ final class InstallerModel: ObservableObject {
                 startDownload(key: formattedKey, machine: machine)
             } catch LicenseClientError.seatLimitReached {
                 errorMessage = "This key has reached its Mac limit."
+                seatLimitHit = true
+            } catch LicenseClientError.machineLimitReached(let machinesUsed, let maxMachines) {
+                errorMessage =
+                    "This key is already active on \(machinesUsed) of \(maxMachines) Macs."
                 seatLimitHit = true
             } catch LicenseClientError.invalidKey {
                 errorMessage = "That license key is invalid or inactive."

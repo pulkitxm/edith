@@ -34,24 +34,26 @@ final class UpdaterModel: NSObject, ObservableObject,
     private var automaticChecksObservation: NSKeyValueObservation?
     private var automaticDownloadsObservation: NSKeyValueObservation?
     private var updater: SPUUpdater? { updaterController?.updater }
+    private let licenseState: LicenseState
+    private let licenseCredentialStore: any LicenseCredentialStoring
 
-    init(startingUpdater: Bool = false, licenseState: LicenseState = LicenseState()) {
+    init(
+        startingUpdater: Bool = false, licenseState: LicenseState = LicenseState(),
+        licenseCredentialStore: any LicenseCredentialStoring = FileLicenseCredentialStore()
+    ) {
+        self.licenseState = licenseState
+        self.licenseCredentialStore = licenseCredentialStore
         super.init()
         guard startingUpdater else { return }
         guard
-            let decision = try? licenseState.gateDecision(),
-            decision != .gate,
-            let key = try? licenseState.licenseKey(),
-            let machine = hardwareUUID()
+            LicenseCoordinator.currentRiskState(credentialStore: licenseCredentialStore)
+                .launchDecision != .gate
         else { return }
         let updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: nil, userDriverDelegate: self)
         self.updaterController = updaterController
         let updater = updaterController.updater
-        updater.httpHeaders = [
-            "x-edith-license": key,
-            "x-edith-machine": machine,
-        ]
+        updater.httpHeaders = currentLicenseHeaders()
         do {
             try updater.start()
             updaterAvailable = true
@@ -73,6 +75,7 @@ final class UpdaterModel: NSObject, ObservableObject,
             Task { @MainActor [weak self] in
                 self?.canCheckForUpdates = canCheckForUpdates
                 self?.lastUpdateCheckDate = lastUpdateCheckDate
+                self?.refreshLicenseHeaders()
             }
         }
         automaticChecksObservation = updater.observe(
@@ -97,7 +100,19 @@ final class UpdaterModel: NSObject, ObservableObject,
 
     func checkForUpdates() {
         guard updaterAvailable else { return }
+        refreshLicenseHeaders()
         updaterController?.checkForUpdates(nil)
+    }
+
+    private func currentLicenseHeaders() -> [String: String] {
+        licenseUpdaterHeaders(
+            accessToken: StoredAccessToken.load(from: licenseCredentialStore),
+            legacyKey: ((try? licenseState.licenseKey()) ?? nil),
+            machine: hardwareUUID())
+    }
+
+    private func refreshLicenseHeaders() {
+        updater?.httpHeaders = currentLicenseHeaders()
     }
 
     func standardUserDriverShouldHandleShowingScheduledUpdate(

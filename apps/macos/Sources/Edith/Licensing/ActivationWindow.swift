@@ -19,7 +19,7 @@ enum ActivationWindow {
             return
         }
         let activationWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 390),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 440),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -38,7 +38,7 @@ enum ActivationWindow {
             })
         hosting.sizingOptions = []
         activationWindow.contentViewController = hosting
-        activationWindow.setContentSize(NSSize(width: 440, height: 390))
+        activationWindow.setContentSize(NSSize(width: 440, height: 440))
         activationWindow.center()
         window = activationWindow
         activationWindow.makeKeyAndOrderFront(nil)

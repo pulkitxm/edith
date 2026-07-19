@@ -120,6 +120,7 @@ private struct UpdatesPane: View {
 
 struct GeneralPane: View {
     private let licenseState = LicenseState()
+    private let licenseCredentialStore = FileLicenseCredentialStore()
     @AppStorage("appearance", store: SharedDefaults.store) private var appearance = "system"
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("lastPaletteTheme", store: SharedDefaults.store) private var lastPaletteTheme =
@@ -130,7 +131,9 @@ struct GeneralPane: View {
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @State private var licenseLabel = "Licensed"
     @State private var maskedLicenseKey = "EDITH-****-****-****-****"
+    @State private var planAllowance: String?
     @State private var licenseError: String?
+    @State private var deactivating = false
 
     var body: some View {
         Form {
@@ -221,8 +224,18 @@ struct GeneralPane: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                Button("Deactivate", role: .destructive, action: deactivateLicense)
-                    .pointerCursor()
+                if let planAllowance {
+                    LabeledContent("Plan") {
+                        Text(planAllowance)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button(
+                    licenseError == nil ? "Deactivate" : "Retry Deactivation",
+                    role: .destructive, action: deactivateLicense
+                )
+                .disabled(deactivating)
+                .pointerCursor()
                 if let licenseError {
                     Text(licenseError)
                         .font(.caption)
@@ -280,16 +293,39 @@ struct GeneralPane: View {
         if let key = try? licenseState.licenseKey() {
             maskedLicenseKey = LicenseKeyFormatting.masked(key)
         }
+        if let raw = ((try? licenseCredentialStore.read(.entitlement)) ?? nil),
+            let payload = LicenseEntitlement.decodePayload(raw)
+        {
+            planAllowance = "\(payload.planId), up to \(payload.maxMachines) Macs"
+        } else {
+            planAllowance = nil
+        }
     }
 
     private func deactivateLicense() {
-        do {
-            try licenseState.deactivate()
+        guard !deactivating else { return }
+        deactivating = true
+        Task {
+            defer { deactivating = false }
+            do {
+                try await LicenseV2Session(credentialStore: licenseCredentialStore).deactivate()
+            } catch LicenseV2SessionError.missingCredentials {
+            } catch {
+                licenseError =
+                    "This Mac could not be released, so nothing was removed. "
+                    + "Check your connection and try again."
+                return
+            }
+            do {
+                try licenseState.deactivate()
+            } catch {
+                licenseError = "The license could not be removed from this Mac."
+                return
+            }
             licenseLabel = "Deactivated"
             maskedLicenseKey = "EDITH-****-****-****-****"
+            planAllowance = nil
             licenseError = nil
-        } catch {
-            licenseError = "The license could not be removed from Keychain."
         }
     }
 
