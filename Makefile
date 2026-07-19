@@ -24,7 +24,7 @@ env-sync: env-check
 
 license:
 	@test -n "$(MACHINES)" || { echo "license blocked: set MACHINES, for example make license MACHINES=3 LABEL=\"Pulkit\"" >&2; exit 1; }
-	cd apps/web && bun run create-license --machines $(MACHINES) $(if $(LABEL),--label "$(LABEL)")
+	bash scripts/mint-license.sh $(MACHINES) $(if $(LABEL),"$(LABEL)")
 
 web-dev:
 	cd apps/web && bun run dev
