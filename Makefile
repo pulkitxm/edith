@@ -1,6 +1,6 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check ci-web db-migrate env-check env-generate env-rotate env-sync
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check ci-web db-migrate db-generate db-push db-studio license web-dev env-check env-generate env-rotate env-sync
 
 ci:
 	bun install --frozen-lockfile
@@ -21,6 +21,22 @@ env-rotate:
 
 env-sync: env-check
 	bash scripts/sync-env.sh $(if $(filter 1,$(CONFIRM)),--confirm,--dry)
+
+license:
+	@test -n "$(MACHINES)" || { echo "license blocked: set MACHINES, for example make license MACHINES=3 LABEL=\"Pulkit\"" >&2; exit 1; }
+	cd apps/web && bun run create-license --machines $(MACHINES) $(if $(LABEL),--label "$(LABEL)")
+
+web-dev:
+	cd apps/web && bun run dev
+
+db-generate:
+	cd apps/web && bun run db:generate
+
+db-push:
+	cd apps/web && bun run db:push
+
+db-studio:
+	cd apps/web && bun run db:studio
 
 db-migrate:
 	@set -eu; \
