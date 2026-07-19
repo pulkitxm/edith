@@ -1,6 +1,6 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check ci-web db-migrate env-check env-sync
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-promo ci-swift ci-swift-check ci-web db-migrate env-check env-generate env-rotate env-sync
 
 ci:
 	bun install --frozen-lockfile
@@ -12,6 +12,12 @@ ci-web:
 
 env-check:
 	cd apps/web && bun -e 'const { missingEnvVars } = await import("./lib/required-env.ts"); const dotenv = Object.fromEntries((await Bun.file(".env").text()).split("\n").filter(l => l.includes("=")).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])); const missing = missingEnvVars(dotenv); if (missing.length) { console.error("missing in apps/web/.env: " + missing.join(", ")); process.exit(1); } console.log("apps/web/.env has every required variable");'
+
+env-generate:
+	bash scripts/generate-env.sh --missing
+
+env-rotate:
+	bash scripts/generate-env.sh --rotate $(if $(filter 1,$(CONFIRM)),--confirm,--dry)
 
 env-sync: env-check
 	bash scripts/sync-env.sh $(if $(filter 1,$(CONFIRM)),--confirm,--dry)
