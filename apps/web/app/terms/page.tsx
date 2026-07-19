@@ -117,7 +117,7 @@ export default function TermsPage() {
         <h2>Contact</h2>
         <p>
           Questions? Email{" "}
-          <a href="mailto:support@edith.app">support@edith.app</a>.
+          <a href="mailto:kpulkit15234@gmail.com">kpulkit15234@gmail.com</a>.
         </p>
       </main>
       <SiteFooter />

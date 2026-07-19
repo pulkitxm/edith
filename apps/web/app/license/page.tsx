@@ -30,7 +30,7 @@ export default function LicensePage() {
           Moving to a new Mac is self-service: deactivate the old Mac from
           Settings in the app and the seat is released immediately. If a Mac is
           lost, broken, or otherwise unreachable, email{" "}
-          <a href="mailto:support@edith.app">support@edith.app</a> and we will
+          <a href="mailto:kpulkit15234@gmail.com">kpulkit15234@gmail.com</a> and we will
           release the seat for you.
         </p>
       </main>

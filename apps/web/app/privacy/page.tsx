@@ -110,7 +110,7 @@ export default function PrivacyPage() {
           are kept for 12 months; payment records are kept as long as legal and
           accounting requirements demand. To remove a device, use Settings in
           the app; for deletion requests or anything else, email{" "}
-          <a href="mailto:support@edith.app">support@edith.app</a>.
+          <a href="mailto:kpulkit15234@gmail.com">kpulkit15234@gmail.com</a>.
         </p>
 
         <h2>This website</h2>
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
         <h2>Contact</h2>
         <p>
           Questions about privacy? Email{" "}
-          <a href="mailto:support@edith.app">support@edith.app</a>.
+          <a href="mailto:kpulkit15234@gmail.com">kpulkit15234@gmail.com</a>.
         </p>
       </main>
       <SiteFooter />
