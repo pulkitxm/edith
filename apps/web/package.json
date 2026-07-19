@@ -13,8 +13,8 @@
     "create-license": "bun scripts/create-license.ts"
   },
   "dependencies": {
-    "drizzle-orm": "0.44.6",
-    "next": "15.5.7",
+    "drizzle-orm": "0.45.2",
+    "next": "15.5.18",
     "postgres": "3.4.7",
     "react": "19.1.1",
     "react-dom": "19.1.1",
