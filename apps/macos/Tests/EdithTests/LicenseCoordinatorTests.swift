@@ -23,14 +23,56 @@ import Testing
         #expect(state(coordinator, now: expiresAt) == .legacyV1(needsMigration: true))
     }
 
-    @Test func expiredOrInvalidLegacyReceiptIsNoLicense() {
+    @Test func expiredLegacyReceiptFallsBackToLegacyV1() {
         let expired = makeCoordinator(
             store: InMemoryLicenseCredentialStore(), legacyValidation: { .expired })
+
+        #expect(state(expired, now: expiresAt) == .legacyV1(needsMigration: true))
+    }
+
+    @Test func invalidLegacyReceiptIsNoLicense() {
         let invalid = makeCoordinator(
             store: InMemoryLicenseCredentialStore(), legacyValidation: { .invalid })
 
-        #expect(state(expired, now: expiresAt) == .noLicense)
         #expect(state(invalid, now: expiresAt) == .noLicense)
+    }
+
+    @Test func missingReceiptWithActivatedFlagFallsBackToLegacyV1() throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: LicenseState.activatedKey)
+        let keyStore = CoordinatorKeyStore(key: "EDITH-ABCD-1234-EFGH-5678")
+        let coordinator = makeCoordinator(
+            store: InMemoryLicenseCredentialStore(),
+            legacyValidation: LicenseCoordinator.legacyReceiptValidation(
+                keyStore: keyStore, machineIdentifier: { "machine-1" }, defaults: defaults))
+
+        #expect(state(coordinator, now: expiresAt) == .legacyV1(needsMigration: true))
+    }
+
+    @Test func missingReceiptWithoutActivatedFlagIsNoLicense() throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let keyStore = CoordinatorKeyStore(key: "EDITH-ABCD-1234-EFGH-5678")
+        let coordinator = makeCoordinator(
+            store: InMemoryLicenseCredentialStore(),
+            legacyValidation: LicenseCoordinator.legacyReceiptValidation(
+                keyStore: keyStore, machineIdentifier: { "machine-1" }, defaults: defaults))
+
+        #expect(state(coordinator, now: expiresAt) == .noLicense)
+    }
+
+    @Test func missingKeyIsNoLicenseEvenWithActivatedFlag() throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: LicenseState.activatedKey)
+        let coordinator = makeCoordinator(
+            store: InMemoryLicenseCredentialStore(),
+            legacyValidation: LicenseCoordinator.legacyReceiptValidation(
+                keyStore: CoordinatorKeyStore(), machineIdentifier: { "machine-1" },
+                defaults: defaults))
+
+        #expect(state(coordinator, now: expiresAt) == .noLicense)
     }
 
     @Test func entitlementTakesPrecedenceOverLegacyReceipt() throws {
@@ -46,12 +88,61 @@ import Testing
         #expect(state(coordinator, now: expiresAt - 1) == .valid(makePayload()))
     }
 
-    @Test func rollbackSuspicionCapsValidEntitlementAtGrace() throws {
-        let store = try storeWithEntitlement()
+    @Test func rollbackWithAnchoredTimeCountsGraceDown() throws {
+        let store = try storeWithEntitlement(trustedTime: nil)
         try TrustedTime(
-            lastServerTime: expiresAt + 10 * 86_400, wallClockAtSync: expiresAt + 10 * 86_400,
-            monotonicAnchor: 100, bootSessionId: "boot-1"
+            lastServerTime: expiresAt, wallClockAtSync: expiresAt,
+            monotonicAnchor: 1_000, bootSessionId: "boot-1"
         ).save(to: store)
+        let rolledBack = expiresAt - 50 * 86_400
+
+        let tenDaysIn = makeCoordinator(
+            store: store, uptime: { 1_000 + 10 * 86_400 }, bootSessionId: { "boot-1" })
+        #expect(
+            state(tenDaysIn, now: rolledBack) == .graceActive(remainingDays: 20, warn: false))
+
+        let pastGrace = makeCoordinator(
+            store: store, uptime: { 1_000 + 30 * 86_400 }, bootSessionId: { "boot-1" })
+        #expect(state(pastGrace, now: rolledBack) == .recovery)
+    }
+
+    @Test func rollbackAcrossRebootUsesLastServerTimeOnly() throws {
+        let store = try storeWithEntitlement(trustedTime: nil)
+        try TrustedTime(
+            lastServerTime: expiresAt, wallClockAtSync: expiresAt,
+            monotonicAnchor: 1_000, bootSessionId: "boot-1"
+        ).save(to: store)
+        let coordinator = makeCoordinator(
+            store: store, uptime: { 1_000 + 40 * 86_400 }, bootSessionId: { "boot-2" })
+
+        #expect(
+            state(coordinator, now: expiresAt - 50 * 86_400)
+                == .graceActive(remainingDays: 30, warn: false))
+    }
+
+    @Test func rollbackWithUnexpiredEntitlementStaysValid() throws {
+        let store = try storeWithEntitlement(trustedTime: nil)
+        try TrustedTime(
+            lastServerTime: expiresAt - 5 * 86_400, wallClockAtSync: expiresAt - 5 * 86_400,
+            monotonicAnchor: 1_000, bootSessionId: "boot-1"
+        ).save(to: store)
+        let coordinator = makeCoordinator(
+            store: store, uptime: { 1_000 + 86_400 }, bootSessionId: { "boot-1" })
+
+        #expect(state(coordinator, now: expiresAt - 50 * 86_400) == .valid(makePayload()))
+    }
+
+    @Test func missingTrustedTimeCapsValidEntitlementAtGrace() throws {
+        let coordinator = makeCoordinator(store: try storeWithEntitlement(trustedTime: nil))
+
+        #expect(
+            state(coordinator, now: expiresAt - 1_000)
+                == .graceActive(remainingDays: 30, warn: false))
+    }
+
+    @Test func undecodableTrustedTimeCapsValidEntitlementAtGrace() throws {
+        let store = try storeWithEntitlement(trustedTime: nil)
+        try store.write("not-json", item: .trustedTime)
         let coordinator = makeCoordinator(store: store)
 
         #expect(
@@ -146,7 +237,9 @@ import Testing
     private func makeCoordinator(
         store: any LicenseCredentialStoring,
         legacyValidation: @escaping () -> LicenseReceiptValidation? = { nil },
-        graceDays: Int = 30
+        graceDays: Int = 30,
+        uptime: @escaping () -> TimeInterval = { 0 },
+        bootSessionId: @escaping () -> String = { "test-boot" }
     ) -> LicenseCoordinator {
         LicenseCoordinator(
             store: store,
@@ -154,13 +247,27 @@ import Testing
                 "test-key": signingKey.publicKey.rawRepresentation.base64EncodedString()
             ]),
             legacyValidation: legacyValidation,
-            graceDays: graceDays)
+            graceDays: graceDays,
+            uptime: uptime,
+            bootSessionId: bootSessionId)
     }
 
-    private func storeWithEntitlement() throws -> InMemoryLicenseCredentialStore {
+    private func storeWithEntitlement(
+        trustedTime: TrustedTime? = TrustedTime(
+            lastServerTime: 1_700_000_000, wallClockAtSync: 1_700_000_000,
+            monotonicAnchor: 0, bootSessionId: "stale-boot")
+    ) throws -> InMemoryLicenseCredentialStore {
         let store = InMemoryLicenseCredentialStore()
         try store.write(try sign(makePayload()), item: .entitlement)
+        try trustedTime?.save(to: store)
         return store
+    }
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suiteName = "LicenseCoordinatorTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
     }
 
     private func makePayload(
@@ -178,5 +285,39 @@ import Testing
         let data = try JSONEncoder().encode(payload)
         let signature = try signingKey.signature(for: data)
         return "\(Base64URL.encode(data)).\(Base64URL.encode(signature))"
+    }
+}
+
+private final class CoordinatorKeyStore: LicenseKeyStoring {
+    private var key: String?
+    private var receipt: String?
+
+    init(key: String? = nil, receipt: String? = nil) {
+        self.key = key
+        self.receipt = receipt
+    }
+
+    func readKey() throws -> String? {
+        key
+    }
+
+    func writeKey(_ key: String) throws {
+        self.key = key
+    }
+
+    func deleteKey() throws {
+        key = nil
+    }
+
+    func readReceipt() throws -> String? {
+        receipt
+    }
+
+    func writeReceipt(_ receipt: String) throws {
+        self.receipt = receipt
+    }
+
+    func deleteReceipt() throws {
+        receipt = nil
     }
 }

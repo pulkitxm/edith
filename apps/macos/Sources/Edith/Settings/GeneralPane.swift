@@ -309,7 +309,6 @@ struct GeneralPane: View {
             defer { deactivating = false }
             do {
                 try await LicenseV2Session(credentialStore: licenseCredentialStore).deactivate()
-            } catch LicenseV2SessionError.missingCredentials {
             } catch {
                 licenseError =
                     "This Mac could not be released, so nothing was removed. "

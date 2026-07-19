@@ -163,6 +163,17 @@ import Testing
         }
     }
 
+    @Test func throttlingMapsToServerError() async {
+        let transport = StubV2Transport(statusCode: 429, body: "{}")
+        let client = LicenseClient(transport: transport, baseURL: baseURL)
+
+        await #expect(throws: LicenseClientError.server(statusCode: 429)) {
+            _ = try await client.refreshV2(
+                deviceId: "device-1", challengeId: "ch-2", nonce: "n-2", signature: "sig",
+                appVersion: "1.2.3")
+        }
+    }
+
     @Test func serverErrorsSurfaceStatusCode() async {
         let transport = StubV2Transport(statusCode: 500, body: "{}")
         let client = LicenseClient(transport: transport, baseURL: baseURL)

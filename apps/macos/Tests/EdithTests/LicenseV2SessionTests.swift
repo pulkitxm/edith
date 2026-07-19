@@ -65,6 +65,29 @@ import Testing
             licenseUpdaterHeaders(accessToken: nil, legacyKey: nil, machine: nil, now: now)
                 == [:])
     }
+
+    @Test func expiredTokenWithRefreshCredentialIsStale() {
+        #expect(
+            licenseUpdaterTokenIsStale(
+                accessToken: StoredAccessToken(token: "tok", expiresAt: iso(offset: -600)),
+                hasRefreshCredential: true, now: now))
+    }
+
+    @Test func missingTokenWithRefreshCredentialIsStale() {
+        #expect(licenseUpdaterTokenIsStale(accessToken: nil, hasRefreshCredential: true, now: now))
+    }
+
+    @Test func freshTokenIsNotStale() {
+        #expect(
+            !licenseUpdaterTokenIsStale(
+                accessToken: StoredAccessToken(token: "tok", expiresAt: iso(offset: 600)),
+                hasRefreshCredential: true, now: now))
+    }
+
+    @Test func withoutRefreshCredentialTokenIsNeverStale() {
+        #expect(
+            !licenseUpdaterTokenIsStale(accessToken: nil, hasRefreshCredential: false, now: now))
+    }
 }
 
 @Suite struct LicenseV2SessionTests {
@@ -195,6 +218,23 @@ import Testing
         try expectValidSignature(
             payload: body(of: transport.requests[1]), purpose: "deactivate",
             publicKeyBase64URL: identity.publicKeySPKIBase64URL)
+    }
+
+    @Test func deactivationWithoutCredentialClearsLocalStateWithoutServerCall() async throws {
+        let transport = SequencedTransport(responses: [])
+        let store = try storeWithV2Credentials()
+        try store.delete(.refreshCredential)
+        let session = makeSession(
+            transport: transport, store: store, legacy: InMemoryV1KeyStore())
+
+        try await session.deactivate()
+
+        #expect(transport.requests.isEmpty)
+        #expect(try store.read(.entitlement) == nil)
+        #expect(try store.read(.accessToken) == nil)
+        #expect(try store.read(.trustedTime) == nil)
+        #expect(try store.read(.deviceId) == nil)
+        #expect(try store.read(.deviceKey) == nil)
     }
 
     @Test func deactivationFailureLeavesLocalStateUntouched() async throws {

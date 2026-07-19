@@ -75,7 +75,7 @@ final class UpdaterModel: NSObject, ObservableObject,
             Task { @MainActor [weak self] in
                 self?.canCheckForUpdates = canCheckForUpdates
                 self?.lastUpdateCheckDate = lastUpdateCheckDate
-                self?.refreshLicenseHeaders()
+                await self?.refreshStaleTokenAndReapplyHeaders()
             }
         }
         automaticChecksObservation = updater.observe(
@@ -100,8 +100,11 @@ final class UpdaterModel: NSObject, ObservableObject,
 
     func checkForUpdates() {
         guard updaterAvailable else { return }
-        refreshLicenseHeaders()
-        updaterController?.checkForUpdates(nil)
+        Task { [weak self] in
+            guard let self else { return }
+            await refreshStaleTokenAndReapplyHeaders()
+            updaterController?.checkForUpdates(nil)
+        }
     }
 
     private func currentLicenseHeaders() -> [String: String] {
@@ -113,6 +116,17 @@ final class UpdaterModel: NSObject, ObservableObject,
 
     private func refreshLicenseHeaders() {
         updater?.httpHeaders = currentLicenseHeaders()
+    }
+
+    private func refreshStaleTokenAndReapplyHeaders() async {
+        if licenseUpdaterTokenIsStale(
+            accessToken: StoredAccessToken.load(from: licenseCredentialStore),
+            hasRefreshCredential: ((try? licenseCredentialStore.read(.refreshCredential)) ?? nil)
+                != nil)
+        {
+            try? await LicenseV2Session(credentialStore: licenseCredentialStore).refresh()
+        }
+        refreshLicenseHeaders()
     }
 
     func standardUserDriverShouldHandleShowingScheduledUpdate(

@@ -99,6 +99,18 @@ import Testing
         }
     }
 
+    @Test func verifyMapsThrottlingToServerError() async {
+        let transport = StubLicenseTransport(statusCode: 429, body: "{}")
+        let client = LicenseClient(transport: transport)
+
+        do {
+            _ = try await client.verify(key: "key", hardwareUuid: "machine")
+            Issue.record("Expected server error")
+        } catch {
+            #expect(error as? LicenseClientError == .server(statusCode: 429))
+        }
+    }
+
     @Test func stateStoresKeyOnlyInKeyStoreAndMirrorsPresentationState() throws {
         let (defaults, suiteName) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

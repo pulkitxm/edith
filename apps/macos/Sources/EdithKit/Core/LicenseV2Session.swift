@@ -81,6 +81,12 @@ public struct StoredAccessToken: Codable, Equatable, Sendable {
     }
 }
 
+public func licenseUpdaterTokenIsStale(
+    accessToken: StoredAccessToken?, hasRefreshCredential: Bool, now: Date = Date()
+) -> Bool {
+    hasRefreshCredential && accessToken?.freshToken(now: now) == nil
+}
+
 public func licenseUpdaterHeaders(
     accessToken: StoredAccessToken?, legacyKey: String?, machine: String?, now: Date = Date()
 ) -> [String: String] {
@@ -190,7 +196,8 @@ public struct LicenseV2Session {
 
     public func deactivate() async throws {
         guard let credential = ((try? credentialStore.read(.refreshCredential)) ?? nil) else {
-            throw LicenseV2SessionError.missingCredentials
+            deleteLocalCredentials()
+            return
         }
         let identity = try identity()
         let challenge = try await client.refreshChallenge(
@@ -199,6 +206,10 @@ public struct LicenseV2Session {
             deviceId: identity.deviceId, challengeId: challenge.challengeId,
             nonce: challenge.nonce,
             signature: try signature(identity, purpose: "deactivate", challenge: challenge))
+        deleteLocalCredentials()
+    }
+
+    private func deleteLocalCredentials() {
         for item in [
             LicenseCredentialItem.entitlement, .refreshCredential, .accessToken, .trustedTime,
             .deviceKey, .deviceId,

@@ -168,6 +168,11 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     private func invalidateLicenseAndRegate() {
         try? licenseState.deactivate()
+        for item in [
+            LicenseCredentialItem.entitlement, .refreshCredential, .accessToken, .trustedTime,
+        ] {
+            try? licenseCredentialStore.delete(item)
+        }
         stopLicensedApp()
         presentActivationGate()
     }

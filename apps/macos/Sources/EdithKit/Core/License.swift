@@ -115,8 +115,8 @@ public struct LicenseClient {
             }
             throw LicenseClientError.seatLimitReached
         }
-        if response.statusCode == 404 {
-            throw LicenseClientError.server(statusCode: 404)
+        if response.statusCode == 404 || response.statusCode == 429 {
+            throw LicenseClientError.server(statusCode: response.statusCode)
         }
         if (400..<500).contains(response.statusCode) {
             throw LicenseClientError.invalidKey
