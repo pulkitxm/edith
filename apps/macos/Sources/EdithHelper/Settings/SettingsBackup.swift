@@ -126,7 +126,7 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
         "tabCalendarEnabled", "musicLooping",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth", "mainWindowZoom",
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -176,7 +176,7 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth", "mainWindowZoom",
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [
