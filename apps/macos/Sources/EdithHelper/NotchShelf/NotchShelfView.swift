@@ -498,7 +498,10 @@ private struct NotchUsageRings: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
         LimitProvider.claude.rawValue
-    @State private var drawn = false
+    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
+        LimitRing.defaultWarnPercent
+    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
+        LimitRing.defaultCriticalPercent
 
     private var providers: [LimitProvider] { usage.availableProviders }
     private var selected: LimitProvider {
@@ -525,13 +528,6 @@ private struct NotchUsageRings: View {
             .padding(8)
         }
         .overlay(alignment: .topTrailing) { refreshButton.padding(6) }
-        .onAppear {
-            guard !reduceMotion else {
-                drawn = true
-                return
-            }
-            withAnimation(.easeOut(duration: 0.8).delay(0.25)) { drawn = true }
-        }
     }
 
     private var refreshButton: some View {
@@ -564,11 +560,17 @@ private struct NotchUsageRings: View {
             ZStack {
                 Circle().stroke(.white.opacity(0.12), lineWidth: 4.5)
                 Circle()
-                    .trim(from: 0, to: drawn ? min(1, value / 100) : 0)
+                    .trim(from: 0, to: min(1, value / 100))
                     .stroke(color(value), style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                    .animation(LimitRing.animation(reduceMotion: reduceMotion), value: value)
                 Text("\(Int(value.rounded()))%")
                     .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(
+                        LimitRing.animation(reduceMotion: reduceMotion),
+                        value: Int(value.rounded()))
             }
             .frame(width: 52, height: 52)
             Text(label)
@@ -605,9 +607,7 @@ private struct NotchUsageRings: View {
     }
 
     private func color(_ percent: Double) -> Color {
-        if percent >= 85 { return Color(red: 0.88, green: 0.4, blue: 0.31) }
-        if percent >= 60 { return Color(red: 0.88, green: 0.66, blue: 0.25) }
-        return Color(red: 0.3, green: 0.77, blue: 0.49)
+        LimitRing.color(percent: percent, warn: warn, critical: crit)
     }
 }
 

@@ -91,29 +91,31 @@ struct TitlebarChrome: View {
     @AppStorage("mainSidebarOpen", store: SharedDefaults.store) private var sidebarOpen = true
 
     var body: some View {
-        HStack(alignment: .center, spacing: UIScale.pt(14)) {
+        HStack(alignment: .center, spacing: 14) {
             Button {
                 sidebarOpen.toggle()
             } label: {
                 Image(systemName: "sidebar.left")
-                    .font(.system(size: UIScale.pt(15), weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                    .frame(width: 22, height: 22)
             }
             .buttonStyle(HoverButtonStyle())
             .help("Toggle sidebar (⌘B)")
             .keyboardShortcut("b", modifiers: .command)
 
             if sidebarOpen, width >= 130 {
-                HStack(alignment: .center, spacing: UIScale.pt(7)) {
+                HStack(alignment: .center, spacing: 6) {
                     if let icon = Brand.icon {
                         Image(nsImage: icon)
                             .resizable()
                             .interpolation(.high)
-                            .frame(width: UIScale.pt(19), height: UIScale.pt(19))
+                            .frame(width: 17, height: 17)
                     }
                     Text("Edith")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
+                        .tracking(-0.2)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
@@ -137,12 +139,12 @@ private struct SidebarNavRow: View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(11)) {
                 Image(systemName: item.icon)
-                    .font(.system(size: UIScale.pt(14), weight: selected ? .semibold : .regular))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: UIScale.pt(14), weight: .medium))
+                    .foregroundStyle(selected ? .primary : .secondary)
                     .frame(width: UIScale.pt(22))
                 Text(item.title)
-                    .font(.system(size: UIScale.pt(13.5), weight: selected ? .semibold : .regular))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: UIScale.pt(13.5), weight: .medium))
+                    .foregroundStyle(selected ? .primary : .secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 if let shortcutHint {
@@ -233,6 +235,7 @@ struct MainWindowView: View {
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("creditHidden", store: SharedDefaults.store) private var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
+    @AppStorage("EdithMainWindowFullScreen") private var windowFullScreen = false
     @State private var dragBaseWidth: Double?
     @State private var musicKeyMonitor: Any?
     @State private var windowKeyMonitor: Any?
@@ -250,6 +253,10 @@ struct MainWindowView: View {
 
     private static let minSidebarWidth = 180.0
     private static let maxSidebarWidth = 320.0
+    private static let defaultSidebarWidth = 230.0
+    private static let trafficLightsInset = 94.0
+    private static let chromeHeight = 31.0
+    private static let fullScreenControlsInset = 12.0
 
     private var clampedSidebarWidth: Double {
         min(Self.maxSidebarWidth, max(Self.minSidebarWidth, sidebarWidth))
@@ -299,8 +306,8 @@ struct MainWindowView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let bandHeight = max(geo.safeAreaInsets.top, 28)
-            VStack(spacing: UIScale.pt(0)) {
+            let bandHeight = Self.chromeHeight + UIScale.pt(10)
+            VStack(spacing: 0) {
                 mainArea(bandHeight)
                 if musicFooterVisible {
                     MusicFooter()
@@ -308,7 +315,7 @@ struct MainWindowView: View {
                 }
             }
             .ignoresSafeArea()
-            .overlay(alignment: .topLeading) { chromeOverlay(bandHeight) }
+            .overlay(alignment: .topLeading) { chromeOverlay() }
             .animation(
                 Motion.animation(Motion.glide, reduceMotion: reduceMotion),
                 value: visibleHomeItems
@@ -450,14 +457,15 @@ struct MainWindowView: View {
         }
     }
 
-    private func chromeOverlay(_ bandHeight: CGFloat) -> some View {
-        VStack(spacing: UIScale.pt(0)) {
+    private func chromeOverlay() -> some View {
+        let inset = windowFullScreen ? Self.fullScreenControlsInset : Self.trafficLightsInset
+        return VStack(spacing: 0) {
             TitlebarChrome(
-                height: min(bandHeight, 52),
-                width: sidebarOpen ? max(displaySidebarWidth - 94, 60) : UIScale.pt(200))
+                height: Self.chromeHeight,
+                width: sidebarOpen ? max(displaySidebarWidth - inset, 60) : UIScale.pt(200))
             Spacer(minLength: 0)
         }
-        .padding(.leading, 94)
+        .padding(.leading, inset)
         .ignoresSafeArea(edges: .top)
     }
 
@@ -821,6 +829,7 @@ struct MainWindowView: View {
                             }
                             .onEnded { _ in dragBaseWidth = nil }
                     )
+                    .onTapGesture(count: 2) { sidebarWidth = Self.defaultSidebarWidth }
             }
     }
 

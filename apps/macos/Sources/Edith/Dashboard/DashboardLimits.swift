@@ -124,8 +124,10 @@ struct RateLimitsDialsView: View {
     let dark: Bool
     var fill = false
     var showsJumpLink = false
-    @AppStorage("warnPercent") private var warn = 60
-    @AppStorage("critPercent") private var crit = 85
+    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
+        LimitRing.defaultWarnPercent
+    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
+        LimitRing.defaultCriticalPercent
     @State private var point: DashLimitPoint?
     @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
         LimitProvider.claude.rawValue
@@ -242,9 +244,7 @@ struct RateLimitsDialsView: View {
     }
 
     private func color(for percent: Double) -> Color {
-        if percent >= Double(crit) { return .red }
-        if percent >= Double(warn) { return .orange }
-        return DashSkin.sage
+        LimitRing.color(percent: percent, warn: warn, critical: crit)
     }
 }
 
@@ -288,8 +288,10 @@ struct LimitsRefreshButton: View {
 struct LimitsCardView: View {
     let theme: Color
     let dark: Bool
-    @AppStorage("warnPercent") private var warn = 60
-    @AppStorage("critPercent") private var crit = 85
+    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
+        LimitRing.defaultWarnPercent
+    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
+        LimitRing.defaultCriticalPercent
     @State private var all: [DashLimitPoint] = []
     @State private var downsampled: [DashLimitPoint] = []
     @State private var visible: [DashLimitPoint] = []

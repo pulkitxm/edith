@@ -126,7 +126,7 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
         "tabCalendarEnabled", "musicLooping",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth", "mainWindowZoom",
+        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -176,7 +176,7 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth", "mainWindowZoom",
+        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [
@@ -192,6 +192,7 @@ final class SettingsBackup: ObservableObject {
         "presenterAutoReason", "settingsSection", "musicFolderPath", "musicFolderStale",
         "musicFolderExternalConfirmation", "repoPathExternalConfirmation",
         "cleanerConfirmedExternalPaths",
+        "mainWindowZoom", "EdithMainWindowFullScreen",
         "restorePending.usage", "restorePending.limits", "restorePending.music",
         "restorePending.clipboard", "restoreTimedOut.usage", "restoreTimedOut.limits",
         "restoreTimedOut.music", "restoreTimedOut.clipboard",
