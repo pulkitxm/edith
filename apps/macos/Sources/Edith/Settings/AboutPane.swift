@@ -22,7 +22,7 @@ struct AboutPane: View {
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 0) {
+                VStack(spacing: UIScale.pt(0)) {
                     Spacer(minLength: 44)
                     content
                     Spacer(minLength: 44)
@@ -35,54 +35,54 @@ struct AboutPane: View {
     }
 
     private var content: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: UIScale.pt(18)) {
             if let icon = Brand.icon {
                 Image(nsImage: icon)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: 88, height: 88)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
+                    .frame(width: UIScale.pt(88), height: UIScale.pt(88))
+                    .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(20), style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: UIScale.pt(12), y: 6)
             }
-            VStack(spacing: 6) {
+            VStack(spacing: UIScale.pt(6)) {
                 Text("Edith")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: UIScale.pt(28), weight: .bold))
                 Text(version)
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             Text("Every little Mac utility you'd otherwise pay for, under one roof.")
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: UIScale.pt(14), weight: .medium))
                 .multilineTextAlignment(.center)
             Text(story)
-                .font(.system(size: 13))
+                .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
-                .frame(maxWidth: 460)
+                .frame(maxWidth: UIScale.pt(460))
             Button {
                 NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Image(systemName: "link")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: UIScale.pt(11), weight: .semibold))
                     Text("pulkit.page")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: UIScale.pt(12), weight: .semibold))
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, UIScale.pt(16))
+                .padding(.vertical, UIScale.pt(8))
                 .background(theme, in: Capsule())
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .padding(.top, 2)
+            .padding(.top, UIScale.pt(2))
             Text("Made with ♥ by Pulkit")
-                .font(.system(size: 11))
+                .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 32)
+        .padding(.horizontal, UIScale.pt(32))
     }
 }

@@ -33,13 +33,13 @@ struct NotchShelfRows: View {
                 Toggle("Open when dragging near the notch", isOn: $openOnDrag)
                     .pointerCursor()
                 Text("The island slides out mid-drag so you can drop without clicking first.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 Toggle("Open on hover", isOn: $openOnHover)
                     .pointerCursor()
                 Text("Expand when the mouse rests on the notch, without a drag.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 Toggle(isOn: $requireOption) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Require \u{2325} to trigger")
                         InfoDot(
                             "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
@@ -59,7 +59,7 @@ struct NotchShelfRows: View {
                     Text("1 week").tag("oneWeek")
                     Text("1 month").tag("oneMonth")
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Keep items for")
                         InfoDot(
                             "Parked files auto-delete after this long. They're copies - originals are never touched."
@@ -70,7 +70,7 @@ struct NotchShelfRows: View {
                 Toggle("Remove after dragging out", isOn: $removeAfterDragOut)
                     .pointerCursor()
                 Text("Treats the shelf as a hand-off tray rather than storage.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
@@ -81,13 +81,13 @@ struct NotchShelfRows: View {
                 Text(
                     "Album art and a live equalizer hug the notch while music plays in the library, Spotify, or Apple Music."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 Toggle("Notch alerts", isOn: $showAlerts)
                     .pointerCursor()
                 Text(
                     "Drops a brief card from the notch. Alerts that arrive while the notch is open queue up and show after it closes."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 if showAlerts {
                     Toggle("Audio output changes", isOn: $alertAudio)
                         .pointerCursor()
@@ -116,15 +116,15 @@ struct NotchShelfRows: View {
                 Text(
                     "Adds an Audio tab to set each app's volume. macOS 14.4+; asks for audio-recording permission the first time. Off by default."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 Toggle("Show on external displays", isOn: $showOnExternal)
                     .pointerCursor()
                 Text("Draws a small pill at the top of screens without a notch.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 Toggle("Haptic feedback", isOn: $haptics)
                     .pointerCursor()
                 Text("A small trackpad tap when the shelf reacts.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)

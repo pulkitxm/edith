@@ -13,7 +13,7 @@ public struct InfoDot: View {
             showing.toggle()
         } label: {
             Image(systemName: "info.circle")
-                .font(.system(size: 12))
+                .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
@@ -22,10 +22,10 @@ public struct InfoDot: View {
         .help("More info")
         .popover(isPresented: $showing, arrowEdge: .trailing) {
             Text(text)
-                .font(.system(size: 12))
-                .frame(width: 260, alignment: .leading)
+                .font(.system(size: UIScale.pt(12)))
+                .frame(width: UIScale.pt(260), alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
+                .padding(UIScale.pt(12))
         }
     }
 }

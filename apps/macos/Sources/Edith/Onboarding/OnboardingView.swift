@@ -41,7 +41,7 @@ struct OnboardingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             ZStack {
                 currentStep
                     .id(step)
@@ -55,13 +55,13 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             stepIndicator
-                .padding(.vertical, 12)
+                .padding(.vertical, UIScale.pt(12))
             Divider()
                 .overlay(DashSkin.line(dark))
             footer
-                .frame(height: 58)
+                .frame(height: UIScale.pt(58))
         }
-        .frame(width: 620, height: 560)
+        .frame(width: UIScale.pt(620), height: UIScale.pt(560))
         .background(DashSkin.paper(dark))
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             guard step == .permissions else { return }
@@ -101,20 +101,20 @@ struct OnboardingView: View {
     }
 
     private var welcomeStep: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 48)
             appIcon
-                .frame(width: 92, height: 92)
-                .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: 18, y: 9)
+                .frame(width: UIScale.pt(92), height: UIScale.pt(92))
+                .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: UIScale.pt(18), y: 9)
             Text("Welcome to Edith")
                 .font(DashSkin.serif(36, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, 24)
+                .padding(.top, UIScale.pt(24))
             Text("Your Mac's useful details and everyday tools, gathered in one place.")
-                .font(.system(size: 15))
+                .font(.system(size: UIScale.pt(15)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .padding(.top, 8)
-            VStack(spacing: 10) {
+                .padding(.top, UIScale.pt(8))
+            VStack(spacing: UIScale.pt(10)) {
                 Button("Get started") { move(to: .restore, direction: 1) }
                     .buttonStyle(OnboardingPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
@@ -126,34 +126,34 @@ struct OnboardingView: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .pointerCursor()
             }
-            .frame(width: 210)
-            .padding(.top, 30)
+            .frame(width: UIScale.pt(210))
+            .padding(.top, UIScale.pt(30))
             Spacer(minLength: 28)
         }
-        .padding(.horizontal, 48)
+        .padding(.horizontal, UIScale.pt(48))
     }
 
     private var restoreStep: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
             ZStack {
                 Circle()
                     .fill(brandAccent.opacity(0.13))
-                    .frame(width: 106, height: 106)
+                    .frame(width: UIScale.pt(106), height: UIScale.pt(106))
                 Image(systemName: restoreSymbol)
-                    .font(.system(size: 40, weight: .medium))
+                    .font(.system(size: UIScale.pt(40), weight: .medium))
                     .foregroundStyle(brandAccent)
             }
             Text(restoreTitle)
                 .font(DashSkin.serif(34, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, 22)
+                .padding(.top, UIScale.pt(22))
             Text(restoreDetail)
-                .font(.system(size: 14))
+                .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
-                .padding(.top, 7)
-            VStack(spacing: 10) {
+                .padding(.top, UIScale.pt(7))
+            VStack(spacing: UIScale.pt(10)) {
                 if cloudChecked {
                     Button("Continue") { move(to: .picks, direction: 1) }
                         .buttonStyle(OnboardingPrimaryButtonStyle())
@@ -171,17 +171,17 @@ struct OnboardingView: View {
                         .pointerCursor()
                 }
             }
-            .frame(width: 230)
-            .padding(.top, 26)
+            .frame(width: UIScale.pt(230))
+            .padding(.top, UIScale.pt(26))
             if !cloudChecked {
                 Text("macOS will ask permission to read Edith's folder in iCloud Drive.")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .padding(.top, 12)
+                    .padding(.top, UIScale.pt(12))
             }
             Spacer(minLength: 28)
         }
-        .padding(.horizontal, 48)
+        .padding(.horizontal, UIScale.pt(48))
     }
 
     private var restoreSymbol: String {
@@ -224,13 +224,13 @@ struct OnboardingView: View {
     }
 
     private var picksStep: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             stepHeading(
                 "Make Edith yours",
                 detail: picksDetail)
             ScrollView {
-                VStack(spacing: 0) {
-                    LazyVGrid(columns: gridColumns, spacing: 12) {
+                VStack(spacing: UIScale.pt(0)) {
+                    LazyVGrid(columns: gridColumns, spacing: UIScale.pt(12)) {
                         ForEach(displayedEntries) { entry in
                             ExtensionChoiceCard(
                                 entry: entry, selected: selectedIDs.contains(entry.id), dark: dark
@@ -246,47 +246,49 @@ struct OnboardingView: View {
                         }
                     }
                     marketplaceCard
-                        .padding(.top, 12)
+                        .padding(.top, UIScale.pt(12))
                 }
-                .padding(.horizontal, 2)
-                .padding(.bottom, 4)
+                .padding(.horizontal, UIScale.pt(2))
+                .padding(.bottom, UIScale.pt(4))
             }
             .scrollIndicators(.never)
         }
-        .padding(.top, 40)
-        .padding(.horizontal, 30)
+        .padding(.top, UIScale.pt(40))
+        .padding(.horizontal, UIScale.pt(30))
     }
 
     private var marketplaceCard: some View {
         Button {
             withAnimation(glide) { showsAllExtensions.toggle() }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: UIScale.pt(12)) {
                 Image(systemName: showsAllExtensions ? "sparkles.rectangle.stack" : "storefront")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: UIScale.pt(18), weight: .medium))
                     .foregroundStyle(brandAccent)
-                    .frame(width: 38, height: 38)
-                    .background(brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 3) {
+                    .frame(width: UIScale.pt(38), height: UIScale.pt(38))
+                    .background(
+                        brandAccent.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(showsAllExtensions ? "Back to top picks" : "Explore the marketplace")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                     Text(marketplaceDetail)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: showsAllExtensions ? "arrow.up.left" : "arrow.down.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
-            .padding(13)
-            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 14))
+            .padding(UIScale.pt(13))
+            .frame(maxWidth: .infinity, minHeight: UIScale.pt(82), alignment: .leading)
+            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
             .overlay {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: UIScale.pt(14))
                     .strokeBorder(DashSkin.lineStrong(dark), style: StrokeStyle(dash: [4, 4]))
             }
         }
@@ -295,12 +297,12 @@ struct OnboardingView: View {
     }
 
     private var permissionsStep: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             stepHeading(
                 "A few permissions",
                 detail: "Grant what you are comfortable with. You can continue either way.")
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: UIScale.pt(10)) {
                     ForEach(permissionItems, id: \.permission) { item in
                         OnboardingPermissionCard(
                             item: item,
@@ -317,41 +319,41 @@ struct OnboardingView: View {
                         Text(
                             "Some features ask for more access the first time you use them, with an explanation."
                         )
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                     }
                 }
-                .padding(.horizontal, 2)
-                .padding(.bottom, 4)
+                .padding(.horizontal, UIScale.pt(2))
+                .padding(.bottom, UIScale.pt(4))
             }
             .scrollIndicators(.never)
         }
-        .padding(.top, 40)
-        .padding(.horizontal, 38)
+        .padding(.top, UIScale.pt(40))
+        .padding(.horizontal, UIScale.pt(38))
         .onAppear(perform: refreshPermissions)
     }
 
     private var readyStep: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
             ZStack {
                 Circle()
                     .fill(brandAccent.opacity(0.13))
-                    .frame(width: 106, height: 106)
+                    .frame(width: UIScale.pt(106), height: UIScale.pt(106))
                 Image(systemName: "checkmark")
-                    .font(.system(size: 44, weight: .medium))
+                    .font(.system(size: UIScale.pt(44), weight: .medium))
                     .foregroundStyle(brandAccent)
             }
             Text("You're ready")
                 .font(DashSkin.serif(34, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, 22)
+                .padding(.top, UIScale.pt(22))
             Text(readySummary)
-                .font(.system(size: 14))
+                .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .padding(.top, 7)
-            VStack(spacing: 6) {
+                .padding(.top, UIScale.pt(7))
+            VStack(spacing: UIScale.pt(6)) {
                 Toggle(
                     cloudBackupFound
                         ? "Restore my iCloud backup and keep syncing"
@@ -360,46 +362,51 @@ struct OnboardingView: View {
                 )
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: UIScale.pt(12.5), weight: .medium))
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.horizontal, 12)
-                .frame(height: 38)
-                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, UIScale.pt(12))
+                .frame(height: UIScale.pt(38))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10).strokeBorder(DashSkin.line(dark))
+                    RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
                 }
                 .pointerCursor()
                 if cloudBackupFound {
                     Text("We found an existing Edith backup in iCloud.")
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
-            .padding(.top, 18)
-            HStack(spacing: 14) {
+            .padding(.top, UIScale.pt(18))
+            HStack(spacing: UIScale.pt(14)) {
                 Text(hotKeyLabel)
                     .font(DashSkin.mono(20, weight: .semibold))
                     .kerning(2)
                     .foregroundStyle(DashSkin.ink(dark))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, UIScale.pt(16))
+                    .padding(.vertical, UIScale.pt(10))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                    )
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10).strokeBorder(DashSkin.lineStrong(dark))
+                        RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(
+                            DashSkin.lineStrong(dark))
                     }
                 Text("opens the Edith panel")
-                    .font(.system(size: 13))
+                    .font(.system(size: UIScale.pt(13)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
-            .padding(.top, 18)
+            .padding(.top, UIScale.pt(18))
             Button("Start using Edith", action: completeOrProvisionOnboarding)
                 .buttonStyle(OnboardingPrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
-                .frame(width: 210)
-                .padding(.top, 22)
+                .frame(width: UIScale.pt(210))
+                .padding(.top, UIScale.pt(22))
             Spacer(minLength: 28)
         }
-        .padding(.horizontal, 48)
+        .padding(.horizontal, UIScale.pt(48))
     }
 
     private var provisioningStep: some View {
@@ -407,11 +414,11 @@ struct OnboardingView: View {
             title: "Setting up your extensions", tools: selectedTools,
             continueAction: onFinish
         )
-        .padding(.horizontal, 32)
+        .padding(.horizontal, UIScale.pt(32))
     }
 
     private var stepIndicator: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             ForEach(Step.allCases, id: \.rawValue) { item in
                 Circle()
                     .fill(item == step ? brandAccent : DashSkin.lineStrong(dark))
@@ -425,7 +432,7 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             if step == .restore || step == .picks || step == .permissions {
                 Button("Back") { goBack() }
                     .buttonStyle(.plain)
@@ -443,7 +450,7 @@ struct OnboardingView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(.horizontal, 30)
+        .padding(.horizontal, UIScale.pt(30))
     }
 
     private var appIcon: some View {
@@ -469,7 +476,10 @@ struct OnboardingView: View {
     }
 
     private var gridColumns: [GridItem] {
-        [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        [
+            GridItem(.flexible(), spacing: UIScale.pt(12)),
+            GridItem(.flexible(), spacing: UIScale.pt(12)),
+        ]
     }
 
     private var picksDetail: String {
@@ -519,12 +529,12 @@ struct OnboardingView: View {
     }
 
     private func stepHeading(_ title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title)
                 .font(DashSkin.serif(27, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(detail)
-                .font(.system(size: 12.5))
+                .font(.system(size: UIScale.pt(12.5)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
@@ -587,30 +597,30 @@ private struct ExtensionChoiceCard: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             Button(action: action) {
-                VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: UIScale.pt(9)) {
                     ExtensionPreview(entry: entry, dark: dark)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 52)
+                        .frame(height: UIScale.pt(52))
                         .background(
                             selected ? brandAccent.opacity(0.1) : DashSkin.paper(dark),
-                            in: RoundedRectangle(cornerRadius: 10))
-                    HStack(spacing: 8) {
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+                    HStack(spacing: UIScale.pt(8)) {
                         Image(systemName: entry.symbolName)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: UIScale.pt(12), weight: .semibold))
                             .foregroundStyle(selected ? brandAccent : DashSkin.inkSoft(dark))
                         Text(entry.title)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: UIScale.pt(14), weight: .semibold))
                             .foregroundStyle(selected ? brandAccent : DashSkin.inkFaint(dark))
                     }
                     Text(entry.subtitle)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
                 }
@@ -619,10 +629,10 @@ private struct ExtensionChoiceCard: View {
             .buttonStyle(.plain)
             .pointerCursor()
             .accessibilityLabel("\(entry.title), \(selected ? "selected" : "not selected")")
-            HStack(spacing: 4) {
+            HStack(spacing: UIScale.pt(4)) {
                 Button(action: action) {
                     Text(permissionNote)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
                         .foregroundStyle(selected ? brandAccent : DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
@@ -633,11 +643,11 @@ private struct ExtensionChoiceCard: View {
                 }
             }
         }
-        .padding(11)
+        .padding(UIScale.pt(11))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 14))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
         .overlay {
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: UIScale.pt(14))
                 .strokeBorder(
                     selected ? brandAccent : DashSkin.line(dark),
                     lineWidth: selected ? 1.5 : 1)
@@ -664,37 +674,37 @@ private struct OnboardingPermissionCard: View {
     let grant: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: item.permission.symbolName)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: UIScale.pt(16), weight: .medium))
                 .foregroundStyle(granted ? DashSkin.ok : brandAccent)
-                .frame(width: 34, height: 34)
+                .frame(width: UIScale.pt(34), height: UIScale.pt(34))
                 .background(
                     (granted ? DashSkin.ok : brandAccent).opacity(0.11),
-                    in: RoundedRectangle(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 7) {
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                HStack(spacing: UIScale.pt(7)) {
                     Text(item.permission.displayName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                     PermissionInfoButton(item.permission)
                     Text(item.required ? "Required" : "Optional")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(item.required ? DashSkin.warn : DashSkin.inkFaint(dark))
                 }
                 Text(item.permission.reason)
-                    .font(.system(size: 11))
+                    .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 if let explanation = item.permission.firstUseExplanation {
                     Text(explanation)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
             Spacer(minLength: 12)
             if granted {
                 Label("Granted", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.ok)
             } else if item.permission.grantRequest != nil {
                 Button("Grant", action: grant)
@@ -702,15 +712,15 @@ private struct OnboardingPermissionCard: View {
                     .pointerCursor()
             } else {
                 Text("On first use")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .padding(14)
+        .padding(UIScale.pt(14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 13))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(13)))
         .overlay {
-            RoundedRectangle(cornerRadius: 13).strokeBorder(DashSkin.line(dark))
+            RoundedRectangle(cornerRadius: UIScale.pt(13)).strokeBorder(DashSkin.line(dark))
         }
     }
 }

@@ -86,33 +86,33 @@ public struct ProviderSwitchButton: View {
                 ? "Choose provider, or Command-click to switch" : selection.label
         )
         .popover(isPresented: $showingProviders, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 ForEach(providers) { provider in
                     Button {
                         selection = provider
                         showingProviders = false
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: UIScale.pt(8)) {
                             ProviderLogoView(provider)
-                                .frame(width: 14, height: 14)
+                                .frame(width: UIScale.pt(14), height: UIScale.pt(14))
                             Text(provider.label)
                             Spacer(minLength: 12)
                             if selection == provider {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: UIScale.pt(10), weight: .semibold))
                             }
                         }
                         .foregroundStyle(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, UIScale.pt(8))
+                        .padding(.vertical, UIScale.pt(6))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
                 }
             }
-            .padding(6)
-            .frame(width: 132)
+            .padding(UIScale.pt(6))
+            .frame(width: UIScale.pt(132))
         }
     }
 

@@ -20,8 +20,8 @@ struct FocusDimRows: View {
             Text(
                 "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
             )
-            .font(.caption).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 6) {
+            .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Intensity") {
                     Text("\(Int(intensity * 100))%")
                         .foregroundStyle(.secondary)
@@ -30,9 +30,9 @@ struct FocusDimRows: View {
                 Slider(value: $intensity, in: FocusDimMath.intensityRange)
                     .pointerCursor()
                 Text("How dark the background gets.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Animation") {
                     Text(String(format: "%.2fs", animationDuration))
                         .foregroundStyle(.secondary)
@@ -41,9 +41,9 @@ struct FocusDimRows: View {
                 Slider(value: $animationDuration, in: FocusDimMath.animationDurationRange)
                     .pointerCursor()
                 Text("How quickly the dim follows you when switching apps.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Picker("Other displays", selection: $otherDisplaysMode) {
                     Text("Highlight front window").tag(FocusDimDisplayMode.perScreenFront)
                     Text("Dim unfocused fully").tag(FocusDimDisplayMode.dimUnfocused)
@@ -53,12 +53,12 @@ struct FocusDimRows: View {
                 Text(
                     "Highlight the front window on each screen, or fully dim displays without keyboard focus so you can tell where you're typing."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
             LabeledContent {
                 HotKeyRecorderControl(keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Toggle hotkey")
                     InfoDot("Flip dimming on or off from anywhere.")
                 }

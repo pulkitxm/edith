@@ -27,39 +27,41 @@ struct DashboardView: View {
     var body: some View {
         GeometryReader { geo in
             let compact = geo.size.width < 640
-            VStack(spacing: 0) {
+            VStack(spacing: UIScale.pt(0)) {
                 if model.loaded {
                     controlsBar
                 }
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                         masthead(compact: compact)
-                            .padding(.horizontal, compact ? 18 : 24).padding(.top, 18)
+                            .padding(.horizontal, compact ? 18 : 24).padding(.top, UIScale.pt(18))
                         if showLog {
                             logView.padding(.horizontal, compact ? 18 : 24)
                         }
                         if model.loaded {
                             kpiGrid.padding(.horizontal, compact ? 18 : 24)
-                            LazyVStack(spacing: 16) {
+                            LazyVStack(spacing: UIScale.pt(16)) {
                                 activityRow(compact: compact)
                                 LimitsCardView(theme: acc, dark: dark)
                                 BudgetCardView(theme: acc, dark: dark)
                                 charts(compact: compact)
                             }
-                            .padding(.horizontal, compact ? 18 : 24).padding(.bottom, 28)
+                            .padding(.horizontal, compact ? 18 : 24).padding(
+                                .bottom, UIScale.pt(28)
+                            )
                             .animation(
                                 Motion.animation(Motion.settle, reduceMotion: reduceMotion),
                                 value: model.revision)
                         } else if !model.loadAttempted {
                             ProgressView("Loading usage data…")
                                 .controlSize(.small)
-                                .frame(maxWidth: .infinity, minHeight: 240)
+                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
                         } else {
                             ContentUnavailableView(
                                 "No usage data yet", systemImage: "chart.bar",
                                 description: Text("Hit reload to run the bundled collector.")
                             )
-                            .frame(maxWidth: .infinity, minHeight: 240)
+                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -103,8 +105,8 @@ struct DashboardView: View {
     }
 
     private func masthead(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
                 (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
                     + Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
                     + Text(".").foregroundStyle(DashSkin.ink(dark)))
@@ -114,18 +116,18 @@ struct DashboardView: View {
                 Spacer(minLength: 8)
                 mastheadButtons
             }
-            WrapHStack(spacing: 6, lineSpacing: 2) {
+            WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
                 ForEach(metaSegments) { seg in
                     Text(seg.text)
                         .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
                 }
             }
-            .font(.system(size: 12.5)).foregroundStyle(DashSkin.inkSoft(dark))
+            .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 
     private var mastheadButtons: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: UIScale.pt(6)) {
             Button {
                 refresh.requestRefresh()
             } label: {
@@ -136,7 +138,7 @@ struct DashboardView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
-                .frame(width: 18, height: 18)
+                .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
             .buttonStyle(HoverButtonStyle())
             .disabled(refresh.updating)
@@ -177,16 +179,16 @@ struct DashboardView: View {
         }
     }
 
-    private static let kpiColumns = [GridItem(.adaptive(minimum: 158), spacing: 12)]
+    private static let kpiColumns = [GridItem(.adaptive(minimum: 158), spacing: UIScale.pt(12))]
 
     private var kpiGrid: some View {
-        LazyVGrid(columns: Self.kpiColumns, spacing: 12) {
+        LazyVGrid(columns: Self.kpiColumns, spacing: UIScale.pt(12)) {
             ForEach(model.kpis) { kpi in
-                HStack(spacing: 0) {
-                    Rectangle().fill(kpi.hot ? acc : Color.clear).frame(width: 3)
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: UIScale.pt(0)) {
+                    Rectangle().fill(kpi.hot ? acc : Color.clear).frame(width: UIScale.pt(3))
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                         Text(kpi.label.uppercased())
-                            .font(DashSkin.mono(10)).tracking(1.4)
+                            .font(DashSkin.mono(10)).tracking(UIScale.pt(1.4))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         Text(kpi.value)
                             .font(DashSkin.serif(26))
@@ -200,7 +202,9 @@ struct DashboardView: View {
                             .presenterBlur(
                                 (kpi.sensitiveValue && blurMoney) || (kpi.usageValue && blurUsage))
                         Text(kpi.sub)
-                            .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkSoft(dark))
+                            .font(.system(size: UIScale.pt(11.5))).foregroundStyle(
+                                DashSkin.inkSoft(dark)
+                            )
                             .contentTransition(.numericText())
                             .animation(
                                 Motion.animation(Motion.settle, reduceMotion: reduceMotion),
@@ -209,20 +213,21 @@ struct DashboardView: View {
                             .presenterBlur(
                                 (kpi.sensitiveSub && blurMoney) || (kpi.usageSub && blurUsage))
                     }
-                    .padding(14)
+                    .padding(UIScale.pt(14))
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(DashSkin.paper2(dark))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14).strokeBorder(
-                        DashSkin.line(dark), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(
+                        DashSkin.line(dark), lineWidth: UIScale.pt(1))
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14)))
                 .background {
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: UIScale.pt(14))
                         .fill(DashSkin.paper2(dark))
-                        .shadow(color: .black.opacity(dark ? 0.3 : 0.05), radius: 8, y: 4)
+                        .shadow(
+                            color: .black.opacity(dark ? 0.3 : 0.05), radius: UIScale.pt(8), y: 4)
                 }
             }
         }
@@ -230,14 +235,14 @@ struct DashboardView: View {
 
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
-            VStack(spacing: 16) {
+            VStack(spacing: UIScale.pt(16)) {
                 SkinCard(title: "Activity", dark: dark) { activityHeatmap }
                 RateLimitsDialsView(dark: dark)
             }
         } else {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: UIScale.pt(16)) {
                 SkinCard(title: "Activity", dark: dark, fill: true) { activityHeatmap }
-                RateLimitsDialsView(dark: dark, fill: true).frame(width: 340)
+                RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -252,7 +257,7 @@ struct DashboardView: View {
     }
 
     private var controlsBar: some View {
-        WrapHStack(spacing: 8, lineSpacing: 8) {
+        WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
             rangeButton("Today", .today)
             rangeButton("Yesterday", .yesterday)
             rangeButton("Week", .thisWeek)
@@ -280,26 +285,28 @@ struct DashboardView: View {
                 .menuStyle(.borderlessButton).pointerCursor().fixedSize()
             }
             Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
-                .pointerCursor().font(.system(size: 11)).fixedSize()
+                .pointerCursor().font(.system(size: UIScale.pt(11))).fixedSize()
             customRange
             sourceMenu
             modelMenu
             Button("Reset") { model.reset() }
                 .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
                 .foregroundStyle(acc)
-                .padding(.vertical, 5)
+                .padding(.vertical, UIScale.pt(5))
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
-        .padding(.horizontal, 24).padding(.top, 4).padding(.bottom, 8)
+        .padding(.horizontal, UIScale.pt(24)).padding(.top, UIScale.pt(4)).padding(
+            .bottom, UIScale.pt(8)
+        )
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper(dark))
         .overlay(alignment: .bottom) {
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
         }
     }
 
     private var customRange: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: UIScale.pt(4)) {
             DatePicker(
                 "",
                 selection: Binding(
@@ -311,7 +318,7 @@ struct DashboardView: View {
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
             .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
-            Text("→").font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
+            Text("→").font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
             DatePicker(
                 "",
                 selection: Binding(
@@ -346,14 +353,15 @@ struct DashboardView: View {
             .buttonStyle(.plain)
             .pointerCursor()
             .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-            .padding(.horizontal, 11).padding(.vertical, 5)
+            .padding(.horizontal, UIScale.pt(11)).padding(.vertical, UIScale.pt(5))
             .background(
                 active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
-                in: RoundedRectangle(cornerRadius: 8)
+                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(active ? Color.clear : DashSkin.lineStrong(dark), lineWidth: 1)
+                RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    .strokeBorder(
+                        active ? Color.clear : DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
             )
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
     }
@@ -418,7 +426,7 @@ struct DashboardView: View {
     }
 
     private var logView: some View {
-        TerminalLogView(log: refresh.log, theme: appTheme, height: 150)
+        TerminalLogView(log: refresh.log, theme: appTheme, height: UIScale.pt(150))
     }
 
     @ViewBuilder private func charts(compact: Bool) -> some View {
@@ -448,22 +456,22 @@ struct DashboardView: View {
             }
         }
         if compact {
-            VStack(spacing: 16) {
+            VStack(spacing: UIScale.pt(16)) {
                 dowCard
                 shareByModelCard
             }
         } else {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: UIScale.pt(16)) {
                 dowCard
                 shareByModelCard
             }
         }
         if !model.projects.isEmpty {
             SkinCard(title: "By project", dark: dark) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     ComboChart(
                         points: model.chartData.project, barColor: acc, lineColor: gold,
-                        dark: dark, height: 280, blur: blurMoney, blurTokens: blurUsage)
+                        dark: dark, height: UIScale.pt(280), blur: blurMoney, blurTokens: blurUsage)
                     ProjectDrilldownView(
                         model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
                 }
@@ -472,7 +480,7 @@ struct DashboardView: View {
         SkinCard(title: "Hourly usage", dark: dark) {
             ComboChart(
                 points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
-                height: 200, blur: blurMoney, blurTokens: blurUsage)
+                height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
     }
@@ -481,7 +489,7 @@ struct DashboardView: View {
         SkinCard(title: "By day of week", dark: dark) {
             ComboChart(
                 points: model.chartData.dow, barColor: acc, lineColor: gold, dark: dark,
-                height: 200, blur: blurMoney, blurTokens: blurUsage)
+                height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
         }
     }
 
@@ -492,38 +500,41 @@ struct DashboardView: View {
     }
 
     private var modelsTable: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
+        VStack(spacing: UIScale.pt(0)) {
+            HStack(spacing: UIScale.pt(8)) {
                 tableHeader("Model", .model, width: nil)
-                tableHeader("Cost", .cost, width: 70)
-                tableHeader("Share", .share, width: 60)
-                tableHeader("Tokens", .tokens, width: 70)
-                tableHeader("Days", .days, width: 44)
+                tableHeader("Cost", .cost, width: UIScale.pt(70))
+                tableHeader("Share", .share, width: UIScale.pt(60))
+                tableHeader("Tokens", .tokens, width: UIScale.pt(70))
+                tableHeader("Days", .days, width: UIScale.pt(44))
             }
             .font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
-            .padding(.vertical, 4)
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            .padding(.vertical, UIScale.pt(4))
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             ForEach(model.modelTotals) { m in
-                HStack(spacing: 8) {
-                    Circle().fill(model.modelColor(m.model, dark: dark)).frame(width: 8, height: 8)
+                HStack(spacing: UIScale.pt(8)) {
+                    Circle().fill(model.modelColor(m.model, dark: dark)).frame(
+                        width: UIScale.pt(8), height: UIScale.pt(8))
                     Text(DashFmt.shortModel(m.model))
-                        .font(.system(size: 11)).foregroundStyle(DashSkin.ink(dark))
+                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
                         .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
                     Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
-                        width: 70, alignment: .trailing
+                        width: UIScale.pt(70), alignment: .trailing
                     ).presenterBlur(blurMoney)
                     Text(DashFmt.pct(m.share)).font(DashSkin.mono(11)).frame(
-                        width: 60, alignment: .trailing
+                        width: UIScale.pt(60), alignment: .trailing
                     ).foregroundStyle(DashSkin.inkSoft(dark))
                     Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
-                        width: 70, alignment: .trailing
+                        width: UIScale.pt(70), alignment: .trailing
                     ).presenterBlur(blurUsage)
-                    Text("\(m.days)").font(DashSkin.mono(11)).frame(width: 44, alignment: .trailing)
-                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    Text("\(m.days)").font(DashSkin.mono(11)).frame(
+                        width: UIScale.pt(44), alignment: .trailing
+                    )
+                    .foregroundStyle(DashSkin.inkSoft(dark))
                 }
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.vertical, 5)
-                Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: 1)
+                .padding(.vertical, UIScale.pt(5))
+                Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: UIScale.pt(1))
             }
         }
     }
@@ -537,11 +548,11 @@ struct DashboardView: View {
                 model.sortAscending = false
             }
         } label: {
-            HStack(spacing: 2) {
+            HStack(spacing: UIScale.pt(2)) {
                 Text(title)
                 if model.sortColumn == col {
                     Image(systemName: model.sortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 7))
+                        .font(.system(size: UIScale.pt(7)))
                 }
             }
             .frame(width: width, alignment: width == nil ? .leading : .trailing)
@@ -586,35 +597,35 @@ struct ActivityHeatmap: View {
         let weeks = stride(from: 0, to: days.count, by: 7).map {
             Array(days[$0..<min($0 + 7, days.count)])
         }
-        return HStack(alignment: .top, spacing: 4) {
-            VStack(spacing: 3) {
+        return HStack(alignment: .top, spacing: UIScale.pt(4)) {
+            VStack(spacing: UIScale.pt(3)) {
                 ForEach(Array(["M", "", "W", "", "F", "", "S"].enumerated()), id: \.offset) {
                     _, label in
                     Text(label)
-                        .font(.system(size: 9))
+                        .font(.system(size: UIScale.pt(9)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: 12, height: 14)
+                        .frame(width: UIScale.pt(12), height: UIScale.pt(14))
                 }
             }
-            .padding(.top, 15)
+            .padding(.top, UIScale.pt(15))
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 3) {
+                HStack(alignment: .top, spacing: UIScale.pt(3)) {
                     ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
-                        VStack(spacing: 3) {
+                        VStack(spacing: UIScale.pt(3)) {
                             Text(monthLabel(for: weeks, at: index))
-                                .font(.system(size: 9))
+                                .font(.system(size: UIScale.pt(9)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
-                                .frame(height: 12)
+                                .frame(height: UIScale.pt(12))
                             ForEach(week) { day in
-                                RoundedRectangle(cornerRadius: 3)
+                                RoundedRectangle(cornerRadius: UIScale.pt(3))
                                     .fill(cellColor(day.cost, cuts: cuts))
-                                    .frame(width: 14, height: 14)
+                                    .frame(width: UIScale.pt(14), height: UIScale.pt(14))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 3)
+                                        RoundedRectangle(cornerRadius: UIScale.pt(3))
                                             .strokeBorder(
                                                 DashSkin.ink(dark).opacity(
                                                     hoveredDay == day.id ? 0.5 : 0),
-                                                lineWidth: 1)
+                                                lineWidth: UIScale.pt(1))
                                     )
                                     .onHover { inside in
                                         if inside {
@@ -643,7 +654,7 @@ struct ActivityHeatmap: View {
             }
             .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
         }
-        .frame(height: 137)
+        .frame(height: UIScale.pt(137))
     }
 
     private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {

@@ -18,36 +18,38 @@ struct ActivationView: View {
     private var dark: Bool { colorScheme == .dark }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 34)
             appIcon
-                .frame(width: 72, height: 72)
-                .shadow(color: .black.opacity(dark ? 0.3 : 0.14), radius: 14, y: 7)
+                .frame(width: UIScale.pt(72), height: UIScale.pt(72))
+                .shadow(color: .black.opacity(dark ? 0.3 : 0.14), radius: UIScale.pt(14), y: 7)
             Text("Activate Edith")
                 .font(DashSkin.serif(30, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, 18)
+                .padding(.top, UIScale.pt(18))
             Text("Enter your license key")
-                .font(.system(size: 14))
+                .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .padding(.top, 5)
+                .padding(.top, UIScale.pt(5))
             TextField("EDITH-XXXX-XXXX-XXXX-XXXX", text: $key)
                 .textFieldStyle(.plain)
                 .font(DashSkin.mono(15, weight: .medium))
                 .multilineTextAlignment(.center)
                 .focused($keyFieldFocused)
                 .disabled(activating)
-                .padding(.horizontal, 12)
-                .frame(height: 42)
-                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, UIScale.pt(12))
+                .frame(height: UIScale.pt(42))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: UIScale.pt(10))
                         .strokeBorder(
                             errorMessage == nil ? DashSkin.lineStrong(dark) : DashSkin.danger,
-                            lineWidth: 1
+                            lineWidth: UIScale.pt(1)
                         )
                 }
-                .padding(.top, 20)
+                .padding(.top, UIScale.pt(20))
                 .onChange(of: key) { _, value in
                     let formatted = LicenseKeyFormatting.format(value)
                     if formatted != value { key = formatted }
@@ -56,17 +58,19 @@ struct ActivationView: View {
                 .onSubmit(activate)
             TextField("Device name (optional)", text: $deviceName)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: UIScale.pt(13)))
                 .multilineTextAlignment(.center)
                 .disabled(activating)
-                .padding(.horizontal, 12)
-                .frame(height: 34)
-                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, UIScale.pt(12))
+                .frame(height: UIScale.pt(34))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: UIScale.pt(10))
+                        .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
                 }
-                .padding(.top, 10)
+                .padding(.top, UIScale.pt(10))
             Button(action: activate) {
                 Group {
                     if activating {
@@ -77,35 +81,35 @@ struct ActivationView: View {
                         Text("Activate")
                     }
                 }
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: UIScale.pt(14), weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .background(brandAccent, in: RoundedRectangle(cornerRadius: 10))
+                .frame(height: UIScale.pt(38))
+                .background(brandAccent, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             }
             .buttonStyle(.plain)
             .disabled(activating || !LicenseKeyFormatting.isComplete(key))
             .opacity(LicenseKeyFormatting.isComplete(key) ? 1 : 0.55)
             .keyboardShortcut(.defaultAction)
             .pointerCursor()
-            .padding(.top, 12)
+            .padding(.top, UIScale.pt(12))
             Text(errorMessage ?? " ")
-                .font(.system(size: 11.5, weight: .medium))
+                .font(.system(size: UIScale.pt(11.5), weight: .medium))
                 .foregroundStyle(DashSkin.danger)
-                .frame(height: 17)
-                .padding(.top, 8)
+                .frame(height: UIScale.pt(17))
+                .padding(.top, UIScale.pt(8))
             Spacer(minLength: 18)
             if seatLimitHit {
                 Divider()
                     .overlay(DashSkin.line(dark))
                 Text("Keys are limited to a number of Macs")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(height: 42)
+                    .frame(height: UIScale.pt(42))
             }
         }
-        .padding(.horizontal, 52)
-        .frame(width: 440, height: 440)
+        .padding(.horizontal, UIScale.pt(52))
+        .frame(width: UIScale.pt(440), height: UIScale.pt(440))
         .background(DashSkin.paper(dark))
         .task { keyFieldFocused = true }
     }

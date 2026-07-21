@@ -37,11 +37,11 @@ struct PermissionsPane: View {
     @ViewBuilder
     private func section(_ title: String, usages sectionUsages: [PermissionUsage]) -> some View {
         if !sectionUsages.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(6)) {
                     eyebrow(title)
                     Text("\(sectionUsages.count)")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.quaternary)
                 }
                 ForEach(sectionUsages) { usage in
@@ -52,25 +52,25 @@ struct PermissionsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: UIScale.pt(12)) {
             summary
             filterRow
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     section("NOT GRANTED", usages: ungranted)
                     section("GRANTED", usages: granted)
                     if visible.isEmpty {
                         emptyState
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.horizontal, UIScale.pt(20))
+                .padding(.bottom, UIScale.pt(20))
                 .animation(
                     Motion.animation(Motion.snap, reduceMotion: reduceMotion),
                     value: granted.map(\.id))
             }
         }
-        .padding(.top, 4)
+        .padding(.top, UIScale.pt(4))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Permissions")
         .onAppear(perform: refresh)
@@ -87,14 +87,14 @@ struct PermissionsPane: View {
     }
 
     private var summary: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: UIScale.pt(14)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(headline)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
                 Text(
                     "Grant access here once and every extension that needs it works straight away, with no prompt mid-task."
                 )
-                .font(.caption)
+                .font(.system(size: UIScale.pt(10)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
@@ -110,7 +110,7 @@ struct PermissionsPane: View {
                 .pointerCursor()
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, UIScale.pt(20))
     }
 
     private var headline: String {
@@ -121,18 +121,18 @@ struct PermissionsPane: View {
     }
 
     private var filterRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             ForEach(PermissionFilter.allCases, id: \.self) { item in
                 Button {
                     withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
                         filterRaw = item.rawValue
                     }
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: UIScale.pt(5)) {
                         Text(item.rawValue)
                         if item == .attention, attentionCount > 0 {
                             Text("\(attentionCount)")
-                                .padding(.horizontal, 5)
+                                .padding(.horizontal, UIScale.pt(5))
                                 .background(
                                     filter == item ? Color.white.opacity(0.25) : Color.red,
                                     in: Capsule()
@@ -140,10 +140,10 @@ struct PermissionsPane: View {
                                 .foregroundStyle(Color.white)
                         }
                     }
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
                     .foregroundStyle(filter == item ? Color.white : Color.secondary)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
+                    .padding(.horizontal, UIScale.pt(12))
+                    .frame(height: UIScale.pt(28))
                     .background(filter == item ? accent : Color.clear)
                     .clipShape(Capsule())
                     .overlay {
@@ -157,7 +157,7 @@ struct PermissionsPane: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, UIScale.pt(20))
     }
 
     private var attentionCount: Int {
@@ -165,16 +165,16 @@ struct PermissionsPane: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: UIScale.pt(6)) {
             Image(systemName: "checkmark.seal")
-                .font(.system(size: 26))
+                .font(.system(size: UIScale.pt(26)))
                 .foregroundStyle(.green)
             Text(
                 filter == .attention
                     ? "Everything your extensions need is granted."
                     : "Turn on an extension to see the access it needs."
             )
-            .font(.callout)
+            .font(.system(size: UIScale.pt(12)))
             .foregroundStyle(.secondary)
             Button("Browse Extensions") {
                 mainWindowSection = MainDestination.extensions.rawValue
@@ -184,7 +184,7 @@ struct PermissionsPane: View {
             .pointerCursor()
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, UIScale.pt(40))
     }
 
     private func grant(_ usage: PermissionUsage) {
@@ -205,24 +205,24 @@ private struct PermissionCard: View {
     private var permission: ExtensionPermission { usage.permission }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: permission.symbolName)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: UIScale.pt(16), weight: .medium))
                 .foregroundStyle(usage.isGranted ? .green : .secondary)
-                .frame(width: 34, height: 34)
+                .frame(width: UIScale.pt(34), height: UIScale.pt(34))
                 .background(
                     (usage.isGranted ? Color.green : Color.secondary).opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous))
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                HStack(spacing: UIScale.pt(8)) {
                     Text(permission.displayName)
-                        .font(.body.weight(.semibold))
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                     statusBadge
                     Spacer(minLength: 0)
                     action
                 }
                 Text(permission.firstUseExplanation ?? permission.reason)
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if !usage.users.isEmpty {
@@ -230,13 +230,13 @@ private struct PermissionCard: View {
                 }
             }
         }
-        .padding(14)
+        .padding(UIScale.pt(14))
         .background(
             Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .stroke(
                     usage.blocksEnabledExtension
                         ? Color.orange.opacity(0.6)
@@ -258,10 +258,10 @@ private struct PermissionCard: View {
 
     private func badge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.caption2.weight(.semibold))
+            .font(.system(size: UIScale.pt(10), weight: .semibold))
             .foregroundStyle(color)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
+            .padding(.horizontal, UIScale.pt(7))
+            .padding(.vertical, UIScale.pt(2))
             .background(color.opacity(0.14), in: Capsule())
     }
 
@@ -273,11 +273,11 @@ private struct PermissionCard: View {
     }
 
     private var usedByRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: UIScale.pt(6)) {
             ForEach(usage.users) { entry in
                 let enabled = usage.enabledUsers.contains(entry)
                 let required = usage.requiredBy.contains(entry)
-                HStack(spacing: 4) {
+                HStack(spacing: UIScale.pt(4)) {
                     Image(systemName: entry.symbolName)
                     Text(entry.title)
                     if required {
@@ -285,10 +285,10 @@ private struct PermissionCard: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .font(.caption2)
+                .font(.system(size: UIScale.pt(10)))
                 .foregroundStyle(enabled ? Color.primary : Color.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .padding(.horizontal, UIScale.pt(7))
+                .padding(.vertical, UIScale.pt(3))
                 .background(
                     Color(nsColor: .separatorColor).opacity(enabled ? 0.35 : 0.15), in: Capsule())
             }

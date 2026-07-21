@@ -316,7 +316,7 @@ struct CleanerCard: View {
 
     var body: some View {
         SkinCard(title: "Reclaim developer space", dark: dark) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 if !model.scanned && !model.scanning {
                     intro
                 } else {
@@ -333,13 +333,14 @@ struct CleanerCard: View {
                             footer
                         } else {
                             Text("Nothing to clean. You're already tidy.")
-                                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+                                .font(.system(size: UIScale.pt(12))).foregroundStyle(
+                                    DashSkin.inkFaint(dark))
                         }
                     }
                 }
                 if model.lastReclaimed > 0 {
                     Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
-                        .font(.system(size: 11)).foregroundStyle(DashSkin.sage)
+                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
                 }
             }
         }
@@ -366,34 +367,36 @@ struct CleanerCard: View {
     private var intro: some View {
         HStack {
             Text("Scan build caches, package managers, Claude Code logs, and your drives.")
-                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+                .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
             Button("Scan") { openPicker(scan: true) }.pointerCursor()
         }
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             if model.scanning {
                 ProgressView().controlSize(.small)
-                Text("Scanning…").font(.system(size: 12)).foregroundStyle(DashSkin.inkSoft(dark))
+                Text("Scanning…").font(.system(size: UIScale.pt(12))).foregroundStyle(
+                    DashSkin.inkSoft(dark))
                 Button("Cancel") { model.cancelScan() }
-                    .font(.system(size: 11, weight: .medium)).buttonStyle(.plain).pointerCursor()
+                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(.plain)
+                    .pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark))
             } else {
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) { model.logsExpanded.toggle() }
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: UIScale.pt(5)) {
                         Image(systemName: "terminal")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: UIScale.pt(10), weight: .semibold))
                         Text("Logs")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: UIScale.pt(11), weight: .medium))
                         Image(systemName: model.logsExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 8, weight: .semibold))
+                            .font(.system(size: UIScale.pt(8), weight: .semibold))
                     }
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .padding(.horizontal, UIScale.pt(9)).padding(.vertical, UIScale.pt(4))
                     .background(DashSkin.paper2(dark), in: Capsule())
                 }
                 .buttonStyle(.plain).pointerCursor()
@@ -403,33 +406,36 @@ struct CleanerCard: View {
     }
 
     private var logView: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             ForEach(Array(model.logs.suffix(8).enumerated()), id: \.offset) { _, line in
                 Text(line)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(10)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+        .padding(UIScale.pt(10))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .clipped()
         .transition(.opacity)
     }
 
     private var drivesView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Text("DRIVES").font(.system(size: 10, weight: .bold)).tracking(0.6)
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(10)) {
+                Text("DRIVES").font(.system(size: UIScale.pt(10), weight: .bold)).tracking(
+                    UIScale.pt(0.6)
+                )
+                .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 Button("Rescan") { model.scan() }
-                    .font(.system(size: 11, weight: .medium)).buttonStyle(.plain).pointerCursor()
+                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(.plain)
+                    .pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark)).disabled(model.scanning)
                 InfoDot("Cleaning moves items to the Trash, so it stays reversible.")
                 Button("Choose drives…") { openPicker(scan: false) }
-                    .font(.system(size: 11)).buttonStyle(.plain).pointerCursor()
+                    .font(.system(size: UIScale.pt(11))).buttonStyle(.plain).pointerCursor()
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             if model.drives.isEmpty {
@@ -437,7 +443,8 @@ struct CleanerCard: View {
                     ForEach(0..<2, id: \.self) { _ in DriveSkeleton(dark: dark) }
                 } else {
                     Text("No drives selected.")
-                        .font(.system(size: 11)).foregroundStyle(DashSkin.inkFaint(dark))
+                        .font(.system(size: UIScale.pt(11))).foregroundStyle(
+                            DashSkin.inkFaint(dark))
                 }
             } else {
                 ForEach(model.drives) { drive in DriveRow(drive: drive, dark: dark) }
@@ -446,11 +453,11 @@ struct CleanerCard: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11))
+        HStack(spacing: UIScale.pt(6)) {
+            Image(systemName: "magnifyingglass").font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             TextField("Filter", text: $model.search)
-                .textFieldStyle(.plain).font(.system(size: 12))
+                .textFieldStyle(.plain).font(.system(size: UIScale.pt(12)))
                 .focused($searchFocused)
                 .focusEffectDisabled()
                 .onExitCommand {
@@ -466,12 +473,12 @@ struct CleanerCard: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, UIScale.pt(10)).padding(.vertical, UIScale.pt(6))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
     }
 
     private var selectAllRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             Button {
                 model.toggleAll()
             } label: {
@@ -480,12 +487,12 @@ struct CleanerCard: View {
                         model.overallSelection == .none ? .secondary : DashSkin.accent(dark))
             }
             .buttonStyle(.plain).pointerCursor()
-            Text("Select all").font(.system(size: 12, weight: .medium))
+            Text("Select all").font(.system(size: UIScale.pt(12), weight: .medium))
             Spacer()
             Text("\(model.selectedItemCount) of \(model.totalItemCount) selected")
-                .font(.system(size: 10.5)).foregroundStyle(DashSkin.inkFaint(dark))
+                .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.inkFaint(dark))
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, UIScale.pt(4))
     }
 
     private var selectAllSymbol: String {
@@ -504,16 +511,16 @@ struct CleanerCard: View {
                 model.selectedTotal > 0
                     ? "Clean \(JunkScanner.format(model.selectedTotal))" : "Select items to clean"
             )
-            .font(.system(size: 14, weight: .semibold))
+            .font(.system(size: UIScale.pt(14), weight: .semibold))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            .padding(.vertical, UIScale.pt(9))
         }
         .buttonStyle(.borderedProminent)
         .tint(DashSkin.accent(dark))
         .controlSize(.large)
         .disabled(model.scanning || model.selectedTotal == 0)
         .pointerCursor()
-        .padding(.top, 2)
+        .padding(.top, UIScale.pt(2))
     }
 
     private func openPicker(scan: Bool) {
@@ -531,26 +538,26 @@ private struct DrivePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             Text("Choose where to search")
-                .font(.system(size: 15, weight: .semibold))
-                .padding(.horizontal, 20).padding(.top, 20)
+                .font(.system(size: UIScale.pt(15), weight: .semibold))
+                .padding(.horizontal, UIScale.pt(20)).padding(.top, UIScale.pt(20))
             Text(
                 "Selected drives and folders are searched for project junk like node_modules and virtualenvs. System caches always come from your home folder."
             )
-            .font(.system(size: 11.5)).foregroundStyle(DashSkin.inkFaint(dark))
-            .padding(.horizontal, 20).padding(.top, 4)
+            .font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.inkFaint(dark))
+            .padding(.horizontal, UIScale.pt(20)).padding(.top, UIScale.pt(4))
 
             ScrollView {
-                VStack(spacing: 6) {
+                VStack(spacing: UIScale.pt(6)) {
                     if model.driveOptions.isEmpty {
-                        ProgressView().controlSize(.small).padding(.vertical, 20)
+                        ProgressView().controlSize(.small).padding(.vertical, UIScale.pt(20))
                     }
                     ForEach(model.driveOptions) { drive in
                         Button {
                             model.toggleDrive(drive.id)
                         } label: {
-                            HStack(spacing: 10) {
+                            HStack(spacing: UIScale.pt(10)) {
                                 Image(
                                     systemName: model.isDriveSelected(drive.id)
                                         ? "checkmark.square.fill" : "square"
@@ -562,28 +569,33 @@ private struct DrivePickerSheet: View {
                                     systemName: drive.isExternal
                                         ? "externaldrive.fill" : "internaldrive.fill"
                                 )
-                                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(drive.name).font(.system(size: 13, weight: .medium))
+                                .font(.system(size: UIScale.pt(12))).foregroundStyle(
+                                    DashSkin.inkFaint(dark))
+                                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                                    Text(drive.name).font(
+                                        .system(size: UIScale.pt(13), weight: .medium))
                                     Text(
                                         "\(JunkScanner.format(drive.totalBytes)) capacity"
                                     )
-                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
                                 Spacer()
                             }
-                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))
                             .background(
-                                DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+                                DashSkin.paper2(dark),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                         }
                         .buttonStyle(.plain).pointerCursor()
                     }
                     if !model.customFolders.isEmpty {
-                        Text("FOLDERS").font(.system(size: 10, weight: .bold)).tracking(0.6)
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 6)
+                        Text("FOLDERS").font(.system(size: UIScale.pt(10), weight: .bold)).tracking(
+                            UIScale.pt(0.6)
+                        )
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, UIScale.pt(6))
                         ForEach(model.customFolders, id: \.self) { folder in
                             folderRow(folder)
                         }
@@ -591,20 +603,20 @@ private struct DrivePickerSheet: View {
                     Button {
                         chooseFolder()
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: UIScale.pt(6)) {
                             Image(systemName: "plus.circle")
                             Text("Add folder…")
                         }
-                        .font(.system(size: 12))
+                        .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.accent(dark))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
+                        .padding(.top, UIScale.pt(4))
                     }
                     .buttonStyle(.plain).pointerCursor()
                 }
-                .padding(20)
+                .padding(UIScale.pt(20))
             }
-            .frame(maxHeight: 280)
+            .frame(maxHeight: UIScale.pt(280))
 
             Divider()
             HStack {
@@ -616,15 +628,15 @@ private struct DrivePickerSheet: View {
                 }
                 .keyboardShortcut(.defaultAction).pointerCursor()
             }
-            .padding(.horizontal, 20).padding(.vertical, 14)
+            .padding(.horizontal, UIScale.pt(20)).padding(.vertical, UIScale.pt(14))
         }
-        .frame(width: 420)
+        .frame(width: UIScale.pt(420))
         .background(DashSkin.paper(dark))
         .onAppear { model.loadDriveOptions() }
     }
 
     private func folderRow(_ folder: String) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             Button {
                 model.toggleDrive(folder)
             } label: {
@@ -636,12 +648,12 @@ private struct DrivePickerSheet: View {
             }
             .buttonStyle(.plain).pointerCursor()
             Image(systemName: "folder.fill")
-                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
-            VStack(alignment: .leading, spacing: 1) {
+                .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text((folder as NSString).lastPathComponent)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: UIScale.pt(13), weight: .medium))
                 Text((folder as NSString).abbreviatingWithTildeInPath)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1).truncationMode(.middle)
             }
@@ -649,13 +661,13 @@ private struct DrivePickerSheet: View {
             Button {
                 model.removeCustomFolder(folder)
             } label: {
-                Image(systemName: "trash").font(.system(size: 11))
+                Image(systemName: "trash").font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain).pointerCursor().help("Remove this folder")
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
     }
 
     private func chooseFolder() {
@@ -690,8 +702,8 @@ private struct CleanerCategoryRow: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
+        VStack(spacing: UIScale.pt(0)) {
+            HStack(spacing: UIScale.pt(10)) {
                 Button {
                     model.toggleCategory(category.id)
                 } label: {
@@ -700,39 +712,40 @@ private struct CleanerCategoryRow: View {
                             category.selection == .none ? .secondary : DashSkin.accent(dark))
                 }
                 .buttonStyle(.plain).pointerCursor()
-                HStack(spacing: 8) {
+                HStack(spacing: UIScale.pt(8)) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9)).foregroundStyle(DashSkin.inkFaint(dark))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(category.name).font(.system(size: 13, weight: .medium))
-                        Text(category.detail).font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(category.name).font(.system(size: UIScale.pt(13), weight: .medium))
+                        Text(category.detail).font(.system(size: UIScale.pt(10.5)))
                             .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
                     }
                     Spacer()
                     Text("\(category.items.count) items")
-                        .font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(
+                            DashSkin.inkFaint(dark))
                     Text(JunkScanner.format(category.sizeBytes))
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.system(size: UIScale.pt(12), design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: 72, alignment: .trailing)
+                        .frame(width: UIScale.pt(72), alignment: .trailing)
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { model.toggleExpand(category.id) }
                 .pointerCursor()
             }
-            .padding(.horizontal, 6).padding(.vertical, 7)
+            .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(7))
             .background(
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: UIScale.pt(7))
                     .fill(headerHover ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
             )
             .onHover { headerHover = $0 }
             if isExpanded {
                 if showItemFilter {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass").font(.system(size: 10))
+                    HStack(spacing: UIScale.pt(6)) {
+                        Image(systemName: "magnifyingglass").font(.system(size: UIScale.pt(10)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         TextField("Filter \(category.items.count) items", text: $itemFilter)
-                            .textFieldStyle(.plain).font(.system(size: 11))
+                            .textFieldStyle(.plain).font(.system(size: UIScale.pt(11)))
                             .focused($itemFilterFocused)
                             .focusEffectDisabled()
                             .onExitCommand {
@@ -748,15 +761,17 @@ private struct CleanerCategoryRow: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 5)
-                    .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 7))
-                    .padding(.leading, 26).padding(.bottom, 4)
+                    .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(5))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    )
+                    .padding(.leading, UIScale.pt(26)).padding(.bottom, UIScale.pt(4))
                 }
                 ForEach(visibleItems) { item in
                     CleanerItemRow(
                         model: model, categoryID: category.id, item: item, dark: dark)
                 }
-                .padding(.bottom, 4)
+                .padding(.bottom, UIScale.pt(4))
             }
             Divider().opacity(0.3)
         }
@@ -779,22 +794,24 @@ private struct CleanerItemRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             Image(systemName: item.selected ? "checkmark.square.fill" : "square")
                 .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
-            Text(item.name).font(.system(size: 11)).lineLimit(1)
+            Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .help(item.path.path)
             Spacer()
             Text(JunkScanner.format(item.sizeBytes))
-                .font(.system(size: 10.5, design: .monospaced))
+                .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: 66, alignment: .trailing)
+                .frame(width: UIScale.pt(66), alignment: .trailing)
         }
-        .padding(.leading, 26).padding(.trailing, 6).padding(.vertical, 4)
+        .padding(.leading, UIScale.pt(26)).padding(.trailing, UIScale.pt(6)).padding(
+            .vertical, UIScale.pt(4)
+        )
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: UIScale.pt(6))
                 .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.12) : .clear)
         )
         .contentShape(Rectangle())
@@ -809,23 +826,25 @@ private struct DriveRow: View {
     let dark: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: UIScale.pt(6)) {
             Image(systemName: drive.isExternal ? "externaldrive.fill" : "internaldrive.fill")
-                .font(.system(size: 11)).foregroundStyle(DashSkin.inkFaint(dark))
-            Text(drive.name).font(.system(size: 12, weight: .medium))
+                .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.inkFaint(dark))
+            Text(drive.name).font(.system(size: UIScale.pt(12), weight: .medium))
             if drive.isExternal {
-                Text("EXTERNAL").font(.system(size: 8, weight: .bold)).tracking(0.4)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(DashSkin.inkFaint(dark).opacity(0.15), in: Capsule())
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text("EXTERNAL").font(.system(size: UIScale.pt(8), weight: .bold)).tracking(
+                    UIScale.pt(0.4)
+                )
+                .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(1))
+                .background(DashSkin.inkFaint(dark).opacity(0.15), in: Capsule())
+                .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer()
             Text("\(JunkScanner.format(drive.totalBytes)) capacity")
-                .font(.system(size: 11, design: .monospaced)).foregroundStyle(
+                .font(.system(size: UIScale.pt(11), design: .monospaced)).foregroundStyle(
                     DashSkin.inkFaint(dark))
         }
-        .padding(10)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+        .padding(UIScale.pt(10))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 }
 
@@ -834,13 +853,14 @@ private struct DriveSkeleton: View {
     @State private var pulse = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 4).frame(width: 120, height: 10)
-            RoundedRectangle(cornerRadius: 3).frame(height: 5)
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            RoundedRectangle(cornerRadius: UIScale.pt(4)).frame(
+                width: UIScale.pt(120), height: UIScale.pt(10))
+            RoundedRectangle(cornerRadius: UIScale.pt(3)).frame(height: UIScale.pt(5))
         }
         .foregroundStyle(DashSkin.inkFaint(dark).opacity(pulse ? 0.25 : 0.1))
-        .padding(10)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+        .padding(UIScale.pt(10))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
                 pulse = true

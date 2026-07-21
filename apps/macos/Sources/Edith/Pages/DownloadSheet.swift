@@ -71,7 +71,7 @@ struct DownloadSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             header
             Divider().overlay(DashSkin.line(dark))
             if let reason = downloader.unavailableReason {
@@ -80,12 +80,12 @@ struct DownloadSheet: View {
                 content
             }
         }
-        .frame(width: 560, height: 580)
+        .frame(width: UIScale.pt(560), height: UIScale.pt(580))
         .background(DashSkin.paper(dark))
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             Text("Download YouTube Audio")
                 .font(DashSkin.serif(20))
                 .foregroundStyle(DashSkin.ink(dark))
@@ -94,9 +94,9 @@ struct DownloadSheet: View {
                 downloader.updateYTDLP()
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .contentShape(Rectangle())
             }
             .buttonStyle(HoverButtonStyle())
@@ -107,12 +107,12 @@ struct DownloadSheet: View {
                 switch result {
                 case .success(let msg):
                     Text(msg)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.green)
                         .lineLimit(1)
                 case .failure(let error):
                     Text(error.localizedDescription)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 }
@@ -121,55 +121,55 @@ struct DownloadSheet: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .contentShape(Rectangle())
             }
             .buttonStyle(HoverButtonStyle())
             .disabled(downloader.isRunning)
             .pointerCursor()
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
+        .padding(.horizontal, UIScale.pt(22))
+        .padding(.vertical, UIScale.pt(14))
     }
 
     private func unavailableView(_ reason: String) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: UIScale.pt(14)) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 30))
+                .font(.system(size: UIScale.pt(30)))
                 .foregroundStyle(.orange)
             Text(reason)
-                .font(.system(size: 12.5))
+                .font(.system(size: UIScale.pt(12.5)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
             Spacer()
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, UIScale.pt(40))
     }
 
     @ViewBuilder
     private var content: some View {
         if downloader.items.isEmpty {
-            VStack(spacing: 16) {
+            VStack(spacing: UIScale.pt(16)) {
                 urlInput
                 optionsRow
                 Spacer()
                 startRow
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 16)
-            .padding(.bottom, 14)
+            .padding(.horizontal, UIScale.pt(22))
+            .padding(.top, UIScale.pt(16))
+            .padding(.bottom, UIScale.pt(14))
         } else {
-            VStack(spacing: 0) {
+            VStack(spacing: UIScale.pt(0)) {
                 urlBar
                 Divider().overlay(DashSkin.line(dark))
                 if !activeItems.isEmpty {
                     progressHeader
                     activeQueue
-                        .frame(maxHeight: 200)
+                        .frame(maxHeight: UIScale.pt(200))
                     Divider().overlay(DashSkin.line(dark))
                 }
                 if !historyItems.isEmpty {
@@ -190,47 +190,47 @@ struct DownloadSheet: View {
     }
 
     private var urlInput: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             label("VIDEO URLS")
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $urlText)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(size: UIScale.pt(13), design: .monospaced))
                     .foregroundStyle(DashSkin.ink(dark))
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
                     .frame(height: downloader.isRunning ? 46 : 104)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, UIScale.pt(10))
+                    .padding(.vertical, UIScale.pt(8))
                 if urlText.isEmpty {
                     Text("Paste one or more YouTube links, one per line")
-                        .font(.system(size: 12.5))
+                        .font(.system(size: UIScale.pt(12.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.45))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, UIScale.pt(14))
+                        .padding(.vertical, UIScale.pt(10))
                         .allowsHitTesting(false)
                 }
             }
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 10))
+            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(
                         urlText.isEmpty ? DashSkin.line(dark) : DashSkin.lineStrong(dark),
-                        lineWidth: 1)
+                        lineWidth: UIScale.pt(1))
             )
 
-            HStack(spacing: 10) {
+            HStack(spacing: UIScale.pt(10)) {
                 if parsedCount > 0 {
-                    HStack(spacing: 4) {
+                    HStack(spacing: UIScale.pt(4)) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: UIScale.pt(10)))
                             .foregroundStyle(.green)
                         Text("\(parsedCount) valid URL\(parsedCount == 1 ? "" : "s")")
-                            .font(.system(size: 11))
+                            .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(.secondary)
                     }
                 } else if !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("No YouTube URLs found")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(.orange)
                 }
                 Spacer()
@@ -238,41 +238,43 @@ struct DownloadSheet: View {
                     urlText = NSPasteboard.general.string(forType: .string) ?? urlText
                 } label: {
                     Label("Paste", systemImage: "clipboard")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .pointerCursor()
             }
-            .frame(height: 16)
+            .frame(height: UIScale.pt(16))
         }
     }
 
     private var optionsRow: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 label("FILENAME PREFIX")
                 TextField("Optional — e.g. roadtrip_", text: $filenamePrefix)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: UIScale.pt(12.5)))
                     .foregroundStyle(DashSkin.ink(dark))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, UIScale.pt(10))
+                    .padding(.vertical, UIScale.pt(7))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
                     )
             }
             if !filenamePrefix.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     label("PREVIEW")
                     Text("\(filenamePrefix)Title.m4a")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
-                        .padding(.top, 7)
+                        .padding(.top, UIScale.pt(7))
                 }
-                .frame(maxWidth: 140, alignment: .leading)
+                .frame(maxWidth: UIScale.pt(140), alignment: .leading)
             }
         }
     }
@@ -281,16 +283,16 @@ struct DownloadSheet: View {
         HStack {
             Spacer()
             Button(action: startDownload) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Image(systemName: "arrow.down.circle")
                     Text("Start Download")
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 9)
+                .padding(.horizontal, UIScale.pt(18))
+                .padding(.vertical, UIScale.pt(9))
                 .background(canStart ? theme : Color.gray.opacity(0.35))
-                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
             }
             .buttonStyle(.plain)
             .disabled(!canStart)
@@ -299,22 +301,24 @@ struct DownloadSheet: View {
     }
 
     private var urlBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             TextField("Add more YouTube URLs...", text: $urlText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12))
+                .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.ink(dark))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(6))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
                 )
                 .disabled(downloader.isRunning)
             Button(action: addMore) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 20))
+                    .font(.system(size: UIScale.pt(20)))
                     .foregroundStyle(canStart ? theme : Color.gray.opacity(0.4))
             }
             .buttonStyle(.plain)
@@ -322,21 +326,21 @@ struct DownloadSheet: View {
             .pointerCursor()
             .help("Add to queue")
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 8)
+        .padding(.horizontal, UIScale.pt(22))
+        .padding(.vertical, UIScale.pt(8))
     }
 
     private var progressHeader: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: UIScale.pt(6)) {
             HStack {
                 Text("ACTIVE")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .tracking(0.5)
+                    .tracking(UIScale.pt(0.5))
                 Spacer()
                 if !summaryText.isEmpty {
                     Text(summaryText)
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -345,27 +349,27 @@ struct DownloadSheet: View {
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(DashSkin.line(dark))
-                        .frame(height: 5)
+                        .frame(height: UIScale.pt(5))
                     Capsule()
                         .fill(theme)
-                        .frame(width: max(5, geo.size.width * pct), height: 5)
+                        .frame(width: max(5, geo.size.width * pct), height: UIScale.pt(5))
                 }
             }
-            .frame(height: 5)
+            .frame(height: UIScale.pt(5))
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 10)
+        .padding(.horizontal, UIScale.pt(22))
+        .padding(.vertical, UIScale.pt(10))
     }
 
     private var activeQueue: some View {
         ScrollView {
-            LazyVStack(spacing: 4) {
+            LazyVStack(spacing: UIScale.pt(4)) {
                 ForEach(activeItems) { item in
                     queueCard(item)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, UIScale.pt(16))
+            .padding(.vertical, UIScale.pt(8))
         }
         .scrollIndicators(.hidden)
     }
@@ -373,9 +377,9 @@ struct DownloadSheet: View {
     private var historyHeader: some View {
         HStack {
             Text("HISTORY")
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-                .tracking(0.5)
+                .tracking(UIScale.pt(0.5))
             Spacer()
             let failedCount = downloader.items.filter {
                 if case .error = $0.status { return true }; return false
@@ -388,36 +392,36 @@ struct DownloadSheet: View {
                     downloader.retryAll()
                 }
                 .buttonStyle(HoverButtonStyle())
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: UIScale.pt(10.5), weight: .medium))
                 .pointerCursor()
                 .disabled(downloader.isRunning)
             }
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 8)
+        .padding(.horizontal, UIScale.pt(22))
+        .padding(.vertical, UIScale.pt(8))
     }
 
     private var historyList: some View {
         ScrollView {
-            LazyVStack(spacing: 2) {
+            LazyVStack(spacing: UIScale.pt(2)) {
                 ForEach(historyItems) { item in
                     historyRow(item)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
+            .padding(.horizontal, UIScale.pt(16))
+            .padding(.vertical, UIScale.pt(4))
         }
         .scrollIndicators(.hidden)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: UIScale.pt(6)) {
             Spacer()
             Image(systemName: "tray")
-                .font(.system(size: 24))
+                .font(.system(size: UIScale.pt(24)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text("No downloads yet")
-                .font(.system(size: 12))
+                .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
         }
@@ -434,12 +438,12 @@ struct DownloadSheet: View {
         default: isActive = false; tint = DashSkin.inkFaint(dark)
         }
 
-        return HStack(spacing: 10) {
+        return HStack(spacing: UIScale.pt(10)) {
             Group {
                 switch item.status {
                 case .queued:
                     Image(systemName: "clock")
-                        .font(.system(size: 12))
+                        .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 case .resolving:
                     ProgressView()
@@ -452,23 +456,23 @@ struct DownloadSheet: View {
                         .tint(theme)
                 case .done:
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 15))
+                        .font(.system(size: UIScale.pt(15)))
                         .foregroundStyle(.green)
                 case .error:
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 15))
+                        .font(.system(size: UIScale.pt(15)))
                         .foregroundStyle(.red)
                 case .interrupted:
                     Image(systemName: "pause.circle.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(.orange)
                 }
             }
-            .frame(width: 20)
+            .frame(width: UIScale.pt(20))
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(displayURL(item.url))
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(
                         isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
                     )
@@ -481,26 +485,29 @@ struct DownloadSheet: View {
                 case .resolving:
                     EmptyView()
                 case let .downloading(progress, videoIndex, videoCount):
-                    HStack(spacing: 4) {
+                    HStack(spacing: UIScale.pt(4)) {
                         if videoIndex > 0, videoCount > 0 {
                             Text("\(videoIndex)/\(videoCount)")
-                                .font(.system(size: 10.5, weight: .medium))
+                                .font(.system(size: UIScale.pt(10.5), weight: .medium))
                                 .foregroundStyle(theme)
                         }
                         if !progress.isEmpty {
                             Text(progress)
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .font(
+                                    .system(
+                                        size: UIScale.pt(11), weight: .medium, design: .monospaced)
+                                )
                                 .foregroundStyle(theme)
                         }
                     }
                 case let .done(output):
                     Text(output)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 case let .error(msg):
                     Text(msg)
-                        .font(.system(size: 10))
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(.red)
                         .lineLimit(2)
                 case .interrupted:
@@ -516,7 +523,7 @@ struct DownloadSheet: View {
                     downloader.retry(item)
                 }
                 .buttonStyle(HoverButtonStyle())
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
                 .pointerCursor()
                 .disabled(downloader.isRunning)
@@ -524,16 +531,17 @@ struct DownloadSheet: View {
                 EmptyView()
             }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 10)
+        .padding(.vertical, UIScale.pt(8))
+        .padding(.horizontal, UIScale.pt(10))
         .background(
             isActive
                 ? DashSkin.paper2(dark) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 9)
+            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
         )
         .overlay(
             isActive
-                ? RoundedRectangle(cornerRadius: 9).strokeBorder(theme.opacity(0.3), lineWidth: 1)
+                ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
+                    theme.opacity(0.3), lineWidth: UIScale.pt(1))
                 : nil
         )
         .contentShape(Rectangle())
@@ -546,30 +554,30 @@ struct DownloadSheet: View {
     }
 
     private func historyRow(_ item: YoutubeDownloader.DownloadItem) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             Group {
                 switch item.status {
                 case .done:
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: UIScale.pt(14)))
                         .foregroundStyle(.green)
                 case .error:
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: UIScale.pt(14)))
                         .foregroundStyle(.red)
                 case .interrupted:
                     Image(systemName: "pause.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: UIScale.pt(14)))
                         .foregroundStyle(.orange)
                 default:
                     EmptyView()
                 }
             }
-            .frame(width: 18)
+            .frame(width: UIScale.pt(18))
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(displayURL(item.url))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -577,17 +585,17 @@ struct DownloadSheet: View {
                 switch item.status {
                 case let .done(output):
                     Text(output)
-                        .font(.system(size: 10))
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 case let .error(msg):
                     Text(msg)
-                        .font(.system(size: 9.5))
+                        .font(.system(size: UIScale.pt(9.5)))
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 case let .interrupted(reason):
                     Text(reason ?? "Paused")
-                        .font(.system(size: 9.5))
+                        .font(.system(size: UIScale.pt(9.5)))
                         .foregroundStyle(.orange)
                 default:
                     EmptyView()
@@ -602,7 +610,7 @@ struct DownloadSheet: View {
                     downloader.retry(item)
                 }
                 .buttonStyle(HoverButtonStyle())
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
                 .pointerCursor()
                 .disabled(downloader.isRunning)
@@ -610,14 +618,14 @@ struct DownloadSheet: View {
                 EmptyView()
             }
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .background(Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        .padding(.vertical, UIScale.pt(5))
+        .padding(.horizontal, UIScale.pt(8))
+        .background(Color.clear, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
     }
 
     private func logSheet(_ item: YoutubeDownloader.DownloadItem) -> some View {
         let live = downloader.items.first(where: { $0.id == item.id }) ?? item
-        return VStack(spacing: 0) {
+        return VStack(spacing: UIScale.pt(0)) {
             HStack {
                 Text("Download Log")
                     .font(DashSkin.serif(16))
@@ -627,46 +635,46 @@ struct DownloadSheet: View {
                     logItem = nil
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: UIScale.pt(12), weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
+                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(HoverButtonStyle())
                 .pointerCursor()
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, UIScale.pt(20))
+            .padding(.vertical, UIScale.pt(12))
 
             Divider().overlay(DashSkin.line(dark))
 
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(live.logs.isEmpty ? "Waiting for output…" : live.logs)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .foregroundStyle(DashSkin.ink(dark))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
-                        .padding(14)
-                    Color.clear.frame(height: 1).id("logBottom")
+                        .padding(UIScale.pt(14))
+                    Color.clear.frame(height: UIScale.pt(1)).id("logBottom")
                 }
                 .scrollIndicators(.hidden)
                 .onChange(of: live.logs) { proxy.scrollTo("logBottom", anchor: .bottom) }
                 .onAppear { proxy.scrollTo("logBottom", anchor: .bottom) }
             }
         }
-        .frame(width: 480, height: 360)
+        .frame(width: UIScale.pt(480), height: UIScale.pt(360))
         .background(DashSkin.paper(dark))
     }
 
     private var controlsRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             if !downloader.items.isEmpty {
                 Button("Clear History") {
                     confirmClearHistory = true
                 }
                 .buttonStyle(HoverButtonStyle())
-                .font(.system(size: 11))
+                .font(.system(size: UIScale.pt(11)))
                 .pointerCursor()
                 .disabled(downloader.isRunning)
                 .confirmationDialog(
@@ -686,7 +694,7 @@ struct DownloadSheet: View {
                     downloader.cancelAll()
                 } label: {
                     Label("Cancel All", systemImage: "xmark")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .pointerCursor()
@@ -699,26 +707,26 @@ struct DownloadSheet: View {
                 dismiss()
             }
             .buttonStyle(HoverButtonStyle())
-            .font(.system(size: 11))
+            .font(.system(size: UIScale.pt(11)))
             .pointerCursor()
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 10)
+        .padding(.horizontal, UIScale.pt(22))
+        .padding(.vertical, UIScale.pt(10))
     }
 
     private func label(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: UIScale.pt(10), weight: .semibold))
             .foregroundStyle(DashSkin.inkFaint(dark))
-            .tracking(0.6)
+            .tracking(UIScale.pt(0.6))
     }
 
     private func statusBadge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 9.5, weight: .medium))
+            .font(.system(size: UIScale.pt(9.5), weight: .medium))
             .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
+            .padding(.horizontal, UIScale.pt(5))
+            .padding(.vertical, UIScale.pt(1))
             .background(color.opacity(0.12), in: Capsule())
     }
 

@@ -42,14 +42,14 @@ struct ProjectDrilldownView: View {
     private static let maxTableHeight: CGFloat = 560
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             toggleButton
             if model.projListOpen {
-                VStack(spacing: 0) {
+                VStack(spacing: UIScale.pt(0)) {
                     headerRow
                     Divider().opacity(0.4)
                     ScrollView {
-                        LazyVStack(spacing: 0) {
+                        LazyVStack(spacing: UIScale.pt(0)) {
                             ForEach(flatRows, id: \.node.id) { row in
                                 ProjectRow(
                                     node: row.node, depth: row.depth, dark: dark, blur: blur,
@@ -71,9 +71,9 @@ struct ProjectDrilldownView: View {
         Button {
             model.projListOpen.toggle()
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: UIScale.pt(4)) {
                 Image(systemName: model.projListOpen ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: UIScale.pt(8), weight: .semibold))
                 Text(
                     "\(model.projListOpen ? "Hide" : "Show") projects (\(model.projectTree.count))"
                 )
@@ -86,7 +86,7 @@ struct ProjectDrilldownView: View {
     }
 
     private var headerRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: UIScale.pt(0)) {
             headerCell("Project", .name, width: ProjColumns.project)
             headerCell("Tokens", .tokens, width: ProjColumns.tokens)
             headerCell("Cost", .cost, width: ProjColumns.cost)
@@ -96,8 +96,8 @@ struct ProjectDrilldownView: View {
             headerCell("Last used", .lastActive, width: ProjColumns.last)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.vertical, UIScale.pt(6))
     }
 
     @ViewBuilder private func headerCell(_ title: String, _ key: ProjSortKey, width: CGFloat?)
@@ -106,11 +106,11 @@ struct ProjectDrilldownView: View {
         Button {
             sortBy(key)
         } label: {
-            HStack(spacing: 3) {
-                Text(title).font(.system(size: 11, weight: .medium))
+            HStack(spacing: UIScale.pt(3)) {
+                Text(title).font(.system(size: UIScale.pt(11), weight: .medium))
                 if model.projSortKey == key {
                     Image(systemName: model.projSortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 7, weight: .bold))
+                        .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
                 Spacer(minLength: 0)
             }
@@ -217,8 +217,8 @@ private struct ProjectRow: View {
 
     var body: some View {
         content
-            .padding(.horizontal, 8)
-            .frame(height: 27)
+            .padding(.horizontal, UIScale.pt(8))
+            .frame(height: UIScale.pt(27))
             .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
@@ -226,7 +226,7 @@ private struct ProjectRow: View {
     }
 
     @ViewBuilder private var content: some View {
-        let row = HStack(spacing: 0) {
+        let row = HStack(spacing: UIScale.pt(0)) {
             nameColumn
             num(DashFmt.tokensFull(node.tokens), width: ProjColumns.tokens, blurWhen: blurTokens)
             num(DashFmt.usdLong(node.cost), width: ProjColumns.cost, blurWhen: blur)
@@ -246,17 +246,17 @@ private struct ProjectRow: View {
     }
 
     private var nameColumn: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: UIScale.pt(5)) {
             if hasChildren {
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: UIScale.pt(8), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: 10)
+                    .frame(width: UIScale.pt(10))
             } else {
-                Color.clear.frame(width: 10)
+                Color.clear.frame(width: UIScale.pt(10))
             }
             iconView
-            Text(node.label).font(.system(size: 11)).lineLimit(1).truncationMode(.tail)
+            Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)
         }
         .padding(.leading, CGFloat(depth) * 16)
@@ -266,14 +266,14 @@ private struct ProjectRow: View {
 
     @ViewBuilder private var iconView: some View {
         let img = ZStack(alignment: .topTrailing) {
-            Image(systemName: icon).font(.system(size: 10))
+            Image(systemName: icon).font(.system(size: UIScale.pt(10)))
             if node.badge > 0 {
                 Text(node.badge > 99 ? "99+" : "\(node.badge)")
-                    .font(.system(size: 7, weight: .semibold))
+                    .font(.system(size: UIScale.pt(7), weight: .semibold))
                     .offset(x: 7, y: -4)
             }
         }
-        .frame(width: 16, height: 14, alignment: .leading)
+        .frame(width: UIScale.pt(16), height: UIScale.pt(14), alignment: .leading)
         if let chatId = node.chatId, !chatId.isEmpty {
             Button {
                 onCopy(chatId)

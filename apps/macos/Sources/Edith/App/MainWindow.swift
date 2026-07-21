@@ -7,11 +7,12 @@ struct ZoomableRoot<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        GeometryReader { geo in
+        UIScale.apply(zoom)
+        return
             content
-                .frame(width: geo.size.width / zoom, height: geo.size.height / zoom)
-                .scaleEffect(zoom, anchor: .topLeading)
-        }
+            .font(.system(size: UIScale.pt(13)))
+            .controlSize(UIScale.controlSize)
+            .id(UIScale.current)
     }
 }
 

@@ -19,7 +19,7 @@ struct ColorPickerRows: View {
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Pick hotkey")
                         InfoDot("Summons the magnifier from anywhere.")
                     }
@@ -35,7 +35,7 @@ struct ColorPickerRows: View {
                         Text(option.displayName).tag(option)
                     }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Color profile")
                         InfoDot(
                             "Compute values in sRGB or Display P3 - they differ on wide-gamut screens like this MacBook's."
@@ -44,7 +44,7 @@ struct ColorPickerRows: View {
                 }
                 .pointerCursor()
                 Stepper(value: $historySize, in: 1...100) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("History size: \(historySize)")
                         InfoDot("How many past colors to keep.")
                     }
@@ -69,10 +69,10 @@ private struct ColorSwatchGrid: View {
     let history: [ColorSwatch]
     let defaultFormat: ColorCopyFormat
 
-    private let columns = [GridItem(.adaptive(minimum: 28), spacing: 6)]
+    private let columns = [GridItem(.adaptive(minimum: 28), spacing: UIScale.pt(6))]
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(6)) {
             ForEach(history) { swatch in
                 ColorSwatchChip(swatch: swatch, defaultFormat: defaultFormat)
             }
@@ -85,11 +85,11 @@ private struct ColorSwatchChip: View {
     let defaultFormat: ColorCopyFormat
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 5)
+        RoundedRectangle(cornerRadius: UIScale.pt(5))
             .fill(swatch.color)
-            .frame(width: 26, height: 26)
+            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
             .overlay(
-                RoundedRectangle(cornerRadius: 5).strokeBorder(.primary.opacity(0.12))
+                RoundedRectangle(cornerRadius: UIScale.pt(5)).strokeBorder(.primary.opacity(0.12))
             )
             .contentShape(Rectangle())
             .onTapGesture { copy(defaultFormat) }

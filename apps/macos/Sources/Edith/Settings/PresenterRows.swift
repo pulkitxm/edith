@@ -29,7 +29,7 @@ struct PresenterRows: View {
         Group {
             Section {
                 Toggle(isOn: $presenterMode) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Manual presenter mode")
                         InfoDot(
                             "Blurs sensitive numbers and track names everywhere in Edith until you turn it back off."
@@ -58,7 +58,7 @@ struct PresenterRows: View {
 
             Section {
                 Toggle(isOn: $autoEnabled) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Auto presenter mode")
                         InfoDot(
                             "Automatically blurs Edith when your screen looks like it's being shared or recorded. Manual presenter mode keeps working independently."
@@ -68,7 +68,7 @@ struct PresenterRows: View {
                 .pointerCursor()
                 Group {
                     Toggle(isOn: $hideMenuBarNumbers) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: UIScale.pt(6)) {
                             Text("Hide menu bar numbers")
                             InfoDot(
                                 "Replaces the usage percentages in the menu bar while presenting - they're visible in every screen share otherwise."
@@ -77,14 +77,14 @@ struct PresenterRows: View {
                     }
                     .pointerCursor()
                     Toggle(isOn: $detectRecording) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: UIScale.pt(6)) {
                             Text("Detect screen recordings")
                             InfoDot("Also blur during QuickTime or ⇧⌘5 recordings.")
                         }
                     }
                     .pointerCursor()
                     Toggle(isOn: $detectScreenSharing) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: UIScale.pt(6)) {
                             Text("Detect macOS Screen Sharing")
                             InfoDot(
                                 "Also blur when someone views this Mac via Screen Sharing or Remote Management."
@@ -93,7 +93,7 @@ struct PresenterRows: View {
                     }
                     .pointerCursor()
                     Toggle(isOn: $detectMirroring) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: UIScale.pt(6)) {
                             Text("Mirrored display counts")
                             InfoDot(
                                 "Blur when your display mirrors to a projector, TV, or AirPlay.")
@@ -109,7 +109,7 @@ struct PresenterRows: View {
                 Text(
                     "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics."
                 )
-                .font(.caption)
+                .font(.system(size: UIScale.pt(10)))
             }
 
             Section {
@@ -127,7 +127,7 @@ struct PresenterRows: View {
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P")
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Toggle hotkey")
                         InfoDot(
                             "Forces presenter mode on or off from anywhere - a manual escape hatch for when auto-detection guesses wrong."

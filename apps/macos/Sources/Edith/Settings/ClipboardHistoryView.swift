@@ -24,9 +24,9 @@ struct ClipboardHistoryView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             HStack {
-                Text("Clipboard History").font(.headline)
+                Text("Clipboard History").font(.system(size: UIScale.pt(13), weight: .semibold))
                 Spacer()
                 Button("Done") { dismiss() }
                     .pointerCursor()
@@ -35,13 +35,13 @@ struct ClipboardHistoryView: View {
             Divider()
             TextField("Search…", text: $filterText)
                 .textFieldStyle(.roundedBorder)
-                .padding(10)
+                .padding(UIScale.pt(10))
             List(filtered) { entry in
                 row(entry)
             }
             .listStyle(.inset)
         }
-        .frame(width: 480, height: 520)
+        .frame(width: UIScale.pt(480), height: UIScale.pt(520))
         .onAppear {
             reload()
             refreshObserver = IPC.observe(IPC.Name.clipboardChanged) { reload() }
@@ -57,29 +57,29 @@ struct ClipboardHistoryView: View {
     }
 
     private func row(_ entry: ClipboardEntry) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: UIScale.pt(10)) {
             ClipboardThumbnailView(entry: entry, maxHeight: entry.kind == .text ? 18 : 40) {
                 Image(systemName: icon(for: entry.kind))
                     .foregroundStyle(.secondary)
-                    .frame(width: 18)
+                    .frame(width: UIScale.pt(18))
             }
-            .frame(minWidth: 18)
-            VStack(alignment: .leading, spacing: 3) {
+            .frame(minWidth: UIScale.pt(18))
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 if entry.kind != .image {
                     Text(entry.displayPreview).lineLimit(2)
                 }
-                HStack(spacing: 4) {
+                HStack(spacing: UIScale.pt(4)) {
                     Text(entry.sourceApp ?? "Unknown")
                     Text("·")
                     Text(entry.createdAt.formatted(.relative(presentation: .named)))
                     Text("·")
                     Text(Self.byteCountFormatter.string(fromByteCount: Int64(entry.size)))
                 }
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
             Spacer()
             if copiedID == entry.id {
-                Text("Copied").font(.caption2).foregroundStyle(.secondary)
+                Text("Copied").font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
             Button {
                 copy(entry)
@@ -101,7 +101,7 @@ struct ClipboardHistoryView: View {
             }
             .buttonStyle(.plain).pointerCursor()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, UIScale.pt(4))
     }
 
     private func icon(for kind: ClipboardEntry.Kind) -> String {

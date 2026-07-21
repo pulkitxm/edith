@@ -72,7 +72,7 @@ private final class WaveBarsView: NSView {
         CATransaction.setDisableActions(true)
         for (i, bar) in bars.enumerated() {
             bar.backgroundColor = color.cgColor
-            bar.bounds = CGRect(x: 0, y: 0, width: 3, height: maxHeight)
+            bar.bounds = CGRect(x: 0, y: 0, width: UIScale.pt(3), height: maxHeight)
             bar.position = CGPoint(x: CGFloat(i) * 5.5 + 1.5, y: maxHeight / 2)
         }
         if playing, !animating {

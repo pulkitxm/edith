@@ -52,17 +52,17 @@ struct ExtensionsPane: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: UIScale.pt(12)) {
             searchField
             categoryRow
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(18)) {
                         section("ENABLED", entries: enabledEntries)
                         section("AVAILABLE", entries: availableEntries)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
+                    .padding(.horizontal, UIScale.pt(20))
+                    .padding(.bottom, UIScale.pt(20))
                     .animation(
                         Motion.animation(Motion.snap, reduceMotion: reduceMotion),
                         value: enabledEntries.map(\.id))
@@ -71,7 +71,7 @@ struct ExtensionsPane: View {
                 .onAppear { handleDeepLink(using: proxy) }
             }
         }
-        .padding(.top, 16)
+        .padding(.top, UIScale.pt(16))
         .navigationTitle("Extensions")
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
         .onChange(of: systemEnabled) {
@@ -107,28 +107,28 @@ struct ExtensionsPane: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("Search extensions", text: $query)
                 .textFieldStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .frame(height: 36)
+        .padding(.horizontal, UIScale.pt(12))
+        .frame(height: UIScale.pt(36))
         .background(
             Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
                 .stroke(Color(nsColor: .separatorColor).opacity(0.5))
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, UIScale.pt(20))
     }
 
     private var categoryRow: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 8) {
+            HStack(spacing: UIScale.pt(8)) {
                 ForEach(ExtensionMarketplaceCategory.allCases, id: \.self) { item in
                     Button {
                         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
@@ -136,10 +136,10 @@ struct ExtensionsPane: View {
                         }
                     } label: {
                         Text(item.rawValue)
-                            .font(.caption.weight(.semibold))
+                            .font(.system(size: UIScale.pt(10), weight: .semibold))
                             .foregroundStyle(category == item ? Color.white : Color.secondary)
-                            .padding(.horizontal, 12)
-                            .frame(height: 28)
+                            .padding(.horizontal, UIScale.pt(12))
+                            .frame(height: UIScale.pt(28))
                             .background(category == item ? Color.accentColor : Color.clear)
                             .clipShape(Capsule())
                             .overlay {
@@ -152,7 +152,7 @@ struct ExtensionsPane: View {
                     .pointerCursor()
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, UIScale.pt(20))
         }
         .scrollIndicators(.never)
     }
@@ -173,14 +173,14 @@ struct ExtensionsPane: View {
     @ViewBuilder
     private func section(_ title: String, entries: [ExtensionRegistryEntry]) -> some View {
         if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(6)) {
                     eyebrow(title)
                     Text("\(entries.count)")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.quaternary)
                 }
-                LazyVGrid(columns: gridColumns, spacing: 14) {
+                LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
                     ForEach(entries) { entry in
                         ExtensionMarketplaceCard(
                             entry: entry,
@@ -196,7 +196,10 @@ struct ExtensionsPane: View {
     }
 
     private var gridColumns: [GridItem] {
-        [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+        [
+            GridItem(.flexible(), spacing: UIScale.pt(14)),
+            GridItem(.flexible(), spacing: UIScale.pt(14)),
+        ]
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
@@ -359,25 +362,25 @@ private struct ExtensionMarketplaceCard: View {
     @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             Button(action: open) {
                 ExtensionPreview(entry: entry, dark: dark)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 52)
+                    .frame(height: UIScale.pt(52))
                     .background(
                         enabled ? brandAccent.opacity(0.1) : DashSkin.paper(dark),
-                        in: RoundedRectangle(cornerRadius: 10))
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            HStack(spacing: 7) {
+            HStack(spacing: UIScale.pt(7)) {
                 Button(action: open) {
-                    HStack(spacing: 7) {
+                    HStack(spacing: UIScale.pt(7)) {
                         Image(systemName: entry.symbolName)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: UIScale.pt(12), weight: .semibold))
                             .foregroundStyle(enabled ? brandAccent : DashSkin.inkSoft(dark))
                         Text(entry.title)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                     }
@@ -397,7 +400,7 @@ private struct ExtensionMarketplaceCard: View {
             }
             Button(action: open) {
                 Text(entry.subtitle)
-                    .font(.system(size: 10.5))
+                    .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -405,25 +408,25 @@ private struct ExtensionMarketplaceCard: View {
             .buttonStyle(.plain)
             .pointerCursor()
         }
-        .padding(11)
+        .padding(UIScale.pt(11))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             ZStack {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: UIScale.pt(14))
                     .fill(DashSkin.paper2(dark))
                 Button(action: open) {
                     Color.clear
-                        .contentShape(RoundedRectangle(cornerRadius: 14))
+                        .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(14)))
                 }
                 .buttonStyle(.plain)
                 .pointerCursor()
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: UIScale.pt(14))
                 .strokeBorder(DashSkin.line(dark), lineWidth: hovering ? 1.5 : 1)
         }
-        .shadow(color: .black.opacity(hovering ? 0.1 : 0), radius: 8, y: 3)
+        .shadow(color: .black.opacity(hovering ? 0.1 : 0), radius: UIScale.pt(8), y: 3)
         .onHover { hovering = $0 }
     }
 
@@ -444,8 +447,8 @@ private struct ExtensionSettingsSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle(entry.title)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
+            .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
+                VStack(spacing: UIScale.pt(0)) {
                     Divider()
                     HStack {
                         Spacer()
@@ -453,15 +456,16 @@ private struct ExtensionSettingsSheet: View {
                             .keyboardShortcut(.defaultAction)
                             .pointerCursor()
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, UIScale.pt(18))
+                    .padding(.vertical, UIScale.pt(12))
                     .background(.bar)
                 }
             }
         }
         .frame(
-            minWidth: 520, idealWidth: 560, maxWidth: 560, minHeight: 260,
-            idealHeight: idealHeight, maxHeight: 620)
+            minWidth: UIScale.pt(520), idealWidth: 560, maxWidth: UIScale.pt(560),
+            minHeight: UIScale.pt(260),
+            idealHeight: idealHeight, maxHeight: UIScale.pt(620))
     }
 
     private var idealHeight: CGFloat {
@@ -485,7 +489,7 @@ private struct RequiredPermissionRows: View {
             if !permissions.isEmpty {
                 Section {
                     ForEach(permissions, id: \.self) { permission in
-                        HStack(spacing: 8) {
+                        HStack(spacing: UIScale.pt(8)) {
                             Image(
                                 systemName: grantedPermissions[permission] == true
                                     ? "checkmark.circle.fill" : "circle"
@@ -561,24 +565,24 @@ private struct ExtensionPermissionSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+            HStack(spacing: UIScale.pt(14)) {
                 Image(systemName: request.entry.symbolName)
-                    .font(.system(size: 22, weight: .medium))
+                    .font(.system(size: UIScale.pt(22), weight: .medium))
                     .foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
+                    .frame(width: UIScale.pt(44), height: UIScale.pt(44))
                     .background(
                         Color.accentColor.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 12))
-                VStack(alignment: .leading, spacing: 3) {
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Enable \(request.entry.title)")
-                        .font(.title2.weight(.semibold))
+                        .font(.system(size: UIScale.pt(17), weight: .semibold))
                     Text(request.entry.subtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
-            VStack(spacing: 10) {
+            VStack(spacing: UIScale.pt(10)) {
                 ForEach(request.required, id: \.self) { permission in
                     permissionCard(permission, required: true)
                 }
@@ -586,7 +590,7 @@ private struct ExtensionPermissionSheet: View {
                     permissionCard(permission, required: false)
                 }
             }
-            HStack(spacing: 10) {
+            HStack(spacing: UIScale.pt(10)) {
                 Spacer()
                 Button("Cancel", action: cancel)
                     .keyboardShortcut(.cancelAction)
@@ -603,8 +607,8 @@ private struct ExtensionPermissionSheet: View {
                 }
             }
         }
-        .padding(24)
-        .frame(width: 540)
+        .padding(UIScale.pt(24))
+        .frame(width: UIScale.pt(540))
         .onAppear(perform: refresh)
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             refresh()
@@ -619,36 +623,36 @@ private struct ExtensionPermissionSheet: View {
 
     private func permissionCard(_ permission: ExtensionPermission, required: Bool) -> some View {
         let isGranted = grantedPermissions[permission] == true
-        return HStack(alignment: .top, spacing: 12) {
+        return HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: permission.symbolName)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: UIScale.pt(16), weight: .medium))
                 .foregroundStyle(isGranted ? .green : .secondary)
-                .frame(width: 28, height: 28)
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .background(
                     (isGranted ? Color.green : Color.secondary).opacity(0.1),
-                    in: RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text(permission.displayName)
                         .fontWeight(.medium)
                     PermissionInfoButton(permission)
                     Text(required ? "Required" : "Optional")
-                        .font(.caption2.weight(.semibold))
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(required ? .orange : .secondary)
                 }
                 Text(permission.reason)
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
                     .foregroundStyle(.secondary)
                 if let firstUseExplanation = permission.firstUseExplanation {
                     Text(firstUseExplanation)
-                        .font(.caption)
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 12)
             if isGranted {
                 Label("Granted", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.medium))
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
                     .foregroundStyle(.green)
             } else if let request = permission.grantRequest {
                 Button("Grant") { grant(request) }
@@ -656,13 +660,13 @@ private struct ExtensionPermissionSheet: View {
                     .pointerCursor()
             }
         }
-        .padding(14)
+        .padding(UIScale.pt(14))
         .background(
             Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .stroke(Color(nsColor: .separatorColor).opacity(0.45))
         }
     }
@@ -777,7 +781,7 @@ private struct UsageRows: View {
                 Text(
                     "Turn on Agent Usage above to restore \(selectedProvider.label) limits. Menu bar limits and alerts are off."
                 )
-                .font(.caption)
+                .font(.system(size: UIScale.pt(10)))
                 .foregroundStyle(.secondary)
             }
         } header: {
@@ -789,7 +793,7 @@ private struct UsageRows: View {
                         ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
                         : "White and Black force a single tint. Pick Custom to color by risk stage."
                 )
-                .font(.caption)
+                .font(.system(size: UIScale.pt(10)))
             }
         }
 
@@ -799,7 +803,7 @@ private struct UsageRows: View {
             Text(
                 "Set a personal cap under the real limit and get told if you're spending too fast."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             if budgetEnabled {
                 Picker("Mode", selection: $budgetMode) {
                     Text("Auto daily pace").tag("pace")
@@ -813,7 +817,7 @@ private struct UsageRows: View {
                     Text("Cap")
                     Slider(value: $budgetCap, in: 10...100, step: 5)
                     Text("\(Int(budgetCap))%").monospacedDigit().frame(
-                        width: 40, alignment: .trailing)
+                        width: UIScale.pt(40), alignment: .trailing)
                 }
                 if budgetMode == "cap" {
                     DatePicker(
@@ -839,7 +843,7 @@ private struct UsageRows: View {
                 .pointerCursor()
             Group {
                 Toggle(isOn: $trackSession) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Session (5h) alerts")
                         InfoDot(
                             "Fires once when the session window crosses warn or critical - it won't repeat while you stay in that zone."
@@ -848,7 +852,7 @@ private struct UsageRows: View {
                 }
                 .pointerCursor()
                 Toggle(isOn: $trackWeekly) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Weekly alerts")
                         InfoDot(
                             "Fires once when the weekly window crosses warn or critical - same one-shot-per-zone behavior as session alerts."
@@ -867,7 +871,7 @@ private struct UsageRows: View {
                     .pointerCursor()
                 }
                 Toggle(isOn: $pacingWarning) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Drifting / burning hot")
                         InfoDot(
                             "A separate signal from the level alerts above: how far ahead of an even burn-rate pace you are, regardless of the absolute percentage."
@@ -912,7 +916,7 @@ private struct UsageRows: View {
                 .pointerCursor()
                 if testSent {
                     Text("Sent - check Notification Center")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 }
             }
         } header: {
@@ -921,7 +925,7 @@ private struct UsageRows: View {
             Text(
                 "Alerts fire once per level or zone crossing, not on a repeating timer - staying in the same zone won't page you again."
             )
-            .font(.caption)
+            .font(.system(size: UIScale.pt(10)))
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -989,7 +993,7 @@ private struct SystemStatsRows: View {
                     set: { statsColorHex = $0.hex6 }),
                 supportsOpacity: false)
             Text("Sampled every couple of seconds; costs nothing measurable.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -1026,7 +1030,7 @@ private struct MicMuteRows: View {
             Toggle("Show in the menu bar", isOn: $inMenuBar)
                 .pointerCursor()
             Text("The menu bar icon shows the current mute state and toggles it on click.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -1041,7 +1045,7 @@ private struct SystemRows: View {
     var body: some View {
         Section {
             Toggle(isOn: $preventSleep) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Keep awake")
                     InfoDot(
                         "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
@@ -1057,7 +1061,7 @@ private struct SystemRows: View {
                 Spacer()
                 if cleaningStarted {
                     Text("Locked - check the overlay")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 }
                 Button("Clean now") {
                     IPC.post(IPC.Name.requestKeyboardClean)

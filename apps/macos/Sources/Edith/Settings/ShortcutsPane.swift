@@ -31,7 +31,7 @@ struct ShortcutsSettingsPane: View {
             Section {
                 if extensionShortcuts.isEmpty {
                     Text("Extensions with shortcuts appear here when enabled.")
-                        .font(.caption)
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(extensionShortcuts, id: \.self) { shortcut in
@@ -45,24 +45,24 @@ struct ShortcutsSettingsPane: View {
             Section {
                 LabeledContent("Toggle sidebar") {
                     Text("⌘B")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
                         .kerning(2)
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Close panel") {
                     Text("Esc")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Back") {
                     Text("⌘[")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
                         .kerning(2)
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Forward") {
                     Text("⌘]")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
                         .kerning(2)
                         .foregroundStyle(.secondary)
                 }
@@ -70,7 +70,7 @@ struct ShortcutsSettingsPane: View {
                 Text("Fixed")
             } footer: {
                 Text("Click a shortcut to record a new one; Esc cancels recording.")
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
             }
         }
         .formStyle(.grouped)
@@ -81,10 +81,10 @@ struct ShortcutsSettingsPane: View {
         _ title: String, subtitle: String, keyPrefix: String, defaultLabel: String
     ) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -127,10 +127,10 @@ struct HotKeyRecorderControl: View {
             recording ? stop() : start()
         } label: {
             Text(recording ? "Press shortcut…" : currentLabel)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: UIScale.pt(12), weight: .medium))
                 .kerning(recording ? 0 : 2)
-                .padding(.vertical, 2)
-                .padding(.horizontal, 6)
+                .padding(.vertical, UIScale.pt(2))
+                .padding(.horizontal, UIScale.pt(6))
         }
         .pointerCursor()
         .onAppear { label = currentLabel }

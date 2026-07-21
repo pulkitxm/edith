@@ -48,10 +48,10 @@ enum DashSkin {
     static let danger = DashPalette.color("#FF3B30")
 
     static func serif(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        .custom("Iowan Old Style", size: size).weight(weight)
+        .custom("Iowan Old Style", size: UIScale.pt(size)).weight(weight)
     }
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+        .system(size: UIScale.pt(size), weight: weight, design: .monospaced)
     }
 }
 
@@ -74,7 +74,7 @@ struct SkinCard<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
                     .font(DashSkin.serif(18))
@@ -82,22 +82,27 @@ struct SkinCard<Content: View>: View {
                 Spacer()
                 if let note {
                     Text(note)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .multilineTextAlignment(.trailing)
                 }
             }
             content()
         }
-        .padding(EdgeInsets(top: 16, leading: 16, bottom: 14, trailing: 16))
+        .padding(
+            EdgeInsets(
+                top: UIScale.pt(16), leading: UIScale.pt(16),
+                bottom: UIScale.pt(14), trailing: UIScale.pt(16))
+        )
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
         .background {
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: UIScale.pt(16))
                 .fill(DashSkin.paper2(dark))
-                .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: 12, y: 8)
+                .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: UIScale.pt(12), y: 8)
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 16).strokeBorder(DashSkin.line(dark), lineWidth: 1)
+            RoundedRectangle(cornerRadius: UIScale.pt(16)).strokeBorder(
+                DashSkin.line(dark), lineWidth: UIScale.pt(1))
         )
     }
 }

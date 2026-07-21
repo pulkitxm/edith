@@ -28,17 +28,17 @@ struct SettingsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             Picker("", selection: tab) {
                 ForEach(Tab.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .pointerCursor()
-            .frame(maxWidth: 320)
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+            .frame(maxWidth: UIScale.pt(320))
+            .padding(.horizontal, UIScale.pt(20))
+            .padding(.top, UIScale.pt(16))
+            .padding(.bottom, UIScale.pt(12))
             Group {
                 switch tab.wrappedValue {
                 case .general: GeneralPane()
@@ -151,7 +151,7 @@ struct GeneralPane: View {
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
-                    HStack(spacing: 10) {
+                    HStack(spacing: UIScale.pt(10)) {
                         Toggle(
                             "Use accent",
                             isOn: Binding(
@@ -179,7 +179,7 @@ struct GeneralPane: View {
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Panel shortcut")
                         InfoDot(
                             "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
@@ -190,7 +190,7 @@ struct GeneralPane: View {
                 Text("Window")
             } footer: {
                 Text("Features are turned on and off from the Extensions page.")
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
             }
 
             Section {
@@ -198,11 +198,11 @@ struct GeneralPane: View {
                     settingsTab = SettingsPane.Tab.permissions.rawValue
                 } label: {
                     LabeledContent("Permissions") {
-                        HStack(spacing: 6) {
+                        HStack(spacing: UIScale.pt(6)) {
                             Text(permissionSummary)
                                 .foregroundStyle(.secondary)
                             Image(systemName: "chevron.right")
-                                .font(.caption)
+                                .font(.system(size: UIScale.pt(10)))
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -213,7 +213,7 @@ struct GeneralPane: View {
                 Text("Access")
             } footer: {
                 Text("Every permission Edith can ask for, in one place.")
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
             }
 
             Section {
@@ -228,11 +228,11 @@ struct GeneralPane: View {
 
             Section {
                 LabeledContent("License") {
-                    VStack(alignment: .trailing, spacing: 3) {
+                    VStack(alignment: .trailing, spacing: UIScale.pt(3)) {
                         Text(licenseLabel)
                             .foregroundStyle(.secondary)
                         Text(maskedLicenseKey)
-                            .font(.system(.caption, design: .monospaced))
+                            .font(.system(size: UIScale.pt(10), design: .monospaced))
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -250,14 +250,14 @@ struct GeneralPane: View {
                 .pointerCursor()
                 if let licenseError {
                     Text(licenseError)
-                        .font(.caption)
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(.red)
                 }
             } header: {
                 Text("License")
             } footer: {
                 Text("Deactivation takes effect the next time Edith launches.")
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
             }
         }
         .formStyle(.grouped)
@@ -346,10 +346,10 @@ struct GeneralPane: View {
             lastPaletteTheme = name
         } label: {
             ZStack {
-                Circle().fill(color).frame(width: 20, height: 20)
+                Circle().fill(color).frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 if themeName == name {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(.white)
                 }
             }

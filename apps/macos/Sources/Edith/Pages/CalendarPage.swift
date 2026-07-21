@@ -20,14 +20,14 @@ struct CalendarPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             pageHeader
-                .padding(.horizontal, 24)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
+                .padding(.horizontal, UIScale.pt(24))
+                .padding(.top, UIScale.pt(18))
+                .padding(.bottom, UIScale.pt(12))
             if store.authStatus != .fullAccess {
                 permissionPrompt
-                    .frame(maxWidth: 420)
+                    .frame(maxWidth: UIScale.pt(420))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onReceive(
                         Timer.publish(every: 2, on: .main, in: .common).autoconnect()
@@ -66,18 +66,18 @@ struct CalendarPage: View {
 
     private var agenda: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(20)) {
                 if groupedDays.isEmpty {
                     Text("Nothing coming up")
-                        .font(.system(size: 13))
+                        .font(.system(size: UIScale.pt(13)))
                         .foregroundStyle(.secondary)
-                        .padding(.vertical, 40)
+                        .padding(.vertical, UIScale.pt(40))
                         .frame(maxWidth: .infinity)
                 } else {
                     ForEach(groupedDays, id: \.day) { group in
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                             dayHeader(group.day)
-                            VStack(alignment: .leading, spacing: 0) {
+                            VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                                 ForEach(group.events, id: \.eventIdentifier) { event in
                                     row(for: event)
                                     if event != group.events.last {
@@ -85,49 +85,50 @@ struct CalendarPage: View {
                                     }
                                 }
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, UIScale.pt(4))
                             .background(
-                                DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 12)
+                                DashSkin.paper2(dark),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(12))
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .strokeBorder(DashSkin.line(dark), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: UIScale.pt(12))
+                                    .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
                             )
                         }
                     }
                 }
-                Color.clear.frame(height: 1).onAppear { store.loadMore() }
+                Color.clear.frame(height: UIScale.pt(1)).onAppear { store.loadMore() }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 28)
+            .padding(.horizontal, UIScale.pt(24))
+            .padding(.bottom, UIScale.pt(28))
         }
     }
 
     private func dayHeader(_ day: Date) -> some View {
         let date = day.formatted(.dateTime.month(.abbreviated).day())
         return Text("\(dayName(day)) · \(date)".uppercased())
-            .font(.system(size: 11, weight: .semibold))
-            .tracking(1.2)
+            .font(.system(size: UIScale.pt(11), weight: .semibold))
+            .tracking(UIScale.pt(1.2))
             .foregroundStyle(.secondary)
     }
 
     private func row(for event: EKEvent) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
             Text(timeRange(for: event))
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: UIScale.pt(12), weight: .medium))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-                .frame(width: 140, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: UIScale.pt(140), alignment: .leading)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(event.title ?? "Untitled")
-                    .font(.system(size: 13.5))
+                    .font(.system(size: UIScale.pt(13.5)))
                     .lineLimit(1)
                     .presenterBlur(blurCalendar)
                 if let location = event.location, !location.isEmpty,
                     !location.hasPrefix("http")
                 {
                     Text(location)
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
@@ -138,15 +139,15 @@ struct CalendarPage: View {
                     NSWorkspace.shared.open(url)
                 } label: {
                     Image(systemName: "video.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(providerColor(url))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help(url.absoluteString)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, UIScale.pt(14))
+        .padding(.vertical, UIScale.pt(8))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel(for: event))
     }
@@ -184,32 +185,33 @@ struct CalendarPage: View {
     }
 
     private var permissionPrompt: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("CALENDAR ACCESS")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .tracking(UIScale.pt(1.2))
                 .foregroundStyle(.secondary)
             Text("Edith needs calendar access to show your schedule here.")
-                .font(.system(size: 12))
+                .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
+            HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "calendar")
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
                 Text("Calendars")
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                 Spacer()
                 Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
                     .buttonStyle(HoverButtonStyle())
-                    .font(.system(size: 11))
+                    .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(theme)
                     .help("Opens System Settings on the right pane")
             }
         }
-        .padding(16)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 12))
+        .padding(UIScale.pt(16))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(
-            RoundedRectangle(cornerRadius: 12).strokeBorder(DashSkin.line(dark), lineWidth: 1))
+            RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
+                DashSkin.line(dark), lineWidth: UIScale.pt(1)))
     }
 }

@@ -108,7 +108,7 @@ public struct ClipboardThumbnailView<Placeholder: View>: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxHeight: maxHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                    .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(3)))
             } else {
                 placeholder
             }

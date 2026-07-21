@@ -10,7 +10,7 @@ struct ToolProvisioningSheet: View {
             title: "Setting up \(entry.title)", tools: activeTools,
             continueAction: { dismiss() }
         )
-        .frame(width: 520)
+        .frame(width: UIScale.pt(520))
     }
 
     private var activeTools: [CLIToolSpec] {
@@ -26,15 +26,15 @@ struct ToolProvisioningPanel: View {
     @State private var logExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(title)
-                    .font(.title2.weight(.semibold))
+                    .font(.system(size: UIScale.pt(17), weight: .semibold))
                 Text("You can continue immediately. Setup will keep running in the background.")
-                    .font(.callout)
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
             }
-            VStack(spacing: 10) {
+            VStack(spacing: UIScale.pt(10)) {
                 ForEach(tools) { tool in
                     ProvisioningToolRow(tool: tool, state: provisioner.state(for: tool))
                 }
@@ -42,17 +42,17 @@ struct ToolProvisioningPanel: View {
             DisclosureGroup("Installation log", isExpanded: $logExpanded) {
                 ScrollView {
                     Text(logText)
-                        .font(.system(size: 10.5, design: .monospaced))
+                        .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                        .padding(UIScale.pt(10))
                 }
-                .frame(height: 110)
+                .frame(height: UIScale.pt(110))
                 .background(
                     Color(nsColor: .textBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 8))
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
             }
-            .font(.caption.weight(.medium))
+            .font(.system(size: UIScale.pt(10), weight: .medium))
             if let continueAction {
                 HStack {
                     Spacer()
@@ -62,7 +62,7 @@ struct ToolProvisioningPanel: View {
                 }
             }
         }
-        .padding(22)
+        .padding(UIScale.pt(22))
         .onAppear { provisioner.provision(tools) }
     }
 
@@ -80,34 +80,34 @@ private struct ProvisioningToolRow: View {
     let state: CLIToolProvisionState
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
+        HStack(alignment: .top, spacing: UIScale.pt(11)) {
             ToolStateIcon(state: state)
-                .frame(width: 20, height: 20)
-            VStack(alignment: .leading, spacing: 3) {
+                .frame(width: UIScale.pt(20), height: UIScale.pt(20))
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack {
                     Text(tool.displayName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
                     Spacer()
                     Text(statusText)
-                        .font(.caption)
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(statusColor)
                         .lineLimit(1)
                 }
                 Text(tool.why)
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
                     .foregroundStyle(.secondary)
                 if case let .failed(_, instruction) = state {
                     Text(instruction)
-                        .font(.caption2)
+                        .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
             }
         }
-        .padding(11)
+        .padding(UIScale.pt(11))
         .background(
             Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: 10))
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
     private var statusText: String {
@@ -159,14 +159,14 @@ struct CLIToolStatusSection: View {
     var body: some View {
         Section {
             ForEach(tools) { tool in
-                HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: UIScale.pt(10)) {
                     ToolStateIcon(state: provisioner.state(for: tool))
-                        .frame(width: 18, height: 22)
-                    VStack(alignment: .leading, spacing: 3) {
+                        .frame(width: UIScale.pt(18), height: UIScale.pt(22))
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                         Text(tool.displayName)
                             .fontWeight(.medium)
                         Text(detail(for: tool))
-                            .font(.caption)
+                            .font(.system(size: UIScale.pt(10)))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                     }

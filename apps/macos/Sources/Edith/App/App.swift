@@ -271,7 +271,7 @@ struct EdithApp: App {
 private struct SettingsRedirect: View {
     var body: some View {
         Color.clear
-            .frame(width: 1, height: 1)
+            .frame(width: UIScale.pt(1), height: UIScale.pt(1))
             .onAppear {
                 SharedDefaults.store.set(
                     MainDestination.settings.rawValue, forKey: "mainWindowSection")

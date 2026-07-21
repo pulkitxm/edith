@@ -11,7 +11,7 @@ struct SystemPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 header
                 summary
                 SkinCard(title: "Running apps", dark: dark) {
@@ -19,7 +19,7 @@ struct SystemPage: View {
                 }
                 CleanerCard(dark: dark)
             }
-            .padding(24)
+            .padding(UIScale.pt(24))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
@@ -47,7 +47,7 @@ struct SystemPage: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("System").font(.system(size: 30, weight: .bold))
+            Text("System").font(.system(size: UIScale.pt(30), weight: .bold))
             Spacer()
             Button(role: .destructive) {
                 confirmQuitAll = true
@@ -68,34 +68,34 @@ struct SystemPage: View {
     }
 
     private var summary: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: UIScale.pt(12)) {
             summaryCard("Running apps", "\(model.apps.count)")
             summaryCard("App memory", String(format: "%.1f GB", model.totalMemoryMB / 1024))
         }
     }
 
     private func summaryCard(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+                .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(UIScale.pt(0.6))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value).font(.system(size: 22, weight: .semibold)).monospacedDigit()
+            Text(value).font(.system(size: UIScale.pt(22), weight: .semibold)).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 14))
+        .padding(UIScale.pt(16))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
     }
 
     private var columnHeaders: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             headerButton("App", .name, width: nil, alignment: .leading)
-                .padding(.leading, 32)
+                .padding(.leading, UIScale.pt(32))
             Spacer()
-            headerButton("CPU", .cpu, width: 48, alignment: .trailing)
-            headerButton("Memory", .memory, width: 72, alignment: .trailing)
-            Color.clear.frame(width: 16)
+            headerButton("CPU", .cpu, width: UIScale.pt(48), alignment: .trailing)
+            headerButton("Memory", .memory, width: UIScale.pt(72), alignment: .trailing)
+            Color.clear.frame(width: UIScale.pt(16))
         }
-        .padding(.bottom, 6)
+        .padding(.bottom, UIScale.pt(6))
     }
 
     private func headerButton(
@@ -104,13 +104,14 @@ struct SystemPage: View {
         Button {
             model.sort(by: key)
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: UIScale.pt(3)) {
                 if alignment == .trailing { Spacer(minLength: 0) }
                 Text(label.uppercased())
-                    .font(.system(size: 10, weight: .semibold)).tracking(0.5)
+                    .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(
+                        UIScale.pt(0.5))
                 if model.sortKey == key {
                     Image(systemName: model.ascending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 7, weight: .bold))
+                        .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
                 if alignment == .leading { Spacer(minLength: 0) }
             }
@@ -121,17 +122,18 @@ struct SystemPage: View {
     }
 
     private var appList: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             columnHeaders
             Divider().opacity(0.4)
             if model.apps.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: UIScale.pt(8)) {
                     ProgressView().controlSize(.small)
                     Text("Reading running apps…")
-                        .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
+                        .font(.system(size: UIScale.pt(12))).foregroundStyle(
+                            DashSkin.inkFaint(dark))
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 24)
+                .padding(.vertical, UIScale.pt(24))
             }
             ForEach(model.apps) { app in
                 SystemAppRow(app: app, dark: dark) { pendingQuit = app }
@@ -159,20 +161,21 @@ private struct SystemAppRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             if let icon = app.icon {
-                Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+                Image(nsImage: icon).resizable().frame(
+                    width: UIScale.pt(22), height: UIScale.pt(22))
             }
-            Text(app.name).font(.system(size: 13)).lineLimit(1)
+            Text(app.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
             Spacer()
             Text(SystemPage.cpuLabel(app.cpuPercent))
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: UIScale.pt(12), design: .monospaced))
                 .foregroundStyle(app.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
-                .frame(width: 48, alignment: .trailing)
+                .frame(width: UIScale.pt(48), alignment: .trailing)
             Text(SystemPage.memoryLabel(app.memoryMB))
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: UIScale.pt(12), design: .monospaced))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: 72, alignment: .trailing)
+                .frame(width: UIScale.pt(72), alignment: .trailing)
             Button {
                 onQuit()
             } label: {
@@ -183,10 +186,10 @@ private struct SystemAppRow: View {
             .pointerCursor()
             .help("Quit \(app.name)")
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 7)
+        .padding(.horizontal, UIScale.pt(6))
+        .padding(.vertical, UIScale.pt(7))
         .background(
-            RoundedRectangle(cornerRadius: 7)
+            RoundedRectangle(cornerRadius: UIScale.pt(7))
                 .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
         )
         .onHover { hovering = $0 }

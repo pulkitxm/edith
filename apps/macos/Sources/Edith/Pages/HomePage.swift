@@ -25,14 +25,14 @@ struct HomePage: View {
         GeometryReader { geo in
             let compact = geo.size.width < 640
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     HomeHeader(dark: dark)
                     ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 16) {
+                        HStack(alignment: .top, spacing: UIScale.pt(16)) {
                             WorldClocksCard(dark: dark)
                             if systemEnabled || presenterEnabled { QuickActionsCard(dark: dark) }
                         }
-                        VStack(spacing: 16) {
+                        VStack(spacing: UIScale.pt(16)) {
                             WorldClocksCard(dark: dark)
                             if systemEnabled || presenterEnabled { QuickActionsCard(dark: dark) }
                         }
@@ -45,8 +45,11 @@ struct HomePage: View {
                         }
                     }
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: compact ? 260 : 340), spacing: 16)],
-                        alignment: .leading, spacing: 16
+                        columns: [
+                            GridItem(
+                                .adaptive(minimum: compact ? 260 : 340), spacing: UIScale.pt(16))
+                        ],
+                        alignment: .leading, spacing: UIScale.pt(16)
                     ) {
                         Group {
                             if calendarEnabled { MeetingsCard(dark: dark) }
@@ -60,8 +63,8 @@ struct HomePage: View {
                     }
                 }
                 .padding(.horizontal, compact ? 18 : 24)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
+                .padding(.top, UIScale.pt(18))
+                .padding(.bottom, UIScale.pt(28))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(background)
@@ -181,7 +184,7 @@ private struct HomeHeader: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let now = context.date
             if compact {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     greeting(now)
                     clockBlock(now, alignment: .leading)
                 }
@@ -196,7 +199,7 @@ private struct HomeHeader: View {
     }
 
     private func greeting(_ now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             (Text("\(salutation(now)), ")
                 + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
                 + Text("."))
@@ -208,7 +211,7 @@ private struct HomeHeader: View {
                 now.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
                     .uppercased()
             )
-            .font(DashSkin.mono(11)).tracking(1.6)
+            .font(DashSkin.mono(11)).tracking(UIScale.pt(1.6))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .lineLimit(1).minimumScaleFactor(0.7)
         }
@@ -223,7 +226,7 @@ private struct HomeHeader: View {
     }
 
     private func clockBlock(_ now: Date, alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 2) {
+        VStack(alignment: alignment, spacing: UIScale.pt(2)) {
             if visibility.visible {
                 TimelineView(.periodic(from: .now, by: 1)) { tick in
                     clockText(tick.date)
@@ -235,7 +238,7 @@ private struct HomeHeader: View {
                 "\(Calendar.current.component(.hour, from: now) < 12 ? "AM" : "PM")"
                     + " · \(TimeZone.current.abbreviation() ?? "local")"
             )
-            .font(DashSkin.mono(11)).tracking(1.2)
+            .font(DashSkin.mono(11)).tracking(UIScale.pt(1.2))
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
@@ -256,7 +259,7 @@ private struct WorldClocksCard: View {
     var body: some View {
         SkinCard(title: "World clocks", note: "hover a clock to remove", dark: dark) {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                WrapHStack(spacing: 20, lineSpacing: 16) {
+                WrapHStack(spacing: UIScale.pt(20), lineSpacing: 16) {
                     ClockTile(
                         date: context.date, zone: TimeZone.current, label: "Local", dark: dark,
                         onRemove: nil)
@@ -298,19 +301,20 @@ private struct WorldClocksCard: View {
         Button {
             showAdd = true
         } label: {
-            VStack(spacing: 10) {
+            VStack(spacing: UIScale.pt(10)) {
                 Circle()
                     .strokeBorder(
-                        DashSkin.lineStrong(dark), style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                        DashSkin.lineStrong(dark),
+                        style: StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 3])
                     )
                     .frame(width: compact ? 64 : 96, height: compact ? 64 : 96)
                     .overlay {
                         Image(systemName: "plus")
-                            .font(.system(size: 24, weight: .light))
+                            .font(.system(size: UIScale.pt(24), weight: .light))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 Text("Add city")
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -318,25 +322,26 @@ private struct WorldClocksCard: View {
         .pointerCursor()
         .help("Add a timezone clock")
         .popover(isPresented: $showAdd, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 TextField("Search city or region", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
+                    .frame(width: UIScale.pt(240))
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         ForEach(matches, id: \.self) { id in
                             Button {
                                 add(id)
                             } label: {
                                 HStack {
-                                    Text(HomeMath.cityName(id)).font(.system(size: 12.5))
+                                    Text(HomeMath.cityName(id)).font(
+                                        .system(size: UIScale.pt(12.5)))
                                     Spacer()
                                     Text(id.split(separator: "/").first.map(String.init) ?? "")
-                                        .font(.system(size: 10.5))
+                                        .font(.system(size: UIScale.pt(10.5)))
                                         .foregroundStyle(.tertiary)
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, UIScale.pt(8))
+                                .padding(.vertical, UIScale.pt(5))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -344,15 +349,15 @@ private struct WorldClocksCard: View {
                         }
                         if matches.isEmpty {
                             Text("No matching timezones")
-                                .font(.system(size: 12))
+                                .font(.system(size: UIScale.pt(12)))
                                 .foregroundStyle(.secondary)
-                                .padding(8)
+                                .padding(UIScale.pt(8))
                         }
                     }
                 }
-                .frame(width: 240, height: 200)
+                .frame(width: UIScale.pt(240), height: UIScale.pt(200))
             }
-            .padding(12)
+            .padding(UIScale.pt(12))
         }
     }
 }
@@ -375,14 +380,14 @@ private struct ClockTile: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: UIScale.pt(10)) {
             ClockFace(zone: zone, dark: dark)
                 .frame(width: faceSize, height: faceSize)
                 .overlay(alignment: .topTrailing) {
                     if hovering, let onRemove {
                         Button(action: onRemove) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 16))
+                                .font(.system(size: UIScale.pt(16)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .background(Circle().fill(DashSkin.paper2(dark)))
                         }
@@ -392,7 +397,7 @@ private struct ClockTile: View {
                         .help("Remove clock")
                     }
                 }
-            VStack(spacing: 2) {
+            VStack(spacing: UIScale.pt(2)) {
                 Text(label)
                     .font(DashSkin.serif(compact ? 13 : 15))
                     .foregroundStyle(DashSkin.ink(dark))
@@ -452,7 +457,7 @@ private struct ClockFace: View {
                     x: center.x - radius, y: center.y - radius,
                     width: radius * 2, height: radius * 2))
             ctx.fill(dial, with: .color(face))
-            ctx.stroke(dial, with: .color(DashSkin.lineStrong(dark)), lineWidth: 1)
+            ctx.stroke(dial, with: .color(DashSkin.lineStrong(dark)), lineWidth: UIScale.pt(1))
 
             for i in 0..<12 {
                 let angle = Double(i) / 12 * 2 * .pi
@@ -471,14 +476,20 @@ private struct ClockFace: View {
             let hourAngle = (hour + minute / 60) / 12 * 2 * .pi
             let minuteAngle = (minute + second / 60) / 60 * 2 * .pi
             let secondAngle = second / 60 * 2 * .pi
-            drawHand(&ctx, center, length: radius * 0.48, angle: hourAngle, width: 2.4, color: hand)
             drawHand(
-                &ctx, center, length: radius * 0.72, angle: minuteAngle, width: 1.7, color: hand)
+                &ctx, center, length: radius * 0.48, angle: hourAngle, width: UIScale.pt(2.4),
+                color: hand)
             drawHand(
-                &ctx, center, length: radius * 0.8, angle: secondAngle, width: 1,
+                &ctx, center, length: radius * 0.72, angle: minuteAngle, width: UIScale.pt(1.7),
+                color: hand)
+            drawHand(
+                &ctx, center, length: radius * 0.8, angle: secondAngle, width: UIScale.pt(1),
                 color: DashSkin.accent(dark))
             ctx.fill(
-                Path(ellipseIn: CGRect(x: center.x - 2, y: center.y - 2, width: 4, height: 4)),
+                Path(
+                    ellipseIn: CGRect(
+                        x: center.x - 2, y: center.y - 2, width: UIScale.pt(4),
+                        height: UIScale.pt(4))),
                 with: .color(DashSkin.accent(dark)))
         }
     }
@@ -513,7 +524,7 @@ private struct QuickActionsCard: View {
 
     var body: some View {
         SkinCard(title: "Quick actions", dark: dark) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: UIScale.pt(12)) {
                 if systemEnabled {
                     tile(
                         icon: "keyboard", title: "Clean keys",
@@ -546,27 +557,27 @@ private struct QuickActionsCard: View {
         icon: String, title: String, sub: String, active: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: UIScale.pt(6)) {
                 Image(systemName: icon)
-                    .font(.system(size: 21))
-                    .frame(height: 26)
+                    .font(.system(size: UIScale.pt(21)))
+                    .frame(height: UIScale.pt(26))
                 Text(title)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
                     .lineLimit(1)
                 Text(sub)
-                    .font(.system(size: 10.5))
+                    .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(active ? .white.opacity(0.8) : DashSkin.inkFaint(dark))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .padding(.horizontal, 8)
+            .padding(.vertical, UIScale.pt(16))
+            .padding(.horizontal, UIScale.pt(8))
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
             .background(
                 active ? AnyShapeStyle(theme) : AnyShapeStyle(.primary.opacity(0.05)),
-                in: RoundedRectangle(cornerRadius: 12)
+                in: RoundedRectangle(cornerRadius: UIScale.pt(12))
             )
             .contentShape(Rectangle())
         }
@@ -593,14 +604,14 @@ private struct MeetingsCard: View {
 
     var body: some View {
         SkinCard(title: "Today's meetings", note: note, dark: dark) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                 if store.authStatus != .fullAccess {
                     accessPrompt
                 } else if todayEvents.isEmpty {
                     Text("No meetings today. Clear runway.")
-                        .font(.system(size: 12.5))
+                        .font(.system(size: UIScale.pt(12.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: 70)
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
                 } else {
                     ForEach(todayEvents.prefix(6), id: \.eventIdentifier) { event in
                         row(event)
@@ -628,14 +639,14 @@ private struct MeetingsCard: View {
     }
 
     private func row(_ event: EKEvent) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
             Text(timeLabel(event))
                 .font(DashSkin.mono(11))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             Text(event.title ?? "Untitled")
-                .font(.system(size: 12.5))
+                .font(.system(size: UIScale.pt(12.5)))
                 .lineLimit(1)
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -645,14 +656,14 @@ private struct MeetingsCard: View {
                     NSWorkspace.shared.open(url)
                 } label: {
                     Image(systemName: "video.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(theme)
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Join meeting")
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, UIScale.pt(6))
     }
 
     private func timeLabel(_ event: EKEvent) -> String {
@@ -663,19 +674,19 @@ private struct MeetingsCard: View {
     }
 
     private var accessPrompt: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "calendar.badge.exclamationmark")
                 .foregroundStyle(.orange)
             Text("Grant calendar access to see today's schedule.")
-                .font(.system(size: 12))
+                .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
             Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
                 .buttonStyle(HoverButtonStyle())
-                .font(.system(size: 11))
+                .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(theme)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, UIScale.pt(14))
     }
 }
 
@@ -694,17 +705,17 @@ struct JumpLink: View {
         Button {
             mainWindowSection = destination.rawValue
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: UIScale.pt(4)) {
                 Text(title)
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: UIScale.pt(9), weight: .semibold))
             }
-            .font(.system(size: 11.5, weight: .medium))
+            .font(.system(size: UIScale.pt(11.5), weight: .medium))
             .foregroundStyle(DashSkin.accentDeep(dark))
         }
         .buttonStyle(.plain)
         .pointerCursor()
-        .padding(.top, 10)
+        .padding(.top, UIScale.pt(10))
     }
 }
 
@@ -746,8 +757,8 @@ private struct UsageSummaryCard: View {
     var body: some View {
         SkinCard(title: "Agent usage", note: "last 14 days", dark: dark) {
             if model.loaded {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    HStack(spacing: UIScale.pt(24)) {
                         stat(
                             "Today", cost: day(0)?.cost ?? 0,
                             tokens: day(0)?.tokens ?? 0)
@@ -758,14 +769,14 @@ private struct UsageSummaryCard: View {
                     }
                     chart
                     if !weekModels.isEmpty {
-                        WrapHStack(spacing: 12, lineSpacing: 4) {
+                        WrapHStack(spacing: UIScale.pt(12), lineSpacing: 4) {
                             ForEach(Array(weekModels.enumerated()), id: \.element.id) { i, entry in
-                                HStack(spacing: 5) {
+                                HStack(spacing: UIScale.pt(5)) {
                                     Circle()
                                         .fill(DashPalette.categorical(i, dark: dark))
-                                        .frame(width: 7, height: 7)
+                                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                                     Text(entry.name)
-                                        .font(.system(size: 11))
+                                        .font(.system(size: UIScale.pt(11)))
                                         .foregroundStyle(DashSkin.inkSoft(dark))
                                     Text(DashFmt.tokens(entry.value))
                                         .font(DashSkin.mono(10))
@@ -779,24 +790,24 @@ private struct UsageSummaryCard: View {
                 }
             } else {
                 Text(model.loadAttempted ? "No usage data yet" : "Loading usage data…")
-                    .font(.system(size: 12.5))
+                    .font(.system(size: UIScale.pt(12.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
             }
         }
     }
 
     private func stat(_ label: String, cost: Double, tokens: Double) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label.uppercased())
-                .font(DashSkin.mono(9.5)).tracking(1.3)
+                .font(DashSkin.mono(9.5)).tracking(UIScale.pt(1.3))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(DashFmt.usd(cost))
                 .font(DashSkin.serif(24))
                 .foregroundStyle(DashSkin.ink(dark))
                 .presenterBlur(blurMoney)
             Text("\(DashFmt.tokens(tokens)) tokens")
-                .font(.system(size: 11))
+                .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .presenterBlur(blurMoney)
         }
@@ -818,14 +829,14 @@ private struct UsageSummaryCard: View {
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
                         Text(d.formatted(.dateTime.day()))
-                            .font(.system(size: 8))
+                            .font(.system(size: UIScale.pt(8)))
                             .foregroundStyle(.tertiary)
                     }
                 }
             }
         }
         .chartYAxis(.hidden)
-        .frame(height: 64)
+        .frame(height: UIScale.pt(64))
     }
 }
 
@@ -851,16 +862,16 @@ private struct MusicCard: View {
             title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks",
             dark: dark
         ) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if let track = remote.current {
                     nowPlaying(track)
                     Divider().opacity(0.4)
                 }
                 if remote.tracks.isEmpty {
                     Text("Drop audio files into your music folder to play them here.")
-                        .font(.system(size: 12.5))
+                        .font(.system(size: UIScale.pt(12.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: 70)
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
                 } else {
                     ForEach(upNext) { track in
                         trackRow(track)
@@ -879,11 +890,11 @@ private struct MusicCard: View {
     }
 
     private func nowPlaying(_ track: Track) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             HomeArtworkThumb(track: track, size: 40)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(track.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: UIScale.pt(13), weight: .medium))
                     .lineLimit(1)
                     .foregroundStyle(DashSkin.ink(dark))
                     .presenterBlur(blur)
@@ -895,13 +906,14 @@ private struct MusicCard: View {
                     elapsedText
                 }
             }
-            PlaybackWave(playing: remote.isPlaying, color: theme.opacity(0.9), maxHeight: 14)
+            PlaybackWave(
+                playing: remote.isPlaying, color: theme.opacity(0.9), maxHeight: UIScale.pt(14))
             Spacer(minLength: 6)
             Button {
                 remote.playPause()
             } label: {
                 Image(systemName: remote.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 15))
+                    .font(.system(size: UIScale.pt(15)))
                     .foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
@@ -909,7 +921,7 @@ private struct MusicCard: View {
                 remote.next()
             } label: {
                 Image(systemName: "forward.fill")
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
@@ -920,16 +932,16 @@ private struct MusicCard: View {
         Button {
             remote.toggle(track)
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: UIScale.pt(8)) {
                 HomeArtworkThumb(track: track, size: 26)
                 Text(track.title)
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .lineLimit(1)
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .presenterBlur(blur)
                 Spacer(minLength: 6)
                 Image(systemName: "play.fill")
-                    .font(.system(size: 9))
+                    .font(.system(size: UIScale.pt(9)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .contentShape(Rectangle())

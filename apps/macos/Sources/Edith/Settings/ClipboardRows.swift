@@ -63,7 +63,7 @@ struct ClipboardRows: View {
             Section {
                 if recentEntries.isEmpty {
                     Text("No clipboard history yet.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 } else {
                     ForEach(recentEntries) { entry in
                         recentRow(entry)
@@ -93,7 +93,7 @@ struct ClipboardRows: View {
             LabeledContent {
                 HotKeyRecorderControl(keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Open")
                     InfoDot(
                         "Global shortcut to open and close the history popup. Default: ⌃⇧C.")
@@ -111,7 +111,7 @@ struct ClipboardRows: View {
                         }
                     })
             ) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Paste automatically")
                     InfoDot(
                         "Selecting an item pastes it into the front app instead of just copying. Needs Accessibility."
@@ -123,12 +123,12 @@ struct ClipboardRows: View {
                 Text(
                     "Accessibility isn't granted yet - selecting an item only copies until you grant it."
                 )
-                .font(.caption).foregroundStyle(.orange)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.orange)
             }
             Toggle("Paste without formatting", isOn: $pastePlainText)
                 .pointerCursor()
             Text("Strips fonts, colors and links so pasted text matches the destination.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
         } header: {
             Text("Behavior")
         }
@@ -140,16 +140,16 @@ struct ClipboardRows: View {
             Toggle("Images", isOn: $saveImages).pointerCursor()
             Toggle("Text", isOn: $saveText).pointerCursor()
             Text("Change what types of copied content should be stored.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
         } header: {
             Text("Save")
         }
         Section {
             LabeledContent {
-                HStack(spacing: 4) {
+                HStack(spacing: UIScale.pt(4)) {
                     TextField("", value: $maxItems, format: .number)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 64)
+                        .frame(width: UIScale.pt(64))
                         .multilineTextAlignment(.trailing)
                         .labelsHidden()
                     Stepper("", value: $maxItems, in: 1...999)
@@ -157,7 +157,7 @@ struct ClipboardRows: View {
                         .pointerCursor()
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Size")
                     InfoDot("Number of history items to keep. Default: 200.")
                 }
@@ -166,7 +166,7 @@ struct ClipboardRows: View {
                 value: maxItemMB,
                 in: 1...200
             ) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Maximum item size: \(maxItemMB.wrappedValue) MB")
                     InfoDot(
                         "Copies larger than this aren't saved - a small indicator shows when one was skipped."
@@ -180,14 +180,14 @@ struct ClipboardRows: View {
                 Text("30 days").tag(30)
                 Text("90 days").tag(90)
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Auto-delete after")
                     InfoDot("Removes entries older than N days, pinned items excepted.")
                 }
             }
             .pointerCursor()
             Stepper(value: $checkInterval, in: 0.2...5, step: 0.1) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Check interval: \(String(format: "%.1f", checkInterval))s")
                     InfoDot(
                         "How often Edith peeks at the clipboard. Larger saves battery; smaller catches rapid copies."
@@ -205,7 +205,7 @@ struct ClipboardRows: View {
                     Text(position.title).tag(position.rawValue)
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Popup at")
                     InfoDot(
                         "Where the popup appears: at the mouse cursor, under the menu icon, centered on the front window or screen, or wherever you last dragged it."
@@ -217,14 +217,14 @@ struct ClipboardRows: View {
                 Text("Top").tag("top")
                 Text("Bottom").tag("bottom")
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Pin to")
                     InfoDot("Whether pinned items stick to the top or the bottom of the list.")
                 }
             }
             .pointerCursor()
             Toggle(isOn: $showFooter) {
-                HStack(spacing: 6) {
+                HStack(spacing: UIScale.pt(6)) {
                     Text("Show footer")
                     InfoDot("Shows the Clear and Preferences rows at the bottom of the popup.")
                 }
@@ -235,7 +235,7 @@ struct ClipboardRows: View {
 
     @ViewBuilder private var ignoreSections: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Ignored apps") {
                     TextField("com.app.bundleid, com.other.app", text: $ignoredApps)
                         .textFieldStyle(.roundedBorder)
@@ -243,7 +243,7 @@ struct ClipboardRows: View {
                 Text(
                     "Copies made in these apps are never recorded (password managers are pre-listed)."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             }
         }
     }
@@ -261,7 +261,7 @@ struct ClipboardRows: View {
             Text("·")
             Text(entry.createdAt.formatted(.relative(presentation: .named)))
         }
-        .font(.caption)
+        .font(.system(size: UIScale.pt(10)))
         .foregroundStyle(.secondary)
     }
 }

@@ -25,7 +25,7 @@ struct ICloudPane: View {
         Form {
             Section {
                 Toggle(isOn: $icloudBackup) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: UIScale.pt(6)) {
                         Text("Back up to iCloud")
                         InfoDot(
                             "Keeps your data in iCloud Drive so a reinstall or another Mac can restore it. Newest copy wins - it's a backup, not a live sync."
@@ -33,7 +33,7 @@ struct ICloudPane: View {
                     }
                 }
                 .pointerCursor()
-                Text(backupSubtitle).font(.caption).foregroundStyle(.secondary)
+                Text(backupSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             } header: {
                 Text("iCloud backup")
             } footer: {
@@ -47,18 +47,18 @@ struct ICloudPane: View {
                     .pointerCursor()
                     .disabled(!icloudBackup)
                 Text("Every preference in this app: toggles, colors, shortcuts, and layouts.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 if usageEnabled {
                     Toggle("Usage data", isOn: $backupUsage)
                         .pointerCursor()
                         .disabled(!icloudBackup)
                     Text("The token and cost history behind the Agent Usage charts.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                     Toggle("Session history", isOn: $backupLimits)
                         .pointerCursor()
                         .disabled(!icloudBackup)
                     Text("Rate-limit snapshots that draw the session and weekly limit charts.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 }
             } header: {
                 Text("App data")
@@ -66,7 +66,7 @@ struct ICloudPane: View {
                 Text(
                     "Everything Edith can back up is listed on this page. Your data never leaves this Mac and your own iCloud Drive - and iCloud is entirely your choice."
                 )
-                .font(.caption)
+                .font(.system(size: UIScale.pt(10)))
             }
 
             if musicEnabled || clipboardEnabled {
@@ -75,11 +75,12 @@ struct ICloudPane: View {
                         Toggle("Music folder", isOn: $musicBackup)
                             .pointerCursor()
                             .disabled(!icloudBackup || !cloudAvailable)
-                        Text(musicSubtitle).font(.caption).foregroundStyle(.secondary)
+                        Text(musicSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(
+                            .secondary)
                     }
                     if clipboardEnabled {
                         Toggle(isOn: $clipboardBackup) {
-                            HStack(spacing: 6) {
+                            HStack(spacing: UIScale.pt(6)) {
                                 Text("Clipboard history")
                                 InfoDot(
                                     "Text history only, items up to 1 MB each - larger copies stay on this Mac."
@@ -88,7 +89,8 @@ struct ICloudPane: View {
                         }
                         .pointerCursor()
                         .disabled(!icloudBackup || !cloudAvailable)
-                        Text(clipboardSubtitle).font(.caption).foregroundStyle(.secondary)
+                        Text(clipboardSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(
+                            .secondary)
                     }
                 } header: {
                     Text("Extensions")

@@ -50,14 +50,14 @@ struct ComboChart: View {
                 )
                 .foregroundStyle(lineColor)
                 .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
             }
             if let p = selectedPoint {
                 RuleMark(x: .value("Day", p.label))
                     .foregroundStyle(.primary.opacity(0.18))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
-                        position: .top, alignment: .center, spacing: 6,
+                        position: .top, alignment: .center, spacing: UIScale.pt(6),
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
                         PointTooltip(
@@ -71,7 +71,7 @@ struct ComboChart: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: 9)).foregroundStyle(
+                        Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
                             DashSkin.inkSoft(dark)
                         ).presenterBlur(blurTokens)
                     }
@@ -80,9 +80,10 @@ struct ComboChart: View {
             AxisMarks(position: .trailing) { value in
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.usd(d / scale)).font(.system(size: 9)).foregroundStyle(
-                            lineColor
-                        ).presenterBlur(blur)
+                        Text(DashFmt.usd(d / scale)).font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(
+                                lineColor
+                            ).presenterBlur(blur)
                     }
                 }
             }
@@ -90,12 +91,12 @@ struct ComboChart: View {
         .chartXAxis {
             AxisMarks(preset: .aligned) { _ in
                 AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: 10.5)).foregroundStyle(DashSkin.ink(dark))
+                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
             }
         }
         .chartXSelection(value: $selected)
         .frame(height: height)
-        .padding(.top, 22)
+        .padding(.top, UIScale.pt(22))
 
         if scroll, points.count > 30 {
             chart
@@ -114,16 +115,18 @@ struct PointTooltip: View {
     var blur = false
     var blurTokens = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.system(size: 9)).foregroundStyle(.secondary)
-            Text(DashFmt.tokens(tokens)).font(.system(size: 11, weight: .semibold))
+        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+            Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(.secondary)
+            Text(DashFmt.tokens(tokens)).font(.system(size: UIScale.pt(11), weight: .semibold))
                 .presenterBlur(blurTokens)
-            Text(DashFmt.usdFull(cost)).font(.system(size: 10)).foregroundStyle(.secondary)
-                .presenterBlur(blur)
+            Text(DashFmt.usdFull(cost)).font(.system(size: UIScale.pt(10))).foregroundStyle(
+                .secondary
+            )
+            .presenterBlur(blur)
         }
-        .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.primary.opacity(0.12)))
+        .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(5))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(7)).strokeBorder(.primary.opacity(0.12)))
     }
 }
 
@@ -179,14 +182,14 @@ struct StackedChart: View {
                 )
                 .foregroundStyle(.secondary)
                 .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 1.2))
+                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.2)))
             }
             if let p = selectedPoint {
                 RuleMark(x: .value("Day", p.label))
                     .foregroundStyle(.primary.opacity(0.18))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
-                        position: .top, alignment: .center, spacing: 6,
+                        position: .top, alignment: .center, spacing: UIScale.pt(6),
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
                         PointTooltip(
@@ -202,7 +205,7 @@ struct StackedChart: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: 9)).foregroundStyle(
+                        Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
                             DashSkin.inkSoft(dark)
                         ).presenterBlur(blurTokens)
                     }
@@ -212,12 +215,12 @@ struct StackedChart: View {
         .chartXAxis {
             AxisMarks(preset: .aligned) { _ in
                 AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: 10.5)).foregroundStyle(DashSkin.ink(dark))
+                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
             }
         }
-        .chartLegend(position: .bottom, alignment: .center, spacing: 6)
+        .chartLegend(position: .bottom, alignment: .center, spacing: UIScale.pt(6))
         .frame(height: height)
-        .padding(.top, 22)
+        .padding(.top, UIScale.pt(22))
 
         if scroll, costLine.count > 30 {
             chart
@@ -271,25 +274,31 @@ struct DonutChart: View {
         .chartForegroundStyleScale(
             domain: slices.map(\.label), range: slices.map(\.color)
         )
-        .chartLegend(position: .bottom, alignment: .center, spacing: 6)
+        .chartLegend(position: .bottom, alignment: .center, spacing: UIScale.pt(6))
         .frame(height: height)
         .overlay {
-            VStack(spacing: 1) {
+            VStack(spacing: UIScale.pt(1)) {
                 if let s = selected {
                     Text(s.label)
-                        .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                        .font(.system(size: UIScale.pt(10), weight: .medium)).foregroundStyle(
+                            .secondary
+                        )
                         .lineLimit(1)
-                    Text(DashFmt.tokens(s.value)).font(.system(size: 13, weight: .semibold))
-                        .presenterBlur(blurTokens)
-                    Text(DashFmt.pct(s.value / total)).font(.system(size: 9))
+                    Text(DashFmt.tokens(s.value)).font(
+                        .system(size: UIScale.pt(13), weight: .semibold)
+                    )
+                    .presenterBlur(blurTokens)
+                    Text(DashFmt.pct(s.value / total)).font(.system(size: UIScale.pt(9)))
                         .foregroundStyle(.tertiary)
                 } else {
-                    Text(DashFmt.tokens(total)).font(.system(size: 13, weight: .semibold))
-                        .presenterBlur(blurTokens)
-                    Text("tokens").font(.system(size: 8)).foregroundStyle(.tertiary)
+                    Text(DashFmt.tokens(total)).font(
+                        .system(size: UIScale.pt(13), weight: .semibold)
+                    )
+                    .presenterBlur(blurTokens)
+                    Text("tokens").font(.system(size: UIScale.pt(8))).foregroundStyle(.tertiary)
                 }
             }
-            .frame(maxWidth: 110)
+            .frame(maxWidth: UIScale.pt(110))
             .offset(y: -14)
             .allowsHitTesting(false)
         }
@@ -304,18 +313,18 @@ struct HeatCard: View {
     var blurTokens = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(DashboardModel.ymd.string(from: detail.date))
-                .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-            HStack(spacing: 5) {
+                .font(.system(size: UIScale.pt(11), weight: .semibold)).foregroundStyle(.secondary)
+            HStack(spacing: UIScale.pt(5)) {
                 Text("\(DashFmt.tokens(detail.tokens)) tokens")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
                     .presenterBlur(blurTokens)
                 Text("· \(DashFmt.usdFull(detail.cost))")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
                     .presenterBlur(blur)
             }
-            HStack(spacing: 5) {
+            HStack(spacing: UIScale.pt(5)) {
                 if detail.projCount > 0 { chip("\(detail.projCount) proj") }
                 if detail.chatCount > 0 { chip("\(detail.chatCount) chats") }
                 if let ph = detail.peakHour { chip("peak " + String(format: "%02d:00", ph)) }
@@ -329,22 +338,22 @@ struct HeatCard: View {
             }
             if !detail.projects.isEmpty { projectList }
         }
-        .padding(12)
-        .frame(width: 258)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.1)))
+        .padding(UIScale.pt(12))
+        .frame(width: UIScale.pt(258))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(.primary.opacity(0.1)))
     }
 
     private func chip(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 9, weight: .medium))
-            .padding(.horizontal, 6).padding(.vertical, 2)
+            .font(.system(size: UIScale.pt(9), weight: .medium))
+            .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(2))
             .background(.primary.opacity(0.08), in: Capsule())
             .foregroundStyle(.secondary)
     }
 
     private var tokenRows: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: UIScale.pt(2)) {
             row("Input", detail.input)
             row("Output", detail.output)
             row("Cache write", detail.cacheCreate)
@@ -354,9 +363,9 @@ struct HeatCard: View {
 
     private func row(_ label: String, _ value: Double) -> some View {
         HStack {
-            Text(label).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
             Spacer()
-            Text(DashFmt.tokens(value)).font(.system(size: 10)).monospacedDigit()
+            Text(DashFmt.tokens(value)).font(.system(size: UIScale.pt(10))).monospacedDigit()
                 .presenterBlur(blurTokens)
         }
     }
@@ -364,27 +373,32 @@ struct HeatCard: View {
     private func tags(_ title: String, _ items: [NamedValue], color: @escaping (String) -> Color)
         -> some View
     {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 8, weight: .semibold)).tracking(0.8)
-                .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Text(title).font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
+                UIScale.pt(0.8)
+            )
+            .foregroundStyle(.tertiary)
             FlowTags(items: items, color: color, blurTokens: blurTokens)
         }
     }
 
     private var projectList: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("TOP PROJECTS").font(.system(size: 8, weight: .semibold)).tracking(0.8)
-                .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Text("TOP PROJECTS").font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
+                UIScale.pt(0.8)
+            )
+            .foregroundStyle(.tertiary)
             ForEach(detail.projects.prefix(4)) { p in
                 HStack {
-                    Text(p.name).font(.system(size: 10)).lineLimit(1)
+                    Text(p.name).font(.system(size: UIScale.pt(10))).lineLimit(1)
                     Spacer()
-                    Text(DashFmt.tokens(p.value)).font(.system(size: 9)).foregroundStyle(.secondary)
+                    Text(DashFmt.tokens(p.value)).font(.system(size: UIScale.pt(9)))
+                        .foregroundStyle(.secondary)
                         .presenterBlur(blurTokens)
                 }
             }
             if detail.projects.count > 4 {
-                Text("+\(detail.projects.count - 4) more").font(.system(size: 9))
+                Text("+\(detail.projects.count - 4) more").font(.system(size: UIScale.pt(9)))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -397,15 +411,15 @@ struct FlowTags: View {
     var blurTokens = false
 
     var body: some View {
-        WrapHStack(spacing: 4, lineSpacing: 4) {
+        WrapHStack(spacing: UIScale.pt(4), lineSpacing: 4) {
             ForEach(items.prefix(6)) { item in
-                HStack(spacing: 3) {
-                    Circle().fill(color(item.id)).frame(width: 6, height: 6)
+                HStack(spacing: UIScale.pt(3)) {
+                    Circle().fill(color(item.id)).frame(width: UIScale.pt(6), height: UIScale.pt(6))
                     Text("\(item.name) \(DashFmt.tokens(item.value))")
-                        .font(.system(size: 9))
+                        .font(.system(size: UIScale.pt(9)))
                         .presenterBlur(blurTokens)
                 }
-                .padding(.horizontal, 5).padding(.vertical, 2)
+                .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(2))
                 .background(.primary.opacity(0.06), in: Capsule())
             }
         }
@@ -491,18 +505,18 @@ struct DashCard<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {
                 eyebrow(title)
                 if let subtitle {
-                    Text(subtitle).font(.system(size: 10)).foregroundStyle(.tertiary)
+                    Text(subtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(.tertiary)
                 }
                 Spacer()
             }
             content()
         }
-        .padding(14)
+        .padding(UIScale.pt(14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
     }
 }

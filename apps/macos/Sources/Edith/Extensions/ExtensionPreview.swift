@@ -33,7 +33,7 @@ struct ExtensionPreview: View {
 
     private func usagePreview(phase: Double) -> some View {
         let fill = CGFloat(0.48 + sin(phase * 1.7) * 0.2)
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             HStack {
                 Text("SESSION")
                     .font(DashSkin.mono(7, weight: .semibold))
@@ -49,26 +49,29 @@ struct ExtensionPreview: View {
                         .frame(width: max(10, proxy.size.width * fill))
                 }
             }
-            .frame(height: 7)
+            .frame(height: UIScale.pt(7))
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
-        .padding(.horizontal, 15)
+        .padding(.horizontal, UIScale.pt(15))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func systemPreview(phase: Double) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: UIScale.pt(7)) {
             ForEach(Array(["⌘", "⌥", "E", "⏎"].enumerated()), id: \.offset) { index, key in
                 let press = CGFloat(max(0, sin(phase * 2.2 - Double(index) * 0.7)))
                 Text(key)
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(.system(size: UIScale.pt(10), weight: .semibold, design: .rounded))
                     .foregroundStyle(DashSkin.ink(dark))
-                    .frame(width: 28, height: 25)
-                    .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 6))
+                    .frame(width: UIScale.pt(28), height: UIScale.pt(25))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    )
                     .overlay {
-                        RoundedRectangle(cornerRadius: 6).strokeBorder(DashSkin.lineStrong(dark))
+                        RoundedRectangle(cornerRadius: UIScale.pt(6)).strokeBorder(
+                            DashSkin.lineStrong(dark))
                     }
-                    .shadow(color: .black.opacity(0.1), radius: 0, y: 2 - press * 2)
+                    .shadow(color: .black.opacity(0.1), radius: UIScale.pt(0), y: 2 - press * 2)
                     .offset(y: press * 2)
             }
         }
@@ -80,7 +83,7 @@ struct ExtensionPreview: View {
         let percentages = [38, 47, 62, 54]
         let percentageIndex = min(Int(progress * Double(percentages.count)), percentages.count - 1)
         let percentage = percentages[percentageIndex]
-        return HStack(spacing: 10) {
+        return HStack(spacing: UIScale.pt(10)) {
             Text("CPU")
                 .font(DashSkin.mono(7, weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
@@ -89,18 +92,19 @@ struct ExtensionPreview: View {
                 .foregroundStyle(DashSkin.ink(dark))
                 .contentTransition(.numericText())
                 .animation(.easeOut(duration: 0.28), value: percentage)
-            HStack(alignment: .bottom, spacing: 3) {
+            HStack(alignment: .bottom, spacing: UIScale.pt(3)) {
                 ForEach(0..<6) { index in
                     let wave = sin(
                         phase * Double.pi * 2 / 3.2 + Double(index) * 1.13)
                     Capsule()
                         .fill(index > 3 ? brandAccent.opacity(0.72) : brandAccent)
-                        .frame(width: 4, height: 7 + CGFloat((wave + 1) * 7.5))
+                        .frame(
+                            width: UIScale.pt(4), height: UIScale.pt(7) + CGFloat((wave + 1) * 7.5))
                 }
             }
-            .frame(height: 23, alignment: .bottom)
+            .frame(height: UIScale.pt(23), alignment: .bottom)
         }
-        .padding(.horizontal, 13)
+        .padding(.horizontal, UIScale.pt(13))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -111,24 +115,26 @@ struct ExtensionPreview: View {
         let slashVisibility = slashEntry * (1 - slashExit)
         let barStrength = 1 - slashEntry + slashExit
         return ZStack {
-            HStack(spacing: 13) {
+            HStack(spacing: UIScale.pt(13)) {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 24, weight: .medium))
+                    .font(.system(size: UIScale.pt(24), weight: .medium))
                     .foregroundStyle(DashSkin.ink(dark))
-                HStack(alignment: .center, spacing: 4) {
+                HStack(alignment: .center, spacing: UIScale.pt(4)) {
                     ForEach(0..<3) { index in
                         let wave = (sin(phase * 4.4 + Double(index) * 1.7) + 1) / 2
                         let fullHeight = CGFloat(10 + index * 5) + CGFloat(wave * 7)
                         Capsule()
                             .fill(brandAccent.opacity(0.72 + Double(index) * 0.12))
-                            .frame(width: 4, height: max(3, fullHeight * CGFloat(barStrength)))
+                            .frame(
+                                width: UIScale.pt(4),
+                                height: max(3, fullHeight * CGFloat(barStrength)))
                     }
                 }
-                .frame(height: 29)
+                .frame(height: UIScale.pt(29))
             }
             Capsule()
                 .fill(brandAccent)
-                .frame(width: 70, height: 3)
+                .frame(width: UIScale.pt(70), height: UIScale.pt(3))
                 .scaleEffect(x: CGFloat(slashEntry), anchor: .leading)
                 .rotationEffect(.degrees(-32))
                 .offset(y: CGFloat(-slashExit * 13))
@@ -146,71 +152,74 @@ struct ExtensionPreview: View {
             Color(red: 0.43, green: 0.55, blue: 0.76),
         ]
         let resetOpacity = 1 - smoothed(clamped((progress - 0.84) / 0.12))
-        return HStack(alignment: .bottom, spacing: 7) {
+        return HStack(alignment: .bottom, spacing: UIScale.pt(7)) {
             ForEach(0..<4) { index in
                 let start = 0.08 + Double(index) * 0.11
                 let rise = smoothed(clamped((progress - start) / 0.28))
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
                     .fill(palette[index].opacity(dark ? 0.78 : 0.68))
-                    .frame(width: 16, height: CGFloat(25 + index * 5))
+                    .frame(width: UIScale.pt(16), height: CGFloat(25 + index * 5))
                     .offset(y: CGFloat((1 - rise) * 25))
                     .opacity(rise * resetOpacity)
             }
         }
-        .padding(.bottom, 7)
+        .padding(.bottom, UIScale.pt(7))
         .overlay(alignment: .bottom) {
             Capsule()
                 .fill(DashSkin.lineStrong(dark))
-                .frame(width: 94, height: 2)
+                .frame(width: UIScale.pt(94), height: UIScale.pt(2))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func notchPreview(phase: Double) -> some View {
         let pulse = CGFloat((sin(phase * 1.8) + 1) / 2)
-        return VStack(spacing: 0) {
-            BottomRoundedRectangle(radius: 12)
+        return VStack(spacing: UIScale.pt(0)) {
+            BottomRoundedRectangle(radius: UIScale.pt(12))
                 .fill(Color.black)
-                .frame(width: 80 + pulse * 44, height: 20 + pulse * 13)
+                .frame(width: UIScale.pt(80) + pulse * 44, height: UIScale.pt(20) + pulse * 13)
             Spacer(minLength: 0)
-            HStack(spacing: 5) {
-                Circle().fill(brandAccent).frame(width: 5, height: 5)
-                Capsule().fill(DashSkin.lineStrong(dark)).frame(width: 38, height: 4)
+            HStack(spacing: UIScale.pt(5)) {
+                Circle().fill(brandAccent).frame(width: UIScale.pt(5), height: UIScale.pt(5))
+                Capsule().fill(DashSkin.lineStrong(dark)).frame(
+                    width: UIScale.pt(38), height: UIScale.pt(4))
             }
         }
-        .padding(.top, 1)
-        .padding(.bottom, 7)
+        .padding(.top, UIScale.pt(1))
+        .padding(.bottom, UIScale.pt(7))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func clipboardPreview(phase: Double) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: UIScale.pt(4)) {
             ForEach(0..<3) { index in
                 let progress = (sin(phase * 1.8 - Double(index) * 0.8) + 1) / 2
-                HStack(spacing: 7) {
-                    RoundedRectangle(cornerRadius: 2)
+                HStack(spacing: UIScale.pt(7)) {
+                    RoundedRectangle(cornerRadius: UIScale.pt(2))
                         .fill(brandAccent.opacity(0.55 + Double(index) * 0.12))
-                        .frame(width: 8, height: 8)
+                        .frame(width: UIScale.pt(8), height: UIScale.pt(8))
                     Capsule()
                         .fill(DashSkin.inkFaint(dark).opacity(0.48))
-                        .frame(width: CGFloat(44 + index * 14), height: 4)
+                        .frame(width: CGFloat(44 + index * 14), height: UIScale.pt(4))
                     Spacer(minLength: 0)
                 }
                 .offset(x: -8 + progress * 8)
                 .opacity(0.5 + progress * 0.5)
             }
         }
-        .padding(.horizontal, 25)
+        .padding(.horizontal, UIScale.pt(25))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var musicPreview: some View {
-        HStack(spacing: 13) {
+        HStack(spacing: UIScale.pt(13)) {
             PlaybackWave(
-                playing: !reduceMotion, color: brandAccent, barCount: 7, maxHeight: 28)
-            VStack(alignment: .leading, spacing: 5) {
-                Capsule().fill(DashSkin.inkSoft(dark).opacity(0.65)).frame(width: 62, height: 5)
-                Capsule().fill(DashSkin.inkFaint(dark).opacity(0.42)).frame(width: 43, height: 4)
+                playing: !reduceMotion, color: brandAccent, barCount: 7, maxHeight: UIScale.pt(28))
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                Capsule().fill(DashSkin.inkSoft(dark).opacity(0.65)).frame(
+                    width: UIScale.pt(62), height: UIScale.pt(5))
+                Capsule().fill(DashSkin.inkFaint(dark).opacity(0.42)).frame(
+                    width: UIScale.pt(43), height: UIScale.pt(4))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -220,28 +229,30 @@ struct ExtensionPreview: View {
         let progress = loopProgress(phase, duration: 3)
         let backOpacity = 0.625 + cos(progress * Double.pi * 2) * 0.375
         return ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 .fill(DashSkin.paper2(dark))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                         .strokeBorder(DashSkin.lineStrong(dark))
                 }
-                .frame(width: 76, height: 39)
+                .frame(width: UIScale.pt(76), height: UIScale.pt(39))
                 .offset(x: -15, y: -7)
                 .opacity(backOpacity)
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 .fill(DashSkin.paper(dark))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(brandAccent.opacity(0.5), lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+                        .strokeBorder(brandAccent.opacity(0.5), lineWidth: UIScale.pt(1.5))
                 }
-                .frame(width: 76, height: 39)
+                .frame(width: UIScale.pt(76), height: UIScale.pt(39))
                 .overlay(alignment: .topLeading) {
-                    HStack(spacing: 4) {
-                        Circle().fill(brandAccent).frame(width: 5, height: 5)
-                        Capsule().fill(DashSkin.inkFaint(dark)).frame(width: 24, height: 4)
+                    HStack(spacing: UIScale.pt(4)) {
+                        Circle().fill(brandAccent).frame(
+                            width: UIScale.pt(5), height: UIScale.pt(5))
+                        Capsule().fill(DashSkin.inkFaint(dark)).frame(
+                            width: UIScale.pt(24), height: UIScale.pt(4))
                     }
-                    .padding(8)
+                    .padding(UIScale.pt(8))
                 }
                 .offset(x: 15, y: 7)
         }
@@ -254,32 +265,32 @@ struct ExtensionPreview: View {
         let bandVisible = progress >= 0.15 && progress <= 0.68
         let bandOpacity = bandVisible ? sin(travel * Double.pi) : 0
         return ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 .fill(DashSkin.paper2(dark))
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Capsule()
                     .fill(DashSkin.inkSoft(dark).opacity(0.68))
-                    .frame(width: 64, height: 4)
+                    .frame(width: UIScale.pt(64), height: UIScale.pt(4))
                 Capsule()
                     .fill(brandAccent.opacity(0.76))
-                    .frame(width: 76, height: 5)
+                    .frame(width: UIScale.pt(76), height: UIScale.pt(5))
                 Capsule()
                     .fill(DashSkin.inkFaint(dark).opacity(0.52))
-                    .frame(width: 50, height: 4)
+                    .frame(width: UIScale.pt(50), height: UIScale.pt(4))
             }
             Capsule()
                 .fill(DashSkin.paper(dark).opacity(0.92))
-                .frame(width: 30, height: 11)
-                .blur(radius: 3.5)
+                .frame(width: UIScale.pt(30), height: UIScale.pt(11))
+                .blur(radius: UIScale.pt(3.5))
                 .offset(x: CGFloat(-48 + travel * 96))
                 .opacity(bandOpacity)
         }
-        .frame(width: 108, height: 48)
+        .frame(width: UIScale.pt(108), height: UIScale.pt(48))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 .strokeBorder(DashSkin.lineStrong(dark))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -292,18 +303,18 @@ struct ExtensionPreview: View {
                 colors: previewColorStops.map(\.color), startPoint: .leading,
                 endPoint: .trailing
             )
-            .frame(width: 112, height: 14)
+            .frame(width: UIScale.pt(112), height: UIScale.pt(14))
             .clipShape(Capsule())
             .overlay {
                 Capsule().strokeBorder(DashSkin.lineStrong(dark))
             }
             Circle()
                 .fill(loupeColor)
-                .frame(width: 21, height: 21)
+                .frame(width: UIScale.pt(21), height: UIScale.pt(21))
                 .overlay {
-                    Circle().strokeBorder(DashSkin.paper(dark), lineWidth: 3)
+                    Circle().strokeBorder(DashSkin.paper(dark), lineWidth: UIScale.pt(3))
                 }
-                .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: 3, y: 1)
+                .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: UIScale.pt(3), y: 1)
                 .offset(x: CGFloat(-49 + travel * 98), y: -7)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -336,15 +347,15 @@ struct ExtensionPreview: View {
 
     private var staticPreview: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .fill(brandAccent.opacity(0.1))
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .strokeBorder(brandAccent.opacity(0.18))
             Image(systemName: entry.symbolName)
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(size: UIScale.pt(22), weight: .semibold))
                 .foregroundStyle(brandAccent)
         }
-        .frame(width: 46, height: 42)
+        .frame(width: UIScale.pt(46), height: UIScale.pt(42))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

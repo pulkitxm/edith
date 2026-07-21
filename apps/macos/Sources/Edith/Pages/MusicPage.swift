@@ -182,18 +182,18 @@ struct MusicPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: UIScale.pt(0)) {
             pageHeader
-                .padding(.horizontal, 24)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
+                .padding(.horizontal, UIScale.pt(24))
+                .padding(.top, UIScale.pt(18))
+                .padding(.bottom, UIScale.pt(12))
             if tabMusicEnabled, remote.restorePending > 0 {
                 Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
-                    .font(.caption)
+                    .font(.system(size: UIScale.pt(10)))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, UIScale.pt(24))
+                    .padding(.bottom, UIScale.pt(8))
             }
             trackList
         }
@@ -208,7 +208,7 @@ struct MusicPage: View {
     }
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .center) {
                 Text("Music")
                     .font(DashSkin.serif(34))
@@ -239,45 +239,46 @@ struct MusicPage: View {
                 .help("Download YouTube audio")
             }
             if musicFolderStale {
-                HStack(spacing: 5) {
+                HStack(spacing: UIScale.pt(5)) {
                     Text("A previous external music folder was skipped.")
                     Button("Choose it again", action: chooseMusicFolder)
                         .buttonStyle(.link)
                 }
-                .font(.system(size: 11))
+                .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.secondary)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
                 TextField("Search tracks", text: $search)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.system(size: UIScale.pt(13)))
                     .focused($searchFocused)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 9))
+            .padding(.horizontal, UIScale.pt(10))
+            .padding(.vertical, UIScale.pt(7))
+            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
             .overlay(
-                RoundedRectangle(cornerRadius: 9).strokeBorder(DashSkin.line(dark), lineWidth: 1))
+                RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
+                    DashSkin.line(dark), lineWidth: UIScale.pt(1)))
         }
     }
 
     @ViewBuilder private var trackList: some View {
         if remote.tracks.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: UIScale.pt(8)) {
                 Text("No playable files in your music folder")
-                    .font(.system(size: 13))
+                    .font(.system(size: UIScale.pt(13)))
                     .foregroundStyle(.secondary)
                 Text(Repo.musicDir.path)
-                    .font(.system(size: 11))
+                    .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVStack(spacing: 2) {
+                LazyVStack(spacing: UIScale.pt(2)) {
                     ForEach(filteredTracks) { track in
                         MusicPageRow(
                             track: track,
@@ -288,8 +289,8 @@ struct MusicPage: View {
                         }
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 8)
+                .padding(.horizontal, UIScale.pt(24))
+                .padding(.bottom, UIScale.pt(8))
             }
         }
     }
@@ -358,7 +359,7 @@ struct SeekBar: View {
             Circle()
                 .fill(theme)
                 .frame(width: knob, height: knob)
-                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                .shadow(color: .black.opacity(0.25), radius: UIScale.pt(2), y: 1)
                 .offset(x: min(max(width * fraction - knob / 2, 0), width - knob))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -377,35 +378,35 @@ private struct MusicPageRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: UIScale.pt(10)) {
                 PageArtworkThumb(track: track, size: 34)
                 Text(track.title)
-                    .font(.system(size: 13))
+                    .font(.system(size: UIScale.pt(13)))
                     .lineLimit(1)
                     .foregroundStyle(isCurrent ? theme : .primary)
                     .presenterBlur(blur)
                 Spacer()
                 if isCurrent {
                     Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(theme)
                 }
                 if let duration {
                     Text(duration)
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
+            .padding(.vertical, UIScale.pt(6))
+            .padding(.horizontal, UIScale.pt(8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
             isCurrent
                 ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
-            in: RoundedRectangle(cornerRadius: 7)
+            in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
         .pointerCursor()
@@ -437,45 +438,45 @@ struct MusicFooter: View {
                 idle
             }
         }
-        .frame(height: 64)
+        .frame(height: UIScale.pt(64))
         .frame(maxWidth: .infinity)
         .background(.regularMaterial)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(Color(nsColor: .separatorColor))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
         }
     }
 
     private func playing(_ track: Track) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: UIScale.pt(14)) {
             trackInfo(track)
                 .frame(maxWidth: .infinity, alignment: .leading)
             transport
             scrubber
-                .frame(maxWidth: 420)
+                .frame(maxWidth: UIScale.pt(420))
             rightControls
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, UIScale.pt(22))
     }
 
     private func trackInfo(_ track: Track) -> some View {
-        HStack(spacing: 11) {
+        HStack(spacing: UIScale.pt(11)) {
             PageArtworkThumb(track: track, size: 44)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(track.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: UIScale.pt(13), weight: .semibold))
                     .lineLimit(1)
                     .presenterBlur(blur)
                 Text(remote.isPlaying ? "Now playing" : "Paused")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
-                    .frame(width: 78, alignment: .leading)
+                    .frame(width: UIScale.pt(78), alignment: .leading)
             }
             PlaybackWave(
                 playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
-                maxHeight: 13)
+                maxHeight: UIScale.pt(13))
         }
         .contentShape(Rectangle())
         .onTapGesture { mainWindowSection = MainDestination.music.rawValue }
@@ -484,11 +485,12 @@ struct MusicFooter: View {
     }
 
     private var transport: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(8)) {
             Button {
                 remote.previous()
             } label: {
-                Image(systemName: "backward.fill").font(.system(size: 13)).foregroundStyle(theme)
+                Image(systemName: "backward.fill").font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
             .help("Previous track")
@@ -496,9 +498,9 @@ struct MusicFooter: View {
                 remote.playPause()
             } label: {
                 ZStack {
-                    Circle().fill(theme).frame(width: 36, height: 36)
+                    Circle().fill(theme).frame(width: UIScale.pt(36), height: UIScale.pt(36))
                     Image(systemName: remote.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: UIScale.pt(14), weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
@@ -508,7 +510,8 @@ struct MusicFooter: View {
             Button {
                 remote.next()
             } label: {
-                Image(systemName: "forward.fill").font(.system(size: 13)).foregroundStyle(theme)
+                Image(systemName: "forward.fill").font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
             .help("Next track")
@@ -516,18 +519,18 @@ struct MusicFooter: View {
     }
 
     private var scrubber: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             timeTicker {
                 Text(TrackMeta.timeLabel(remote.elapsed))
-                    .frame(width: 42, alignment: .trailing)
+                    .frame(width: UIScale.pt(42), alignment: .trailing)
             }
-            SeekBar(theme: theme, height: 4)
+            SeekBar(theme: theme, height: UIScale.pt(4))
             timeTicker {
                 Text("-" + TrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
-                    .frame(width: 46, alignment: .leading)
+                    .frame(width: UIScale.pt(46), alignment: .leading)
             }
         }
-        .font(.system(size: 10.5))
+        .font(.system(size: UIScale.pt(10.5)))
         .monospacedDigit()
         .foregroundStyle(.secondary)
     }
@@ -544,18 +547,18 @@ struct MusicFooter: View {
     }
 
     private var rightControls: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: UIScale.pt(10)) {
             Button {
                 remote.toggleLoop()
             } label: {
                 Image(systemName: "repeat")
-                    .font(.system(size: 13))
+                    .font(.system(size: UIScale.pt(13)))
                     .foregroundStyle(remote.looping ? theme : .secondary)
             }
             .buttonStyle(HoverButtonStyle())
             .help(remote.looping ? "Looping current song" : "Shuffle next")
             Image(systemName: "speaker.wave.1")
-                .font(.system(size: 10))
+                .font(.system(size: UIScale.pt(10)))
                 .foregroundStyle(.secondary)
             Slider(
                 value: Binding(get: { remote.volume }, set: { remote.setVolume($0) }),
@@ -563,30 +566,30 @@ struct MusicFooter: View {
             )
             .controlSize(.mini)
             .tint(theme)
-            .frame(width: 88)
+            .frame(width: UIScale.pt(88))
             .pointerCursor()
         }
     }
 
     private var idle: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: UIScale.pt(12)) {
             Image(systemName: "music.note")
-                .font(.system(size: 14))
+                .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(.secondary)
             Text("Nothing playing")
-                .font(.system(size: 12))
+                .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
                 mainWindowSection = MainDestination.music.rawValue
             } label: {
                 Text("Browse music")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: UIScale.pt(11), weight: .medium))
                     .foregroundStyle(theme)
             }
             .buttonStyle(HoverButtonStyle())
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, UIScale.pt(22))
     }
 }
 

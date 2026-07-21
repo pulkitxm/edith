@@ -150,18 +150,18 @@ struct RateLimitsDialsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
                 ProviderSwitchButton(
                     selection: Binding(get: { selected }, set: { selected = $0 }),
                     providers: providers, color: DashSkin.ink(dark), size: 16)
                 Text("Rate limits").font(DashSkin.serif(18)).foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Text("session · weekly").font(.system(size: 11.5))
+                Text("session · weekly").font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
             }
-            HStack(spacing: 24) {
+            HStack(spacing: UIScale.pt(24)) {
                 dial("SESSION (5H)", pct: point?.s, reset: point?.sr)
                 dial("WEEKLY", pct: point?.w, reset: point?.wr)
             }
@@ -174,15 +174,20 @@ struct RateLimitsDialsView: View {
                 JumpLink(title: "Open Agent Usage", destination: .dashboard, dark: dark)
             }
         }
-        .padding(EdgeInsets(top: 16, leading: 16, bottom: 14, trailing: 16))
+        .padding(
+            EdgeInsets(
+                top: UIScale.pt(16), leading: UIScale.pt(16),
+                bottom: UIScale.pt(14), trailing: UIScale.pt(16))
+        )
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
         .background {
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: UIScale.pt(16))
                 .fill(DashSkin.paper2(dark))
-                .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: 12, y: 8)
+                .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: UIScale.pt(12), y: 8)
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 16).strokeBorder(DashSkin.line(dark), lineWidth: 1)
+            RoundedRectangle(cornerRadius: UIScale.pt(16)).strokeBorder(
+                DashSkin.line(dark), lineWidth: UIScale.pt(1))
         )
         .task { reload() }
         .onChange(of: selectedRaw) { reload() }
@@ -198,12 +203,14 @@ struct RateLimitsDialsView: View {
 
     private func dial(_ label: String, pct: Double?, reset: Date?) -> some View {
         let p = pct ?? 0
-        return VStack(spacing: 8) {
+        return VStack(spacing: UIScale.pt(8)) {
             ZStack {
-                Circle().stroke(DashSkin.line(dark), lineWidth: 8)
+                Circle().stroke(DashSkin.line(dark), lineWidth: UIScale.pt(8))
                 Circle()
                     .trim(from: 0, to: min(p / 100, 1))
-                    .stroke(color(for: p), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .stroke(
+                        color(for: p), style: StrokeStyle(lineWidth: UIScale.pt(8), lineCap: .round)
+                    )
                     .rotationEffect(.degrees(-90))
                     .animation(
                         Motion.animation(Motion.settle, reduceMotion: reduceMotion), value: p)
@@ -215,10 +222,10 @@ struct RateLimitsDialsView: View {
                         Motion.animation(Motion.settle, reduceMotion: reduceMotion),
                         value: pct.map { Int($0) })
             }
-            .frame(width: 104, height: 104)
-            Text(label).font(DashSkin.mono(9)).tracking(1.4)
+            .frame(width: UIScale.pt(104), height: UIScale.pt(104))
+            Text(label).font(DashSkin.mono(9)).tracking(UIScale.pt(1.4))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(resetText(reset)).font(.system(size: 11))
+            Text(resetText(reset)).font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
         }
     }
@@ -260,11 +267,11 @@ struct LimitsRefreshButton: View {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
-            .frame(width: 16, height: 16)
+            .frame(width: UIScale.pt(16), height: UIScale.pt(16))
         }
         .buttonStyle(HoverButtonStyle())
         .disabled(refreshing)
@@ -319,13 +326,13 @@ struct LimitsCardView: View {
 
     var body: some View {
         SkinCard(title: "Rate limits - session & weekly", dark: dark) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ProviderSwitchButton(
                     selection: Binding(
                         get: { selectedProvider }, set: { selectedProvider = $0 }),
                     providers: providers, color: DashSkin.ink(dark), size: 15)
                 if all.count > 1 {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         HStack {
                             segmented
                             Spacer()
@@ -337,8 +344,10 @@ struct LimitsCardView: View {
                 } else {
                     HStack {
                         Text("Collecting limit history…")
-                            .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
-                            .frame(maxWidth: .infinity, minHeight: 60)
+                            .font(.system(size: UIScale.pt(12))).foregroundStyle(
+                                DashSkin.inkFaint(dark)
+                            )
+                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(60))
                         LimitsRefreshButton(dark: dark) { reloadAll() }
                     }
                 }
@@ -379,13 +388,15 @@ struct LimitsCardView: View {
     }
 
     private var segmented: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: UIScale.pt(6)) {
             ForEach(ranges, id: \.0) { name, _ in
                 Button(name) { range = name }
                     .buttonStyle(.plain)
                     .pointerCursor()
-                    .font(.system(size: 11, weight: range == name ? .semibold : .regular))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .font(
+                        .system(size: UIScale.pt(11), weight: range == name ? .semibold : .regular)
+                    )
+                    .padding(.horizontal, UIScale.pt(10)).padding(.vertical, UIScale.pt(4))
                     .background(
                         range == name
                             ? AnyShapeStyle(theme.opacity(0.9))
@@ -404,7 +415,7 @@ struct LimitsCardView: View {
         }
         return Group {
             if let point {
-                HStack(spacing: 10) {
+                HStack(spacing: UIScale.pt(10)) {
                     Text(point.t.formatted(.dateTime.month().day().hour().minute()))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     if let s = point.s {
@@ -428,7 +439,7 @@ struct LimitsCardView: View {
                 Text("Drag chart to inspect").foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+        .font(.system(size: UIScale.pt(10.5), weight: .medium, design: .monospaced))
     }
 
     private var chart: some View {
@@ -439,14 +450,14 @@ struct LimitsCardView: View {
             ForEach(marks) { m in
                 RuleMark(x: .value("Reset", m.t))
                     .foregroundStyle(m.session ? sessionC.opacity(0.3) : weeklyC.opacity(0.55))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [2, 3]))
             }
             RuleMark(y: .value("Warn", warn))
                 .foregroundStyle(.orange.opacity(0.5))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 4]))
             RuleMark(y: .value("Crit", crit))
                 .foregroundStyle(.red.opacity(0.5))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 4]))
             ForEach(samples) { s in
                 LineMark(
                     x: .value("Time", s.t),
@@ -454,7 +465,7 @@ struct LimitsCardView: View {
                     series: .value("Series", s.series)
                 )
                 .interpolationMethod(.stepEnd)
-                .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
                 .foregroundStyle(by: .value("Series", s.series))
             }
         }
@@ -466,7 +477,9 @@ struct LimitsCardView: View {
             AxisMarks(values: [0, 50, 100]) { value in
                 AxisGridLine().foregroundStyle(.primary.opacity(0.08))
                 AxisValueLabel {
-                    if let v = value.as(Int.self) { Text("\(v)%").font(.system(size: 8)) }
+                    if let v = value.as(Int.self) {
+                        Text("\(v)%").font(.system(size: UIScale.pt(8)))
+                    }
                 }
             }
         }
@@ -474,14 +487,15 @@ struct LimitsCardView: View {
             AxisMarks(values: .automatic(desiredCount: spanDays < 2 ? 5 : 6)) { value in
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(tick(d, spanDays: spanDays)).font(.system(size: 8)).foregroundStyle(
-                            .tertiary)
+                        Text(tick(d, spanDays: spanDays)).font(.system(size: UIScale.pt(8)))
+                            .foregroundStyle(
+                                .tertiary)
                     }
                 }
             }
         }
-        .chartLegend(position: .top, alignment: .trailing, spacing: 6)
-        .frame(height: 220)
+        .chartLegend(position: .top, alignment: .trailing, spacing: UIScale.pt(6))
+        .frame(height: UIScale.pt(220))
     }
 
     private func tick(_ d: Date, spanDays: Double) -> String {

@@ -39,26 +39,26 @@ struct BudgetCardView: View {
                         ? "Waiting for usage data…"
                         : "Set a personal cap in Settings › Usage to pace your Claude spend."
                 )
-                .font(.system(size: 12)).foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+                .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(60), alignment: .leading)
             }
         }
         .task { latest = DashLimits.loadLatest() }
     }
 
     private func content(_ status: BudgetStatus) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
                 Text("\(Int(status.actualPercent.rounded()))%")
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .font(.system(size: UIScale.pt(26), weight: .semibold, design: .rounded))
                     .monospacedDigit()
                 statePill(status.state)
                 Spacer()
                 Text("cap \(Int(cap))% · \(kind == .session ? "session" : "week")")
-                    .font(.system(size: 11)).foregroundStyle(DashSkin.inkFaint(dark))
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.inkFaint(dark))
             }
             meter(status)
-            HStack(spacing: 16) {
+            HStack(spacing: UIScale.pt(16)) {
                 stat("On-pace target", "\(Int(status.targetPercent.rounded()))%")
                 if let daily = status.dailyBudgetPercent {
                     stat("Today's budget", "\(Int(daily.rounded()))%")
@@ -77,24 +77,24 @@ struct BudgetCardView: View {
                 Capsule().fill(.primary.opacity(0.08))
                 Capsule().fill(color(status.state).opacity(0.85))
                     .frame(width: max(3, w * min(1, status.actualPercent / 100)))
-                Rectangle().fill(theme.opacity(0.6)).frame(width: 2)
+                Rectangle().fill(theme.opacity(0.6)).frame(width: UIScale.pt(2))
                     .offset(x: w * min(1, cap / 100) - 1)
             }
         }
-        .frame(height: 8)
+        .frame(height: UIScale.pt(8))
     }
 
     private func stat(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 10)).foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value).font(.system(size: 14, weight: .medium)).monospacedDigit()
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
+            Text(value).font(.system(size: UIScale.pt(14), weight: .medium)).monospacedDigit()
         }
     }
 
     private func statePill(_ state: BudgetState) -> some View {
         Text(label(state))
-            .font(.system(size: 11, weight: .semibold))
-            .padding(.horizontal, 9).padding(.vertical, 3)
+            .font(.system(size: UIScale.pt(11), weight: .semibold))
+            .padding(.horizontal, UIScale.pt(9)).padding(.vertical, UIScale.pt(3))
             .background(color(state).opacity(0.18), in: Capsule())
             .foregroundStyle(color(state))
     }

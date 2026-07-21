@@ -13,7 +13,7 @@ enum OnboardingWindow {
             return
         }
         let onboardingWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: UIScale.pt(620), height: UIScale.pt(560)),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         onboardingWindow.title = "Welcome to Edith"

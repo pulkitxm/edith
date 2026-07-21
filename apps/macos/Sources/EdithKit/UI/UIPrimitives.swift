@@ -8,15 +8,16 @@ public struct HoverButton: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .padding(4)
+            .padding(UIScale.pt(4))
             .background(
-                .primary.opacity(hovering ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6)
+                .primary.opacity(hovering ? 0.07 : 0),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(.primary.opacity(hovering ? 0.18 : 0), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .strokeBorder(.primary.opacity(hovering ? 0.18 : 0), lineWidth: UIScale.pt(0.5))
             )
-            .shadow(color: .black.opacity(hovering ? 0.35 : 0), radius: 4, y: 1)
+            .shadow(color: .black.opacity(hovering ? 0.35 : 0), radius: UIScale.pt(4), y: 1)
             .onHover { hovering = $0 }
             .pointerCursor()
             .animation(.easeOut(duration: 0.12), value: hovering)
@@ -29,7 +30,7 @@ public struct HoverButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .modifier(HoverButton())
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(6)))
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
@@ -55,7 +56,7 @@ extension View {
     @ViewBuilder
     public func presenterBlur(_ on: Bool) -> some View {
         if on {
-            blur(radius: 4)
+            blur(radius: UIScale.pt(4))
         } else {
             self
         }
@@ -64,7 +65,7 @@ extension View {
     public func card() -> some View {
         padding(13)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
 }
 
@@ -80,8 +81,8 @@ extension Color {
 
 public func eyebrow(_ text: String) -> some View {
     Text(text)
-        .font(.system(size: 10, weight: .semibold))
-        .tracking(1.4)
+        .font(.system(size: UIScale.pt(10), weight: .semibold))
+        .tracking(UIScale.pt(1.4))
         .foregroundStyle(.tertiary)
 }
 
@@ -100,7 +101,7 @@ public struct TerminalLogView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 Text(log.isEmpty ? "No output yet - hit reload" : log)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: UIScale.pt(11), design: .monospaced))
                     .foregroundStyle(theme)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -109,7 +110,7 @@ public struct TerminalLogView: View {
             .onChange(of: log) { proxy.scrollTo("end", anchor: .bottom) }
         }
         .frame(height: height)
-        .padding(8)
-        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+        .padding(UIScale.pt(8))
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
     }
 }
