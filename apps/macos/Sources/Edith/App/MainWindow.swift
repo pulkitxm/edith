@@ -2,16 +2,6 @@ import AppKit
 import EdithKit
 import SwiftUI
 
-enum WindowZoom {
-    static let range = 0.8...1.6
-    static let step = 0.1
-    static let defaultsKey = "mainWindowZoom"
-
-    static func clamp(_ value: Double) -> Double {
-        min(range.upperBound, max(range.lowerBound, (value * 100).rounded() / 100))
-    }
-}
-
 struct ZoomableRoot<Content: View>: View {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @ViewBuilder let content: Content
@@ -22,22 +12,6 @@ struct ZoomableRoot<Content: View>: View {
                 .frame(width: geo.size.width / zoom, height: geo.size.height / zoom)
                 .scaleEffect(zoom, anchor: .topLeading)
         }
-        .background(shortcuts)
-    }
-
-    private var shortcuts: some View {
-        ZStack {
-            Button("") { zoom = WindowZoom.clamp(zoom + WindowZoom.step) }
-                .keyboardShortcut("=", modifiers: .command)
-            Button("") { zoom = WindowZoom.clamp(zoom + WindowZoom.step) }
-                .keyboardShortcut("+", modifiers: .command)
-            Button("") { zoom = WindowZoom.clamp(zoom - WindowZoom.step) }
-                .keyboardShortcut("-", modifiers: .command)
-            Button("") { zoom = 1 }
-                .keyboardShortcut("0", modifiers: .command)
-        }
-        .opacity(0)
-        .allowsHitTesting(false)
     }
 }
 

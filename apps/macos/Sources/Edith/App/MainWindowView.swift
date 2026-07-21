@@ -128,6 +128,7 @@ private struct SidebarNavRow: View {
     let item: MainDestination
     let selected: Bool
     let theme: Color
+    let shortcutHint: String?
     let selectionNamespace: Namespace.ID
     let action: () -> Void
     @State private var hovering = false
@@ -144,6 +145,12 @@ private struct SidebarNavRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                if let shortcutHint {
+                    Text(shortcutHint)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 10)
@@ -225,8 +232,10 @@ struct MainWindowView: View {
         false
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("creditHidden", store: SharedDefaults.store) private var creditHidden = false
+    @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @State private var dragBaseWidth: Double?
     @State private var musicKeyMonitor: Any?
+    @State private var windowKeyMonitor: Any?
     @State private var nav = NavStack()
     @State private var restoringHistory = false
     @State private var permissionsNeedAttention = PermissionsStatus.current
@@ -316,6 +325,7 @@ struct MainWindowView: View {
         }
         .onAppear {
             applyNavigationFallback()
+            installWindowKeys()
             syncMusicResources()
             PresenterState.shared.syncEnabled(presenterEnabled)
             refreshPermissionsPill()
@@ -324,6 +334,7 @@ struct MainWindowView: View {
         .onChange(of: musicEnabled) { _, _ in syncMusicResources() }
         .onChange(of: presenterEnabled) { _, on in PresenterState.shared.syncEnabled(on) }
         .onDisappear {
+            removeWindowKeys()
             removeMusicKeys()
             MusicRemote.shared.stop()
         }
@@ -493,6 +504,7 @@ struct MainWindowView: View {
                 ForEach(visibleHomeItems) { item in
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
+                        shortcutHint: shortcutHint(for: item),
                         selectionNamespace: sidebarSelectionNamespace
                     ) {
                         mainWindowSection = item.rawValue
@@ -507,6 +519,7 @@ struct MainWindowView: View {
                 ForEach(MainDestination.appItems) { item in
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
+                        shortcutHint: shortcutHint(for: item),
                         selectionNamespace: sidebarSelectionNamespace
                     ) {
                         mainWindowSection = item.rawValue
@@ -530,6 +543,52 @@ struct MainWindowView: View {
             case .system: systemEnabled
             default: true
             }
+        }
+    }
+
+    private var navigableItems: [MainDestination] {
+        visibleHomeItems + MainDestination.appItems
+    }
+
+    private func shortcutHint(for item: MainDestination) -> String? {
+        let items = navigableItems
+        guard let index = items.firstIndex(of: item) else { return nil }
+        if index < WindowKeyCommand.directSelectLimit { return "⌘\(index + 1)" }
+        return index == items.count - 1 ? "⌘9" : nil
+    }
+
+    private func installWindowKeys() {
+        guard windowKeyMonitor == nil else { return }
+        windowKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let characters = event.charactersIgnoringModifiers
+            let code = event.keyCode
+            let mods = event.modifierFlags
+            let handled = MainActor.assumeIsolated {
+                guard
+                    let command = WindowKeyCommand.resolve(
+                        characters: characters, keyCode: code, modifiers: mods)
+                else { return false }
+                if let next = WindowZoom.adjusted(zoom, for: command) {
+                    zoom = next
+                    return true
+                }
+                let items = navigableItems
+                guard
+                    let index = WindowKeyCommand.resolvedIndex(
+                        for: command, count: items.count,
+                        current: items.firstIndex(of: destination) ?? 0)
+                else { return false }
+                mainWindowSection = items[index].rawValue
+                return true
+            }
+            return handled ? nil : event
+        }
+    }
+
+    private func removeWindowKeys() {
+        if let monitor = windowKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            windowKeyMonitor = nil
         }
     }
 
