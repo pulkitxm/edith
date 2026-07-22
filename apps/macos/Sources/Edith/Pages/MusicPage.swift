@@ -146,6 +146,33 @@ final class MusicRemote: ObservableObject {
     }
     func toggleLoop() { send("loop", ["value": !looping]) }
 
+    func delete(_ track: Track) {
+        try? FileManager.default.trashItem(at: track.url, resultingItemURL: nil)
+        rescan()
+        broadcastFolderChanged()
+    }
+
+    func rename(_ track: Track, to name: String) {
+        let base = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        guard !base.isEmpty else { return }
+        let ext = track.url.pathExtension
+        let destination = track.url.deletingLastPathComponent()
+            .appendingPathComponent(ext.isEmpty ? base : "\(base).\(ext)")
+        guard destination != track.url,
+            !FileManager.default.fileExists(atPath: destination.path),
+            (try? FileManager.default.moveItem(at: track.url, to: destination)) != nil
+        else { return }
+        rescan()
+        broadcastFolderChanged()
+    }
+
+    private func broadcastFolderChanged() {
+        NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+        IPC.post(IPC.Name.musicFolderChanged)
+    }
+
     func nudgeSeek(_ seconds: TimeInterval) {
         guard duration > 0 else { return }
         let target = min(max(elapsed + seconds, 0), duration)
@@ -171,6 +198,9 @@ struct MusicPage: View {
     @State private var search = ""
     @FocusState private var searchFocused: Bool
     @State private var showDownloader = false
+    @State private var renameTarget: Track?
+    @State private var renameText = ""
+    @State private var deleteTarget: Track?
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
@@ -202,9 +232,42 @@ struct MusicPage: View {
         .sheet(isPresented: $showDownloader) {
             DownloadSheet()
         }
+        .alert("Rename track", isPresented: renameAlertBinding) {
+            TextField("Name", text: $renameText)
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button("Rename") {
+                if let track = renameTarget { remote.rename(track, to: renameText) }
+                renameTarget = nil
+            }
+        }
+        .alert(
+            "Move to Trash?", isPresented: deleteAlertBinding,
+            presenting: deleteTarget
+        ) { track in
+            Button("Cancel", role: .cancel) { deleteTarget = nil }
+            Button("Move to Trash", role: .destructive) {
+                remote.delete(track)
+                deleteTarget = nil
+            }
+        } message: { track in
+            Text("\"\(track.title)\" will be moved to the Trash.")
+        }
         .onExitCommand {
             searchFocused = false
         }
+    }
+
+    private var renameAlertBinding: Binding<Bool> {
+        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
+    }
+
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
+    }
+
+    private func beginRename(_ track: Track) {
+        renameText = track.url.deletingPathExtension().lastPathComponent
+        renameTarget = track
     }
 
     private var pageHeader: some View {
@@ -283,7 +346,9 @@ struct MusicPage: View {
                         MusicPageRow(
                             track: track,
                             isCurrent: remote.currentFile == track.url.lastPathComponent,
-                            isPlaying: remote.isPlaying, theme: theme, blur: blurMusic
+                            isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
+                            onRename: { beginRename(track) },
+                            onDelete: { deleteTarget = track }
                         ) {
                             remote.toggle(track)
                         }
@@ -372,6 +437,8 @@ private struct MusicPageRow: View {
     let isPlaying: Bool
     let theme: Color
     let blur: Bool
+    let onRename: () -> Void
+    let onDelete: () -> Void
     let action: () -> Void
     @State private var duration: String?
     @State private var hovering = false
@@ -410,6 +477,10 @@ private struct MusicPageRow: View {
         )
         .onHover { hovering = $0 }
         .pointerCursor()
+        .contextMenu {
+            Button("Rename", action: onRename)
+            Button("Move to Trash", role: .destructive, action: onDelete)
+        }
         .task {
             duration = await TrackMeta.durationLabel(for: track)
         }
