@@ -549,9 +549,9 @@ struct MusicPage: View {
                 Label("Play", systemImage: "play.fill")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, UIScale.pt(12))
-                    .padding(.vertical, UIScale.pt(6))
-                    .background(theme, in: Capsule())
+                    .padding(.horizontal, UIScale.pt(14))
+                    .padding(.vertical, UIScale.pt(7))
+                    .liquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
             }
             .buttonStyle(.plain)
             .pointerCursor()
@@ -996,16 +996,15 @@ private struct MusicDetailSheet: View {
                 Button {
                     remote.toggle(track)
                 } label: {
-                    ZStack {
-                        Circle().fill(theme)
-                            .frame(width: UIScale.pt(50), height: UIScale.pt(50))
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: UIScale.pt(19), weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .shadow(color: theme.opacity(0.5), radius: UIScale.pt(8), y: UIScale.pt(3))
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: UIScale.pt(19), weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: UIScale.pt(52), height: UIScale.pt(52))
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .liquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
+                .shadow(color: .black.opacity(0.28), radius: UIScale.pt(8), y: UIScale.pt(3))
                 .pointerCursor()
                 .help(isPlaying ? "Pause" : "Play")
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
@@ -1165,6 +1164,32 @@ private struct MusicDetailSheet: View {
     }
 }
 
+@available(macOS 26, *)
+private enum GlassStyle {
+    static func make(tint: Color?, interactive: Bool) -> Glass {
+        var glass = Glass.regular
+        if let tint { glass = glass.tint(tint) }
+        if interactive { glass = glass.interactive() }
+        return glass
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func liquidGlass<S: InsettableShape>(
+        in shape: S, tint: Color? = nil, interactive: Bool = false, dark: Bool = false
+    ) -> some View {
+        if #available(macOS 26, *) {
+            self.glassEffect(GlassStyle.make(tint: tint, interactive: interactive), in: shape)
+        } else {
+            self
+                .background((tint ?? .clear).opacity(tint == nil ? 0 : 0.28), in: shape)
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(dark ? 0.16 : 0.4), lineWidth: 1))
+        }
+    }
+}
+
 struct MusicFooter: View {
     @ObservedObject private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
@@ -1178,6 +1203,7 @@ struct MusicFooter: View {
 
     private var theme: Color { themeColor(themeName) }
     private var blur: Bool { presenterState.active && presenterBlurMusic }
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Group {
@@ -1235,36 +1261,38 @@ struct MusicFooter: View {
 
     private var transport: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Button {
+            glassButton("backward.fill", diameter: 34, iconSize: 12, tint: nil) {
                 remote.previous()
-            } label: {
-                Image(systemName: "backward.fill").font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
             .help("Previous track")
-            Button {
+            glassButton(
+                remote.isPlaying ? "pause.fill" : "play.fill",
+                diameter: 42, iconSize: 15, iconColor: .white, tint: theme
+            ) {
                 remote.playPause()
-            } label: {
-                ZStack {
-                    Circle().fill(theme).frame(width: UIScale.pt(36), height: UIScale.pt(36))
-                    Image(systemName: remote.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: UIScale.pt(14), weight: .bold))
-                        .foregroundStyle(.white)
-                }
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
             .help("Play or pause")
-            Button {
+            glassButton("forward.fill", diameter: 34, iconSize: 12, tint: nil) {
                 remote.next()
-            } label: {
-                Image(systemName: "forward.fill").font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
             .help("Next track")
         }
+    }
+
+    private func glassButton(
+        _ symbol: String, diameter: CGFloat, iconSize: CGFloat, iconColor: Color? = nil,
+        tint: Color?, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(iconSize), weight: .semibold))
+                .foregroundStyle(iconColor ?? theme)
+                .frame(width: UIScale.pt(diameter), height: UIScale.pt(diameter))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .liquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
 
     private var scrubber: some View {
@@ -1297,26 +1325,30 @@ struct MusicFooter: View {
 
     private var rightControls: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Button {
+            glassButton(
+                "repeat", diameter: 34, iconSize: 12,
+                iconColor: remote.looping ? .white : .secondary,
+                tint: remote.looping ? theme : nil
+            ) {
                 remote.toggleLoop()
-            } label: {
-                Image(systemName: "repeat")
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(remote.looping ? theme : .secondary)
             }
-            .buttonStyle(HoverButtonStyle())
-            .help(remote.looping ? "Looping current song" : "Shuffle next")
-            Image(systemName: "speaker.wave.1")
-                .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(.secondary)
-            Slider(
-                value: Binding(get: { remote.volume }, set: { remote.setVolume($0) }),
-                in: 0...1
-            )
-            .controlSize(.mini)
-            .tint(theme)
-            .frame(width: UIScale.pt(88))
-            .pointerCursor()
+            .help(remote.looping ? "Repeating this track" : "Play through the queue")
+            HStack(spacing: UIScale.pt(8)) {
+                Image(systemName: "speaker.wave.1")
+                    .font(.system(size: UIScale.pt(10)))
+                    .foregroundStyle(.secondary)
+                Slider(
+                    value: Binding(get: { remote.volume }, set: { remote.setVolume($0) }),
+                    in: 0...1
+                )
+                .controlSize(.mini)
+                .tint(theme)
+                .frame(width: UIScale.pt(80))
+                .pointerCursor()
+            }
+            .padding(.horizontal, UIScale.pt(12))
+            .padding(.vertical, UIScale.pt(7))
+            .liquidGlass(in: Capsule(), dark: dark)
         }
     }
 
