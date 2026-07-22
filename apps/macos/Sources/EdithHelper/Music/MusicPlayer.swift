@@ -59,7 +59,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func track(for relativePath: String) -> Track {
-        Track(url: Repo.musicDir.appendingPathComponent(relativePath))
+        tracks.first { $0.relativePath == relativePath }
+            ?? Track(url: Repo.musicDir.appendingPathComponent(relativePath))
     }
 
     private func queueTracks(_ info: [AnyHashable: Any]) -> [Track]? {
