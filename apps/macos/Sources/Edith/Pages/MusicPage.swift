@@ -1,6 +1,31 @@
 import AppKit
 import EdithKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor
+private func loadDroppedTrackPaths(
+    _ providers: [NSItemProvider], _ completion: @escaping ([String]) -> Void
+) -> Bool {
+    let relevant = providers.filter { $0.canLoadObject(ofClass: NSString.self) }
+    guard !relevant.isEmpty else { return false }
+    let group = DispatchGroup()
+    let lock = NSLock()
+    var paths: [String] = []
+    for provider in relevant {
+        group.enter()
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            if let path = object as? String {
+                lock.lock()
+                paths.append(path)
+                lock.unlock()
+            }
+            group.leave()
+        }
+    }
+    group.notify(queue: .main) { completion(paths) }
+    return true
+}
 
 @MainActor
 final class WindowVisibility: ObservableObject {
@@ -533,11 +558,10 @@ struct MusicPage: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: UIScale.pt(4)) {
                     crumb("Home", path: "", systemImage: "house.fill")
+                    chevronMenu(parentPath: "")
                     ForEach(crumbSegments, id: \.path) { segment in
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: UIScale.pt(9)))
-                            .foregroundStyle(.tertiary)
                         crumb(segment.name, path: segment.path, systemImage: nil)
+                        chevronMenu(parentPath: segment.path)
                     }
                 }
                 .padding(.vertical, UIScale.pt(2))
@@ -566,6 +590,33 @@ struct MusicPage: View {
             onTap: { remote.navigate(to: path) },
             onDrop: { remote.move(relativePaths: $0, toFolderPath: path) }
         )
+    }
+
+    @ViewBuilder
+    private func chevronMenu(parentPath: String) -> some View {
+        let folders = TrackMeta.entries(in: parentPath).folders
+        if folders.isEmpty {
+            Image(systemName: "chevron.right")
+                .font(.system(size: UIScale.pt(9)))
+                .foregroundStyle(.tertiary)
+        } else {
+            Menu {
+                ForEach(folders) { folder in
+                    Button(folder.name) { remote.navigate(to: folder.relativePath) }
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: UIScale.pt(9), weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .pointerCursor()
+            .help("Jump to a folder here")
+        }
     }
 
     @ViewBuilder private var trackList: some View {
@@ -720,12 +771,10 @@ private struct CrumbButton: View {
         }
         .buttonStyle(.plain)
         .pointerCursor()
-        .dropDestination(for: String.self) { items, _ in
+        .onDrop(of: [.text], isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 }))
+        { providers in
             guard !isCurrent else { return false }
-            onDrop(items)
-            return !items.isEmpty
-        } isTargeted: {
-            dropTargeted = $0 && !isCurrent
+            return loadDroppedTrackPaths(providers) { onDrop($0) }
         }
     }
 }
@@ -795,11 +844,9 @@ private struct MusicFolderRow: View {
                 .strokeBorder(theme, lineWidth: dropTargeted ? UIScale.pt(1.5) : 0)
         )
         .onHover { hovering = $0 }
-        .dropDestination(for: String.self) { items, _ in
-            onDrop(items)
-            return !items.isEmpty
-        } isTargeted: {
-            dropTargeted = $0
+        .onDrop(of: [.text], isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 }))
+        { providers in
+            loadDroppedTrackPaths(providers) { onDrop($0) }
         }
         .contextMenu {
             Button("Play", action: onPlay)
