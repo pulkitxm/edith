@@ -18,6 +18,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        InputFocus.install()
+        ScrollForwarding.install()
         switch currentLaunchDecision() {
         case .start:
             startLicensedApp()
