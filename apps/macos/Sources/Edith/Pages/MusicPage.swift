@@ -1,31 +1,6 @@
 import AppKit
 import EdithKit
 import SwiftUI
-import UniformTypeIdentifiers
-
-@MainActor
-private func loadDroppedTrackPaths(
-    _ providers: [NSItemProvider], _ completion: @escaping ([String]) -> Void
-) -> Bool {
-    let relevant = providers.filter { $0.canLoadObject(ofClass: NSString.self) }
-    guard !relevant.isEmpty else { return false }
-    let group = DispatchGroup()
-    let lock = NSLock()
-    var paths: [String] = []
-    for provider in relevant {
-        group.enter()
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            if let path = object as? String {
-                lock.lock()
-                paths.append(path)
-                lock.unlock()
-            }
-            group.leave()
-        }
-    }
-    group.notify(queue: .main) { completion(paths) }
-    return true
-}
 
 @MainActor
 final class WindowVisibility: ObservableObject {
@@ -770,12 +745,12 @@ private struct CrumbButton: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .pointerCursor()
-        .onDrop(
-            of: [.utf8PlainText, .plainText, .text],
-            isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 })
-        ) { providers in
+        .dropDestination(for: String.self) { paths, _ in
             guard !isCurrent else { return false }
-            return loadDroppedTrackPaths(providers) { onDrop($0) }
+            onDrop(paths)
+            return !paths.isEmpty
+        } isTargeted: {
+            dropTargeted = $0 && !isCurrent
         }
     }
 }
@@ -845,11 +820,11 @@ private struct MusicFolderRow: View {
                 .strokeBorder(theme, lineWidth: dropTargeted ? UIScale.pt(1.5) : 0)
         )
         .onHover { hovering = $0 }
-        .onDrop(
-            of: [.utf8PlainText, .plainText, .text],
-            isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 })
-        ) { providers in
-            loadDroppedTrackPaths(providers) { onDrop($0) }
+        .dropDestination(for: String.self) { paths, _ in
+            onDrop(paths)
+            return !paths.isEmpty
+        } isTargeted: {
+            dropTargeted = $0
         }
         .contextMenu {
             Button("Play", action: onPlay)
@@ -923,9 +898,7 @@ private struct MusicPageRow: View {
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
-        .onDrag {
-            NSItemProvider(object: track.relativePath as NSString)
-        }
+        .draggable(track.relativePath)
         .contextMenu {
             Button("Show Details", action: onOpenDetails)
             Button("Rename", action: onRename)
