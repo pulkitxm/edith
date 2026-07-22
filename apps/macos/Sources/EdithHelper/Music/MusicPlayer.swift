@@ -237,9 +237,11 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
 
     private func step(_ delta: Int) {
         let list = currentQueue()
-        guard !list.isEmpty else { return }
-        let index = current.flatMap { list.firstIndex(of: $0) } ?? -delta
-        play(list[((index + delta) % list.count + list.count) % list.count])
+        let position = current.flatMap { list.firstIndex(of: $0) }
+        guard
+            let next = PlayQueue.index(after: position, delta: delta, count: list.count)
+        else { return }
+        play(list[next])
     }
 
     private func play(_ track: Track) {
@@ -400,6 +402,14 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
                 self.step(1)
             }
         }
+    }
+}
+
+enum PlayQueue {
+    static func index(after current: Int?, delta: Int, count: Int) -> Int? {
+        guard count > 0 else { return nil }
+        let base = current ?? -delta
+        return ((base + delta) % count + count) % count
     }
 }
 
