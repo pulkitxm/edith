@@ -74,6 +74,8 @@ final class MusicRemote: ObservableObject {
     @Published private(set) var folderPath = ""
     @Published private(set) var folders: [MusicFolder] = []
     @Published private(set) var folderTracks: [Track] = []
+    @Published private(set) var searchTracks: [Track] = []
+    @Published private(set) var searchFolders: [MusicFolder] = []
     @Published private(set) var favourites: [Track] = []
     @Published private(set) var favouritePaths: Set<String> = []
     @Published private(set) var showingFavourites = false
@@ -115,6 +117,7 @@ final class MusicRemote: ObservableObject {
     private var folderObserver: NSObjectProtocol?
     private var folderIPCObserver: NSObjectProtocol?
     private var revealObserver: NSObjectProtocol?
+    private var searchScopePath: String?
     private var folderCache: [String: [MusicFolder]] = [:]
 
     func start() {
@@ -211,6 +214,7 @@ final class MusicRemote: ObservableObject {
     func rescan() {
         TrackMeta.invalidateCaches()
         folderCache.removeAll()
+        invalidateSearchScope()
         refreshFavourites()
         if !folderPath.isEmpty,
             !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
@@ -233,6 +237,26 @@ final class MusicRemote: ObservableObject {
             self.folders = entries.folders
             self.folderTracks = entries.tracks
         }
+    }
+
+    func loadSearchScope() {
+        let path = folderPath
+        guard searchScopePath != path else { return }
+        searchScopePath = path
+        Task { [weak self] in
+            let found = await Task.detached {
+                (TrackMeta.tracks(under: path), TrackMeta.folders(under: path))
+            }.value
+            guard let self, self.searchScopePath == path else { return }
+            self.searchTracks = found.0
+            self.searchFolders = found.1
+        }
+    }
+
+    private func invalidateSearchScope() {
+        searchScopePath = nil
+        searchTracks = []
+        searchFolders = []
     }
 
     func subfolders(of path: String) -> [MusicFolder] {
@@ -538,6 +562,7 @@ struct MusicPage: View {
     @StateObject private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
     @FocusState private var searchFocused: Bool
     @State private var showDownloader = false
@@ -553,15 +578,31 @@ struct MusicPage: View {
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
     private var filteredTracks: [Track] {
-        let source = remote.showingFavourites ? remote.favourites : remote.folderTracks
-        guard !search.isEmpty else { return source }
+        guard !search.isEmpty else {
+            return remote.showingFavourites ? remote.favourites : remote.folderTracks
+        }
+        let source = remote.showingFavourites ? remote.favourites : remote.searchTracks
         return source.filter { $0.title.localizedCaseInsensitiveContains(search) }
     }
 
     private var filteredFolders: [MusicFolder] {
         guard !remote.showingFavourites else { return [] }
         guard !search.isEmpty else { return remote.folders }
-        return remote.folders.filter { $0.name.localizedCaseInsensitiveContains(search) }
+        return remote.searchFolders.filter { $0.name.localizedCaseInsensitiveContains(search) }
+    }
+
+    private var contentKey: [String] {
+        filteredFolders.map(\.relativePath) + filteredTracks.map(\.relativePath)
+    }
+
+    private func location(of relativePath: String) -> String? {
+        guard !search.isEmpty, !remote.showingFavourites else { return nil }
+        let parent = (relativePath as NSString).deletingLastPathComponent
+        guard parent != remote.folderPath else { return nil }
+        let scoped =
+            remote.folderPath.isEmpty
+            ? parent : String(parent.dropFirst(remote.folderPath.count + 1))
+        return scoped.replacingOccurrences(of: "/", with: " / ")
     }
 
     private var moveTargets: [MoveTarget] {
@@ -634,6 +675,8 @@ struct MusicPage: View {
         .onExitCommand {
             searchFocused = false
         }
+        .onChange(of: search) { if !search.isEmpty { remote.loadSearchScope() } }
+        .onChange(of: remote.folderPath) { if !search.isEmpty { remote.loadSearchScope() } }
     }
 
     private var deleteAlertBinding: Binding<Bool> {
@@ -864,6 +907,8 @@ struct MusicPage: View {
                     if gridView { gridContent } else { listContent }
                 }
                 .pageContent(compact)
+                .animation(
+                    Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: contentKey)
             }
         }
     }
@@ -872,7 +917,7 @@ struct MusicPage: View {
         LazyVStack(spacing: UIScale.pt(2)) {
             ForEach(filteredFolders) { folder in
                 MusicFolderRow(
-                    folder: folder, theme: theme,
+                    folder: folder, theme: theme, location: location(of: folder.relativePath),
                     onOpen: { remote.open(folder) },
                     onPlay: { remote.playFolder(folder) },
                     onDrop: {
@@ -884,7 +929,7 @@ struct MusicPage: View {
             }
             ForEach(filteredTracks) { track in
                 MusicPageRow(
-                    track: track,
+                    track: track, location: location(of: track.relativePath),
                     isCurrent: remote.currentFile == track.relativePath,
                     isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
                     moveTargets: moveTargets,
@@ -911,7 +956,7 @@ struct MusicPage: View {
         ) {
             ForEach(filteredFolders) { folder in
                 MusicFolderTile(
-                    folder: folder, theme: theme,
+                    folder: folder, theme: theme, location: location(of: folder.relativePath),
                     onOpen: { remote.open(folder) },
                     onPlay: { remote.playFolder(folder) },
                     onDrop: {
@@ -923,7 +968,7 @@ struct MusicPage: View {
             }
             ForEach(filteredTracks) { track in
                 MusicTrackTile(
-                    track: track,
+                    track: track, location: location(of: track.relativePath),
                     isCurrent: remote.currentFile == track.relativePath,
                     isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
                     moveTargets: moveTargets,
@@ -1062,6 +1107,7 @@ private struct CrumbButton: View {
 private struct MusicFolderRow: View {
     let folder: MusicFolder
     let theme: Color
+    let location: String?
     let onOpen: () -> Void
     let onPlay: () -> Void
     let onDrop: ([String]) -> Void
@@ -1089,9 +1135,13 @@ private struct MusicFolderRow: View {
                             .font(.system(size: UIScale.pt(13), weight: .medium))
                             .lineLimit(1)
                             .foregroundStyle(.primary)
-                        Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
-                            .font(.system(size: UIScale.pt(10.5)))
-                            .foregroundStyle(.secondary)
+                        Text(
+                            location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " "
+                        )
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
                     }
                     Spacer()
                 }
@@ -1152,6 +1202,7 @@ struct MoveTarget: Identifiable, Equatable {
 
 private struct MusicPageRow: View {
     let track: Track
+    let location: String?
     let isCurrent: Bool
     let isPlaying: Bool
     let theme: Color
@@ -1178,11 +1229,20 @@ private struct MusicPageRow: View {
             .help("Show details")
             Button(action: onToggle) {
                 HStack(spacing: UIScale.pt(10)) {
-                    Text(track.title)
-                        .font(.system(size: UIScale.pt(13)))
-                        .lineLimit(1)
-                        .foregroundStyle(isCurrent ? theme : .primary)
-                        .presenterBlur(blur)
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(track.title)
+                            .font(.system(size: UIScale.pt(13)))
+                            .lineLimit(1)
+                            .foregroundStyle(isCurrent ? theme : .primary)
+                            .presenterBlur(blur)
+                        if let location {
+                            Text(location)
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
+                    }
                     Spacer()
                     if isCurrent {
                         Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
@@ -1281,6 +1341,7 @@ private enum MusicTile {
 private struct MusicFolderTile: View {
     let folder: MusicFolder
     let theme: Color
+    let location: String?
     let onOpen: () -> Void
     let onPlay: () -> Void
     let onDrop: ([String]) -> Void
@@ -1322,9 +1383,11 @@ private struct MusicFolderTile: View {
                 Text(folder.name)
                     .font(.system(size: UIScale.pt(12), weight: .medium))
                     .lineLimit(1)
-                Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
+                Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
             .frame(width: MusicTile.artSize)
         }
@@ -1359,6 +1422,7 @@ private struct MusicFolderTile: View {
 
 private struct MusicTrackTile: View {
     let track: Track
+    let location: String?
     let isCurrent: Bool
     let isPlaying: Bool
     let theme: Color
@@ -1414,10 +1478,12 @@ private struct MusicTrackTile: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(isCurrent ? theme : .primary)
                     .presenterBlur(blur)
-                Text(duration ?? " ")
+                Text(location ?? duration ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
             .frame(width: MusicTile.artSize)
             .contentShape(Rectangle())

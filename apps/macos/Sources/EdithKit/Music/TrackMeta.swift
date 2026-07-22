@@ -250,6 +250,28 @@ public enum TrackMeta {
         return (folders, tracks)
     }
 
+    public static func folders(under relativePath: String) -> [MusicFolder] {
+        folders(under: relativePath, base: basePath)
+    }
+
+    static func folders(under relativePath: String, base: String) -> [MusicFolder] {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url(for: relativePath, base: base),
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return [] }
+        var result: [MusicFolder] = []
+        for case let item as URL in enumerator where isDirectory(item) {
+            result.append(
+                MusicFolder(url: item, relativePath: Self.relativePath(of: item, base: base)))
+        }
+        result.sort {
+            $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
+        }
+        return result
+    }
+
     public static func subfolders(in relativePath: String) -> [MusicFolder] {
         subfolders(in: relativePath, base: basePath)
     }
