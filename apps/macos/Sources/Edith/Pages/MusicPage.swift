@@ -38,15 +38,26 @@ final class MusicDetailPresenter: ObservableObject {
 
     @Published private(set) var track: Track?
     @Published private(set) var beginRename = false
+    private var followsPlayback = false
 
     func show(_ track: Track, renaming: Bool = false) {
         beginRename = renaming
+        followsPlayback = MusicRemote.shared.currentFile == track.relativePath
         self.track = track
+    }
+
+    func followCurrent() {
+        guard followsPlayback, track != nil, let current = MusicRemote.shared.current,
+            current != track
+        else { return }
+        beginRename = false
+        track = current
     }
 
     func dismiss() {
         track = nil
         beginRename = false
+        followsPlayback = false
     }
 }
 
@@ -1424,12 +1435,17 @@ struct MusicDetailOverlay: View {
                 .shadow(color: .black.opacity(0.45), radius: UIScale.pt(40), y: UIScale.pt(16))
                 .padding(UIScale.pt(24))
                 .transition(.scale(scale: 0.96).combined(with: .opacity))
-                .onExitCommand { presenter.dismiss() }
+                Button("Close", action: presenter.dismiss)
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
             }
         }
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: presenter.track
         )
+        .onChange(of: remote.currentFile) { presenter.followCurrent() }
         .alert(
             "Move to Trash?",
             isPresented: Binding(
@@ -1481,13 +1497,16 @@ private struct MusicDetailSheet: View {
         }
         .frame(width: UIScale.pt(track.isVideo ? 760 : 400))
         .background(sheetBackground)
-        .onAppear {
+        .task(id: track.id) {
             name = track.url.deletingPathExtension().lastPathComponent
             sourceURL = YoutubeDownloader.shared.sourceURL(
                 forFileNamed: track.url.lastPathComponent)
             if beginRename { nameFocused = true }
+            duration = nil
+            sizeText = nil
+            addedText = nil
+            await loadDetails()
         }
-        .task { await loadDetails() }
     }
 
     private var sheetBackground: some View {
@@ -1547,8 +1566,11 @@ private struct MusicDetailSheet: View {
     @ViewBuilder private var stage: some View {
         if track.isVideo {
             VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0)
+                .id(track.id)
+                .transition(.opacity)
         } else {
             artwork
+                .transition(.opacity)
         }
     }
 
