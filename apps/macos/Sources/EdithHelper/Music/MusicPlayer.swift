@@ -87,6 +87,11 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         folderChangedIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
             MainActor.assumeIsolated { self?.rescan() }
         }
+        levelRequestObserver = IPC.observe(IPC.Name.requestMusicLevels) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.levelSubscriberUntil = Date().addingTimeInterval(2.5)
+            }
+        }
         broadcastState()
     }
 
@@ -206,6 +211,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func startSaveTimer() {
+        startLevelTimer()
         guard saveTimer == nil else { return }
         saveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.persistPlayback() }
@@ -214,8 +220,41 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func stopSaveTimer() {
+        stopLevelTimer()
         saveTimer?.invalidate()
         saveTimer = nil
+    }
+
+    private func startLevelTimer() {
+        guard levelTimer == nil else { return }
+        levelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.sampleLevel() }
+        }
+        levelTimer?.tolerance = 0.01
+    }
+
+    private func stopLevelTimer() {
+        levelTimer?.invalidate()
+        levelTimer = nil
+        smoothedLevel = 0
+        PlaybackLevel.shared.reset()
+        if Date() < levelSubscriberUntil {
+            IPC.post(IPC.Name.musicLevel, userInfo: ["level": PlaybackLevel.neutral])
+        }
+    }
+
+    private func sampleLevel() {
+        guard let p = player, p.isPlaying else { return }
+        p.updateMeters()
+        let channels = max(min(p.numberOfChannels, 2), 1)
+        let loudest = (0..<channels).map { Double(p.averagePower(forChannel: $0)) }.max() ?? -60
+        let loudness = min(max((loudest + 46) / 40, 0), 1)
+        smoothedLevel = max(loudness * volume, smoothedLevel * 0.8)
+        PlaybackLevel.shared.update(smoothedLevel)
+        levelTick += 1
+        guard levelTick % 2 == 0, Date() < levelSubscriberUntil else { return }
+        IPC.post(IPC.Name.musicLevel, userInfo: ["level": smoothedLevel])
     }
 
     private func setupRemoteCommands() {
@@ -464,6 +503,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         if let folderChangedIPCObserver {
             IPC.stopObserving(folderChangedIPCObserver)
             self.folderChangedIPCObserver = nil
+        }
+        if let levelRequestObserver {
+            IPC.stopObserving(levelRequestObserver)
+            self.levelRequestObserver = nil
         }
     }
 

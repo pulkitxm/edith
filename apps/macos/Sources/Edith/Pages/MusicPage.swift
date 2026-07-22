@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import EdithKit
 import SwiftUI
 
@@ -51,6 +52,10 @@ final class MusicRemote: ObservableObject {
     private var elapsedBase: TimeInterval = 0
     private var elapsedTimestamp: TimeInterval = 0
     private var stateObserver: NSObjectProtocol?
+    private var levelObserver: NSObjectProtocol?
+    private var levelPing: Timer?
+    private var visibilityObserver: AnyCancellable?
+    private var windowVisible = true
 
     var current: Track? {
         currentFile.map { Track(url: TrackMeta.url(for: $0), relativePath: $0) }
@@ -88,7 +93,37 @@ final class MusicRemote: ObservableObject {
         folderIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
             MainActor.assumeIsolated { self?.rescan() }
         }
+        levelObserver = IPC.observe(
+            IPC.Name.musicLevel,
+            info: { info in
+                MainActor.assumeIsolated {
+                    guard let value = info["level"] as? Double else { return }
+                    PlaybackLevel.shared.update(value)
+                }
+            })
+        visibilityObserver = WindowVisibility.shared.$visible.sink { [weak self] visible in
+            MainActor.assumeIsolated {
+                self?.windowVisible = visible
+                self?.refreshLevelPing()
+            }
+        }
         rescan()
+    }
+
+    private func refreshLevelPing() {
+        let wanted = isPlaying && windowVisible && stateObserver != nil
+        guard wanted != (levelPing != nil) else { return }
+        guard wanted else {
+            levelPing?.invalidate()
+            levelPing = nil
+            PlaybackLevel.shared.reset()
+            return
+        }
+        IPC.post(IPC.Name.requestMusicLevels)
+        levelPing = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            IPC.post(IPC.Name.requestMusicLevels)
+        }
+        levelPing?.tolerance = 0.2
     }
 
     func stop() {
@@ -104,10 +139,16 @@ final class MusicRemote: ObservableObject {
             IPC.stopObserving(folderIPCObserver)
             self.folderIPCObserver = nil
         }
+        if let levelObserver {
+            IPC.stopObserving(levelObserver)
+            self.levelObserver = nil
+        }
+        visibilityObserver = nil
         tracks = []
         currentFile = nil
         isPlaying = false
         duration = 0
+        refreshLevelPing()
     }
 
     func rescan() {
@@ -162,7 +203,10 @@ final class MusicRemote: ObservableObject {
         let file = info["track"] as? String ?? ""
         let track = file.isEmpty ? nil : file
         if currentFile != track { currentFile = track }
-        if let playing = info["isPlaying"] as? Bool, playing != isPlaying { isPlaying = playing }
+        if let playing = info["isPlaying"] as? Bool, playing != isPlaying {
+            isPlaying = playing
+            refreshLevelPing()
+        }
         if let value = info["duration"] as? Double, value != duration { duration = value }
         if let value = info["looping"] as? Bool, value != looping { looping = value }
         if let value = info["shuffling"] as? Bool, value != shuffling { shuffling = value }
