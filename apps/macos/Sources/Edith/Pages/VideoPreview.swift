@@ -39,6 +39,8 @@ final class VideoPreviewSession: ObservableObject {
 
     func start() { player.play() }
 
+    func pause() { player.pause() }
+
     func stop() {
         player.pause()
         player.replaceCurrentItem(with: nil)
@@ -53,11 +55,18 @@ extension Track {
 
 struct VideoStage: View {
     let track: Track
-    let onClose: (TimeInterval) -> Void
+    let onOpen: () -> Void
+    let onClose: (TimeInterval, Bool) -> Void
+    @ObservedObject private var remote = MusicRemote.shared
     @StateObject private var session: VideoPreviewSession
+    @State private var handedOverWhilePlaying = false
 
-    init(track: Track, startAt: TimeInterval, onClose: @escaping (TimeInterval) -> Void) {
+    init(
+        track: Track, startAt: TimeInterval, onOpen: @escaping () -> Void,
+        onClose: @escaping (TimeInterval, Bool) -> Void
+    ) {
         self.track = track
+        self.onOpen = onOpen
         self.onClose = onClose
         _session = StateObject(
             wrappedValue: VideoPreviewSession(url: track.url, startingAt: startAt))
@@ -69,10 +78,18 @@ struct VideoStage: View {
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .shadow(color: .black.opacity(0.3), radius: UIScale.pt(16), y: UIScale.pt(8))
-            .onAppear { session.start() }
+            .onAppear {
+                handedOverWhilePlaying = remote.isPlaying
+                onOpen()
+                session.start()
+            }
+            .onChange(of: remote.isPlaying) {
+                if remote.isPlaying { session.pause() }
+            }
             .onDisappear {
-                onClose(session.elapsed)
+                let position = session.elapsed
                 session.stop()
+                onClose(position, handedOverWhilePlaying)
             }
     }
 }

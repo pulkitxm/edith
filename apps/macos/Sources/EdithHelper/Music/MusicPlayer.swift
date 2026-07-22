@@ -46,9 +46,17 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private var fadingOut: [AVAudioPlayer] = []
     private var loadGeneration = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
+    private var lastBroadcast: TimeInterval = 0
+    private var broadcastScheduled = false
+    private let broadcastInterval: TimeInterval = 0.05
     private var artworkTrack: Track?
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
+    private var levelTimer: Timer?
+    private var levelSubscriberUntil = Date.distantPast
+    private var smoothedLevel = 0.0
+    private var levelTick = 0
+    private var levelRequestObserver: NSObjectProtocol?
     private var folderChangedObserver: NSObjectProtocol?
     private var folderChangedIPCObserver: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
@@ -127,6 +135,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private func handleCommand(_ info: [AnyHashable: Any]) {
         switch info["action"] as? String {
         case "playPause": playPause()
+        case "pause":
+            if isPlaying { pause() }
+        case "resume":
+            if !isPlaying, current != nil { resume() }
         case "next": next()
         case "previous": previous()
         case "toggle":
@@ -162,6 +174,23 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func broadcastState() {
+        let now = Date().timeIntervalSince1970
+        guard now - lastBroadcast < broadcastInterval else {
+            lastBroadcast = now
+            postState()
+            return
+        }
+        guard !broadcastScheduled else { return }
+        broadcastScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + broadcastInterval) { [weak self] in
+            guard let self else { return }
+            self.broadcastScheduled = false
+            self.lastBroadcast = Date().timeIntervalSince1970
+            self.postState()
+        }
+    }
+
+    private func postState() {
         IPC.post(
             IPC.Name.musicState,
             userInfo: [

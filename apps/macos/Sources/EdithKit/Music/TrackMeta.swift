@@ -49,6 +49,30 @@ public struct MusicFolder: Identifiable, Equatable, Sendable {
     public var name: String { url.lastPathComponent }
 }
 
+actor LoadGate {
+    private let limit: Int
+    private var active = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    init(limit: Int) { self.limit = limit }
+
+    func acquire() async {
+        if active < limit {
+            active += 1
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func release() {
+        if waiting.isEmpty {
+            active -= 1
+        } else {
+            waiting.removeFirst().resume()
+        }
+    }
+}
+
 public enum TrackMeta {
     public static let playableExtensions: Set<String> =
         ["mp3", "m4a", "m4b", "aac", "wav", "aiff", "flac", "mp4", "mov"]
@@ -58,6 +82,7 @@ public enum TrackMeta {
     nonisolated(unsafe) private static var trackCounts: [URL: Int] = [:]
     nonisolated(unsafe) private static var durationCache: [URL: TimeInterval] = [:]
     nonisolated(unsafe) private static var artworkMisses: Set<URL> = []
+    private static let gate = LoadGate(limit: 3)
     private static let artworkCache: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
         cache.countLimit = 100
@@ -197,6 +222,9 @@ public enum TrackMeta {
 
     public static func duration(for track: Track) async -> TimeInterval? {
         if let hit = cacheLock.withLock({ durationCache[track.url] }) { return hit }
+        await gate.acquire()
+        defer { Task { await gate.release() } }
+        guard !Task.isCancelled else { return nil }
         let asset = AVURLAsset(url: track.url)
         guard let time = try? await asset.load(.duration), time.seconds.isFinite else { return nil }
         cacheLock.withLock { durationCache[track.url] = time.seconds }
@@ -221,6 +249,9 @@ public enum TrackMeta {
     public static func artwork(for track: Track) async -> NSImage? {
         if let hit = artworkCache.object(forKey: track.url as NSURL) { return hit }
         if cacheLock.withLock({ artworkMisses.contains(track.url) }) { return nil }
+        await gate.acquire()
+        defer { Task { await gate.release() } }
+        guard !Task.isCancelled else { return nil }
         if let image = await loadArtwork(for: track.url) {
             artworkCache.setObject(image, forKey: track.url as NSURL)
             return image

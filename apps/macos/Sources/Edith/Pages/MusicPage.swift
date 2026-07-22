@@ -160,12 +160,13 @@ final class MusicRemote: ObservableObject {
 
     func apply(_ info: [AnyHashable: Any]) {
         let file = info["track"] as? String ?? ""
-        currentFile = file.isEmpty ? nil : file
-        isPlaying = info["isPlaying"] as? Bool ?? false
-        duration = info["duration"] as? Double ?? 0
-        looping = info["looping"] as? Bool ?? false
-        shuffling = info["shuffling"] as? Bool ?? false
-        if let value = info["volume"] as? Double { volume = value }
+        let track = file.isEmpty ? nil : file
+        if currentFile != track { currentFile = track }
+        if let playing = info["isPlaying"] as? Bool, playing != isPlaying { isPlaying = playing }
+        if let value = info["duration"] as? Double, value != duration { duration = value }
+        if let value = info["looping"] as? Bool, value != looping { looping = value }
+        if let value = info["shuffling"] as? Bool, value != shuffling { shuffling = value }
+        if let value = info["volume"] as? Double, value != volume { volume = value }
         elapsedBase = info["elapsed"] as? Double ?? 0
         elapsedTimestamp = info["at"] as? Double ?? Date().timeIntervalSince1970
     }
@@ -180,6 +181,8 @@ final class MusicRemote: ObservableObject {
         send("toggle", ["track": track.relativePath])
     }
     func playPause() { send("playPause") }
+    func pausePlayback() { send("pause") }
+    func resumePlayback() { send("resume") }
     func next() { send("next") }
     func previous() { send("previous") }
     func seek(to fraction: Double) {
@@ -210,7 +213,7 @@ final class MusicRemote: ObservableObject {
         let ext = track.url.pathExtension
         let destination = track.url.deletingLastPathComponent()
             .appendingPathComponent(ext.isEmpty ? base : "\(base).\(ext)")
-        moveFile(from: track.url, to: destination)
+        if moveFile(from: track.url, to: destination) { refreshAfterFileChange() }
     }
 
     private func sanitizedName(_ name: String) -> String {
@@ -231,9 +234,12 @@ final class MusicRemote: ObservableObject {
                 "from": TrackMeta.relativePath(of: source),
                 "to": TrackMeta.relativePath(of: destination),
             ])
+        return true
+    }
+
+    private func refreshAfterFileChange() {
         rescan()
         broadcastFolderChanged()
-        return true
     }
 
     func createFolder(named name: String) {
@@ -251,17 +257,22 @@ final class MusicRemote: ObservableObject {
     }
 
     func move(_ track: Track, toFolderPath folderRelativePath: String) {
-        let destination = TrackMeta.url(for: folderRelativePath)
-            .appendingPathComponent(track.url.lastPathComponent)
-        moveFile(from: track.url, to: destination)
+        if moveTrack(track, toFolderPath: folderRelativePath) { refreshAfterFileChange() }
     }
 
     func move(relativePaths: [String], toFolderPath folderRelativePath: String) {
+        var moved = false
         for path in relativePaths {
-            move(
-                Track(url: TrackMeta.url(for: path), relativePath: path),
-                toFolderPath: folderRelativePath)
+            let track = Track(url: TrackMeta.url(for: path), relativePath: path)
+            moved = moveTrack(track, toFolderPath: folderRelativePath) || moved
         }
+        if moved { refreshAfterFileChange() }
+    }
+
+    private func moveTrack(_ track: Track, toFolderPath folderRelativePath: String) -> Bool {
+        let destination = TrackMeta.url(for: folderRelativePath)
+            .appendingPathComponent(track.url.lastPathComponent)
+        return moveFile(from: track.url, to: destination)
     }
 
     func renameFolder(_ folder: MusicFolder, to name: String) {
@@ -986,7 +997,6 @@ private struct MusicDetailSheet: View {
             sourceURL = YoutubeDownloader.shared.sourceURL(
                 forFileNamed: track.url.lastPathComponent)
             if beginRename { nameFocused = true }
-            if track.isVideo, isPlaying { remote.playPause() }
         }
         .task { await loadDetails() }
     }
@@ -1047,10 +1057,17 @@ private struct MusicDetailSheet: View {
 
     @ViewBuilder private var stage: some View {
         if track.isVideo {
-            VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0) { position in
-                guard isCurrent, remote.duration > 0 else { return }
-                remote.seek(to: position / remote.duration)
-            }
+            VideoStage(
+                track: track,
+                startAt: isCurrent ? remote.elapsed : 0,
+                onOpen: { remote.pausePlayback() },
+                onClose: { position, wasPlaying in
+                    if isCurrent, remote.duration > 0 {
+                        remote.seek(to: position / remote.duration)
+                    }
+                    if wasPlaying { remote.resumePlayback() }
+                }
+            )
         } else {
             artwork
         }

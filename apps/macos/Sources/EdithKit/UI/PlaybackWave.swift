@@ -1,8 +1,26 @@
 import AppKit
+import Combine
 import SwiftUI
 
 public enum MusicTick {
     public static let epoch = Date(timeIntervalSinceReferenceDate: 0)
+}
+
+@MainActor
+public final class PlaybackLevel: ObservableObject {
+    public static let shared = PlaybackLevel()
+    public static let neutral = 0.5
+
+    @Published public private(set) var level = PlaybackLevel.neutral
+
+    public func update(_ value: Double) {
+        let next = min(max(value, 0), 1)
+        if abs(next - level) > 0.004 { level = next }
+    }
+
+    public func reset() {
+        if level != Self.neutral { level = Self.neutral }
+    }
 }
 
 public struct PlaybackWave: View {
@@ -42,10 +60,24 @@ private struct WaveLayers: NSViewRepresentable {
 }
 
 private final class WaveBarsView: NSView {
-    private static let weights: [CGFloat] = [0.55, 0.85, 1.0, 0.75, 0.6, 0.9, 0.5]
+    private let container = CALayer()
     private var bars: [CALayer] = []
     private var animating = false
     private var barColor = NSColor.white
+    private var level = CGFloat(PlaybackLevel.neutral)
+    private var levelObserver: AnyCancellable?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never
+        layer?.addSublayer(container)
+        levelObserver = PlaybackLevel.shared.$level.sink { [weak self] value in
+            MainActor.assumeIsolated { self?.setLevel(CGFloat(value)) }
+        }
+    }
+
+    required init?(coder: NSCoder) { nil }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -55,39 +87,30 @@ private final class WaveBarsView: NSView {
     }
 
     func apply(playing: Bool, color: NSColor, barCount: Int, maxHeight: CGFloat) {
-        wantsLayer = true
-        layerContentsRedrawPolicy = .never
         barColor = color
         if bars.count != barCount {
             bars.forEach { $0.removeFromSuperlayer() }
             bars = (0..<barCount).map { _ in
                 let bar = CALayer()
                 bar.cornerRadius = 1.5
-                layer?.addSublayer(bar)
+                container.addSublayer(bar)
                 return bar
             }
             animating = false
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        container.bounds = CGRect(
+            x: 0, y: 0, width: CGFloat(barCount) * 5.5, height: maxHeight)
+        container.position = CGPoint(x: CGFloat(barCount) * 2.75, y: maxHeight / 2)
+        container.transform = CATransform3DMakeScale(1, playing ? envelope : 1, 1)
         for (i, bar) in bars.enumerated() {
             bar.backgroundColor = color.cgColor
             bar.bounds = CGRect(x: 0, y: 0, width: UIScale.pt(3), height: maxHeight)
             bar.position = CGPoint(x: CGFloat(i) * 5.5 + 1.5, y: maxHeight / 2)
         }
         if playing, !animating {
-            for (i, bar) in bars.enumerated() {
-                let weight = Self.weights[i % Self.weights.count]
-                let scale = CABasicAnimation(keyPath: "transform.scale.y")
-                scale.fromValue = 0.3 * weight
-                scale.toValue = weight
-                scale.duration = 0.45 + Double(i % 3) * 0.18
-                scale.autoreverses = true
-                scale.repeatCount = .infinity
-                scale.timeOffset = Double(i) * 0.13
-                scale.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                bar.add(scale, forKey: "wave")
-            }
+            bars.forEach { $0.add(Self.texture(), forKey: "wave") }
         } else if !playing {
             for bar in bars {
                 bar.removeAnimation(forKey: "wave")
@@ -96,5 +119,29 @@ private final class WaveBarsView: NSView {
         }
         animating = playing
         CATransaction.commit()
+    }
+
+    private var envelope: CGFloat { 0.28 + 0.72 * level }
+
+    private func setLevel(_ value: CGFloat) {
+        level = value
+        guard animating else { return }
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.14)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .linear))
+        container.transform = CATransform3DMakeScale(1, envelope, 1)
+        CATransaction.commit()
+    }
+
+    private static func texture() -> CAKeyframeAnimation {
+        var values = (0..<12).map { _ in CGFloat.random(in: 0.25...1) }
+        values.append(values[0])
+        let wave = CAKeyframeAnimation(keyPath: "transform.scale.y")
+        wave.values = values
+        wave.duration = Double.random(in: 2.6...4.4)
+        wave.calculationMode = .cubic
+        wave.repeatCount = .infinity
+        wave.timeOffset = Double.random(in: 0...2.5)
+        return wave
     }
 }

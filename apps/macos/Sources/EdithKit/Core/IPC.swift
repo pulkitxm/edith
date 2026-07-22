@@ -37,6 +37,9 @@ public enum IPC {
         public static let musicState = Notification.Name("com.pulkit.edith.musicState")
         public static let requestMusicState = Notification.Name(
             "com.pulkit.edith.requestMusicState")
+        public static let musicLevel = Notification.Name("com.pulkit.edith.musicLevel")
+        public static let requestMusicLevels = Notification.Name(
+            "com.pulkit.edith.requestMusicLevels")
         public static let requestKeyboardClean = Notification.Name(
             "com.pulkit.edith.requestKeyboardClean")
         public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
