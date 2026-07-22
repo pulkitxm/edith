@@ -161,7 +161,31 @@ persist just like any app you update normally.
 
 `build.sh` signs with the first available of a "Developer ID Application",
 self-signed "Edith Dev", or "Apple Development" identity, so local builds,
-`--install` reinstalls, and the released DMG all sign the same way. For the DMG
+`--install` reinstalls, and the released DMG all sign the same way.
+
+By default `codesign` writes a requirement that names the exact leaf
+certificate, so grants still evaporate when that certificate is re-issued or
+when you swap an "Apple Development" identity for the "Developer ID
+Application" one used to notarize. When the identity carries a team id,
+`build.sh` instead pins the requirement to bundle id + team id:
+
+```
+identifier "com.pulkit.edith" and anchor apple generic
+  and certificate leaf[subject.OU] = "<team id>"
+```
+
+Every certificate your team owns satisfies that, so grants survive certificate
+renewals and the move to Developer ID. Because macOS stores the requirement at
+the moment a permission is granted, grants made by an older build keep the old
+certificate-specific requirement; reset them once after installing a build made
+with this change so the durable requirement is what gets recorded:
+
+```bash
+tccutil reset All com.pulkit.edith
+tccutil reset All com.pulkit.edith.statusbar
+```
+
+For the DMG
 to match your local builds, CI must sign with the same certificate. Export the
 identity you sign with locally and store it as two repository secrets:
 

@@ -15,12 +15,24 @@
 # survive reinstalls. Without any identity, signing falls back to ad-hoc ("-"),
 # whose requirement is pinned to the binary hash and so resets TCC grants
 # (Screen Recording, ...) on every reinstall.
+#
+# When the identity carries a team id, the designated requirement is pinned to
+# bundle id + team id instead of codesign's default, which names the exact leaf
+# certificate. The default breaks whenever that certificate is re-issued or
+# swapped (Apple Development -> Developer ID), and every TCC grant is dropped
+# with it; the team-id form survives all of those.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 find_identity() {
   security find-identity -v -p codesigning 2>/dev/null \
     | awk -F'"' -v pat="$1" '$0 ~ pat {print $2; exit}'
+}
+
+team_id_for() {
+  security find-certificate -c "$1" -p 2>/dev/null \
+    | openssl x509 -noout -subject 2>/dev/null \
+    | sed -n 's/.*OU *= *\([^,/]*\).*/\1/p'
 }
 INSTALL=0 NO_OPEN=0 PR="" BRANCH="" RELEASE="${EDITH_RELEASE:-0}"
 while [ $# -gt 0 ]; do
@@ -138,9 +150,24 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "         identity, or set EDITH_SIGN_IDENTITY, so grants survive reinstalls." >&2
 fi
 
+TEAM_ID=""
+[ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
+
+sign() {
+  local identifier
+  identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
+  if [ -n "$TEAM_ID" ]; then
+    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS --requirements \
+      "=designated => identifier \"$identifier\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
+      "$1"
+  else
+    codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
+  fi
+}
+
 # sign inside-out: the nested helper first, then the outer bundle - never --deep.
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$HELPER"
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$APP"
+sign "$HELPER"
+sign "$APP"
 
 killall Edith 2>/dev/null || true
 pkill -if "edith.?menubar" 2>/dev/null || true
