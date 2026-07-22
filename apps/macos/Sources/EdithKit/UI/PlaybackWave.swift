@@ -10,10 +10,15 @@ public enum MeterLevel {
     public static let floorDecibels = -46.0
     public static let ceilingDecibels = -6.0
 
-    public static func level(decibels: Double, volume: Double, previous: Double) -> Double {
+    public static func gain(appVolume: Double, systemVolume: Double) -> Double {
+        let combined = min(max(appVolume, 0), 1) * min(max(systemVolume, 0), 1)
+        return combined.squareRoot()
+    }
+
+    public static func level(decibels: Double, gain: Double, previous: Double) -> Double {
         let span = ceilingDecibels - floorDecibels
         let loudness = min(max((decibels - floorDecibels) / span, 0), 1)
-        return max(loudness * min(max(volume, 0), 1), previous * 0.8)
+        return max(loudness * min(max(gain, 0), 1), previous * 0.8)
     }
 }
 
@@ -114,25 +119,59 @@ private final class WaveBarsView: NSView {
         container.bounds = CGRect(
             x: 0, y: 0, width: CGFloat(barCount) * 5.5, height: maxHeight)
         container.position = CGPoint(x: CGFloat(barCount) * 2.75, y: maxHeight / 2)
-        container.transform = CATransform3DMakeScale(1, playing ? envelope : 1, 1)
         for (i, bar) in bars.enumerated() {
             bar.backgroundColor = color.cgColor
             bar.bounds = CGRect(x: 0, y: 0, width: UIScale.pt(3), height: maxHeight)
             bar.position = CGPoint(x: CGFloat(i) * 5.5 + 1.5, y: maxHeight / 2)
         }
-        if playing, !animating {
-            bars.forEach { $0.add(Self.texture(), forKey: "wave") }
-        } else if !playing {
-            for bar in bars {
-                bar.removeAnimation(forKey: "wave")
-                bar.transform = CATransform3DMakeScale(1, 0.15, 1)
-            }
+        if playing == animating {
+            container.transform = CATransform3DMakeScale(1, playing ? envelope : Self.resting, 1)
         }
+        CATransaction.commit()
+        guard playing != animating else { return }
         animating = playing
+        playing ? startWave() : settleWave()
+    }
+
+    private static let resting: CGFloat = 0.15
+    private static let transition = 0.4
+
+    private var envelope: CGFloat { 0.28 + 0.72 * level }
+
+    private func startWave() {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(Self.transition)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        for bar in bars {
+            bar.removeAnimation(forKey: "settle")
+            bar.add(Self.texture(), forKey: "wave")
+        }
+        container.transform = CATransform3DMakeScale(1, envelope, 1)
         CATransaction.commit()
     }
 
-    private var envelope: CGFloat { 0.28 + 0.72 * level }
+    private func settleWave() {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(Self.transition)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        for bar in bars {
+            let held =
+                bar.presentation()?.value(forKeyPath: "transform.scale.y") as? CGFloat ?? 1
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            bar.removeAnimation(forKey: "wave")
+            bar.transform = CATransform3DIdentity
+            CATransaction.commit()
+            let settle = CABasicAnimation(keyPath: "transform.scale.y")
+            settle.fromValue = held
+            settle.toValue = 1
+            settle.duration = Self.transition
+            settle.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            bar.add(settle, forKey: "settle")
+        }
+        container.transform = CATransform3DMakeScale(1, Self.resting, 1)
+        CATransaction.commit()
+    }
 
     private func setLevel(_ value: CGFloat) {
         level = value

@@ -55,6 +55,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private var levelTimer: Timer?
     private var levelSubscriberUntil = Date.distantPast
     private var smoothedLevel = 0.0
+    private var systemVolume = 1.0
     private var levelTick = 0
     private var levelRequestObserver: NSObjectProtocol?
     private var folderChangedObserver: NSObjectProtocol?
@@ -227,6 +228,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
 
     private func startLevelTimer() {
         guard levelTimer == nil else { return }
+        levelTick = 0
+        systemVolume = SystemVolume.current()
         levelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) {
             [weak self] _ in
             MainActor.assumeIsolated { self?.sampleLevel() }
@@ -247,10 +250,13 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private func sampleLevel() {
         guard let p = player, p.isPlaying else { return }
         p.updateMeters()
+        if levelTick % 3 == 0 { systemVolume = SystemVolume.current() }
         let channels = max(min(p.numberOfChannels, 2), 1)
         let loudest = (0..<channels).map { Double(p.averagePower(forChannel: $0)) }.max() ?? -60
         smoothedLevel = MeterLevel.level(
-            decibels: loudest, volume: volume, previous: smoothedLevel)
+            decibels: loudest,
+            gain: MeterLevel.gain(appVolume: volume, systemVolume: systemVolume),
+            previous: smoothedLevel)
         PlaybackLevel.shared.update(smoothedLevel)
         levelTick += 1
         guard levelTick % 2 == 0, Date() < levelSubscriberUntil else { return }
