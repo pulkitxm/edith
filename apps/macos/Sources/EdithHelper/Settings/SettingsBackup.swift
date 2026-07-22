@@ -704,6 +704,7 @@ final class SettingsBackup: ObservableObject {
 
     func backupMusic() {
         guard !musicBackupRunning, cloudEnabled,
+            pendingRestoreStates[.music] == nil,
             transferDecision(for: .music).shouldExport,
             FileManager.default.fileExists(atPath: Repo.musicDir.path)
         else { return }
@@ -712,7 +713,7 @@ final class SettingsBackup: ObservableObject {
         try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-        p.arguments = ["-a", Repo.musicDir.path + "/", destination.path + "/"]
+        p.arguments = ["-a", "--delete", Repo.musicDir.path + "/", destination.path + "/"]
         p.qualityOfService = .utility
         p.terminationHandler = { process in
             Task { @MainActor in
