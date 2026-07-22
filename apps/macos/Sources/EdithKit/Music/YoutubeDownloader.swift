@@ -390,6 +390,7 @@ public final class YoutubeDownloader: ObservableObject {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty && FileManager.default.fileExists(atPath: $0) }
                 if proc.terminationStatus == 0 || !producedPaths.isEmpty {
+                    YoutubeDownloader.cleanupIntermediates(for: producedPaths)
                     let files = producedPaths.map { ($0 as NSString).lastPathComponent }
                     let label = files.isEmpty ? "done" : files.joined(separator: ", ")
                     self.items[index].status = .done(label)
@@ -424,6 +425,27 @@ public final class YoutubeDownloader: ObservableObject {
 
     private func indexOfItem(with id: UUID) -> Int? {
         items.firstIndex(where: { $0.id == id })
+    }
+
+    nonisolated static let intermediateExtensions: Set<String> =
+        ["webm", "mkv", "opus", "ogg", "part", "ytdl", "temp"]
+
+    nonisolated static func cleanupIntermediates(for producedPaths: [String]) {
+        let fm = FileManager.default
+        for path in producedPaths {
+            let produced = URL(fileURLWithPath: path)
+            let stem = produced.deletingPathExtension().lastPathComponent
+            let directory = produced.deletingLastPathComponent()
+            let siblings =
+                (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+            for sibling in siblings
+            where sibling != produced
+                && sibling.deletingPathExtension().lastPathComponent == stem
+                && intermediateExtensions.contains(sibling.pathExtension.lowercased())
+            {
+                try? fm.removeItem(at: sibling)
+            }
+        }
     }
 
     private func ytdlpExecutable() -> (url: URL, prefix: [String]) {

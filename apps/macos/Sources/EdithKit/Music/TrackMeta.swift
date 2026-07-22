@@ -26,7 +26,7 @@ public struct Track: Identifiable, Equatable, Sendable {
 @MainActor
 public enum TrackMeta {
     public static let playableExtensions: Set<String> =
-        ["mp3", "m4a", "m4b", "aac", "wav", "aiff", "flac", "mp4", "mov", "webm"]
+        ["mp3", "m4a", "m4b", "aac", "wav", "aiff", "flac", "mp4", "mov"]
 
     private static let artworkCache: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
