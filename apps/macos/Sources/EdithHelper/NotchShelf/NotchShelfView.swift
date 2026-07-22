@@ -389,16 +389,25 @@ private struct NotchNowPlayingCard: View {
             artwork
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .center, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(track.title)
-                            .font(.system(size: 12.5, weight: .semibold))
-                            .foregroundStyle(.white).lineLimit(1)
-                            .presenterBlur(presenterState.active && presenterBlurMusic)
-                        Text(sourceLabel)
-                            .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.55))
-                            .lineLimit(1)
-                            .presenterBlur(presenterState.active && presenterBlurMusic)
+                    Button {
+                        controller.openNowPlayingLocation()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(track.title)
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .foregroundStyle(.white).lineLimit(1)
+                                .presenterBlur(presenterState.active && presenterBlurMusic)
+                            Text(sourceLabel)
+                                .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.55))
+                                .lineLimit(1)
+                                .presenterBlur(presenterState.active && presenterBlurMusic)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help(isLocal ? "Show this track in Music" : "Open the app playing this")
                     Spacer(minLength: 4)
                     HStack(spacing: 6) {
                         control("backward.fill", 12) { controller.nowPlayingPrevious() }
@@ -416,6 +425,11 @@ private struct NotchNowPlayingCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(10)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var isLocal: Bool {
+        if case .local = track.source { return true }
+        return false
     }
 
     private var sourceLabel: String {

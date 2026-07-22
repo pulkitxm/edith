@@ -759,6 +759,15 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         }
     }
 
+    func openNowPlayingLocation() {
+        guard case .local = nowPlaying?.source, let track = localMusic?.current else {
+            openNowPlayingApp()
+            return
+        }
+        collapseNow()
+        MusicReveal.request(trackPath: track.relativePath)
+    }
+
     func nowPlayingPlayPause() {
         switch nowPlaying?.source {
         case .local: localMusic?.playPause()

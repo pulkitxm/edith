@@ -49,6 +49,8 @@ public enum IPC {
             "com.pulkit.edith.musicFolderChanged")
         public static let musicFavouritesChanged = Notification.Name(
             "com.pulkit.edith.musicFavouritesChanged")
+        public static let musicRevealFolder = Notification.Name(
+            "com.pulkit.edith.musicRevealFolder")
         public static let presenterPauseAuto = Notification.Name(
             "com.pulkit.edith.presenterPauseAuto")
     }

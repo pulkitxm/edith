@@ -38,12 +38,17 @@ final class MusicDetailPresenter: ObservableObject {
 
     @Published private(set) var track: Track?
     @Published private(set) var beginRename = false
-    private var followsPlayback = false
+    private(set) var followsPlayback = false
 
     func show(_ track: Track, renaming: Bool = false) {
         beginRename = renaming
         followsPlayback = MusicRemote.shared.currentFile == track.relativePath
         self.track = track
+    }
+
+    func followPlayback(_ track: Track) {
+        guard self.track == track else { return }
+        followsPlayback = true
     }
 
     func followCurrent() {
@@ -107,6 +112,7 @@ final class MusicRemote: ObservableObject {
 
     private var folderObserver: NSObjectProtocol?
     private var folderIPCObserver: NSObjectProtocol?
+    private var revealObserver: NSObjectProtocol?
     private var folderCache: [String: [MusicFolder]] = [:]
 
     func start() {
@@ -128,6 +134,16 @@ final class MusicRemote: ObservableObject {
         folderIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
             MainActor.assumeIsolated { self?.rescan() }
         }
+        revealObserver = IPC.observe(
+            IPC.Name.musicRevealFolder,
+            info: { [weak self] info in
+                MainActor.assumeIsolated {
+                    guard let path = info["path"] as? String else { return }
+                    _ = MusicReveal.consumePending()
+                    self?.navigate(to: path)
+                }
+            })
+        if let pending = MusicReveal.consumePending() { navigate(to: pending) }
         levelObserver = IPC.observe(
             IPC.Name.musicLevel,
             info: { info in
@@ -173,6 +189,10 @@ final class MusicRemote: ObservableObject {
         if let folderIPCObserver {
             IPC.stopObserving(folderIPCObserver)
             self.folderIPCObserver = nil
+        }
+        if let revealObserver {
+            IPC.stopObserving(revealObserver)
+            self.revealObserver = nil
         }
         if let levelObserver {
             IPC.stopObserving(levelObserver)
@@ -228,6 +248,11 @@ final class MusicRemote: ObservableObject {
         refreshEntries()
     }
 
+    func reveal(_ track: Track) {
+        navigate(to: (track.relativePath as NSString).deletingLastPathComponent)
+        SharedDefaults.store.set(MainDestination.music.rawValue, forKey: "mainWindowSection")
+    }
+
     func openFavourites() {
         refreshFavourites()
         showingFavourites = true
@@ -281,6 +306,7 @@ final class MusicRemote: ObservableObject {
     func attachVideo(_ session: VideoPreviewSession, resumesAudio: Bool) {
         videoSession = session
         videoResumesAudio = resumesAudio
+        MusicDetailPresenter.shared.followPlayback(session.track)
         pausePlayback()
         isPlaying = session.isPlaying
         duration = session.duration
@@ -311,7 +337,9 @@ final class MusicRemote: ObservableObject {
         guard let videoSession else { return }
         videoResumesAudio = false
         detachVideo(videoSession)
-        MusicDetailPresenter.shared.dismiss()
+        if !MusicDetailPresenter.shared.followsPlayback {
+            MusicDetailPresenter.shared.dismiss()
+        }
     }
 
     private func send(_ action: String, _ extra: [String: Any] = [:]) {
@@ -1540,23 +1568,29 @@ private struct MusicDetailSheet: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: UIScale.pt(8)) {
             Spacer()
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-                    .background(DashSkin.paper2(dark).opacity(0.6), in: Circle())
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            headerButton("trash", tint: .red, help: "Move to Trash", action: onDelete)
+            headerButton("xmark", tint: .secondary, help: "Close", action: onClose)
         }
         .padding(.horizontal, UIScale.pt(16))
         .padding(.top, UIScale.pt(14))
+    }
+
+    private func headerButton(
+        _ symbol: String, tint: some ShapeStyle, help: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                .background(DashSkin.paper2(dark).opacity(0.6), in: Circle())
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .help(help)
     }
 
     private var content: some View {
@@ -1572,11 +1606,11 @@ private struct MusicDetailSheet: View {
                 youtubeLink(sourceURL)
             }
             actions
-                .padding(.top, UIScale.pt(2))
         }
         .padding(.horizontal, UIScale.pt(28))
         .padding(.bottom, UIScale.pt(28))
         .padding(.top, UIScale.pt(6))
+        .animation(.smooth(duration: 0.28), value: canRename)
     }
 
     @ViewBuilder private var stage: some View {
@@ -1709,37 +1743,20 @@ private struct MusicDetailSheet: View {
         .pointerCursor()
     }
 
-    private var actions: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
+    @ViewBuilder private var actions: some View {
+        if canRename {
+            Button(action: commitRename) {
+                Label("Rename", systemImage: "checkmark")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, UIScale.pt(11))
+                    .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.red)
-            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .pointerCursor()
-
-            if canRename {
-                Button(action: commitRename) {
-                    Label("Rename", systemImage: "checkmark")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, UIScale.pt(11))
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-                .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-                .pointerCursor()
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-            }
+            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+            .transition(.opacity)
         }
-        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: canRename)
     }
 
     private var canRename: Bool {
@@ -1850,9 +1867,9 @@ struct MusicFooter: View {
                 maxHeight: UIScale.pt(13))
         }
         .contentShape(Rectangle())
-        .onTapGesture { mainWindowSection = MainDestination.music.rawValue }
+        .onTapGesture { remote.reveal(track) }
         .pointerCursor()
-        .help("Open Music")
+        .help("Show this track in Music")
     }
 
     private var transport: some View {
