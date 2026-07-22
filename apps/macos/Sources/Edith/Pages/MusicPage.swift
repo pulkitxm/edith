@@ -79,7 +79,9 @@ final class MusicRemote: ObservableObject {
     @Published private(set) var showingFavourites = false
     @Published private(set) var currentFile: String?
     @Published private(set) var isPlaying = false
-    @Published private(set) var volume = 0.7
+    @Published private(set) var volume = 0.7 {
+        didSet { videoSession?.applyVolume(volume) }
+    }
     @Published private(set) var looping = false
     @Published private(set) var shuffling = false
     @Published private(set) var duration: TimeInterval = 0
@@ -306,6 +308,7 @@ final class MusicRemote: ObservableObject {
     func attachVideo(_ session: VideoPreviewSession, resumesAudio: Bool) {
         videoSession = session
         videoResumesAudio = resumesAudio
+        session.applyVolume(volume)
         MusicDetailPresenter.shared.followPlayback(session.track)
         pausePlayback()
         isPlaying = session.isPlaying
@@ -1466,6 +1469,10 @@ struct MusicDetailOverlay: View {
 
     private var theme: Color { themeColor(themeName) }
 
+    private var sheetShape: String? {
+        presenter.track.map { $0.isVideo ? "video" : "audio" }
+    }
+
     var body: some View {
         ZStack {
             if let track = presenter.track {
@@ -1500,9 +1507,7 @@ struct MusicDetailOverlay: View {
                     .accessibilityHidden(true)
             }
         }
-        .animation(
-            Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: presenter.track
-        )
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: sheetShape)
         .onChange(of: remote.currentFile) { presenter.followCurrent() }
         .alert(
             "Move to Trash?",
@@ -1597,18 +1602,20 @@ private struct MusicDetailSheet: View {
     }
 
     private var content: some View {
-        VStack(spacing: UIScale.pt(20)) {
-            stage
-                .padding(.top, UIScale.pt(2))
-            titleField
-            folderPath
-            if isCurrent, !track.isVideo {
-                playerBlock
+        VStack(spacing: UIScale.pt(0)) {
+            VStack(spacing: UIScale.pt(20)) {
+                stage
+                    .padding(.top, UIScale.pt(2))
+                titleField
+                folderPath
+                if isCurrent, !track.isVideo {
+                    playerBlock
+                }
+                if let sourceURL {
+                    youtubeLink(sourceURL)
+                }
             }
-            if let sourceURL {
-                youtubeLink(sourceURL)
-            }
-            actions
+            renameReveal
         }
         .padding(.horizontal, UIScale.pt(28))
         .padding(.bottom, UIScale.pt(28))
@@ -1745,21 +1752,26 @@ private struct MusicDetailSheet: View {
         .pointerCursor()
     }
 
-    @ViewBuilder private var actions: some View {
-        if canRename {
-            Button(action: commitRename) {
-                Label("Rename", systemImage: "checkmark")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, UIScale.pt(11))
-                    .foregroundStyle(.white)
-            }
-            .buttonStyle(.plain)
-            .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-            .pointerCursor()
-            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-            .transition(.opacity)
+    private var renameReveal: some View {
+        Button(action: commitRename) {
+            Label("Rename", systemImage: "checkmark")
+                .frame(maxWidth: .infinity)
+                .frame(height: UIScale.pt(Self.renameButtonHeight))
+                .foregroundStyle(.white)
         }
+        .buttonStyle(.plain)
+        .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .pointerCursor()
+        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+        .padding(.top, UIScale.pt(Self.renameButtonGap))
+        .frame(height: canRename ? UIScale.pt(Self.renameRowHeight) : 0, alignment: .top)
+        .clipped()
+        .allowsHitTesting(canRename)
     }
+
+    private static let renameButtonHeight = 40.0
+    private static let renameButtonGap = 20.0
+    private static var renameRowHeight: Double { renameButtonHeight + renameButtonGap }
 
     private var canRename: Bool {
         guard namedTrack == track.id else { return false }
@@ -1941,6 +1953,17 @@ struct MusicFooter: View {
 
     private var rightControls: some View {
         HStack(spacing: UIScale.pt(10)) {
+            if let track = remote.current {
+                let liked = remote.favouritePaths.contains(track.relativePath)
+                glassButton(
+                    liked ? "heart.fill" : "heart", diameter: 34, iconSize: 12,
+                    iconColor: liked ? .white : .secondary,
+                    tint: liked ? theme : nil
+                ) {
+                    remote.toggleFavourite(track)
+                }
+                .help(liked ? "Remove from favourites" : "Add to favourites")
+            }
             glassButton(
                 "shuffle", diameter: 34, iconSize: 12,
                 iconColor: remote.shuffling ? .white : .secondary,

@@ -33,6 +33,7 @@ final class VideoPreviewSession: ObservableObject {
     init(track: Track, startingAt seconds: TimeInterval) {
         self.track = track
         player = AVPlayer(url: track.url)
+        player.volume = Float(MusicRemote.shared.volume)
         if seconds > 0 {
             player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         }
@@ -58,6 +59,10 @@ final class VideoPreviewSession: ObservableObject {
     func start() {
         installRemoteCommands()
         player.play()
+    }
+
+    func applyVolume(_ value: Double) {
+        player.volume = Float(min(max(value, 0), 1))
     }
 
     func toggle() {
