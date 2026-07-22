@@ -29,7 +29,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private var player: AVAudioPlayer?
-    private var queueSource: QueueSource = .all
+    private var queueSource: QueueSource = .all {
+        didSet { if queueSource != oldValue { queueCache = nil } }
+    }
+    private var queueCache: [Track]?
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
     private var folderChangedObserver: NSObjectProtocol?
@@ -65,8 +68,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func track(for relativePath: String) -> Track {
-        tracks.first { $0.relativePath == relativePath }
-            ?? Track(url: Repo.musicDir.appendingPathComponent(relativePath))
+        Track(url: TrackMeta.url(for: relativePath), relativePath: relativePath)
     }
 
     private func source(from info: [AnyHashable: Any]) -> QueueSource? {
@@ -81,11 +83,15 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func currentQueue() -> [Track] {
-        switch queueSource {
-        case .all: return tracks
-        case .folder(let path): return TrackMeta.tracks(under: path)
-        case .directory(let path): return TrackMeta.entries(in: path).tracks
-        }
+        if let queueCache { return queueCache }
+        let list: [Track] =
+            switch queueSource {
+            case .all: tracks
+            case .folder(let path): TrackMeta.tracks(under: path)
+            case .directory(let path): TrackMeta.entries(in: path).tracks
+            }
+        queueCache = list
+        return list
     }
 
     private func handleCommand(_ info: [AnyHashable: Any]) {
@@ -197,9 +203,15 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     func rescan() {
-        tracks = TrackMeta.scanMusicFolder()
-        if let current, !isPlaying, !tracks.contains(current) {
-            stop()
+        TrackMeta.invalidateCaches()
+        queueCache = nil
+        Task { [weak self] in
+            let scanned = await Task.detached { TrackMeta.scanMusicFolder() }.value
+            guard let self else { return }
+            self.tracks = scanned
+            if let current = self.current, !self.isPlaying, !scanned.contains(current) {
+                self.stop()
+            }
         }
     }
 
@@ -370,10 +382,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func restoreLastPlayback() {
-        guard current == nil,
-            let snapshot = PlaybackStore.load(from: .standard),
-            let track = tracks.first(where: { $0.relativePath == snapshot.track })
-        else { return }
+        guard current == nil, let snapshot = PlaybackStore.load(from: .standard) else { return }
+        let track = self.track(for: snapshot.track)
         guard let p = try? AVAudioPlayer(contentsOf: track.url) else { return }
         player = p
         p.isMeteringEnabled = true

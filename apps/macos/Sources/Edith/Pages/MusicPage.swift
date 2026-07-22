@@ -52,7 +52,7 @@ final class MusicRemote: ObservableObject {
     private var stateObserver: NSObjectProtocol?
 
     var current: Track? {
-        currentFile.flatMap { file in tracks.first { $0.relativePath == file } }
+        currentFile.map { Track(url: TrackMeta.url(for: $0), relativePath: $0) }
     }
 
     var elapsed: TimeInterval {
@@ -66,6 +66,7 @@ final class MusicRemote: ObservableObject {
 
     private var folderObserver: NSObjectProtocol?
     private var folderIPCObserver: NSObjectProtocol?
+    private var folderCache: [String: [MusicFolder]] = [:]
 
     func start() {
         if stateObserver != nil {
@@ -109,20 +110,36 @@ final class MusicRemote: ObservableObject {
     }
 
     func rescan() {
-        tracks = TrackMeta.scanMusicFolder()
+        TrackMeta.invalidateCaches()
+        folderCache.removeAll()
         if !folderPath.isEmpty,
-            !FileManager.default.fileExists(atPath: TrackMeta.directory(for: folderPath).path)
+            !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
         {
             folderPath = ""
         }
         refreshEntries()
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
+        Task { [weak self] in
+            let scanned = await Task.detached { TrackMeta.scanMusicFolder() }.value
+            self?.tracks = scanned
+        }
     }
 
     private func refreshEntries() {
-        let entries = TrackMeta.entries(in: folderPath)
-        folders = entries.folders
-        folderTracks = entries.tracks
+        let path = folderPath
+        Task { [weak self] in
+            let entries = await Task.detached { TrackMeta.entries(in: path) }.value
+            guard let self, self.folderPath == path else { return }
+            self.folders = entries.folders
+            self.folderTracks = entries.tracks
+        }
+    }
+
+    func subfolders(of path: String) -> [MusicFolder] {
+        if let hit = folderCache[path] { return hit }
+        let list = TrackMeta.subfolders(in: path)
+        folderCache[path] = list
+        return list
     }
 
     func open(_ folder: MusicFolder) { navigate(to: folder.relativePath) }
@@ -137,7 +154,6 @@ final class MusicRemote: ObservableObject {
     func playCurrentFolder() { playAll(under: folderPath) }
 
     private func playAll(under relativePath: String) {
-        guard !TrackMeta.tracks(under: relativePath).isEmpty else { return }
         send("playSource", ["sourceKind": "folder", "sourcePath": relativePath])
     }
 
@@ -222,7 +238,7 @@ final class MusicRemote: ObservableObject {
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
         guard !base.isEmpty else { return }
-        let dir = TrackMeta.directory(for: folderPath).appendingPathComponent(base)
+        let dir = TrackMeta.url(for: folderPath).appendingPathComponent(base)
         guard !FileManager.default.fileExists(atPath: dir.path),
             (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true))
                 != nil
@@ -232,7 +248,7 @@ final class MusicRemote: ObservableObject {
     }
 
     func move(_ track: Track, toFolderPath folderRelativePath: String) {
-        let destination = TrackMeta.directory(for: folderRelativePath)
+        let destination = TrackMeta.url(for: folderRelativePath)
             .appendingPathComponent(track.url.lastPathComponent)
         moveFile(from: track.url, to: destination)
     }
@@ -240,7 +256,7 @@ final class MusicRemote: ObservableObject {
     func move(relativePaths: [String], toFolderPath folderRelativePath: String) {
         for path in relativePaths {
             move(
-                Track(url: Repo.musicDir.appendingPathComponent(path)),
+                Track(url: TrackMeta.url(for: path), relativePath: path),
                 toFolderPath: folderRelativePath)
         }
     }
@@ -284,6 +300,8 @@ final class MusicRemote: ObservableObject {
     }
 
     private func broadcastFolderChanged() {
+        TrackMeta.invalidateCaches()
+        folderCache.removeAll()
         NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
         IPC.post(IPC.Name.musicFolderChanged)
     }
@@ -390,9 +408,7 @@ struct MusicPage: View {
                 deleteFolderTarget = nil
             }
         } message: { folder in
-            Text(
-                "\"\(folder.name)\" and its \(folder.trackCount) track\(folder.trackCount == 1 ? "" : "s") will be moved to the Trash."
-            )
+            Text("\"\(folder.name)\" and everything inside it will be moved to the Trash.")
         }
         .sheet(item: $detailTarget) { track in
             MusicDetailSheet(
@@ -569,7 +585,7 @@ struct MusicPage: View {
 
     @ViewBuilder
     private func chevronMenu(parentPath: String) -> some View {
-        let folders = TrackMeta.entries(in: parentPath).folders
+        let folders = remote.subfolders(of: parentPath)
         if folders.isEmpty {
             Image(systemName: "chevron.right")
                 .font(.system(size: UIScale.pt(9)))
@@ -603,7 +619,7 @@ struct MusicPage: View {
                 )
                 .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
-                Text(TrackMeta.directory(for: remote.folderPath).path)
+                Text(TrackMeta.url(for: remote.folderPath).path)
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.tertiary)
             }
@@ -764,6 +780,7 @@ private struct MusicFolderRow: View {
     let onDelete: () -> Void
     @State private var hovering = false
     @State private var dropTargeted = false
+    @State private var trackCount: Int?
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -782,7 +799,7 @@ private struct MusicFolderRow: View {
                             .font(.system(size: UIScale.pt(13), weight: .medium))
                             .lineLimit(1)
                             .foregroundStyle(.primary)
-                        Text("\(folder.trackCount) track\(folder.trackCount == 1 ? "" : "s")")
+                        Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                             .font(.system(size: UIScale.pt(10.5)))
                             .foregroundStyle(.secondary)
                     }
@@ -801,7 +818,7 @@ private struct MusicFolderRow: View {
             .buttonStyle(.plain)
             .pointerCursor()
             .help("Play this folder")
-            .opacity(hovering || folder.trackCount == 0 ? 1 : 0.55)
+            .opacity(hovering || trackCount == 0 ? 1 : 0.55)
 
             Image(systemName: "chevron.right")
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -830,6 +847,10 @@ private struct MusicFolderRow: View {
             Button("Open", action: onOpen)
             Button("Rename", action: onRename)
             Button("Move to Trash", role: .destructive, action: onDelete)
+        }
+        .task(id: folder.relativePath) {
+            let path = folder.relativePath
+            trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
         }
     }
 }
