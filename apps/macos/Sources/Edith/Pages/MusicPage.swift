@@ -38,12 +38,18 @@ final class MusicDetailPresenter: ObservableObject {
 
     @Published private(set) var track: Track?
     @Published private(set) var beginRename = false
+    @Published private(set) var renameArmed = false
     private(set) var followsPlayback = false
 
     func show(_ track: Track, renaming: Bool = false) {
         beginRename = renaming
+        renameArmed = false
         followsPlayback = MusicRemote.shared.currentFile == track.relativePath
         self.track = track
+    }
+
+    func armRename(_ value: Bool) {
+        if renameArmed != value { renameArmed = value }
     }
 
     func followPlayback(_ track: Track) {
@@ -56,12 +62,14 @@ final class MusicDetailPresenter: ObservableObject {
             current != track
         else { return }
         beginRename = false
+        renameArmed = false
         track = current
     }
 
     func dismiss() {
         track = nil
         beginRename = false
+        renameArmed = false
         followsPlayback = false
     }
 }
@@ -1569,6 +1577,10 @@ struct MusicDetailOverlay: View {
             }
         }
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: sheetShape)
+        .animation(
+            Motion.animation(.smooth(duration: 0.32), reduceMotion: reduceMotion),
+            value: presenter.renameArmed
+        )
         .onChange(of: remote.currentFile) { presenter.followCurrent() }
         .alert(
             "Move to Trash?",
@@ -1596,6 +1608,7 @@ private struct MusicDetailSheet: View {
     let onOpenFolder: (String) -> Void
     let onClose: () -> Void
     @ObservedObject private var remote = MusicRemote.shared
+    @ObservedObject private var presenter = MusicDetailPresenter.shared
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
     @State private var namedTrack: URL?
@@ -1613,13 +1626,13 @@ private struct MusicDetailSheet: View {
         }
         .frame(width: UIScale.pt(track.isVideo ? 760 : 400))
         .background(sheetBackground)
-        .animation(.smooth(duration: 0.4), value: canRename)
         .task(id: track.id) {
             name = track.url.deletingPathExtension().lastPathComponent
             namedTrack = track.id
             sourceURL = YoutubeDownloader.shared.sourceURL(
                 forFileNamed: track.url.lastPathComponent)
             if beginRename { nameFocused = true }
+            presenter.armRename(false)
         }
     }
 
@@ -1743,7 +1756,7 @@ private struct MusicDetailSheet: View {
     }
 
     private var titleField: some View {
-        TextField("Track name", text: $name)
+        TextField("Track name", text: nameBinding)
             .textFieldStyle(.plain)
             .font(.system(size: UIScale.pt(17), weight: .semibold))
             .multilineTextAlignment(.center)
@@ -1834,14 +1847,24 @@ private struct MusicDetailSheet: View {
     private static let renameButtonGap = 20.0
     private static var renameRowHeight: Double { renameButtonHeight + renameButtonGap }
 
-    private var canRename: Bool {
-        guard namedTrack == track.id else { return false }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var nameBinding: Binding<String> {
+        Binding(
+            get: { name },
+            set: { value in
+                name = value
+                presenter.armRename(isRenameable(value))
+            })
+    }
+
+    private var canRename: Bool { presenter.renameArmed && namedTrack == track.id }
+
+    private func isRenameable(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && trimmed != track.url.deletingPathExtension().lastPathComponent
     }
 
     private func commitRename() {
-        if canRename { onRename(name) }
+        if isRenameable(name) { onRename(name) }
         onClose()
     }
 }
