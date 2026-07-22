@@ -137,9 +137,8 @@ final class MusicRemote: ObservableObject {
     func playCurrentFolder() { playAll(under: folderPath) }
 
     private func playAll(under relativePath: String) {
-        let queue = TrackMeta.tracks(under: relativePath).map(\.relativePath)
-        guard !queue.isEmpty else { return }
-        send("playQueue", ["queue": queue])
+        guard !TrackMeta.tracks(under: relativePath).isEmpty else { return }
+        send("playSource", ["sourceKind": "folder", "sourcePath": relativePath])
     }
 
     func apply(_ info: [AnyHashable: Any]) {
@@ -160,9 +159,7 @@ final class MusicRemote: ObservableObject {
     }
 
     func toggle(_ track: Track) {
-        let folder = (track.relativePath as NSString).deletingLastPathComponent
-        let siblings = TrackMeta.entries(in: folder).tracks.map(\.relativePath)
-        send("toggle", ["track": track.relativePath, "queue": siblings])
+        send("toggle", ["track": track.relativePath])
     }
     func playPause() { send("playPause") }
     func next() { send("next") }
@@ -189,19 +186,35 @@ final class MusicRemote: ObservableObject {
     }
 
     func rename(_ track: Track, to name: String) {
-        let base = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
+        let base = sanitizedName(name)
         guard !base.isEmpty else { return }
         let ext = track.url.pathExtension
         let destination = track.url.deletingLastPathComponent()
             .appendingPathComponent(ext.isEmpty ? base : "\(base).\(ext)")
-        guard destination != track.url,
+        moveFile(from: track.url, to: destination)
+    }
+
+    private func sanitizedName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+    }
+
+    @discardableResult
+    private func moveFile(from source: URL, to destination: URL) -> Bool {
+        guard destination != source,
             !FileManager.default.fileExists(atPath: destination.path),
-            (try? FileManager.default.moveItem(at: track.url, to: destination)) != nil
-        else { return }
+            (try? FileManager.default.moveItem(at: source, to: destination)) != nil
+        else { return false }
+        send(
+            "renamed",
+            [
+                "from": TrackMeta.relativePath(of: source),
+                "to": TrackMeta.relativePath(of: destination),
+            ])
         rescan()
         broadcastFolderChanged()
+        return true
     }
 
     func createFolder(named name: String) {
@@ -221,12 +234,7 @@ final class MusicRemote: ObservableObject {
     func move(_ track: Track, toFolderPath folderRelativePath: String) {
         let destination = TrackMeta.directory(for: folderRelativePath)
             .appendingPathComponent(track.url.lastPathComponent)
-        guard destination != track.url,
-            !FileManager.default.fileExists(atPath: destination.path),
-            (try? FileManager.default.moveItem(at: track.url, to: destination)) != nil
-        else { return }
-        rescan()
-        broadcastFolderChanged()
+        moveFile(from: track.url, to: destination)
     }
 
     func move(relativePaths: [String], toFolderPath folderRelativePath: String) {
@@ -234,6 +242,44 @@ final class MusicRemote: ObservableObject {
             move(
                 Track(url: Repo.musicDir.appendingPathComponent(path)),
                 toFolderPath: folderRelativePath)
+        }
+    }
+
+    func renameFolder(_ folder: MusicFolder, to name: String) {
+        let base = sanitizedName(name)
+        guard !base.isEmpty, base != folder.name else { return }
+        let destination = folder.url.deletingLastPathComponent().appendingPathComponent(base)
+        guard destination != folder.url,
+            !FileManager.default.fileExists(atPath: destination.path),
+            (try? FileManager.default.moveItem(at: folder.url, to: destination)) != nil
+        else { return }
+        let newPath = TrackMeta.relativePath(of: destination)
+        if let playing = currentFile,
+            playing == folder.relativePath || playing.hasPrefix(folder.relativePath + "/")
+        {
+            send(
+                "renamed",
+                ["from": playing, "to": newPath + playing.dropFirst(folder.relativePath.count)])
+        }
+        repointFolderPath(from: folder.relativePath, to: newPath)
+        rescan()
+        broadcastFolderChanged()
+    }
+
+    func deleteFolder(_ folder: MusicFolder) {
+        guard (try? FileManager.default.trashItem(at: folder.url, resultingItemURL: nil)) != nil
+        else { return }
+        repointFolderPath(from: folder.relativePath, to: nil)
+        rescan()
+        broadcastFolderChanged()
+    }
+
+    private func repointFolderPath(from old: String, to new: String?) {
+        guard folderPath == old || folderPath.hasPrefix(old + "/") else { return }
+        if let new {
+            folderPath = new + folderPath.dropFirst(old.count)
+        } else {
+            folderPath = (old as NSString).deletingLastPathComponent
         }
     }
 
@@ -272,6 +318,9 @@ struct MusicPage: View {
     @State private var deleteTarget: Track?
     @State private var showNewFolder = false
     @State private var newFolderName = ""
+    @State private var renameFolderTarget: MusicFolder?
+    @State private var folderRenameText = ""
+    @State private var deleteFolderTarget: MusicFolder?
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
@@ -334,6 +383,30 @@ struct MusicPage: View {
                 "Creates a folder inside \(remote.folderPath.isEmpty ? "your music library" : remote.folderPath)."
             )
         }
+        .alert("Rename folder", isPresented: renameFolderBinding) {
+            TextField("Folder name", text: $folderRenameText)
+            Button("Cancel", role: .cancel) { renameFolderTarget = nil }
+            Button("Rename") {
+                if let folder = renameFolderTarget {
+                    remote.renameFolder(folder, to: folderRenameText)
+                }
+                renameFolderTarget = nil
+            }
+        }
+        .alert(
+            "Move folder to Trash?", isPresented: deleteFolderBinding,
+            presenting: deleteFolderTarget
+        ) { folder in
+            Button("Cancel", role: .cancel) { deleteFolderTarget = nil }
+            Button("Move to Trash", role: .destructive) {
+                remote.deleteFolder(folder)
+                deleteFolderTarget = nil
+            }
+        } message: { folder in
+            Text(
+                "\"\(folder.name)\" and its \(folder.trackCount) track\(folder.trackCount == 1 ? "" : "s") will be moved to the Trash."
+            )
+        }
         .sheet(item: $detailTarget) { track in
             MusicDetailSheet(
                 track: track,
@@ -365,6 +438,14 @@ struct MusicPage: View {
 
     private var deleteAlertBinding: Binding<Bool> {
         Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
+    }
+
+    private var renameFolderBinding: Binding<Bool> {
+        Binding(get: { renameFolderTarget != nil }, set: { if !$0 { renameFolderTarget = nil } })
+    }
+
+    private var deleteFolderBinding: Binding<Bool> {
+        Binding(get: { deleteFolderTarget != nil }, set: { if !$0 { deleteFolderTarget = nil } })
     }
 
     private func openDetails(_ track: Track, renaming: Bool) {
@@ -451,14 +532,15 @@ struct MusicPage: View {
         HStack(spacing: UIScale.pt(8)) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: UIScale.pt(4)) {
-                    crumbButton("Home", path: "", systemImage: "house.fill")
+                    crumb("Home", path: "", systemImage: "house.fill")
                     ForEach(crumbSegments, id: \.path) { segment in
                         Image(systemName: "chevron.right")
                             .font(.system(size: UIScale.pt(9)))
                             .foregroundStyle(.tertiary)
-                        crumbButton(segment.name, path: segment.path, systemImage: nil)
+                        crumb(segment.name, path: segment.path, systemImage: nil)
                     }
                 }
+                .padding(.vertical, UIScale.pt(2))
             }
             Spacer(minLength: UIScale.pt(8))
             Button {
@@ -477,30 +559,13 @@ struct MusicPage: View {
         }
     }
 
-    private func crumbButton(_ name: String, path: String, systemImage: String?) -> some View {
-        Button {
-            remote.navigate(to: path)
-        } label: {
-            HStack(spacing: UIScale.pt(3)) {
-                if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
-                }
-                Text(name).lineLimit(1)
-            }
-            .font(
-                .system(
-                    size: UIScale.pt(12), weight: path == remote.folderPath ? .semibold : .regular)
-            )
-            .foregroundStyle(
-                path == remote.folderPath ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
-        }
-        .buttonStyle(.plain)
-        .pointerCursor()
-        .dropDestination(for: String.self) { items, _ in
-            guard path != remote.folderPath else { return false }
-            remote.move(relativePaths: items, toFolderPath: path)
-            return !items.isEmpty
-        }
+    private func crumb(_ name: String, path: String, systemImage: String?) -> some View {
+        CrumbButton(
+            name: name, path: path, systemImage: systemImage, theme: theme,
+            isCurrent: path == remote.folderPath,
+            onTap: { remote.navigate(to: path) },
+            onDrop: { remote.move(relativePaths: $0, toFolderPath: path) }
+        )
     }
 
     @ViewBuilder private var trackList: some View {
@@ -527,7 +592,12 @@ struct MusicPage: View {
                             onPlay: { remote.playFolder(folder) },
                             onDrop: {
                                 remote.move(relativePaths: $0, toFolderPath: folder.relativePath)
-                            }
+                            },
+                            onRename: {
+                                folderRenameText = folder.name
+                                renameFolderTarget = folder
+                            },
+                            onDelete: { deleteFolderTarget = folder }
                         )
                     }
                     ForEach(filteredTracks) { track in
@@ -621,12 +691,53 @@ struct SeekBar: View {
     }
 }
 
+private struct CrumbButton: View {
+    let name: String
+    let path: String
+    let systemImage: String?
+    let theme: Color
+    let isCurrent: Bool
+    let onTap: () -> Void
+    let onDrop: ([String]) -> Void
+    @State private var dropTargeted = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: UIScale.pt(3)) {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+                }
+                Text(name).lineLimit(1)
+            }
+            .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
+            .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, UIScale.pt(6))
+            .padding(.vertical, UIScale.pt(3))
+            .background(
+                dropTargeted ? theme.opacity(0.18) : .clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            )
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .dropDestination(for: String.self) { items, _ in
+            guard !isCurrent else { return false }
+            onDrop(items)
+            return !items.isEmpty
+        } isTargeted: {
+            dropTargeted = $0 && !isCurrent
+        }
+    }
+}
+
 private struct MusicFolderRow: View {
     let folder: MusicFolder
     let theme: Color
     let onOpen: () -> Void
     let onPlay: () -> Void
     let onDrop: ([String]) -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
     @State private var hovering = false
     @State private var dropTargeted = false
 
@@ -689,6 +800,12 @@ private struct MusicFolderRow: View {
             return !items.isEmpty
         } isTargeted: {
             dropTargeted = $0
+        }
+        .contextMenu {
+            Button("Play", action: onPlay)
+            Button("Open", action: onOpen)
+            Button("Rename", action: onRename)
+            Button("Move to Trash", role: .destructive, action: onDelete)
         }
     }
 }
