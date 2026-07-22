@@ -2,7 +2,11 @@ import Foundation
 
 public enum SharedDefaults {
     public static let suiteName = "com.pulkit.edith.shared"
-    public static let registeredDefaults: [String: Any] = ["icloudBackup": true]
+    public static let registeredDefaults: [String: Any] = [
+        "icloudBackup": true,
+        MusicFade.enabledKey: true,
+        MusicFade.secondsKey: MusicFade.defaultSeconds,
+    ]
     public static let store: UserDefaults = {
         let store = UserDefaults(suiteName: suiteName) ?? .standard
         store.register(defaults: registeredDefaults)

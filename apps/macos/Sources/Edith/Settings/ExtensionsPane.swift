@@ -472,7 +472,7 @@ private struct ExtensionSettingsSheet: View {
     private var idealHeight: CGFloat {
         switch entry.id {
         case "micMute", "systemStats": 300
-        case "music": 400
+        case "music": 460
         case "focusDim", "colorPicker": 430
         case "system": 500
         case "notchShelf", "presenter": 580
@@ -1003,6 +1003,9 @@ private struct SystemStatsRows: View {
 
 private struct MusicRows: View {
     @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var enabled = false
+    @AppStorage(MusicFade.enabledKey, store: SharedDefaults.store) private var crossfade = true
+    @AppStorage(MusicFade.secondsKey, store: SharedDefaults.store) private var crossfadeSeconds =
+        MusicFade.defaultSeconds
 
     var body: some View {
         CLIToolStatusSection(tools: [.youtubeDownloader], extensionEnabled: enabled)
@@ -1015,6 +1018,21 @@ private struct MusicRows: View {
                     NSWorkspace.shared.open(Repo.musicDir)
                 }
                 .pointerCursor()
+            }
+            Toggle("Fade between tracks", isOn: $crossfade)
+                .pointerCursor()
+            if crossfade {
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    LabeledContent("Fade length") {
+                        Text(String(format: "%.1fs", crossfadeSeconds))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $crossfadeSeconds, in: MusicFade.secondsRange)
+                        .pointerCursor()
+                    Text("How long the old track fades out while the next one fades in.")
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                }
             }
         }
         .disabled(!enabled)

@@ -33,6 +33,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         didSet { if queueSource != oldValue { queueCache = nil } }
     }
     private var queueCache: [Track]?
+    private var fadingOut: [AVAudioPlayer] = []
+    private var loadGeneration = 0
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
     private var folderChangedObserver: NSObjectProtocol?
@@ -82,15 +84,19 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         }
     }
 
-    private func currentQueue() -> [Track] {
+    private func queue() async -> [Track] {
         if let queueCache { return queueCache }
-        let list: [Track] =
-            switch queueSource {
-            case .all: tracks
-            case .folder(let path): TrackMeta.tracks(under: path)
-            case .directory(let path): TrackMeta.entries(in: path).tracks
-            }
-        queueCache = list
+        let source = queueSource
+        let list: [Track]
+        switch source {
+        case .all:
+            list = tracks
+        case .folder(let path):
+            list = await Task.detached { TrackMeta.tracks(under: path) }.value
+        case .directory(let path):
+            list = await Task.detached { TrackMeta.entries(in: path).tracks }.value
+        }
+        if queueSource == source { queueCache = list }
         return list
     }
 
@@ -227,11 +233,18 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private func playSource(_ source: QueueSource, start: Track?) {
         let previousSource = queueSource
         queueSource = source
-        guard let track = start ?? currentQueue().first else {
-            queueSource = previousSource
+        if let start {
+            play(start)
             return
         }
-        play(track)
+        Task { [weak self] in
+            guard let self else { return }
+            guard let first = await self.queue().first else {
+                self.queueSource = previousSource
+                return
+            }
+            self.play(first)
+        }
     }
 
     func playPause() {
@@ -239,8 +252,11 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
             pause()
         } else if current != nil {
             resume()
-        } else if let first = currentQueue().first {
-            play(first)
+        } else {
+            Task { [weak self] in
+                guard let self, let first = await self.queue().first else { return }
+                self.play(first)
+            }
         }
     }
 
@@ -248,36 +264,54 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     func previous() { step(-1) }
 
     private func step(_ delta: Int) {
-        let list = currentQueue()
-        let position = current.flatMap { list.firstIndex(of: $0) }
-        guard
-            let next = PlayQueue.index(after: position, delta: delta, count: list.count)
-        else { return }
-        play(list[next])
+        Task { [weak self] in
+            guard let self else { return }
+            let list = await self.queue()
+            let position = self.current.flatMap { list.firstIndex(of: $0) }
+            guard let next = PlayQueue.index(after: position, delta: delta, count: list.count)
+            else { return }
+            self.play(list[next])
+        }
     }
 
     private func play(_ track: Track) {
-        player?.stop()
-        guard let p = try? AVAudioPlayer(contentsOf: track.url) else {
-            tracks.removeAll { $0 == track }
-            return
+        let crossfade = MusicFade.duration(from: SharedDefaults.store)
+        loadGeneration += 1
+        let generation = loadGeneration
+        current = track
+        isPlaying = true
+        startSaveTimer()
+        updateNowPlaying()
+        broadcastState()
+        Task { [weak self] in
+            let loaded = await Task.detached { LoadedAudio(url: track.url) }.value
+            guard let self, self.loadGeneration == generation else { return }
+            guard let loaded else {
+                self.tracks.removeAll { $0 == track }
+                self.queueCache?.removeAll { $0 == track }
+                return
+            }
+            self.install(loaded.player, for: track, crossfade: crossfade)
         }
+    }
+
+    private func install(_ p: AVAudioPlayer, for track: Track, crossfade: TimeInterval) {
+        retirePlayer(over: crossfade)
         player = p
         p.isMeteringEnabled = true
         p.delegate = self
         p.volume = 0
-        p.prepareToPlay()
-        p.play()
-        p.setVolume(Float(volume), fadeDuration: fade)
-        current = track
-        isPlaying = true
-        startSaveTimer()
+        if isPlaying {
+            p.play()
+            p.setVolume(Float(volume), fadeDuration: max(crossfade, fade))
+        }
         updateNowPlaying()
         persistPlayback()
         broadcastState()
         Task { [weak self] in
             guard let self, let current = self.current, current == track else { return }
             guard let art = await self.artwork(for: track) else { return }
+            guard self.current == track else { return }
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(
                 boundsSize: art.size
@@ -286,26 +320,44 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         }
     }
 
+    private func retirePlayer(over crossfade: TimeInterval) {
+        guard let outgoing = player else { return }
+        player = nil
+        outgoing.delegate = nil
+        guard crossfade > 0, outgoing.isPlaying else {
+            outgoing.stop()
+            return
+        }
+        outgoing.setVolume(0, fadeDuration: crossfade)
+        fadingOut.append(outgoing)
+        DispatchQueue.main.asyncAfter(deadline: .now() + crossfade) { [weak self] in
+            outgoing.stop()
+            self?.fadingOut.removeAll { $0 === outgoing }
+        }
+    }
+
     private func pause() {
-        guard let p = player else { return }
-        p.setVolume(0, fadeDuration: fade)
         isPlaying = false
         stopSaveTimer()
         persistPlayback()
-        DispatchQueue.main.asyncAfter(deadline: .now() + fade) { [weak self] in
-            guard let self, !self.isPlaying else { return }
-            self.player?.pause()
+        if let p = player {
+            p.setVolume(0, fadeDuration: fade)
+            DispatchQueue.main.asyncAfter(deadline: .now() + fade) { [weak self] in
+                guard let self, !self.isPlaying else { return }
+                self.player?.pause()
+            }
         }
         updateNowPlaying()
         broadcastState()
     }
 
     private func resume() {
-        guard let p = player else { return }
-        p.play()
-        p.setVolume(Float(volume), fadeDuration: fade)
         isPlaying = true
         startSaveTimer()
+        if let p = player {
+            p.play()
+            p.setVolume(Float(volume), fadeDuration: fade)
+        }
         updateNowPlaying()
         broadcastState()
     }
@@ -313,6 +365,9 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     func stop() {
         persistPlayback()
         stopSaveTimer()
+        loadGeneration += 1
+        fadingOut.forEach { $0.stop() }
+        fadingOut.removeAll()
         player?.stop()
         player = nil
         current = nil
@@ -412,6 +467,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
                 self.step(1)
             }
         }
+    }
+}
+
+final class LoadedAudio: @unchecked Sendable {
+    let player: AVAudioPlayer
+
+    init?(url: URL) {
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.prepareToPlay()
+        self.player = player
     }
 }
 
