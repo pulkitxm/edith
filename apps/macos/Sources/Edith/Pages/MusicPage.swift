@@ -753,26 +753,27 @@ private struct CrumbButton: View {
     @State private var dropTargeted = false
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: UIScale.pt(3)) {
-                if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
-                }
-                Text(name).lineLimit(1)
+        HStack(spacing: UIScale.pt(3)) {
+            if let systemImage {
+                Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
             }
-            .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
-            .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, UIScale.pt(6))
-            .padding(.vertical, UIScale.pt(3))
-            .background(
-                dropTargeted ? theme.opacity(0.18) : .clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-            )
+            Text(name).lineLimit(1)
         }
-        .buttonStyle(.plain)
+        .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
+        .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+        .padding(.horizontal, UIScale.pt(7))
+        .padding(.vertical, UIScale.pt(4))
+        .background(
+            dropTargeted ? theme.opacity(0.2) : .clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
         .pointerCursor()
-        .onDrop(of: [.text], isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 }))
-        { providers in
+        .onDrop(
+            of: [.utf8PlainText, .plainText, .text],
+            isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 })
+        ) { providers in
             guard !isCurrent else { return false }
             return loadDroppedTrackPaths(providers) { onDrop($0) }
         }
@@ -844,8 +845,10 @@ private struct MusicFolderRow: View {
                 .strokeBorder(theme, lineWidth: dropTargeted ? UIScale.pt(1.5) : 0)
         )
         .onHover { hovering = $0 }
-        .onDrop(of: [.text], isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 }))
-        { providers in
+        .onDrop(
+            of: [.utf8PlainText, .plainText, .text],
+            isTargeted: Binding(get: { dropTargeted }, set: { dropTargeted = $0 })
+        ) { providers in
             loadDroppedTrackPaths(providers) { onDrop($0) }
         }
         .contextMenu {
