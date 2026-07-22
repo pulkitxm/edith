@@ -58,6 +58,9 @@ final class MusicRemote: ObservableObject {
     @Published private(set) var folderPath = ""
     @Published private(set) var folders: [MusicFolder] = []
     @Published private(set) var folderTracks: [Track] = []
+    @Published private(set) var favourites: [Track] = []
+    @Published private(set) var favouritePaths: Set<String> = []
+    @Published private(set) var showingFavourites = false
     @Published private(set) var currentFile: String?
     @Published private(set) var isPlaying = false
     @Published private(set) var volume = 0.7
@@ -175,6 +178,7 @@ final class MusicRemote: ObservableObject {
     func rescan() {
         TrackMeta.invalidateCaches()
         folderCache.removeAll()
+        refreshFavourites()
         if !folderPath.isEmpty,
             !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
         {
@@ -208,8 +212,28 @@ final class MusicRemote: ObservableObject {
     func open(_ folder: MusicFolder) { navigate(to: folder.relativePath) }
 
     func navigate(to path: String) {
+        showingFavourites = false
         folderPath = path
         refreshEntries()
+    }
+
+    func openFavourites() {
+        refreshFavourites()
+        showingFavourites = true
+    }
+
+    private func refreshFavourites() {
+        favourites = Favourites.tracks()
+        favouritePaths = Set(favourites.map(\.relativePath))
+    }
+
+    func toggleFavourite(_ track: Track) {
+        Favourites.toggle(track.relativePath)
+        refreshFavourites()
+    }
+
+    func playFavourites() {
+        send("playSource", ["sourceKind": "favourites"])
     }
 
     func playFolder(_ folder: MusicFolder) { playAll(under: folder.relativePath) }
@@ -286,6 +310,10 @@ final class MusicRemote: ObservableObject {
     }
 
     func toggle(_ track: Track) {
+        if showingFavourites, currentFile != track.relativePath {
+            send("playSource", ["sourceKind": "favourites", "start": track.relativePath])
+            return
+        }
         send("toggle", ["track": track.relativePath])
     }
     func playPause() {
@@ -353,12 +381,10 @@ final class MusicRemote: ObservableObject {
             !FileManager.default.fileExists(atPath: destination.path),
             (try? FileManager.default.moveItem(at: source, to: destination)) != nil
         else { return false }
-        send(
-            "renamed",
-            [
-                "from": TrackMeta.relativePath(of: source),
-                "to": TrackMeta.relativePath(of: destination),
-            ])
+        let from = TrackMeta.relativePath(of: source)
+        let to = TrackMeta.relativePath(of: destination)
+        Favourites.repoint(from: from, to: to)
+        send("renamed", ["from": from, "to": to])
         return true
     }
 
@@ -409,6 +435,7 @@ final class MusicRemote: ObservableObject {
             (try? FileManager.default.moveItem(at: folder.url, to: destination)) != nil
         else { return }
         let newPath = TrackMeta.relativePath(of: destination)
+        Favourites.repoint(from: folder.relativePath, to: newPath)
         if let playing = currentFile,
             playing == folder.relativePath || playing.hasPrefix(folder.relativePath + "/")
         {
@@ -484,11 +511,13 @@ struct MusicPage: View {
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
     private var filteredTracks: [Track] {
-        guard !search.isEmpty else { return remote.folderTracks }
-        return remote.folderTracks.filter { $0.title.localizedCaseInsensitiveContains(search) }
+        let source = remote.showingFavourites ? remote.favourites : remote.folderTracks
+        guard !search.isEmpty else { return source }
+        return source.filter { $0.title.localizedCaseInsensitiveContains(search) }
     }
 
     private var filteredFolders: [MusicFolder] {
+        guard !remote.showingFavourites else { return [] }
         guard !search.isEmpty else { return remote.folders }
         return remote.folders.filter { $0.name.localizedCaseInsensitiveContains(search) }
     }
@@ -617,6 +646,20 @@ struct MusicPage: View {
             .buttonStyle(HoverButtonStyle())
             .help(gridView ? "Show as list" : "Show as grid")
             Button {
+                if remote.showingFavourites {
+                    remote.navigate(to: remote.folderPath)
+                } else {
+                    remote.openFavourites()
+                }
+            } label: {
+                Image(systemName: remote.showingFavourites ? "heart.fill" : "heart")
+                    .foregroundStyle(
+                        remote.showingFavourites
+                            ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
+            }
+            .buttonStyle(HoverButtonStyle())
+            .help(remote.showingFavourites ? "Back to your folders" : "Show favourites")
+            Button {
                 newFolderName = ""
                 showNewFolder = true
             } label: {
@@ -679,19 +722,30 @@ struct MusicPage: View {
 
     private var breadcrumbBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            HStack(spacing: UIScale.pt(4)) {
-                crumb("Home", path: "", systemImage: "house.fill")
-                chevronMenu(parentPath: "")
-                ForEach(crumbSegments, id: \.path) { segment in
-                    crumb(segment.name, path: segment.path, systemImage: nil)
-                    chevronMenu(parentPath: segment.path)
+            if remote.showingFavourites {
+                Label("Favourites", systemImage: "heart.fill")
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .foregroundStyle(theme)
+                    .padding(.vertical, UIScale.pt(6))
+            } else {
+                HStack(spacing: UIScale.pt(4)) {
+                    crumb("Home", path: "", systemImage: "house.fill")
+                    chevronMenu(parentPath: "")
+                    ForEach(crumbSegments, id: \.path) { segment in
+                        crumb(segment.name, path: segment.path, systemImage: nil)
+                        chevronMenu(parentPath: segment.path)
+                    }
                 }
+                .padding(.vertical, UIScale.pt(2))
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.vertical, UIScale.pt(2))
-            .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: UIScale.pt(8))
             Button {
-                remote.playCurrentFolder()
+                if remote.showingFavourites {
+                    remote.playFavourites()
+                } else {
+                    remote.playCurrentFolder()
+                }
             } label: {
                 Label("Play", systemImage: "play.fill")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -702,7 +756,9 @@ struct MusicPage: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .help("Play everything in this folder")
+            .help(
+                remote.showingFavourites
+                    ? "Play your favourites" : "Play everything in this folder")
         }
     }
 
@@ -745,15 +801,16 @@ struct MusicPage: View {
     @ViewBuilder private var trackList: some View {
         if filteredFolders.isEmpty && filteredTracks.isEmpty {
             VStack(spacing: UIScale.pt(8)) {
+                Text(emptyMessage)
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(.secondary)
                 Text(
-                    remote.folderPath.isEmpty
-                        ? "No playable files in your music folder" : "This folder is empty"
+                    remote.showingFavourites
+                        ? "Tap the heart on a track to add it here"
+                        : TrackMeta.url(for: remote.folderPath).path
                 )
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(.secondary)
-                Text(TrackMeta.url(for: remote.folderPath).path)
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.tertiary)
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -786,11 +843,13 @@ struct MusicPage: View {
                     isCurrent: remote.currentFile == track.relativePath,
                     isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
                     moveTargets: moveTargets,
+                    isFavourite: remote.favouritePaths.contains(track.relativePath),
                     onOpenDetails: { openDetails(track, renaming: false) },
                     onRename: { openDetails(track, renaming: true) },
                     onDelete: { deleteTarget = track },
                     onMove: { remote.move(track, toFolderPath: $0) },
-                    onToggle: { remote.toggle(track) }
+                    onToggle: { remote.toggle(track) },
+                    onToggleFavourite: { remote.toggleFavourite(track) }
                 )
             }
         }
@@ -821,14 +880,22 @@ struct MusicPage: View {
                     isCurrent: remote.currentFile == track.relativePath,
                     isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
                     moveTargets: moveTargets,
+                    isFavourite: remote.favouritePaths.contains(track.relativePath),
                     onOpenDetails: { openDetails(track, renaming: false) },
                     onRename: { openDetails(track, renaming: true) },
                     onDelete: { deleteTarget = track },
                     onMove: { remote.move(track, toFolderPath: $0) },
-                    onToggle: { remote.toggle(track) }
+                    onToggle: { remote.toggle(track) },
+                    onToggleFavourite: { remote.toggleFavourite(track) }
                 )
             }
         }
+    }
+
+    private var emptyMessage: String {
+        if remote.showingFavourites { return "No favourites yet" }
+        return remote.folderPath.isEmpty
+            ? "No playable files in your music folder" : "This folder is empty"
     }
 
     private func beginFolderRename(_ folder: MusicFolder) {
@@ -1041,11 +1108,13 @@ private struct MusicPageRow: View {
     let theme: Color
     let blur: Bool
     let moveTargets: [MoveTarget]
+    let isFavourite: Bool
     let onOpenDetails: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
     let onMove: (String) -> Void
     let onToggle: () -> Void
+    let onToggleFavourite: () -> Void
     @State private var duration: String?
     @State private var hovering = false
 
@@ -1082,6 +1151,17 @@ private struct MusicPageRow: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
+
+            Button(action: onToggleFavourite) {
+                Image(systemName: isFavourite ? "heart.fill" : "heart")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(isFavourite ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help(isFavourite ? "Remove from favourites" : "Add to favourites")
+            .opacity(hovering || isFavourite ? 1 : 0)
         }
         .padding(.vertical, UIScale.pt(6))
         .padding(.horizontal, UIScale.pt(8))
@@ -1094,8 +1174,9 @@ private struct MusicPageRow: View {
         .draggable(track.relativePath)
         .contextMenu {
             trackMenu(
-                track, moveTargets: moveTargets, onOpenDetails: onOpenDetails, onRename: onRename,
-                onDelete: onDelete, onMove: onMove)
+                track, moveTargets: moveTargets, isFavourite: isFavourite,
+                onOpenDetails: onOpenDetails, onRename: onRename, onDelete: onDelete,
+                onMove: onMove, onToggleFavourite: onToggleFavourite)
         }
         .task {
             duration = await TrackMeta.durationLabel(for: track)
@@ -1119,10 +1200,13 @@ private func folderMenu(
 
 @ViewBuilder
 private func trackMenu(
-    _ track: Track, moveTargets: [MoveTarget], onOpenDetails: @escaping () -> Void,
-    onRename: @escaping () -> Void, onDelete: @escaping () -> Void,
-    onMove: @escaping (String) -> Void
+    _ track: Track, moveTargets: [MoveTarget], isFavourite: Bool,
+    onOpenDetails: @escaping () -> Void, onRename: @escaping () -> Void,
+    onDelete: @escaping () -> Void, onMove: @escaping (String) -> Void,
+    onToggleFavourite: @escaping () -> Void
 ) -> some View {
+    Button(
+        isFavourite ? "Remove from Favourites" : "Add to Favourites", action: onToggleFavourite)
     Button("Show Details", action: onOpenDetails)
     Button("Show in Finder") {
         NSWorkspace.shared.activateFileViewerSelecting([track.url])
@@ -1177,7 +1261,7 @@ private struct MusicFolderTile: View {
             .onTapGesture(perform: onOpen)
             .pointerCursor()
 
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+            VStack(spacing: UIScale.pt(1)) {
                 Text(folder.name)
                     .font(.system(size: UIScale.pt(12), weight: .medium))
                     .lineLimit(1)
@@ -1185,7 +1269,7 @@ private struct MusicFolderTile: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
         .padding(UIScale.pt(6))
         .background(
@@ -1222,11 +1306,13 @@ private struct MusicTrackTile: View {
     let theme: Color
     let blur: Bool
     let moveTargets: [MoveTarget]
+    let isFavourite: Bool
     let onOpenDetails: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
     let onMove: (String) -> Void
     let onToggle: () -> Void
+    let onToggleFavourite: () -> Void
     @State private var duration: String?
     @State private var hovering = false
 
@@ -1244,14 +1330,29 @@ private struct MusicTrackTile: View {
                     .opacity(hovering || isCurrent ? 1 : 0)
                     .padding(UIScale.pt(7))
             }
+            .overlay(alignment: .topTrailing) {
+                Button(action: onToggleFavourite) {
+                    Image(systemName: isFavourite ? "heart.fill" : "heart")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(isFavourite ? theme : .white)
+                        .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointerCursor()
+                .help(isFavourite ? "Remove from favourites" : "Add to favourites")
+                .opacity(hovering || isFavourite ? 1 : 0)
+                .padding(UIScale.pt(7))
+            }
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
             .pointerCursor()
 
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+            VStack(spacing: UIScale.pt(1)) {
                 Text(track.title)
                     .font(.system(size: UIScale.pt(12)))
                     .lineLimit(2)
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(isCurrent ? theme : .primary)
                     .presenterBlur(blur)
                 Text(duration ?? " ")
@@ -1259,7 +1360,7 @@ private struct MusicTrackTile: View {
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpenDetails)
             .pointerCursor()
@@ -1275,8 +1376,9 @@ private struct MusicTrackTile: View {
         .draggable(track.relativePath)
         .contextMenu {
             trackMenu(
-                track, moveTargets: moveTargets, onOpenDetails: onOpenDetails, onRename: onRename,
-                onDelete: onDelete, onMove: onMove)
+                track, moveTargets: moveTargets, isFavourite: isFavourite,
+                onOpenDetails: onOpenDetails, onRename: onRename, onDelete: onDelete,
+                onMove: onMove, onToggleFavourite: onToggleFavourite)
         }
         .task {
             duration = await TrackMeta.durationLabel(for: track)

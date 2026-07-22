@@ -33,6 +33,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         case all
         case folder(String)
         case directory(String)
+        case favourites
     }
 
     private var player: AVAudioPlayer?
@@ -58,6 +59,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private var systemVolume = 1.0
     private var levelTick = 0
     private var levelRequestObserver: NSObjectProtocol?
+    private var favouritesObserver: NSObjectProtocol?
     private var folderChangedObserver: NSObjectProtocol?
     private var folderChangedIPCObserver: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
@@ -91,6 +93,9 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         folderChangedIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
             MainActor.assumeIsolated { self?.rescan() }
         }
+        favouritesObserver = IPC.observe(IPC.Name.musicFavouritesChanged) { [weak self] in
+            MainActor.assumeIsolated { self?.queueCache = nil }
+        }
         levelRequestObserver = IPC.observe(IPC.Name.requestMusicLevels) { [weak self] in
             MainActor.assumeIsolated {
                 self?.levelSubscriberUntil = Date().addingTimeInterval(2.5)
@@ -109,6 +114,7 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         switch kind {
         case "folder": return .folder(path)
         case "directory": return .directory(path)
+        case "favourites": return .favourites
         case "all": return .all
         default: return nil
         }
@@ -121,6 +127,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         switch source {
         case .all:
             list = tracks
+        case .favourites:
+            list = Favourites.tracks()
         case .folder(let path):
             list = await Task.detached { TrackMeta.tracks(under: path) }.value
         case .directory(let path) where isShuffling:
