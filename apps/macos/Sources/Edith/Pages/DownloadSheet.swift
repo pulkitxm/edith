@@ -470,8 +470,10 @@ struct DownloadSheet: View {
             }
             .frame(width: UIScale.pt(20))
 
+            DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
+
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text(displayURL(item.url))
+                Text(item.resolvedTitle ?? displayURL(item.url))
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(
                         isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
@@ -575,16 +577,18 @@ struct DownloadSheet: View {
             }
             .frame(width: UIScale.pt(18))
 
+            DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(30))
+
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text(displayURL(item.url))
+                Text(item.resolvedTitle ?? displayURL(item.url))
                     .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 switch item.status {
-                case let .done(output):
-                    Text(output)
+                case .done:
+                    Text(displayURL(item.url))
                         .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
@@ -751,5 +755,34 @@ struct DownloadSheet: View {
         guard !urls.isEmpty else { return }
         downloader.enqueue(urls: urls, prefix: filenamePrefix)
         urlText = ""
+    }
+}
+
+private struct DownloadThumb: View {
+    let url: URL
+    let dark: Bool
+    var height: CGFloat = 32
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: UIScale.pt(5)).fill(DashSkin.paper2(dark))
+            if let thumb = YoutubeDownloader.thumbnailURL(for: url) {
+                AsyncImage(url: thumb) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    placeholder
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: height * 16 / 9, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(5)))
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "play.rectangle.fill")
+            .font(.system(size: height * 0.4))
+            .foregroundStyle(DashSkin.inkFaint(dark))
     }
 }

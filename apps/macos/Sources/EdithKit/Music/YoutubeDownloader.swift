@@ -96,6 +96,49 @@ public final class YoutubeDownloader: ObservableObject {
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
             lhs.id == rhs.id
         }
+
+        public var resolvedTitle: String? {
+            if case let .done(output) = status {
+                let first = output.components(separatedBy: ", ").first ?? output
+                let stem = (first as NSString).deletingPathExtension
+                return stem.isEmpty ? nil : stem
+            }
+            for line in logs.components(separatedBy: .newlines).reversed() {
+                guard let range = line.range(of: "Destination: ") else { continue }
+                let path = String(line[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                let stem = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+                if !stem.isEmpty { return stem }
+            }
+            return nil
+        }
+
+        public var thumbnailURL: URL? { YoutubeDownloader.thumbnailURL(for: url) }
+    }
+
+    nonisolated public static func videoID(from url: URL) -> String? {
+        let host = url.host?.lowercased() ?? ""
+        if host.contains("youtu.be") {
+            let id = url.lastPathComponent
+            return id.isEmpty || id == "/" ? nil : id
+        }
+        guard host.contains("youtube.com") else { return nil }
+        if let v = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "v" })?.value, !v.isEmpty
+        {
+            return v
+        }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        if let idx = parts.firstIndex(where: { $0 == "shorts" || $0 == "embed" }),
+            idx + 1 < parts.count
+        {
+            return parts[idx + 1]
+        }
+        return nil
+    }
+
+    nonisolated public static func thumbnailURL(for url: URL) -> URL? {
+        guard let id = videoID(from: url) else { return nil }
+        return URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")
     }
 
     private var persistenceURL: URL {
