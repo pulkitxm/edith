@@ -530,17 +530,16 @@ struct MusicPage: View {
 
     private var breadcrumbBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: UIScale.pt(4)) {
-                    crumb("Home", path: "", systemImage: "house.fill")
-                    chevronMenu(parentPath: "")
-                    ForEach(crumbSegments, id: \.path) { segment in
-                        crumb(segment.name, path: segment.path, systemImage: nil)
-                        chevronMenu(parentPath: segment.path)
-                    }
+            HStack(spacing: UIScale.pt(4)) {
+                crumb("Home", path: "", systemImage: "house.fill")
+                chevronMenu(parentPath: "")
+                ForEach(crumbSegments, id: \.path) { segment in
+                    crumb(segment.name, path: segment.path, systemImage: nil)
+                    chevronMenu(parentPath: segment.path)
                 }
-                .padding(.vertical, UIScale.pt(2))
             }
+            .padding(.vertical, UIScale.pt(2))
+            .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: UIScale.pt(8))
             Button {
                 remote.playCurrentFolder()
