@@ -35,6 +35,16 @@ import Testing
         #expect(PlayQueue.shuffled([], startingWith: nil).isEmpty)
     }
 
+    @Test func previousRestartsAfterTheThreshold() {
+        #expect(PlayQueue.previousRestarts(elapsed: 60))
+        #expect(PlayQueue.previousRestarts(elapsed: PlayQueue.restartThreshold + 0.1))
+    }
+
+    @Test func previousStepsBackEarlyInTheTrack() {
+        #expect(!PlayQueue.previousRestarts(elapsed: 0))
+        #expect(!PlayQueue.previousRestarts(elapsed: PlayQueue.restartThreshold))
+    }
+
     @Test func advancesToNextTrack() {
         #expect(PlayQueue.index(after: 0, delta: 1, count: 3) == 1)
     }

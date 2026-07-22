@@ -11,6 +11,14 @@ struct DownloadSheet: View {
     @State private var filenamePrefix = ""
     @State private var logItem: YoutubeDownloader.DownloadItem?
     @State private var confirmClearHistory = false
+    @AppStorage("musicDownloadKind", store: SharedDefaults.store) private var downloadKindRaw =
+        DownloadKind.audio.rawValue
+    @State private var estimate: DownloadEstimate?
+    @State private var estimating = false
+
+    private var downloadKind: DownloadKind {
+        DownloadKind(rawValue: downloadKindRaw) ?? .audio
+    }
 
     private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
@@ -155,6 +163,7 @@ struct DownloadSheet: View {
         if downloader.items.isEmpty {
             VStack(spacing: UIScale.pt(16)) {
                 urlInput
+                formatRow
                 optionsRow
                 Spacer()
                 startRow
@@ -247,6 +256,69 @@ struct DownloadSheet: View {
         }
     }
 
+    private var formatRow: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            label("FORMAT")
+            Picker("", selection: $downloadKindRaw) {
+                ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
+                    Text(kind.title).tag(kind.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .pointerCursor()
+            HStack(spacing: UIScale.pt(10)) {
+                ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
+                    sizeChip(kind)
+                }
+                if estimating {
+                    ProgressView().controlSize(.small)
+                }
+                Spacer()
+            }
+            .font(.system(size: UIScale.pt(11)))
+        }
+        .task(id: urlText) { await refreshEstimate() }
+    }
+
+    private func sizeChip(_ kind: DownloadKind) -> some View {
+        let selected = kind == downloadKind
+        return HStack(spacing: UIScale.pt(4)) {
+            Image(systemName: kind == .audio ? "waveform" : "film")
+            Text("\(kind.title) \(sizeText(kind))")
+        }
+        .foregroundStyle(selected ? theme : Color.secondary)
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.vertical, UIScale.pt(4))
+        .background(
+            selected ? theme.opacity(0.12) : Color.clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+    }
+
+    private func sizeText(_ kind: DownloadKind) -> String {
+        guard let bytes = estimate?.bytes(for: kind) else { return estimating ? "…" : "—" }
+        let formatted = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        return (estimate?.approximate == true ? "~" : "") + formatted
+    }
+
+    private func refreshEstimate() async {
+        let urls = YoutubeDownloader.parseURLs(from: urlText)
+        guard !urls.isEmpty, downloader.unavailableReason == nil else {
+            estimate = nil
+            return
+        }
+        estimating = true
+        defer { estimating = false }
+        var total: DownloadEstimate?
+        for url in urls.prefix(5) {
+            guard !Task.isCancelled else { return }
+            guard let one = await downloader.estimate(for: url) else { continue }
+            total = total.map { $0 + one } ?? one
+            estimate = total
+        }
+        estimate = total
+    }
+
     private var optionsRow: some View {
         HStack(spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -268,7 +340,7 @@ struct DownloadSheet: View {
             if !filenamePrefix.isEmpty {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     label("PREVIEW")
-                    Text("\(filenamePrefix)Title.m4a")
+                    Text("\(filenamePrefix)Title.\(downloadKind.fileExtension)")
                         .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
@@ -746,14 +818,14 @@ struct DownloadSheet: View {
     private func startDownload() {
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
-        downloader.enqueue(urls: urls, prefix: filenamePrefix)
+        downloader.enqueue(urls: urls, prefix: filenamePrefix, kind: downloadKind)
         urlText = ""
     }
 
     private func addMore() {
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
-        downloader.enqueue(urls: urls, prefix: filenamePrefix)
+        downloader.enqueue(urls: urls, prefix: filenamePrefix, kind: downloadKind)
         urlText = ""
     }
 }

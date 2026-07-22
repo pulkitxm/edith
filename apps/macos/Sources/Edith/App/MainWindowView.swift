@@ -243,6 +243,7 @@ struct MainWindowView: View {
     @State private var commandHintWork: DispatchWorkItem?
     @State private var showShortcutHints = false
     @State private var nav = NavStack()
+    @State private var musicFolderPath = ""
     @State private var restoringHistory = false
     @State private var permissionsNeedAttention = PermissionsStatus.current
     @State private var presenterQuickActionsPresented = false
@@ -284,16 +285,26 @@ struct MainWindowView: View {
     }
 
     private var currentLocation: String {
-        destination == .settings
-            ? "settings/\(navigationSelection.settingsTab)"
-            : navigationSelection.mainWindowSection
+        if destination == .settings {
+            return "settings/\(navigationSelection.settingsTab)"
+        }
+        if destination == .music, !musicFolderPath.isEmpty {
+            return "music/\(musicFolderPath)"
+        }
+        return navigationSelection.mainWindowSection
     }
 
     private func navigate(to location: String) {
         restoringHistory = true
+        let music = MainDestination.music.rawValue
         if location.hasPrefix("settings/") {
             settingsTab = String(location.dropFirst("settings/".count))
             mainWindowSection = MainDestination.settings.rawValue
+        } else if location == music || location.hasPrefix(music + "/") {
+            MusicRemote.shared.navigate(
+                to: location.hasPrefix(music + "/")
+                    ? String(location.dropFirst(music.count + 1)) : "")
+            mainWindowSection = music
         } else {
             mainWindowSection = location
         }
@@ -318,6 +329,7 @@ struct MainWindowView: View {
                 }
             }
             .ignoresSafeArea()
+            .overlay { MusicDetailOverlay() }
             .overlay(alignment: .topLeading) { chromeOverlay() }
             .animation(
                 Motion.animation(Motion.glide, reduceMotion: reduceMotion),
@@ -328,6 +340,7 @@ struct MainWindowView: View {
                 value: footerVisible)
         }
         .background(historyShortcuts)
+        .onReceive(MusicRemote.shared.$folderPath) { musicFolderPath = $0 }
         .onChange(of: currentLocation) { _, location in
             if restoringHistory {
                 restoringHistory = false

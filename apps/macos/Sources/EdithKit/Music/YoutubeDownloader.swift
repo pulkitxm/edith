@@ -61,11 +61,121 @@ public enum DownloadStatus: Equatable, Codable {
     }
 }
 
+public enum DownloadKind: String, Codable, Sendable, CaseIterable {
+    case audio
+    case video
+
+    public var title: String {
+        switch self {
+        case .audio: "Audio"
+        case .video: "Video"
+        }
+    }
+
+    public var fileExtension: String {
+        switch self {
+        case .audio: "m4a"
+        case .video: "mp4"
+        }
+    }
+}
+
+public struct DownloadEstimate: Equatable, Sendable {
+    public let audioBytes: Int64?
+    public let videoBytes: Int64?
+    public let approximate: Bool
+
+    public init(audioBytes: Int64?, videoBytes: Int64?, approximate: Bool) {
+        self.audioBytes = audioBytes
+        self.videoBytes = videoBytes
+        self.approximate = approximate
+    }
+
+    public func bytes(for kind: DownloadKind) -> Int64? {
+        switch kind {
+        case .audio: audioBytes
+        case .video: videoBytes
+        }
+    }
+
+    public static func + (lhs: DownloadEstimate, rhs: DownloadEstimate) -> DownloadEstimate {
+        DownloadEstimate(
+            audioBytes: sum(lhs.audioBytes, rhs.audioBytes),
+            videoBytes: sum(lhs.videoBytes, rhs.videoBytes),
+            approximate: lhs.approximate || rhs.approximate)
+    }
+
+    private static func sum(_ a: Int64?, _ b: Int64?) -> Int64? {
+        guard let a else { return b }
+        guard let b else { return a }
+        return a + b
+    }
+}
+
+public enum DownloadSizeParser {
+    public static func estimate(fromJSON data: Data) -> DownloadEstimate? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let formats = root["formats"] as? [[String: Any]]
+        else { return nil }
+        var missing = false
+        let audio = best(of: formats.filter { isAudioOnly($0) }, by: "abr")
+        let video = best(of: formats.filter { isVideoOnly($0) }, by: "height")
+        let combined = best(of: formats.filter { isCombined($0) }, by: "height")
+
+        let audioBytes = size(of: audio, missing: &missing)
+        var videoBytes = size(of: video, missing: &missing)
+        if let bytes = videoBytes, let audioBytes {
+            videoBytes = bytes + audioBytes
+        } else if videoBytes == nil {
+            videoBytes = size(of: combined, missing: &missing)
+        }
+        guard audioBytes != nil || videoBytes != nil else { return nil }
+        return DownloadEstimate(
+            audioBytes: audioBytes, videoBytes: videoBytes, approximate: true)
+    }
+
+    private static func isAudioOnly(_ format: [String: Any]) -> Bool {
+        codec(format, "vcodec") == "none" && codec(format, "acodec") != "none"
+    }
+
+    private static func isVideoOnly(_ format: [String: Any]) -> Bool {
+        codec(format, "acodec") == "none" && codec(format, "vcodec") != "none"
+    }
+
+    private static func isCombined(_ format: [String: Any]) -> Bool {
+        codec(format, "acodec") != "none" && codec(format, "vcodec") != "none"
+    }
+
+    private static func codec(_ format: [String: Any], _ key: String) -> String {
+        (format[key] as? String) ?? "none"
+    }
+
+    private static func best(of formats: [[String: Any]], by key: String) -> [String: Any]? {
+        formats.max { rank($0, key) < rank($1, key) }
+    }
+
+    private static func rank(_ format: [String: Any], _ key: String) -> Double {
+        (format[key] as? Double) ?? Double(format[key] as? Int ?? 0)
+    }
+
+    private static func size(of format: [String: Any]?, missing: inout Bool) -> Int64? {
+        guard let format else { return nil }
+        for key in ["filesize", "filesize_approx"] {
+            if let value = format[key] as? Int64 { return value }
+            if let value = format[key] as? Int { return Int64(value) }
+            if let value = format[key] as? Double { return Int64(value) }
+        }
+        missing = true
+        return nil
+    }
+}
+
 private struct SavedItem: Codable {
     let url: URL
     var status: DownloadStatus
     var outputFilename: String?
     var createdAt: Date
+    var kind: DownloadKind?
 }
 
 @MainActor
@@ -79,6 +189,7 @@ public final class YoutubeDownloader: ObservableObject {
     @Published public private(set) var isUpdatingYTDLP = false
     @Published public private(set) var ytdlpUpdateMessage: String?
     @Published public private(set) var updateResult: Result<String, Error>? = nil
+    @Published public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
     private var currentProcess: Process?
     private var currentItemID: UUID?
@@ -91,6 +202,7 @@ public final class YoutubeDownloader: ObservableObject {
         public var status: DownloadStatus
         public var outputFilename: String?
         public let createdAt: Date
+        public var kind: DownloadKind = .audio
         public var logs: String = ""
 
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
@@ -176,7 +288,7 @@ public final class YoutubeDownloader: ObservableObject {
         let saved = items.map {
             SavedItem(
                 url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
-                createdAt: $0.createdAt)
+                createdAt: $0.createdAt, kind: $0.kind)
         }
         if let data = try? JSONEncoder().encode(saved) {
             try? FileManager.default.createDirectory(
@@ -192,7 +304,7 @@ public final class YoutubeDownloader: ObservableObject {
         items = saved.map {
             DownloadItem(
                 url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
-                createdAt: $0.createdAt)
+                createdAt: $0.createdAt, kind: $0.kind ?? .audio)
         }
         .sorted { $0.createdAt > $1.createdAt }
     }
@@ -302,7 +414,7 @@ public final class YoutubeDownloader: ObservableObject {
         return host.contains("youtube.com") || host.contains("youtu.be")
     }
 
-    public func enqueue(urls: [URL], prefix: String) {
+    public func enqueue(urls: [URL], prefix: String, kind: DownloadKind = .audio) {
         let outputDir = Repo.musicDir
         try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
@@ -314,13 +426,41 @@ public final class YoutubeDownloader: ObservableObject {
                 template = outputDir.appendingPathComponent("\(prefix)%(title)s.%(ext)s").path
             }
             return DownloadItem(
-                url: url, status: .queued, outputFilename: template, createdAt: Date())
+                url: url, status: .queued, outputFilename: template, createdAt: Date(),
+                kind: kind)
         }
         self.items.insert(contentsOf: items, at: 0)
         save()
         if !isRunning {
             processNext()
         }
+    }
+
+    public func estimate(for url: URL) async -> DownloadEstimate? {
+        if let cached = estimates[url] { return cached }
+        let (exe, prefix) = ytdlpExecutable()
+        let value = await Task.detached {
+            Self.runEstimate(executable: exe, prefix: prefix, url: url)
+        }.value
+        if let value { estimates[url] = value }
+        return value
+    }
+
+    nonisolated private static func runEstimate(
+        executable: URL, prefix: [String], url: URL
+    ) -> DownloadEstimate? {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments =
+            prefix + ["--no-update", "--no-playlist", "--skip-download", "-J", url.absoluteString]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return DownloadSizeParser.estimate(fromJSON: data)
     }
 
     public func sourceURL(forFileNamed name: String) -> URL? {
@@ -378,12 +518,17 @@ public final class YoutubeDownloader: ObservableObject {
         let (exe, prefix) = ytdlpExecutable()
         let p = Process()
         p.executableURL = exe
+        let formatArguments: [String] =
+            switch item.kind {
+            case .audio: ["-x", "--audio-format", "m4a"]
+            case .video: ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
+            }
         p.arguments =
             prefix + [
                 "--no-update",
                 "--no-playlist",
                 "--no-quiet",
-                "-x", "--audio-format", "m4a",
+            ] + formatArguments + [
                 "--embed-thumbnail", "--convert-thumbnails", "jpg",
                 "--progress", "--newline",
                 "-o", item.outputFilename ?? "%(title)s.%(ext)s",

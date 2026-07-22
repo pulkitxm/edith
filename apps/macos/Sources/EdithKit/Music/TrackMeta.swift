@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import CryptoKit
 
 public struct Track: Identifiable, Equatable, Sendable {
     public let url: URL
@@ -47,6 +48,56 @@ public struct MusicFolder: Identifiable, Equatable, Sendable {
     public static func == (lhs: MusicFolder, rhs: MusicFolder) -> Bool { lhs.url == rhs.url }
 
     public var name: String { url.lastPathComponent }
+}
+
+enum ThumbnailStore {
+    static let maxPixels: CGFloat = 240
+
+    private static let directory: URL = {
+        let dir = AppData.supportDir.appendingPathComponent("thumbnails")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    static func key(for url: URL) -> String {
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        let stamp = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        let size = values?.fileSize ?? 0
+        let seed = "\(url.path)|\(stamp)|\(size)"
+        let digest = SHA256.hash(data: Data(seed.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func read(_ key: String) -> NSImage? {
+        NSImage(contentsOf: directory.appendingPathComponent(key + ".jpg"))
+    }
+
+    static func store(_ image: NSImage, key: String) -> NSImage? {
+        guard let data = jpeg(from: image) else { return nil }
+        try? data.write(to: directory.appendingPathComponent(key + ".jpg"), options: .atomic)
+        return NSImage(data: data)
+    }
+
+    private static func jpeg(from image: NSImage) -> Data? {
+        guard let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        let longest = CGFloat(max(source.width, source.height))
+        let scale = longest > maxPixels ? maxPixels / longest : 1
+        let width = Int(CGFloat(source.width) * scale)
+        let height = Int(CGFloat(source.height) * scale)
+        guard width > 0, height > 0,
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        else { return nil }
+        context.interpolationQuality = .medium
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let scaled = context.makeImage() else { return nil }
+        return NSBitmapImageRep(cgImage: scaled)
+            .representation(using: .jpeg, properties: [.compressionFactor: 0.82])
+    }
 }
 
 actor LoadGate {
@@ -249,12 +300,18 @@ public enum TrackMeta {
     public static func artwork(for track: Track) async -> NSImage? {
         if let hit = artworkCache.object(forKey: track.url as NSURL) { return hit }
         if cacheLock.withLock({ artworkMisses.contains(track.url) }) { return nil }
+        let key = ThumbnailStore.key(for: track.url)
+        if let stored = ThumbnailStore.read(key) {
+            artworkCache.setObject(stored, forKey: track.url as NSURL)
+            return stored
+        }
         await gate.acquire()
         defer { Task { await gate.release() } }
         guard !Task.isCancelled else { return nil }
         if let image = await loadArtwork(for: track.url) {
-            artworkCache.setObject(image, forKey: track.url as NSURL)
-            return image
+            let thumbnail = ThumbnailStore.store(image, key: key) ?? image
+            artworkCache.setObject(thumbnail, forKey: track.url as NSURL)
+            return thumbnail
         }
         cacheLock.withLock { _ = artworkMisses.insert(track.url) }
         return nil

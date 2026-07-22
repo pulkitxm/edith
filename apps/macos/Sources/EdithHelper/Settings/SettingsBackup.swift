@@ -85,7 +85,7 @@ final class SettingsBackup: ObservableObject {
         "presenterDetectScreenSharing", "presenterDetectMirroring",
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         "tabUsageEnabled", "tabMusicEnabled",
-        "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "repoPath",
+        "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "musicDownloadKind", "repoPath",
         "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
         "tabSystemEnabled", "preventSleep", "tabOrder",
         "backupSettings", "backupUsage", "backupLimits",
@@ -130,7 +130,7 @@ final class SettingsBackup: ObservableObject {
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
-        "theme", "lastPaletteTheme", "appearance",
+        "theme", "lastPaletteTheme", "appearance", "musicDownloadKind",
         "presenterMode", "presenterEnabled", "presenterBlurMusic", "presenterBlurMoney",
         "presenterBlurUsage",
         "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",

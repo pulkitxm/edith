@@ -374,7 +374,14 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     func next() { step(1) }
-    func previous() { step(-1) }
+
+    func previous() {
+        if PlayQueue.previousRestarts(elapsed: elapsed) {
+            seek(to: 0)
+        } else {
+            step(-1)
+        }
+    }
 
     private func step(_ delta: Int) {
         Task { [weak self] in
@@ -593,6 +600,10 @@ final class LoadedAudio: @unchecked Sendable {
 }
 
 enum PlayQueue {
+    static let restartThreshold: TimeInterval = 3
+
+    static func previousRestarts(elapsed: TimeInterval) -> Bool { elapsed > restartThreshold }
+
     static func index(after current: Int?, delta: Int, count: Int) -> Int? {
         guard count > 0 else { return nil }
         let base = current ?? -delta
