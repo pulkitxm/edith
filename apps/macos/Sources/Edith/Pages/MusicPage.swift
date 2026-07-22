@@ -204,6 +204,31 @@ final class MusicRemote: ObservableObject {
         broadcastFolderChanged()
     }
 
+    func createFolder(named name: String) {
+        let base = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        guard !base.isEmpty else { return }
+        let dir = TrackMeta.directory(for: folderPath).appendingPathComponent(base)
+        guard !FileManager.default.fileExists(atPath: dir.path),
+            (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true))
+                != nil
+        else { return }
+        refreshEntries()
+        broadcastFolderChanged()
+    }
+
+    func move(_ track: Track, toFolderPath folderRelativePath: String) {
+        let destination = TrackMeta.directory(for: folderRelativePath)
+            .appendingPathComponent(track.url.lastPathComponent)
+        guard destination != track.url,
+            !FileManager.default.fileExists(atPath: destination.path),
+            (try? FileManager.default.moveItem(at: track.url, to: destination)) != nil
+        else { return }
+        rescan()
+        broadcastFolderChanged()
+    }
+
     private func broadcastFolderChanged() {
         NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
         IPC.post(IPC.Name.musicFolderChanged)
@@ -237,6 +262,8 @@ struct MusicPage: View {
     @State private var detailTarget: Track?
     @State private var detailBeginRename = false
     @State private var deleteTarget: Track?
+    @State private var showNewFolder = false
+    @State private var newFolderName = ""
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
@@ -250,6 +277,17 @@ struct MusicPage: View {
     private var filteredFolders: [MusicFolder] {
         guard !search.isEmpty else { return remote.folders }
         return remote.folders.filter { $0.name.localizedCaseInsensitiveContains(search) }
+    }
+
+    private var moveTargets: [MoveTarget] {
+        var targets: [MoveTarget] = []
+        if !remote.folderPath.isEmpty {
+            let parent = (remote.folderPath as NSString).deletingLastPathComponent
+            let name = parent.isEmpty ? "Home" : (parent as NSString).lastPathComponent
+            targets.append(MoveTarget(name: "\(name) (up)", path: parent))
+        }
+        targets += remote.folders.map { MoveTarget(name: $0.name, path: $0.relativePath) }
+        return targets
     }
 
     var body: some View {
@@ -275,6 +313,18 @@ struct MusicPage: View {
         .navigationTitle("Music")
         .sheet(isPresented: $showDownloader) {
             DownloadSheet()
+        }
+        .alert("New folder", isPresented: $showNewFolder) {
+            TextField("Folder name", text: $newFolderName)
+            Button("Cancel", role: .cancel) { newFolderName = "" }
+            Button("Create") {
+                remote.createFolder(named: newFolderName)
+                newFolderName = ""
+            }
+        } message: {
+            Text(
+                "Creates a folder inside \(remote.folderPath.isEmpty ? "your music library" : remote.folderPath)."
+            )
         }
         .sheet(item: $detailTarget) { track in
             MusicDetailSheet(
@@ -321,6 +371,14 @@ struct MusicPage: View {
                     .font(DashSkin.serif(34))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
+                Button {
+                    newFolderName = ""
+                    showNewFolder = true
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .help("New folder")
                 Button {
                     try? FileManager.default.createDirectory(
                         at: Repo.musicDir, withIntermediateDirectories: true)
@@ -461,9 +519,11 @@ struct MusicPage: View {
                             track: track,
                             isCurrent: remote.currentFile == track.relativePath,
                             isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
+                            moveTargets: moveTargets,
                             onOpenDetails: { openDetails(track, renaming: false) },
                             onRename: { openDetails(track, renaming: true) },
                             onDelete: { deleteTarget = track },
+                            onMove: { remote.move(track, toFolderPath: $0) },
                             onToggle: { remote.toggle(track) }
                         )
                     }
@@ -604,15 +664,23 @@ private struct MusicFolderRow: View {
     }
 }
 
+struct MoveTarget: Identifiable, Equatable {
+    let name: String
+    let path: String
+    var id: String { path }
+}
+
 private struct MusicPageRow: View {
     let track: Track
     let isCurrent: Bool
     let isPlaying: Bool
     let theme: Color
     let blur: Bool
+    let moveTargets: [MoveTarget]
     let onOpenDetails: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
+    let onMove: (String) -> Void
     let onToggle: () -> Void
     @State private var duration: String?
     @State private var hovering = false
@@ -662,6 +730,13 @@ private struct MusicPageRow: View {
         .contextMenu {
             Button("Show Details", action: onOpenDetails)
             Button("Rename", action: onRename)
+            if !moveTargets.isEmpty {
+                Menu("Move to Folder") {
+                    ForEach(moveTargets) { target in
+                        Button(target.name) { onMove(target.path) }
+                    }
+                }
+            }
             Button("Move to Trash", role: .destructive, action: onDelete)
         }
         .task {
@@ -905,9 +980,15 @@ private struct MusicDetailSheet: View {
                 .buttonStyle(.plain)
                 .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                 .pointerCursor()
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .opacity
+                    ))
             }
         }
         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: canRename)
     }
 
     private var canRename: Bool {
