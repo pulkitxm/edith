@@ -323,19 +323,8 @@ struct DownloadSheet: View {
         HStack(spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 label("FILENAME PREFIX")
-                TextField("Optional — e.g. roadtrip_", text: $filenamePrefix)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: UIScale.pt(12.5)))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .padding(.horizontal, UIScale.pt(10))
-                    .padding(.vertical, UIScale.pt(7))
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UIScale.pt(8))
-                            .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
-                    )
+                EdithTextField(
+                    placeholder: "Optional — e.g. roadtrip_", text: $filenamePrefix)
             }
             if !filenamePrefix.isEmpty {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -374,19 +363,7 @@ struct DownloadSheet: View {
 
     private var urlBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            TextField("Add more YouTube URLs...", text: $urlText)
-                .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.ink(dark))
-                .padding(.horizontal, UIScale.pt(10))
-                .padding(.vertical, UIScale.pt(6))
-                .background(
-                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(8))
-                        .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
-                )
+            EdithTextField(placeholder: "Add more YouTube URLs...", text: $urlText)
                 .disabled(downloader.isRunning)
             Button(action: addMore) {
                 Image(systemName: "plus.circle.fill")

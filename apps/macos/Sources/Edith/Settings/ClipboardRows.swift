@@ -147,11 +147,7 @@ struct ClipboardRows: View {
         Section {
             LabeledContent {
                 HStack(spacing: UIScale.pt(4)) {
-                    TextField("", value: $maxItems, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: UIScale.pt(64))
-                        .multilineTextAlignment(.trailing)
-                        .labelsHidden()
+                    EdithNumberField(value: $maxItems, width: UIScale.pt(64))
                     Stepper("", value: $maxItems, in: 1...999)
                         .labelsHidden()
                         .pointerCursor()
@@ -237,8 +233,8 @@ struct ClipboardRows: View {
         Section {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Ignored apps") {
-                    TextField("com.app.bundleid, com.other.app", text: $ignoredApps)
-                        .textFieldStyle(.roundedBorder)
+                    EdithTextField(
+                        placeholder: "com.app.bundleid, com.other.app", text: $ignoredApps)
                 }
                 Text(
                     "Copies made in these apps are never recorded (password managers are pre-listed)."

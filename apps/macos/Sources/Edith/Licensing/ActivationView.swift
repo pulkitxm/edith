@@ -31,46 +31,23 @@ struct ActivationView: View {
                 .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .padding(.top, UIScale.pt(5))
-            TextField("EDITH-XXXX-XXXX-XXXX-XXXX", text: $key)
-                .textFieldStyle(.plain)
-                .font(DashSkin.mono(15, weight: .medium))
-                .multilineTextAlignment(.center)
-                .focused($keyFieldFocused)
-                .disabled(activating)
-                .padding(.horizontal, UIScale.pt(12))
-                .frame(height: UIScale.pt(42))
-                .background(
-                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(10))
-                        .strokeBorder(
-                            errorMessage == nil ? DashSkin.lineStrong(dark) : DashSkin.danger,
-                            lineWidth: UIScale.pt(1)
-                        )
-                }
-                .padding(.top, UIScale.pt(20))
-                .onChange(of: key) { _, value in
-                    let formatted = LicenseKeyFormatting.format(value)
-                    if formatted != value { key = formatted }
-                    errorMessage = nil
-                }
-                .onSubmit(activate)
-            TextField("Device name (optional)", text: $deviceName)
-                .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(13)))
-                .multilineTextAlignment(.center)
-                .disabled(activating)
-                .padding(.horizontal, UIScale.pt(12))
-                .frame(height: UIScale.pt(34))
-                .background(
-                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(10))
-                        .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
-                }
-                .padding(.top, UIScale.pt(10))
+            EdithTextField(
+                placeholder: "EDITH-XXXX-XXXX-XXXX-XXXX", text: $key,
+                font: DashSkin.mono(15, weight: .medium), alignment: .center,
+                invalid: errorMessage != nil, focus: $keyFieldFocused, onSubmit: activate
+            )
+            .disabled(activating)
+            .padding(.top, UIScale.pt(20))
+            .onChange(of: key) { _, value in
+                let formatted = LicenseKeyFormatting.format(value)
+                if formatted != value { key = formatted }
+                errorMessage = nil
+            }
+            EdithTextField(
+                placeholder: "Device name (optional)", text: $deviceName, alignment: .center
+            )
+            .disabled(activating)
+            .padding(.top, UIScale.pt(10))
             Button(action: activate) {
                 Group {
                     if activating {

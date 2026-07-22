@@ -319,8 +319,7 @@ private struct WorldClocksCard: View {
         .help("Add a timezone clock")
         .popover(isPresented: $showAdd, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                TextField("Search city or region", text: $query)
-                    .textFieldStyle(.roundedBorder)
+                SearchField(placeholder: "Search city or region", text: $query)
                     .frame(width: UIScale.pt(240))
                 ScrollView {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
