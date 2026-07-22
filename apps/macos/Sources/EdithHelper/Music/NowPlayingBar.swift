@@ -66,7 +66,7 @@ struct NowPlayingBar: View {
                             .foregroundStyle(player.isLooping ? theme : .secondary)
                     }
                     .buttonStyle(HoverButtonStyle())
-                    .help(player.isLooping ? "Looping current song" : "Shuffle next")
+                    .help(player.isLooping ? "Repeating this track" : "Play through the queue")
                     Slider(value: $player.volume, in: 0...1)
                         .controlSize(.mini)
                         .tint(theme)

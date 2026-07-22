@@ -16,11 +16,27 @@ public struct Track: Identifiable, Equatable, Sendable {
             .capitalized
     }
 
+    public var relativePath: String { TrackMeta.relativePath(of: url) }
+
     public var hue: Double {
         var h: UInt64 = 5381
         for b in url.lastPathComponent.utf8 { h = (h &* 33) &+ UInt64(b) }
         return Double(h % 360) / 360
     }
+}
+
+public struct MusicFolder: Identifiable, Equatable, Sendable {
+    public let url: URL
+    public let trackCount: Int
+    public var id: URL { url }
+
+    public init(url: URL, trackCount: Int) {
+        self.url = url
+        self.trackCount = trackCount
+    }
+
+    public var name: String { url.lastPathComponent }
+    public var relativePath: String { TrackMeta.relativePath(of: url) }
 }
 
 @MainActor
@@ -35,16 +51,75 @@ public enum TrackMeta {
     }()
     private static var durationCache: [URL: TimeInterval] = [:]
 
+    nonisolated public static func relativePath(of url: URL) -> String {
+        let base = Repo.musicDir.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        if path == base { return "" }
+        if path.hasPrefix(base + "/") { return String(path.dropFirst(base.count + 1)) }
+        return url.lastPathComponent
+    }
+
     public static func scanMusicFolder() -> [Track] {
-        let files =
+        tracks(under: "")
+    }
+
+    public static func directory(for relativePath: String) -> URL {
+        relativePath.isEmpty
+            ? Repo.musicDir : Repo.musicDir.appendingPathComponent(relativePath)
+    }
+
+    public static func tracks(under relativePath: String) -> [Track] {
+        let root = directory(for: relativePath)
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: root, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return [] }
+        var result: [Track] = []
+        for case let url as URL in enumerator {
+            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if !isDir, playableExtensions.contains(url.pathExtension.lowercased()) {
+                result.append(Track(url: url))
+            }
+        }
+        return result.sorted {
+            $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
+        }
+    }
+
+    public static func entries(in relativePath: String) -> (
+        folders: [MusicFolder], tracks: [Track]
+    ) {
+        let dir = directory(for: relativePath)
+        let items =
             (try? FileManager.default.contentsOfDirectory(
-                at: Repo.musicDir, includingPropertiesForKeys: nil
-            )) ?? []
-        return
-            files
-            .filter { playableExtensions.contains($0.pathExtension.lowercased()) }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-            .map(Track.init)
+                at: dir, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])) ?? []
+        var folders: [MusicFolder] = []
+        var tracks: [Track] = []
+        for item in items {
+            let isDir = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDir {
+                folders.append(
+                    MusicFolder(
+                        url: item,
+                        trackCount: Self.tracks(
+                            under: relativePathJoin(relativePath, item.lastPathComponent)
+                        ).count))
+            } else if playableExtensions.contains(item.pathExtension.lowercased()) {
+                tracks.append(Track(url: item))
+            }
+        }
+        folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        tracks.sort {
+            $0.url.lastPathComponent.localizedStandardCompare($1.url.lastPathComponent)
+                == .orderedAscending
+        }
+        return (folders, tracks)
+    }
+
+    private static func relativePathJoin(_ base: String, _ component: String) -> String {
+        base.isEmpty ? component : base + "/" + component
     }
 
     public static func duration(for track: Track) async -> TimeInterval? {
