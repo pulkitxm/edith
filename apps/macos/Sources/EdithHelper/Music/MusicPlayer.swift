@@ -249,8 +249,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
         p.updateMeters()
         let channels = max(min(p.numberOfChannels, 2), 1)
         let loudest = (0..<channels).map { Double(p.averagePower(forChannel: $0)) }.max() ?? -60
-        let loudness = min(max((loudest + 46) / 40, 0), 1)
-        smoothedLevel = max(loudness * volume, smoothedLevel * 0.8)
+        smoothedLevel = MeterLevel.level(
+            decibels: loudest, volume: volume, previous: smoothedLevel)
         PlaybackLevel.shared.update(smoothedLevel)
         levelTick += 1
         guard levelTick % 2 == 0, Date() < levelSubscriberUntil else { return }

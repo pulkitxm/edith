@@ -6,6 +6,17 @@ public enum MusicTick {
     public static let epoch = Date(timeIntervalSinceReferenceDate: 0)
 }
 
+public enum MeterLevel {
+    public static let floorDecibels = -46.0
+    public static let ceilingDecibels = -6.0
+
+    public static func level(decibels: Double, volume: Double, previous: Double) -> Double {
+        let span = ceilingDecibels - floorDecibels
+        let loudness = min(max((decibels - floorDecibels) / span, 0), 1)
+        return max(loudness * min(max(volume, 0), 1), previous * 0.8)
+    }
+}
+
 @MainActor
 public final class PlaybackLevel: ObservableObject {
     public static let shared = PlaybackLevel()
