@@ -853,7 +853,7 @@ private struct MusicCard: View {
     private var blur: Bool { presenterState.active && presenterBlurMusic }
 
     private var upNext: [Track] {
-        remote.tracks.filter { $0.url.lastPathComponent != remote.currentFile }.prefix(4)
+        remote.tracks.filter { $0.relativePath != remote.currentFile }.prefix(4)
             .map { $0 }
     }
 

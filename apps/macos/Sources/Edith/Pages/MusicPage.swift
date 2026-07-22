@@ -36,6 +36,9 @@ final class MusicRemote: ObservableObject {
     static let shared = MusicRemote()
 
     @Published private(set) var tracks: [Track] = []
+    @Published private(set) var folderPath = ""
+    @Published private(set) var folders: [MusicFolder] = []
+    @Published private(set) var folderTracks: [Track] = []
     @Published private(set) var currentFile: String?
     @Published private(set) var isPlaying = false
     @Published private(set) var volume = 0.7
@@ -49,7 +52,7 @@ final class MusicRemote: ObservableObject {
     private var stateObserver: NSObjectProtocol?
 
     var current: Track? {
-        currentFile.flatMap { file in tracks.first { $0.url.lastPathComponent == file } }
+        currentFile.flatMap { file in tracks.first { $0.relativePath == file } }
     }
 
     var elapsed: TimeInterval {
@@ -107,7 +110,36 @@ final class MusicRemote: ObservableObject {
 
     func rescan() {
         tracks = TrackMeta.scanMusicFolder()
+        if !folderPath.isEmpty,
+            !FileManager.default.fileExists(atPath: TrackMeta.directory(for: folderPath).path)
+        {
+            folderPath = ""
+        }
+        refreshEntries()
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
+    }
+
+    private func refreshEntries() {
+        let entries = TrackMeta.entries(in: folderPath)
+        folders = entries.folders
+        folderTracks = entries.tracks
+    }
+
+    func open(_ folder: MusicFolder) { navigate(to: folder.relativePath) }
+
+    func navigate(to path: String) {
+        folderPath = path
+        refreshEntries()
+    }
+
+    func playFolder(_ folder: MusicFolder) { playAll(under: folder.relativePath) }
+
+    func playCurrentFolder() { playAll(under: folderPath) }
+
+    private func playAll(under relativePath: String) {
+        let queue = TrackMeta.tracks(under: relativePath).map(\.relativePath)
+        guard !queue.isEmpty else { return }
+        send("playQueue", ["queue": queue])
     }
 
     func apply(_ info: [AnyHashable: Any]) {
@@ -127,7 +159,11 @@ final class MusicRemote: ObservableObject {
         IPC.post(IPC.Name.musicCommand, userInfo: info)
     }
 
-    func toggle(_ track: Track) { send("toggle", ["track": track.url.lastPathComponent]) }
+    func toggle(_ track: Track) {
+        let folder = (track.relativePath as NSString).deletingLastPathComponent
+        let siblings = TrackMeta.entries(in: folder).tracks.map(\.relativePath)
+        send("toggle", ["track": track.relativePath, "queue": siblings])
+    }
     func playPause() { send("playPause") }
     func next() { send("next") }
     func previous() { send("previous") }
@@ -207,8 +243,13 @@ struct MusicPage: View {
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
     private var filteredTracks: [Track] {
-        guard !search.isEmpty else { return remote.tracks }
-        return remote.tracks.filter { $0.title.localizedCaseInsensitiveContains(search) }
+        guard !search.isEmpty else { return remote.folderTracks }
+        return remote.folderTracks.filter { $0.title.localizedCaseInsensitiveContains(search) }
+    }
+
+    private var filteredFolders: [MusicFolder] {
+        guard !search.isEmpty else { return remote.folders }
+        return remote.folders.filter { $0.name.localizedCaseInsensitiveContains(search) }
     }
 
     var body: some View {
@@ -217,6 +258,9 @@ struct MusicPage: View {
                 .padding(.horizontal, UIScale.pt(24))
                 .padding(.top, UIScale.pt(18))
                 .padding(.bottom, UIScale.pt(12))
+            breadcrumbBar
+                .padding(.horizontal, UIScale.pt(24))
+                .padding(.bottom, UIScale.pt(10))
             if tabMusicEnabled, remote.restorePending > 0 {
                 Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
                     .font(.system(size: UIScale.pt(10)))
@@ -328,13 +372,76 @@ struct MusicPage: View {
         }
     }
 
+    private var crumbSegments: [(name: String, path: String)] {
+        guard !remote.folderPath.isEmpty else { return [] }
+        var cumulative = ""
+        return remote.folderPath.split(separator: "/").map { part in
+            cumulative = cumulative.isEmpty ? String(part) : cumulative + "/" + part
+            return (String(part), cumulative)
+        }
+    }
+
+    private var breadcrumbBar: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(4)) {
+                    crumbButton("Home", path: "", systemImage: "house.fill")
+                    ForEach(crumbSegments, id: \.path) { segment in
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(.tertiary)
+                        crumbButton(segment.name, path: segment.path, systemImage: nil)
+                    }
+                }
+            }
+            Spacer(minLength: UIScale.pt(8))
+            Button {
+                remote.playCurrentFolder()
+            } label: {
+                Label("Play", systemImage: "play.fill")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, UIScale.pt(12))
+                    .padding(.vertical, UIScale.pt(6))
+                    .background(theme, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help("Play everything in this folder")
+        }
+    }
+
+    private func crumbButton(_ name: String, path: String, systemImage: String?) -> some View {
+        Button {
+            remote.navigate(to: path)
+        } label: {
+            HStack(spacing: UIScale.pt(3)) {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+                }
+                Text(name).lineLimit(1)
+            }
+            .font(
+                .system(
+                    size: UIScale.pt(12), weight: path == remote.folderPath ? .semibold : .regular)
+            )
+            .foregroundStyle(
+                path == remote.folderPath ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+    }
+
     @ViewBuilder private var trackList: some View {
-        if remote.tracks.isEmpty {
+        if filteredFolders.isEmpty && filteredTracks.isEmpty {
             VStack(spacing: UIScale.pt(8)) {
-                Text("No playable files in your music folder")
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(.secondary)
-                Text(Repo.musicDir.path)
+                Text(
+                    remote.folderPath.isEmpty
+                        ? "No playable files in your music folder" : "This folder is empty"
+                )
+                .font(.system(size: UIScale.pt(13)))
+                .foregroundStyle(.secondary)
+                Text(TrackMeta.directory(for: remote.folderPath).path)
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.tertiary)
             }
@@ -342,10 +449,17 @@ struct MusicPage: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: UIScale.pt(2)) {
+                    ForEach(filteredFolders) { folder in
+                        MusicFolderRow(
+                            folder: folder, theme: theme,
+                            onOpen: { remote.open(folder) },
+                            onPlay: { remote.playFolder(folder) }
+                        )
+                    }
                     ForEach(filteredTracks) { track in
                         MusicPageRow(
                             track: track,
-                            isCurrent: remote.currentFile == track.url.lastPathComponent,
+                            isCurrent: remote.currentFile == track.relativePath,
                             isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
                             onOpenDetails: { openDetails(track, renaming: false) },
                             onRename: { openDetails(track, renaming: true) },
@@ -428,6 +542,65 @@ struct SeekBar: View {
                 .offset(x: min(max(width * fraction - knob / 2, 0), width - knob))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MusicFolderRow: View {
+    let folder: MusicFolder
+    let theme: Color
+    let onOpen: () -> Void
+    let onPlay: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(10)) {
+            Button(action: onOpen) {
+                HStack(spacing: UIScale.pt(10)) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: UIScale.pt(7))
+                            .fill(theme.opacity(0.16))
+                            .frame(width: UIScale.pt(34), height: UIScale.pt(34))
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: UIScale.pt(14)))
+                            .foregroundStyle(theme)
+                    }
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(folder.name)
+                            .font(.system(size: UIScale.pt(13), weight: .medium))
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                        Text("\(folder.trackCount) track\(folder.trackCount == 1 ? "" : "s")")
+                            .font(.system(size: UIScale.pt(10.5)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+
+            Button(action: onPlay) {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: UIScale.pt(22)))
+                    .foregroundStyle(theme)
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help("Play this folder")
+            .opacity(hovering || folder.trackCount == 0 ? 1 : 0.55)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, UIScale.pt(6))
+        .padding(.horizontal, UIScale.pt(8))
+        .background(
+            hovering ? Color.primary.opacity(0.05) : .clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+        )
+        .onHover { hovering = $0 }
     }
 }
 
@@ -520,7 +693,7 @@ private struct MusicDetailSheet: View {
     }()
 
     private var dark: Bool { scheme == .dark }
-    private var isCurrent: Bool { remote.currentFile == track.url.lastPathComponent }
+    private var isCurrent: Bool { remote.currentFile == track.relativePath }
     private var isPlaying: Bool { isCurrent && remote.isPlaying }
 
     var body: some View {
