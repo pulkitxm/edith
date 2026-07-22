@@ -701,9 +701,6 @@ struct DownloadSheet: View {
             }
             Spacer()
             Button("Close") {
-                if downloader.isRunning {
-                    downloader.cancelAll()
-                }
                 dismiss()
             }
             .buttonStyle(HoverButtonStyle())
