@@ -465,6 +465,7 @@ struct MusicPage: View {
     @AppStorage(
         Repo.musicFolderStaleKey, store: SharedDefaults.store)
     private var musicFolderStale = false
+    @AppStorage("musicGridView", store: SharedDefaults.store) private var gridView = false
     @StateObject private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -609,6 +610,13 @@ struct MusicPage: View {
     private var headerActions: some View {
         HStack(spacing: UIScale.pt(4)) {
             Button {
+                gridView.toggle()
+            } label: {
+                Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
+            }
+            .buttonStyle(HoverButtonStyle())
+            .help(gridView ? "Show as list" : "Show as grid")
+            Button {
                 newFolderName = ""
                 showNewFolder = true
             } label: {
@@ -750,39 +758,82 @@ struct MusicPage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVStack(spacing: UIScale.pt(2)) {
-                    ForEach(filteredFolders) { folder in
-                        MusicFolderRow(
-                            folder: folder, theme: theme,
-                            onOpen: { remote.open(folder) },
-                            onPlay: { remote.playFolder(folder) },
-                            onDrop: {
-                                remote.move(relativePaths: $0, toFolderPath: folder.relativePath)
-                            },
-                            onRename: {
-                                folderRenameText = folder.name
-                                renameFolderTarget = folder
-                            },
-                            onDelete: { deleteFolderTarget = folder }
-                        )
-                    }
-                    ForEach(filteredTracks) { track in
-                        MusicPageRow(
-                            track: track,
-                            isCurrent: remote.currentFile == track.relativePath,
-                            isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
-                            moveTargets: moveTargets,
-                            onOpenDetails: { openDetails(track, renaming: false) },
-                            onRename: { openDetails(track, renaming: true) },
-                            onDelete: { deleteTarget = track },
-                            onMove: { remote.move(track, toFolderPath: $0) },
-                            onToggle: { remote.toggle(track) }
-                        )
-                    }
+                Group {
+                    if gridView { gridContent } else { listContent }
                 }
                 .pageContent(compact)
             }
         }
+    }
+
+    private var listContent: some View {
+        LazyVStack(spacing: UIScale.pt(2)) {
+            ForEach(filteredFolders) { folder in
+                MusicFolderRow(
+                    folder: folder, theme: theme,
+                    onOpen: { remote.open(folder) },
+                    onPlay: { remote.playFolder(folder) },
+                    onDrop: {
+                        remote.move(relativePaths: $0, toFolderPath: folder.relativePath)
+                    },
+                    onRename: { beginFolderRename(folder) },
+                    onDelete: { deleteFolderTarget = folder }
+                )
+            }
+            ForEach(filteredTracks) { track in
+                MusicPageRow(
+                    track: track,
+                    isCurrent: remote.currentFile == track.relativePath,
+                    isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
+                    moveTargets: moveTargets,
+                    onOpenDetails: { openDetails(track, renaming: false) },
+                    onRename: { openDetails(track, renaming: true) },
+                    onDelete: { deleteTarget = track },
+                    onMove: { remote.move(track, toFolderPath: $0) },
+                    onToggle: { remote.toggle(track) }
+                )
+            }
+        }
+    }
+
+    private var gridContent: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.adaptive(minimum: UIScale.pt(124)), spacing: UIScale.pt(14))
+            ],
+            alignment: .leading, spacing: UIScale.pt(16)
+        ) {
+            ForEach(filteredFolders) { folder in
+                MusicFolderTile(
+                    folder: folder, theme: theme,
+                    onOpen: { remote.open(folder) },
+                    onPlay: { remote.playFolder(folder) },
+                    onDrop: {
+                        remote.move(relativePaths: $0, toFolderPath: folder.relativePath)
+                    },
+                    onRename: { beginFolderRename(folder) },
+                    onDelete: { deleteFolderTarget = folder }
+                )
+            }
+            ForEach(filteredTracks) { track in
+                MusicTrackTile(
+                    track: track,
+                    isCurrent: remote.currentFile == track.relativePath,
+                    isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
+                    moveTargets: moveTargets,
+                    onOpenDetails: { openDetails(track, renaming: false) },
+                    onRename: { openDetails(track, renaming: true) },
+                    onDelete: { deleteTarget = track },
+                    onMove: { remote.move(track, toFolderPath: $0) },
+                    onToggle: { remote.toggle(track) }
+                )
+            }
+        }
+    }
+
+    private func beginFolderRename(_ folder: MusicFolder) {
+        folderRenameText = folder.name
+        renameFolderTarget = folder
     }
 
     private func chooseMusicFolder() {
@@ -967,13 +1018,8 @@ private struct MusicFolderRow: View {
             dropTargeted = $0
         }
         .contextMenu {
-            Button("Play", action: onPlay)
-            Button("Open", action: onOpen)
-            Button("Show in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([folder.url])
-            }
-            Button("Rename", action: onRename)
-            Button("Move to Trash", role: .destructive, action: onDelete)
+            folderMenu(
+                folder, onOpen: onOpen, onPlay: onPlay, onRename: onRename, onDelete: onDelete)
         }
         .task(id: folder.relativePath) {
             let path = folder.relativePath
@@ -1047,19 +1093,190 @@ private struct MusicPageRow: View {
         .onHover { hovering = $0 }
         .draggable(track.relativePath)
         .contextMenu {
-            Button("Show Details", action: onOpenDetails)
-            Button("Show in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([track.url])
+            trackMenu(
+                track, moveTargets: moveTargets, onOpenDetails: onOpenDetails, onRename: onRename,
+                onDelete: onDelete, onMove: onMove)
+        }
+        .task {
+            duration = await TrackMeta.durationLabel(for: track)
+        }
+    }
+}
+
+@ViewBuilder
+private func folderMenu(
+    _ folder: MusicFolder, onOpen: @escaping () -> Void, onPlay: @escaping () -> Void,
+    onRename: @escaping () -> Void, onDelete: @escaping () -> Void
+) -> some View {
+    Button("Play", action: onPlay)
+    Button("Open", action: onOpen)
+    Button("Show in Finder") {
+        NSWorkspace.shared.activateFileViewerSelecting([folder.url])
+    }
+    Button("Rename", action: onRename)
+    Button("Move to Trash", role: .destructive, action: onDelete)
+}
+
+@ViewBuilder
+private func trackMenu(
+    _ track: Track, moveTargets: [MoveTarget], onOpenDetails: @escaping () -> Void,
+    onRename: @escaping () -> Void, onDelete: @escaping () -> Void,
+    onMove: @escaping (String) -> Void
+) -> some View {
+    Button("Show Details", action: onOpenDetails)
+    Button("Show in Finder") {
+        NSWorkspace.shared.activateFileViewerSelecting([track.url])
+    }
+    Button("Rename", action: onRename)
+    if !moveTargets.isEmpty {
+        Menu("Move to Folder") {
+            ForEach(moveTargets) { target in
+                Button(target.name) { onMove(target.path) }
             }
-            Button("Rename", action: onRename)
-            if !moveTargets.isEmpty {
-                Menu("Move to Folder") {
-                    ForEach(moveTargets) { target in
-                        Button(target.name) { onMove(target.path) }
-                    }
+        }
+    }
+    Button("Move to Trash", role: .destructive, action: onDelete)
+}
+
+private struct MusicFolderTile: View {
+    let folder: MusicFolder
+    let theme: Color
+    let onOpen: () -> Void
+    let onPlay: () -> Void
+    let onDrop: ([String]) -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+    @State private var hovering = false
+    @State private var dropTargeted = false
+    @State private var trackCount: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            ZStack {
+                RoundedRectangle(cornerRadius: UIScale.pt(12))
+                    .fill(theme.opacity(0.16))
+                Image(systemName: "folder.fill")
+                    .font(.system(size: UIScale.pt(34)))
+                    .foregroundStyle(theme)
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(alignment: .bottomTrailing) {
+                Button(action: onPlay) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: UIScale.pt(24)))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, theme)
                 }
+                .buttonStyle(.plain)
+                .pointerCursor()
+                .help("Play this folder")
+                .opacity(hovering ? 1 : 0)
+                .padding(UIScale.pt(7))
             }
-            Button("Move to Trash", role: .destructive, action: onDelete)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpen)
+            .pointerCursor()
+
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                Text(folder.name)
+                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .lineLimit(1)
+                Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(UIScale.pt(6))
+        .background(
+            dropTargeted
+                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(10))
+                .strokeBorder(theme, lineWidth: dropTargeted ? UIScale.pt(1.5) : 0)
+        )
+        .onHover { hovering = $0 }
+        .dropDestination(for: String.self) { paths, _ in
+            onDrop(paths)
+            return !paths.isEmpty
+        } isTargeted: {
+            dropTargeted = $0
+        }
+        .contextMenu {
+            folderMenu(
+                folder, onOpen: onOpen, onPlay: onPlay, onRename: onRename, onDelete: onDelete)
+        }
+        .task(id: folder.relativePath) {
+            let path = folder.relativePath
+            trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
+        }
+    }
+}
+
+private struct MusicTrackTile: View {
+    let track: Track
+    let isCurrent: Bool
+    let isPlaying: Bool
+    let theme: Color
+    let blur: Bool
+    let moveTargets: [MoveTarget]
+    let onOpenDetails: () -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+    let onMove: (String) -> Void
+    let onToggle: () -> Void
+    @State private var duration: String?
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            GeometryReader { geo in
+                PageArtworkThumb(track: track, size: geo.size.width)
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: isCurrent && isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: UIScale.pt(24)))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, theme)
+                    .opacity(hovering || isCurrent ? 1 : 0)
+                    .padding(UIScale.pt(7))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onToggle)
+            .pointerCursor()
+
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                Text(track.title)
+                    .font(.system(size: UIScale.pt(12)))
+                    .lineLimit(2)
+                    .foregroundStyle(isCurrent ? theme : .primary)
+                    .presenterBlur(blur)
+                Text(duration ?? " ")
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpenDetails)
+            .pointerCursor()
+            .help("Show details")
+        }
+        .padding(UIScale.pt(6))
+        .background(
+            isCurrent
+                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+        )
+        .onHover { hovering = $0 }
+        .draggable(track.relativePath)
+        .contextMenu {
+            trackMenu(
+                track, moveTargets: moveTargets, onOpenDetails: onOpenDetails, onRename: onRename,
+                onDelete: onDelete, onMove: onMove)
         }
         .task {
             duration = await TrackMeta.durationLabel(for: track)
