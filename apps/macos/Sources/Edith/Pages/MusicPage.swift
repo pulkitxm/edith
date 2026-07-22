@@ -739,16 +739,19 @@ struct MusicPage: View {
                     .foregroundStyle(theme)
                     .padding(.vertical, UIScale.pt(6))
             } else {
-                HStack(spacing: UIScale.pt(4)) {
-                    crumb("Home", path: "", systemImage: "house.fill")
-                    chevronMenu(parentPath: "")
-                    ForEach(crumbSegments, id: \.path) { segment in
-                        crumb(segment.name, path: segment.path, systemImage: nil)
-                        chevronMenu(parentPath: segment.path)
+                ScrollView(.horizontal) {
+                    HStack(spacing: UIScale.pt(4)) {
+                        crumb("Home", path: "", systemImage: "house.fill")
+                        chevronMenu(parentPath: "")
+                        ForEach(crumbSegments, id: \.path) { segment in
+                            crumb(segment.name, path: segment.path, systemImage: nil)
+                            chevronMenu(parentPath: segment.path)
+                        }
                     }
+                    .padding(.vertical, UIScale.pt(2))
+                    .fixedSize(horizontal: true, vertical: false)
                 }
-                .padding(.vertical, UIScale.pt(2))
-                .fixedSize(horizontal: true, vertical: false)
+                .scrollIndicators(.hidden)
             }
             Spacer(minLength: UIScale.pt(8))
             Button {
@@ -869,7 +872,9 @@ struct MusicPage: View {
     private var gridContent: some View {
         LazyVGrid(
             columns: [
-                GridItem(.adaptive(minimum: UIScale.pt(124)), spacing: UIScale.pt(14))
+                GridItem(
+                    .adaptive(minimum: MusicTile.width, maximum: MusicTile.width),
+                    spacing: UIScale.pt(14))
             ],
             alignment: .leading, spacing: UIScale.pt(16)
         ) {
@@ -1031,6 +1036,7 @@ private struct MusicFolderRow: View {
     let onDrop: ([String]) -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
@@ -1055,6 +1061,10 @@ private struct MusicFolderRow: View {
                         Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                             .font(.system(size: UIScale.pt(10.5)))
                             .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                            .animation(
+                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
+                                value: trackCount)
                     }
                     Spacer()
                 }
@@ -1126,6 +1136,7 @@ private struct MusicPageRow: View {
     let onMove: (String) -> Void
     let onToggle: () -> Void
     let onToggleFavourite: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var duration: String?
     @State private var hovering = false
 
@@ -1150,12 +1161,14 @@ private struct MusicPageRow: View {
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(theme)
                     }
-                    if let duration {
-                        Text(duration)
-                            .font(.system(size: UIScale.pt(11)))
-                            .monospacedDigit()
-                            .foregroundStyle(.tertiary)
-                    }
+                    Text(duration ?? "")
+                        .font(.system(size: UIScale.pt(11)))
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
+                        .contentTransition(.numericText())
+                        .animation(
+                            Motion.animation(Motion.settle, reduceMotion: reduceMotion),
+                            value: duration)
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -1233,6 +1246,13 @@ private func trackMenu(
     Button("Move to Trash", role: .destructive, action: onDelete)
 }
 
+private enum MusicTile {
+    static let art = 118.0
+    static let inset = 6.0
+    static var artSize: CGFloat { UIScale.pt(art) }
+    static var width: CGFloat { UIScale.pt(art + inset * 2) }
+}
+
 private struct MusicFolderTile: View {
     let folder: MusicFolder
     let theme: Color
@@ -1241,6 +1261,7 @@ private struct MusicFolderTile: View {
     let onDrop: ([String]) -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
@@ -1254,7 +1275,7 @@ private struct MusicFolderTile: View {
                     .font(.system(size: UIScale.pt(34)))
                     .foregroundStyle(theme)
             }
-            .aspectRatio(1, contentMode: .fit)
+            .frame(width: MusicTile.artSize, height: MusicTile.artSize)
             .overlay(alignment: .bottomTrailing) {
                 Button(action: onPlay) {
                     Image(systemName: "play.circle.fill")
@@ -1279,8 +1300,12 @@ private struct MusicFolderTile: View {
                 Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                    .animation(
+                        Motion.animation(Motion.settle, reduceMotion: reduceMotion),
+                        value: trackCount)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: MusicTile.artSize)
         }
         .padding(UIScale.pt(6))
         .background(
@@ -1324,40 +1349,41 @@ private struct MusicTrackTile: View {
     let onMove: (String) -> Void
     let onToggle: () -> Void
     let onToggleFavourite: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var duration: String?
     @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            GeometryReader { geo in
-                PageArtworkThumb(track: track, size: geo.size.width)
-            }
-            .aspectRatio(1, contentMode: .fit)
-            .overlay(alignment: .bottomTrailing) {
-                Image(systemName: isCurrent && isPlaying ? "pause.circle.fill" : "play.circle.fill")
+            PageArtworkThumb(track: track, size: MusicTile.artSize)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(
+                        systemName: isCurrent && isPlaying
+                            ? "pause.circle.fill" : "play.circle.fill"
+                    )
                     .font(.system(size: UIScale.pt(24)))
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, theme)
                     .opacity(hovering || isCurrent ? 1 : 0)
                     .padding(UIScale.pt(7))
-            }
-            .overlay(alignment: .topTrailing) {
-                Button(action: onToggleFavourite) {
-                    Image(systemName: isFavourite ? "heart.fill" : "heart")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        .foregroundStyle(isFavourite ? theme : .white)
-                        .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .overlay(alignment: .topTrailing) {
+                    Button(action: onToggleFavourite) {
+                        Image(systemName: isFavourite ? "heart.fill" : "heart")
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .foregroundStyle(isFavourite ? theme : .white)
+                            .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help(isFavourite ? "Remove from favourites" : "Add to favourites")
+                    .opacity(hovering || isFavourite ? 1 : 0)
+                    .padding(UIScale.pt(7))
+                }
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onToggle)
                 .pointerCursor()
-                .help(isFavourite ? "Remove from favourites" : "Add to favourites")
-                .opacity(hovering || isFavourite ? 1 : 0)
-                .padding(UIScale.pt(7))
-            }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onToggle)
-            .pointerCursor()
 
             VStack(spacing: UIScale.pt(1)) {
                 Text(track.title)
@@ -1370,8 +1396,12 @@ private struct MusicTrackTile: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
+                    .contentTransition(.numericText())
+                    .animation(
+                        Motion.animation(Motion.settle, reduceMotion: reduceMotion),
+                        value: duration)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: MusicTile.artSize)
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpenDetails)
             .pointerCursor()
@@ -1475,16 +1505,7 @@ private struct MusicDetailSheet: View {
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
     @FocusState private var nameFocused: Bool
-    @State private var duration: String?
-    @State private var sizeText: String?
-    @State private var addedText: String?
     @State private var sourceURL: URL?
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        return f
-    }()
 
     private var dark: Bool { scheme == .dark }
     private var isCurrent: Bool { remote.currentFile == track.relativePath }
@@ -1502,10 +1523,6 @@ private struct MusicDetailSheet: View {
             sourceURL = YoutubeDownloader.shared.sourceURL(
                 forFileNamed: track.url.lastPathComponent)
             if beginRename { nameFocused = true }
-            duration = nil
-            sizeText = nil
-            addedText = nil
-            await loadDetails()
         }
     }
 
@@ -1548,7 +1565,6 @@ private struct MusicDetailSheet: View {
                 .padding(.top, UIScale.pt(2))
             titleField
             folderPath
-            metadata
             if isCurrent, !track.isVideo {
                 playerBlock
             }
@@ -1643,24 +1659,6 @@ private struct MusicDetailSheet: View {
             .onSubmit(commitRename)
     }
 
-    private var metadata: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            if let duration { chip(duration, "clock") }
-            if duration != nil, sizeText != nil { separator }
-            if let sizeText { chip(sizeText, "internaldrive") }
-            if sizeText != nil, addedText != nil { separator }
-            if let addedText { chip(addedText, "calendar") }
-        }
-        .font(.system(size: UIScale.pt(11.5)))
-        .foregroundStyle(.secondary)
-    }
-
-    private var separator: some View {
-        Circle()
-            .fill(Color.secondary.opacity(0.4))
-            .frame(width: UIScale.pt(2.5), height: UIScale.pt(2.5))
-    }
-
     private var playerBlock: some View {
         VStack(spacing: UIScale.pt(8)) {
             SeekBar(theme: theme, height: UIScale.pt(5))
@@ -1689,12 +1687,6 @@ private struct MusicDetailSheet: View {
         } else {
             content()
         }
-    }
-
-    private func chip(_ text: String, _ symbol: String) -> some View {
-        Label(text, systemImage: symbol)
-            .labelStyle(.titleAndIcon)
-            .lineLimit(1)
     }
 
     private func youtubeLink(_ url: URL) -> some View {
@@ -1758,20 +1750,6 @@ private struct MusicDetailSheet: View {
     private func commitRename() {
         if canRename { onRename(name) }
         onClose()
-    }
-
-    private func loadDetails() async {
-        let attrs = try? FileManager.default.attributesOfItem(atPath: track.url.path)
-        let bytes = (attrs?[.size] as? NSNumber)?.int64Value
-        if let bytes {
-            sizeText = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-        }
-        if let created = attrs?[.creationDate] as? Date {
-            addedText = Self.dateFormatter.string(from: created)
-        }
-        if let seconds = await TrackMeta.duration(for: track), seconds > 0 {
-            duration = TrackMeta.timeLabel(seconds)
-        }
     }
 }
 
