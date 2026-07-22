@@ -1532,6 +1532,7 @@ private struct MusicDetailSheet: View {
     @ObservedObject private var remote = MusicRemote.shared
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
+    @State private var namedTrack: URL?
     @FocusState private var nameFocused: Bool
     @State private var sourceURL: URL?
 
@@ -1546,8 +1547,10 @@ private struct MusicDetailSheet: View {
         }
         .frame(width: UIScale.pt(track.isVideo ? 760 : 400))
         .background(sheetBackground)
+        .animation(.smooth(duration: 0.4), value: canRename)
         .task(id: track.id) {
             name = track.url.deletingPathExtension().lastPathComponent
+            namedTrack = track.id
             sourceURL = YoutubeDownloader.shared.sourceURL(
                 forFileNamed: track.url.lastPathComponent)
             if beginRename { nameFocused = true }
@@ -1610,7 +1613,6 @@ private struct MusicDetailSheet: View {
         .padding(.horizontal, UIScale.pt(28))
         .padding(.bottom, UIScale.pt(28))
         .padding(.top, UIScale.pt(6))
-        .animation(.smooth(duration: 0.28), value: canRename)
     }
 
     @ViewBuilder private var stage: some View {
@@ -1760,6 +1762,7 @@ private struct MusicDetailSheet: View {
     }
 
     private var canRename: Bool {
+        guard namedTrack == track.id else { return false }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && trimmed != track.url.deletingPathExtension().lastPathComponent
     }
