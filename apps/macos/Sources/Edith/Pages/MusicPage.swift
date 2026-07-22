@@ -939,7 +939,8 @@ struct MusicPage: View {
                     onDelete: { deleteTarget = track },
                     onMove: { remote.move(track, toFolderPath: $0) },
                     onToggle: { remote.toggle(track) },
-                    onToggleFavourite: { remote.toggleFavourite(track) }
+                    onToggleFavourite: { remote.toggleFavourite(track) },
+                    onOpenFolder: { remote.reveal(track) }
                 )
             }
         }
@@ -978,7 +979,8 @@ struct MusicPage: View {
                     onDelete: { deleteTarget = track },
                     onMove: { remote.move(track, toFolderPath: $0) },
                     onToggle: { remote.toggle(track) },
-                    onToggleFavourite: { remote.toggleFavourite(track) }
+                    onToggleFavourite: { remote.toggleFavourite(track) },
+                    onOpenFolder: { remote.reveal(track) }
                 )
             }
         }
@@ -1215,6 +1217,7 @@ private struct MusicPageRow: View {
     let onMove: (String) -> Void
     let onToggle: () -> Void
     let onToggleFavourite: () -> Void
+    let onOpenFolder: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var duration: String?
     @State private var hovering = false
@@ -1284,7 +1287,8 @@ private struct MusicPageRow: View {
             trackMenu(
                 track, moveTargets: moveTargets, isFavourite: isFavourite,
                 onOpenDetails: onOpenDetails, onRename: onRename, onDelete: onDelete,
-                onMove: onMove, onToggleFavourite: onToggleFavourite)
+                onMove: onMove, onToggleFavourite: onToggleFavourite,
+                onOpenFolder: onOpenFolder)
         }
         .task {
             duration = TrackMeta.cachedDurationLabel(for: track)
@@ -1312,11 +1316,12 @@ private func trackMenu(
     _ track: Track, moveTargets: [MoveTarget], isFavourite: Bool,
     onOpenDetails: @escaping () -> Void, onRename: @escaping () -> Void,
     onDelete: @escaping () -> Void, onMove: @escaping (String) -> Void,
-    onToggleFavourite: @escaping () -> Void
+    onToggleFavourite: @escaping () -> Void, onOpenFolder: @escaping () -> Void
 ) -> some View {
     Button(
         isFavourite ? "Remove from Favourites" : "Add to Favourites", action: onToggleFavourite)
     Button("Show Details", action: onOpenDetails)
+    Button("Open Enclosing Folder", action: onOpenFolder)
     Button("Show in Finder") {
         NSWorkspace.shared.activateFileViewerSelecting([track.url])
     }
@@ -1435,6 +1440,7 @@ private struct MusicTrackTile: View {
     let onMove: (String) -> Void
     let onToggle: () -> Void
     let onToggleFavourite: () -> Void
+    let onOpenFolder: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var duration: String?
     @State private var hovering = false
@@ -1503,7 +1509,8 @@ private struct MusicTrackTile: View {
             trackMenu(
                 track, moveTargets: moveTargets, isFavourite: isFavourite,
                 onOpenDetails: onOpenDetails, onRename: onRename, onDelete: onDelete,
-                onMove: onMove, onToggleFavourite: onToggleFavourite)
+                onMove: onMove, onToggleFavourite: onToggleFavourite,
+                onOpenFolder: onOpenFolder)
         }
         .task {
             duration = TrackMeta.cachedDurationLabel(for: track)
