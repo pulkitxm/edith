@@ -83,7 +83,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
                 MainActor.assumeIsolated { self?.handleCommand(info) }
             })
         stateRequestObserver = IPC.observe(IPC.Name.requestMusicState) { [weak self] in
-            MainActor.assumeIsolated { self?.broadcastState() }
+            MainActor.assumeIsolated {
+                self?.updateNowPlaying()
+                self?.broadcastState()
+            }
         }
         folderChangedIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
             MainActor.assumeIsolated { self?.rescan() }

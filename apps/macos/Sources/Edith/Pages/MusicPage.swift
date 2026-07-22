@@ -70,6 +70,8 @@ final class MusicRemote: ObservableObject {
     private var elapsedBase: TimeInterval = 0
     private var elapsedTimestamp: TimeInterval = 0
     private var stateObserver: NSObjectProtocol?
+    private(set) var videoSession: VideoPreviewSession?
+    private var videoResumesAudio = false
     private var levelObserver: NSObjectProtocol?
     private var levelPing: Timer?
     private var visibilityObserver: AnyCancellable?
@@ -80,6 +82,7 @@ final class MusicRemote: ObservableObject {
     }
 
     var elapsed: TimeInterval {
+        if let videoSession { return videoSession.elapsed }
         let raw =
             isPlaying
             ? elapsedBase + (Date().timeIntervalSince1970 - elapsedTimestamp) : elapsedBase
@@ -221,16 +224,59 @@ final class MusicRemote: ObservableObject {
         let file = info["track"] as? String ?? ""
         let track = file.isEmpty ? nil : file
         if currentFile != track { currentFile = track }
-        if let playing = info["isPlaying"] as? Bool, playing != isPlaying {
-            isPlaying = playing
-            refreshLevelPing()
-        }
-        if let value = info["duration"] as? Double, value != duration { duration = value }
         if let value = info["looping"] as? Bool, value != looping { looping = value }
         if let value = info["shuffling"] as? Bool, value != shuffling { shuffling = value }
         if let value = info["volume"] as? Double, value != volume { volume = value }
-        elapsedBase = info["elapsed"] as? Double ?? 0
-        elapsedTimestamp = info["at"] as? Double ?? Date().timeIntervalSince1970
+        guard let videoSession else {
+            if let playing = info["isPlaying"] as? Bool, playing != isPlaying {
+                isPlaying = playing
+                refreshLevelPing()
+            }
+            if let value = info["duration"] as? Double, value != duration { duration = value }
+            elapsedBase = info["elapsed"] as? Double ?? 0
+            elapsedTimestamp = info["at"] as? Double ?? Date().timeIntervalSince1970
+            return
+        }
+        if info["isPlaying"] as? Bool == true {
+            pausePlayback()
+            videoSession.toggle()
+        }
+    }
+
+    func attachVideo(_ session: VideoPreviewSession, resumesAudio: Bool) {
+        videoSession = session
+        videoResumesAudio = resumesAudio
+        pausePlayback()
+        isPlaying = session.isPlaying
+        duration = session.duration
+    }
+
+    func detachVideo(_ session: VideoPreviewSession) {
+        guard videoSession === session else { return }
+        let position = session.elapsed
+        let length = session.duration
+        let resumes = videoResumesAudio
+        let sameTrack = currentFile == session.track.relativePath
+        videoSession = nil
+        videoResumesAudio = false
+        isPlaying = false
+        if sameTrack, length > 0 { seek(to: position / length) }
+        if resumes { resumePlayback() }
+        IPC.post(IPC.Name.requestMusicState)
+    }
+
+    func videoPlaybackChanged() {
+        guard let videoSession else { return }
+        if isPlaying != videoSession.isPlaying { isPlaying = videoSession.isPlaying }
+        if duration != videoSession.duration { duration = videoSession.duration }
+        objectWillChange.send()
+    }
+
+    private func leaveVideo() {
+        guard let videoSession else { return }
+        videoResumesAudio = false
+        detachVideo(videoSession)
+        MusicDetailPresenter.shared.dismiss()
     }
 
     private func send(_ action: String, _ extra: [String: Any] = [:]) {
@@ -242,13 +288,30 @@ final class MusicRemote: ObservableObject {
     func toggle(_ track: Track) {
         send("toggle", ["track": track.relativePath])
     }
-    func playPause() { send("playPause") }
+    func playPause() {
+        if let videoSession {
+            videoSession.toggle()
+            return
+        }
+        send("playPause")
+    }
     func pausePlayback() { send("pause") }
     func resumePlayback() { send("resume") }
-    func next() { send("next") }
-    func previous() { send("previous") }
+    func next() {
+        leaveVideo()
+        send("next")
+    }
+    func previous() {
+        leaveVideo()
+        send("previous")
+    }
     func seek(to fraction: Double) {
         let clamped = min(max(fraction, 0), 1)
+        if let videoSession {
+            videoSession.seek(toFraction: clamped)
+            objectWillChange.send()
+            return
+        }
         if duration > 0 {
             elapsedBase = clamped * duration
             elapsedTimestamp = Date().timeIntervalSince1970
@@ -1164,17 +1227,7 @@ private struct MusicDetailSheet: View {
 
     @ViewBuilder private var stage: some View {
         if track.isVideo {
-            VideoStage(
-                track: track,
-                startAt: isCurrent ? remote.elapsed : 0,
-                onOpen: { remote.pausePlayback() },
-                onClose: { position, wasPlaying in
-                    if isCurrent, remote.duration > 0 {
-                        remote.seek(to: position / remote.duration)
-                    }
-                    if wasPlaying { remote.resumePlayback() }
-                }
-            )
+            VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0)
         } else {
             artwork
         }
