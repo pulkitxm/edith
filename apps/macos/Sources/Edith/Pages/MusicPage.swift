@@ -43,6 +43,7 @@ final class MusicRemote: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var volume = 0.7
     @Published private(set) var looping = false
+    @Published private(set) var shuffling = false
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var restorePending = SharedDefaults.store.integer(
         forKey: "restorePending.music")
@@ -163,6 +164,7 @@ final class MusicRemote: ObservableObject {
         isPlaying = info["isPlaying"] as? Bool ?? false
         duration = info["duration"] as? Double ?? 0
         looping = info["looping"] as? Bool ?? false
+        shuffling = info["shuffling"] as? Bool ?? false
         if let value = info["volume"] as? Double { volume = value }
         elapsedBase = info["elapsed"] as? Double ?? 0
         elapsedTimestamp = info["at"] as? Double ?? Date().timeIntervalSince1970
@@ -194,6 +196,7 @@ final class MusicRemote: ObservableObject {
         send("volume", ["value": value])
     }
     func toggleLoop() { send("loop", ["value": !looping]) }
+    func toggleShuffle() { send("shuffle", ["value": !shuffling]) }
 
     func delete(_ track: Track) {
         try? FileManager.default.trashItem(at: track.url, resultingItemURL: nil)
@@ -419,7 +422,8 @@ struct MusicPage: View {
                 onDelete: {
                     detailTarget = nil
                     deleteTarget = track
-                }
+                },
+                onOpenFolder: { remote.navigate(to: $0) }
             )
         }
         .alert(
@@ -845,6 +849,9 @@ private struct MusicFolderRow: View {
         .contextMenu {
             Button("Play", action: onPlay)
             Button("Open", action: onOpen)
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([folder.url])
+            }
             Button("Rename", action: onRename)
             Button("Move to Trash", role: .destructive, action: onDelete)
         }
@@ -921,6 +928,9 @@ private struct MusicPageRow: View {
         .draggable(track.relativePath)
         .contextMenu {
             Button("Show Details", action: onOpenDetails)
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([track.url])
+            }
             Button("Rename", action: onRename)
             if !moveTargets.isEmpty {
                 Menu("Move to Folder") {
@@ -943,6 +953,7 @@ private struct MusicDetailSheet: View {
     let beginRename: Bool
     let onRename: (String) -> Void
     let onDelete: () -> Void
+    let onOpenFolder: (String) -> Void
     @ObservedObject private var remote = MusicRemote.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
@@ -968,13 +979,14 @@ private struct MusicDetailSheet: View {
             header
             content
         }
-        .frame(width: UIScale.pt(400))
+        .frame(width: UIScale.pt(track.isVideo ? 760 : 400))
         .background(sheetBackground)
         .onAppear {
             name = track.url.deletingPathExtension().lastPathComponent
             sourceURL = YoutubeDownloader.shared.sourceURL(
                 forFileNamed: track.url.lastPathComponent)
             if beginRename { nameFocused = true }
+            if track.isVideo, isPlaying { remote.playPause() }
         }
         .task { await loadDetails() }
     }
@@ -1014,11 +1026,12 @@ private struct MusicDetailSheet: View {
 
     private var content: some View {
         VStack(spacing: UIScale.pt(20)) {
-            artwork
+            stage
                 .padding(.top, UIScale.pt(2))
             titleField
+            folderPath
             metadata
-            if isCurrent {
+            if isCurrent, !track.isVideo {
                 playerBlock
             }
             if let sourceURL {
@@ -1030,6 +1043,43 @@ private struct MusicDetailSheet: View {
         .padding(.horizontal, UIScale.pt(28))
         .padding(.bottom, UIScale.pt(28))
         .padding(.top, UIScale.pt(6))
+    }
+
+    @ViewBuilder private var stage: some View {
+        if track.isVideo {
+            VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0) { position in
+                guard isCurrent, remote.duration > 0 else { return }
+                remote.seek(to: position / remote.duration)
+            }
+        } else {
+            artwork
+        }
+    }
+
+    private var folderPath: some View {
+        let parent = (track.relativePath as NSString).deletingLastPathComponent
+        return Button {
+            onOpenFolder(parent)
+            dismiss()
+        } label: {
+            HStack(spacing: UIScale.pt(5)) {
+                Image(systemName: "folder")
+                Text(parent.isEmpty ? "Music" : parent.replacingOccurrences(of: "/", with: " / "))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: UIScale.pt(8), weight: .semibold))
+            }
+            .font(.system(size: UIScale.pt(11), weight: .medium))
+            .foregroundStyle(theme)
+            .padding(.horizontal, UIScale.pt(10))
+            .padding(.vertical, UIScale.pt(6))
+            .background(theme.opacity(0.1), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .help("Show this folder in Music")
     }
 
     private var artwork: some View {
@@ -1236,6 +1286,8 @@ extension View {
 struct MusicFooter: View {
     @ObservedObject private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
+    @State private var detailTarget: Track?
+    @State private var deleteTarget: Track?
     @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
         MainDestination.home.rawValue
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
@@ -1264,6 +1316,21 @@ struct MusicFooter: View {
                 .fill(Color(nsColor: .separatorColor))
                 .frame(height: UIScale.pt(1))
         }
+        .sheet(item: $detailTarget) { _ in detailSheet }
+        .alert(
+            "Move to Trash?",
+            isPresented: Binding(
+                get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
+            presenting: deleteTarget
+        ) { track in
+            Button("Cancel", role: .cancel) { deleteTarget = nil }
+            Button("Move to Trash", role: .destructive) {
+                remote.delete(track)
+                deleteTarget = nil
+            }
+        } message: { track in
+            Text("\"\(track.title)\" will be moved to the Trash.")
+        }
     }
 
     private func playing(_ track: Track) -> some View {
@@ -1281,7 +1348,14 @@ struct MusicFooter: View {
 
     private func trackInfo(_ track: Track) -> some View {
         HStack(spacing: UIScale.pt(11)) {
-            PageArtworkThumb(track: track, size: 44)
+            Button {
+                detailTarget = track
+            } label: {
+                PageArtworkThumb(track: track, size: 44)
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help(track.isVideo ? "Watch this video" : "Show details")
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(track.title)
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -1300,6 +1374,27 @@ struct MusicFooter: View {
         .onTapGesture { mainWindowSection = MainDestination.music.rawValue }
         .pointerCursor()
         .help("Open Music")
+    }
+
+    private var detailSheet: some View {
+        Group {
+            if let track = detailTarget {
+                MusicDetailSheet(
+                    track: track,
+                    theme: theme,
+                    beginRename: false,
+                    onRename: { remote.rename(track, to: $0) },
+                    onDelete: {
+                        detailTarget = nil
+                        deleteTarget = track
+                    },
+                    onOpenFolder: {
+                        remote.navigate(to: $0)
+                        mainWindowSection = MainDestination.music.rawValue
+                    }
+                )
+            }
+        }
     }
 
     private var transport: some View {
@@ -1368,6 +1463,14 @@ struct MusicFooter: View {
 
     private var rightControls: some View {
         HStack(spacing: UIScale.pt(10)) {
+            glassButton(
+                "shuffle", diameter: 34, iconSize: 12,
+                iconColor: remote.shuffling ? .white : .secondary,
+                tint: remote.shuffling ? theme : nil
+            ) {
+                remote.toggleShuffle()
+            }
+            .help(remote.shuffling ? "Shuffling this folder and everything in it" : "Play in order")
             glassButton(
                 "repeat", diameter: 34, iconSize: 12,
                 iconColor: remote.looping ? .white : .secondary,

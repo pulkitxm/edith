@@ -59,6 +59,17 @@ struct NowPlayingBar: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     Button {
+                        player.isShuffling.toggle()
+                    } label: {
+                        Image(systemName: "shuffle")
+                            .font(.system(size: 12))
+                            .foregroundStyle(player.isShuffling ? theme : .secondary)
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .help(
+                        player.isShuffling
+                            ? "Shuffling this folder and everything in it" : "Play in order")
+                    Button {
                         player.isLooping.toggle()
                     } label: {
                         Image(systemName: "repeat")

@@ -1,8 +1,40 @@
+import EdithKit
+import Foundation
 import Testing
 
 @testable import EdithHelper
 
 @Suite struct PlayQueueTests {
+    private func tracks(_ names: [String]) -> [Track] {
+        names.map { Track(url: URL(fileURLWithPath: "/music/\($0).mp3"), relativePath: $0) }
+    }
+
+    @Test func shuffleKeepsEveryTrack() {
+        let list = tracks(["a", "b", "c", "d", "e"])
+        let shuffled = PlayQueue.shuffled(list, startingWith: nil)
+        #expect(shuffled.count == list.count)
+        #expect(Set(shuffled.map(\.relativePath)) == Set(list.map(\.relativePath)))
+    }
+
+    @Test func shuffleStartsFromTheCurrentTrack() {
+        let list = tracks(["a", "b", "c", "d", "e"])
+        for _ in 0..<20 {
+            let shuffled = PlayQueue.shuffled(list, startingWith: list[3])
+            #expect(shuffled.first == list[3])
+        }
+    }
+
+    @Test func shuffleHandlesACurrentTrackOutsideTheQueue() {
+        let list = tracks(["a", "b"])
+        let outsider = tracks(["z"])[0]
+        let shuffled = PlayQueue.shuffled(list, startingWith: outsider)
+        #expect(Set(shuffled.map(\.relativePath)) == Set(list.map(\.relativePath)))
+    }
+
+    @Test func shuffleOfAnEmptyQueueIsEmpty() {
+        #expect(PlayQueue.shuffled([], startingWith: nil).isEmpty)
+    }
+
     @Test func advancesToNextTrack() {
         #expect(PlayQueue.index(after: 0, delta: 1, count: 3) == 1)
     }

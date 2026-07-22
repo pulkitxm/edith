@@ -249,7 +249,7 @@ public enum TrackMeta {
         generator.requestedTimeToleranceAfter = .positiveInfinity
         let at = CMTime(seconds: 3, preferredTimescale: 600)
         guard let cg = try? await generator.image(at: at).image else { return nil }
-        return NSImage(cgImage: cg, size: .zero)
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 
     public static func artworkCached(for track: Track) -> NSImage? {
