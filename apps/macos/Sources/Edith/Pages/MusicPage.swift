@@ -511,7 +511,6 @@ private struct MusicDetailSheet: View {
     @State private var duration: String?
     @State private var sizeText: String?
     @State private var addedText: String?
-    @State private var bitrateText: String?
     @State private var sourceURL: URL?
 
     private static let dateFormatter: DateFormatter = {
@@ -529,8 +528,8 @@ private struct MusicDetailSheet: View {
             header
             content
         }
-        .frame(width: UIScale.pt(380))
-        .background(DashSkin.paper(dark))
+        .frame(width: UIScale.pt(400))
+        .background(sheetBackground)
         .onAppear {
             name = track.url.deletingPathExtension().lastPathComponent
             sourceURL = YoutubeDownloader.shared.sourceURL(
@@ -538,6 +537,19 @@ private struct MusicDetailSheet: View {
             if beginRename { nameFocused = true }
         }
         .task { await loadDetails() }
+    }
+
+    private var sheetBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(
+                    hue: track.hue, saturation: dark ? 0.28 : 0.14, brightness: dark ? 0.2 : 0.99),
+                DashSkin.paper(dark),
+            ],
+            startPoint: .top, endPoint: .center
+        )
+        .overlay(DashSkin.paper(dark).opacity(dark ? 0.35 : 0.15))
+        .ignoresSafeArea()
     }
 
     private var header: some View {
@@ -549,98 +561,132 @@ private struct MusicDetailSheet: View {
                 Image(systemName: "xmark")
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                    .background(DashSkin.paper2(dark).opacity(0.6), in: Circle())
                     .contentShape(Rectangle())
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.plain)
             .pointerCursor()
         }
-        .padding(.horizontal, UIScale.pt(14))
-        .padding(.top, UIScale.pt(12))
+        .padding(.horizontal, UIScale.pt(16))
+        .padding(.top, UIScale.pt(14))
     }
 
     private var content: some View {
-        VStack(spacing: UIScale.pt(16)) {
+        VStack(spacing: UIScale.pt(20)) {
             artwork
+                .padding(.top, UIScale.pt(2))
             titleField
             metadata
             if isCurrent {
-                SeekBar(theme: theme, height: UIScale.pt(4))
-                    .padding(.horizontal, UIScale.pt(4))
+                playerBlock
             }
             if let sourceURL {
                 youtubeLink(sourceURL)
             }
             actions
+                .padding(.top, UIScale.pt(2))
         }
-        .padding(.horizontal, UIScale.pt(24))
-        .padding(.bottom, UIScale.pt(24))
-        .padding(.top, UIScale.pt(4))
+        .padding(.horizontal, UIScale.pt(28))
+        .padding(.bottom, UIScale.pt(28))
+        .padding(.top, UIScale.pt(6))
     }
 
     private var artwork: some View {
-        PageArtworkThumb(track: track, size: 176)
-            .shadow(color: .black.opacity(0.28), radius: UIScale.pt(12), y: UIScale.pt(5))
+        PageArtworkThumb(track: track, size: 196)
+            .shadow(color: .black.opacity(0.3), radius: UIScale.pt(16), y: UIScale.pt(8))
             .overlay(alignment: .bottomTrailing) {
                 Button {
                     remote.toggle(track)
                 } label: {
                     ZStack {
                         Circle().fill(theme)
-                            .frame(width: UIScale.pt(46), height: UIScale.pt(46))
+                            .frame(width: UIScale.pt(50), height: UIScale.pt(50))
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: UIScale.pt(18), weight: .bold))
+                            .font(.system(size: UIScale.pt(19), weight: .bold))
                             .foregroundStyle(.white)
                     }
-                    .shadow(color: .black.opacity(0.3), radius: UIScale.pt(4), y: UIScale.pt(2))
+                    .shadow(color: theme.opacity(0.5), radius: UIScale.pt(8), y: UIScale.pt(3))
                 }
                 .buttonStyle(.plain)
                 .pointerCursor()
                 .help(isPlaying ? "Pause" : "Play")
-                .offset(x: UIScale.pt(8), y: UIScale.pt(8))
+                .offset(x: UIScale.pt(10), y: UIScale.pt(10))
             }
     }
 
     private var titleField: some View {
         TextField("Track name", text: $name)
             .textFieldStyle(.plain)
-            .font(.system(size: UIScale.pt(15), weight: .semibold))
+            .font(.system(size: UIScale.pt(17), weight: .semibold))
             .multilineTextAlignment(.center)
             .foregroundStyle(DashSkin.ink(dark))
             .focused($nameFocused)
-            .padding(.horizontal, UIScale.pt(12))
-            .padding(.vertical, UIScale.pt(8))
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            .padding(.horizontal, UIScale.pt(14))
+            .padding(.vertical, UIScale.pt(10))
+            .background(
+                DashSkin.paper2(dark).opacity(nameFocused ? 1 : 0),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+            )
             .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(8))
+                RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(
-                        nameFocused ? theme : DashSkin.line(dark), lineWidth: UIScale.pt(1))
+                        nameFocused ? theme : .clear, lineWidth: UIScale.pt(1))
             )
             .onSubmit(commitRename)
     }
 
     private var metadata: some View {
-        VStack(spacing: UIScale.pt(6)) {
-            HStack(spacing: UIScale.pt(12)) {
-                if let duration { chip(duration, "clock") }
-                chip(track.url.pathExtension.uppercased(), "waveform")
-                if let sizeText { chip(sizeText, "internaldrive") }
-                if let bitrateText { chip(bitrateText, "gauge.with.dots.needle.67percent") }
-            }
-            HStack(spacing: UIScale.pt(12)) {
-                if let addedText { chip("Added \(addedText)", "calendar") }
-                if isCurrent {
-                    chip(isPlaying ? "Playing" : "Paused", "dot.radiowaves.left.and.right")
-                        .foregroundStyle(theme)
+        HStack(spacing: UIScale.pt(10)) {
+            if let duration { chip(duration, "clock") }
+            if duration != nil, sizeText != nil { separator }
+            if let sizeText { chip(sizeText, "internaldrive") }
+            if sizeText != nil, addedText != nil { separator }
+            if let addedText { chip(addedText, "calendar") }
+        }
+        .font(.system(size: UIScale.pt(11.5)))
+        .foregroundStyle(.secondary)
+    }
+
+    private var separator: some View {
+        Circle()
+            .fill(Color.secondary.opacity(0.4))
+            .frame(width: UIScale.pt(2.5), height: UIScale.pt(2.5))
+    }
+
+    private var playerBlock: some View {
+        VStack(spacing: UIScale.pt(8)) {
+            SeekBar(theme: theme, height: UIScale.pt(5))
+            HStack {
+                ticker { Text(TrackMeta.timeLabel(remote.elapsed)) }
+                Spacer()
+                Label(isPlaying ? "Now Playing" : "Paused", systemImage: "waveform")
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .foregroundStyle(theme)
+                Spacer()
+                ticker {
+                    Text("-" + TrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
                 }
             }
+            .font(.system(size: UIScale.pt(10.5)))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
         }
-        .font(.system(size: UIScale.pt(11)))
-        .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func ticker<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View
+    {
+        if isPlaying {
+            TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in content() }
+        } else {
+            content()
+        }
     }
 
     private func chip(_ text: String, _ symbol: String) -> some View {
         Label(text, systemImage: symbol)
+            .labelStyle(.titleAndIcon)
             .lineLimit(1)
     }
 
@@ -669,26 +715,26 @@ private struct MusicDetailSheet: View {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, UIScale.pt(9))
+                    .padding(.vertical, UIScale.pt(11))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.red)
-            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .pointerCursor()
 
             if canRename {
                 Button(action: commitRename) {
                     Label("Rename", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, UIScale.pt(9))
+                        .padding(.vertical, UIScale.pt(11))
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
-                .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                 .pointerCursor()
             }
         }
-        .font(.system(size: UIScale.pt(12), weight: .medium))
+        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
     }
 
     private var canRename: Bool {
@@ -712,9 +758,6 @@ private struct MusicDetailSheet: View {
         }
         if let seconds = await TrackMeta.duration(for: track), seconds > 0 {
             duration = TrackMeta.timeLabel(seconds)
-            if let bytes {
-                bitrateText = "\(Int((Double(bytes) * 8 / 1000) / seconds)) kbps"
-            }
         }
     }
 }
