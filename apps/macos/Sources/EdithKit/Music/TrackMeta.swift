@@ -4,6 +4,7 @@ import AppKit
 public struct Track: Identifiable, Equatable, Sendable {
     public let url: URL
     public let relativePath: String
+    public let title: String
     public var id: URL { url }
 
     public init(url: URL) {
@@ -13,16 +14,14 @@ public struct Track: Identifiable, Equatable, Sendable {
     public init(url: URL, relativePath: String) {
         self.url = url
         self.relativePath = relativePath
-    }
-
-    public static func == (lhs: Track, rhs: Track) -> Bool { lhs.url == rhs.url }
-
-    public var title: String {
-        url.deletingPathExtension().lastPathComponent
+        self.title =
+            url.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "-", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
     }
+
+    public static func == (lhs: Track, rhs: Track) -> Bool { lhs.url == rhs.url }
 
     public var hue: Double {
         var h: UInt64 = 5381
@@ -239,14 +238,16 @@ public enum TrackMeta {
                 }
             }
         }
-        guard let videoTracks = try? await asset.loadTracks(withMediaType: .video),
-            !videoTracks.isEmpty
+        guard !Task.isCancelled,
+            let videoTracks = try? await asset.loadTracks(withMediaType: .video),
+            !videoTracks.isEmpty, !Task.isCancelled
         else { return nil }
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 120, height: 120)
-        let seconds = (try? await asset.load(.duration))?.seconds ?? 0
-        let at = CMTime(seconds: max(1, seconds * 0.2), preferredTimescale: 600)
+        generator.maximumSize = CGSize(width: 240, height: 240)
+        generator.requestedTimeToleranceBefore = .positiveInfinity
+        generator.requestedTimeToleranceAfter = .positiveInfinity
+        let at = CMTime(seconds: 3, preferredTimescale: 600)
         guard let cg = try? await generator.image(at: at).image else { return nil }
         return NSImage(cgImage: cg, size: .zero)
     }
