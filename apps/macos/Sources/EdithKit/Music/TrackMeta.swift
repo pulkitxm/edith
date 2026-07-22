@@ -289,6 +289,18 @@ public enum TrackMeta {
         return timeLabel(seconds)
     }
 
+    public static func cachedDurationLabel(for track: Track) -> String? {
+        guard let seconds = cacheLock.withLock({ durationCache[track.url] }), seconds > 0 else {
+            return nil
+        }
+        return timeLabel(seconds)
+    }
+
+    public static func cachedTrackCount(under relativePath: String) -> Int? {
+        let root = url(for: relativePath)
+        return cacheLock.withLock { trackCounts[root] }
+    }
+
     public static func timeLabel(_ t: TimeInterval) -> String {
         guard t.isFinite, t > 0 else { return "0:00" }
         let s = Int(t)

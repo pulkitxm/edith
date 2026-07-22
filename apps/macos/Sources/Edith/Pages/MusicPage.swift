@@ -1092,10 +1092,6 @@ private struct MusicFolderRow: View {
                         Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                             .font(.system(size: UIScale.pt(10.5)))
                             .foregroundStyle(.secondary)
-                            .contentTransition(.numericText())
-                            .animation(
-                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                                value: trackCount)
                     }
                     Spacer()
                 }
@@ -1142,6 +1138,7 @@ private struct MusicFolderRow: View {
         }
         .task(id: folder.relativePath) {
             let path = folder.relativePath
+            trackCount = TrackMeta.cachedTrackCount(under: path)
             trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
         }
     }
@@ -1196,10 +1193,6 @@ private struct MusicPageRow: View {
                         .font(.system(size: UIScale.pt(11)))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
-                        .contentTransition(.numericText())
-                        .animation(
-                            Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                            value: duration)
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -1234,6 +1227,7 @@ private struct MusicPageRow: View {
                 onMove: onMove, onToggleFavourite: onToggleFavourite)
         }
         .task {
+            duration = TrackMeta.cachedDurationLabel(for: track)
             duration = await TrackMeta.durationLabel(for: track)
         }
     }
@@ -1331,10 +1325,6 @@ private struct MusicFolderTile: View {
                 Text(trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-                    .animation(
-                        Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                        value: trackCount)
             }
             .frame(width: MusicTile.artSize)
         }
@@ -1361,6 +1351,7 @@ private struct MusicFolderTile: View {
         }
         .task(id: folder.relativePath) {
             let path = folder.relativePath
+            trackCount = TrackMeta.cachedTrackCount(under: path)
             trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
         }
     }
@@ -1427,10 +1418,6 @@ private struct MusicTrackTile: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
-                    .contentTransition(.numericText())
-                    .animation(
-                        Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                        value: duration)
             }
             .frame(width: MusicTile.artSize)
             .contentShape(Rectangle())
@@ -1453,6 +1440,7 @@ private struct MusicTrackTile: View {
                 onMove: onMove, onToggleFavourite: onToggleFavourite)
         }
         .task {
+            duration = TrackMeta.cachedDurationLabel(for: track)
             duration = await TrackMeta.durationLabel(for: track)
         }
     }
@@ -2023,8 +2011,14 @@ struct MusicFooter: View {
 
 private struct PageArtworkThumb: View {
     let track: Track
-    var size: CGFloat = 36
+    let size: CGFloat
     @State private var artwork: NSImage?
+
+    init(track: Track, size: CGFloat = 36) {
+        self.track = track
+        self.size = size
+        _artwork = State(initialValue: TrackMeta.artworkCached(for: track))
+    }
 
     var body: some View {
         Group {
