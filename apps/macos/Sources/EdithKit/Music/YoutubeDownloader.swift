@@ -323,6 +323,14 @@ public final class YoutubeDownloader: ObservableObject {
         }
     }
 
+    public func sourceURL(forFileNamed name: String) -> URL? {
+        for item in items {
+            guard case let .done(output) = item.status else { continue }
+            if output.components(separatedBy: ", ").contains(name) { return item.url }
+        }
+        return nil
+    }
+
     public func retry(_ item: DownloadItem) {
         guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[idx].status = .queued
