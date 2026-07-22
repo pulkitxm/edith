@@ -312,7 +312,6 @@ struct CleanerCard: View {
     @State private var showDrivePicker = false
     @State private var pickerScans = false
     @State private var confirmClean = false
-    @FocusState private var searchFocused: Bool
 
     var body: some View {
         SkinCard(title: "Reclaim developer space", dark: dark) {
@@ -453,28 +452,7 @@ struct CleanerCard: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "magnifyingglass").font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            TextField("Filter", text: $model.search)
-                .textFieldStyle(.plain).font(.system(size: UIScale.pt(12)))
-                .focused($searchFocused)
-                .focusEffectDisabled()
-                .onExitCommand {
-                    model.search = ""
-                    searchFocused = false
-                }
-            if !model.search.isEmpty {
-                Button {
-                    model.search = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, UIScale.pt(10)).padding(.vertical, UIScale.pt(6))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+        SearchField(placeholder: "Filter", text: $model.search)
     }
 
     private var selectAllRow: some View {
@@ -689,7 +667,6 @@ private struct CleanerCategoryRow: View {
     let dark: Bool
     @State private var itemFilter = ""
     @State private var headerHover = false
-    @FocusState private var itemFilterFocused: Bool
 
     private var isExpanded: Bool { model.expanded.contains(category.id) }
 
@@ -741,29 +718,9 @@ private struct CleanerCategoryRow: View {
             .onHover { headerHover = $0 }
             if isExpanded {
                 if showItemFilter {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: "magnifyingglass").font(.system(size: UIScale.pt(10)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        TextField("Filter \(category.items.count) items", text: $itemFilter)
-                            .textFieldStyle(.plain).font(.system(size: UIScale.pt(11)))
-                            .focused($itemFilterFocused)
-                            .focusEffectDisabled()
-                            .onExitCommand {
-                                itemFilter = ""
-                                itemFilterFocused = false
-                            }
-                        if !itemFilter.isEmpty {
-                            Button {
-                                itemFilter = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(5))
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    SearchField(
+                        placeholder: "Filter \(category.items.count) items", text: $itemFilter,
+                        compact: true
                     )
                     .padding(.leading, UIScale.pt(26)).padding(.bottom, UIScale.pt(4))
                 }

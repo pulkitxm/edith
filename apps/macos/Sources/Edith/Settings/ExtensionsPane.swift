@@ -110,22 +110,7 @@ struct ExtensionsPane: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search extensions", text: $query)
-                .textFieldStyle(.plain)
-        }
-        .padding(.horizontal, UIScale.pt(12))
-        .frame(height: UIScale.pt(36))
-        .background(
-            Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.5))
-        }
+        SearchField(placeholder: "Search extensions", text: $query, typeAhead: true)
     }
 
     private var categoryRow: some View {

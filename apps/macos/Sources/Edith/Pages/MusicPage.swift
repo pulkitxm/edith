@@ -572,7 +572,6 @@ struct MusicPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
-    @FocusState private var searchFocused: Bool
     @State private var showDownloader = false
     @State private var deleteTarget: Track?
     @State private var showNewFolder = false
@@ -680,9 +679,6 @@ struct MusicPage: View {
         } message: { track in
             Text("\"\(track.title)\" will be moved to the Trash.")
         }
-        .onExitCommand {
-            searchFocused = false
-        }
         .onChange(of: search) { if !search.isEmpty { remote.loadSearchScope() } }
         .onChange(of: remote.folderPath) { if !search.isEmpty { remote.loadSearchScope() } }
     }
@@ -787,21 +783,7 @@ struct MusicPage: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.secondary)
-            TextField("Search tracks", text: $search)
-                .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(13)))
-                .focused($searchFocused)
-        }
-        .padding(.horizontal, UIScale.pt(10))
-        .padding(.vertical, UIScale.pt(7))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
-                DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+        SearchField(placeholder: "Search tracks", text: $search, typeAhead: true)
     }
 
     private var crumbSegments: [(name: String, path: String)] {

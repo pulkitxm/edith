@@ -33,8 +33,7 @@ struct ClipboardHistoryView: View {
             }
             .padding()
             Divider()
-            TextField("Search…", text: $filterText)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search…", text: $filterText, typeAhead: true)
                 .padding(UIScale.pt(10))
             List(filtered) { entry in
                 row(entry)
