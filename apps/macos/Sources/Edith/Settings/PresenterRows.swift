@@ -42,16 +42,12 @@ struct PresenterRows: View {
                 }
                 Toggle("Blur music", isOn: $presenterBlurMusic)
                     .pointerCursor()
-                    .disabled(!presenterMode && !autoEnabled)
                 Toggle("Blur cost figures", isOn: $presenterBlurMoney)
                     .pointerCursor()
-                    .disabled(!presenterMode && !autoEnabled)
                 Toggle("Blur usage figures", isOn: $presenterBlurUsage)
                     .pointerCursor()
-                    .disabled(!presenterMode && !autoEnabled)
                 Toggle("Blur calendar events", isOn: $presenterBlurCalendar)
                     .pointerCursor()
-                    .disabled(!presenterMode && !autoEnabled)
             } header: {
                 Text("Manual")
             }

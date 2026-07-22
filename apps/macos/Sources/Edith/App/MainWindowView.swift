@@ -229,9 +229,6 @@ struct MainWindowView: View {
         false
     @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
     private var presenterBlurCalendar = true
-    @AppStorage("presenterAutoEnabled", store: SharedDefaults.store) private
-        var presenterAutoEnabled =
-        false
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
     @AppStorage("creditHidden", store: SharedDefaults.store) private var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
@@ -735,7 +732,7 @@ struct MainWindowView: View {
     private var presenterQuickActionTile: some View {
         HStack(spacing: UIScale.pt(0)) {
             Button {
-                presenterMode.toggle()
+                setPresenterMode(!presenterMode)
             } label: {
                 VStack(spacing: UIScale.pt(4)) {
                     Image(systemName: "theatermasks.fill")
@@ -786,6 +783,11 @@ struct MainWindowView: View {
             Text("Presenter mode")
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
                 .padding(.bottom, UIScale.pt(10))
+            presenterQuickActionToggle(
+                "Presenter mode",
+                isOn: Binding(get: { presenterMode }, set: { setPresenterMode($0) })
+            )
+            Divider()
             presenterQuickActionToggle("Blur music", isOn: $presenterBlurMusic)
             Divider()
             presenterQuickActionToggle("Blur cost figures", isOn: $presenterBlurMoney)
@@ -796,7 +798,11 @@ struct MainWindowView: View {
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))
-        .disabled(!presenterMode && !presenterAutoEnabled)
+    }
+
+    private func setPresenterMode(_ on: Bool) {
+        presenterMode = on
+        if !on { IPC.post(IPC.Name.presenterPauseAuto) }
     }
 
     private func presenterQuickActionToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -818,7 +824,6 @@ struct MainWindowView: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            guard presenterMode || presenterAutoEnabled else { return }
             isOn.wrappedValue.toggle()
         }
         .onHover { hovering in
