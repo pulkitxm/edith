@@ -21,4 +21,17 @@ import Testing
         #expect(ScrollForwarding.scrollsVertically(content: 900, visible: 400))
         #expect(!ScrollForwarding.scrollsVertically(content: 400, visible: 400))
     }
+
+    @Test func aGestureIsRetargetedOnlyAtItsStart() {
+        #expect(ScrollForwarding.startsGesture(phase: .began, momentum: []))
+        #expect(ScrollForwarding.startsGesture(phase: [], momentum: []))
+        #expect(!ScrollForwarding.startsGesture(phase: .changed, momentum: []))
+        #expect(!ScrollForwarding.startsGesture(phase: [], momentum: .changed))
+    }
+
+    @Test func aFlatGestureStillCountsAsVertical() {
+        #expect(ScrollForwarding.carriesVerticalScroll(deltaX: 0, deltaY: 0))
+        #expect(ScrollForwarding.carriesVerticalScroll(deltaX: 1, deltaY: 4))
+        #expect(!ScrollForwarding.carriesVerticalScroll(deltaX: 4, deltaY: 1))
+    }
 }
