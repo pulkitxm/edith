@@ -2,8 +2,6 @@ import AppKit
 
 @MainActor
 public enum InputFocus {
-    public static let escapeKeyCode: UInt16 = 53
-
     private static var monitor: Any?
 
     public static func install() {
@@ -18,15 +16,8 @@ public enum InputFocus {
                 }
                 return event
             }
-            if event.type == .keyDown {
-                guard
-                    escapeUnfocuses(keyCode: event.keyCode, modifiers: event.modifierFlags)
-                else { return event }
-                window.makeFirstResponder(nil)
-                return nil
-            }
-            if !clickLandsInside(
-                editor: editor, window: window, location: event.locationInWindow)
+            if event.type == .leftMouseDown,
+                !clickLandsInside(editor: editor, window: window, location: event.locationInWindow)
             {
                 window.makeFirstResponder(nil)
             }
@@ -34,9 +25,9 @@ public enum InputFocus {
         }
     }
 
-    public static func escapeUnfocuses(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
-        keyCode == escapeKeyCode
-            && modifiers.intersection([.command, .option, .control, .shift]).isEmpty
+    public static func resignEditing() {
+        guard let window = NSApp.keyWindow, editingTextView(in: window) != nil else { return }
+        window.makeFirstResponder(nil)
     }
 
     public static func isTypeAheadKey(characters: String?, modifiers: NSEvent.ModifierFlags)

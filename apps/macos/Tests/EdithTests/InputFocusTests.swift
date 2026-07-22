@@ -4,16 +4,6 @@ import Testing
 
 @MainActor
 @Suite struct InputFocusTests {
-    @Test func escapeWithoutModifiersUnfocuses() {
-        #expect(InputFocus.escapeUnfocuses(keyCode: InputFocus.escapeKeyCode, modifiers: []))
-    }
-
-    @Test func escapeWithModifiersIsLeftAlone() {
-        #expect(
-            !InputFocus.escapeUnfocuses(keyCode: InputFocus.escapeKeyCode, modifiers: [.command]))
-        #expect(!InputFocus.escapeUnfocuses(keyCode: 36, modifiers: []))
-    }
-
     @Test func plainLettersStartTypeAhead() {
         #expect(InputFocus.isTypeAheadKey(characters: "a", modifiers: []))
         #expect(InputFocus.isTypeAheadKey(characters: "Z", modifiers: [.shift]))

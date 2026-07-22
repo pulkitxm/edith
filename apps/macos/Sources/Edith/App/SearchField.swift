@@ -25,6 +25,7 @@ struct SearchField: View {
                 .font(.system(size: UIScale.pt(fontSize)))
                 .focused($focused)
                 .focusEffectDisabled()
+                .onExitCommand { focused = false }
             if !text.isEmpty {
                 Button {
                     text = ""

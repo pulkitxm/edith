@@ -337,6 +337,7 @@ struct MainWindowView: View {
                 value: footerVisible)
         }
         .background(historyShortcuts)
+        .onExitCommand { InputFocus.resignEditing() }
         .onReceive(MusicRemote.shared.$folderPath) { musicFolderPath = $0 }
         .onChange(of: currentLocation) { _, location in
             if restoringHistory {
