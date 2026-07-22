@@ -873,16 +873,8 @@ private struct MusicPageRow: View {
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
-        .draggable(track.relativePath) {
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "music.note")
-                Text(track.title).lineLimit(1)
-            }
-            .font(.system(size: UIScale.pt(12), weight: .medium))
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(6))
-            .background(theme.opacity(0.9), in: Capsule())
-            .foregroundStyle(.white)
+        .onDrag {
+            NSItemProvider(object: track.relativePath as NSString)
         }
         .contextMenu {
             Button("Show Details", action: onOpenDetails)
