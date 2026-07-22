@@ -229,6 +229,14 @@ final class MusicRemote: ObservableObject {
         broadcastFolderChanged()
     }
 
+    func move(relativePaths: [String], toFolderPath folderRelativePath: String) {
+        for path in relativePaths {
+            move(
+                Track(url: Repo.musicDir.appendingPathComponent(path)),
+                toFolderPath: folderRelativePath)
+        }
+    }
+
     private func broadcastFolderChanged() {
         NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
         IPC.post(IPC.Name.musicFolderChanged)
@@ -488,6 +496,11 @@ struct MusicPage: View {
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .dropDestination(for: String.self) { items, _ in
+            guard path != remote.folderPath else { return false }
+            remote.move(relativePaths: items, toFolderPath: path)
+            return !items.isEmpty
+        }
     }
 
     @ViewBuilder private var trackList: some View {
@@ -511,7 +524,10 @@ struct MusicPage: View {
                         MusicFolderRow(
                             folder: folder, theme: theme,
                             onOpen: { remote.open(folder) },
-                            onPlay: { remote.playFolder(folder) }
+                            onPlay: { remote.playFolder(folder) },
+                            onDrop: {
+                                remote.move(relativePaths: $0, toFolderPath: folder.relativePath)
+                            }
                         )
                     }
                     ForEach(filteredTracks) { track in
@@ -610,7 +626,9 @@ private struct MusicFolderRow: View {
     let theme: Color
     let onOpen: () -> Void
     let onPlay: () -> Void
+    let onDrop: ([String]) -> Void
     @State private var hovering = false
+    @State private var dropTargeted = false
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -657,10 +675,21 @@ private struct MusicFolderRow: View {
         .padding(.vertical, UIScale.pt(6))
         .padding(.horizontal, UIScale.pt(8))
         .background(
-            hovering ? Color.primary.opacity(0.05) : .clear,
+            dropTargeted
+                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(7))
+                .strokeBorder(theme, lineWidth: dropTargeted ? UIScale.pt(1.5) : 0)
+        )
         .onHover { hovering = $0 }
+        .dropDestination(for: String.self) { items, _ in
+            onDrop(items)
+            return !items.isEmpty
+        } isTargeted: {
+            dropTargeted = $0
+        }
     }
 }
 
@@ -727,6 +756,17 @@ private struct MusicPageRow: View {
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
+        .draggable(track.relativePath) {
+            HStack(spacing: UIScale.pt(8)) {
+                Image(systemName: "music.note")
+                Text(track.title).lineLimit(1)
+            }
+            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .padding(.horizontal, UIScale.pt(10))
+            .padding(.vertical, UIScale.pt(6))
+            .background(theme.opacity(0.9), in: Capsule())
+            .foregroundStyle(.white)
+        }
         .contextMenu {
             Button("Show Details", action: onOpenDetails)
             Button("Rename", action: onRename)
