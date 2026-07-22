@@ -125,7 +125,7 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "tabCalendarEnabled", "musicLooping",
+        "tabCalendarEnabled", "musicLooping", "musicGridView", "musicFavourites",
         "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
     ]
 
@@ -176,6 +176,7 @@ final class SettingsBackup: ObservableObject {
         "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
         "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
+        "musicGridView", "musicFavourites",
         "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
     ]
 
@@ -190,7 +191,7 @@ final class SettingsBackup: ObservableObject {
         "permNotificationsGranted",
         "permScreenRecordingGranted", "presenterAutoActive", "presenterAutoPaused",
         "presenterAutoReason", "settingsSection", "musicFolderPath", "musicFolderStale",
-        "musicFolderExternalConfirmation", "repoPathExternalConfirmation",
+        "musicFolderExternalConfirmation", "musicRevealPath", "repoPathExternalConfirmation",
         "cleanerConfirmedExternalPaths",
         "mainWindowZoom", "EdithMainWindowFullScreen",
         "restorePending.usage", "restorePending.limits", "restorePending.music",

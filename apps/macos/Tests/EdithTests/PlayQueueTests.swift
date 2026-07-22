@@ -31,6 +31,24 @@ import Testing
         #expect(Set(shuffled.map(\.relativePath)) == Set(list.map(\.relativePath)))
     }
 
+    @Test func shuffleOrderSurvivesARescan() {
+        let list = tracks(["a", "b", "c", "d"])
+        let first = PlayQueue.shuffleOrder(previous: nil, natural: list, current: list[0])
+        let again = PlayQueue.shuffleOrder(previous: first, natural: list, current: list[0])
+        #expect(again.map(\.relativePath) == first.map(\.relativePath))
+    }
+
+    @Test func shuffleOrderDropsGoneTracksAndAppendsNewOnes() {
+        let list = tracks(["a", "b", "c"])
+        let previous = PlayQueue.shuffleOrder(previous: nil, natural: list, current: nil)
+        let changed = tracks(["a", "c", "d"])
+        let order = PlayQueue.shuffleOrder(previous: previous, natural: changed, current: nil)
+        #expect(Set(order.map(\.relativePath)) == Set(changed.map(\.relativePath)))
+        let kept = previous.map(\.relativePath).filter { $0 != "b" }
+        #expect(order.prefix(kept.count).map(\.relativePath) == kept)
+        #expect(order.last?.relativePath == "d")
+    }
+
     @Test func shuffleOfAnEmptyQueueIsEmpty() {
         #expect(PlayQueue.shuffled([], startingWith: nil).isEmpty)
     }

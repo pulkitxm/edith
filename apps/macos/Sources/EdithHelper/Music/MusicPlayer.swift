@@ -24,7 +24,8 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     @Published var isShuffling: Bool {
         didSet {
             UserDefaults.standard.set(isShuffling, forKey: "musicShuffling")
-            queueCache = nil
+            if case .directory = queueSource { queueCache = nil }
+            shuffledCache = nil
             broadcastState()
         }
     }
@@ -38,12 +39,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
 
     private var player: AVAudioPlayer?
     private var queueSource: QueueSource = .all {
-        didSet { if queueSource != oldValue { queueCache = nil } }
+        didSet {
+            guard queueSource != oldValue else { return }
+            queueCache = nil
+            shuffledCache = nil
+            history.removeAll()
+        }
     }
-    private var queueCache: [Track]? {
-        didSet { shuffledCache = nil }
-    }
+    private var queueCache: [Track]?
     private var shuffledCache: [Track]?
+    private var history: [Track] = []
     private var fadingOut: [AVAudioPlayer] = []
     private var loadGeneration = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
@@ -143,10 +148,10 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private func playOrder() async -> [Track] {
         let natural = await queue()
         guard isShuffling else { return natural }
-        if let shuffledCache { return shuffledCache }
-        let shuffled = PlayQueue.shuffled(natural, startingWith: current)
-        shuffledCache = shuffled
-        return shuffled
+        let order = PlayQueue.shuffleOrder(
+            previous: shuffledCache, natural: natural, current: current)
+        shuffledCache = order
+        return order
     }
 
     private func handleCommand(_ info: [AnyHashable: Any]) {
@@ -389,23 +394,36 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     func previous() {
         if PlayQueue.previousRestarts(elapsed: elapsed) {
             seek(to: 0)
-        } else {
-            step(-1)
+            return
         }
+        if let previous = history.popLast() {
+            play(previous, remember: false)
+            return
+        }
+        step(-1, remember: false)
     }
 
-    private func step(_ delta: Int) {
+    private func step(_ delta: Int, remember: Bool = true) {
         Task { [weak self] in
             guard let self else { return }
             let list = await self.playOrder()
             let position = self.current.flatMap { list.firstIndex(of: $0) }
             guard let next = PlayQueue.index(after: position, delta: delta, count: list.count)
             else { return }
-            self.play(list[next])
+            self.play(list[next], remember: remember)
         }
     }
 
-    private func play(_ track: Track) {
+    private func remember(_ track: Track) {
+        guard let current, current != track else { return }
+        history.append(current)
+        if history.count > PlayQueue.historyLimit {
+            history.removeFirst(history.count - PlayQueue.historyLimit)
+        }
+    }
+
+    private func play(_ track: Track, remember shouldRemember: Bool = true) {
+        if shouldRemember { remember(track) }
         let crossfade = MusicFade.duration(from: SharedDefaults.store)
         loadGeneration += 1
         let generation = loadGeneration
@@ -612,6 +630,7 @@ final class LoadedAudio: @unchecked Sendable {
 
 enum PlayQueue {
     static let restartThreshold: TimeInterval = 3
+    static let historyLimit = 100
 
     static func previousRestarts(elapsed: TimeInterval) -> Bool { elapsed > restartThreshold }
 
@@ -627,6 +646,15 @@ enum PlayQueue {
             shuffled.swapAt(0, position)
         }
         return shuffled
+    }
+
+    static func shuffleOrder(previous: [Track]?, natural: [Track], current: Track?) -> [Track] {
+        guard let previous else { return shuffled(natural, startingWith: current) }
+        let available = Set(natural.map(\.relativePath))
+        var order = previous.filter { available.contains($0.relativePath) }
+        let kept = Set(order.map(\.relativePath))
+        order.append(contentsOf: natural.filter { !kept.contains($0.relativePath) }.shuffled())
+        return order
     }
 }
 
