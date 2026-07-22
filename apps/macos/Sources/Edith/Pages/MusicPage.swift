@@ -198,8 +198,8 @@ struct MusicPage: View {
     @State private var search = ""
     @FocusState private var searchFocused: Bool
     @State private var showDownloader = false
-    @State private var renameTarget: Track?
-    @State private var renameText = ""
+    @State private var detailTarget: Track?
+    @State private var detailBeginRename = false
     @State private var deleteTarget: Track?
 
     private var dark: Bool { scheme == .dark }
@@ -232,13 +232,19 @@ struct MusicPage: View {
         .sheet(isPresented: $showDownloader) {
             DownloadSheet()
         }
-        .alert("Rename track", isPresented: renameAlertBinding) {
-            TextField("Name", text: $renameText)
-            Button("Cancel", role: .cancel) { renameTarget = nil }
-            Button("Rename") {
-                if let track = renameTarget { remote.rename(track, to: renameText) }
-                renameTarget = nil
-            }
+        .sheet(item: $detailTarget) { track in
+            MusicDetailSheet(
+                track: track,
+                isCurrent: remote.currentFile == track.url.lastPathComponent,
+                isPlaying: remote.isPlaying,
+                theme: theme,
+                beginRename: detailBeginRename,
+                onRename: { remote.rename(track, to: $0) },
+                onDelete: {
+                    detailTarget = nil
+                    deleteTarget = track
+                }
+            )
         }
         .alert(
             "Move to Trash?", isPresented: deleteAlertBinding,
@@ -257,17 +263,13 @@ struct MusicPage: View {
         }
     }
 
-    private var renameAlertBinding: Binding<Bool> {
-        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
-    }
-
     private var deleteAlertBinding: Binding<Bool> {
         Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
     }
 
-    private func beginRename(_ track: Track) {
-        renameText = track.url.deletingPathExtension().lastPathComponent
-        renameTarget = track
+    private func openDetails(_ track: Track, renaming: Bool) {
+        detailBeginRename = renaming
+        detailTarget = track
     }
 
     private var pageHeader: some View {
@@ -347,11 +349,11 @@ struct MusicPage: View {
                             track: track,
                             isCurrent: remote.currentFile == track.url.lastPathComponent,
                             isPlaying: remote.isPlaying, theme: theme, blur: blurMusic,
-                            onRename: { beginRename(track) },
-                            onDelete: { deleteTarget = track }
-                        ) {
-                            remote.toggle(track)
-                        }
+                            onOpenDetails: { openDetails(track, renaming: false) },
+                            onRename: { openDetails(track, renaming: true) },
+                            onDelete: { deleteTarget = track },
+                            onToggle: { remote.toggle(track) }
+                        )
                     }
                 }
                 .padding(.horizontal, UIScale.pt(24))
@@ -437,53 +439,168 @@ private struct MusicPageRow: View {
     let isPlaying: Bool
     let theme: Color
     let blur: Bool
+    let onOpenDetails: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
-    let action: () -> Void
+    let onToggle: () -> Void
     @State private var duration: String?
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: UIScale.pt(10)) {
+        HStack(spacing: UIScale.pt(10)) {
+            Button(action: onOpenDetails) {
                 PageArtworkThumb(track: track, size: 34)
-                Text(track.title)
-                    .font(.system(size: UIScale.pt(13)))
-                    .lineLimit(1)
-                    .foregroundStyle(isCurrent ? theme : .primary)
-                    .presenterBlur(blur)
-                Spacer()
-                if isCurrent {
-                    Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(theme)
-                }
-                if let duration {
-                    Text(duration)
-                        .font(.system(size: UIScale.pt(11)))
-                        .monospacedDigit()
-                        .foregroundStyle(.tertiary)
-                }
             }
-            .padding(.vertical, UIScale.pt(6))
-            .padding(.horizontal, UIScale.pt(8))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help("Show details")
+            Button(action: onToggle) {
+                HStack(spacing: UIScale.pt(10)) {
+                    Text(track.title)
+                        .font(.system(size: UIScale.pt(13)))
+                        .lineLimit(1)
+                        .foregroundStyle(isCurrent ? theme : .primary)
+                        .presenterBlur(blur)
+                    Spacer()
+                    if isCurrent {
+                        Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(theme)
+                    }
+                    if let duration {
+                        Text(duration)
+                            .font(.system(size: UIScale.pt(11)))
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, UIScale.pt(6))
+        .padding(.horizontal, UIScale.pt(8))
         .background(
             isCurrent
                 ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
-        .pointerCursor()
         .contextMenu {
+            Button("Show Details", action: onOpenDetails)
             Button("Rename", action: onRename)
             Button("Move to Trash", role: .destructive, action: onDelete)
         }
         .task {
             duration = await TrackMeta.durationLabel(for: track)
         }
+    }
+}
+
+private struct MusicDetailSheet: View {
+    let track: Track
+    let isCurrent: Bool
+    let isPlaying: Bool
+    let theme: Color
+    let beginRename: Bool
+    let onRename: (String) -> Void
+    let onDelete: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @FocusState private var nameFocused: Bool
+    @State private var duration: String?
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(spacing: UIScale.pt(16)) {
+            PageArtworkThumb(track: track, size: 168)
+                .shadow(color: .black.opacity(0.25), radius: UIScale.pt(10), y: UIScale.pt(4))
+
+            VStack(spacing: UIScale.pt(6)) {
+                TextField("Track name", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .focused($nameFocused)
+                    .padding(.horizontal, UIScale.pt(12))
+                    .padding(.vertical, UIScale.pt(8))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            .strokeBorder(
+                                nameFocused ? theme : DashSkin.line(dark), lineWidth: UIScale.pt(1))
+                    )
+                    .onSubmit(commitRename)
+
+                HStack(spacing: UIScale.pt(10)) {
+                    if let duration {
+                        Label(duration, systemImage: "clock")
+                    }
+                    Label(track.url.pathExtension.uppercased(), systemImage: "waveform")
+                    if isCurrent {
+                        Label(
+                            isPlaying ? "Playing" : "Paused",
+                            systemImage: "dot.radiowaves.left.and.right"
+                        )
+                        .foregroundStyle(theme)
+                    }
+                }
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: UIScale.pt(10)) {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, UIScale.pt(8))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .background(
+                    Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                )
+                .pointerCursor()
+
+                Button(action: commitRename) {
+                    Text(canRename ? "Rename" : "Done")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, UIScale.pt(8))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                .pointerCursor()
+            }
+            .font(.system(size: UIScale.pt(12), weight: .medium))
+        }
+        .padding(UIScale.pt(22))
+        .frame(width: UIScale.pt(320))
+        .background(DashSkin.paper(dark))
+        .onAppear {
+            name = track.url.deletingPathExtension().lastPathComponent
+            if beginRename { nameFocused = true }
+        }
+        .task {
+            duration = await TrackMeta.durationLabel(for: track)
+        }
+    }
+
+    private var canRename: Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != track.url.deletingPathExtension().lastPathComponent
+    }
+
+    private func commitRename() {
+        if canRename { onRename(name) }
+        dismiss()
     }
 }
 
