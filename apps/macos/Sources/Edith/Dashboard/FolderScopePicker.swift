@@ -25,8 +25,16 @@ struct FolderScopePicker: View {
                 model.selectedPath = nil
                 dismiss()
             }
-            row(label: "Choose folder…", detail: nil, selected: false, tint: true) {
-                chooseFolder()
+            if model.allProjectPaths.isEmpty {
+                Text("Usage data has no folder paths yet. Hit refresh to rebuild it.")
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, UIScale.pt(6))
+            } else {
+                row(label: "Choose folder…", detail: nil, selected: false, tint: true) {
+                    chooseFolder()
+                }
             }
             Divider().opacity(0.4)
             ScrollView {

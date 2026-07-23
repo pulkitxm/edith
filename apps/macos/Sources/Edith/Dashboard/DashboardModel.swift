@@ -338,7 +338,7 @@ final class DashboardModel: ObservableObject {
     @Published var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
     @Published var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
     @Published var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var selectedPath: String? { didSet { persist(); recompute() } }
+    @Published var selectedPath: String? { didSet { recompute() } }
     @Published var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
     @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
     @Published var sortAscending = false { didSet { persist(); resortTotals() } }
@@ -563,7 +563,6 @@ final class DashboardModel: ObservableObject {
             projSortKey = key
         }
         projSortAscending = d.bool(forKey: "projSortAsc")
-        selectedPath = d.string(forKey: "dashPath").flatMap { $0.isEmpty ? nil : $0 }
         if let hm = d.string(forKey: "dashHeatMetric"), let m = DashMetric(rawValue: hm) {
             heatMetric = m
         }
@@ -607,7 +606,6 @@ final class DashboardModel: ObservableObject {
         d.set(projSortKey.rawValue, forKey: "projSort")
         d.set(projSortAscending, forKey: "projSortAsc")
         d.set(heatMetric.rawValue, forKey: "dashHeatMetric")
-        d.set(selectedPath, forKey: "dashPath")
     }
 
     private func encodeRange(_ r: DashRange) -> String {
@@ -855,7 +853,9 @@ final class DashboardModel: ObservableObject {
                     guard pathInScope(p.path) || ProjAccum.hasTokenedChat(p) else { continue }
                     let name = p.projectName ?? "unknown"
                     var a = projAgg[name] ?? ProjAccum()
-                    a.absorb(p, period: key, scale: scale, include: { self.pathInScope($0.path) })
+                    a.absorb(
+                        p, period: key, scale: scale,
+                        include: { self.pathInScope($0.path ?? p.path) })
                     projAgg[name] = a
                 }
             }
@@ -915,8 +915,8 @@ final class DashboardModel: ObservableObject {
         return path.lowercased().hasPrefix(scope.lowercased() + "/")
     }
 
-    private func chatInScope(_ c: DashUsage.Chat) -> Bool {
-        chatVisible(c.source) && pathInScope(c.path)
+    private func chatInScope(_ c: DashUsage.Chat, fallback: String?) -> Bool {
+        chatVisible(c.source) && pathInScope(c.path ?? fallback)
     }
 
     private func rawUsage(_ p: DashUsage.Project, scoped: Bool) -> (tokens: Double, cost: Double) {
@@ -925,7 +925,7 @@ final class DashboardModel: ObservableObject {
             return (p.tokens ?? 0, p.cost ?? 0)
         }
         let chats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
-        return chats.filter { scoped ? chatInScope($0) : chatVisible($0.source) }
+        return chats.filter { scoped ? chatInScope($0, fallback: p.path) : chatVisible($0.source) }
             .reduce(into: (0.0, 0.0)) {
                 $0.0 += $1.tokens ?? 0
                 $0.1 += $1.cost ?? 0
