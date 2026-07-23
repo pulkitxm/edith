@@ -19,11 +19,12 @@ import Testing
 
     private func chat(
         _ id: String, tokens: Double, cost: Double = 1, title: String? = nil,
-        source: String? = nil, firstTs: Double? = nil, lastTs: Double? = nil
+        source: String? = nil, path: String? = nil, firstTs: Double? = nil, lastTs: Double? = nil
     ) -> String {
         var fields = ["\"id\":\"\(id)\"", "\"tokens\":\(tokens)", "\"cost\":\(cost)"]
         if let title { fields.append("\"title\":\"\(title)\"") }
         if let source { fields.append("\"source\":\"\(source)\"") }
+        if let path { fields.append("\"path\":\"\(path)\"") }
         if let firstTs { fields.append("\"firstTs\":\(firstTs)") }
         if let lastTs { fields.append("\"lastTs\":\(lastTs)") }
         return "{\(fields.joined(separator: ","))}"
@@ -333,26 +334,36 @@ import Testing
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
     }
 
-    @Test func projectFilterScopesSeriesAndTree() throws {
+    @Test func folderScopeCoversNestedPathsAndScopesSeries() throws {
         let d = day(
             "2026-06-01",
             projects: """
-                {"projectName":"orbit","tokens":300,"cost":3,
-                 "chats":[\(chat("o", tokens: 300, cost: 3, source: "cli"))]},
-                {"projectName":"other","tokens":700,"cost":7,
-                 "chats":[\(chat("x", tokens: 700, cost: 7, source: "cli"))]}
+                {"projectName":"orbit","path":"/drive/orbit","tokens":300,"cost":3,
+                 "chats":[\(chat("o", tokens: 100, cost: 1, source: "cli", path: "/drive/orbit"))],
+                 "worktrees":[{"name":"agent-1","tokens":200,"cost":2,
+                   "chats":[\(chat("a", tokens: 200, cost: 2, source: "cli", path: "/drive/orbit/.claude/worktrees/agent-1"))]}]},
+                {"projectName":"other","path":"/drive/other","tokens":700,"cost":7,
+                 "chats":[\(chat("x", tokens: 700, cost: 7, source: "cli", path: "/drive/other"))]}
                 """,
             bySource: """
                 "cli":[{"modelName":"m","inputTokens":1000,"cost":10}]
                 """)
         let m = try model(usage(daily: d))
-        #expect(m.allProjects.contains("orbit"))
-        m.selectedProject = "orbit"
+        #expect(m.allProjectPaths.map(\.path).sorted() == ["/drive/orbit", "/drive/other"])
+
+        m.selectedPath = "/drive/orbit"
         #expect(m.projectTree.map(\.name) == ["orbit"])
+        #expect(m.projectTree.first?.worktrees.map(\.name) == ["agent-1"])
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
         #expect(abs(m.modelTotals.reduce(0) { $0 + $1.cost } - 3) < 0.0001)
-        m.selectedProject = nil
+
+        m.selectedPath = "/drive"
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 1000) < 0.0001)
+        m.selectedPath = "/drive/orbit/.claude/worktrees/agent-1"
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
+        #expect(m.projectTree.first?.chats.isEmpty == true)
+        m.selectedPath = nil
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 1000) < 0.0001)
     }
 

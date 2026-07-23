@@ -95,6 +95,7 @@ struct DashUsage: Decodable {
     }
     struct Project: Decodable {
         let projectName: String?
+        let path: String?
         let tokens: Double?
         let cost: Double?
         let chats: [Chat]?
@@ -108,6 +109,7 @@ struct DashUsage: Decodable {
     }
     struct Chat: Decodable {
         let id: String?
+        let path: String?
         let title: String?
         let tokens: Double?
         let cost: Double?
@@ -168,6 +170,13 @@ struct HourDatum: Identifiable {
     let hour: Int
     let tokens: Double
     let cost: Double
+}
+
+struct ProjectPath: Identifiable, Hashable {
+    var id: String { path }
+    let path: String
+    let name: String
+    let tokens: Double
 }
 
 struct ProjectAgg: Identifiable {
@@ -329,7 +338,7 @@ final class DashboardModel: ObservableObject {
     @Published var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
     @Published var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
     @Published var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var selectedProject: String? { didSet { persist(); recompute() } }
+    @Published var selectedPath: String? { didSet { persist(); recompute() } }
     @Published var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
     @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
     @Published var sortAscending = false { didSet { persist(); resortTotals() } }
@@ -361,7 +370,7 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var revision = 0
 
     private(set) var allModels: [String] = []
-    private(set) var allProjects: [String] = []
+    private(set) var allProjectPaths: [ProjectPath] = []
     private(set) var allSources: [SourceInfo] = []
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
@@ -493,13 +502,18 @@ final class DashboardModel: ObservableObject {
         modelIndex = Dictionary(uniqueKeysWithValues: allModels.enumerated().map { ($1, $0) })
         defaultModels = allModels
 
-        var tokensByProject: [String: Double] = [:]
+        var byPath: [String: (name: String, tokens: Double)] = [:]
         for day in parsed.daily {
             for p in day.projects ?? [] {
-                tokensByProject[p.projectName ?? "unknown", default: 0] += p.tokens ?? 0
+                guard let path = p.path, !path.isEmpty else { continue }
+                let name = p.projectName ?? URL(fileURLWithPath: path).lastPathComponent
+                byPath[path, default: (name, 0)].tokens += p.tokens ?? 0
             }
         }
-        allProjects = tokensByProject.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
+        allProjectPaths =
+            byPath
+            .map { ProjectPath(path: $0.key, name: $0.value.name, tokens: $0.value.tokens) }
+            .sorted { ($0.tokens, $1.path) > ($1.tokens, $0.path) }
 
         rebuildCycles()
         var months = Set<String>()
@@ -549,9 +563,7 @@ final class DashboardModel: ObservableObject {
             projSortKey = key
         }
         projSortAscending = d.bool(forKey: "projSortAsc")
-        selectedProject = d.string(forKey: "dashProject").flatMap {
-            allProjects.contains($0) ? $0 : nil
-        }
+        selectedPath = d.string(forKey: "dashPath").flatMap { $0.isEmpty ? nil : $0 }
         if let hm = d.string(forKey: "dashHeatMetric"), let m = DashMetric(rawValue: hm) {
             heatMetric = m
         }
@@ -579,7 +591,6 @@ final class DashboardModel: ObservableObject {
             selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
         selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
         knownModels = validModels
-        if let project = selectedProject, !allProjects.contains(project) { selectedProject = nil }
     }
 
     private func persist() {
@@ -596,7 +607,7 @@ final class DashboardModel: ObservableObject {
         d.set(projSortKey.rawValue, forKey: "projSort")
         d.set(projSortAscending, forKey: "projSortAsc")
         d.set(heatMetric.rawValue, forKey: "dashHeatMetric")
-        d.set(selectedProject, forKey: "dashProject")
+        d.set(selectedPath, forKey: "dashPath")
     }
 
     private func encodeRange(_ r: DashRange) -> String {
@@ -640,7 +651,7 @@ final class DashboardModel: ObservableObject {
         range = .cycle(nil)
         selectedSources = Set(defaultSources)
         selectedModels = Set(defaultModels)
-        selectedProject = nil
+        selectedPath = nil
         sortColumn = .cost
         sortAscending = false
         projSortKey = .cost
@@ -840,10 +851,11 @@ final class DashboardModel: ObservableObject {
                     hourCost[0] += datum.cost
                 }
                 let scale = dayScale(day, dayTokens: datum.tokens, dayCost: datum.cost)
-                for p in day.projects ?? [] where inScope(p) {
+                for p in day.projects ?? [] {
+                    guard pathInScope(p.path) || ProjAccum.hasTokenedChat(p) else { continue }
                     let name = p.projectName ?? "unknown"
                     var a = projAgg[name] ?? ProjAccum()
-                    a.absorb(p, period: key, scale: scale)
+                    a.absorb(p, period: key, scale: scale, include: { self.pathInScope($0.path) })
                     projAgg[name] = a
                 }
             }
@@ -895,15 +907,25 @@ final class DashboardModel: ObservableObject {
         return selectedSources.contains(source)
     }
 
-    private func inScope(_ p: DashUsage.Project) -> Bool {
-        guard let selectedProject else { return true }
-        return (p.projectName ?? "unknown") == selectedProject
+    func pathInScope(_ path: String?) -> Bool {
+        guard let selectedPath, !selectedPath.isEmpty else { return true }
+        guard let path, !path.isEmpty else { return false }
+        let scope = selectedPath.hasSuffix("/") ? String(selectedPath.dropLast()) : selectedPath
+        if path.compare(scope, options: .caseInsensitive) == .orderedSame { return true }
+        return path.lowercased().hasPrefix(scope.lowercased() + "/")
     }
 
-    private func rawUsage(_ p: DashUsage.Project) -> (tokens: Double, cost: Double) {
-        guard ProjAccum.hasTokenedChat(p) else { return (p.tokens ?? 0, p.cost ?? 0) }
+    private func chatInScope(_ c: DashUsage.Chat) -> Bool {
+        chatVisible(c.source) && pathInScope(c.path)
+    }
+
+    private func rawUsage(_ p: DashUsage.Project, scoped: Bool) -> (tokens: Double, cost: Double) {
+        guard ProjAccum.hasTokenedChat(p) else {
+            guard !scoped || pathInScope(p.path) else { return (0, 0) }
+            return (p.tokens ?? 0, p.cost ?? 0)
+        }
         let chats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
-        return chats.filter { chatVisible($0.source) }
+        return chats.filter { scoped ? chatInScope($0) : chatVisible($0.source) }
             .reduce(into: (0.0, 0.0)) {
                 $0.0 += $1.tokens ?? 0
                 $0.1 += $1.cost ?? 0
@@ -911,17 +933,16 @@ final class DashboardModel: ObservableObject {
     }
 
     private func projectShare(_ day: DashUsage.Day) -> (tokens: Double, cost: Double) {
-        guard selectedProject != nil else { return (1, 1) }
+        guard selectedPath != nil else { return (1, 1) }
         var all = (tokens: 0.0, cost: 0.0)
         var mine = (tokens: 0.0, cost: 0.0)
         for p in day.projects ?? [] {
-            let raw = rawUsage(p)
+            let raw = rawUsage(p, scoped: false)
+            let scoped = rawUsage(p, scoped: true)
             all.tokens += raw.tokens
             all.cost += raw.cost
-            if inScope(p) {
-                mine.tokens += raw.tokens
-                mine.cost += raw.cost
-            }
+            mine.tokens += scoped.tokens
+            mine.cost += scoped.cost
         }
         return (
             all.tokens > 0 ? mine.tokens / all.tokens : 0,
@@ -931,8 +952,8 @@ final class DashboardModel: ObservableObject {
 
     private func dayScale(_ day: DashUsage.Day, dayTokens: Double, dayCost: Double) -> DayScale {
         var scale = DayScale(dayTokens: dayTokens, dayCost: dayCost)
-        for p in day.projects ?? [] where inScope(p) {
-            let raw = rawUsage(p)
+        for p in day.projects ?? [] {
+            let raw = rawUsage(p, scoped: true)
             scale.rawTokens += raw.tokens
             scale.rawCost += raw.cost
         }
@@ -1026,19 +1047,20 @@ final class DashboardModel: ObservableObject {
         var fallbackCost = 0.0
         var fallbackDays = Set<String>()
 
-        mutating func absorb(_ p: DashUsage.Project, period: String, scale: DayScale) {
-            let mainChats = p.chats ?? []
-            let worktrees = p.worktrees ?? []
+        mutating func absorb(
+            _ p: DashUsage.Project, period: String, scale: DayScale,
+            include: (DashUsage.Chat) -> Bool
+        ) {
             if !ProjAccum.hasTokenedChat(p), (p.tokens ?? 0) > 0 || (p.cost ?? 0) > 0 {
                 fallbackTokens += scale.tokens(p.tokens ?? 0, p.cost ?? 0)
                 fallbackCost += scale.cost(p.cost ?? 0, p.tokens ?? 0)
                 fallbackDays.insert(period)
             }
-            for c in mainChats {
+            for c in p.chats ?? [] where include(c) {
                 main[c.id ?? "", default: ChatAcc()].merge(c, period: period, scale: scale)
             }
-            for wt in worktrees {
-                for c in wt.chats ?? [] {
+            for wt in p.worktrees ?? [] {
+                for c in wt.chats ?? [] where include(c) {
                     wts[wt.name ?? "", default: [:]][c.id ?? "", default: ChatAcc()]
                         .merge(c, period: period, scale: scale)
                 }
