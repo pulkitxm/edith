@@ -367,7 +367,7 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
         else (($r[0][.date][.model]) // 0) end))})' \
     "$TMP/records.jsonl" >"$TMP/recs.json"
 
-  CWDMAP_CACHE="$HOME/Library/Application Support/Edith/.cwdmap.jsonl"
+  CWDMAP_CACHE="$HOME/Library/Application Support/Edith/.cwdmap.v2.jsonl"
   touch "$CWDMAP_CACHE"
   jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | sort >"$TMP/cwds.txt"
   jq -c --rawfile want "$TMP/cwds.txt" \
@@ -377,34 +377,29 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
   jq -r '.cwd' "$TMP/cwdmap.jsonl" | sort -u >"$TMP/cwds-have.txt"
   comm -23 "$TMP/cwds.txt" "$TMP/cwds-have.txt" | while IFS= read -r cwd; do
     name=""
+    root=""
     case "$cwd" in
       */local-agent-mode-sessions/*) name="Cowork" ;;
-      /Volumes | /Volumes/*) name=$(basename "$cwd") ;;
     esac
-    if [ -z "$name" ] && [ -d "$cwd" ]; then
+    for m in "/.claude/worktrees/" "/.cursor/worktrees/"; do
+      case "$cwd" in
+        *"$m"*)
+          root="${cwd%%"$m"*}"
+          break
+          ;;
+      esac
+    done
+    if [ -z "$root" ] && [ -z "$name" ] && [ -d "$cwd" ]; then
       common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
-      if [ -n "$common" ]; then
-        case "$common" in
-          */.git) name=$(basename "${common%/.git}") ;;
-          *)
-            top=$(git -C "$cwd" rev-parse --path-format=absolute --show-toplevel 2>/dev/null || true)
-            [ -n "$top" ] && name=$(basename "$top")
-            ;;
-        esac
-      fi
+      case "$common" in
+        */.git) root="${common%/.git}" ;;
+        ?*) root=$(git -C "$cwd" rev-parse --path-format=absolute --show-toplevel 2>/dev/null || true) ;;
+      esac
     fi
-    if [ -z "$name" ]; then
-      for m in "/.claude/worktrees/" "/.cursor/worktrees/"; do
-        case "$cwd" in
-          *"$m"*)
-            name=$(basename "${cwd%%"$m"*}")
-            break
-            ;;
-        esac
-      done
-    fi
-    [ -n "$name" ] || name=$(basename "$cwd")
-    jq -cn --arg c "$cwd" --arg n "$name" '{cwd: $c, name: $n}' >>"$TMP/cwdmap.jsonl"
+    [ -n "$root" ] || root="$cwd"
+    [ -n "$name" ] || name=$(basename "$root")
+    jq -cn --arg c "$cwd" --arg n "$name" --arg r "$root" '{cwd: $c, name: $n, root: $r}' \
+      >>"$TMP/cwdmap.jsonl"
   done
   jq -c --rawfile have "$TMP/cwds-have.txt" \
     '($have | split("\n") | map(select(. != "")) | map({(.): true}) | add // {}) as $H
@@ -416,8 +411,10 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
     --slurpfile usage "$TMP/usage.json" \
     --slurpfile titles "$TMP/titles.json" \
     --slurpfile cloud "$TMP/cloud.json" \
-    --slurpfile nm <(jq -s 'map({(.cwd): .name}) | add // {}' "$TMP/cwdmap.jsonl") '
+    --slurpfile nm <(jq -s 'map({(.cwd): .name}) | add // {}' "$TMP/cwdmap.jsonl") \
+    --slurpfile rt <(jq -s 'map({(.cwd): (.root // .cwd)}) | add // {}' "$TMP/cwdmap.jsonl") '
     . as $R | $usage[0] as $usage | ($nm[0] // {}) as $NAME | ($titles[0] // {}) as $T |
+    ($rt[0] // {}) as $ROOT |
     (($cloud[0] // []) | map({(.): true}) | add // {}) as $CS |
     def chatsort: sort_by([-.tokens, .id]);
     ( $R | group_by(.date) | map({
@@ -425,26 +422,22 @@ if [ -d "$PROJECTS_DIR" ] && [ -s "$TMP/cli.daily.json" ]; then
         hours: ( group_by(.hour) | map({hour: .[0].hour, tokens: (map(.tok) | add), cost: (map(.cost) | add)}) ),
         projects: ( map(. + {p: ($NAME[.cwd] // "unknown")}) | group_by(.p)
           | map(
-              ( group_by(.sid) | map(
-                  ( group_by(.wt // "") | map({
-                      wt: (.[0].wt // ""),
-                      tokens: (map(.tok) | add), cost: (map(.cost) | add),
-                      firstTs: (map(.ts) | min), lastTs: (map(.ts) | max)
-                    }) ) as $frags
-                  | ($frags | max_by(.tokens)) as $win
-                  | { wt: $win.wt,
-                      chat: {
-                        id: .[0].sid,
-                        title: ($T[.[0].sid]
-                          // (if .[0].sid != "" then "Chat " + (.[0].sid[0:8]) else "Untitled chat" end)),
-                        tokens: ($frags | map(.tokens) | add),
-                        cost: ($frags | map(.cost) | add),
-                        firstTs: ($frags | map(.firstTs) | min),
-                        lastTs: ($frags | map(.lastTs) | max),
-                        source: (if $CS[.[0].sid] then "cc-cloud" else .[0].src end)
-                      } }
+              ( group_by(.sid + "|" + (.wt // "")) | map(
+                  { wt: (.[0].wt // ""),
+                    chat: {
+                      id: .[0].sid,
+                      path: (max_by(.tok) | .cwd),
+                      title: ($T[.[0].sid]
+                        // (if .[0].sid != "" then "Chat " + (.[0].sid[0:8]) else "Untitled chat" end)),
+                      tokens: (map(.tok) | add),
+                      cost: (map(.cost) | add),
+                      firstTs: (map(.ts) | min),
+                      lastTs: (map(.ts) | max),
+                      source: (if $CS[.[0].sid] then "cc-cloud" else .[0].src end)
+                    } }
                 ) ) as $chats
               | { projectName: .[0].p,
+                  path: ((max_by(.tok) | .cwd) as $c | $ROOT[$c] // $c),
                   tokens: (map(.tok) | add), cost: (map(.cost) | add),
                   chats: ([ $chats[] | select(.wt == "") | .chat ] | chatsort),
                   worktrees: ([ $chats[] | select(.wt != "") ] | group_by(.wt) | map({
