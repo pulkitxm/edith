@@ -329,6 +329,7 @@ final class DashboardModel: ObservableObject {
     @Published var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
     @Published var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
     @Published var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
+    @Published var selectedProject: String? { didSet { persist(); recompute() } }
     @Published var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
     @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
     @Published var sortAscending = false { didSet { persist(); resortTotals() } }
@@ -360,6 +361,7 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var revision = 0
 
     private(set) var allModels: [String] = []
+    private(set) var allProjects: [String] = []
     private(set) var allSources: [SourceInfo] = []
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
@@ -491,6 +493,14 @@ final class DashboardModel: ObservableObject {
         modelIndex = Dictionary(uniqueKeysWithValues: allModels.enumerated().map { ($1, $0) })
         defaultModels = allModels
 
+        var tokensByProject: [String: Double] = [:]
+        for day in parsed.daily {
+            for p in day.projects ?? [] {
+                tokensByProject[p.projectName ?? "unknown", default: 0] += p.tokens ?? 0
+            }
+        }
+        allProjects = tokensByProject.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
+
         rebuildCycles()
         var months = Set<String>()
         for d in parsed.daily where d.period.count >= 7 {
@@ -539,6 +549,9 @@ final class DashboardModel: ObservableObject {
             projSortKey = key
         }
         projSortAscending = d.bool(forKey: "projSortAsc")
+        selectedProject = d.string(forKey: "dashProject").flatMap {
+            allProjects.contains($0) ? $0 : nil
+        }
         if let hm = d.string(forKey: "dashHeatMetric"), let m = DashMetric(rawValue: hm) {
             heatMetric = m
         }
@@ -566,6 +579,7 @@ final class DashboardModel: ObservableObject {
             selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
         selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
         knownModels = validModels
+        if let project = selectedProject, !allProjects.contains(project) { selectedProject = nil }
     }
 
     private func persist() {
@@ -582,6 +596,7 @@ final class DashboardModel: ObservableObject {
         d.set(projSortKey.rawValue, forKey: "projSort")
         d.set(projSortAscending, forKey: "projSortAsc")
         d.set(heatMetric.rawValue, forKey: "dashHeatMetric")
+        d.set(selectedProject, forKey: "dashProject")
     }
 
     private func encodeRange(_ r: DashRange) -> String {
@@ -625,6 +640,7 @@ final class DashboardModel: ObservableObject {
         range = .cycle(nil)
         selectedSources = Set(defaultSources)
         selectedModels = Set(defaultModels)
+        selectedProject = nil
         sortColumn = .cost
         sortAscending = false
         projSortKey = .cost
@@ -779,23 +795,28 @@ final class DashboardModel: ObservableObject {
             let key = ymdStr(cursor)
             var datum = DayDatum(id: key, date: cursor, label: String(key.dropFirst(5)))
             if let day = byDate[key] {
-                for (src, models) in day.bySource ?? [:] where selectedSources.contains(src) {
+                let projShare = projectShare(day)
+                let dayInScope = projShare.tokens > 0 || projShare.cost > 0
+                for (src, models) in day.bySource ?? [:]
+                where dayInScope && selectedSources.contains(src) {
                     for m in models {
                         let name = m.modelName ?? "unknown"
                         guard selectedModels.contains(name) else { continue }
-                        datum.input += m.inputTokens ?? 0
-                        datum.output += m.outputTokens ?? 0
-                        datum.cacheCreate += m.cacheCreationTokens ?? 0
-                        datum.cacheRead += m.cacheReadTokens ?? 0
-                        datum.cost += m.cost ?? 0
-                        datum.byModel[name, default: 0] += m.tokens
-                        datum.bySource[src, default: 0] += m.tokens
+                        let tokens = m.tokens * projShare.tokens
+                        let cost = (m.cost ?? 0) * projShare.cost
+                        datum.input += (m.inputTokens ?? 0) * projShare.tokens
+                        datum.output += (m.outputTokens ?? 0) * projShare.tokens
+                        datum.cacheCreate += (m.cacheCreationTokens ?? 0) * projShare.tokens
+                        datum.cacheRead += (m.cacheReadTokens ?? 0) * projShare.tokens
+                        datum.cost += cost
+                        datum.byModel[name, default: 0] += tokens
+                        datum.bySource[src, default: 0] += tokens
                         var agg = modelAgg[name] ?? (0, 0, 0, 0, 0, [])
-                        agg.tokens += m.tokens
-                        agg.cost += m.cost ?? 0
-                        agg.input += m.inputTokens ?? 0
-                        agg.output += m.outputTokens ?? 0
-                        agg.cacheRead += m.cacheReadTokens ?? 0
+                        agg.tokens += tokens
+                        agg.cost += cost
+                        agg.input += (m.inputTokens ?? 0) * projShare.tokens
+                        agg.output += (m.outputTokens ?? 0) * projShare.tokens
+                        agg.cacheRead += (m.cacheReadTokens ?? 0) * projShare.tokens
                         agg.days.insert(key)
                         modelAgg[name] = agg
                     }
@@ -819,7 +840,7 @@ final class DashboardModel: ObservableObject {
                     hourCost[0] += datum.cost
                 }
                 let scale = dayScale(day, dayTokens: datum.tokens, dayCost: datum.cost)
-                for p in day.projects ?? [] {
+                for p in day.projects ?? [] where inScope(p) {
                     let name = p.projectName ?? "unknown"
                     var a = projAgg[name] ?? ProjAccum()
                     a.absorb(p, period: key, scale: scale)
@@ -874,19 +895,46 @@ final class DashboardModel: ObservableObject {
         return selectedSources.contains(source)
     }
 
+    private func inScope(_ p: DashUsage.Project) -> Bool {
+        guard let selectedProject else { return true }
+        return (p.projectName ?? "unknown") == selectedProject
+    }
+
+    private func rawUsage(_ p: DashUsage.Project) -> (tokens: Double, cost: Double) {
+        guard ProjAccum.hasTokenedChat(p) else { return (p.tokens ?? 0, p.cost ?? 0) }
+        let chats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
+        return chats.filter { chatVisible($0.source) }
+            .reduce(into: (0.0, 0.0)) {
+                $0.0 += $1.tokens ?? 0
+                $0.1 += $1.cost ?? 0
+            }
+    }
+
+    private func projectShare(_ day: DashUsage.Day) -> (tokens: Double, cost: Double) {
+        guard selectedProject != nil else { return (1, 1) }
+        var all = (tokens: 0.0, cost: 0.0)
+        var mine = (tokens: 0.0, cost: 0.0)
+        for p in day.projects ?? [] {
+            let raw = rawUsage(p)
+            all.tokens += raw.tokens
+            all.cost += raw.cost
+            if inScope(p) {
+                mine.tokens += raw.tokens
+                mine.cost += raw.cost
+            }
+        }
+        return (
+            all.tokens > 0 ? mine.tokens / all.tokens : 0,
+            all.cost > 0 ? mine.cost / all.cost : 0
+        )
+    }
+
     private func dayScale(_ day: DashUsage.Day, dayTokens: Double, dayCost: Double) -> DayScale {
         var scale = DayScale(dayTokens: dayTokens, dayCost: dayCost)
-        for p in day.projects ?? [] {
-            guard ProjAccum.hasTokenedChat(p) else {
-                scale.rawTokens += p.tokens ?? 0
-                scale.rawCost += p.cost ?? 0
-                continue
-            }
-            let chats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
-            for c in chats where chatVisible(c.source) {
-                scale.rawTokens += c.tokens ?? 0
-                scale.rawCost += c.cost ?? 0
-            }
+        for p in day.projects ?? [] where inScope(p) {
+            let raw = rawUsage(p)
+            scale.rawTokens += raw.tokens
+            scale.rawCost += raw.cost
         }
         return scale
     }

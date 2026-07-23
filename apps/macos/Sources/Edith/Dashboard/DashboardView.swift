@@ -284,6 +284,7 @@ struct DashboardView: View {
             customRange
             sourceMenu
             modelMenu
+            projectMenu
             Button("Reset") { model.reset() }
                 .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
                 .foregroundStyle(acc)
@@ -367,6 +368,19 @@ struct DashboardView: View {
             return true
         default: return false
         }
+    }
+
+    private var projectMenu: some View {
+        Menu {
+            Button("All projects") { model.selectedProject = nil }
+            Divider()
+            ForEach(model.allProjects, id: \.self) { name in
+                Button(name) { model.selectedProject = name }
+            }
+        } label: {
+            Label(model.selectedProject ?? "All projects", systemImage: "folder")
+        }
+        .menuStyle(.borderlessButton).pointerCursor().fixedSize()
     }
 
     private var sourceMenu: some View {

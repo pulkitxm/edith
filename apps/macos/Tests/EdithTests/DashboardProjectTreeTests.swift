@@ -333,6 +333,29 @@ import Testing
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
     }
 
+    @Test func projectFilterScopesSeriesAndTree() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"orbit","tokens":300,"cost":3,
+                 "chats":[\(chat("o", tokens: 300, cost: 3, source: "cli"))]},
+                {"projectName":"other","tokens":700,"cost":7,
+                 "chats":[\(chat("x", tokens: 700, cost: 7, source: "cli"))]}
+                """,
+            bySource: """
+                "cli":[{"modelName":"m","inputTokens":1000,"cost":10}]
+                """)
+        let m = try model(usage(daily: d))
+        #expect(m.allProjects.contains("orbit"))
+        m.selectedProject = "orbit"
+        #expect(m.projectTree.map(\.name) == ["orbit"])
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
+        #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
+        #expect(abs(m.modelTotals.reduce(0) { $0 + $1.cost } - 3) < 0.0001)
+        m.selectedProject = nil
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 1000) < 0.0001)
+    }
+
     @Test func modelFilterLeavesActivityUnfiltered() throws {
         let d = day(
             "2026-06-01",
