@@ -56,8 +56,13 @@ final class VideoPreviewSession: ObservableObject {
         return time.isFinite ? time : 0
     }
 
-    func start() {
+    func prepare() {
         installRemoteCommands()
+        publishNowPlaying()
+    }
+
+    func start() {
+        prepare()
         player.play()
     }
 
@@ -168,8 +173,13 @@ struct VideoStage: View {
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .shadow(color: .black.opacity(0.3), radius: UIScale.pt(16), y: UIScale.pt(8))
             .onAppear {
-                remote.attachVideo(session, resumesAudio: remote.isPlaying)
-                session.start()
+                let takesOverPlayback = remote.isPlaying
+                remote.attachVideo(session, resumesAudio: takesOverPlayback)
+                if takesOverPlayback {
+                    session.start()
+                } else {
+                    session.prepare()
+                }
             }
             .onDisappear {
                 remote.detachVideo(session)
