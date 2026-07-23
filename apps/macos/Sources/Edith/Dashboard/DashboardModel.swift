@@ -371,6 +371,7 @@ final class DashboardModel: ObservableObject {
 
     private(set) var allModels: [String] = []
     private(set) var allProjectPaths: [ProjectPath] = []
+    private var pathByProjectName: [String: String] = [:]
     private(set) var allSources: [SourceInfo] = []
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
@@ -514,6 +515,8 @@ final class DashboardModel: ObservableObject {
             byPath
             .map { ProjectPath(path: $0.key, name: $0.value.name, tokens: $0.value.tokens) }
             .sorted { ($0.tokens, $1.path) > ($1.tokens, $0.path) }
+        pathByProjectName = allProjectPaths.reversed()
+            .reduce(into: [:]) { $0[$1.name] = $1.path }
 
         rebuildCycles()
         var months = Set<String>()
@@ -850,12 +853,12 @@ final class DashboardModel: ObservableObject {
                 }
                 let scale = dayScale(day, dayTokens: datum.tokens, dayCost: datum.cost)
                 for p in day.projects ?? [] {
-                    guard pathInScope(p.path) || ProjAccum.hasTokenedChat(p) else { continue }
+                    guard pathInScope(knownPath(p)) || ProjAccum.hasTokenedChat(p) else { continue }
                     let name = p.projectName ?? "unknown"
                     var a = projAgg[name] ?? ProjAccum()
                     a.absorb(
                         p, period: key, scale: scale,
-                        include: { self.pathInScope($0.path ?? p.path) })
+                        include: { self.pathInScope($0.path ?? self.knownPath(p)) })
                     projAgg[name] = a
                 }
             }
@@ -919,17 +922,24 @@ final class DashboardModel: ObservableObject {
         chatVisible(c.source) && pathInScope(c.path ?? fallback)
     }
 
+    private func knownPath(_ p: DashUsage.Project) -> String? {
+        p.path ?? pathByProjectName[p.projectName ?? ""]
+    }
+
     private func rawUsage(_ p: DashUsage.Project, scoped: Bool) -> (tokens: Double, cost: Double) {
         guard ProjAccum.hasTokenedChat(p) else {
-            guard !scoped || pathInScope(p.path) else { return (0, 0) }
+            guard !scoped || pathInScope(knownPath(p)) else { return (0, 0) }
             return (p.tokens ?? 0, p.cost ?? 0)
         }
         let chats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
-        return chats.filter { scoped ? chatInScope($0, fallback: p.path) : chatVisible($0.source) }
-            .reduce(into: (0.0, 0.0)) {
-                $0.0 += $1.tokens ?? 0
-                $0.1 += $1.cost ?? 0
-            }
+        let fallback = knownPath(p)
+        let kept = chats.filter {
+            scoped ? chatInScope($0, fallback: fallback) : chatVisible($0.source)
+        }
+        return kept.reduce(into: (0.0, 0.0)) {
+            $0.0 += $1.tokens ?? 0
+            $0.1 += $1.cost ?? 0
+        }
     }
 
     private func projectShare(_ day: DashUsage.Day) -> (tokens: Double, cost: Double) {

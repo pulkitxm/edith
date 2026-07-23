@@ -367,6 +367,30 @@ import Testing
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 1000) < 0.0001)
     }
 
+    @Test func folderScopeBackfillsPathsForOlderDays() throws {
+        let legacy = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"orbit","tokens":100,"cost":1,
+                 "chats":[\(chat("old", tokens: 100, cost: 1, source: "cli"))]}
+                """,
+            bySource: """
+                "cli":[{"modelName":"m","inputTokens":100,"cost":1}]
+                """)
+        let current = day(
+            "2026-06-02",
+            projects: """
+                {"projectName":"orbit","path":"/drive/orbit","tokens":200,"cost":2,
+                 "chats":[\(chat("new", tokens: 200, cost: 2, source: "cli", path: "/drive/orbit"))]}
+                """,
+            bySource: """
+                "cli":[{"modelName":"m","inputTokens":200,"cost":2}]
+                """)
+        let m = try model(usage(daily: "\(legacy),\(current)"))
+        m.selectedPath = "/drive/orbit"
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
+    }
+
     @Test func modelFilterLeavesActivityUnfiltered() throws {
         let d = day(
             "2026-06-01",
