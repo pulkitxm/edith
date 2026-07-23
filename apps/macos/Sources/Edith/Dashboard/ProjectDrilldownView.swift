@@ -38,12 +38,22 @@ struct ProjectDrilldownView: View {
 
     private static let chatsPerGroup = 20
     private static let rowHeight: CGFloat = 27
-    private static let minTableHeight: CGFloat = 340
-    private static let maxTableHeight: CGFloat = 560
+    private static let minTableHeight: CGFloat = 520
+    private static let maxTableHeight: CGFloat = 760
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            toggleButton
+            HStack(spacing: UIScale.pt(10)) {
+                toggleButton
+                if model.projListOpen {
+                    SearchField(
+                        placeholder: "Filter projects, worktrees, chats…", text: $model.projQuery,
+                        compact: true
+                    )
+                    .frame(maxWidth: UIScale.pt(260))
+                }
+                Spacer(minLength: 0)
+            }
             if model.projListOpen {
                 VStack(spacing: UIScale.pt(0)) {
                     headerRow
@@ -58,6 +68,12 @@ struct ProjectDrilldownView: View {
                                     onToggle: { toggleExpand(row.node.id) },
                                     onCopy: copyToPasteboard)
                                 Divider().opacity(0.12)
+                            }
+                            if nodes.isEmpty {
+                                Text("No projects match “\(model.projQuery)”")
+                                    .font(.system(size: UIScale.pt(11)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                    .padding(UIScale.pt(12))
                             }
                         }
                     }
@@ -156,8 +172,18 @@ struct ProjectDrilldownView: View {
             Self.maxTableHeight)
     }
 
+    private var matchedTree: [ProjTreeRow] {
+        let q = model.projQuery.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return model.projectTree }
+        func hit(_ s: String) -> Bool { s.localizedCaseInsensitiveContains(q) }
+        return model.projectTree.filter { p in
+            hit(p.name) || p.chats.contains { hit($0.title) }
+                || p.worktrees.contains { hit($0.name) || $0.chats.contains { hit($0.title) } }
+        }
+    }
+
     private var nodes: [ProjNode] {
-        model.projectTree.map { p in
+        matchedTree.map { p in
             var kids = chatNodes(p.chats, parent: p.id)
             kids += p.worktrees.map { wt in
                 let wtChats = chatNodes(wt.chats, parent: wt.id)

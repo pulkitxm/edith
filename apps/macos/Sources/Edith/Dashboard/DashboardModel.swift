@@ -309,6 +309,7 @@ final class DashboardModel: ObservableObject {
     @Published var projSortAscending = false { didSet { persist(); resortProjectTree() } }
     @Published var projListOpen = false
     @Published var projExpanded: Set<String> = []
+    @Published var projQuery = ""
 
     private var loading = false
     private var restored = false
@@ -603,6 +604,7 @@ final class DashboardModel: ObservableObject {
         heatMetric = .tokens
         projExpanded = []
         projListOpen = false
+        projQuery = ""
     }
 
     private func parseYMD(_ s: String) -> Date? { Self.ymd.date(from: s) }
