@@ -302,6 +302,37 @@ import Testing
         #expect(abs(detail.projects.reduce(0) { $0 + $1.value } - 200) < 0.0001)
     }
 
+    @Test func inflatedDayDoesNotShrinkOtherDaysProjects() throws {
+        let noisy = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"noisy","tokens":10000,"cost":100,
+                 "chats":[\(chat("n", tokens: 10000, cost: 100, source: "codex"))]},
+                {"projectName":"orbit","tokens":100,"cost":1,
+                 "chats":[\(chat("o1", tokens: 100, cost: 1, source: "cli"))]}
+                """,
+            bySource: """
+                "cli":[{"modelName":"m","inputTokens":50,"cost":0.5}],
+                "codex":[{"modelName":"m","inputTokens":50,"cost":0.5}]
+                """)
+        let quiet = day(
+            "2026-06-02",
+            projects: """
+                {"projectName":"orbit","tokens":200,"cost":2,
+                 "chats":[\(chat("o2", tokens: 200, cost: 2, source: "cli"))]}
+                """,
+            bySource: """
+                "cli":[{"modelName":"m","inputTokens":200,"cost":2}]
+                """)
+        let m = try model(usage(daily: "\(noisy),\(quiet)"))
+        let allTime = try #require(m.projectTree.first { $0.name == "orbit" }?.tokens)
+        m.range = .today
+        let today = try #require(m.projectTree.first { $0.name == "orbit" }?.tokens)
+        #expect(abs(today - 200) < 0.0001)
+        #expect(allTime >= today)
+        #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
+    }
+
     @Test func modelFilterLeavesActivityUnfiltered() throws {
         let d = day(
             "2026-06-01",

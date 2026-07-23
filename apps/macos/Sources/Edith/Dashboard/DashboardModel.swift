@@ -182,6 +182,34 @@ enum ProjSortKey: String, CaseIterable {
     case name, tokens, cost, share, days, dur, lastActive
 }
 
+func normalizedPart(
+    _ value: Double, alternate: Double, rawTotal: Double, rawAlternateTotal: Double,
+    target: Double
+) -> Double {
+    if rawTotal > 0 { return target * value / rawTotal }
+    if rawAlternateTotal > 0 { return target * alternate / rawAlternateTotal }
+    return 0
+}
+
+struct DayScale {
+    var rawTokens = 0.0
+    var rawCost = 0.0
+    var dayTokens = 0.0
+    var dayCost = 0.0
+
+    func tokens(_ tokens: Double, _ cost: Double) -> Double {
+        normalizedPart(
+            tokens, alternate: cost, rawTotal: rawTokens, rawAlternateTotal: rawCost,
+            target: dayTokens)
+    }
+
+    func cost(_ cost: Double, _ tokens: Double) -> Double {
+        normalizedPart(
+            cost, alternate: tokens, rawTotal: rawCost, rawAlternateTotal: rawTokens,
+            target: dayCost)
+    }
+}
+
 protocol ProjSortable {
     var sortName: String { get }
     var tokens: Double { get }
@@ -790,10 +818,11 @@ final class DashboardModel: ObservableObject {
                     hourTok[0] += datum.tokens
                     hourCost[0] += datum.cost
                 }
+                let scale = dayScale(day, dayTokens: datum.tokens, dayCost: datum.cost)
                 for p in day.projects ?? [] {
                     let name = p.projectName ?? "unknown"
                     var a = projAgg[name] ?? ProjAccum()
-                    a.absorb(p, period: key)
+                    a.absorb(p, period: key, scale: scale)
                     projAgg[name] = a
                 }
             }
@@ -840,13 +869,26 @@ final class DashboardModel: ObservableObject {
         rebuildChartData()
     }
 
-    private func normalizedPart(
-        _ value: Double, alternate: Double, rawTotal: Double, rawAlternateTotal: Double,
-        target: Double
-    ) -> Double {
-        if rawTotal > 0 { return target * value / rawTotal }
-        if rawAlternateTotal > 0 { return target * alternate / rawAlternateTotal }
-        return 0
+    private func chatVisible(_ source: String?) -> Bool {
+        guard let source, !source.isEmpty else { return true }
+        return selectedSources.contains(source)
+    }
+
+    private func dayScale(_ day: DashUsage.Day, dayTokens: Double, dayCost: Double) -> DayScale {
+        var scale = DayScale(dayTokens: dayTokens, dayCost: dayCost)
+        for p in day.projects ?? [] {
+            guard ProjAccum.hasTokenedChat(p) else {
+                scale.rawTokens += p.tokens ?? 0
+                scale.rawCost += p.cost ?? 0
+                continue
+            }
+            let chats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
+            for c in chats where chatVisible(c.source) {
+                scale.rawTokens += c.tokens ?? 0
+                scale.rawCost += c.cost ?? 0
+            }
+        }
+        return scale
     }
 
     private func rebuildChartData() {
@@ -915,9 +957,9 @@ final class DashboardModel: ObservableObject {
         var lastTs = 0.0
         var days = Set<String>()
 
-        mutating func merge(_ c: DashUsage.Chat, period: String) {
-            tokens += c.tokens ?? 0
-            cost += c.cost ?? 0
+        mutating func merge(_ c: DashUsage.Chat, period: String, scale: DayScale) {
+            tokens += scale.tokens(c.tokens ?? 0, c.cost ?? 0)
+            cost += scale.cost(c.cost ?? 0, c.tokens ?? 0)
             if let s = c.source, !s.isEmpty { source = s }
             if let t = c.title, !t.isEmpty { title = t }
             if period > lastActive { lastActive = period }
@@ -936,27 +978,29 @@ final class DashboardModel: ObservableObject {
         var fallbackCost = 0.0
         var fallbackDays = Set<String>()
 
-        mutating func absorb(_ p: DashUsage.Project, period: String) {
+        mutating func absorb(_ p: DashUsage.Project, period: String, scale: DayScale) {
             let mainChats = p.chats ?? []
             let worktrees = p.worktrees ?? []
-            let tokened = { (c: DashUsage.Chat) in (c.tokens ?? 0) > 0 || (c.cost ?? 0) > 0 }
-            let hasTokenedChat =
-                mainChats.contains(where: tokened)
-                || worktrees.contains { ($0.chats ?? []).contains(where: tokened) }
-            if !hasTokenedChat, (p.tokens ?? 0) > 0 || (p.cost ?? 0) > 0 {
-                fallbackTokens += p.tokens ?? 0
-                fallbackCost += p.cost ?? 0
+            if !ProjAccum.hasTokenedChat(p), (p.tokens ?? 0) > 0 || (p.cost ?? 0) > 0 {
+                fallbackTokens += scale.tokens(p.tokens ?? 0, p.cost ?? 0)
+                fallbackCost += scale.cost(p.cost ?? 0, p.tokens ?? 0)
                 fallbackDays.insert(period)
             }
             for c in mainChats {
-                main[c.id ?? "", default: ChatAcc()].merge(c, period: period)
+                main[c.id ?? "", default: ChatAcc()].merge(c, period: period, scale: scale)
             }
             for wt in worktrees {
                 for c in wt.chats ?? [] {
                     wts[wt.name ?? "", default: [:]][c.id ?? "", default: ChatAcc()]
-                        .merge(c, period: period)
+                        .merge(c, period: period, scale: scale)
                 }
             }
+        }
+
+        static func hasTokenedChat(_ p: DashUsage.Project) -> Bool {
+            let tokened = { (c: DashUsage.Chat) in (c.tokens ?? 0) > 0 || (c.cost ?? 0) > 0 }
+            return (p.chats ?? []).contains(where: tokened)
+                || (p.worktrees ?? []).contains { ($0.chats ?? []).contains(where: tokened) }
         }
     }
 
