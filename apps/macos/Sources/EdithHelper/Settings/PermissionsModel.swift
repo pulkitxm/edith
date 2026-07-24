@@ -21,6 +21,7 @@ final class PermissionsModel: ObservableObject {
 
     private let eventStore = EKEventStore()
     private var ipcTokens: [NSObjectProtocol] = []
+    private var calendarHealItems: [DispatchWorkItem] = []
 
     func startIPCBridge() {
         guard ipcTokens.isEmpty else { return }
@@ -59,6 +60,11 @@ final class PermissionsModel: ObservableObject {
     }
 
     func refresh() {
+        readPermissions()
+        scheduleCalendarHeal()
+    }
+
+    private func readPermissions() {
         calendar = EKEventStore.authorizationStatus(for: .event) == .fullAccess
         accessibility = AXIsProcessTrusted()
         inputMonitoring = CGPreflightListenEventAccess()
@@ -74,10 +80,28 @@ final class PermissionsModel: ObservableObject {
         }
     }
 
+    private func scheduleCalendarHeal() {
+        calendarHealItems.forEach { $0.cancel() }
+        calendarHealItems.removeAll()
+        guard !calendar else { return }
+        for delay in [1.0, 3.0, 7.0, 15.0] {
+            let item = DispatchWorkItem { [weak self] in
+                guard let self, !self.calendar else { return }
+                self.readPermissions()
+            }
+            calendarHealItems.append(item)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+        }
+    }
+
     private func mirrorToSharedDefaults() {
         let d = SharedDefaults.store
+        var changed = false
         func setIfChanged(_ value: Bool, _ key: String) {
-            if d.object(forKey: key) as? Bool != value { d.set(value, forKey: key) }
+            if d.object(forKey: key) as? Bool != value {
+                d.set(value, forKey: key)
+                changed = true
+            }
         }
         setIfChanged(calendar, "permCalendarGranted")
         setIfChanged(notifications, "permNotificationsGranted")
@@ -86,7 +110,7 @@ final class PermissionsModel: ObservableObject {
         setIfChanged(fullDisk, "permFullDiskGranted")
         setIfChanged(screenRecording, "permScreenRecordingGranted")
         setIfChanged(camera, "permCameraGranted")
-        IPC.post(IPC.Name.permissionsRefreshed)
+        if changed { IPC.post(IPC.Name.permissionsRefreshed) }
     }
 
     var needsAttention: Bool { PermissionsStatus.current }
