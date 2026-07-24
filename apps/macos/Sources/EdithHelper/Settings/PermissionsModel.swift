@@ -34,9 +34,14 @@ final class PermissionsModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
+        let calendarToken = NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged, object: eventStore, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refresh() }
+        }
         ipcTokens =
             [IPC.observe(IPC.Name.requestPermissionsRefresh) { [weak self] in self?.refresh() }]
-            + grantTokens + [activeToken]
+            + grantTokens + [activeToken, calendarToken]
     }
 
     func grant(_ permission: ExtensionPermission) {
