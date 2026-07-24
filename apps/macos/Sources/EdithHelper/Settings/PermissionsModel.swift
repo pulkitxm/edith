@@ -11,7 +11,6 @@ import UserNotifications
 final class PermissionsModel: ObservableObject {
     static let shared = PermissionsModel()
 
-    @Published private(set) var calendar = false
     @Published private(set) var notifications = false
     @Published private(set) var accessibility = false
     @Published private(set) var inputMonitoring = false
@@ -21,7 +20,6 @@ final class PermissionsModel: ObservableObject {
 
     private let eventStore = EKEventStore()
     private var ipcTokens: [NSObjectProtocol] = []
-    private var calendarHealItems: [DispatchWorkItem] = []
 
     func startIPCBridge() {
         guard ipcTokens.isEmpty else { return }
@@ -35,14 +33,9 @@ final class PermissionsModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
-        let calendarToken = NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged, object: eventStore, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refresh() }
-        }
         ipcTokens =
             [IPC.observe(IPC.Name.requestPermissionsRefresh) { [weak self] in self?.refresh() }]
-            + grantTokens + [activeToken, calendarToken]
+            + grantTokens + [activeToken]
     }
 
     func grant(_ permission: ExtensionPermission) {
@@ -60,12 +53,6 @@ final class PermissionsModel: ObservableObject {
     }
 
     func refresh() {
-        readPermissions()
-        scheduleCalendarHeal()
-    }
-
-    private func readPermissions() {
-        calendar = EKEventStore.authorizationStatus(for: .event) == .fullAccess
         accessibility = AXIsProcessTrusted()
         inputMonitoring = CGPreflightListenEventAccess()
         fullDisk = Self.hasFullDiskAccess()
@@ -80,20 +67,6 @@ final class PermissionsModel: ObservableObject {
         }
     }
 
-    private func scheduleCalendarHeal() {
-        calendarHealItems.forEach { $0.cancel() }
-        calendarHealItems.removeAll()
-        guard !calendar else { return }
-        for delay in [1.0, 3.0, 7.0, 15.0] {
-            let item = DispatchWorkItem { [weak self] in
-                guard let self, !self.calendar else { return }
-                self.readPermissions()
-            }
-            calendarHealItems.append(item)
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
-        }
-    }
-
     private func mirrorToSharedDefaults() {
         let d = SharedDefaults.store
         var changed = false
@@ -103,7 +76,6 @@ final class PermissionsModel: ObservableObject {
                 changed = true
             }
         }
-        setIfChanged(calendar, "permCalendarGranted")
         setIfChanged(notifications, "permNotificationsGranted")
         setIfChanged(accessibility, "permAccessibilityGranted")
         setIfChanged(inputMonitoring, "permInputMonitoringGranted")

@@ -100,9 +100,7 @@ struct PermissionsPane: View {
             Spacer(minLength: 0)
             if !pending.isEmpty {
                 Button("Grant \(pending.count) Remaining") {
-                    for usage in pending {
-                        if let request = usage.permission.grantRequest { IPC.post(request) }
-                    }
+                    for usage in pending { grant(usage) }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(accent)
@@ -187,11 +185,16 @@ struct PermissionsPane: View {
     }
 
     private func grant(_ usage: PermissionUsage) {
+        if usage.permission == .calendar {
+            CalendarPermission.request()
+            return
+        }
         guard let request = usage.permission.grantRequest else { return }
         IPC.post(request)
     }
 
     private func refresh() {
+        CalendarPermission.mirror()
         usages = PermissionsStatus.usages
         IPC.post(IPC.Name.requestPermissionsRefresh)
     }
