@@ -8,7 +8,6 @@ public enum UsageHistory {
         guard let rawCloud = decode(cloud) else { return local }
         let l = foldLegacyCloudSource(rawLocal)
         let c = foldLegacyCloudSource(rawCloud)
-        let preferLocalDays = intOf(l["schemaVersion"]) > intOf(c["schemaVersion"])
 
         var best: [String: [String: Any]] = [:]
         for day in daily(c) {
@@ -17,7 +16,7 @@ public enum UsageHistory {
         }
         for day in daily(l) {
             guard let p = day["period"] as? String else { continue }
-            if !preferLocalDays, let cur = best[p], dayTokens(cur) > dayTokens(day) { continue }
+            if let cur = best[p], prefersExisting(cur, over: day) { continue }
             best[p] = day
         }
         let mergedDaily = best.keys.sorted().compactMap { best[$0] }
@@ -168,6 +167,15 @@ public enum UsageHistory {
 
     public static func dayTokens(_ day: [String: Any]) -> Double {
         rows(day).reduce(0) { $0 + rowTokens($1.row) }
+    }
+
+    private static func prefersExisting(_ cur: [String: Any], over day: [String: Any]) -> Bool {
+        let curVersion = intOf(cur["genVersion"])
+        let dayVersion = intOf(day["genVersion"])
+        if curVersion > 0, dayVersion > 0, curVersion != dayVersion {
+            return curVersion > dayVersion
+        }
+        return dayTokens(cur) > dayTokens(day)
     }
 
     private static func mergeSessions(_ a: Any?, _ b: Any?) -> [[String: Any]] {

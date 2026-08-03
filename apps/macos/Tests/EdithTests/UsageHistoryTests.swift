@@ -7,10 +7,11 @@ import Testing
     private func usage(
         days: [(period: String, tokens: Double, cost: Double)],
         source: String = "cli",
-        sessions: [[String: Any]] = []
+        sessions: [[String: Any]] = [],
+        genVersion: Int? = nil
     ) -> Data {
         let daily = days.map { d in
-            [
+            var day: [String: Any] = [
                 "period": d.period,
                 "bySource": [
                     source: [
@@ -21,7 +22,9 @@ import Testing
                     ]
                 ],
                 "hours": [], "projects": [],
-            ] as [String: Any]
+            ]
+            if let genVersion { day["genVersion"] = genVersion }
+            return day
         }
         let obj: [String: Any] = [
             "schemaVersion": 4,
@@ -237,7 +240,7 @@ import Testing
         #expect(byTotals["cli"]?["tokens"] == 155)
     }
 
-    @Test func newerLocalSchemaWinsOverlappingDays() {
+    @Test func fileSchemaVersionDoesNotDecideOverlappingDays() {
         var l = decode(usage(days: [("2026-06-10", 40, 1)]))
         l["schemaVersion"] = 5
         let cloud = usage(days: [("2026-05-01", 9, 1), ("2026-06-10", 900, 9)])
@@ -248,7 +251,53 @@ import Testing
         let overlap = (merged["daily"] as! [[String: Any]]).first {
             $0["period"] as? String == "2026-06-10"
         }!
-        #expect(UsageHistory.dayTokens(overlap) == 40)
+        #expect(UsageHistory.dayTokens(overlap) == 900)
         #expect(merged["schemaVersion"] as? Int == 5)
+    }
+
+    private func overlapDay(_ merged: [String: Any], _ period: String = "2026-06-10") -> [String:
+        Any]
+    {
+        (merged["daily"] as! [[String: Any]]).first { $0["period"] as? String == period }!
+    }
+
+    @Test func higherGenVersionDayBeatsBiggerLowerVersionDay() {
+        let local = usage(days: [("2026-06-10", 40, 1)], genVersion: 6)
+        let cloud = usage(days: [("2026-06-10", 900, 9)], genVersion: 5)
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        #expect(UsageHistory.dayTokens(overlapDay(merged)) == 40)
+    }
+
+    @Test func higherGenVersionCloudDaySurvivesLocalRegeneration() {
+        let local = usage(days: [("2026-06-10", 900, 9)], genVersion: 5)
+        let cloud = usage(days: [("2026-06-10", 40, 1)], genVersion: 6)
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        #expect(UsageHistory.dayTokens(overlapDay(merged)) == 40)
+    }
+
+    @Test func unstampedBiggerDayStillWinsAgainstStampedDay() {
+        let local = usage(days: [("2026-06-10", 40, 1)], genVersion: 6)
+        let cloud = usage(days: [("2026-06-10", 900, 9)])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        #expect(UsageHistory.dayTokens(overlapDay(merged)) == 900)
+    }
+
+    @Test func equalGenVersionFallsBackToBiggerTokens() {
+        let local = usage(days: [("2026-06-10", 40, 1)], genVersion: 5)
+        let cloud = usage(days: [("2026-06-10", 900, 9)], genVersion: 5)
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        #expect(UsageHistory.dayTokens(overlapDay(merged)) == 900)
+        let localTie = usage(days: [("2026-06-10", 900, 2)], genVersion: 5)
+        let tied = decode(UsageHistory.merge(local: localTie, cloud: cloud))
+        let rows = (overlapDay(tied)["bySource"] as! [String: [[String: Any]]])["cli"]!
+        #expect(rows.first!["cost"] as! Double == 2)
+    }
+
+    @Test func genVersionSurvivesMerge() {
+        let local = usage(days: [("2026-06-10", 100, 1)], genVersion: 5)
+        let cloud = usage(days: [("2026-05-01", 500, 5)])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        #expect(overlapDay(merged)["genVersion"] as? Int == 5)
+        #expect(overlapDay(merged, "2026-05-01")["genVersion"] == nil)
     }
 }
