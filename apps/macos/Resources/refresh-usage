@@ -543,12 +543,14 @@ if [ -s "$TMP/manifest.jsonl" ]; then
             )
           | sort_by([-.tokens, .projectName]) )
       }) | map({(.key): {hours: .hours, projects: .projects}}) | add // {} ) as $BY |
-    $usage | .schemaVersion = 5 | .daily = [ .daily[] |
+    5 as $gen |
+    $usage | .schemaVersion = $gen | .daily = [ .daily[] |
       ($BY[.period]) as $b |
       .hours = ( [range(0; 24)] | map( . as $h |
         ($b.hours // [] | map(select(.hour == $h)) | .[0]) as $x
         | {tokens: ($x.tokens // 0), cost: ($x.cost // 0)} ) )
       | .projects = ($b.projects // [])
+      | .genVersion = $gen
     ]
   ' "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$TMP/usage.json"
   _phase "merge" "hours + projects merged"
