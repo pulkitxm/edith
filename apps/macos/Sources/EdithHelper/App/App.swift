@@ -103,6 +103,17 @@ struct EdithApp: App {
         _ = IPC.observe(IPC.Name.requestKeyboardClean) {
             services.system?.beginCleaning()
         }
+        _ = IPC.observe(
+            IPC.Name.requestQuitApps,
+            info: { info in
+                let force = info["force"] as? Bool ?? false
+                if info["all"] as? Bool == true {
+                    RunningApps.quitEverythingElse(force: force)
+                    return
+                }
+                guard let pid = info["pid"] as? Int else { return }
+                RunningApps.quit(pid: pid_t(pid), force: force)
+            })
         _ = IPC.observe(IPC.Name.openPanel) {
             showPanel()
         }

@@ -131,15 +131,10 @@ final class RunningAppsModel: ObservableObject {
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
-        guard let app = NSRunningApplication(processIdentifier: row.pid) else { return }
-        if force { app.forceTerminate() } else { app.terminate() }
+        RunningApps.quit(pid: row.pid, force: force)
     }
 
     func quitAll(force: Bool = false) {
-        let mine = ProcessInfo.processInfo.processIdentifier
-        let finder = "com.apple.finder"
-        for row in apps where row.pid != mine && row.bundleID != finder {
-            quit(row, force: force)
-        }
+        RunningApps.quitEverythingElse(force: force)
     }
 }

@@ -221,6 +221,17 @@ public enum CommandTree {
                         options: ["--json", "--days"])
                 ]),
             CommandNode(
+                "apps", "The applications running on this Mac.",
+                children: [
+                    CommandNode(
+                        "ls", "List apps with a window open.", aliases: ["list"],
+                        options: common),
+                    CommandNode(
+                        "quit", "Quit one app, or everything else.",
+                        options: ["--json", "--help", "--all", "--force", "--yes"],
+                        arguments: [.free]),
+                ]),
+            CommandNode(
                 "download", "The download queue Edith feeds to yt-dlp.",
                 aliases: ["downloads", "dl"],
                 children: [

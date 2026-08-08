@@ -161,6 +161,9 @@ enum UIParity {
         UICapability("Download sheet", "remove one item", ["download", "rm", "1"]),
         UICapability("Download sheet", "update yt-dlp", ["download", "tool", "--update"]),
 
+        UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
+        UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
+
         UICapability("Menu bar", "open the panel", ["app", "open"]),
         UICapability("Menu bar", "quit Edith", ["app", "quit"]),
         UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),

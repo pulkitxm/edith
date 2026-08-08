@@ -25,6 +25,7 @@ and is the shortest path to being useful. This page is the complete reference.
 - [`ed music`](#ed-music)
 - [`ed calendar`](#ed-calendar)
 - [`ed clipboard`](#ed-clipboard)
+- [`ed apps`](#ed-apps)
 - [`ed download`](#ed-download)
 - [`ed color`](#ed-color)
 - [`ed shelf`](#ed-shelf)
@@ -387,6 +388,30 @@ bumps it to the top of the history. `--plain` strips styling from a rich entry.
 `pin` keeps an entry out of the retention sweep that `clipboardMaxItems` and
 `clipboardMaxAgeDays` drive; pinning something already pinned reports that on
 stderr and still exits 0.
+
+## `ed apps`
+
+```
+ed apps ls [--json]
+ed apps quit <app> [--force] [--json]
+ed apps quit --all [--force] --yes [--json]
+```
+
+`ls` reads the process table and needs nothing. Quitting asks the Edith app to
+send the quit event, because that belongs to the app's Automation grant rather
+than to `ed`, so it exits 4 when Edith is closed. An app resolves by name, by
+bundle id, or by an unambiguous prefix.
+
+Finder, Edith and its menu bar helper are never quit, whichever surface asks.
+`--all` does nothing without `--yes` and reports the count first:
+
+```
+$ ed apps quit --all
+would quit 7 app(s)
+nothing was quit; pass --yes to go ahead
+```
+
+`--force` uses `forceTerminate`, which does not let an app save first.
 
 ## `ed download`
 

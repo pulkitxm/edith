@@ -207,6 +207,8 @@ public enum Guide {
         running, because it lives in files and preferences rather than in memory.
 
         ```
+        ed apps ls                      what is running here
+        ed apps quit Safari | --all --yes
         ed download ls                  the yt-dlp queue
         ed download add <url> --kind audio
         ed download retry --all | clear | tool --update
