@@ -19,7 +19,6 @@ struct DashboardView: View {
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
-    @State private var machineCount = 0
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -76,7 +75,6 @@ struct DashboardView: View {
         }
         .navigationTitle("Agent Usage")
         .task {
-            machineCount = MachineRegistry.machines().count
             await model.load()
             syncCustomDates()
         }
@@ -296,7 +294,7 @@ struct DashboardView: View {
             sourceMenu
             modelMenu
             projectMenu
-            if machineCount > 0 { machineMenu }
+            if !model.machineGroups.isEmpty { machineMenu }
             Button("Reset") { model.reset() }
                 .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
                 .foregroundStyle(acc)
@@ -448,10 +446,7 @@ struct DashboardView: View {
 
     private var machineSummary: String {
         let groups = model.machineGroups
-        guard !groups.isEmpty else {
-            let counted = MachineUsageSelection.machineIDs().count
-            return counted == 0 ? "Machines" : "\(counted) collected"
-        }
+        guard !groups.isEmpty else { return "Machines" }
         let shown = groups.filter { model.machineIsShown($0) || model.machineIsPartlyShown($0) }
         if shown.count == groups.count { return "All machines" }
         if shown.count == 1, let only = shown.first { return only.name }

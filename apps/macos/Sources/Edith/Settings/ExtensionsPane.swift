@@ -713,6 +713,8 @@ private struct UsageRows: View {
             tools: ExtensionRegistry.entries.first { $0.id == "usage" }?.requiredTools ?? [],
             extensionEnabled: enabled)
 
+        UsageMachineRows(extensionEnabled: enabled)
+
         Section {
             Group {
                 Toggle("Claude limits", isOn: $claudeEnabled)

@@ -561,6 +561,12 @@ final class DashboardModel: ObservableObject {
         return names
     }
 
+    static func agentName(_ entry: DashUsage.Meta?, id: String, local: Bool) -> String {
+        guard let entry else { return id }
+        if local { return entry.label ?? entry.tool ?? id }
+        return entry.tool ?? entry.label ?? id
+    }
+
     static func groupByMachine(
         _ ids: [String], meta: [String: DashUsage.Meta], naming: [String: String]
     ) -> [MachineGroup] {
@@ -571,6 +577,7 @@ final class DashboardModel: ObservableObject {
         for id in ids {
             let entry = meta[id]
             let key = entry?.machineID?.lowercased() ?? entry?.machine ?? MachineGroup.localID
+            let local = key == MachineGroup.localID
             if sources[key] == nil {
                 order.append(key)
                 names[key] =
@@ -578,7 +585,7 @@ final class DashboardModel: ObservableObject {
                     ? "This Mac" : (naming[key] ?? entry?.machine ?? key)
             }
             sources[key, default: []].append(id)
-            agents[key, default: []].append(entry?.tool ?? entry?.label ?? id)
+            agents[key, default: []].append(Self.agentName(entry, id: id, local: local))
         }
         let groups = order.map {
             MachineGroup(
