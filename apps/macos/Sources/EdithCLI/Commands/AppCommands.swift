@@ -277,17 +277,31 @@ struct AppRelaunchCommand: AsyncParsableCommand {
                     "Edith is not installed where ed can find it",
                     hint: "it looks in /Applications and alongside this binary")
             }
+            let progress = CLIProgress.forCommand(json: json)
             AppBridge.post(IPC.Name.quitMainApp)
-            AppBridge.post(IPC.Name.requestQuitApps, userInfo: ["edith": true])
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            process.arguments = ["-n", "-a", bundle.path]
-            try? process.run()
+            progress.begin("waiting for Edith to quit")
+            let stopped = await EdithProcesses.quitAll(within: 8)
+            progress.end()
+            guard stopped else {
+                throw CLIFailure(
+                    "Edith did not quit, so it was not relaunched",
+                    hint: "quit it from the menu bar, then run `ed app relaunch` again")
+            }
+            progress.begin("starting Edith")
+            do {
+                try await EdithProcesses.launch(bundle)
+            } catch {
+                progress.end()
+                throw CLIFailure(
+                    "could not start Edith: \(error.localizedDescription)",
+                    hint: "open \(bundle.path) from Finder")
+            }
+            progress.end()
             guard !json else {
                 CLIOut.json(.object(["relaunched": .bool(true), "path": .string(bundle.path)]))
                 return
             }
-            CLIOut.out("relaunching Edith")
+            CLIOut.out("relaunched Edith")
         }
     }
 }

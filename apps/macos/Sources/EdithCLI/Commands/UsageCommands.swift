@@ -36,6 +36,20 @@ struct UsageWindow: ParsableArguments {
     }
 
     var sources: Set<String>? { source.isEmpty ? nil : Set(source) }
+
+    func validated(against document: UsageDocument) throws -> Set<String>? {
+        guard let sources else { return nil }
+        let known = Set(document.sources ?? [])
+        let unknown = sources.subtracting(known).sorted()
+        guard unknown.isEmpty else {
+            throw CLIFailure.notFound(
+                "no usage source named " + unknown.joined(separator: ", "),
+                hint: known.isEmpty
+                    ? "run `ed usage refresh` first"
+                    : "sources: " + known.sorted().joined(separator: ", "))
+        }
+        return sources
+    }
 }
 
 struct UsageLimitsCommand: AsyncParsableCommand {
@@ -113,8 +127,9 @@ struct UsageSummaryCommand: AsyncParsableCommand {
             let range = try window.resolved()
             let document = try UsageDocument.load()
             let days = UsageAnalysis.days(document, range: range)
-            let totals = UsageAnalysis.totals(days, sources: window.sources)
-            let bySource = UsageAnalysis.bySource(days, sources: window.sources)
+            let chosen = try window.validated(against: document)
+            let totals = UsageAnalysis.totals(days, sources: chosen)
+            let bySource = UsageAnalysis.bySource(days, sources: chosen)
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -155,7 +170,8 @@ struct UsageDailyCommand: AsyncParsableCommand {
             let range = try window.resolved()
             let document = try UsageDocument.load()
             let days = UsageAnalysis.byDay(
-                UsageAnalysis.days(document, range: range), sources: window.sources)
+                UsageAnalysis.days(document, range: range),
+                sources: try window.validated(against: document))
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -186,7 +202,8 @@ struct UsageModelsCommand: AsyncParsableCommand {
             let range = try window.resolved()
             let document = try UsageDocument.load()
             let models = UsageAnalysis.byModel(
-                UsageAnalysis.days(document, range: range), sources: window.sources)
+                UsageAnalysis.days(document, range: range),
+                sources: try window.validated(against: document))
             let ordered = models.sorted { $0.value.cost > $1.value.cost }
             guard !json else {
                 CLIOut.json(

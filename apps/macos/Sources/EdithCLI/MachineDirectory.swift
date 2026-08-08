@@ -24,7 +24,7 @@ public enum MachineDirectory {
         guard !machines.isEmpty else {
             throw CLIFailure.notFound(
                 "no machines are configured",
-                hint: "add one in Edith under Machines, then run `ed machines ls`")
+                hint: "run `ed machines add <name> <host>`, or add one in Edith under Machines")
         }
         let needle = query.lowercased()
         if let exact = machines.first(where: { $0.name.lowercased() == needle }) { return exact }

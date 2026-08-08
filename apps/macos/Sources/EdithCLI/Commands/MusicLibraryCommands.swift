@@ -346,10 +346,9 @@ struct MusicPlayTrackCommand: AsyncParsableCommand {
                 let found = try LibraryBridge.folder(target)
                 AppBridge.post(
                     IPC.Name.musicCommand,
-                    userInfo: [
-                        "action": "playSource", "kind": "folder",
-                        "path": found.relativePath,
-                    ])
+                    userInfo: ["action": "playSource"].merging(
+                        MusicSourceRequest.folder(found.relativePath).payload
+                    ) { _, new in new })
                 guard !json else {
                     CLIOut.json(
                         .object([

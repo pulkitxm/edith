@@ -71,6 +71,21 @@ import Testing
         #expect(ToolVersionCache.cached(for: missing) == nil)
     }
 
+    @Test func theCLIAndTheUIAgreeOnHowAPlaySourceIsSpelled() {
+        #expect(
+            MusicSourceRequest.folder("Albums/Live").payload as? [String: String]
+                == ["sourceKind": "folder", "sourcePath": "Albums/Live"])
+        #expect(
+            MusicSourceRequest.favourites.payload as? [String: String]
+                == ["sourceKind": "favourites"])
+        for request: MusicSourceRequest in [
+            .folder("a/b"), .directory("c"), .favourites, .all,
+        ] {
+            #expect(MusicSourceRequest.decode(request.payload) == request)
+        }
+        #expect(MusicSourceRequest.decode(["kind": "folder", "path": "a"]) == nil)
+    }
+
     @Test func limitsRefreshThatGoesUnansweredIsAnErrorRatherThanStaleNumbers() async throws {
         try await CLIProbe.inWorld { world in
             world.helperRunning(true)

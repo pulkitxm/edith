@@ -114,14 +114,12 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     }
 
     private func source(from info: [AnyHashable: Any]) -> QueueSource? {
-        guard let kind = info["sourceKind"] as? String else { return nil }
-        let path = info["sourcePath"] as? String ?? ""
-        switch kind {
-        case "folder": return .folder(path)
-        case "directory": return .directory(path)
-        case "favourites": return .favourites
-        case "all": return .all
-        default: return nil
+        switch MusicSourceRequest.decode(info) {
+        case let .folder(path): return .folder(path)
+        case let .directory(path): return .directory(path)
+        case .favourites: return .favourites
+        case .all: return .all
+        case nil: return nil
         }
     }
 

@@ -68,7 +68,7 @@ struct MachinesListCommand: AsyncParsableCommand {
             return
         }
         guard !machines.isEmpty else {
-            CLIOut.note("no machines are configured; add one in Edith under Machines")
+            CLIOut.note("no machines are configured; add one with `ed machines add <name> <host>`")
             return
         }
         let rows = machines.map { machine in

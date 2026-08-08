@@ -303,7 +303,7 @@ final class MusicRemote: ObservableObject {
     }
 
     func playFavourites() {
-        send("playSource", ["sourceKind": "favourites"])
+        send("playSource", MusicSourceRequest.favourites.payload)
     }
 
     func playFolder(_ folder: MusicFolder) { playAll(under: folder.relativePath) }
@@ -311,7 +311,7 @@ final class MusicRemote: ObservableObject {
     func playCurrentFolder() { playAll(under: folderPath) }
 
     private func playAll(under relativePath: String) {
-        send("playSource", ["sourceKind": "folder", "sourcePath": relativePath])
+        send("playSource", MusicSourceRequest.folder(relativePath).payload)
     }
 
     func apply(_ info: [AnyHashable: Any]) {
@@ -385,7 +385,10 @@ final class MusicRemote: ObservableObject {
 
     func toggle(_ track: Track) {
         if showingFavourites, currentFile != track.relativePath {
-            send("playSource", ["sourceKind": "favourites", "start": track.relativePath])
+            send(
+                "playSource",
+                MusicSourceRequest.favourites.payload.merging(
+                    ["start": track.relativePath]) { _, new in new })
             return
         }
         send("toggle", ["track": track.relativePath])

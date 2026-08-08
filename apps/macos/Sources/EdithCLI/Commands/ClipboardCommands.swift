@@ -28,9 +28,13 @@ enum ClipboardBridge {
     static func entry(at index: Int) throws -> (entry: ClipboardEntry, all: [ClipboardEntry]) {
         let all = entries()
         guard !all.isEmpty else {
+            let recording =
+                CLIEnvironment.sharedDefaults.object(forKey: "clipboardEnabled") as? Bool ?? true
             throw CLIFailure.unavailable(
                 "the clipboard history is empty",
-                hint: "turn the Clipboard extension on with `ed extensions enable clipboard`")
+                hint: recording
+                    ? "Edith records what you copy while it is running"
+                    : "turn the Clipboard extension on with `ed extensions enable clipboard`")
         }
         guard index >= 1, index <= all.count else {
             throw CLIFailure.notFound(
