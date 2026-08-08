@@ -95,9 +95,18 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
             let destination = URL(
                 fileURLWithPath: (local ?? (remote as NSString).lastPathComponent as String)
                     .expandingTilde())
+            let progress = CLIProgress.forCommand(json: json)
+            let expected = await runner.ssh.remoteFileSize(remote)
+            let meter = TransferMeter(
+                total: expected, label: (remote as NSString).lastPathComponent)
+            progress.begin(meter.text(sent: 0))
             do {
-                try await runner.ssh.download(remotePath: remote, to: destination)
+                try await runner.ssh.download(remotePath: remote, to: destination) { written in
+                    progress.update(meter.text(sent: written))
+                }
+                progress.end()
             } catch {
+                progress.end()
                 throw CLIFailure("download failed: \(error.localizedDescription)")
             }
             let size =
@@ -142,9 +151,18 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
             let runner = try await MachineResolver.runner(machine)
             let destination = try await RemoteDestination.resolve(
                 remote, named: source.lastPathComponent, on: runner)
+            let progress = CLIProgress.forCommand(json: json)
+            let expected =
+                (try? FileManager.default.attributesOfItem(atPath: source.path)[.size]) as? Int64
+            let meter = TransferMeter(total: expected, label: source.lastPathComponent)
+            progress.begin(meter.text(sent: 0))
             do {
-                try await runner.ssh.upload(localURL: source, toRemotePath: destination)
+                try await runner.ssh.upload(localURL: source, toRemotePath: destination) { sent in
+                    progress.update(meter.text(sent: sent))
+                }
+                progress.end()
             } catch {
+                progress.end()
                 throw CLIFailure("upload failed: \(error.localizedDescription)")
             }
             let size =

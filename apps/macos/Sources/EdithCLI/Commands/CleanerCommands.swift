@@ -62,12 +62,21 @@ enum CleanerBridge {
         }
     }
 
-    static func scan(_ entries: [JunkCatalog.Entry], roots: [URL], only: String?)
-        -> [JunkCategory]
-    {
-        var found = entries.compactMap { JunkScanner.scanCategory($0, home: home) }
+    static func scan(
+        _ entries: [JunkCatalog.Entry], roots: [URL], only: String?,
+        progress: CLIProgress? = nil
+    ) -> [JunkCategory] {
+        var found: [JunkCategory] = []
+        for entry in entries {
+            progress?.update(entry.name)
+            if let category = JunkScanner.scanCategory(entry, home: home) {
+                found.append(category)
+            }
+        }
         guard !roots.isEmpty else { return found }
-        var swept = JunkScanner.scanProjectJunk(roots: roots, progress: { _ in })
+        var swept = JunkScanner.scanProjectJunk(roots: roots) { note in
+            progress?.update(note)
+        }
         if let only { swept = swept.filter { $0.id == only } }
         found.append(contentsOf: swept)
         return found
@@ -146,7 +155,11 @@ struct CleanerScanCommand: AsyncParsableCommand {
                 sweep.isEmpty || category == nil
                 ? try CleanerBridge.categories(only: category)
                 : ((try? CleanerBridge.categories(only: category)) ?? [])
-            let found = CleanerBridge.scan(entries, roots: sweep, only: category)
+            let progress = CLIProgress.forCommand(json: json)
+            progress.begin("scanning")
+            let found = CleanerBridge.scan(
+                entries, roots: sweep, only: category, progress: progress)
+            progress.end()
             let total = found.reduce(Int64(0)) { $0 + $1.sizeBytes }
             guard !json else {
                 CLIOut.json(
@@ -198,7 +211,11 @@ struct CleanerCleanCommand: AsyncParsableCommand {
                 sweep.isEmpty || category == nil
                 ? try CleanerBridge.categories(only: category)
                 : ((try? CleanerBridge.categories(only: category)) ?? [])
-            let found = CleanerBridge.scan(entries, roots: sweep, only: category)
+            let progress = CLIProgress.forCommand(json: json)
+            progress.begin("scanning")
+            let found = CleanerBridge.scan(
+                entries, roots: sweep, only: category, progress: progress)
+            progress.end()
             let items = found.flatMap(\.items)
             let total = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
             guard yes else {
@@ -218,7 +235,9 @@ struct CleanerCleanCommand: AsyncParsableCommand {
                 CLIOut.note("pass --yes to do it")
                 return
             }
+            progress.begin("moving \(items.count) items to the Trash")
             let reclaimed = JunkScanner.clean(items)
+            progress.end()
             guard !json else {
                 CLIOut.json(
                     .object([

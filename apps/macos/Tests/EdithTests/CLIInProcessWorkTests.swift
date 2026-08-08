@@ -45,6 +45,32 @@ import Testing
         }
     }
 
+    @Test func toolVersionsAreRememberedUntilTheBinaryChanges() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-toolcache-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let previous = ToolVersionCache.storeURL
+        ToolVersionCache.storeURL = dir.appendingPathComponent("versions.json")
+        defer { ToolVersionCache.storeURL = previous }
+
+        let binary = dir.appendingPathComponent("fake-tool")
+        try "one".write(to: binary, atomically: true, encoding: .utf8)
+        #expect(ToolVersionCache.cached(for: binary) == nil)
+        ToolVersionCache.remember("1.0.0", for: binary)
+        #expect(ToolVersionCache.cached(for: binary) == "1.0.0")
+
+        try "a longer body that changes the size".write(
+            to: binary, atomically: true, encoding: .utf8)
+        #expect(ToolVersionCache.cached(for: binary) == nil)
+    }
+
+    @Test func aToolThatIsNotThereHasNoRememberedVersion() {
+        let missing = URL(fileURLWithPath: "/nope/not/a/tool")
+        #expect(ToolVersionCache.stamp(for: missing) == nil)
+        #expect(ToolVersionCache.cached(for: missing) == nil)
+    }
+
     @Test func limitsRefreshThatGoesUnansweredIsAnErrorRatherThanStaleNumbers() async throws {
         try await CLIProbe.inWorld { world in
             world.helperRunning(true)

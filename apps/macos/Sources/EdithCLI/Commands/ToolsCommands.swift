@@ -39,6 +39,13 @@ enum ToolsBridge {
         guard case let .executable(_, arguments) = spec.presenceStrategy,
             let executable = found(spec)
         else { return nil }
+        if let remembered = ToolVersionCache.cached(for: executable) { return remembered }
+        guard let probed = probeVersion(executable, arguments: arguments) else { return nil }
+        ToolVersionCache.remember(probed, for: executable)
+        return probed
+    }
+
+    private static func probeVersion(_ executable: URL, arguments: [String]) -> String? {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -66,10 +73,20 @@ struct ToolsListCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let rows = ToolsBridge.all.map { spec -> (CLIToolSpec, URL?, String?) in
-                let path = ToolsBridge.found(spec)
-                return (spec, path, path == nil ? nil : ToolsBridge.version(spec))
+            let progress = CLIProgress.forCommand(json: json)
+            progress.begin("probing \(ToolsBridge.all.count) tools")
+            let rows = await withTaskGroup(of: (Int, CLIToolSpec, URL?, String?).self) { group in
+                for (index, spec) in ToolsBridge.all.enumerated() {
+                    group.addTask {
+                        let path = ToolsBridge.found(spec)
+                        return (index, spec, path, path == nil ? nil : ToolsBridge.version(spec))
+                    }
+                }
+                var probed: [(Int, CLIToolSpec, URL?, String?)] = []
+                for await probe in group { probed.append(probe) }
+                return probed.sorted { $0.0 < $1.0 }.map { ($0.1, $0.2, $0.3) }
             }
+            progress.end()
             guard !json else {
                 CLIOut.json(
                     .array(

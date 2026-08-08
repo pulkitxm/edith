@@ -330,6 +330,10 @@ public actor SSHConnection {
         }
     }
 
+    public func remoteFileSize(_ path: String) async -> Int64? {
+        await remoteSize(path)
+    }
+
     private func remoteSize(_ path: String) async -> Int64? {
         let quoted = ShellQuote.quote(path)
         let command = "stat -c%s \(quoted) 2>/dev/null || stat -f%z \(quoted) 2>/dev/null"
