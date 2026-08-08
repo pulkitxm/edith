@@ -139,9 +139,6 @@ cp .build/release/EdithHelper "$HELPER/Contents/MacOS/Edith"
 cp Resources/HelperInfo.plist "$HELPER/Contents/Info.plist"
 cp Resources/AppIcon.icns "$HELPER/Contents/Resources/"
 cp -R .build/release/Edith_EdithKit.bundle "$HELPER/Contents/Resources/"
-cp Resources/refresh-usage "$HELPER/Contents/Resources/"
-chmod +x "$HELPER/Contents/Resources/refresh-usage"
-# menu bar / header glyph: trim the icon's canvas margin, then scale
 cp "$ARTWORK" "$HELPER/Contents/Resources/MenuBar.png"
 sips -c 942 942 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1
 sips -z 80 80 "$HELPER/Contents/Resources/MenuBar.png" >/dev/null 2>&1

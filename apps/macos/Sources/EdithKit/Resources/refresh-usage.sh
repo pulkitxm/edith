@@ -22,8 +22,11 @@ _phase() {
   n=$(_now)
   d=$(awk "BEGIN{printf \"%.2f\", $n-$_tlast}")
   _tlast=$n
-  printf '  ▸ %-10s %-32s %6ss\n' "$1" "$2" "$d"
+  printf 'phase\t%s\t%s\t%s\n' "$1" "$2" "$d"
 }
+_note() { printf 'note\t%s\n' "$1"; }
+_summary() { printf 'summary\t%s\t%s\n' "$1" "$2"; }
+_error() { printf 'error\t%s\n' "$1"; }
 _total() { awk "BEGIN{printf \"%.2f\", $(_now)-$_t0}"; }
 
 label_for() {
@@ -127,14 +130,11 @@ VALIDATE='
         + tokenSum($rows; "cacheCreationTokens") + tokenSum($rows; "cacheReadTokens")))
 '
 
-printf '\n  EDITH · refresh usage · %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
-printf '  ────────────────────────────────────────────────────\n'
-
 if command -v bun >/dev/null 2>&1; then
   CACHE="$HOME/Library/Application Support/Edith/.ccusage"
   mkdir -p "$CACHE"
   if [ ! -x "$CACHE/node_modules/.bin/ccusage" ]; then
-    printf '  · installing ccusage (first run, ~15s)…\n'
+    _note "installing ccusage (first run, ~15s)"
     (cd "$CACHE" && bun add ccusage >/dev/null 2>&1)
     _phase "ccusage" "installed via bun"
   else
@@ -145,7 +145,7 @@ elif command -v npx >/dev/null 2>&1; then
   _phase "ccusage" "via npx"
   ccu() { npx -y ccusage@latest "$@"; }
 else
-  printf '  ✖ need bun or npx on PATH to run ccusage\n' >&2
+  _error "need bun or npx on PATH to run ccusage"
   exit 1
 fi
 
@@ -187,7 +187,7 @@ Z=$(date +%z)
 OFF=$((10#${Z:1:2} * 3600 + 10#${Z:3:2} * 60))
 [ "${Z:0:1}" = "-" ] && OFF=$((-OFF))
 
-printf '  · discovering sources…\n'
+_note "discovering sources"
 
 CLI_CFG="$HOME/.claude"
 CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cli.daily.json" || echo '{"daily":[]}' >"$TMP/cli.daily.json"
@@ -220,12 +220,12 @@ if [ -d "$CCODE_DIR" ]; then
 fi
 
 if [ ! -s "$TMP/manifest.jsonl" ]; then
-  printf '  ✖ no usage found from any source\n' >&2
+  _error "no usage found from any source"
   exit 1
 fi
 [ -s "$TMP/sessions.jsonl" ] || : >"$TMP/sessions.jsonl"
 
-printf '  · assembling usage.json…\n'
+_note "assembling usage.json"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 jq -s \
   --arg now "$NOW" \
@@ -427,7 +427,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   }
 
   NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
-  printf '  · walking %s transcript files…\n' "$NFILES"
+  _note "walking $NFILES transcript files"
   walk_dir "$PROJECTS_DIR" cli
   if [ -n "${COWORK_CFG:-}" ]; then
     (
@@ -555,7 +555,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
 fi
 
 if ! jq -e "$VALIDATE" "$TMP/usage.json" >/dev/null; then
-  printf '  ✖ usage validation failed; previous data preserved\n' >&2
+  _error "usage validation failed; previous data preserved"
   exit 1
 fi
 mv "$TMP/usage.json" "$OUT"
@@ -569,8 +569,7 @@ TO=$(jq -r '.daily[-1].period // "-"' "$OUT")
 COST=$(printf '$%.2f' "$(jq -r '.totals.cost // 0' "$OUT")")
 KB=$(awk "BEGIN{printf \"%.0f\", $(wc -c <"$OUT")/1024}")
 
-printf '  ────────────────────────────────────────────────────\n'
-printf '  ✓ sources   %s\n' "$SRCS"
-printf '  ✓ window    %s → %s · %s days · %s models\n' "$FROM" "$TO" "$DAYS" "$MODELS"
-printf '  ✓ spend     %s · %s sessions · %s KB\n' "$COST" "$SESS" "$KB"
-printf '  ✓ done in %ss\n\n' "$(_total)"
+_summary "sources" "$SRCS"
+_summary "window" "$FROM to $TO · $DAYS days · $MODELS models"
+_summary "spend" "$COST · $SESS sessions · $KB KB"
+printf 'done\t%s\n' "$(_total)"
