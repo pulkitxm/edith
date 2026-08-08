@@ -38,6 +38,8 @@ public enum CLIEnvironment {
             try AppleScriptHost.execute($0, timeout: $1)
         }
 
+    nonisolated(unsafe) public static var usageRefresh = UsageRefreshDriver.live
+
     nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -73,5 +75,6 @@ public enum CLIEnvironment {
         answer = nil
         permissionUsages = { PermissionsStatus.usages }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
+        usageRefresh = UsageRefreshDriver.live
     }
 }

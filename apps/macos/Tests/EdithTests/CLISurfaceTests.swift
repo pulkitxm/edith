@@ -92,30 +92,62 @@ import Testing
         #expect(result.stdout.isEmpty)
     }
 
-    @Test func refreshNeedsTheAppAndSaysSo() async {
-        let result = await CLIProbe.run(["usage", "refresh"])
-        #expect(result.code == ExitCodes.unavailable)
-        #expect(result.stderr.contains("menu bar app"))
-    }
+    static let run: [UsageRefreshEvent] = [
+        .phase(name: "cli", detail: "28 days", seconds: 0.88),
+        .summary(label: "sources", value: "cli, codex"),
+        .finished(seconds: 7.8),
+    ]
 
-    @Test func refreshReportsWhetherTheAppFinished() async throws {
+    @Test func refreshRunsWithoutTheAppAndReportsWhatItCollected() async throws {
         try await CLIProbe.inWorld { world in
-            world.helperRunning(true)
-            world.answers { _ in [:] }
+            world.helperRunning(false)
+            CLIEnvironment.usageRefresh = .scripted(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["completed"] as? Bool == true)
-            #expect(world.postedNames() == [IPC.Name.requestUsageRefresh.rawValue])
+            #expect(result.object?["followed"] as? Bool == false)
+            #expect(result.object?["seconds"] as? Double == 7.8)
+            let summary = result.object?["summary"] as? [String: Any]
+            #expect(summary?["sources"] as? String == "cli, codex")
+            #expect(world.postedNames().isEmpty)
         }
     }
 
-    @Test func refreshThatGoesQuietSaysRequestedRatherThanDone() async throws {
-        try await CLIProbe.inWorld { world in
-            world.helperRunning(true)
-            world.answers { _ in nil }
+    @Test func refreshAttachesToARunOneWhenTheLockIsAlreadyHeld() async throws {
+        try await CLIProbe.inWorld { _ in
+            CLIEnvironment.usageRefresh = .scripted(events: Self.run, busy: true)
             let result = await CLIProbe.capture(["usage", "refresh", "--json"])
             #expect(result.code == 0)
-            #expect(result.object?["completed"] as? Bool == false)
+            #expect(result.object?["followed"] as? Bool == true)
+        }
+    }
+
+    @Test func followWithNothingRunningIsUnavailableRatherThanAFreshRun() async throws {
+        try await CLIProbe.inWorld { _ in
+            CLIEnvironment.usageRefresh = .scripted(events: Self.run)
+            let result = await CLIProbe.capture(["usage", "refresh", "--follow"])
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("no usage refresh is running"))
+        }
+    }
+
+    @Test func aPipelineFailureIsAnErrorRatherThanASilentSuccess() async throws {
+        try await CLIProbe.inWorld { _ in
+            CLIEnvironment.usageRefresh = .scripted(
+                events: [], failure: .reported("no usage found from any source"))
+            let result = await CLIProbe.capture(["usage", "refresh"])
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("no usage found from any source"))
+            #expect(result.stdout.isEmpty)
+        }
+    }
+
+    @Test func refreshKeepsStdoutCleanForPipes() async throws {
+        try await CLIProbe.inWorld { _ in
+            CLIEnvironment.usageRefresh = .scripted(events: Self.run)
+            let result = await CLIProbe.capture(["usage", "refresh"])
+            #expect(result.code == 0)
+            #expect(result.stdoutLines == ["usage refreshed"])
         }
     }
 }

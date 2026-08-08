@@ -258,8 +258,15 @@ ed usage daily   [--range <r>] [--source <s>]... [--json]
 ed usage models  [--range <r>] [--source <s>]... [--json]
 ed usage projects [--range <r>] [--limit <n>] [--json]
 ed usage sources [--json]
-ed usage refresh [--no-wait] [--json]
+ed usage refresh [--follow] [--json]
 ```
+
+`ed usage refresh` runs the collection pipeline itself, so it does not need the
+Edith app to be open. It prints each phase as it completes. When a refresh is
+already running, in the app or in another terminal, it attaches to that one and
+reports its progress rather than starting a second; `--follow` requires a
+running refresh and never starts one. Progress goes to stderr and is skipped
+when stderr is not a terminal, so `ed usage refresh --json` stays pipeable.
 
 `--range` is `today`, `week` (last 7 days), `month` (last 30) or `all`, and
 defaults to `all`. `--source` filters to one agent and repeats;
@@ -874,7 +881,7 @@ still needs `ed machines exec usage -- ...`.
 | --- | --- |
 | `config`, `extensions`, `schema`, `guide`, `version`, `install` | no, but changes reach the app live when it is running |
 | `usage limits`, `summary`, `daily`, `models`, `projects`, `sources` | no, they read the collected files |
-| `usage refresh` | yes |
+| `usage refresh` | no, it runs the collection pipeline itself |
 | `system stats`, `system disks` | no |
 | `machines` and `ed <machine> ...` | no |
 | `music`, `calendar` | yes |

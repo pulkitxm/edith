@@ -169,7 +169,8 @@ public enum Guide {
         ed usage models
         ed usage projects
         ed usage sources
-        ed usage refresh                ask the running app to re-collect
+        ed usage refresh                re-collect from every agent, live progress
+        ed usage refresh --follow       watch a refresh that is already running
         ```
 
         `--range` is one of today, week, month, all. `--source` filters to one agent

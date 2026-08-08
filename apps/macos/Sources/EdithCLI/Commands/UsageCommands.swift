@@ -8,8 +8,8 @@ struct UsageCommand: AsyncParsableCommand {
         abstract: "Agent usage, token counts, cost and rate limits.",
         discussion: """
             Numbers come from the same files the app's dashboard reads, so the CLI and
-            the UI cannot disagree. `ed usage refresh` asks the running app to collect
-            fresh data.
+            the UI cannot disagree. `ed usage refresh` collects fresh data itself,
+            whether or not the app is open.
             """,
         subcommands: [
             UsageLimitsCommand.self, UsageSummaryCommand.self, UsageDailyCommand.self,
@@ -276,28 +276,125 @@ struct UsageSourcesCommand: AsyncParsableCommand {
 
 struct UsageRefreshCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "refresh", abstract: "Ask the running app to re-collect usage data.")
+        commandName: "refresh",
+        abstract: "Re-collect usage data from every agent on this Mac.",
+        discussion: """
+            Runs the collection pipeline in this process, so it works whether or not the
+            Edith app is open. If a refresh is already running somewhere else, this
+            attaches to it and reports its progress instead of starting a second one.
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Flag(help: "Return as soon as the request is sent.")
-    var noWait = false
+    @Flag(help: "Attach to a refresh that is already running instead of starting one.")
+    var follow = false
 
     func run() async throws {
         try await execute {
-            try AppBridge.requireHelper("refreshing usage")
-            let finished = await AppBridge.awaitReply(
-                IPC.Name.usageRefreshFinished, timeout: noWait ? 0.1 : 180
-            ) {
-                AppBridge.post(IPC.Name.requestUsageRefresh)
+            let progress = CLIProgress.forCommand(json: json)
+            let printer = UsageRefreshPrinter(progress: progress)
+            let sink: @Sendable (UsageRefreshEvent) -> Void = { printer.show($0) }
+
+            let driver = CLIEnvironment.usageRefresh
+            progress.header("EDITH · refresh usage · " + UsageRefreshPrinter.stamp(Date()))
+            do {
+                var followed = follow
+                let result: UsageRefreshResult
+                if follow {
+                    guard driver.isRunning() else {
+                        throw CLIFailure.unavailable(
+                            "no usage refresh is running", hint: "drop --follow to start one")
+                    }
+                    progress.begin("following")
+                    result = try await driver.attach(sink)
+                } else {
+                    progress.begin("starting")
+                    do {
+                        result = try await driver.start(sink)
+                    } catch UsageRefreshFailure.busy {
+                        followed = true
+                        progress.note("a refresh is already running, attaching to it")
+                        result = try await driver.attach(sink)
+                    }
+                }
+                progress.end()
+                guard !json else {
+                    CLIOut.json(Self.payload(result: result, followed: followed))
+                    return
+                }
+                CLIOut.out("usage refreshed")
+            } catch let failure as UsageRefreshFailure {
+                progress.end()
+                progress.failure(failure.description)
+                throw CLIFailure.unavailable(failure.description, hint: failure.hint)
+            } catch {
+                progress.end()
+                throw error
             }
-            let completed = finished != nil
-            guard !json else {
-                CLIOut.json(.object(["requested": .bool(true), "completed": .bool(completed)]))
-                return
-            }
-            CLIOut.out(completed ? "usage refreshed" : "refresh requested")
         }
+    }
+
+    private static func payload(result: UsageRefreshResult, followed: Bool) -> JSONValue {
+        .object([
+            "completed": .bool(true),
+            "followed": .bool(followed),
+            "seconds": .double(result.seconds),
+            "summary": .object(
+                Dictionary(
+                    uniqueKeysWithValues: result.summaries.map {
+                        ($0.label, JSONValue.string($0.value))
+                    }
+                )),
+            "phases": .array(
+                result.events.compactMap { event in
+                    guard case let .phase(name, detail, seconds) = event else { return nil }
+                    return .object([
+                        "name": .string(name), "detail": .string(detail),
+                        "seconds": .double(seconds),
+                    ])
+                }),
+        ])
+    }
+}
+
+final class UsageRefreshPrinter: @unchecked Sendable {
+    private let progress: CLIProgress
+    private let lock = NSLock()
+    private var sawSummary = false
+
+    init(progress: CLIProgress) { self.progress = progress }
+
+    static func stamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
+    func show(_ event: UsageRefreshEvent) {
+        switch event {
+        case let .phase(name, detail, seconds):
+            progress.step(name, detail, seconds: seconds)
+            progress.update(name)
+        case let .note(text):
+            progress.note(text)
+            progress.update(text)
+        case let .summary(label, value):
+            openSummaries()
+            progress.summary(label, value)
+        case let .failure(text):
+            progress.failure(text)
+        case let .finished(seconds):
+            progress.end()
+            progress.done(String(format: "done in %.2fs", seconds))
+        }
+    }
+
+    private func openSummaries() {
+        lock.lock()
+        let first = !sawSummary
+        sawSummary = true
+        lock.unlock()
+        if first { progress.rule() }
     }
 }
