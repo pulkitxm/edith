@@ -65,6 +65,10 @@ final class NotchShelfController: ObservableObject, FeatureModule {
 
     init() {
         items = store.items
+        store.onExternalChange = { [weak self] in
+            guard let self else { return }
+            self.items = self.store.items
+        }
         purgeExpired()
         rebuildPanels()
         screenObserver = NotificationCenter.default.addObserver(

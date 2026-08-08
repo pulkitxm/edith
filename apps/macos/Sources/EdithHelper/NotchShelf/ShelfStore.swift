@@ -5,6 +5,8 @@ import Foundation
 final class ShelfStore {
     private(set) var items: [ShelfItem] = []
     private let root: URL
+    private var changeObserver: NSObjectProtocol?
+    var onExternalChange: (@MainActor () -> Void)?
 
     init(root: URL = ShelfIndex.root) {
         self.root = root
@@ -12,7 +14,23 @@ final class ShelfStore {
         migrateLegacyIndex()
         load()
         migrateLegacyFolders()
+        changeObserver = IPC.observe(
+            IPC.Name.shelfChanged,
+            info: { [weak self] info in
+                guard info["sender"] as? String != Self.senderID else { return }
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.load()
+                    self.onExternalChange?()
+                }
+            })
     }
+
+    deinit {
+        if let changeObserver { IPC.stopObserving(changeObserver) }
+    }
+
+    private static let senderID = "shelfStore-\(ProcessInfo.processInfo.processIdentifier)"
 
     private var indexURL: URL { ShelfIndex.indexFile(in: root) }
 
@@ -49,6 +67,7 @@ final class ShelfStore {
 
     private func save() {
         ShelfIndex.save(items, to: root)
+        IPC.post(IPC.Name.shelfChanged, userInfo: ["sender": Self.senderID])
     }
 
     func fileURL(for item: ShelfItem) -> URL { root.appendingPathComponent(item.name) }

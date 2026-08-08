@@ -22,6 +22,10 @@ enum ShelfBridge {
         ShelfIndex.load().sorted { $0.addedAt > $1.addedAt }
     }
 
+    static func announce() {
+        AppBridge.post(IPC.Name.shelfChanged, userInfo: ["sender": "ed"])
+    }
+
     static func item(at index: Int) throws -> (item: ShelfItem, all: [ShelfItem]) {
         let all = items()
         guard !all.isEmpty else {
@@ -152,6 +156,7 @@ struct ShelfAddCommand: AsyncParsableCommand {
             }
             let item = ShelfItem(id: UUID(), name: name, addedAt: Date())
             ShelfIndex.save(ShelfIndex.load() + [item])
+            ShelfBridge.announce()
             guard !json else {
                 CLIOut.json(ShelfBridge.json(item, index: 1))
                 return
@@ -177,6 +182,7 @@ struct ShelfRemoveCommand: AsyncParsableCommand {
             try? FileManager.default.removeItem(at: ShelfIndex.fileURL(for: found.item))
             let kept = found.all.filter { $0.id != found.item.id }
             ShelfIndex.save(kept)
+            ShelfBridge.announce()
             guard !json else {
                 CLIOut.json(.object(["removed": .int(index), "remaining": .int(kept.count)]))
                 return
@@ -200,6 +206,7 @@ struct ShelfClearCommand: AsyncParsableCommand {
                 try? FileManager.default.removeItem(at: ShelfIndex.fileURL(for: item))
             }
             ShelfIndex.save([])
+            ShelfBridge.announce()
             guard !json else {
                 CLIOut.json(.object(["removed": .int(all.count)]))
                 return
