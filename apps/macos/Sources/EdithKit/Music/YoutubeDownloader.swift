@@ -196,6 +196,7 @@ public final class YoutubeDownloader: ObservableObject {
     private var ytdlpExecutableCache: (url: URL, prefix: [String])?
     private var provisioningObserver: NSObjectProtocol?
     private var queueObserver: NSObjectProtocol?
+    private var cancelObserver: NSObjectProtocol?
 
     public struct DownloadItem: Identifiable, Equatable {
         public let id = UUID()
@@ -278,6 +279,9 @@ public final class YoutubeDownloader: ObservableObject {
         }
         queueObserver = IPC.observe(IPC.Name.downloadQueueChanged) { [weak self] in
             Task { @MainActor in self?.adoptQueueFromDisk() }
+        }
+        cancelObserver = IPC.observe(IPC.Name.requestDownloadCancel) { [weak self] in
+            Task { @MainActor in self?.cancelAll() }
         }
         provisioningObserver = NotificationCenter.default.addObserver(
             forName: .cliToolProvisioned, object: nil, queue: .main

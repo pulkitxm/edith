@@ -32,7 +32,7 @@ enum ToolsBridge {
 
     static func found(_ spec: CLIToolSpec) -> URL? {
         guard case let .executable(name, _) = spec.presenceStrategy else { return nil }
-        return CLIToolEnvironment.executable(named: name)
+        return CLIEnvironment.executableNamed(name)
     }
 
     static func version(_ spec: CLIToolSpec) -> String? {
@@ -123,19 +123,32 @@ struct ToolsInstallCommand: AsyncParsableCommand {
                 CLIOut.note("\(spec.id) is already at \(existing.path)")
                 return
             }
-            try AppBridge.requireHelper("installing \(spec.id)")
-            AppBridge.post(
-                IPC.Name.requestToolInstall, userInfo: ["toolID": spec.id])
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "id": .string(spec.id), "requested": .bool(true),
-                        "installed": .bool(false),
-                    ]))
-                return
+            let progress = CLIProgress.forCommand(json: json)
+            progress.header("EDITH · install " + spec.displayName)
+            progress.begin("installing " + spec.id)
+            do {
+                let version = try await CLIEnvironment.installTool(spec) { line in
+                    progress.note(line)
+                }
+                progress.end()
+                progress.done("\(spec.id) is ready")
+                guard !json else {
+                    CLIOut.json(
+                        .object([
+                            "id": .string(spec.id), "installed": .bool(true),
+                            "version": .string(version), "changed": .bool(true),
+                        ]))
+                    return
+                }
+                CLIOut.out("installed \(spec.id) (\(version))")
+            } catch {
+                progress.end()
+                let reason =
+                    (error as? ToolInstallFailure)?.description
+                    ?? error.localizedDescription
+                progress.failure(reason)
+                throw CLIFailure.unavailable(reason, hint: spec.installStrategy.instruction)
             }
-            CLIOut.out("asked Edith to install \(spec.id)")
-            CLIOut.note("run `ed tools ls` to see when it lands")
         }
     }
 }

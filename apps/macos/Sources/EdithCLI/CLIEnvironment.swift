@@ -40,6 +40,15 @@ public enum CLIEnvironment {
 
     nonisolated(unsafe) public static var usageRefresh = UsageRefreshDriver.live
 
+    nonisolated(unsafe) public static var installTool:
+        @Sendable (CLIToolSpec, @escaping @Sendable (String) -> Void) async throws -> String = {
+            try await ToolInstaller().install($0, log: $1)
+        }
+
+    nonisolated(unsafe) public static var executableNamed: @Sendable (String) -> URL? = {
+        CLIToolEnvironment.executable(named: $0)
+    }
+
     nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -76,5 +85,7 @@ public enum CLIEnvironment {
         permissionUsages = { PermissionsStatus.usages }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
+        installTool = { try await ToolInstaller().install($0, log: $1) }
+        executableNamed = { CLIToolEnvironment.executable(named: $0) }
     }
 }

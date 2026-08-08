@@ -482,16 +482,14 @@ struct MusicRescanCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             try LibraryBridge.requireFolder()
-            let before = TrackMeta.scanMusicFolder().count
             TrackMeta.invalidateCaches()
-            let after = TrackMeta.scanMusicFolder().count
-            AppBridge.post(IPC.Name.requestMusicRescan)
+            let tracks = TrackMeta.scanMusicFolder().count
             LibraryBridge.announce()
             guard !json else {
-                CLIOut.json(.object(["tracks": .int(after), "wasTracks": .int(before)]))
+                CLIOut.json(.object(["tracks": .int(tracks)]))
                 return
             }
-            CLIOut.out("\(after) track(s) in the library")
+            CLIOut.out("\(tracks) track(s) in the library")
         }
     }
 }

@@ -336,23 +336,36 @@ struct DownloadCancelCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let running = DownloadQueue.load().filter { !$0.isFinished }
-            guard !running.isEmpty else {
-                CLIOut.note("nothing is downloading")
+            let pending = DownloadQueue.load().filter { !$0.isFinished }
+            guard !pending.isEmpty else {
                 guard !json else {
-                    CLIOut.json(.object(["cancelled": .int(0)]))
+                    CLIOut.json(
+                        .object([
+                            "cancelled": .int(0), "stoppedRunning": .bool(false),
+                            "appRunning": .bool(AppBridge.mainAppIsRunning),
+                        ]))
                     return
                 }
+                CLIOut.note("nothing is downloading")
                 return
             }
-            AppBridge.post(IPC.Name.requestDownloadCancel)
+            let appRunning = AppBridge.mainAppIsRunning
+            if appRunning { AppBridge.post(IPC.Name.requestDownloadCancel) }
             let stopped = try DownloadQueue.remove { !$0.isFinished }
             DownloadBridge.announce()
             guard !json else {
-                CLIOut.json(.object(["cancelled": .int(stopped)]))
+                CLIOut.json(
+                    .object([
+                        "cancelled": .int(stopped), "stoppedRunning": .bool(appRunning),
+                        "appRunning": .bool(appRunning),
+                    ]))
                 return
             }
             CLIOut.out("cancelled \(stopped)")
+            if !appRunning {
+                CLIOut.note(
+                    "Edith was not running, so the queue was emptied without stopping yt-dlp")
+            }
         }
     }
 }

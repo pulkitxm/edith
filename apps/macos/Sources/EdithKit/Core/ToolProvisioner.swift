@@ -99,12 +99,6 @@ public enum CLICommandRunner {
     }
 }
 
-private struct ToolProvisioningError: LocalizedError {
-    let message: String
-
-    var errorDescription: String? { message }
-}
-
 @MainActor
 public final class ToolProvisioner: ObservableObject {
     public typealias RunCommand =
@@ -117,7 +111,7 @@ public final class ToolProvisioner: ObservableObject {
     @Published public private(set) var states: [String: CLIToolProvisionState] = [:]
     @Published public private(set) var logs: [String: [String]] = [:]
 
-    private let runCommand: RunCommand
+    private let installer: ToolInstaller
     private var tasks: [String: Task<Void, Never>] = [:]
 
     public init(
@@ -125,7 +119,7 @@ public final class ToolProvisioner: ObservableObject {
             try await CLICommandRunner.run(request, onLine: onLine)
         }
     ) {
-        self.runCommand = runCommand
+        self.installer = ToolInstaller(runCommand: runCommand)
     }
 
     public func state(for tool: CLIToolSpec) -> CLIToolProvisionState {
@@ -160,7 +154,8 @@ public final class ToolProvisioner: ObservableObject {
     private func perform(_ tool: CLIToolSpec, installIfMissing: Bool) async {
         states[tool.id] = .checking
         logs[tool.id] = []
-        if let version = await detectedVersion(for: tool) {
+        let record = recorder(for: tool)
+        if let version = await installer.detectedVersion(of: tool, log: record) {
             states[tool.id] = .present(version: version)
             return
         }
@@ -173,137 +168,23 @@ public final class ToolProvisioner: ObservableObject {
         states[tool.id] = .installing(logTail: [])
         append("Installing " + tool.displayName + "...", for: tool)
         do {
-            try await install(tool)
-            guard await detectedVersion(for: tool) != nil else {
-                throw ToolProvisioningError(
-                    message: "Installation finished, but " + tool.displayName
-                        + " could not be verified")
-            }
+            _ = try await installer.install(tool, log: record)
             states[tool.id] = .installed
             append(tool.displayName + " is ready.", for: tool)
             NotificationCenter.default.post(
                 name: .cliToolProvisioned, object: nil, userInfo: ["toolID": tool.id])
         } catch {
-            let message = error.localizedDescription
+            let message =
+                (error as? ToolInstallFailure)?.description
+                ?? error.localizedDescription
             append(message, for: tool)
             states[tool.id] = .failed(
                 message: message, instruction: tool.installStrategy.instruction)
         }
     }
 
-    private func detectedVersion(for tool: CLIToolSpec) async -> String? {
-        let name: String
-        let arguments: [String]
-        switch tool.presenceStrategy {
-        case let .executable(executableName, versionArguments):
-            name = executableName
-            arguments = [executableName] + versionArguments
-        }
-        let request = CLICommandRequest(
-            executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: arguments,
-            environment: CLIToolEnvironment.sanitized())
-        guard let result = try? await run(request, for: tool), result.terminationStatus == 0 else {
-            return nil
-        }
-        let version = result.output.components(separatedBy: .newlines).first {
-            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return version ?? name
-    }
-
-    private func install(_ tool: CLIToolSpec) async throws {
-        switch tool.installStrategy {
-        case let .standaloneBinary(url, destinationName, _):
-            try await installStandaloneBinary(
-                url: url, destinationName: destinationName, tool: tool)
-        case let .packageManagers(homebrewArguments, npmPackage, _):
-            try await installPackage(
-                homebrewArguments: homebrewArguments, npmPackage: npmPackage, tool: tool)
-        }
-    }
-
-    private func installStandaloneBinary(
-        url: URL, destinationName: String, tool: CLIToolSpec
-    ) async throws {
-        let binDirectory = AppData.supportDir.appendingPathComponent("bin")
-        try FileManager.default.createDirectory(
-            at: binDirectory, withIntermediateDirectories: true)
-        let destination = binDirectory.appendingPathComponent(destinationName)
-        let temporary = binDirectory.appendingPathComponent(
-            ".\(destinationName)-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        append("Downloading " + url.absoluteString, for: tool)
-        try await requireSuccess(
-            executable: "/usr/bin/curl",
-            arguments: [
-                "--fail", "--location", "--progress-bar", url.absoluteString, "--output",
-                temporary.path,
-            ],
-            tool: tool)
-        try await requireSuccess(
-            executable: "/bin/chmod", arguments: ["+x", temporary.path], tool: tool)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: temporary, to: destination)
-        append("Saved " + destination.path, for: tool)
-    }
-
-    private func installPackage(
-        homebrewArguments: [String], npmPackage: String, tool: CLIToolSpec
-    ) async throws {
-        if await commandIsPresent("brew", tool: tool) {
-            append("Running brew " + homebrewArguments.joined(separator: " "), for: tool)
-            let result = try await run(
-                request(executable: "/usr/bin/env", arguments: ["brew"] + homebrewArguments),
-                for: tool)
-            if result.terminationStatus == 0 { return }
-            append("Homebrew install failed, trying npm.", for: tool)
-        } else {
-            append("Homebrew was not found, checking npm.", for: tool)
-        }
-        guard await commandIsPresent("npm", tool: tool) else {
-            throw ToolProvisioningError(
-                message: "Neither Homebrew nor npm is available for installing "
-                    + tool.displayName + ".")
-        }
-        append("Running npm install -g " + npmPackage, for: tool)
-        try await requireSuccess(
-            executable: "/usr/bin/env", arguments: ["npm", "install", "-g", npmPackage],
-            tool: tool)
-    }
-
-    private func commandIsPresent(_ name: String, tool: CLIToolSpec) async -> Bool {
-        guard
-            let result = try? await run(
-                request(executable: "/usr/bin/env", arguments: [name, "--version"]),
-                for: tool)
-        else { return false }
-        return result.terminationStatus == 0
-    }
-
-    private func requireSuccess(
-        executable: String, arguments: [String], tool: CLIToolSpec
-    ) async throws {
-        let result = try await run(
-            request(executable: executable, arguments: arguments), for: tool)
-        guard result.terminationStatus == 0 else {
-            throw ToolProvisioningError(
-                message: "Command exited with status "
-                    + String(result.terminationStatus) + ".")
-        }
-    }
-
-    private func request(executable: String, arguments: [String]) -> CLICommandRequest {
-        CLICommandRequest(
-            executableURL: URL(fileURLWithPath: executable), arguments: arguments,
-            environment: CLIToolEnvironment.sanitized())
-    }
-
-    private func run(
-        _ request: CLICommandRequest, for tool: CLIToolSpec
-    ) async throws -> CLICommandResult {
-        try await runCommand(request) { [weak self] line in
+    private func recorder(for tool: CLIToolSpec) -> ToolInstaller.Log {
+        { [weak self] line in
             Task { @MainActor in self?.append(line, for: tool) }
         }
     }

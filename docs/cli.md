@@ -441,9 +441,11 @@ claude  installed  2.1.226 (Claude Code)       Includes Claude Code cloud sessio
 codex   installed  codex-cli 0.146.0-alpha.9.2 Reads Codex session and weekly limits when that provider is enabled.
 ```
 
-`ls` checks PATH and needs nothing. `install` asks the app to fetch it the same
-way the extension sheet does, so it exits 4 when Edith is closed, and reports
-rather than reinstalling when the tool is already there.
+`ls` checks PATH and needs nothing. `install` fetches the tool itself, the same
+way the extension sheet does, and needs no app running. It streams what it is
+doing, verifies the tool is on PATH afterwards, and exits 4 with the manual
+instruction when it could not. A tool that is already there is reported rather
+than reinstalled.
 
 ## `ed apps`
 

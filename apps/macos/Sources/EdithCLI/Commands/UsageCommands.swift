@@ -52,8 +52,15 @@ struct UsageLimitsCommand: AsyncParsableCommand {
         try await execute {
             if refresh {
                 try AppBridge.requireHelper("refreshing the rate limits")
-                AppBridge.post(IPC.Name.requestLimitsRefresh)
-                _ = await AppBridge.awaitReply(IPC.Name.limitsUpdated, timeout: 20) {}
+                let answered = await AppBridge.awaitReply(
+                    IPC.Name.limitsUpdated, timeout: 20
+                ) {
+                    AppBridge.post(IPC.Name.requestLimitsRefresh)
+                }
+                guard answered != nil else {
+                    throw AppBridge.silence(
+                        "refreshing the rate limits", extensionKey: "tabUsageEnabled")
+                }
             }
             let providers = LimitsReport.providers()
             guard !providers.isEmpty else {
