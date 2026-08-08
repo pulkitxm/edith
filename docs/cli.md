@@ -253,9 +253,9 @@ CLI and the UI cannot disagree.
 
 ```
 ed usage limits [--refresh] [--json]
-ed usage summary [--range <r>] [--source <s>]... [--json]
-ed usage daily   [--range <r>] [--source <s>]... [--json]
-ed usage models  [--range <r>] [--source <s>]... [--json]
+ed usage summary [--range <r>] [--source <s>]... [--machine <m>]... [--json]
+ed usage daily   [--range <r>] [--source <s>]... [--machine <m>]... [--json]
+ed usage models  [--range <r>] [--source <s>]... [--machine <m>]... [--json]
 ed usage projects [--range <r>] [--limit <n>] [--json]
 ed usage sources [--json]
 ed usage machines [ls] [--json]
@@ -276,6 +276,22 @@ when stderr is not a terminal, so `ed usage refresh --json` stays pipeable.
 `--range` is `today`, `week` (last 7 days), `month` (last 30) or `all`, and
 defaults to `all`. `--source` filters to one agent and repeats;
 `ed usage sources` lists the valid values.
+
+`--machine` filters to everything one machine ran, by the machine's name
+rather than by source id, and repeats. `--machine local` is this Mac on its
+own. Naming a machine that has never given usage is an error rather than a
+silent empty answer, and `ed usage sources` has a MACHINE column so you can
+see which is which.
+
+```
+$ ed usage summary --machine "Asus TUF 7"
+cost    $254.07
+tokens  329833432
+days    81
+
+SOURCE          COST    TOKENS
+asus-tuf-7:cli  254.07  329833432
+```
 
 ```
 $ ed usage limits

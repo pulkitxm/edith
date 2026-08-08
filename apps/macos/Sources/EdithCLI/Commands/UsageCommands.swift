@@ -26,6 +26,11 @@ struct UsageWindow: ParsableArguments {
     @Option(name: .long, help: "Only this usage source. Repeat to include several.")
     var source: [String] = []
 
+    @Option(
+        name: .long,
+        help: "Only this machine's agents, or local for this Mac. Repeat to include several.")
+    var machine: [String] = []
+
     func resolved() throws -> UsageRange {
         guard let value = UsageRange(rawValue: range.lowercased()) else {
             throw CLIFailure.notFound(
@@ -35,20 +40,36 @@ struct UsageWindow: ParsableArguments {
         return value
     }
 
-    var sources: Set<String>? { source.isEmpty ? nil : Set(source) }
+    func sources(in document: UsageDocument) throws -> Set<String>? {
+        var chosen = try known(Set(source), in: document)
+        for query in machine {
+            let resolved = try? MachineResolver.machine(query)
+            let matched = UsageMachineFilter.sources(
+                matching: query, in: document, machineID: resolved?.id)
+            guard !matched.isEmpty else {
+                throw CLIFailure.notFound(
+                    "no collected usage from a machine called \(query)",
+                    hint: "run `ed usage machines` to see which machines have given usage")
+            }
+            chosen.formUnion(matched)
+        }
+        return chosen.isEmpty ? nil : chosen
+    }
 
-    func validated(against document: UsageDocument) throws -> Set<String>? {
-        guard let sources else { return nil }
-        let known = Set(document.sources ?? [])
-        let unknown = sources.subtracting(known).sorted()
+    private func known(_ requested: Set<String>, in document: UsageDocument) throws
+        -> Set<String>
+    {
+        guard !requested.isEmpty else { return [] }
+        let available = Set(document.sources ?? [])
+        let unknown = requested.subtracting(available).sorted()
         guard unknown.isEmpty else {
             throw CLIFailure.notFound(
                 "no usage source named " + unknown.joined(separator: ", "),
-                hint: known.isEmpty
+                hint: available.isEmpty
                     ? "run `ed usage refresh` first"
-                    : "sources: " + known.sorted().joined(separator: ", "))
+                    : "sources: " + available.sorted().joined(separator: ", "))
         }
-        return sources
+        return requested
     }
 }
 
@@ -127,9 +148,9 @@ struct UsageSummaryCommand: AsyncParsableCommand {
             let range = try window.resolved()
             let document = try UsageDocument.load()
             let days = UsageAnalysis.days(document, range: range)
-            let chosen = try window.validated(against: document)
-            let totals = UsageAnalysis.totals(days, sources: chosen)
-            let bySource = UsageAnalysis.bySource(days, sources: chosen)
+            let sources = try window.sources(in: document)
+            let totals = UsageAnalysis.totals(days, sources: sources)
+            let bySource = UsageAnalysis.bySource(days, sources: sources)
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -171,7 +192,7 @@ struct UsageDailyCommand: AsyncParsableCommand {
             let document = try UsageDocument.load()
             let days = UsageAnalysis.byDay(
                 UsageAnalysis.days(document, range: range),
-                sources: try window.validated(against: document))
+                sources: try window.sources(in: document))
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -203,7 +224,7 @@ struct UsageModelsCommand: AsyncParsableCommand {
             let document = try UsageDocument.load()
             let models = UsageAnalysis.byModel(
                 UsageAnalysis.days(document, range: range),
-                sources: try window.validated(against: document))
+                sources: try window.sources(in: document))
             let ordered = models.sorted { $0.value.cost > $1.value.cost }
             guard !json else {
                 CLIOut.json(
@@ -284,6 +305,8 @@ struct UsageSourcesCommand: AsyncParsableCommand {
                                 "id": .string(id),
                                 "label": .optional(document.sourceMeta?[id]?.label),
                                 "tool": .optional(document.sourceMeta?[id]?.tool),
+                                "machine": .optional(document.sourceMeta?[id]?.machine),
+                                "machineID": .optional(document.sourceMeta?[id]?.machineID),
                                 "default": .bool(
                                     document.defaultSources?.contains(id) ?? false),
                             ])
@@ -291,9 +314,14 @@ struct UsageSourcesCommand: AsyncParsableCommand {
                 return
             }
             let rows = sources.map { id in
-                [id, document.sourceMeta?[id]?.label ?? id, document.sourceMeta?[id]?.tool ?? ""]
+                [
+                    id, document.sourceMeta?[id]?.label ?? id,
+                    document.sourceMeta?[id]?.tool ?? "",
+                    document.sourceMeta?[id]?.machine ?? "this Mac",
+                ]
             }
-            CLIOut.out(TextTable.render(headers: ["ID", "LABEL", "TOOL"], rows: rows))
+            CLIOut.out(
+                TextTable.render(headers: ["ID", "LABEL", "TOOL", "MACHINE"], rows: rows))
         }
     }
 }

@@ -442,14 +442,20 @@ struct DashboardView: View {
         .buttonStyle(.plain).pointerCursor().fixedSize()
         .modifier(FilterChip(dark: dark))
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
-            UsageMachinesPicker(dark: dark) { machinePickerOpen = false }
+            UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
         }
     }
 
     private var machineSummary: String {
-        let counted = MachineUsageSelection.machineIDs().count
-        if counted == 0 { return "Machines" }
-        return counted == 1 ? "1 machine" : "\(counted) machines"
+        let groups = model.machineGroups
+        guard !groups.isEmpty else {
+            let counted = MachineUsageSelection.machineIDs().count
+            return counted == 0 ? "Machines" : "\(counted) collected"
+        }
+        let shown = groups.filter { model.machineIsShown($0) || model.machineIsPartlyShown($0) }
+        if shown.count == groups.count { return "All machines" }
+        if shown.count == 1, let only = shown.first { return only.name }
+        return "\(shown.count) of \(groups.count) machines"
     }
 
     private var modelMenu: some View {

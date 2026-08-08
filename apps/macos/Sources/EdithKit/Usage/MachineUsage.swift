@@ -220,6 +220,34 @@ public enum MachineUsageStore {
         }
     }
 
+    @discardableResult
+    public static func restamp(
+        _ machines: [Machine], in directory: URL = UsageCollector.machinesDirectory
+    ) -> [UUID] {
+        let slugs = MachineUsageSlug.slugs(for: machines)
+        let byID = Dictionary(machines.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var changed: [UUID] = []
+        for id in storedIDs(in: directory) {
+            guard let machine = byID[id], let slug = slugs[id] else { continue }
+            let file = UsageCollector.machineFile(id: id, in: directory)
+            guard let data = try? Data(contentsOf: file),
+                var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                var block = object["machine"] as? [String: Any]
+            else { continue }
+            guard block["name"] as? String != machine.name || block["slug"] as? String != slug
+            else { continue }
+            block["name"] = machine.name
+            block["slug"] = slug
+            object["machine"] = block
+            guard let encoded = try? JSONSerialization.data(withJSONObject: object) else {
+                continue
+            }
+            try? encoded.write(to: file, options: .atomic)
+            changed.append(id)
+        }
+        return changed
+    }
+
     public static func storedIDs(in directory: URL = UsageCollector.machinesDirectory) -> [UUID] {
         let contents = try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil)

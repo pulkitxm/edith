@@ -101,6 +101,8 @@ enum JSONContract {
         JSONCase("ed usage projects", ["usage", "projects", "--json"]),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase("ed usage refresh", ["usage", "refresh", "--json"]),
+        JSONCase(
+            "ed usage summary --machine", ["usage", "summary", "--machine", "local", "--json"]),
         JSONCase("ed usage machines ls", ["usage", "machines", "ls", "--json"]),
         JSONCase(
             "ed usage machines collect",

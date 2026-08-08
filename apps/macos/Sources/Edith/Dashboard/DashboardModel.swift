@@ -66,6 +66,8 @@ struct DashUsage: Decodable {
     struct Meta: Decodable {
         let label: String?
         let tool: String?
+        let machine: String?
+        let machineID: String?
     }
     struct Totals: Decodable {
         let cost: Double?
@@ -177,6 +179,19 @@ struct ProjectPath: Identifiable, Hashable {
     let path: String
     let name: String
     let tokens: Double
+}
+
+struct MachineGroup: Identifiable, Equatable {
+    static let localID = "local"
+
+    let id: String
+    let name: String
+    let sourceIDs: [String]
+    var agentNames: [String] = []
+
+    var isLocal: Bool { id == Self.localID }
+
+    var agentSummary: String { agentNames.joined(separator: ", ") }
 }
 
 struct ProjectAgg: Identifiable {
@@ -373,6 +388,7 @@ final class DashboardModel: ObservableObject {
     private(set) var allProjectPaths: [ProjectPath] = []
     private var pathByProjectName: [String: String] = [:]
     private(set) var allSources: [SourceInfo] = []
+    private(set) var machineGroups: [MachineGroup] = []
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
     private(set) var cycleOptions: [CycleOption] = []
@@ -488,6 +504,8 @@ final class DashboardModel: ObservableObject {
         let ids = srcIds.isEmpty ? (parsed.sources ?? ["cli"]) : srcIds
         allSources = ids.map { SourceInfo(id: $0, label: parsed.sourceMeta?[$0]?.label ?? $0) }
         sourceIndex = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+        machineGroups = Self.groupByMachine(
+            ids, meta: parsed.sourceMeta ?? [:], naming: Self.registryNames())
         defaultSources = (parsed.defaultSources ?? ids).filter { ids.contains($0) }
         if defaultSources.isEmpty { defaultSources = ids }
 
@@ -533,6 +551,66 @@ final class DashboardModel: ObservableObject {
         }
         loaded = true
         recompute()
+    }
+
+    static func registryNames() -> [String: String] {
+        var names: [String: String] = [:]
+        for machine in MachineRegistry.machines() {
+            names[machine.id.uuidString.lowercased()] = machine.name
+        }
+        return names
+    }
+
+    static func groupByMachine(
+        _ ids: [String], meta: [String: DashUsage.Meta], naming: [String: String]
+    ) -> [MachineGroup] {
+        var order: [String] = []
+        var sources: [String: [String]] = [:]
+        var names: [String: String] = [:]
+        var agents: [String: [String]] = [:]
+        for id in ids {
+            let entry = meta[id]
+            let key = entry?.machineID?.lowercased() ?? entry?.machine ?? MachineGroup.localID
+            if sources[key] == nil {
+                order.append(key)
+                names[key] =
+                    key == MachineGroup.localID
+                    ? "This Mac" : (naming[key] ?? entry?.machine ?? key)
+            }
+            sources[key, default: []].append(id)
+            agents[key, default: []].append(entry?.tool ?? entry?.label ?? id)
+        }
+        let groups = order.map {
+            MachineGroup(
+                id: $0, name: names[$0] ?? $0, sourceIDs: sources[$0] ?? [],
+                agentNames: agents[$0] ?? [])
+        }
+        guard groups.count > 1 else { return [] }
+        return groups
+    }
+
+    func machineIsShown(_ group: MachineGroup) -> Bool {
+        !group.sourceIDs.isEmpty && group.sourceIDs.allSatisfy { selectedSources.contains($0) }
+    }
+
+    func machineIsPartlyShown(_ group: MachineGroup) -> Bool {
+        group.sourceIDs.contains { selectedSources.contains($0) } && !machineIsShown(group)
+    }
+
+    func showMachine(_ group: MachineGroup, _ shown: Bool) {
+        var next = selectedSources
+        if shown {
+            next.formUnion(group.sourceIDs)
+        } else {
+            next.subtract(group.sourceIDs)
+        }
+        guard !next.isEmpty else { return }
+        selectedSources = next
+    }
+
+    func showOnlyMachine(_ group: MachineGroup) {
+        guard !group.sourceIDs.isEmpty else { return }
+        selectedSources = Set(group.sourceIDs)
     }
 
     private func restore() {

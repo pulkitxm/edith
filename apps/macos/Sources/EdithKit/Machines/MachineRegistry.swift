@@ -65,6 +65,10 @@ public enum MachineRegistry {
         guard let index = all.firstIndex(where: { $0.id == machine.id }) else { return all }
         all[index] = machine
         encode(all, to: files.machines)
+        guard files.machines == MachinePaths.machinesFile else { return all }
+        if !MachineUsageStore.restamp(all).isEmpty {
+            IPC.post(IPC.Name.requestUsageRefresh)
+        }
         return all
     }
 

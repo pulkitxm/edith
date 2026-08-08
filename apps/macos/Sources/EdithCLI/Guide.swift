@@ -176,7 +176,8 @@ public enum Guide {
         ```
 
         `--range` is one of today, week, month, all. `--source` filters to one agent
-        and repeats.
+        and repeats, `--machine` filters to one machine by name and repeats, and
+        `--machine local` is this Mac on its own.
 
         A machine keeps its agent history on its own disk, so `ed usage machines
         collect` pipes the collector over SSH and runs it there, installing what is

@@ -62,6 +62,34 @@ public struct UsageDay: Decodable, Sendable {
 public struct UsageSourceMeta: Decodable, Sendable {
     public let label: String?
     public let tool: String?
+    public let machine: String?
+    public let machineID: String?
+}
+
+public enum UsageMachineFilter {
+    public static let localNames = ["local", "this-mac", "thismac", "mac"]
+
+    public static func isLocal(_ query: String) -> Bool {
+        localNames.contains(query.lowercased().replacingOccurrences(of: " ", with: "-"))
+    }
+
+    public static func sources(
+        matching query: String, in document: UsageDocument, machineID: UUID? = nil
+    ) -> Set<String> {
+        let meta = document.sourceMeta ?? [:]
+        let ids = document.sources ?? Array(meta.keys)
+        guard !isLocal(query) else {
+            return Set(ids.filter { meta[$0]?.machine == nil && meta[$0]?.machineID == nil })
+        }
+        let wanted = machineID?.uuidString.lowercased()
+        let needle = query.lowercased()
+        return Set(
+            ids.filter { id in
+                guard let entry = meta[id] else { return false }
+                if let wanted, entry.machineID?.lowercased() == wanted { return true }
+                return entry.machine?.lowercased() == needle
+            })
+    }
 }
 
 public struct UsageDocument: Decodable, Sendable {

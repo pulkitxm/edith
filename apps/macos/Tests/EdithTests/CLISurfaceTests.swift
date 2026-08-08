@@ -71,9 +71,11 @@ import Testing
     }
 
     @Test func repeatingSourceNarrowsToASet() throws {
-        #expect(try UsageWindow.parse([]).sources == nil)
+        let document = try JSONDecoder().decode(
+            UsageDocument.self, from: Data(Self.document.utf8))
+        #expect(try UsageWindow.parse([]).sources(in: document) == nil)
         let window = try UsageWindow.parse(["--source", "cli", "--source", "codex"])
-        #expect(window.sources == ["cli", "codex"])
+        #expect(try window.sources(in: document) == ["cli", "codex"])
     }
 
     @Test func totalsAndPerSourceBreakdownsAddUp() throws {

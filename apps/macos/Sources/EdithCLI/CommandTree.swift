@@ -155,13 +155,14 @@ public enum CommandTree {
                         options: ["--json", "--help", "--refresh"]),
                     CommandNode(
                         "summary", "Cost and tokens over a window.",
-                        options: ["--json", "--range", "--source"], arguments: [.usageRange]),
+                        options: ["--json", "--range", "--source", "--machine"],
+                        arguments: [.usageRange]),
                     CommandNode(
                         "daily", "Per-day cost and tokens.",
-                        options: ["--json", "--range", "--source"]),
+                        options: ["--json", "--range", "--source", "--machine"]),
                     CommandNode(
                         "models", "Cost and tokens per model.",
-                        options: ["--json", "--range", "--source"]),
+                        options: ["--json", "--range", "--source", "--machine"]),
                     CommandNode(
                         "projects", "Cost and tokens per project.",
                         options: ["--json", "--range"]),

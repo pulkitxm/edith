@@ -285,6 +285,12 @@ enum UIParity {
         UICapability(
             "Dashboard machines menu", "drop what a machine already gave",
             ["usage", "machines", "forget", "box"]),
+        UICapability(
+            "Dashboard machines chip", "show one machine's agents only",
+            ["usage", "summary", "--machine", "box"]),
+        UICapability(
+            "Dashboard machines chip", "take a machine out of the charts",
+            ["usage", "summary", "--machine", "local"]),
     ]
 }
 
