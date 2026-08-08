@@ -606,7 +606,7 @@ enum JSONContract {
         }
     }
 
-    static let silenceIsNotAnError: Set<String> = ["UsageCommands.swift"]
+    static let silenceIsNotAnError: Set<String> = []
 
     @Test func everyPlaceThatWaitsOnTheAppDiagnosesItsSilence() throws {
         let root = URL(fileURLWithPath: #filePath)

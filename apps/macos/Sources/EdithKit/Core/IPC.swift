@@ -42,8 +42,6 @@ public enum IPC {
             "com.pulkit.edith.requestQuitApps")
         public static let requestFinderUndo = Notification.Name(
             "com.pulkit.edith.requestFinderUndo")
-        public static let requestMusicRescan = Notification.Name(
-            "com.pulkit.edith.requestMusicRescan")
         public static let requestDownloadCancel = Notification.Name(
             "com.pulkit.edith.requestDownloadCancel")
         public static let finderUndoResult = Notification.Name(
