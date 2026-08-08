@@ -26,7 +26,7 @@ enum UIParity {
         "uninstall", "refresh", "request", "play", "pause", "stop", "toggle", "next",
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
-        "check-updates",
+        "check-updates", "collect", "forget",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -273,6 +273,18 @@ enum UIParity {
         UICapability("Settings", "send a test notification", ["app", "test-notification"]),
         UICapability("About pane", "check for updates", ["app", "check-updates"]),
         UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
+        UICapability(
+            "Dashboard machines menu", "count a machine's agent usage too",
+            ["usage", "machines", "enable", "box"]),
+        UICapability(
+            "Dashboard machines menu", "stop counting a machine",
+            ["usage", "machines", "disable", "box"]),
+        UICapability(
+            "Dashboard machines menu", "collect from the machines now",
+            ["usage", "machines", "collect"]),
+        UICapability(
+            "Dashboard machines menu", "drop what a machine already gave",
+            ["usage", "machines", "forget", "box"]),
     ]
 }
 

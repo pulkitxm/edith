@@ -3,7 +3,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const script = readFileSync(
-  join(import.meta.dir, "..", "apps", "macos", "Resources", "refresh-usage"),
+  join(
+    import.meta.dir,
+    "..",
+    "apps",
+    "macos",
+    "Sources",
+    "EdithKit",
+    "Resources",
+    "refresh-usage",
+  ),
   "utf8",
 );
 
@@ -20,6 +29,7 @@ const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
 const WALKCC = extractBlock("WALKCC");
 const CCDAILY = extractBlock("CCDAILY");
+const FLEET = extractBlock("FLEET");
 
 function jq(program, input, args = []) {
   const proc = Bun.spawnSync(["jq", "-c", ...args, program], {
@@ -627,5 +637,209 @@ describe("usage pipeline", () => {
       corrupt(value);
       expect(jqExit(VALIDATE, JSON.stringify(value))).toBe(1);
     }
+  });
+});
+
+const localDoc = (over = {}) => ({
+  schemaVersion: 6,
+  generatedAt: "2026-08-08T10:00:00Z",
+  sources: ["cli"],
+  defaultSources: ["cli"],
+  sourceMeta: { cli: { label: "Claude Code", tool: "Claude Code" } },
+  totals: {
+    cost: 1,
+    tokens: 100,
+    inputTokens: 10,
+    outputTokens: 20,
+    cacheCreationTokens: 30,
+    cacheReadTokens: 40,
+  },
+  sessions: [{ id: "s1", source: "cli" }],
+  daily: [
+    {
+      period: "2026-08-07",
+      bySource: {
+        cli: [
+          {
+            modelName: "opus",
+            inputTokens: 10,
+            outputTokens: 20,
+            cacheCreationTokens: 30,
+            cacheReadTokens: 40,
+            cost: 1,
+          },
+        ],
+      },
+      hours: [{ tokens: 100, cost: 1 }],
+      projects: [
+        {
+          projectName: "edith",
+          path: "/Users/p/edith",
+          tokens: 100,
+          cost: 1,
+          chats: [{ id: "c1", source: "cli", tokens: 100, cost: 1 }],
+          worktrees: [],
+        },
+      ],
+    },
+  ],
+  ...over,
+});
+
+const machineDoc = (over = {}) => ({
+  schemaVersion: 6,
+  generatedAt: "2026-08-08T09:00:00Z",
+  sources: ["cli", "codex"],
+  defaultSources: ["cli", "codex"],
+  sourceMeta: {
+    cli: { label: "Claude Code", tool: "Claude Code" },
+    codex: { label: "Codex", tool: "Codex" },
+  },
+  machine: {
+    id: "11111111-1111-1111-1111-111111111111",
+    name: "tuf",
+    slug: "tuf",
+    host: "tuf.local",
+    collectedAt: "2026-08-08T09:05:00Z",
+  },
+  sessions: [{ id: "s9", source: "cli" }],
+  daily: [
+    {
+      period: "2026-08-07",
+      bySource: {
+        cli: [
+          {
+            modelName: "opus",
+            inputTokens: 1,
+            outputTokens: 2,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            cost: 2,
+          },
+        ],
+      },
+      hours: [{ tokens: 3, cost: 2 }],
+      projects: [
+        {
+          projectName: "edith",
+          path: "/home/p/edith",
+          tokens: 3,
+          cost: 2,
+          chats: [{ id: "c9", source: "cli", tokens: 3, cost: 2 }],
+          worktrees: [
+            {
+              name: "wt",
+              chats: [{ id: "c8", source: "codex", tokens: 0, cost: 0 }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  ...over,
+});
+
+const fleet = (docs) =>
+  jq(FLEET, docs.map((d) => JSON.stringify(d)).join("\n"), ["-s"])[0];
+
+describe("FLEET", () => {
+  test("machine sources are namespaced and labelled with the machine", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    expect(out.sources).toEqual(["cli", "tuf:cli", "tuf:codex"]);
+    expect(out.defaultSources).toEqual(["cli", "tuf:cli", "tuf:codex"]);
+    expect(out.sourceMeta["tuf:cli"].label).toBe("Claude Code · tuf");
+    expect(out.sourceMeta["tuf:cli"].machine).toBe("tuf");
+    expect(out.sourceMeta.cli.label).toBe("Claude Code");
+  });
+
+  test("a day seen on both sides keeps one row with both sides' sources", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    expect(out.daily).toHaveLength(1);
+    expect(Object.keys(out.daily[0].bySource).sort()).toEqual([
+      "cli",
+      "tuf:cli",
+    ]);
+    expect(out.daily[0].hours).toHaveLength(24);
+    expect(out.daily[0].hours[0]).toEqual({ tokens: 103, cost: 3 });
+  });
+
+  test("machine projects and chats stay separable from the local ones", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    const projects = out.daily[0].projects;
+    expect(projects.map((p) => p.projectName)).toEqual([
+      "edith",
+      "edith · tuf",
+    ]);
+    expect(projects[1].path).toBe("tuf:/home/p/edith");
+    expect(projects[1].chats[0].source).toBe("tuf:cli");
+    expect(projects[1].worktrees[0].chats[0].source).toBe("tuf:codex");
+  });
+
+  test("totals are recomputed over the merged rows and pass validation", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    expect(out.totals.cost).toBe(3);
+    expect(out.totals.tokens).toBe(103);
+    expect(out.totals.inputTokens).toBe(11);
+    expect(out.machines).toEqual([
+      {
+        id: "11111111-1111-1111-1111-111111111111",
+        name: "tuf",
+        slug: "tuf",
+        host: "tuf.local",
+        collectedAt: "2026-08-08T09:05:00Z",
+        sources: ["tuf:cli", "tuf:codex"],
+      },
+    ]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("two machines never collide, and days only one of them has survive", () => {
+    const other = machineDoc({
+      machine: {
+        id: "22222222-2222-2222-2222-222222222222",
+        name: "pi",
+        slug: "pi",
+        host: "pi.local",
+        collectedAt: "2026-08-08T09:06:00Z",
+      },
+      daily: [
+        {
+          period: "2026-08-06",
+          bySource: {
+            cli: [
+              {
+                modelName: "opus",
+                inputTokens: 4,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0,
+                cost: 5,
+              },
+            ],
+          },
+          hours: [],
+          projects: [],
+        },
+      ],
+    });
+    const out = fleet([localDoc(), machineDoc(), other]);
+    expect(out.daily.map((d) => d.period)).toEqual([
+      "2026-08-06",
+      "2026-08-07",
+    ]);
+    expect(Object.keys(out.daily[0].bySource)).toEqual(["pi:cli"]);
+    expect(out.totals.cost).toBe(8);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("a machine with no usage adds nothing but still reports itself", () => {
+    const out = fleet([
+      localDoc(),
+      machineDoc({ sources: [], defaultSources: [], daily: [], sessions: [] }),
+    ]);
+    expect(out.sources).toEqual(["cli"]);
+    expect(out.totals.tokens).toBe(100);
+    expect(out.machines[0].sources).toEqual([]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 });

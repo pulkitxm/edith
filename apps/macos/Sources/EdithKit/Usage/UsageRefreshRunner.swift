@@ -92,11 +92,7 @@ public final class UsageRefreshLock {
 }
 
 public enum UsageRefreshRunner {
-    public static let scriptName = "refresh-usage.sh"
-
-    public static func scriptURL() -> URL? {
-        BundledResources.locate(scriptName, in: BundledResources.kitBundleName)
-    }
+    public static func scriptURL() -> URL? { UsageCollector.scriptURL() }
 
     public static func lockURL(dataDir: URL = Repo.dataDir) -> URL {
         dataDir.appendingPathComponent("refresh.lock")

@@ -18,6 +18,8 @@ struct DashboardView: View {
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
+    @State private var machinePickerOpen = false
+    @State private var machineCount = 0
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -74,6 +76,7 @@ struct DashboardView: View {
         }
         .navigationTitle("Agent Usage")
         .task {
+            machineCount = MachineRegistry.machines().count
             await model.load()
             syncCustomDates()
         }
@@ -293,6 +296,7 @@ struct DashboardView: View {
             sourceMenu
             modelMenu
             projectMenu
+            if machineCount > 0 { machineMenu }
             Button("Reset") { model.reset() }
                 .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
                 .foregroundStyle(acc)
@@ -426,6 +430,26 @@ struct DashboardView: View {
             return model.sourceLabel(id)
         }
         return "\(model.selectedSources.count) sources"
+    }
+
+    private var machineMenu: some View {
+        Button {
+            machinePickerOpen = true
+        } label: {
+            Label(machineSummary, systemImage: "server.rack")
+                .font(.system(size: UIScale.pt(11)))
+        }
+        .buttonStyle(.plain).pointerCursor().fixedSize()
+        .modifier(FilterChip(dark: dark))
+        .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
+            UsageMachinesPicker(dark: dark) { machinePickerOpen = false }
+        }
+    }
+
+    private var machineSummary: String {
+        let counted = MachineUsageSelection.machineIDs().count
+        if counted == 0 { return "Machines" }
+        return counted == 1 ? "1 machine" : "\(counted) machines"
     }
 
     private var modelMenu: some View {

@@ -2,6 +2,15 @@
 set -euo pipefail
 
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+case "$(uname -s)" in
+  Darwin) DEFAULT_CACHE="$HOME/Library/Application Support/Edith" ;;
+  *) DEFAULT_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/edith" ;;
+esac
+EDCACHE="${EDITH_CACHE_DIR:-$DEFAULT_CACHE}"
+mkdir -p "$EDCACHE/bin"
+export PATH="$EDCACHE/bin:$EDCACHE/bun/bin:$PATH"
+
 if ! command -v bun >/dev/null 2>&1; then
   NODE_DIR="$HOME/.nvm/versions/node"
   [ -d "$NODE_DIR" ] && export PATH="$NODE_DIR/$(ls "$NODE_DIR" 2>/dev/null | tail -1)/bin:$PATH"
@@ -10,9 +19,11 @@ fi
 OUT_DIR="${1:-$PWD/data}"
 mkdir -p "$OUT_DIR"
 OUT="$OUT_DIR/usage.json"
+MACHINES_DIR="$OUT_DIR/machines"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+trap 'printf "  ✖ collector stopped at line %s\n" "$LINENO" >&2' ERR
 
 _now() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%.3f", time' 2>/dev/null || date +%s; }
 _t0=$(_now)
@@ -28,6 +39,56 @@ _note() { printf 'note\t%s\n' "$1"; }
 _summary() { printf 'summary\t%s\t%s\n' "$1" "$2"; }
 _error() { printf 'error\t%s\n' "$1"; }
 _total() { awk "BEGIN{printf \"%.2f\", $(_now)-$_t0}"; }
+
+_hash() {
+  if command -v md5 >/dev/null 2>&1; then
+    md5 -q -s "$1"
+  elif command -v md5sum >/dev/null 2>&1; then
+    printf '%s' "$1" | md5sum | cut -d' ' -f1
+  else
+    printf 'v1'
+  fi
+}
+
+platform_tag() {
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os=macos ;;
+    Linux) os=linux ;;
+    *) os=unsupported ;;
+  esac
+  case "$(uname -m)" in
+    x86_64 | amd64) arch=amd64 ;;
+    aarch64 | arm64) arch=arm64 ;;
+    *) arch=unsupported ;;
+  esac
+  printf '%s-%s' "$os" "$arch"
+}
+
+install_jq() {
+  local tag url
+  tag="$(platform_tag)"
+  case "$tag" in
+    *unsupported*) return 1 ;;
+  esac
+  command -v curl >/dev/null 2>&1 || return 1
+  url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-$tag"
+  curl -fsSL "$url" -o "$EDCACHE/bin/jq.download" || return 1
+  chmod +x "$EDCACHE/bin/jq.download"
+  "$EDCACHE/bin/jq.download" --version >/dev/null 2>&1 || {
+    rm -f "$EDCACHE/bin/jq.download"
+    return 1
+  }
+  mv "$EDCACHE/bin/jq.download" "$EDCACHE/bin/jq"
+}
+
+install_bun() {
+  command -v curl >/dev/null 2>&1 || return 1
+  command -v unzip >/dev/null 2>&1 || return 1
+  BUN_INSTALL="$EDCACHE/bun" bash -c 'curl -fsSL https://bun.sh/install | bash' >/dev/null 2>&1 \
+    || return 1
+  [ -x "$EDCACHE/bun/bin/bun" ]
+}
 
 label_for() {
   case "$1" in
@@ -109,6 +170,91 @@ ASSEMBLE='
     }
 '
 
+FLEET='
+  def dedupe: reduce .[] as $x ([]; if index($x) then . else . + [$x] end);
+  def qualify:
+    (.machine.slug // "machine") as $slug
+    | (.machine.name // .machine.slug // "machine") as $name
+    | (.machine.id // "") as $mid
+    | (.sourceMeta // {}) as $meta
+    | def sid($s): $slug + ":" + $s;
+      def rechat: .source = sid(.source // "");
+      {
+        machine: {
+          id: $mid, name: $name, slug: $slug,
+          host: (.machine.host // ""),
+          collectedAt: (.machine.collectedAt // .generatedAt),
+          sources: [ (.sources // [])[] | sid(.) ]
+        },
+        sources: [ (.sources // [])[] | sid(.) ],
+        defaultSources: [ (.defaultSources // .sources // [])[] | sid(.) ],
+        sourceMeta: ( reduce ((.sources // [])[]) as $s ({};
+            .[$slug + ":" + $s] = {
+              label: (($meta[$s].label // $s) + " · " + $name),
+              tool: ($meta[$s].tool // $s),
+              machine: $name,
+              machineID: $mid
+            }) ),
+        sessions: [ (.sessions // [])[] | { id: (.id // ""), source: sid(.source // "") } ],
+        daily: [ (.daily // [])[] | {
+            period: .period,
+            bySource: ( reduce ((.bySource // {}) | to_entries[]) as $e ({};
+              .[$slug + ":" + $e.key] = $e.value) ),
+            hours: (.hours // []),
+            projects: [ (.projects // [])[] | {
+                projectName: ((.projectName // "unknown") + " · " + $name),
+                path: ($slug + ":" + (.path // "")),
+                tokens: (.tokens // 0),
+                cost: (.cost // 0),
+                chats: [ (.chats // [])[] | rechat ],
+                worktrees: [ (.worktrees // [])[]
+                  | .chats = [ (.chats // [])[] | rechat ] ]
+              } ]
+          } ]
+      };
+  .[0] as $base
+  | [ .[1:][] | qualify ] as $fleet
+  | {
+      schemaVersion: 6,
+      generatedAt: $base.generatedAt,
+      sources: ((($base.sources // []) + [ $fleet[].sources[] ]) | dedupe),
+      defaultSources: ((($base.defaultSources // []) + [ $fleet[].defaultSources[] ]) | dedupe),
+      sourceMeta: ( reduce $fleet[] as $m (($base.sourceMeta // {}); . + $m.sourceMeta) ),
+      machines: [ $fleet[].machine ],
+      sessions: (($base.sessions // []) + [ $fleet[].sessions[] ]),
+      daily: ( (($base.daily // []) + [ $fleet[].daily[] ]) | group_by(.period)
+        | map(. as $g | {
+            period: $g[0].period,
+            bySource: ( reduce $g[] as $d ({}; . + ($d.bySource // {})) ),
+            hours: [ range(0; 24) | . as $h | {
+                tokens: ([ $g[] | (.hours // [])[$h].tokens // 0 ] | add // 0),
+                cost: ([ $g[] | (.hours // [])[$h].cost // 0 ] | add // 0)
+              } ],
+            projects: ( reduce $g[] as $d ([]; . + ($d.projects // [])) )
+          })
+        | sort_by(.period) )
+    }
+  | ( [ .daily[].bySource[][] ] ) as $all
+  | .totals = {
+      cost: ([ $all[].cost // 0 ] | add // 0),
+      tokens: ([ $all[] | ((.inputTokens // 0) + (.outputTokens // 0)
+        + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0)) ] | add // 0),
+      inputTokens: ([ $all[].inputTokens // 0 ] | add // 0),
+      outputTokens: ([ $all[].outputTokens // 0 ] | add // 0),
+      cacheCreationTokens: ([ $all[].cacheCreationTokens // 0 ] | add // 0),
+      cacheReadTokens: ([ $all[].cacheReadTokens // 0 ] | add // 0)
+    }
+'
+
+EMPTY='
+  {
+    schemaVersion: 6, generatedAt: $now, sources: [], defaultSources: [], sourceMeta: {},
+    totals: { cost: 0, tokens: 0, inputTokens: 0, outputTokens: 0,
+      cacheCreationTokens: 0, cacheReadTokens: 0 },
+    daily: [], sessions: []
+  }
+'
+
 VALIDATE='
   def tokenSum($rows; $field): [ $rows[] | (.[$field] // 0) ] | add // 0;
   [ .daily[].bySource[][] ] as $rows
@@ -130,8 +276,28 @@ VALIDATE='
         + tokenSum($rows; "cacheCreationTokens") + tokenSum($rows; "cacheReadTokens")))
 '
 
+if ! command -v jq >/dev/null 2>&1; then
+  _note "jq is missing, fetching a static build"
+  if install_jq; then
+    _phase "jq" "installed into the cache"
+  else
+    _error "jq is required and could not be installed"
+    exit 1
+  fi
+fi
+
+if ! command -v bun >/dev/null 2>&1 && ! command -v npx >/dev/null 2>&1; then
+  _note "no JavaScript runtime, installing bun"
+  if install_bun; then
+    _phase "bun" "installed into the cache"
+  else
+    _error "need bun or npx to run ccusage, and bun could not be installed"
+    exit 1
+  fi
+fi
+
 if command -v bun >/dev/null 2>&1; then
-  CACHE="$HOME/Library/Application Support/Edith/.ccusage"
+  CACHE="$EDCACHE/.ccusage"
   mkdir -p "$CACHE"
   if [ ! -x "$CACHE/node_modules/.bin/ccusage" ]; then
     _note "installing ccusage (first run, ~15s)"
@@ -141,12 +307,9 @@ if command -v bun >/dev/null 2>&1; then
     _phase "ccusage" "cached"
   fi
   ccu() { bun "$CACHE/node_modules/.bin/ccusage" "$@"; }
-elif command -v npx >/dev/null 2>&1; then
+else
   _phase "ccusage" "via npx"
   ccu() { npx -y ccusage@latest "$@"; }
-else
-  _error "need bun or npx on PATH to run ccusage"
-  exit 1
 fi
 
 : >"$TMP/manifest.jsonl"
@@ -194,7 +357,7 @@ CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cli.dail
 CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude session --json 2>/dev/null >"$TMP/cli.session.json" || echo '{"sessions":[]}' >"$TMP/cli.session.json"
 add_source cli "$TMP/cli.daily.json" "$TMP/cli.session.json" || true
 
-COWORK_CFG="$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions" -maxdepth 2 -name .claude -type d 2>/dev/null | paste -sd, -)"
+COWORK_CFG="$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions" -maxdepth 2 -name .claude -type d 2>/dev/null | paste -sd, - || true)"
 if [ -n "$COWORK_CFG" ]; then
   CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cowork.daily.json" || echo '{"daily":[]}' >"$TMP/cowork.daily.json"
   CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude session --json 2>/dev/null >"$TMP/cowork.session.json" || echo '{"sessions":[]}' >"$TMP/cowork.session.json"
@@ -219,18 +382,26 @@ if [ -d "$CCODE_DIR" ]; then
   add_source commandcode "$TMP/commandcode.daily.json" "$TMP/commandcode.session.json" || true
 fi
 
-if [ ! -s "$TMP/manifest.jsonl" ]; then
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+HAS_MACHINES=0
+compgen -G "$MACHINES_DIR/*.json" >/dev/null 2>&1 && HAS_MACHINES=1
+
+if [ ! -s "$TMP/manifest.jsonl" ] && [ "$HAS_MACHINES" = "0" ]; then
   _error "no usage found from any source"
-  exit 1
+  exit 3
 fi
 [ -s "$TMP/sessions.jsonl" ] || : >"$TMP/sessions.jsonl"
 
-_note "assembling usage.json"
-NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-jq -s \
-  --arg now "$NOW" \
-  --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") \
-  "$ASSEMBLE" "$TMP/manifest.jsonl" >"$TMP/usage.json"
+if [ -s "$TMP/manifest.jsonl" ]; then
+  _note "assembling usage.json"
+  jq -s \
+    --arg now "$NOW" \
+    --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") \
+    "$ASSEMBLE" "$TMP/manifest.jsonl" >"$TMP/usage.json"
+else
+  _note "no usage on this Mac; reporting the machines only"
+  jq -n --arg now "$NOW" "$EMPTY" >"$TMP/usage.json"
+fi
 
 PROJECTS_DIR="$HOME/.claude/projects"
 if [ -s "$TMP/manifest.jsonl" ]; then
@@ -348,13 +519,21 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   '
 
   : >"$TMP/walk.jsonl"
-  WCACHE="$HOME/Library/Application Support/Edith/.walkcache"
+  WCACHE="$EDCACHE/.walkcache"
   mkdir -p "$WCACHE"
   find "$WCACHE" -type f -mtime +45 -delete 2>/dev/null || true
   walk_dir() {
     [ -d "$1" ] || return 0
     local prog="${3:-$WALK}"
-    WALK_DIR="$1" WALK_SRC="$2" WALK_OFF="$OFF" WALK_VER="$(md5 -q -s "$prog" 2>/dev/null || echo v1)" \
+    if ! command -v perl >/dev/null 2>&1; then
+      find "$1" -name '*.jsonl' -print0 2>/dev/null \
+        | while IFS= read -r -d '' file; do
+          jq -c --argjson off "$OFF" --arg src "$2" "$prog" "$file" \
+            >>"$TMP/walk.jsonl" 2>/dev/null || true
+        done
+      return 0
+    fi
+    WALK_DIR="$1" WALK_SRC="$2" WALK_OFF="$OFF" WALK_VER="$(_hash "$prog")" \
       WALK_CACHE="$WCACHE" WALK_OUT="$TMP/walk.jsonl" WALK_PROG="$prog" \
       perl -e '
       use File::Find;
@@ -396,6 +575,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   walk_opencode() {
     local db="$HOME/.local/share/opencode/opencode.db"
     [ -f "$db" ] || return 0
+    command -v sqlite3 >/dev/null 2>&1 || return 0
     sqlite3 -readonly "$db" "
       select json_object(
         'sid', m.session_id,
@@ -426,7 +606,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
       | jq -c '{t: "title", sid: .sid, title: .title}' >>"$TMP/walk.jsonl" 2>/dev/null || true
   }
 
-  NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+  NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ' || true)
   _note "walking $NFILES transcript files"
   walk_dir "$PROJECTS_DIR" cli
   if [ -n "${COWORK_CFG:-}" ]; then
@@ -464,7 +644,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
        end)})' \
     "$TMP/records.jsonl" >"$TMP/recs.json"
 
-  CWDMAP_CACHE="$HOME/Library/Application Support/Edith/.cwdmap.v2.jsonl"
+  CWDMAP_CACHE="$EDCACHE/.cwdmap.v2.jsonl"
   touch "$CWDMAP_CACHE"
   jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | sort >"$TMP/cwds.txt"
   jq -c --rawfile want "$TMP/cwds.txt" \
@@ -543,7 +723,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
             )
           | sort_by([-.tokens, .projectName]) )
       }) | map({(.key): {hours: .hours, projects: .projects}}) | add // {} ) as $BY |
-    $usage | .schemaVersion = 5 | .daily = [ .daily[] |
+    $usage | .schemaVersion = 6 | .daily = [ .daily[] |
       ($BY[.period]) as $b |
       .hours = ( [range(0; 24)] | map( . as $h |
         ($b.hours // [] | map(select(.hour == $h)) | .[0]) as $x
@@ -552,6 +732,12 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     ]
   ' "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$TMP/usage.json"
   _phase "merge" "hours + projects merged"
+fi
+
+if [ "$HAS_MACHINES" = "1" ]; then
+  jq -s "$FLEET" "$TMP/usage.json" "$MACHINES_DIR"/*.json >"$TMP/fleet.json" \
+    && mv "$TMP/fleet.json" "$TMP/usage.json"
+  _phase "machines" "$(jq -r '.machines | length' "$TMP/usage.json") folded in"
 fi
 
 if ! jq -e "$VALIDATE" "$TMP/usage.json" >/dev/null; then
@@ -569,7 +755,10 @@ TO=$(jq -r '.daily[-1].period // "-"' "$OUT")
 COST=$(printf '$%.2f' "$(jq -r '.totals.cost // 0' "$OUT")")
 KB=$(awk "BEGIN{printf \"%.0f\", $(wc -c <"$OUT")/1024}")
 
+FLEETNAMES=$(jq -r '[.machines[]?.name] | join(", ")' "$OUT")
+
 _summary "sources" "$SRCS"
+if [ -n "$FLEETNAMES" ]; then _summary "machines" "$FLEETNAMES"; fi
 _summary "window" "$FROM to $TO · $DAYS days · $MODELS models"
 _summary "spend" "$COST · $SESS sessions · $KB KB"
 printf 'done\t%s\n' "$(_total)"

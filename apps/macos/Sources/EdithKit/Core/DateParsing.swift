@@ -3,6 +3,10 @@ import Foundation
 public enum EdithDate {
     private static let iso = ISO8601DateFormatter()
 
+    public static func isoString(_ date: Date) -> String {
+        iso.string(from: date)
+    }
+
     public static func parseISO(_ s: String?) -> Date? {
         guard var s else { return nil }
         if let dot = s.firstIndex(of: ".") {

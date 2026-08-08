@@ -8,6 +8,8 @@ public enum IPC {
             "com.pulkit.edith.usageRefreshStarted")
         public static let usageRefreshFinished = Notification.Name(
             "com.pulkit.edith.usageRefreshFinished")
+        public static let requestUsageMachineCollect = Notification.Name(
+            "com.pulkit.edith.requestUsageMachineCollect")
         public static let requestLimitsRefresh = Notification.Name(
             "com.pulkit.edith.requestLimitsRefresh")
         public static let limitsUpdated = Notification.Name("com.pulkit.edith.limitsUpdated")

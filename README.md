@@ -21,6 +21,7 @@ Requires macOS 14 or later on Apple Silicon.
 - **Dashboard** - KPIs with per-day, model, source, project and hourly charts, plus a sortable model table.
 - **Activity heatmap** - GitHub-style daily spend calendar across your full history.
 - **Project drilldown** - spend by project, worktree and chat, across both agents.
+- **Fleet usage** - the same collector runs on your SSH machines and folds their agents in as their own sources, so the totals cover every box you code on.
 
 **Everything else on the shelf**
 

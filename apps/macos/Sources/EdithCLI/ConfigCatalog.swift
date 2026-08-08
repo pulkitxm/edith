@@ -150,6 +150,9 @@ public enum ConfigCatalog {
             summary: "Agent Usage extension: Claude and Codex limits, stats and alerts.",
             fallback: .bool(true)),
         SettingDefinition(
+            "usageMachines", .stringList, group: "usage",
+            summary: "Ids of the machines whose agent usage is collected over SSH."),
+        SettingDefinition(
             "claudeLimitsEnabled", .bool, group: "limits",
             summary: "Track Claude rate limits.", fallback: .bool(true)),
         SettingDefinition(

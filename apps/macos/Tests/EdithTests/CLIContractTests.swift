@@ -101,6 +101,19 @@ enum JSONContract {
         JSONCase("ed usage projects", ["usage", "projects", "--json"]),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase("ed usage refresh", ["usage", "refresh", "--json"]),
+        JSONCase("ed usage machines ls", ["usage", "machines", "ls", "--json"]),
+        JSONCase(
+            "ed usage machines collect",
+            ["usage", "machines", "collect", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed usage machines enable", ["usage", "machines", "enable", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed usage machines disable",
+            ["usage", "machines", "disable", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed usage machines forget",
+            ["usage", "machines", "forget", "nowhere-at-all", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed system stats", ["system", "stats", "--json"]),
         JSONCase("ed system disks", ["system", "disks", "--json"]),
         JSONCase("ed music status", ["music", "status", "--json"]),

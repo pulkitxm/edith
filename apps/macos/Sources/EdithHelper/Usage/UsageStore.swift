@@ -53,11 +53,14 @@ final class UsageStore: ObservableObject, FeatureModule {
     private var refreshRequestObserver: NSObjectProtocol?
     private var refreshStartedObserver: NSObjectProtocol?
     private var limitsRefreshObserver: NSObjectProtocol?
+    private var machineCollectObserver: NSObjectProtocol?
     private var hasLiveLimits = false
     private var limitsRefreshStartedAt: Date?
     private var limitsRefreshGeneration = 0
     private var quickRetries = 0
     private var quickRetryTask: Task<Void, Never>?
+    private var machineTask: Task<Void, Never>?
+    private var pendingMachineMerge = false
     let notifier = LimitNotifier()
     private var history = LimitsHistory()
     @Published private(set) var limitPoints: [LimitPoint] = []
@@ -161,6 +164,10 @@ final class UsageStore: ObservableObject, FeatureModule {
             Task { @MainActor in self?.adoptExternalRefresh() }
         }
 
+        machineCollectObserver = IPC.observe(IPC.Name.requestUsageMachineCollect) { [weak self] in
+            self?.runUpdate(forceMachines: true)
+        }
+
         limitsRefreshObserver = IPC.observe(IPC.Name.requestLimitsRefresh) { [weak self] in
             Task { @MainActor in await self?.refreshLimits(force: true) }
         }
@@ -256,6 +263,12 @@ final class UsageStore: ObservableObject, FeatureModule {
         }
         quickRetryTask?.cancel()
         quickRetryTask = nil
+        machineTask?.cancel()
+        machineTask = nil
+        if let machineCollectObserver {
+            IPC.stopObserving(machineCollectObserver)
+            self.machineCollectObserver = nil
+        }
     }
 
     func syncStatusItem() {
@@ -851,8 +864,10 @@ final class UsageStore: ObservableObject, FeatureModule {
         limitPoints = points
     }
 
-    func runUpdate() {
+    func runUpdate(collectMachines: Bool = true, forceMachines: Bool = false) {
+        if collectMachines { collectFromMachines(force: forceMachines) }
         guard !updating else { return }
+        MachineUsageStore.prune(keeping: MachineRegistry.machines().map(\.id))
         beginTranscript()
         refreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -894,6 +909,10 @@ final class UsageStore: ObservableObject, FeatureModule {
         SettingsBackup.shared.syncUsage()
         await loadStats()
         NotificationCenter.default.post(name: .usageDataChanged, object: nil)
+        if pendingMachineMerge {
+            pendingMachineMerge = false
+            runUpdate(collectMachines: false)
+        }
     }
 
     private func adoptExternalRefresh() {
@@ -912,6 +931,65 @@ final class UsageStore: ObservableObject, FeatureModule {
             }
             await self.finishRefresh()
         }
+    }
+
+    nonisolated static let machineInterval: TimeInterval = 1800
+
+    nonisolated static func machinesDue(
+        _ machines: [Machine], force: Bool, now: Date,
+        collectedAt: (UUID) -> Date?
+    ) -> [Machine] {
+        machines.filter { machine in
+            guard !force else { return true }
+            guard let last = collectedAt(machine.id) else { return true }
+            return now.timeIntervalSince(last) >= machineInterval
+        }
+    }
+
+    private func collectFromMachines(force: Bool) {
+        guard machineTask == nil else { return }
+        let registry = MachineRegistry.machines()
+        let due = Self.machinesDue(
+            MachineUsageSelection.included(in: registry), force: force, now: Date(),
+            collectedAt: { MachineUsageStore.summary(machineID: $0)?.collectedAt })
+        guard !due.isEmpty else { return }
+        let slugs = MachineUsageSlug.slugs(for: registry)
+        diag("collecting usage from \(due.count) machine(s)")
+        machineTask = Task { [weak self] in
+            var collected = 0
+            for machine in due {
+                let slug = slugs[machine.id] ?? MachineUsageSlug.slug(for: machine.name)
+                let connection = SSHConnection(machine: machine)
+                do {
+                    try await connection.connect()
+                    let run = try await MachineUsageCollector.collect(
+                        machine: machine, slug: slug, over: connection)
+                    collected += 1
+                    let sources = run.summary.sources.count
+                    await self?.noteMachine(
+                        "\(machine.name): \(run.summary.days) days from \(sources) source(s)")
+                } catch {
+                    await self?.noteMachine(
+                        "\(machine.name): \(error.localizedDescription)")
+                }
+            }
+            await self?.finishedCollecting(changed: collected > 0)
+        }
+    }
+
+    private func noteMachine(_ message: String) {
+        Log.usage.notice("machine usage \(message, privacy: .public)")
+        diag("machine usage \(message)")
+    }
+
+    private func finishedCollecting(changed: Bool) {
+        machineTask = nil
+        guard changed else { return }
+        guard !updating else {
+            pendingMachineMerge = true
+            return
+        }
+        runUpdate(collectMachines: false)
     }
 }
 

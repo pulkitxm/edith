@@ -169,6 +169,26 @@ public enum CommandTree {
                         "sources", "The agents that produced the history.",
                         options: common),
                     CommandNode(
+                        "machines", "Machines counted with this Mac.",
+                        children: [
+                            CommandNode(
+                                "ls", "Every machine and what its usage adds up to.",
+                                options: common),
+                            CommandNode(
+                                "collect", "Run the collector on a machine and bring it back.",
+                                options: ["--json", "--verbose", "--once", "--timeout"],
+                                arguments: [.machine]),
+                            CommandNode(
+                                "enable", "Count this machine on every refresh.",
+                                options: ["--json"], arguments: [.machine]),
+                            CommandNode(
+                                "disable", "Stop collecting from this machine.",
+                                options: ["--json"], arguments: [.machine]),
+                            CommandNode(
+                                "forget", "Drop what a machine gave and stop counting it.",
+                                options: ["--json"], arguments: [.machine]),
+                        ]),
+                    CommandNode(
                         "refresh", "Re-collect usage data from every agent.",
                         options: ["--json", "--follow"]),
                 ]),

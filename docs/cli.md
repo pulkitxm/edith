@@ -258,6 +258,11 @@ ed usage daily   [--range <r>] [--source <s>]... [--json]
 ed usage models  [--range <r>] [--source <s>]... [--json]
 ed usage projects [--range <r>] [--limit <n>] [--json]
 ed usage sources [--json]
+ed usage machines [ls] [--json]
+ed usage machines collect [<machine>] [--once] [--verbose] [--timeout <s>] [--json]
+ed usage machines enable <machine> [--json]
+ed usage machines disable <machine> [--json]
+ed usage machines forget <machine> [--json]
 ed usage refresh [--follow] [--json]
 ```
 
@@ -287,6 +292,26 @@ collected file and does not.
 `limits --json` gives each provider a `session` and `weekly` object with
 `percent`, `resetsAt` and `resetsInSeconds`, or `null` where the provider has
 never reported that window.
+
+`machines` counts SSH machines alongside this Mac. `collect` pipes the same
+collector Edith runs here to the machine, runs it against that machine's home
+and brings the numbers back, so a box you only ever reach over SSH shows up in
+every other `ed usage` answer. What the machine is missing (jq, bun, ccusage) is
+installed under `~/.cache/edith` there on the first run, which is why nothing is
+collected until you ask: naming a machine to `collect` signs it up for later
+refreshes, `--once` collects without signing it up, and `disable` stops the
+refreshes while keeping the numbers.
+
+Each agent on a machine arrives as its own source, `<machine-slug>:<agent>`,
+labelled with the machine name, so `--source asus-tuf-7:cli` narrows to one
+agent on one machine and `ed usage sources` lists them next to the local ones.
+`forget` drops everything one machine gave and stops counting it.
+
+```
+$ ed usage machines
+MACHINE     COUNTED  COLLECTED             SOURCES  COST    TOKENS
+Asus TUF 7  yes      2026-08-08T16:14:51Z  1        249.81  321812580
+```
 
 `refresh` asks the running app to re-collect, and waits for it to finish so you
 can gate on the exit code; `--no-wait` returns as soon as the request is sent.
@@ -883,6 +908,8 @@ still needs `ed machines exec usage -- ...`.
 | --- | --- |
 | `config`, `extensions`, `schema`, `guide`, `version`, `install` | no, but changes reach the app live when it is running |
 | `usage limits`, `summary`, `daily`, `models`, `projects`, `sources` | no, they read the collected files |
+| `usage machines ls`, `enable`, `disable` | no |
+| `usage machines collect`, `forget` | no, but the numbers only reach the dashboard once the app folds them in |
 | `usage refresh` | no, it runs the collection pipeline itself |
 | `system stats`, `system disks` | no |
 | `machines` and `ed <machine> ...` | no |
