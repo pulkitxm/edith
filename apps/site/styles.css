@@ -1148,11 +1148,16 @@ label.action {
   height: 3rem;
   flex-shrink: 0;
   border-radius: 10px;
+  object-fit: cover;
   background: linear-gradient(
     145deg,
     var(--color-art-coral),
     var(--color-art-rust)
   );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 18%),
+    0 0 0 1px rgb(255 255 255 / 8%),
+    0 8px 16px -6px rgb(0 0 0 / 80%);
 }
 
 .now-playing.bare .art {
@@ -1311,14 +1316,6 @@ label.action {
   60% {
     height: 45%;
   }
-}
-
-.panel-music .art {
-  object-fit: cover;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 18%),
-    0 0 0 1px rgb(255 255 255 / 8%),
-    0 10px 20px -8px rgb(0 0 0 / 85%);
 }
 
 .panel-music .track-art {

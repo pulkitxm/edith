@@ -1,36 +1,3 @@
-const tracks = [
-  {
-    title: "Weightless",
-    artist: "Marconi Union",
-    from: "var(--color-art-coral)",
-    to: "var(--color-art-rust)",
-  },
-  {
-    title: "Nightcall",
-    artist: "Kavinsky",
-    from: "var(--color-art-blue)",
-    to: "var(--color-art-navy)",
-  },
-  {
-    title: "Strobe",
-    artist: "deadmau5",
-    from: "var(--color-art-green)",
-    to: "var(--color-art-forest)",
-  },
-  {
-    title: "Teardrop",
-    artist: "Massive Attack",
-    from: "var(--color-art-purple)",
-    to: "var(--color-art-plum)",
-  },
-  {
-    title: "Intro",
-    artist: "The xx",
-    from: "var(--color-track-gold)",
-    to: "var(--color-track-ochre)",
-  },
-];
-
 const library = [
   {
     title: "Weightless",
@@ -104,17 +71,17 @@ function startNowPlaying() {
   let trackIndex = 0;
   let progress = 18;
   const paint = () => {
-    const track = tracks[trackIndex];
+    const track = library[trackIndex];
     titleElement.textContent = track.title;
     artistElement.textContent = track.artist;
-    artElement.style.background = `linear-gradient(145deg, ${track.from}, ${track.to})`;
+    artElement.src = track.cover;
   };
   paint();
   window.setInterval(() => {
     progress += 100 / 60;
     if (progress >= 100) {
       progress = 0;
-      trackIndex = (trackIndex + 1) % tracks.length;
+      trackIndex = (trackIndex + 1) % library.length;
       paint();
     }
     progressElement.style.width = `${progress}%`;
