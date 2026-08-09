@@ -1028,6 +1028,10 @@ label.action {
   border-top: 1px solid var(--color-line);
 }
 
+.film + .section {
+  border-top: 0;
+}
+
 .split {
   margin-inline: auto;
   display: grid;
@@ -1189,7 +1193,6 @@ label.action {
 }
 
 .film {
-  border-top: 1px solid var(--color-line);
   padding-block: 6rem;
 }
 
@@ -2120,11 +2123,11 @@ label.action {
     scroll-behavior: auto;
   }
 
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+  :root:root *,
+  :root:root *::before,
+  :root:root *::after {
+    animation: none;
+    transition: none;
   }
 
   [data-reveal] {
