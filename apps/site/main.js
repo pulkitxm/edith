@@ -31,6 +31,33 @@ const tracks = [
   },
 ];
 
+const library = [
+  {
+    title: "Weightless",
+    artist: "Marconi Union",
+    cover: "/music/cover-1.jpg",
+    seconds: 372,
+  },
+  {
+    title: "Clair de Lune",
+    artist: "Debussy",
+    cover: "/music/cover-2.jpg",
+    seconds: 302,
+  },
+  {
+    title: "Time",
+    artist: "Hans Zimmer",
+    cover: "/music/cover-3.jpg",
+    seconds: 275,
+  },
+  {
+    title: "Intro",
+    artist: "The xx",
+    cover: "/music/cover-4.jpg",
+    seconds: 127,
+  },
+];
+
 const sparkHeights = [
   18, 22, 20, 26, 30, 28, 34, 40, 37, 44, 48, 46, 53, 58, 55, 61, 66, 64, 68,
 ];
@@ -91,6 +118,89 @@ function startNowPlaying() {
       paint();
     }
     progressElement.style.width = `${progress}%`;
+  }, 100);
+}
+
+function clock(seconds) {
+  const whole = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(whole / 60);
+  return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function startPlayer() {
+  const root = document.querySelector("[data-player]");
+  if (!root) {
+    return;
+  }
+  const art = root.querySelector("[data-np-art]");
+  const title = root.querySelector("[data-np-title]");
+  const artist = root.querySelector("[data-np-artist]");
+  const bar = root.querySelector("[data-np-progress]");
+  const elapsedText = root.querySelector("[data-np-elapsed]");
+  const remainingText = root.querySelector("[data-np-remaining]");
+  const queueElement = root.querySelector("[data-queue]");
+  if (!art || !title || !bar || !queueElement) {
+    return;
+  }
+
+  const queue = library.slice();
+  const secondsPerTick = 1.6;
+  let elapsed = 0;
+
+  const renderQueue = () => {
+    queueElement.textContent = "";
+    for (const track of queue.slice(1)) {
+      const row = document.createElement("div");
+      const cover = document.createElement("img");
+      cover.className = "track-art";
+      cover.src = track.cover;
+      cover.alt = "";
+      const name = document.createElement("span");
+      name.className = "track-name";
+      name.textContent = `${track.title} · ${track.artist}`;
+      const length = document.createElement("span");
+      length.className = "mono subtle";
+      length.textContent = clock(track.seconds);
+      row.append(cover, name, length);
+      queueElement.appendChild(row);
+    }
+  };
+
+  const paint = () => {
+    const track = queue[0];
+    art.src = track.cover;
+    title.textContent = track.title;
+    if (artist) {
+      artist.textContent = track.artist;
+    }
+    renderQueue();
+  };
+
+  const advance = () => {
+    queue.push(queue.shift());
+    elapsed = 0;
+    queueElement.dataset.shifting = "true";
+    paint();
+    window.setTimeout(() => {
+      delete queueElement.dataset.shifting;
+    }, 460);
+  };
+
+  paint();
+  window.setInterval(() => {
+    const track = queue[0];
+    elapsed += secondsPerTick;
+    if (elapsed >= track.seconds) {
+      advance();
+      return;
+    }
+    bar.style.width = `${(elapsed / track.seconds) * 100}%`;
+    if (elapsedText) {
+      elapsedText.textContent = clock(elapsed);
+    }
+    if (remainingText) {
+      remainingText.textContent = `-${clock(track.seconds - elapsed)}`;
+    }
   }, 100);
 }
 
@@ -156,6 +266,7 @@ function start() {
   buildHeatmaps();
   buildSparks();
   startNowPlaying();
+  startPlayer();
   startReveals();
   startPresenterDemo();
 }

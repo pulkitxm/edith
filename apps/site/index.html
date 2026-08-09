@@ -495,7 +495,7 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-live">
               <div class="panel-head">
                 <span>Rate limits</span>
                 <span class="mono">session, weekly</span>
@@ -510,10 +510,9 @@
                       cy="48"
                       r="38"
                       transform="rotate(-90 48 48)"
-                      style="stroke-dashoffset: 126.5"
                     />
                   </svg>
-                  <span class="ring-pct">47%</span>
+                  <span class="ring-pct"></span>
                   <span class="ring-label">Session (5h)</span>
                   <span class="ring-sub">resets 2h 47m</span>
                 </div>
@@ -526,10 +525,9 @@
                       cy="48"
                       r="38"
                       transform="rotate(-90 48 48)"
-                      style="stroke-dashoffset: 76.4"
                     />
                   </svg>
-                  <span class="ring-pct">68%</span>
+                  <span class="ring-pct"></span>
                   <span class="ring-label">Weekly</span>
                   <span class="ring-sub">resets 3d 6h</span>
                 </div>
@@ -544,7 +542,7 @@
       <section class="section">
         <div class="split reverse" data-reveal-group>
           <div class="split-copy">
-            <p class="eyebrow">Codex</p>
+            <p class="eyebrow">Code</p>
             <h3>Claude and Codex, side by side.</h3>
             <p class="lede">
               Edith tracks both agents. Switch the rate-limit rings between providers, filter the
@@ -553,21 +551,31 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-providers">
               <div class="panel-head">
                 <span>Providers</span>
                 <span class="mono">both tracked</span>
               </div>
               <div class="provider-stack">
-                <div class="provider-row">
-                  <span>Claude</span>
-                  <span class="mono">47% <span class="subtle">session</span></span>
-                  <span class="mono">68% <span class="subtle">week</span></span>
+                <div class="provider-row row-claude">
+                  <span class="provider-name">
+                    <img src="/logo/claude.png" alt="" width="22" height="22" />
+                    Claude
+                  </span>
+                  <span class="mono stat stat-session"
+                    ><span class="subtle">session</span></span
+                  >
+                  <span class="mono stat stat-week"><span class="subtle">week</span></span>
                 </div>
-                <div class="provider-row">
-                  <span>Codex</span>
-                  <span class="mono">12% <span class="subtle">session</span></span>
-                  <span class="mono">31% <span class="subtle">week</span></span>
+                <div class="provider-row row-codex">
+                  <span class="provider-name">
+                    <img src="/logo/codex.png" alt="" width="22" height="22" />
+                    Codex
+                  </span>
+                  <span class="mono stat stat-session"
+                    ><span class="subtle">session</span></span
+                  >
+                  <span class="mono stat stat-week"><span class="subtle">week</span></span>
                 </div>
               </div>
               <p class="panel-note">
@@ -589,19 +597,19 @@
             </p>
           </div>
           <div>
-            <div class="panel">
-              <div class="menubar">
-                <span>
-                  <span style="color: var(--color-sage)">38%</span>
+            <div class="panel panel-raised panel-menubar">
+              <div class="menubar menubar-live">
+                <span class="menubar-stats">
+                  <span class="mb-stat mb-a"></span>
                   <span class="subtle">·</span>
-                  <span style="color: var(--color-accent)">62%</span>
+                  <span class="mb-stat mb-b"></span>
                 </span>
                 <span class="subtle">Wed 14:22</span>
               </div>
-              <div class="legend">
-                <span><i class="dot sage"></i>Safe</span>
-                <span><i class="dot accent"></i>Close</span>
-                <span><i class="dot danger"></i>Over</span>
+              <div class="legend legend-live">
+                <span class="legend-safe"><i class="dot sage"></i>Safe</span>
+                <span class="legend-close"><i class="dot accent"></i>Close</span>
+                <span class="legend-over"><i class="dot danger"></i>Over</span>
               </div>
             </div>
           </div>
@@ -621,7 +629,7 @@
           <div>
             <div class="notif-stack">
               <div class="notif">
-                <span class="notif-icon"></span>
+                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
                 <div class="notif-body">
                   <div class="notif-top">
                     <b>Ahead of pace</b>
@@ -632,7 +640,7 @@
                 <i class="dot accent glow-accent"></i>
               </div>
               <div class="notif">
-                <span class="notif-icon"></span>
+                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
                 <div class="notif-body">
                   <div class="notif-top">
                     <b>Approaching weekly limit</b>
@@ -643,7 +651,7 @@
                 <i class="dot danger glow-danger"></i>
               </div>
               <div class="notif">
-                <span class="notif-icon"></span>
+                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
                 <div class="notif-body">
                   <div class="notif-top">
                     <b>Back in the green</b>
@@ -669,7 +677,7 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-heat">
               <div class="panel-head">
                 <span>Activity</span>
                 <span class="mono">$1,284 · 13 weeks</span>
@@ -701,56 +709,34 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-music" data-player>
               <div class="now-playing bare">
-                <span class="art"></span>
+                <span class="np-art">
+                  <img class="art" src="/music/cover-1.jpg" alt="" data-np-art />
+                  <span class="np-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                </span>
                 <div class="np-body">
-                  <div class="np-title">Weightless</div>
-                  <div class="np-artist">Marconi Union</div>
-                  <div class="progress"><span style="width: 42%"></span></div>
-                  <div class="np-times"><span>2:38</span><span>-3:34</span></div>
+                  <div class="np-title" data-np-title>Weightless</div>
+                  <div class="np-artist" data-np-artist>Marconi Union</div>
+                  <div class="progress"><span data-np-progress></span></div>
+                  <div class="np-times">
+                    <span data-np-elapsed>0:00</span><span data-np-remaining>-6:12</span>
+                  </div>
                 </div>
               </div>
-              <div class="tracklist" style="margin-top: 1rem">
+              <div class="tracklist" style="margin-top: 1rem" data-queue>
                 <div>
-                  <span
-                    class="track-art"
-                    style="
-                      background: linear-gradient(
-                        145deg,
-                        var(--color-art-blue),
-                        var(--color-art-navy)
-                      );
-                    "
-                  ></span>
+                  <img class="track-art" src="/music/cover-2.jpg" alt="" />
                   <span class="track-name">Clair de Lune · Debussy</span>
                   <span class="mono subtle">5:02</span>
                 </div>
                 <div>
-                  <span
-                    class="track-art"
-                    style="
-                      background: linear-gradient(
-                        145deg,
-                        var(--color-art-green),
-                        var(--color-art-forest)
-                      );
-                    "
-                  ></span>
+                  <img class="track-art" src="/music/cover-3.jpg" alt="" />
                   <span class="track-name">Time · Hans Zimmer</span>
                   <span class="mono subtle">4:35</span>
                 </div>
                 <div>
-                  <span
-                    class="track-art"
-                    style="
-                      background: linear-gradient(
-                        145deg,
-                        var(--color-art-purple),
-                        var(--color-art-plum)
-                      );
-                    "
-                  ></span>
+                  <img class="track-art" src="/music/cover-4.jpg" alt="" />
                   <span class="track-name">Intro · The xx</span>
                   <span class="mono subtle">2:07</span>
                 </div>
