@@ -42,7 +42,8 @@ import Testing
         let linux = MachineMonitor.readOnlyMounts(
             """
             /dev/sr0 on /media/pulkit/SanDisk Unlocker type udf (ro,nosuid,nodev)
-            /dev/nvme0n1p5 on / type ext4 (rw,relatime,errors=remount-ro)
+            /dev/nvme0n1p5 on / type ext4 (rw,relatime,stripe=32)
+            /dev/nvme0n1p1 on /boot/efi type vfat (rw,relatime,errors=remount-ro)
             """)
         #expect(linux == ["/media/pulkit/SanDisk Unlocker"])
 
