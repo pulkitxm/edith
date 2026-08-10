@@ -42,6 +42,7 @@ public enum ExtensionDefaultsMigration {
         "tabUsageEnabled": true,
         "tabSystemEnabled": true,
         "tabMachinesEnabled": false,
+        "tabCompanionEnabled": false,
         "menuBarSystemStats": false,
         "micMuteEnabled": false,
         "tabMusicEnabled": true,

@@ -32,6 +32,8 @@ struct ExtensionsPane: View {
     @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
     @AppStorage("tabMachinesEnabled", store: SharedDefaults.store) private var machinesEnabled =
         false
+    @AppStorage("tabCompanionEnabled", store: SharedDefaults.store) private var companionEnabled =
+        false
     @AppStorage("menuBarSystemStats", store: SharedDefaults.store) private var systemStats = false
     @AppStorage("notchShelfEnabled", store: SharedDefaults.store) private var notchShelfEnabled =
         false
@@ -239,6 +241,7 @@ struct ExtensionsPane: View {
         case "tabUsageEnabled": agentUsageBinding
         case "tabSystemEnabled": $systemEnabled
         case "tabMachinesEnabled": $machinesEnabled
+        case "tabCompanionEnabled": $companionEnabled
         case "menuBarSystemStats": $systemStats
         case "micMuteEnabled": $micMuteEnabled
         case "tabMusicEnabled": $musicEnabled

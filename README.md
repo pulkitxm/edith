@@ -8,6 +8,7 @@ app. No licence key, no account, no paid tier.
 
 **[Download for macOS](https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg)**
 · [edith.pulkit.page](https://edith.pulkit.page)
+· [Wiki](https://github.com/pulkitxm/edith/wiki)
 
 Requires macOS 14 or later on Apple Silicon.
 

@@ -287,8 +287,11 @@ struct DockerConsoleView: View {
                 onRemove: { pendingRemoval = $0 },
                 onGroupAction: { key, containers, action in
                     guard !containers.isEmpty else { return }
+                    let project = String(key.dropFirst(DockerContainerList.groupKeyPrefix.count))
                     perform(
-                        DockerCommands.lifecycle(action, ids: containers.map(\.id)), on: key)
+                        DockerCommands.lifecycle(action, ids: containers.map(\.id)), on: key,
+                        describing: "\(action == "start" ? "Start" : "Stop") failed for "
+                            + (project.isEmpty ? "Standalone" : project))
                 })
         case .images:
             DockerSimpleList(
@@ -340,14 +343,15 @@ struct DockerConsoleView: View {
             }
     }
 
-    private func perform(_ command: String, on id: String) {
+    private func perform(_ command: String, on id: String, describing: String? = nil) {
         busyIDs.insert(id)
         error = nil
         Task {
             let result = await session.runDocker(command)
             busyIDs.remove(id)
             if case let .failure(failure) = result {
-                error = failure.localizedDescription
+                let detail = failure.localizedDescription
+                error = describing.map { "\($0): \(detail)" } ?? detail
             }
             await session.refreshImagesAndVolumes()
         }

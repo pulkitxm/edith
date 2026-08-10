@@ -204,6 +204,11 @@ public enum ExtensionRegistry {
             symbolName: "server.rack", group: .system, featured: true,
             defaultsKey: "tabMachinesEnabled", optionalPermissions: [.notifications]),
         ExtensionRegistryEntry(
+            id: "companion", title: "Companion",
+            subtitle: "Your notes, voice memos and activity, remembered and searchable.",
+            symbolName: "brain.head.profile", group: .agent, featured: false,
+            defaultsKey: "tabCompanionEnabled"),
+        ExtensionRegistryEntry(
             id: "systemStats", title: "CPU & Memory in menu bar",
             subtitle: "Live CPU and memory readout as a menu bar item.",
             symbolName: "gauge.with.needle", group: .system, featured: false,

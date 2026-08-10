@@ -1,0 +1,9 @@
+services:
+  whisper:
+    command:
+      - test -f /models/${COMPANION_STT_MODEL:-ggml-base.bin} || /app/models/download-ggml-model.sh ${COMPANION_STT_MODEL_NAME:-base} /models; exec /app/build/bin/whisper-server -m /models/${COMPANION_STT_MODEL:-ggml-base.bin} --host 0.0.0.0 --port 8080 --threads ${COMPANION_STT_THREADS:-4}
+  api:
+    environment:
+      EMBED_MODEL: ${COMPANION_EMBED_MODEL:-qwen3-embedding:0.6b}
+      VLM_MODEL: ${COMPANION_VLM_MODEL:-qwen3-vl:2b}
+      RERANK_URL: ${COMPANION_RERANK_URL:-}

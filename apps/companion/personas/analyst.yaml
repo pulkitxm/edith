@@ -1,0 +1,26 @@
+id: analyst
+label: Analyst
+retrieval:
+  sources: []
+  window_days: 365
+  k: 10
+  prefer: evidence
+  salience_weight: 0.1
+  beliefs: true
+  observations: true
+  graph: true
+evidence:
+  self_report_weight: 0.3
+  observation_weight: 1.0
+  require_corroboration: false
+pipeline:
+  - reframe_question
+  - retrieve
+  - counterfactual
+  - draft
+  - ground_check
+  - revise
+output: findings
+abstain_below: 0.55
+max_words: 220
+voice: analyst.md

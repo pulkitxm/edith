@@ -77,6 +77,134 @@ enum JSONContract {
         JSONCase("ed shelf add", ["shelf", "add", "/etc/hosts", "--json"]),
         JSONCase("ed shelf rm", ["shelf", "rm", "1", "--json"]),
         JSONCase("ed shelf clear", ["shelf", "clear", "--json"]),
+        JSONCase("ed companion status", ["companion", "status", "--json"]),
+        JSONCase("ed companion doctor", ["companion", "doctor", "--json"]),
+        JSONCase("ed companion search", ["companion", "search", "warden", "--json"]),
+        JSONCase(
+            "ed companion index", ["companion", "index", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion episodes", ["companion", "episodes", "--json"]),
+        JSONCase(
+            "ed companion sync", ["companion", "sync", "github", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion observations", ["companion", "observations", "--json"]),
+        JSONCase(
+            "ed companion reflect", ["companion", "reflect", "--json"], mutatesTheMachine: true),
+        JSONCase("ed companion beliefs", ["companion", "beliefs", "--json"]),
+        JSONCase("ed companion ask", ["companion", "ask", "what happened", "--json"]),
+        JSONCase(
+            "ed companion extract", ["companion", "extract", "--json"], mutatesTheMachine: true),
+        JSONCase("ed companion claims", ["companion", "claims", "--json"]),
+        JSONCase(
+            "ed companion corroborate", ["companion", "corroborate", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion runs", ["companion", "runs", "--json"]),
+        JSONCase("ed companion personas", ["companion", "personas", "--json"]),
+        JSONCase("ed companion lenses", ["companion", "lenses", "--json"]),
+        JSONCase(
+            "ed companion council", ["companion", "council", "should i push", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion core show", ["companion", "core", "show", "--json"]),
+        JSONCase(
+            "ed companion core set", ["companion", "core", "set", "values", "honest", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion why", ["companion", "why", "abc", "--json"]),
+        JSONCase("ed companion hypotheses ls", ["companion", "hypotheses", "ls", "--json"]),
+        JSONCase(
+            "ed companion hypotheses run", ["companion", "hypotheses", "run", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion predictions", ["companion", "predictions", "--json"]),
+        JSONCase("ed companion commitments", ["companion", "commitments", "--json"]),
+        JSONCase("ed companion discrepancies ls", ["companion", "discrepancies", "ls", "--json"]),
+        JSONCase(
+            "ed companion discrepancies override",
+            ["companion", "discrepancies", "override", "abc", "--real", "was pairing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion calibration", ["companion", "calibration", "--json"]),
+        JSONCase(
+            "ed companion inquire next", ["companion", "inquire", "next", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion inquire answer",
+            ["companion", "inquire", "answer", "abc", "yes", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed companion inquire skip", ["companion", "inquire", "skip", "abc", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion inquire mute", ["companion", "inquire", "mute", "money", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion inquire ls", ["companion", "inquire", "ls", "--json"]),
+        JSONCase("ed companion entities", ["companion", "entities", "--json"]),
+        JSONCase("ed companion eval ls", ["companion", "eval", "ls", "--json"]),
+        JSONCase(
+            "ed companion eval run", ["companion", "eval", "run", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion standup record",
+            ["companion", "standup", "record", "/tmp/nowhere.md", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion standup report", ["companion", "standup", "report", "--json"]),
+        JSONCase("ed companion machines ls", ["companion", "machines", "ls", "--json"]),
+        JSONCase(
+            "ed companion machines add",
+            ["companion", "machines", "add", "nowhere-at-all", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion machines probe",
+            ["companion", "machines", "probe", "nowhere-at-all", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion machines plan", ["companion", "machines", "plan", "--json"]),
+        JSONCase(
+            "ed companion machines profile",
+            ["companion", "machines", "profile", "nowhere-at-all", "cpu-only", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion baselines", ["companion", "baselines", "--json"]),
+        JSONCase("ed companion connectors show", ["companion", "connectors", "show", "--json"]),
+        JSONCase(
+            "ed companion connectors set",
+            ["companion", "connectors", "set", "--github", "gho_x", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion connectors import",
+            ["companion", "connectors", "import", "music", "/tmp/nowhere.json", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion facts", ["companion", "facts", "--json"]),
+        JSONCase(
+            "ed companion correct", ["companion", "correct", "abc", "--retire", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion weekly", ["companion", "weekly", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed companion db migrate", ["companion", "db", "migrate", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion db reindex", ["companion", "db", "reindex", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion db rebuild-derived", ["companion", "db", "rebuild-derived", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion ingest", ["companion", "ingest", "/tmp/nowhere.md", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion chat", ["companion", "chat", "hello there", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion conversations", ["companion", "conversations", "--json"]),
+        JSONCase(
+            "ed companion forget", ["companion", "forget", "abc", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion episode", ["companion", "episode", "abc", "--json"]),
+        JSONCase(
+            "ed companion nightly", ["companion", "nightly", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion reason show", ["companion", "reason", "show", "--json"]),
+        JSONCase(
+            "ed companion reason set",
+            ["companion", "reason", "set", "--model", "claude-sonnet-5", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion reason test", ["companion", "reason", "test", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed cleaner scan", ["cleaner", "scan", "--json"]),
         JSONCase("ed cleaner categories", ["cleaner", "categories", "--json"]),
         JSONCase("ed cleaner clean", ["cleaner", "clean", "--json"]),

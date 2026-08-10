@@ -1,0 +1,27 @@
+id: skeptic
+label: Skeptic
+retrieval:
+  sources: []
+  window_days: 90
+  k: 20
+  prefer: contradicted
+  salience_weight: 0.05
+  beliefs: true
+  observations: true
+  graph: true
+evidence:
+  self_report_weight: 0.2
+  observation_weight: 1.0
+  require_corroboration: true
+pipeline:
+  - reframe_question
+  - retrieve
+  - counterfactual
+  - find_disconfirming
+  - draft
+  - ground_check
+  - revise
+output: findings
+abstain_below: 0.7
+max_words: 200
+voice: skeptic.md

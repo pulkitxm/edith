@@ -172,6 +172,23 @@ public enum Guide {
         ed tuf cd                               back to the home directory
         ```
 
+        ## Companion memory
+
+        The companion stores Markdown notes as append-only episodes. Run its stack
+        from apps/companion, or point the CLI at a forwarded backend.
+
+        ```
+        ed companion status                     counts and latest ingest
+        ed companion doctor                     postgres, redis and vault checks
+        ed companion search "launch plan"        search indexed memory
+        ed companion ingest ./notes --json      ingest a Markdown tree
+        ed companion chat "how was my week"      streamed chat with citations
+        ed companion conversations              list chats, replay one by id
+        ed companion episode <id>               read one episode in full
+        ed companion reason set --api-key sk-x  configure the reasoner in place
+        ed companion nightly                    run the learning pipeline now
+        ```
+
         ## Usage and limits
 
         Usage numbers come from the same `usage.json` the dashboard reads, and limits

@@ -50,6 +50,7 @@ public struct EdRoot: AsyncParsableCommand {
             ShelfCommand.self,
             CleanerCommand.self,
             MachinesCommand.self,
+            CompanionCommand.self,
             CompleteCommand.self,
         ])
 

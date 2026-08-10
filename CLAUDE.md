@@ -72,20 +72,31 @@ the same function.
   and `everyUIActionParsesWithTheArgumentsItClaims` fails when the verb it names
   does not exist or does not take those arguments.
 - A new command also needs a `CommandNode` in `CommandTree.swift` (completion), a
-  `JSONCase` in `CLIContractTests.swift` if it takes `--json`, a section on the right
-  page under `docs/cli/`, and an entry in `Guide.swift`.
+  `JSONCase` in `CLIContractTests.swift` if it takes `--json`, its own page under
+  `docs/cli/<group>/`, and an entry in `Guide.swift`.
   `CLIDocsTests.everyCommandInTheTreeIsDocumented` fails when a command in the tree
-  is documented nowhere, and a brand new page must be linked from `docs/cli/README.md`.
+  is documented nowhere, and `everyCommandPageIsListedByItsGroup` fails when the new
+  page is not linked from its group's `README.md`.
 
 ## Documentation
 
-`docs/cli/` is the CLI reference: `README.md` is the index, and every other page
-covers one command group. It is the only place the CLI is documented at length;
-the root `README.md` links to it rather than repeating it.
+`docs/cli/` is the CLI reference, one page per command. `README.md` is the index and
+links every group; each group is a directory whose `README.md` introduces the group
+and links its commands in the order they should be read; every other file documents
+exactly one command and opens with that command as its `# ` title. A command page
+ends by linking back to its group, and a group links back to `./README.md`, which is
+what keeps the generated wiki navigable. It is the only place the CLI is documented
+at length; the root `README.md` links to it rather than repeating it.
+
+Four tests hold that shape: `everyGroupIsListedInTheIndex`,
+`everyCommandPageIsListedByItsGroup`, `everyPageLinksBackToItsIndex` and
+`everyRelativeLinkResolves`.
 
 `scripts/sync-wiki.mjs` mirrors `docs/` into this repo's GitHub wiki, one wiki page
-per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. Relative links
-between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
+per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. A group becomes
+`CLI-<Group>` and its commands `CLI-<Group>-<Command>`, nested one level under the
+group in the sidebar and ordered the way the group `README.md` links them. Relative
+links between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
 on every push to `main` that touches `docs/`. Preview the output locally with
 `make wiki` (writes `.wiki-build/`, never pushes); `make wiki-push` publishes.
 The wiki is generated output: edit `docs/`, never the wiki.

@@ -1,0 +1,24 @@
+id: friend
+label: Friend
+retrieval:
+  sources: []
+  window_days: 1095
+  k: 12
+  prefer: evidence
+  salience_weight: 0.35
+  beliefs: true
+  observations: false
+  graph: true
+evidence:
+  self_report_weight: 1.0
+  observation_weight: 0.4
+  require_corroboration: false
+pipeline:
+  - retrieve
+  - draft
+  - ground_check
+  - revise
+output: prose
+abstain_below: 0.35
+max_words: 200
+voice: friend.md

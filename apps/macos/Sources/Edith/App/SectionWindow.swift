@@ -38,6 +38,7 @@ struct DetachedSectionView: View {
         case .calendar: CalendarPage()
         case .system: SystemPage()
         case .machines: MachinesPage()
+        case .companion: CompanionPage()
         case .extensions: ExtensionsPane()
         case .settings: SettingsPane(updater: UpdaterModel())
         case .about: AboutPane()

@@ -45,15 +45,16 @@ public struct SettingDefinition: Equatable, Sendable {
 public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "usage", "limits", "menubar", "alerts", "budget", "dashboard",
-        "machines", "finder", "system", "cleaner", "music", "calendar", "clipboard", "notch",
-        "focusdim", "presenter", "colorpicker", "micmute", "backup", "permissions", "terminal",
+        "machines", "companion", "finder", "system", "cleaner", "music", "calendar", "clipboard",
+        "notch", "focusdim", "presenter", "colorpicker", "micmute", "backup", "permissions",
+        "terminal",
     ]
 
     public static let settings: [SettingDefinition] =
         appearance + panel + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + finder + system + cleaner + music
-        + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute + backup
-        + permissions + terminal
+        + menuBar + alerts + budget + dashboard + machines + companion + finder + system + cleaner
+        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
+        + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
 
@@ -314,6 +315,21 @@ public enum ConfigCatalog {
         SettingDefinition(
             "projSortAsc", .bool, group: "dashboard",
             summary: "Sort the project drilldown ascending.", fallback: .bool(false)),
+    ]
+
+    private static let companion: [SettingDefinition] = [
+        SettingDefinition(
+            "tabCompanionEnabled", .bool, group: "companion",
+            summary: "Show the Companion page.", fallback: .bool(false)),
+        SettingDefinition(
+            "companionEndpoint", .string, group: "companion",
+            summary: "Companion API base URL the app and CLI talk to.",
+            fallback: .string("http://127.0.0.1:4820")),
+        SettingDefinition(
+            "companionTab", .string, group: "companion",
+            summary: "Companion screen shown on open.",
+            allowed: ["chat", "capture", "desk", "library", "mind", "setup", "settings"],
+            fallback: .string("chat")),
     ]
 
     private static let machines: [SettingDefinition] = [

@@ -456,9 +456,13 @@ and `ed app open`, `clean-keys` and `test-notification` post and return. Nothing
 is waited for, so these cost nothing when the app is closed.
 
 The rest are request and reply: `ed` registers an observer for the reply, posts
-the request, then polls until an answer arrives or the deadline passes. After
-one second of waiting it prints `waiting for Edith to answer...` once, on
-stderr. The deadlines are per command:
+the request, then suspends until the observer hands it an answer. It does not
+poll. The deadline is a separate task that sleeps and then cancels the wait, and
+the note is a third that sleeps one second and prints
+`waiting for Edith to answer...` once, on stderr, unless the answer has already
+landed. So a reply that comes back in a millisecond resumes the command in a
+millisecond, and a command that waits the full deadline spends it asleep rather
+than checking. The deadlines are per command:
 
 ```
 ed calendar ls                 4 seconds
@@ -504,11 +508,11 @@ claiming it stopped a transfer.
 
 ## Where to go next
 
-- [`ed machines`](./machines.md) for the SSH transport, and the one command in
+- [`ed machines`](./machines/README.md) for the SSH transport, and the one command in
   the group that needs the app.
-- [`ed app`](./app.md) for the one-shot actions and which process each needs.
-- [`ed permissions`](./permissions.md) for why the grants belong to the bundle
+- [`ed app`](./app/README.md) for the one-shot actions and which process each needs.
+- [`ed permissions`](./permissions/README.md) for why the grants belong to the bundle
   rather than to `ed`.
-- [`ed usage`](./usage.md) for the commands that read files, the one that
+- [`ed usage`](./usage/README.md) for the commands that read files, the one that
   collects them again, and the one that asks the app.
 - [All command pages](./README.md).

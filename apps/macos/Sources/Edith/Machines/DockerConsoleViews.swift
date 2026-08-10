@@ -13,7 +13,9 @@ struct DockerContainerList: View {
     let onRemove: (DockerContainer) -> Void
     let onGroupAction: (String, [DockerContainer], String) -> Void
 
-    static func groupKey(_ project: String?) -> String { "group:\(project ?? "")" }
+    static let groupKeyPrefix = "group:"
+
+    static func groupKey(_ project: String?) -> String { "\(groupKeyPrefix)\(project ?? "")" }
 
     private var filtered: [DockerContainer] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -82,27 +84,39 @@ struct DockerContainerList: View {
         }
     }
 
+    private static func groupHelp(_ verb: String, _ count: Int, _ noun: String) -> String {
+        "\(verb) the \(count) \(noun) container" + (count == 1 ? "" : "s") + " in this group"
+    }
+
     @ViewBuilder
     private func groupSwitch(_ project: String?, _ containers: [DockerContainer]) -> some View {
         let key = Self.groupKey(project)
-        let running = containers.filter { $0.state.isRunning }
-        let starting = running.isEmpty
+        let plan = DockerGroupPlan(containers: containers)
         if busyIDs.contains(key) {
             ProgressView().controlSize(.small).scaleEffect(0.5).frame(width: UIScale.pt(20))
         } else {
-            Button {
-                let targets = starting ? containers.filter { !$0.state.isRunning } : running
-                onGroupAction(key, targets, starting ? "start" : "stop")
-            } label: {
-                Image(systemName: starting ? "play.fill" : "stop.fill")
-                    .font(.system(size: UIScale.pt(9.5)))
+            HStack(spacing: UIScale.pt(4)) {
+                if plan.canStart {
+                    Button {
+                        onGroupAction(key, plan.startable, "start")
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: UIScale.pt(9.5)))
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .help(Self.groupHelp("Start", plan.startable.count, "stopped"))
+                }
+                if plan.canStop {
+                    Button {
+                        onGroupAction(key, plan.stoppable, "stop")
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: UIScale.pt(9.5)))
+                    }
+                    .buttonStyle(HoverButtonStyle())
+                    .help(Self.groupHelp("Stop", plan.stoppable.count, "running"))
+                }
             }
-            .buttonStyle(HoverButtonStyle())
-            .help(
-                starting
-                    ? "Start every container in this group"
-                    : "Stop the \(running.count) running container"
-                        + (running.count == 1 ? "" : "s") + " in this group")
         }
     }
 }

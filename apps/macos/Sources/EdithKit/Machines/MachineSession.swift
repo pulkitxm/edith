@@ -428,13 +428,13 @@ public final class MachineSession: ObservableObject {
         }
         do {
             let result = try await connection.run(command, timeout: 120)
+            await refreshDocker()
             guard result.succeeded else {
                 let message = result.stderrText.isEmpty ? result.stdoutText : result.stderrText
                 return .failure(
                     SSHConnectionError.commandFailed(
                         command: command, status: result.status, stderr: message))
             }
-            await refreshDocker()
             return .success(result.stdoutText)
         } catch {
             return .failure(error)

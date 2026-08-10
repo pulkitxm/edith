@@ -633,6 +633,56 @@ import Testing
     }
 }
 
+@Suite struct DockerGroupPlanTests {
+    private func container(_ name: String, _ state: DockerContainerState) -> DockerContainer {
+        DockerContainer(
+            id: name, names: [name], image: "img", command: "cmd", state: state, status: "")
+    }
+
+    @Test func aMixedGroupCanBothStartAndStop() {
+        let plan = DockerGroupPlan(containers: [
+            container("postgres", .running),
+            container("clickhouse", .running),
+            container("redis", .exited),
+        ])
+        #expect(plan.isMixed)
+        #expect(plan.startable.map(\.id) == ["redis"])
+        #expect(plan.stoppable.map(\.id) == ["postgres", "clickhouse"])
+    }
+
+    @Test func aFullyStoppedGroupOnlyStarts() {
+        let plan = DockerGroupPlan(containers: [
+            container("a", .exited), container("b", .created), container("c", .dead),
+        ])
+        #expect(plan.canStart)
+        #expect(!plan.canStop)
+        #expect(plan.startable.count == 3)
+    }
+
+    @Test func aFullyRunningGroupOnlyStops() {
+        let plan = DockerGroupPlan(containers: [
+            container("a", .running), container("b", .restarting),
+        ])
+        #expect(!plan.canStart)
+        #expect(plan.canStop)
+        #expect(plan.stoppable.count == 2)
+    }
+
+    @Test func pausedContainersStopButNeverStart() {
+        let plan = DockerGroupPlan(containers: [container("a", .paused)])
+        #expect(!plan.canStart)
+        #expect(plan.stoppable.map(\.id) == ["a"])
+    }
+
+    @Test func transientStatesAreLeftAlone() {
+        let plan = DockerGroupPlan(containers: [
+            container("a", .removing), container("b", .unknown),
+        ])
+        #expect(!plan.canStart)
+        #expect(!plan.canStop)
+    }
+}
+
 @Suite struct DockerProbeClassificationTests {
     @Test func silenceMeansTheProbeNeverAnswered() {
         let availability = DockerParsing.availability(

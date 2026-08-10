@@ -83,6 +83,63 @@ enum UIParity {
             "Cleaner card", "clean one category",
             ["cleaner", "clean", "--category", "npm", "--yes"]),
 
+        UICapability("Companion", "sync github activity", ["companion", "sync", "github"]),
+        UICapability("Companion", "ask about your life", ["companion", "ask", "how is warden"]),
+        UICapability(
+            "Companion", "ingest dropped files", ["companion", "ingest", "/tmp/notes"]),
+        UICapability(
+            "Companion chat", "send a chat message",
+            ["companion", "chat", "how was my week"]),
+        UICapability(
+            "Companion chat", "continue a conversation",
+            ["companion", "chat", "and then", "--conversation", "abc"]),
+        UICapability(
+            "Companion chat", "list past conversations", ["companion", "conversations"]),
+        UICapability(
+            "Companion chat", "delete a conversation", ["companion", "forget", "abc"]),
+        UICapability(
+            "Companion library", "search the memory", ["companion", "search", "warden"]),
+        UICapability(
+            "Companion library", "read a full episode", ["companion", "episode", "abc"]),
+        UICapability(
+            "Companion library", "open an episode with the default app",
+            ["companion", "episode", "abc", "--open"]),
+        UICapability(
+            "Companion library", "index pending episodes", ["companion", "index"]),
+        UICapability(
+            "Companion capture", "remember a recorded voice memory",
+            ["companion", "ingest", "/tmp/voice-memo.wav"]),
+        UICapability(
+            "Companion capture", "remember a typed note",
+            ["companion", "ingest", "/tmp/note.md"]),
+        UICapability(
+            "Companion mind", "run the nightly pipeline", ["companion", "nightly"]),
+        UICapability(
+            "Companion mind", "edit a section of the standing summary",
+            ["companion", "core", "set", "values", "honest"]),
+        UICapability(
+            "Companion desk", "show the question it wants to ask today",
+            ["companion", "inquire", "next"]),
+        UICapability(
+            "Companion setup", "add a machine the stack could run on",
+            ["companion", "machines", "add", "gpu-box"]),
+        UICapability(
+            "Companion settings", "store a github or notion token",
+            ["companion", "connectors", "set", "--github", "gho_x"]),
+        UICapability(
+            "Companion settings", "import a calendar, music or youtube export",
+            ["companion", "connectors", "import", "music", "./export.json"]),
+        UICapability(
+            "Companion mind", "retire a belief that is wrong",
+            ["companion", "correct", "abc", "--retire"]),
+        UICapability(
+            "Companion settings", "change the reasoner or its api key",
+            ["companion", "reason", "set", "--provider", "anthropic", "--api-key", "sk-x"]),
+        UICapability(
+            "Companion settings", "test the reasoner", ["companion", "reason", "test"]),
+        UICapability(
+            "Companion settings", "point at another companion",
+            ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
         UICapability("Machines", "add a machine", ["machines", "add", "box", "--host", "h"]),
         UICapability("Machines", "edit a machine", ["machines", "edit", "box"]),
         UICapability("Machines", "delete a machine", ["machines", "rm", "box"]),
@@ -248,10 +305,10 @@ enum UIParity {
         UICapability(
             "Docker window", "start a container", ["machines", "docker", "start", "box", "api"]),
         UICapability(
-            "Docker group header", "start every container in the group",
+            "Docker group header", "start the stopped containers in the group",
             ["machines", "docker", "start", "box", "api", "db"]),
         UICapability(
-            "Docker group header", "stop every running container in the group",
+            "Docker group header", "stop the running containers in the group",
             ["machines", "docker", "stop", "box", "api", "db"]),
         UICapability(
             "Docker window", "stop a container", ["machines", "docker", "stop", "box", "api"]),
