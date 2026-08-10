@@ -91,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install native dependencies
-        run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
+        run: apt-get update && apt-get install -y libgtk-4-dev libadwaita-1-dev desktop-file-utils appstream dpkg-dev make
       - name: Test portable core
         run: make linux-test
       - name: Validate desktop metadata

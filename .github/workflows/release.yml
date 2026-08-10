@@ -141,7 +141,7 @@ jobs:
           ref: ${{ inputs.release_tag || github.ref_name }}
 
       - name: Install native dependencies
-        run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
+        run: apt-get update && apt-get install -y libgtk-4-dev libadwaita-1-dev desktop-file-utils appstream dpkg-dev make
 
       - name: Verify tag matches app version
         run: |

@@ -1,6 +1,6 @@
 # Ubuntu development
 
-Edith targets Ubuntu 24.04 LTS with Swift 6.3.2 and GTK 4. Published Debian
+Edith targets Ubuntu 24.04 LTS with Swift 6.3.2, GTK 4, and libadwaita. Published Debian
 packages currently target `amd64`. Local source builds also follow the architecture
 of the installed Swift toolchain and Ubuntu system.
 
@@ -44,6 +44,7 @@ sudo apt install --yes \
   desktop-file-utils \
   dpkg-dev \
   git \
+  libadwaita-1-dev \
   libgtk-4-dev \
   make \
   pkg-config
@@ -53,10 +54,10 @@ sudo apt install --yes \
 which silently skips the install in an `apt update && apt install` chain. Run the
 two commands separately, or read the update output before trusting it.
 
-Verify that SwiftPM can discover GTK 4:
+Verify that SwiftPM can discover both system libraries:
 
 ```bash
-pkg-config --modversion gtk4
+pkg-config --modversion gtk4 libadwaita-1
 ```
 
 Install [Bun](https://bun.sh/docs/installation) when running the repository policy
@@ -127,8 +128,7 @@ Remove an installed development package with `sudo apt remove edith`.
 | Path | Responsibility |
 | --- | --- |
 | `Packages/Edith/Sources/EdithCore` | Portable models, extension declarations, capability contracts, and filesystem behavior. |
-| `Packages/Edith/Sources/EdithLinux` | Linux process entry point and GTK application lifecycle. |
-| `Packages/Edith/Sources/CGTK` | Minimal SwiftPM system-library bridge to GTK 4. |
+| `Packages/Edith/Sources/EdithLinux` | Linux entry point and the libadwaita interface, built with Adwaita for Swift. |
 | `packaging/linux` | Desktop entry, AppStream metadata, and application icon integration. |
 | `packaging/debian` | Reproducible Debian staging and package construction. |
 | `Packages/Edith/Tests/EdithCoreTests` | Tests that run on both macOS and Linux. |
