@@ -55,6 +55,66 @@ import Testing
         #expect(macOS == ["/"])
     }
 
+    @Test func theDiskProbeOnlyAsksAboutFilesystemsItUnderstands() {
+        let command = MachineMonitor.diskCommand
+        #expect(command.contains("-t ext4"))
+        #expect(command.contains("-t btrfs"))
+        #expect(command.contains("[ -r /proc/mounts ]"))
+    }
+
+    @Test func stillParsesOutputThatCarriesTheStalledSection() {
+        let parsed = MachineMonitor.parseDisks(
+            """
+            Filesystem     1024-blocks      Used Available Capacity Mounted on
+            /dev/nvme0n1p5   503648256 289598472 188392392      61% /
+            \(MachineMonitor.mountsMarker)
+            /dev/nvme0n1p5 on / type ext4 (rw,relatime)
+            \(MachineMonitor.stalledMarker)
+            7
+            """)
+        #expect(parsed.map(\.mount) == ["/"])
+    }
+
+    @Test func readsTheStalledProcessCount() {
+        let output = """
+            Filesystem     1024-blocks      Used Available Capacity Mounted on
+            \(MachineMonitor.mountsMarker)
+            \(MachineMonitor.stalledMarker)
+            39
+            """
+        #expect(MachineMonitor.parseStalledProcesses(output) == 39)
+        #expect(MachineMonitor.parseStalledProcesses("no markers here") == 0)
+    }
+
+    @Test func warnsOnceWhenProcessesWedgeOnAFilesystem() {
+        let healthy = MachineHealth(reachable: true, stalledProcesses: 0)
+        let stalled = MachineHealth(reachable: true, stalledProcesses: 39)
+        let first = MachineMonitorLogic.alerts(
+            machineName: "Tuf", previous: healthy, current: stalled, disks: [], threshold: 90,
+            notifyDown: true, notifyDisk: true)
+        #expect(first == [.filesystemStalled(machine: "Tuf", stuckProcesses: 39)])
+
+        let repeated = MachineMonitorLogic.alerts(
+            machineName: "Tuf", previous: stalled, current: stalled, disks: [], threshold: 90,
+            notifyDown: true, notifyDisk: true)
+        #expect(repeated.isEmpty)
+    }
+
+    @Test func ignoresTheHandfulOfProcessesThatBlockOnOrdinaryIO() {
+        let alerts = MachineMonitorLogic.alerts(
+            machineName: "Tuf", previous: MachineHealth(reachable: true),
+            current: MachineHealth(reachable: true, stalledProcesses: 1), disks: [],
+            threshold: 90, notifyDown: true, notifyDisk: true)
+        #expect(alerts.isEmpty)
+    }
+
+    @Test func theStalledAlertReadsLikeSomethingActionable() {
+        let alert = MachineAlert.filesystemStalled(machine: "Tuf", stuckProcesses: 39)
+        #expect(alert.title == "Tuf has a stalled filesystem")
+        #expect(alert.body.contains("39 processes are stuck"))
+        #expect(alert.body.contains("restart"))
+    }
+
     @Test func flagsMountsOverThreshold() {
         #expect(MachineMonitorLogic.fullMounts(disks: disks, threshold: 90) == ["/"])
         #expect(MachineMonitorLogic.fullMounts(disks: disks, threshold: 99).isEmpty)
