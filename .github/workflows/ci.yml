@@ -22,16 +22,18 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - id: areas
         name: Work out which areas changed
         env:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
         run: |
-          if [ -n "$BASE_REF" ]; then
-            base="$(git merge-base "origin/$BASE_REF" HEAD)"
-          elif git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+          if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+            && git merge-base --is-ancestor "$BEFORE" HEAD 2>/dev/null; then
             base="$BEFORE"
+          elif [ -n "$BASE_REF" ]; then
+            base="$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             base=""
           fi
