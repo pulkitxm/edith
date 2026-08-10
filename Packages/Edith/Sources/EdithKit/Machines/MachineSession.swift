@@ -60,7 +60,7 @@ public final class MachineSession {
     private var metricsFailures = 0
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
-    private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
     private var dockerObserverCount = 0

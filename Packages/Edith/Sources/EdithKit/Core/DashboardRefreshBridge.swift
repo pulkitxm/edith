@@ -7,9 +7,9 @@ public final class DashboardRefreshBridge {
     public private(set) var updating = false
     public private(set) var log = ""
 
-    private nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
+    @ObservationIgnored private nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
     private let logURL: URL
-    private nonisolated(unsafe) var tailTimer: Timer?
+    @ObservationIgnored private nonisolated(unsafe) var tailTimer: Timer?
 
     public init(logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log")) {
         self.logURL = logURL
