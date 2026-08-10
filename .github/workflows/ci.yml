@@ -15,6 +15,9 @@ jobs:
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
       promo: ${{ steps.areas.outputs.promo }}
+      site: ${{ steps.areas.outputs.site }}
+      scripts: ${{ steps.areas.outputs.scripts }}
+      source: ${{ steps.areas.outputs.source }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,24 +51,32 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(Packages/Edith/|Resources/|docs/|edth\.xcodeproj/|build\.sh$|Makefile$|\.github/workflows/ci\.yml$)'
-          area promo '^(apps/promo-video/|\.github/workflows/ci\.yml$)'
+          area swift '^(Packages/Edith/|Resources/|docs/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area promo '^apps/promo-video/'
+          area site '^apps/site/'
+          area scripts '^(scripts/|package\.json$|bun\.lock$|biome\.json$)'
+          area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
 
   checks:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - name: No disallowed comments
-        run: make ci-comments
       - name: No committed secrets
         run: make ci-secrets
+      - name: No disallowed comments
+        if: needs.changes.outputs.source == 'true'
+        run: make ci-comments
       - name: Lint (Biome)
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
         run: make ci-lint
       - name: Script tests
+        if: needs.changes.outputs.scripts == 'true'
         run: make ci-scripts
       - name: Site is self-contained
+        if: needs.changes.outputs.site == 'true'
         run: make ci-site
 
   promo-video:
