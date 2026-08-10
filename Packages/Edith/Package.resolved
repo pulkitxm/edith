@@ -1,24 +1,51 @@
 {
-  "originHash" : "72a37dd25ffb945c87b8d3bef14f5d490e2fd5f0f1458f2fee58b6f20b75a8c3",
-  "pins" : [
+  "originHash": "580981de8107abfa04e856146440d0d61f2e4c3544d702717838e921a5104487",
+  "pins": [
     {
-      "identity" : "adwaita",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AparokshaUI/Adwaita",
-      "state" : {
-        "revision" : "c82957e2398a766458ff22129db26b46de75248b",
-        "version" : "0.2.6"
+      "identity": "adwaita",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/AparokshaUI/Adwaita",
+      "state": {
+        "revision": "c82957e2398a766458ff22129db26b46de75248b",
+        "version": "0.2.6"
       }
     },
     {
-      "identity" : "levenshteintransformations",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/david-swift/LevenshteinTransformations",
-      "state" : {
-        "revision" : "002c3ae5c48f30d61c96045fd3ceb9928aa778d2",
-        "version" : "0.1.3"
+      "identity": "levenshteintransformations",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/david-swift/LevenshteinTransformations",
+      "state": {
+        "revision": "002c3ae5c48f30d61c96045fd3ceb9928aa778d2",
+        "version": "0.1.3"
+      }
+    },
+    {
+      "identity": "sparkle",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/sparkle-project/Sparkle",
+      "state": {
+        "revision": "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
+        "version": "2.9.4"
+      }
+    },
+    {
+      "identity": "swift-argument-parser",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/apple/swift-argument-parser",
+      "state": {
+        "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version": "1.8.2"
+      }
+    },
+    {
+      "identity": "swiftterm",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/migueldeicaza/SwiftTerm",
+      "state": {
+        "revision": "dd2fb8ac5b861e7bf617c872895e338f38165648",
+        "version": "1.15.0"
       }
     }
   ],
-  "version" : 3
+  "version": 3
 }

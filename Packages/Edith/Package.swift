@@ -5,7 +5,12 @@ var products: [Product] = [
     .library(name: "EdithCore", targets: ["EdithCore"])
 ]
 
-var dependencies: [Package.Dependency] = []
+var dependencies: [Package.Dependency] = [
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.15.0"),
+    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
+    .package(url: "https://github.com/AparokshaUI/Adwaita", from: "0.2.6"),
+]
 
 var targets: [Target] = [
     .target(
@@ -25,12 +30,6 @@ products += [
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
     .library(name: "Highlighter", targets: ["Highlighter"]),
-]
-
-dependencies += [
-    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.15.0"),
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
 ]
 
 targets += [
@@ -119,10 +118,6 @@ targets += [
 #if os(Linux)
 products += [
     .executable(name: "edith-linux", targets: ["EdithLinux"])
-]
-
-dependencies += [
-    .package(url: "https://github.com/AparokshaUI/Adwaita", from: "0.2.6")
 ]
 
 targets += [
