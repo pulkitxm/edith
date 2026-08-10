@@ -188,6 +188,23 @@ import Testing
     }
 }
 
+@Suite struct MetricsStreamRecoveryTests {
+    @Test func aStreamThatKeepsFailingIsRetriedLessOften() {
+        #expect(MachineSession.metricsRestartDelay(failures: 0) == 3)
+        #expect(MachineSession.metricsRestartDelay(failures: 1) == 6)
+        #expect(MachineSession.metricsRestartDelay(failures: 2) == 12)
+    }
+
+    @Test func theRetryDelayIsCappedSoAMachineIsNeverAbandoned() {
+        #expect(MachineSession.metricsRestartDelay(failures: 20) == 60)
+        #expect(MachineSession.metricsRestartDelay(failures: -1) == 3)
+    }
+
+    @Test func silenceIsJudgedGenerouslyAgainstTheTwoSecondCadence() {
+        #expect(MachineSession.metricsSilenceLimit >= 10)
+    }
+}
+
 @Suite @MainActor struct MetricHistoryShapeTests {
     @Test func theFirstSampleFillsTheWholeWindow() {
         let seeded = MachineSession.appending(42, to: [])
