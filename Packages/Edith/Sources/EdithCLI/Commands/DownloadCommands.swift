@@ -256,7 +256,7 @@ struct DownloadToolCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let executable = CLIToolEnvironment.executable(named: "yt-dlp")
+            let executable = CLIEnvironment.executableNamed("yt-dlp")
             guard update else {
                 let version = executable.flatMap(DownloadTool.version(of:))
                 guard !json else {
