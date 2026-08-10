@@ -84,8 +84,8 @@ public final class CalendarStore: FeatureModule {
         guard let end = Calendar.current.date(byAdding: .day, value: daysLoaded, to: start) else {
             return nil
         }
-        let store = self.store
         return await Task.detached(priority: .userInitiated) {
+            let store = EKEventStore()
             let predicate = store.predicateForEvents(
                 withStart: start, end: end, calendars: store.calendars(for: .event))
             return CalendarDayEvents.sorted(
