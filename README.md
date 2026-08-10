@@ -1,4 +1,4 @@
-# <img src="apps/macos/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
+# <img src="Packages/Edith/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
 
 A native SwiftUI menu bar app for the Mac: a dark, minimal control center that
 replaces a shelf of single-purpose utilities and idles at about 22 MB.
@@ -7,9 +7,15 @@ Free and open source under the [GPL-3.0](LICENSE). Every feature is in the one
 app. No licence key, no account, no paid tier.
 
 **[Download for macOS](https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg)**
-· [edith.pulkit.page](https://edith.pulkit.page)
 
-Requires macOS 14 or later on Apple Silicon.
+**[Download the Ubuntu preview](https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb)**
+· [edith.pulkit.page](https://edith.pulkit.page)
+· [Wiki](https://github.com/pulkitxm/edith/wiki)
+
+The macOS app requires macOS 14 or later on Apple Silicon. The Ubuntu preview
+targets Ubuntu 24.04 LTS on `amd64`; see the
+[Ubuntu development guide](docs/ubuntu-development.md) for source builds and the
+current platform scope.
 
 ## Features
 

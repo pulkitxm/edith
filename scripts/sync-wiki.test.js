@@ -12,6 +12,9 @@ const repoRoot = path.resolve(
 const docs = collect();
 const slugMap = new Map(docs.map((d) => [d.src, d.slug]));
 const dirMap = new Map([["docs/cli", "CLI"]]);
+for (const doc of docs) {
+  if (doc.isGroup) dirMap.set(path.posix.dirname(doc.src), doc.slug);
+}
 const options = {
   root: repoRoot,
   slugMap,
@@ -19,11 +22,35 @@ const options = {
   blobBase: "https://github.com/pulkitxm/edith/blob/main",
 };
 
+function markdownUnder(dir) {
+  let count = 0;
+  for (const entry of readdirSync(path.join(repoRoot, dir), {
+    withFileTypes: true,
+  })) {
+    if (entry.isDirectory()) count += markdownUnder(`${dir}/${entry.name}`);
+    else if (entry.name.endsWith(".md")) count += 1;
+  }
+  return count;
+}
+
 test("every markdown file under docs/cli becomes a page", () => {
-  const files = readdirSync(path.join(repoRoot, "docs/cli")).filter((f) =>
-    f.endsWith(".md"),
+  expect(docs.length).toBe(markdownUnder("docs/cli"));
+});
+
+test("a command page nests under its group", () => {
+  const ps = docs.find((d) => d.src === "docs/cli/machines-docker/ps.md");
+  expect(ps.slug).toBe("CLI-Machines-Docker-Ps");
+  expect(ps.depth).toBe(1);
+  expect(ps.parent).toBe("CLI-Machines-Docker");
+});
+
+test("a group README keeps the group slug", () => {
+  const group = docs.find(
+    (d) => d.src === "docs/cli/machines-docker/README.md",
   );
-  expect(docs.length).toBe(files.length);
+  expect(group.slug).toBe("CLI-Machines-Docker");
+  expect(group.isGroup).toBe(true);
+  expect(group.depth).toBe(0);
 });
 
 test("the index page is the section slug and comes first", () => {
@@ -34,9 +61,9 @@ test("the index page is the section slug and comes first", () => {
 });
 
 test("page slugs are prefixed and title cased", () => {
-  const machines = docs.find((d) => d.src === "docs/cli/machines-docker.md");
-  expect(machines.slug).toBe("CLI-Machines-Docker");
-  expect(machines.title).toBe("Machines Docker");
+  const conventions = docs.find((d) => d.src === "docs/cli/conventions.md");
+  expect(conventions.slug).toBe("CLI-Conventions");
+  expect(conventions.title).toBe("Conventions");
 });
 
 test("slugs are unique", () => {
@@ -45,13 +72,31 @@ test("slugs are unique", () => {
 });
 
 test("sibling doc links become wiki slugs", () => {
-  expect(mapTarget("./config.md", "docs/cli", options)).toBe("CLI-Config");
+  expect(mapTarget("./conventions.md", "docs/cli", options)).toBe(
+    "CLI-Conventions",
+  );
   expect(mapTarget("./README.md", "docs/cli", options)).toBe("CLI");
 });
 
+test("a group directory link resolves to the group page", () => {
+  expect(mapTarget("./config/README.md", "docs/cli", options)).toBe(
+    "CLI-Config",
+  );
+  expect(mapTarget("../machines/README.md", "docs/cli/usage", options)).toBe(
+    "CLI-Machines",
+  );
+});
+
+test("a link between siblings in a group resolves", () => {
+  expect(mapTarget("./daily.md", "docs/cli/usage", options)).toBe(
+    "CLI-Usage-Daily",
+  );
+  expect(mapTarget("./README.md", "docs/cli/usage", options)).toBe("CLI-Usage");
+});
+
 test("anchors and link titles survive rewriting", () => {
-  expect(mapTarget("./usage.md#ed-usage-daily", "docs/cli", options)).toBe(
-    "CLI-Usage#ed-usage-daily",
+  expect(mapTarget("./daily.md#examples", "docs/cli/usage", options)).toBe(
+    "CLI-Usage-Daily#examples",
   );
 });
 
@@ -70,12 +115,15 @@ test("links to repo files outside docs become blob urls", () => {
 });
 
 test("links inside fenced blocks are not rewritten", () => {
-  const source = ["```", "[a](./config.md)", "```", "[b](./config.md)"].join(
-    "\n",
-  );
+  const source = [
+    "```",
+    "[a](./conventions.md)",
+    "```",
+    "[b](./conventions.md)",
+  ].join("\n");
   const rewritten = rewriteLinks(source, "docs/cli", options);
-  expect(rewritten).toContain("[a](./config.md)");
-  expect(rewritten).toContain("[b](CLI-Config)");
+  expect(rewritten).toContain("[a](./conventions.md)");
+  expect(rewritten).toContain("[b](CLI-Conventions)");
 });
 
 test("wiki build emits Home, sidebar and footer", () => {

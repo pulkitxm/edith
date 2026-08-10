@@ -1,0 +1,12 @@
+Source: edith
+Section: utils
+Priority: optional
+Maintainer: Pulkit <pulkitxm@users.noreply.github.com>
+Standards-Version: 4.7.2
+Homepage: https://github.com/pulkitxm/edith
+
+Package: edith
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Native control center for Ubuntu
+ Edith combines usage, machines, media, and desktop utilities.

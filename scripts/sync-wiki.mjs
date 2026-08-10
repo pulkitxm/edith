@@ -90,33 +90,91 @@ function ownerRepo() {
   return { owner: "pulkitxm", repo: "edith" };
 }
 
+function isReadme(file) {
+  return file.toLowerCase() === "readme.md";
+}
+
+function childOrder(root, groupDir, names) {
+  const readme = path.join(root, groupDir, "README.md");
+  if (!existsSync(readme)) return names;
+  const text = readFileSync(readme, "utf8");
+  const cited = [];
+  for (const m of text.matchAll(/\]\(\.\/([A-Za-z0-9._-]+)\.md\)/g)) {
+    if (!cited.includes(m[1])) cited.push(m[1]);
+  }
+  const known = cited.filter((n) => names.includes(n));
+  return [...known, ...names.filter((n) => !known.includes(n))];
+}
+
 export function collect(root = repoRoot) {
   const docs = [];
   for (const section of SECTIONS) {
     const abs = path.join(root, section.dir);
     if (!existsSync(abs)) continue;
-    const files = readdirSync(abs)
-      .filter((f) => f.endsWith(".md"))
-      .sort();
-    for (const file of files) {
-      const name = file.replace(/\.md$/, "");
-      const src = `${section.dir}/${file}`;
-      if (file.toLowerCase() === "readme.md") {
+    const entries = readdirSync(abs, { withFileTypes: true });
+
+    for (const entry of entries.filter((e) => e.isFile())) {
+      if (!entry.name.endsWith(".md")) continue;
+      const name = entry.name.replace(/\.md$/, "");
+      const src = `${section.dir}/${entry.name}`;
+      docs.push(
+        isReadme(entry.name)
+          ? {
+              src,
+              slug: section.prefix,
+              title: "Overview",
+              section: section.label,
+              order: -1,
+              depth: 0,
+              isIndex: true,
+            }
+          : {
+              src,
+              slug: `${section.prefix}-${slugSuffix(name)}`,
+              title: displayTitle(name),
+              section: section.label,
+              order: orderOf(name),
+              depth: 0,
+              isIndex: false,
+            },
+      );
+    }
+
+    for (const dir of entries.filter((e) => e.isDirectory())) {
+      const groupDir = `${section.dir}/${dir.name}`;
+      const groupSlug = `${section.prefix}-${slugSuffix(dir.name)}`;
+      const files = readdirSync(path.join(root, groupDir))
+        .filter((f) => f.endsWith(".md"))
+        .sort();
+      if (files.some(isReadme)) {
         docs.push({
-          src,
-          slug: section.prefix,
-          title: "Overview",
+          src: `${groupDir}/README.md`,
+          slug: groupSlug,
+          title: displayTitle(dir.name),
           section: section.label,
-          order: -1,
-          isIndex: true,
+          order: orderOf(dir.name),
+          depth: 0,
+          isIndex: false,
+          isGroup: true,
         });
-      } else {
+      }
+      const leaves = files
+        .filter((f) => !isReadme(f))
+        .map((f) => f.replace(/\.md$/, ""));
+      for (const [index, leaf] of childOrder(
+        root,
+        groupDir,
+        leaves,
+      ).entries()) {
         docs.push({
-          src,
-          slug: `${section.prefix}-${slugSuffix(name)}`,
-          title: displayTitle(name),
+          src: `${groupDir}/${leaf}.md`,
+          slug: `${groupSlug}-${slugSuffix(leaf)}`,
+          title: displayTitle(leaf),
           section: section.label,
-          order: orderOf(name),
+          order: orderOf(dir.name),
+          childOrder: index,
+          depth: 1,
+          parent: groupSlug,
           isIndex: false,
         });
       }
@@ -133,6 +191,9 @@ const wikiDisplay = `https://github.com/${owner}/${repo}.wiki.git`;
 const docs = collect();
 const slugMap = new Map(docs.map((d) => [d.src, d.slug]));
 const dirMap = new Map(SECTIONS.map((s) => [s.dir, s.prefix]));
+for (const doc of docs) {
+  if (doc.isGroup) dirMap.set(path.posix.dirname(doc.src), doc.slug);
+}
 
 export function mapTarget(target, fileDir, options = {}) {
   const root = options.root || repoRoot;
@@ -179,10 +240,19 @@ export function rewriteLinks(content, fileDir, options = {}) {
 function sectionDocs(label) {
   const inSection = docs.filter((d) => d.section === label);
   const index = inSection.filter((d) => d.isIndex);
-  const rest = inSection
-    .filter((d) => !d.isIndex)
+  const tops = inSection
+    .filter((d) => !d.isIndex && d.depth === 0)
     .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-  return [...index, ...rest];
+  const ordered = [];
+  for (const top of tops) {
+    ordered.push(top);
+    if (!top.isGroup) continue;
+    const kids = inSection
+      .filter((d) => d.parent === top.slug)
+      .sort((a, b) => a.childOrder - b.childOrder);
+    ordered.push(...kids);
+  }
+  return [...index, ...ordered];
 }
 
 function endWithNewline(text) {
@@ -199,7 +269,7 @@ function buildHome() {
   for (const section of SECTIONS) {
     lines.push(`## ${section.label}`, "");
     for (const doc of sectionDocs(section.label))
-      lines.push(`- [${doc.title}](${doc.slug})`);
+      lines.push(`${doc.depth ? "  " : ""}- [${doc.title}](${doc.slug})`);
     lines.push("");
   }
   return endWithNewline(lines.join("\n"));
@@ -210,7 +280,7 @@ function buildSidebar() {
   for (const section of SECTIONS) {
     lines.push(`**${section.label}**`, "");
     for (const doc of sectionDocs(section.label))
-      lines.push(`- [${doc.title}](${doc.slug})`);
+      lines.push(`${doc.depth ? "  " : ""}- [${doc.title}](${doc.slug})`);
     lines.push("");
   }
   return endWithNewline(lines.join("\n"));

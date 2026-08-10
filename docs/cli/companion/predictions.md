@@ -1,0 +1,25 @@
+# `ed companion predictions`
+
+What the companion expects to happen, and what actually did. Each prediction belongs
+to a hypothesis, names exactly what record would confirm or deny it, and carries a
+window it must resolve inside.
+
+Usage:
+
+```
+ed companion predictions [--limit <n>] [--json] [--endpoint <url>]
+```
+
+An open prediction prints the date its window closes. A resolved one prints
+`confirmed`, `denied` or `unresolvable`. Absence of records is unresolvable, never
+denied: work is invisible to connectors constantly, and scoring silence as failure
+would poison every posterior downstream.
+
+`--json` shape: an array of `{id, hypothesisId, statement, observable, windowStart,
+windowEnd, resolvedAt, outcome}`.
+
+## Where to go next
+
+- [`ed companion hypotheses`](./hypotheses.md), the theories these test
+- [`ed companion`](./README.md), the rest of this group
+- [All `ed` commands](../README.md)

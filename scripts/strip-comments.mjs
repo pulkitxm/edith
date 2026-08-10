@@ -637,7 +637,7 @@ function main() {
     .map((s) => s.trim())
     .filter(Boolean)
     .filter((f) => !/(^|\/)package-lock\.json$/.test(f))
-    .filter((f) => !/^apps\/macos\/Vendor\//.test(f));
+    .filter((f) => !/^Packages\/Edith\/Vendor\//.test(f));
 
   let changedFiles = 0;
   let totalRemoved = 0;

@@ -6,8 +6,8 @@ const script = readFileSync(
   join(
     import.meta.dir,
     "..",
-    "apps",
-    "macos",
+    "Packages",
+    "Edith",
     "Sources",
     "EdithKit",
     "Resources",

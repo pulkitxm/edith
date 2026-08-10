@@ -39,7 +39,7 @@ avoid this:
 - Never leave `#Preview { }` macros in SwiftUI files: they fail the command-line SwiftPM
   build ("PreviewsMacros plugin not found").
 - `swift test` fails with "no such module 'Testing'" under Command Line Tools; run
-  `apps/macos/test.sh`, which adds the CLT Testing.framework search paths.
+  `Packages/Edith/test.sh`, which adds the CLT Testing.framework search paths.
 
 ## Committing around protected work-in-progress
 
@@ -72,29 +72,56 @@ the same function.
   and `everyUIActionParsesWithTheArgumentsItClaims` fails when the verb it names
   does not exist or does not take those arguments.
 - A new command also needs a `CommandNode` in `CommandTree.swift` (completion), a
-  `JSONCase` in `CLIContractTests.swift` if it takes `--json`, a section on the right
-  page under `docs/cli/`, and an entry in `Guide.swift`.
+  `JSONCase` in `CLIContractTests.swift` if it takes `--json`, its own page under
+  `docs/cli/<group>/`, and an entry in `Guide.swift`.
   `CLIDocsTests.everyCommandInTheTreeIsDocumented` fails when a command in the tree
-  is documented nowhere, and a brand new page must be linked from `docs/cli/README.md`.
+  is documented nowhere, and `everyCommandPageIsListedByItsGroup` fails when the new
+  page is not linked from its group's `README.md`.
 
 ## Documentation
 
-`docs/cli/` is the CLI reference: `README.md` is the index, and every other page
-covers one command group. It is the only place the CLI is documented at length;
-the root `README.md` links to it rather than repeating it.
+`docs/cli/` is the CLI reference, one page per command. `README.md` is the index and
+links every group; each group is a directory whose `README.md` introduces the group
+and links its commands in the order they should be read; every other file documents
+exactly one command and opens with that command as its `# ` title. A command page
+ends by linking back to its group, and a group links back to `./README.md`, which is
+what keeps the generated wiki navigable. It is the only place the CLI is documented
+at length; the root `README.md` links to it rather than repeating it.
+
+Four tests hold that shape: `everyGroupIsListedInTheIndex`,
+`everyCommandPageIsListedByItsGroup`, `everyPageLinksBackToItsIndex` and
+`everyRelativeLinkResolves`.
 
 `scripts/sync-wiki.mjs` mirrors `docs/` into this repo's GitHub wiki, one wiki page
-per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. Relative links
-between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
+per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. A group becomes
+`CLI-<Group>` and its commands `CLI-<Group>-<Command>`, nested one level under the
+group in the sidebar and ordered the way the group `README.md` links them. Relative
+links between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
 on every push to `main` that touches `docs/`. Preview the output locally with
 `make wiki` (writes `.wiki-build/`, never pushes); `make wiki-push` publishes.
 The wiki is generated output: edit `docs/`, never the wiki.
 
+## Layout
+
+Every Swift source lives in one SwiftPM package, `Packages/Edith`: `Sources/Edith`
+(main app UI), `Sources/EdithKit` (shared core), `Sources/EdithCLI`, the vendored
+`Vendor/Highlighter`, thin `Sources/{EdithMain,EdithFiles,EdithHelper,ed,edh}`
+entry points, and `Tests/EdithTests`. `edth.xcodeproj` builds the app bundles from
+those same directories through folder-synchronized groups, so a new file needs no
+project edit: drop it in the target's directory and it builds. Never add a second
+copy of a source tree; there is one.
+
 ## Checks
 
 - `bun run check-comments` - no disallowed comments (all tracked source).
-- Swift checks run from `apps/macos/`: `swift build` (type-check), `swift test` / `./test.sh` (tests),
-  `swift format lint --strict --recursive Sources Tests Package.swift` (format + lint).
+- Swift checks: `make ci-swift-check` runs all of it. The three halves are separate
+  targets, and nothing makes you wait for the others: `make ci-swift-lint`
+  (`swift format lint --strict`), `make ci-swift-build` (one `xcodebuild`), and
+  `make ci-swift-test` (`./test.sh`). The build and the tests use different build
+  systems and different build trees, so they run in parallel.
+- Build the `EdithMain` scheme alone to type-check everything: it lists `EdithHelper`,
+  `EdithFiles`, `ed` and `edh` as target dependencies, so all five targets compile.
+  Looping over the schemes only pays xcodebuild's startup four more times.
 - `bun run lint` - Biome format + lint for `scripts/` and `apps/site`.
 - `bun test ./scripts` - JS tests. Do not pass a bare `scripts`; it also matches the
   gitignored `extras/` tree and reports unrelated failures.

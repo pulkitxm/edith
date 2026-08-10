@@ -17,39 +17,40 @@ key.
 
 | Page | What it covers |
 | --- | --- |
-| [Getting started](./getting-started.md) | Installing and linking the CLI, `ed guide`, `ed schema`, `ed version`, shell completion, and the `ed <machine> ...` shorthand |
+| [Getting started](./getting-started/README.md) | Installing and linking the CLI, `ed guide`, `ed schema`, `ed version`, shell completion, and the `ed <machine> ...` shorthand |
 | [Conventions and contracts](./conventions.md) | The `--json` guarantee, stdout versus stderr, the exit code table, and which commands need the app running |
 
 ## This Mac
 
 | Page | What it covers |
 | --- | --- |
-| [`ed config`](./config.md) | Every setting the UI exposes, and the full setting catalogue |
-| [`ed app`](./app.md) | One-shot actions the app performs: open, quit, relaunch, update checks |
-| [`ed extensions`](./extensions.md) | Turning Edith's features on and off |
-| [`ed permissions`](./permissions.md) | Inspecting and requesting Edith's macOS permissions |
-| [`ed usage`](./usage.md) | Agent usage: limits, cost, tokens, per-day, per-model and per-project |
-| [`ed system`](./system.md) | CPU, memory, load, network and mounted volumes |
-| [`ed music`](./music.md) | Playback control and the local music library |
-| [`ed calendar`](./calendar.md) | Your agenda |
-| [`ed clipboard`](./clipboard.md) | Clipboard history: read, copy, pin and prune |
-| [`ed color`](./color.md) | The colour picker's swatch history |
-| [`ed download`](./download.md) | The download queue and the tools that back it |
-| [`ed apps`](./apps.md) | Running applications, and quitting them |
-| [`ed tools`](./tools.md) | The command line tools Edith can install for you |
-| [`ed shelf`](./shelf.md) | The notch shelf's staged files |
-| [`ed cleaner`](./cleaner.md) | Scanning and reclaiming disk space |
+| [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
+| [`ed app`](./app/README.md) | One-shot actions the app performs: open, quit, relaunch, update checks |
+| [`ed extensions`](./extensions/README.md) | Turning Edith's features on and off |
+| [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
+| [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, per-day, per-model and per-project |
+| [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
+| [`ed music`](./music/README.md) | Playback control and the local music library |
+| [`ed calendar`](./calendar/README.md) | Your agenda |
+| [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
+| [`ed color`](./color/README.md) | The colour picker's swatch history |
+| [`ed download`](./download/README.md) | The download queue and the tools that back it |
+| [`ed apps`](./apps/README.md) | Running applications, and quitting them |
+| [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |
+| [`ed shelf`](./shelf/README.md) | The notch shelf's staged files |
+| [`ed cleaner`](./cleaner/README.md) | Scanning and reclaiming disk space |
+| [`ed companion`](./companion/README.md) | Local memory health, status, Markdown ingest and episodes |
 
 ## Other machines
 
 | Page | What it covers |
 | --- | --- |
-| [`ed machines`](./machines.md) | The machine directory: add, edit, connect, inspect, plus snippets and forwards |
-| [Running commands on a machine](./machines-remote.md) | The `ed <machine> ...` shorthand, `ed machines exec`, remote working directories and completion |
-| [`ed machines docker`](./machines-docker.md) | Containers, images, volumes, networks and compose projects |
-| [`ed machines files`](./machines-files.md) | Browsing, transferring and editing files over SSH, and the undo model |
-| [`ed machines power`](./machines-power.md) | Power state, processes and system services |
-| [`ed machines workspace`](./machines-workspace.md) | Workspaces and panes |
+| [`ed machines`](./machines/README.md) | The machine directory: add, edit, connect, inspect, plus snippets and forwards |
+| [Running commands on a machine](./machines-remote/README.md) | The `ed <machine> ...` shorthand, `ed machines exec`, remote working directories and completion |
+| [`ed machines docker`](./machines-docker/README.md) | Containers, images, volumes, networks and compose projects |
+| [`ed machines files`](./machines-files/README.md) | Browsing, transferring and editing files over SSH, and the undo model |
+| [`ed machines power`](./machines-power/README.md) | Power state, processes and system services |
+| [`ed machines workspace`](./machines-workspace/README.md) | Workspaces and panes |
 
 ## The short version
 

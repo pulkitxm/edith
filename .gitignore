@@ -1,8 +1,9 @@
 .DS_Store
 .build/
+.swiftpm/
+xcuserdata/
 dist/
-# generated from Resources/appicon.png by build.sh
-apps/macos/Resources/AppIcon.icns
+/build/
 local/
 node_modules/
 # usage data stays local - never pushed
@@ -23,7 +24,7 @@ apps/promo-video/out/
 
 .env
 .env.local
-apps/macos/*.dmg
-apps/macos/dmg-root/
-apps/macos/dist/
+/*.dmg
+/dmg-root/
 .vercel
+apps/companion/target/
