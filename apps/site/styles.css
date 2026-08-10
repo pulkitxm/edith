@@ -1936,9 +1936,7 @@ label.action {
   *,
   *::before,
   *::after {
-    /* biome-ignore lint/complexity/noImportantStyles: must override any animation/transition specificity for prefers-reduced-motion */
     animation: none !important;
-    /* biome-ignore lint/complexity/noImportantStyles: must override any animation/transition specificity for prefers-reduced-motion */
     transition: none !important;
   }
 
