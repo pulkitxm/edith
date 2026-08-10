@@ -217,24 +217,53 @@ function startPresenterDemo() {
   if (!badge || !note) {
     return;
   }
+  const swapText = (element, text) => {
+    if (element.textContent === text) {
+      return;
+    }
+    element.dataset.swap = "out";
+    window.setTimeout(() => {
+      element.textContent = text;
+      element.dataset.swap = "in";
+    }, 200);
+  };
+
   const flip = () => {
     const enabled = demo.dataset.presenterState !== "on";
     demo.dataset.presenterState = enabled ? "on" : "off";
-    badge.textContent = enabled ? "Presenter on" : "Presenter off";
-    badge.style.opacity = enabled ? "1" : "0.5";
-    note.textContent = enabled
-      ? "Spend and track names hidden for the room."
-      : "Everything visible to you.";
+    swapText(badge, enabled ? "Presenter on" : "Presenter off");
+    swapText(
+      note,
+      enabled
+        ? "Spend and track names hidden for the room."
+        : "Everything visible to you.",
+    );
   };
   demo.dataset.presenterState = "off";
+  badge.dataset.swap = "in";
+  note.dataset.swap = "in";
   flip();
-  window.setInterval(flip, 2200);
+  window.setInterval(flip, 3600);
 }
+
+const downloadUrls = {
+  macos: "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
+  linux: "https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb",
+};
+
+const downloadLabels = {
+  macos: "Download Edith for macOS",
+  linux: "Download Edith for Ubuntu",
+};
 
 function startPlatformDownload() {
   const platform = currentDesktopPlatform();
   if (!platform) {
     return;
+  }
+  for (const button of document.querySelectorAll("[data-download-auto]")) {
+    button.href = downloadUrls[platform];
+    button.setAttribute("aria-label", downloadLabels[platform]);
   }
   const buttons = document.querySelectorAll("[data-download-os]");
   for (const button of buttons) {
@@ -256,8 +285,43 @@ function startPlatformDownload() {
   }
 }
 
+function startSystemActions() {
+  const buttons = document.querySelectorAll("[data-action]");
+  const text = document.querySelector("[data-action-text]");
+  const icon = document.querySelector("[data-action-icon]");
+  if (!buttons.length || !text || !icon) {
+    return;
+  }
+  const idle =
+    "Tap any control to see what it does. Nothing here can lock you out.";
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      const pressed = button.getAttribute("aria-pressed") === "true";
+      for (const other of buttons) {
+        other.setAttribute("aria-pressed", "false");
+        other.classList.remove("is-active");
+      }
+      if (!pressed) {
+        button.setAttribute("aria-pressed", "true");
+        button.classList.add("is-active");
+      }
+      const message = pressed ? idle : button.dataset.explain;
+      if (text.textContent === message) {
+        return;
+      }
+      text.dataset.swap = "out";
+      window.setTimeout(() => {
+        text.textContent = message;
+        icon.textContent = pressed ? "🔒" : button.dataset.icon;
+        text.dataset.swap = "in";
+      }, 180);
+    });
+  }
+}
+
 function start() {
   startPlatformDownload();
+  startSystemActions();
   buildHeatmaps();
   buildSparks();
   startNowPlaying();

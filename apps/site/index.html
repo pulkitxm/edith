@@ -165,7 +165,7 @@
           <a href="#faq">FAQ</a>
           <a href="#reviews">Reviews</a>
         </nav>
-        <a class="btn btn-solid btn-sm" href="#download">
+        <a class="btn btn-solid btn-sm" data-download-auto href="#download">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="M12 3a1.2 1.2 0 0 1 1.2 1.2v8.9l3.05-3.05a1.2 1.2 0 1 1 1.7 1.7l-5.1 5.1a1.2 1.2 0 0 1-1.7 0l-5.1-5.1a1.2 1.2 0 1 1 1.7-1.7l3.05 3.05V4.2A1.2 1.2 0 0 1 12 3zM5.2 18.6h13.6a1.2 1.2 0 0 1 0 2.4H5.2a1.2 1.2 0 0 1 0-2.4z"
@@ -787,7 +787,11 @@
             </p>
           </div>
           <div>
-            <div class="panel" data-presenter-demo data-presenter-state="off">
+            <div
+              class="panel panel-raised panel-presenter"
+              data-presenter-demo
+              data-presenter-state="off"
+            >
               <div class="panel-head">
                 <span>Usage</span>
                 <span class="badge" data-pbadge>Presenter on</span>
@@ -807,7 +811,7 @@
                 </div>
                 <div class="kpi">
                   <div class="kpi-label">Top model</div>
-                  <div class="kpi-value">opus-4-8</div>
+                  <div class="kpi-value">Opus 4.8</div>
                 </div>
               </div>
               <p class="panel-note" data-pnote>Spend and track names hidden for the room.</p>
@@ -828,28 +832,51 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-system">
               <div class="panel-head"><span>Quick actions</span></div>
               <div class="action-grid">
-                <span class="action">
+                <button
+                  type="button"
+                  class="action"
+                  data-action
+                  aria-pressed="false"
+                  data-icon="⌨"
+                  data-explain="Locks the keyboard so you can wipe it down without firing shortcuts. Restores itself after 60 seconds."
+                >
                   <span class="action-icon">⌨</span>
                   <span>Clean keys</span>
                   <small>Lock the keyboard to wipe it</small>
-                </span>
-                <span class="action is-active">
+                </button>
+                <button
+                  type="button"
+                  class="action is-active"
+                  data-action
+                  aria-pressed="true"
+                  data-icon="☾"
+                  data-explain="Holds off sleep through a long build or download, even with the lid closed on power."
+                >
                   <span class="action-icon">☾</span>
                   <span>Keep awake</span>
                   <small>Stop this Mac from sleeping</small>
-                </span>
-                <span class="action">
+                </button>
+                <button
+                  type="button"
+                  class="action"
+                  data-action
+                  aria-pressed="false"
+                  data-icon="◍"
+                  data-explain="Blurs spend figures and track names so you can screen-share without exposing your bill."
+                >
                   <span class="action-icon">◍</span>
                   <span>Presenter</span>
                   <small>Blur sensitive values</small>
-                </span>
+                </button>
               </div>
-              <div class="hint">
-                <span>🔒</span>Keyboard relocks for 60s, then restores itself. No way to get
-                stuck.
+              <div class="hint" aria-live="polite">
+                <span data-action-icon>🔒</span>
+                <span data-swap="in" data-action-text
+                  >Tap any control to see what it does. Nothing here can lock you out.</span
+                >
               </div>
             </div>
           </div>
