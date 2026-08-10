@@ -38,6 +38,18 @@ Keychain Access, Certificate Assistant, Create a Certificate, named
 "Edith Dev", Identity Type "Self Signed Root", Certificate Type
 "Code Signing".
 
+Before it signs a `--release` build, `build.sh` strips the binaries in `dist`.
+Xcode's Release configuration builds with `dwarf-with-dsym` and no stripping, and
+a plain `xcodebuild build` never strips, so every shipped binary would otherwise
+carry its full DWARF: 65MB of DMG rather than 43MB. The `.dSYM` bundles stay in
+`build/Build/Products/Release`, so a crash report is still symbolicatable.
+
+It also deletes the `Frameworks` directory Xcode embeds inside the nested
+`Edith Files.app`. That app links Sparkle through the outer bundle, its rpath is
+`@executable_path/../../../../../Frameworks`, and `make verify-bundle` asserts
+both that exactly one `Sparkle.framework` ships and that the path the rpath
+resolves to exists.
+
 `AppIcon.icns` and the helper's `MenuBar.png` are checked in, generated from
 `Packages/Edith/Sources/Edith/Resources/appicon.png`. Run `make icon` after
 changing the artwork.
@@ -54,8 +66,12 @@ Run `make ci` before pushing; the pre-push hook runs the same gates.
 | `make ci-lint` | Biome format and lint for `scripts/` and `apps/site`. |
 | `make ci-scripts` | The `bun test` suite for `scripts/`. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |
-| `make ci-swift-check` | `swift format lint --strict`, a build of every scheme, and the tests. |
-| `make ci-swift` | `ci-swift-check` plus a full `build.sh` with bundle and codesign assertions. |
+| `make ci-swift-lint` | `swift format lint --strict` over `Sources`, `Tests` and `Package.swift`. |
+| `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all five targets. |
+| `make ci-swift-test` | The Swift test suite, through `Packages/Edith/test.sh`. |
+| `make ci-swift-check` | The three above. They share nothing, so CI and the pre-push hook run them in parallel. |
+| `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
+| `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
 
 Other targets: `make build`, `make install`, `make reset`, `make reinstall`,
 `make icon`, `make site-dev` (serves `apps/site` on port 8000), `make loc`.
