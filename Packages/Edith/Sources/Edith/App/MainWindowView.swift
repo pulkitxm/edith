@@ -985,7 +985,7 @@ struct MainWindowView: View {
                 Text("Made with ♥ by")
                     .foregroundStyle(.tertiary)
                 Button("Pulkit") {
-                    NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
+                    NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
                 }
                 .buttonStyle(.plain)
                 .fontWeight(.semibold)

@@ -5,6 +5,7 @@
     "strip-comments": "bun scripts/strip-comments.mjs",
     "check-comments": "bun scripts/strip-comments.mjs --check",
     "check-secrets": "bun scripts/check-secrets.mjs",
+    "check-duplicate-keys": "bun scripts/check-duplicate-keys.mjs",
     "wiki": "bun scripts/sync-wiki.mjs",
     "selftest": "bun scripts/strip-comments.mjs --selftest",
     "lint": "biome check .",

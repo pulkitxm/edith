@@ -713,9 +713,9 @@ private struct UsageRows: View {
         var highColorHex =
         "FF3B30"
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private
-        var warnPercent = 60
+        var warnPercent = LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private
-        var critPercent = 85
+        var critPercent = LimitRing.defaultCriticalPercent
     @AppStorage(AppStorageKeys.Limits.pacingMargin, store: SharedDefaults.store) private
         var pacingMargin = 10.0
     @AppStorage(AppStorageKeys.Budget.enabled, store: SharedDefaults.store) private
@@ -981,7 +981,10 @@ private struct UsageRows: View {
             get: { notifyMaster },
             set: { enabled in
                 notifyMaster = enabled
-                if enabled && !SharedDefaults.store.bool(forKey: "permNotificationsGranted") {
+                if enabled
+                    && !SharedDefaults.store.bool(
+                        forKey: AppStorageKeys.Permissions.notificationsGranted)
+                {
                     IPC.post(IPC.Name.grantNotifications)
                 }
             })

@@ -63,8 +63,8 @@ public final class PresenterState {
         let d = SharedDefaults.store
         let newEnabled = d.object(forKey: AppStorageKeys.Presenter.enabled) as? Bool ?? false
         let newManual = newEnabled && d.bool(forKey: AppStorageKeys.Presenter.mode)
-        let newAutoActive = newEnabled && d.bool(forKey: "presenterAutoActive")
-        let newAutoReason = newEnabled ? d.string(forKey: "presenterAutoReason") : nil
+        let newAutoActive = newEnabled && d.bool(forKey: AppStorageKeys.Presenter.autoActive)
+        let newAutoReason = newEnabled ? d.string(forKey: AppStorageKeys.Presenter.autoReason) : nil
         if enabled != newEnabled { enabled = newEnabled }
         if manual != newManual { manual = newManual }
         if autoActive != newAutoActive { autoActive = newAutoActive }

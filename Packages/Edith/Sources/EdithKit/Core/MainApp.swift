@@ -2,7 +2,10 @@ import AppKit
 
 @MainActor
 public enum MainApp {
-    public static let bundleIdentifier = "com.pulkit.edith"
+    public nonisolated static let bundleIdentifier = "com.pulkit.edith"
+    public nonisolated static let statusBarBundleIdentifier = "com.pulkit.edith.statusbar"
+    public nonisolated static let filesBundleIdentifier = "com.pulkit.edith.files"
+    public nonisolated static let creatorSiteURLString = "https://pulkit.page"
 
     public static func openDashboard() {
         guard

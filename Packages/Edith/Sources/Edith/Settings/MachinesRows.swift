@@ -10,7 +10,7 @@ struct MachinesRows: View {
         var notifyDisk = true
     @AppStorage(AppStorageKeys.Machines.diskThreshold, store: SharedDefaults.store) private
         var diskThreshold =
-        90.0
+        FleetMath.diskWarningPercent
     @AppStorage(AppStorageKeys.Machines.autoConnect, store: SharedDefaults.store) private
         var autoConnect = true
 

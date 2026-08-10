@@ -7,10 +7,10 @@ struct ClipboardRows: View {
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private var enabled =
         false
     @AppStorage(AppStorageKeys.Clipboard.maxItems, store: SharedDefaults.store) private
-        var maxItems = 200
+        var maxItems = ClipboardIndex.defaultMaxItems
     @AppStorage(AppStorageKeys.Clipboard.maxItemBytes, store: SharedDefaults.store) private
         var maxItemBytes =
-        10_000_000
+        ClipboardIndex.defaultMaxItemBytes
     @AppStorage(AppStorageKeys.Clipboard.maxAgeDays, store: SharedDefaults.store) private
         var maxAgeDays = 0
     @AppStorage(AppStorageKeys.Clipboard.ignoredApps, store: SharedDefaults.store) private
@@ -22,7 +22,7 @@ struct ClipboardRows: View {
         false
     @AppStorage(AppStorageKeys.Clipboard.checkInterval, store: SharedDefaults.store) private
         var checkInterval =
-        1.0
+        ClipboardIndex.defaultCheckInterval
     @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
     private var accessibilityGranted = false
     @AppStorage(AppStorageKeys.Clipboard.popupAt, store: SharedDefaults.store) private var popupAt =

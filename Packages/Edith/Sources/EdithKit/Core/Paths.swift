@@ -48,13 +48,14 @@ public enum AppData {
 }
 
 public enum Repo {
+    public static let pathKey = "repoPath"
     public static let musicFolderPathKey = "musicFolderPath"
     public static let musicFolderStaleKey = "musicFolderStale"
     private static let musicFolderConfirmationKey = "musicFolderExternalConfirmation"
     private static let repoPathConfirmationKey = "repoPathExternalConfirmation"
 
     public static var devRoot: URL? {
-        confirmedPath(forKey: "repoPath", confirmationKey: repoPathConfirmationKey)
+        confirmedPath(forKey: pathKey, confirmationKey: repoPathConfirmationKey)
     }
 
     public static var dataDir: URL {
@@ -71,14 +72,14 @@ public enum Repo {
 
     public static func prepareStoredPaths() {
         validateStoredPath(
-            forKey: "repoPath", confirmationKey: repoPathConfirmationKey, marksMusicStale: true)
+            forKey: pathKey, confirmationKey: repoPathConfirmationKey, marksMusicStale: true)
         validateStoredPath(
             forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey,
             marksMusicStale: true)
     }
 
     public static func setDevRootPath(_ path: String?) {
-        setConfirmedPath(path, forKey: "repoPath", confirmationKey: repoPathConfirmationKey)
+        setConfirmedPath(path, forKey: pathKey, confirmationKey: repoPathConfirmationKey)
     }
 
     public static func setMusicDirectory(_ url: URL) {

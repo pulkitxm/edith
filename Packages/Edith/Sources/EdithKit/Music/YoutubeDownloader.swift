@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 extension Notification.Name {
-    public static let musicFolderChanged = Notification.Name("musicFolderChanged")
+    public static let musicFolderChangedLocally = Notification.Name("musicFolderChanged")
 }
 
 public enum DownloadStatus: Equatable, Codable {
@@ -276,7 +276,7 @@ public final class YoutubeDownloader {
         }
         if changed {
             save()
-            NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
         }
         queueObserver = IPC.observe(IPC.Name.downloadQueueChanged) { [weak self] in
@@ -607,7 +607,7 @@ public final class YoutubeDownloader {
                     let label = files.isEmpty ? "done" : files.joined(separator: ", ")
                     self.items[index].status = .done(label)
                     self.save()
-                    NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+                    NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
                     IPC.post(IPC.Name.musicFolderChanged)
                 } else {
                     let msg = self.items[index].logs.trimmingCharacters(

@@ -116,16 +116,17 @@ public enum ConfigCatalog {
             summary: "Whether the main window opens in full screen.", fallback: .bool(false),
             scope: .standard),
         SettingDefinition(
-            "hotKeyCode", .int, group: "panel",
+            AppStorageKeys.General.hotKeyCode, .int, group: "panel",
             summary: "Virtual key code of the global panel shortcut.", fallback: .int(14)),
         SettingDefinition(
-            "hotKeyMods", .int, group: "panel",
+            AppStorageKeys.General.hotKeyMods, .int, group: "panel",
             summary: "Carbon modifier mask of the global panel shortcut.", fallback: .int(2304)),
         SettingDefinition(
-            "hotKeyLabel", .string, group: "panel",
+            AppStorageKeys.General.hotKeyLabel, .string, group: "panel",
             summary: "Printable label for the global panel shortcut."),
         SettingDefinition(
-            "tab", .string, group: "panel", summary: "Panel tab shown on open.",
+            AppStorageKeys.General.panelTab, .string, group: "panel",
+            summary: "Panel tab shown on open.",
             fallback: .string("usage"), scope: .standard),
         SettingDefinition(
             AppStorageKeys.Tabs.order, .csv, group: "panel",
@@ -143,7 +144,7 @@ public enum ConfigCatalog {
             AppStorageKeys.General.mainSidebarWidth, .number, group: "panel",
             summary: "Main window sidebar width in points."),
         SettingDefinition(
-            "repoPath", .string, group: "panel",
+            Repo.pathKey, .string, group: "panel",
             summary: "Development repository root used for usage data and music."),
     ]
 
@@ -328,7 +329,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Companion.endpoint, .string, group: "companion",
             summary: "Companion API base URL the app and CLI talk to.",
-            fallback: .string("http://127.0.0.1:4820")),
+            fallback: .string(CompanionClient.defaultEndpointString)),
         SettingDefinition(
             AppStorageKeys.Companion.tab, .string, group: "companion",
             summary: "Companion screen shown on open.",
@@ -437,7 +438,7 @@ public enum ConfigCatalog {
 
     private static let music: [SettingDefinition] = [
         SettingDefinition(
-            "musicFolderStale", .bool, group: "music",
+            Repo.musicFolderStaleKey, .bool, group: "music",
             summary: "Whether the stored music folder has gone missing.", fallback: .bool(false),
             readOnly: true),
         SettingDefinition(
@@ -463,20 +464,23 @@ public enum ConfigCatalog {
             summary: "Music extension: local library playback with media keys.",
             fallback: .bool(false)),
         SettingDefinition(
-            "musicVolume", .number, group: "music", summary: "Player volume from 0 to 1.",
+            AppStorageKeys.Music.volume, .number, group: "music",
+            summary: "Player volume from 0 to 1.",
             fallback: .double(0.7), scope: .standard),
         SettingDefinition(
-            "musicLooping", .bool, group: "music", summary: "Repeat the current track.",
+            AppStorageKeys.Music.looping, .bool, group: "music",
+            summary: "Repeat the current track.",
             fallback: .bool(false), scope: .standard),
         SettingDefinition(
             AppStorageKeys.Music.gridView, .bool, group: "music",
             summary: "Show the library as a grid.",
             fallback: .bool(false)),
         SettingDefinition(
-            "musicFolderPath", .string, group: "music",
+            Repo.musicFolderPathKey, .string, group: "music",
             summary: "Folder the music library plays from."),
         SettingDefinition(
-            "musicShuffling", .bool, group: "music", summary: "Play the folder in a random order.",
+            AppStorageKeys.Music.shuffling, .bool, group: "music",
+            summary: "Play the folder in a random order.",
             fallback: .bool(false), scope: .standard),
         SettingDefinition(
             "musicFavourites", .stringList, group: "music",
@@ -632,27 +636,27 @@ public enum ConfigCatalog {
             allowed: FocusDimDisplayMode.allCases.map(\.rawValue),
             fallback: .string("perScreenFront")),
         SettingDefinition(
-            "focusDimHotKeyCode", .int, group: "focusdim",
+            AppStorageKeys.FocusDim.hotKeyCode, .int, group: "focusdim",
             summary: "Virtual key code of the focus dim shortcut."),
         SettingDefinition(
-            "focusDimHotKeyMods", .int, group: "focusdim",
+            AppStorageKeys.FocusDim.hotKeyMods, .int, group: "focusdim",
             summary: "Carbon modifier mask of the focus dim shortcut."),
         SettingDefinition(
-            "focusDimHotKeyLabel", .string, group: "focusdim",
+            AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
     ]
 
     private static let presenter: [SettingDefinition] = [
         SettingDefinition(
-            "presenterAutoActive", .bool, group: "presenter",
+            AppStorageKeys.Presenter.autoActive, .bool, group: "presenter",
             summary: "A share is being detected right now.", fallback: .bool(false),
             readOnly: true),
         SettingDefinition(
-            "presenterAutoPaused", .bool, group: "presenter",
+            AppStorageKeys.Presenter.autoPaused, .bool, group: "presenter",
             summary: "Auto presenter mode is paused until the current share ends.",
             fallback: .bool(false), readOnly: true),
         SettingDefinition(
-            "presenterAutoReason", .string, group: "presenter",
+            AppStorageKeys.Presenter.autoReason, .string, group: "presenter",
             summary: "Why auto presenter mode turned on.", readOnly: true),
         SettingDefinition(
             AppStorageKeys.Presenter.enabled, .bool, group: "presenter",

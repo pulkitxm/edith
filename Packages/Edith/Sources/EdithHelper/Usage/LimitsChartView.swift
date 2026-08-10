@@ -6,9 +6,9 @@ struct LimitsChartView: View {
     let points: [LimitPoint]
     let theme: Color
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
-        60
+        LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
-        85
+        LimitRing.defaultCriticalPercent
 
     struct Sample: Identifiable {
         let date: Date

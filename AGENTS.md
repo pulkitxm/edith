@@ -14,6 +14,19 @@ Do not write comments in code. This repo is kept comment-free and CI enforces it
 Write code clear enough not to need comments. If a name or a block needs
 explaining, improve the name or the structure instead of adding prose.
 
+## Code standards: one source of truth, reused everywhere
+
+- `UserDefaults`/`SharedDefaults` keys live once in `AppStorageKeys`
+  (`Sources/EdithKit/Core/AppStorageKeys.swift`), grouped by feature. Reference the
+  constant; do not retype the key string at a second call site.
+- Bundle identifiers and other app-identity strings live on `MainApp`
+  (`Sources/EdithKit/Core/MainApp.swift`). A default value shared by an `@AppStorage`
+  property and a plain `UserDefaults` fallback lives as a `static let` next to the
+  logic that owns it, not as two independently typed literals.
+- Shared, cross-feature SwiftUI views and modifiers live in `Sources/EdithKit/UI`.
+  Check there before adding a new chip/badge/card/row that copies an existing one's
+  modifier chain with different content.
+
 ## Layout
 
 Every Swift source lives in one SwiftPM package, `Packages/Edith`: `Sources/Edith`
@@ -27,6 +40,8 @@ copy of a source tree; there is one.
 ## Checks
 
 - `bun run check-comments` - no disallowed comments (all tracked source).
+- `bun run check-duplicate-keys` - no `UserDefaults`/`SharedDefaults` key spelled out as a raw
+  string literal in more than one Swift file; add it once to `AppStorageKeys` instead.
 - Swift checks: `make ci-swift-check` runs all of it. The three halves are separate
   targets, and nothing makes you wait for the others: `make ci-swift-lint`
   (`swift format lint --strict`), `make ci-swift-build` (one `xcodebuild`), and

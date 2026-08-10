@@ -2,7 +2,7 @@ import EdithKit
 import ServiceManagement
 import SwiftUI
 
-private let helperBundleIdentifier = "com.pulkit.edith.statusbar"
+private let helperBundleIdentifier = MainApp.statusBarBundleIdentifier
 
 @MainActor
 final class MainAppDelegate: NSObject, NSApplicationDelegate {

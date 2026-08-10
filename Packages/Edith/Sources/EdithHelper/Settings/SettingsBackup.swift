@@ -81,7 +81,8 @@ final class SettingsBackup {
 
     nonisolated static let backedKeys = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
-        AppStorageKeys.General.theme, "tab", AppStorageKeys.Presenter.mode,
+        AppStorageKeys.General.theme, AppStorageKeys.General.panelTab,
+        AppStorageKeys.Presenter.mode,
         AppStorageKeys.Presenter.blurMusic, AppStorageKeys.Presenter.blurMoney,
         AppStorageKeys.Presenter.blurUsage,
         AppStorageKeys.Presenter.enabled,
@@ -90,8 +91,10 @@ final class SettingsBackup {
         AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
         AppStorageKeys.Tabs.usageEnabled, AppStorageKeys.Tabs.musicEnabled, "usageMachines",
-        "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", AppStorageKeys.Music.downloadKind,
-        "repoPath",
+        AppStorageKeys.General.hotKeyCode, AppStorageKeys.General.hotKeyMods,
+        AppStorageKeys.General.hotKeyLabel, AppStorageKeys.Music.volume,
+        AppStorageKeys.Music.downloadKind,
+        Repo.pathKey,
         AppStorageKeys.Backup.icloud, AppStorageKeys.Music.backup,
         AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
@@ -152,15 +155,17 @@ final class SettingsBackup {
         "clipboardWindowPositionX", "clipboardWindowPositionY",
         FocusDimState.enabledKey, AppStorageKeys.FocusDim.intensity,
         AppStorageKeys.FocusDim.animationDuration,
-        AppStorageKeys.FocusDim.otherDisplaysMode, "focusDimHotKeyCode", "focusDimHotKeyMods",
-        "focusDimHotKeyLabel",
+        AppStorageKeys.FocusDim.otherDisplaysMode, AppStorageKeys.FocusDim.hotKeyCode,
+        AppStorageKeys.FocusDim.hotKeyMods,
+        AppStorageKeys.FocusDim.hotKeyLabel,
         AppStorageKeys.ColorPicker.enabled, AppStorageKeys.ColorPicker.copyFormat,
         AppStorageKeys.ColorPicker.profile,
         AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
         AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
         AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
-        AppStorageKeys.Tabs.calendarEnabled, "musicLooping", "musicShuffling",
+        AppStorageKeys.Tabs.calendarEnabled, AppStorageKeys.Music.looping,
+        AppStorageKeys.Music.shuffling,
         AppStorageKeys.Music.gridView,
         "musicFavourites", "musicLastTrack", "musicLastPosition", "musicWasPlaying",
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
@@ -208,7 +213,9 @@ final class SettingsBackup {
         AppStorageKeys.Notify.pacingHot,
         AppStorageKeys.Notify.reminderSession, AppStorageKeys.Notify.reminderSessionOffsetMin,
         AppStorageKeys.Notify.reminderWeekly, AppStorageKeys.Notify.reminderWeeklyOffsetMin,
-        AppStorageKeys.Notify.tokenExpired, "hotKeyCode", "hotKeyMods", "hotKeyLabel",
+        AppStorageKeys.Notify.tokenExpired, AppStorageKeys.General.hotKeyCode,
+        AppStorageKeys.General.hotKeyMods,
+        AppStorageKeys.General.hotKeyLabel,
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
         "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
@@ -217,7 +224,7 @@ final class SettingsBackup {
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        AppStorageKeys.General.preventSleep, "repoPath",
+        AppStorageKeys.General.preventSleep, Repo.pathKey,
         AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
         AppStorageKeys.Notch.shelfOpenOnHover,
         AppStorageKeys.Notch.shelfRequireOption, AppStorageKeys.Notch.shelfKeepDuration,
@@ -242,8 +249,9 @@ final class SettingsBackup {
         "clipboardWindowPositionX", "clipboardWindowPositionY",
         FocusDimState.enabledKey, AppStorageKeys.FocusDim.intensity,
         AppStorageKeys.FocusDim.animationDuration,
-        AppStorageKeys.FocusDim.otherDisplaysMode, "focusDimHotKeyCode", "focusDimHotKeyMods",
-        "focusDimHotKeyLabel",
+        AppStorageKeys.FocusDim.otherDisplaysMode, AppStorageKeys.FocusDim.hotKeyCode,
+        AppStorageKeys.FocusDim.hotKeyMods,
+        AppStorageKeys.FocusDim.hotKeyLabel,
         AppStorageKeys.ColorPicker.enabled, AppStorageKeys.ColorPicker.copyFormat,
         AppStorageKeys.ColorPicker.profile,
         AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
@@ -263,11 +271,15 @@ final class SettingsBackup {
         "notifWeeklyPacing", AppStorageKeys.Permissions.filter, "permissionPromptCount",
         "permissionHintShown",
         "focusDimActive",
-        AppStorageKeys.Permissions.accessibilityGranted, "permCalendarGranted",
-        "permCameraGranted", "permFullDiskGranted", "permInputMonitoringGranted",
-        "permNotificationsGranted",
-        "permScreenRecordingGranted", "presenterAutoActive", "presenterAutoPaused",
-        "presenterAutoReason", "settingsSection", "musicFolderPath", "musicFolderStale",
+        AppStorageKeys.Permissions.accessibilityGranted,
+        AppStorageKeys.Permissions.calendarGranted,
+        AppStorageKeys.Permissions.cameraGranted, AppStorageKeys.Permissions.fullDiskGranted,
+        AppStorageKeys.Permissions.inputMonitoringGranted,
+        AppStorageKeys.Permissions.notificationsGranted,
+        AppStorageKeys.Permissions.screenRecordingGranted, AppStorageKeys.Presenter.autoActive,
+        AppStorageKeys.Presenter.autoPaused,
+        AppStorageKeys.Presenter.autoReason, "settingsSection", Repo.musicFolderPathKey,
+        Repo.musicFolderStaleKey,
         "musicFolderExternalConfirmation", "musicRevealPath", "repoPathExternalConfirmation",
         "cleanerConfirmedExternalPaths",
         "mainWindowZoom", AppStorageKeys.General.editMainWindowFullScreen,
@@ -617,7 +629,7 @@ final class SettingsBackup {
         case .limits:
             IPC.post(IPC.Name.limitsUpdated)
         case .music:
-            NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
         case .clipboard:
             IPC.post(IPC.Name.clipboardChanged)
@@ -1065,7 +1077,7 @@ final class SettingsBackup {
         }
         for (key, value) in dict where Self.backedKeys.contains(key) {
             switch key {
-            case "repoPath":
+            case Repo.pathKey:
                 guard let path = value as? String else { continue }
                 guard RestoredPathValidation.verdict(for: path) == .keep else {
                     Repo.setDevRootPath(nil)

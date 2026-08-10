@@ -231,13 +231,15 @@ enum GlobalHotKey {
 
 enum HotKey {
     static var code: Int {
-        SharedDefaults.store.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
+        SharedDefaults.store.object(forKey: AppStorageKeys.General.hotKeyCode) as? Int
+            ?? kVK_ANSI_E
     }
     static var mods: Int {
-        SharedDefaults.store.object(forKey: "hotKeyMods") as? Int ?? (cmdKey | optionKey)
+        SharedDefaults.store.object(forKey: AppStorageKeys.General.hotKeyMods) as? Int
+            ?? (cmdKey | optionKey)
     }
     static var label: String {
-        SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
+        SharedDefaults.store.string(forKey: AppStorageKeys.General.hotKeyLabel) ?? "⌥⌘E"
     }
 
     static func register() {
@@ -251,9 +253,9 @@ enum HotKey {
     }
 
     static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: "hotKeyCode")
-        SharedDefaults.store.set(mods, forKey: "hotKeyMods")
-        SharedDefaults.store.set(label, forKey: "hotKeyLabel")
+        SharedDefaults.store.set(code, forKey: AppStorageKeys.General.hotKeyCode)
+        SharedDefaults.store.set(mods, forKey: AppStorageKeys.General.hotKeyMods)
+        SharedDefaults.store.set(label, forKey: AppStorageKeys.General.hotKeyLabel)
     }
 }
 
@@ -443,7 +445,8 @@ struct RootView: View {
         self.services = services
     }
 
-    @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
+    @State private var tab =
+        UserDefaults.standard.string(forKey: AppStorageKeys.General.panelTab) ?? "usage"
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
@@ -622,7 +625,7 @@ struct RootView: View {
             permissions.refresh()
         }
         .onChange(of: tab) {
-            UserDefaults.standard.set(tab, forKey: "tab")
+            UserDefaults.standard.set(tab, forKey: AppStorageKeys.General.panelTab)
         }
         .onChange(of: usageEnabled) { pinTab() }
         .onChange(of: musicEnabled) { pinTab() }

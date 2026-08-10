@@ -63,7 +63,7 @@ struct AboutPane: View {
                 .lineSpacing(3)
                 .frame(maxWidth: UIScale.pt(460))
             Button {
-                NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
+                NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     Image(systemName: "link")
