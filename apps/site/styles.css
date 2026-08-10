@@ -2466,6 +2466,168 @@ button.action {
   background: var(--color-accent);
 }
 
+.card-junk {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-junk .card-art {
+  gap: 1rem;
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.junk-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+}
+
+.junk-items .pill {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  color: var(--color-fg);
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 3px 7px -3px rgb(0 0 0 / 80%);
+}
+
+.junk-items .pill:nth-child(1) {
+  animation: junk-toss 6s var(--ease-out) infinite;
+}
+
+.junk-items .pill:nth-child(2) {
+  animation: junk-toss 6s var(--ease-out) 2s infinite;
+}
+
+.junk-items .pill:nth-child(3) {
+  animation: junk-toss 6s var(--ease-out) 4s infinite;
+}
+
+.bin {
+  position: relative;
+  width: 2.75rem;
+  height: 3rem;
+  flex-shrink: 0;
+}
+
+.bin-body {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2.125rem;
+  height: 2.125rem;
+  transform: translateX(-50%);
+  clip-path: polygon(9% 0, 91% 0, 83% 100%, 17% 100%);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 7px,
+      rgb(0 0 0 / 26%) 7px 8px,
+      transparent 8px 15px,
+      rgb(0 0 0 / 26%) 15px 16px,
+      transparent 16px 23px,
+      rgb(0 0 0 / 26%) 23px 24px,
+      transparent 24px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-muted) 62%, var(--color-surface-2)),
+      color-mix(in oklab, var(--color-subtle) 55%, var(--color-surface))
+    );
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 28%),
+    inset 0 -2px 4px rgb(0 0 0 / 45%);
+}
+
+.bin-lid {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  width: 2.4375rem;
+  height: 0.375rem;
+  transform: translateX(-50%);
+  transform-origin: 14% 100%;
+  border-radius: 3px;
+  background: linear-gradient(
+    to bottom,
+    var(--color-muted),
+    var(--color-subtle)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    0 2px 5px -2px rgb(0 0 0 / 85%);
+  animation: bin-lid 2s var(--ease-out) infinite;
+}
+
+.bin-lid::after {
+  content: "";
+  position: absolute;
+  top: -0.25rem;
+  left: 50%;
+  width: 0.625rem;
+  height: 0.25rem;
+  transform: translateX(-50%);
+  border-radius: 2px 2px 0 0;
+  background: var(--color-subtle);
+}
+
+@keyframes junk-toss {
+  0%,
+  4% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  10% {
+    transform: translate(0.25rem, -0.5rem) rotate(-6deg) scale(1.04);
+    opacity: 1;
+  }
+  26% {
+    transform: translate(5.5rem, 0.25rem) rotate(22deg) scale(0.3);
+    opacity: 0;
+  }
+  27%,
+  90% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 0;
+  }
+  97%,
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bin-lid {
+  0%,
+  10% {
+    transform: translateX(-50%) rotate(0deg);
+  }
+  26%,
+  52% {
+    transform: translateX(-50%) rotate(-34deg);
+  }
+  70%,
+  100% {
+    transform: translateX(-50%) rotate(0deg);
+  }
+}
+
 .card-alerts {
   border-color: var(--color-line-2);
   background: linear-gradient(
@@ -2583,6 +2745,383 @@ button.action {
   }
 }
 
+@property --dl-i {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --sp-i {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --sp-m {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 3;
+}
+
+@property --sp-s {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 34;
+}
+
+.card-spotify {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+  animation: sp-play 6s linear infinite;
+}
+
+.card-spotify .card-art {
+  gap: 0.875rem;
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.sp-art {
+  position: relative;
+  width: 3.25rem;
+  height: 3.25rem;
+  flex-shrink: 0;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 18%),
+    0 0 0 1px rgb(255 255 255 / 8%),
+    0 8px 16px -6px rgb(0 0 0 / 85%);
+}
+
+.sp-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+  opacity: 0;
+  animation: sp-swap 18s var(--ease-out) infinite;
+}
+
+.sp-art img:nth-child(2) {
+  animation-delay: 6s;
+}
+
+.sp-art img:nth-child(3) {
+  animation-delay: 12s;
+}
+
+.sp-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sp-track {
+  position: relative;
+  height: 1rem;
+}
+
+.sp-track > span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--color-fg);
+  opacity: 0;
+  animation: sp-swap 18s var(--ease-out) infinite;
+}
+
+.sp-track > span:nth-child(2) {
+  animation-delay: 6s;
+}
+
+.sp-track > span:nth-child(3) {
+  animation-delay: 12s;
+}
+
+.card-spotify .bar {
+  flex: none;
+  width: 100%;
+  height: 0.375rem;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 55%), rgb(0 0 0 / 25%));
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 70%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-spotify .bar i {
+  width: calc(var(--sp-i) * 1%);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-accent) 72%, white),
+    var(--color-accent)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 0 8px color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+.sp-time {
+  counter-reset: spm var(--sp-m) sps var(--sp-s);
+  align-self: flex-end;
+}
+
+.sp-time::after {
+  content: "-" counter(spm) ":" counter(sps, decimal-leading-zero);
+}
+
+@keyframes sp-play {
+  0% {
+    --sp-i: 0;
+    --sp-m: 3;
+    --sp-s: 34;
+  }
+  25% {
+    --sp-i: 25;
+    --sp-m: 2;
+    --sp-s: 40;
+  }
+  50% {
+    --sp-i: 50;
+    --sp-m: 1;
+    --sp-s: 47;
+  }
+  75% {
+    --sp-i: 75;
+    --sp-m: 0;
+    --sp-s: 53;
+  }
+  100% {
+    --sp-i: 100;
+    --sp-m: 0;
+    --sp-s: 0;
+  }
+}
+
+@keyframes sp-swap {
+  0%,
+  30% {
+    opacity: 1;
+  }
+  36%,
+  94% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.card-drill {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-drill .card-art {
+  gap: 0.3125rem;
+  padding: 0.625rem;
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-drill .card-row {
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  padding: 0.25rem 0.5rem;
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 3px 8px -5px rgb(0 0 0 / 75%);
+}
+
+.drill-caret {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--color-accent);
+  animation: drill-caret 7s var(--ease-out) infinite;
+}
+
+.drill-children {
+  display: grid;
+  grid-template-rows: 0fr;
+  animation: drill-open 7s var(--ease-out) infinite;
+}
+
+.drill-inner {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.3125rem;
+  overflow: hidden;
+  padding-left: 0.75rem;
+}
+
+.card-drill .drill-inner .card-row {
+  animation: drill-fade 7s var(--ease-out) infinite;
+}
+
+.card-drill .drill-inner .card-row:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+@keyframes drill-open {
+  0%,
+  10% {
+    grid-template-rows: 0fr;
+  }
+  26%,
+  74% {
+    grid-template-rows: 1fr;
+  }
+  90%,
+  100% {
+    grid-template-rows: 0fr;
+  }
+}
+
+@keyframes drill-caret {
+  0%,
+  10% {
+    transform: rotate(0deg);
+  }
+  26%,
+  74% {
+    transform: rotate(90deg);
+  }
+  90%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes drill-fade {
+  0%,
+  12% {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+  30%,
+  72% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  88%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+}
+
+.card-yt {
+  --dl-i: 0;
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+  animation: dl-progress 7s ease-in-out infinite;
+}
+
+.card-yt .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-yt .card-art > .pill {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  color: var(--color-fg);
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 3px 7px -3px rgb(0 0 0 / 80%);
+}
+
+.card-yt .card-row {
+  margin-right: 0.375rem;
+}
+
+.card-yt .bar i {
+  width: calc(var(--dl-i) * 1%);
+}
+
+.card-yt .dl-pct {
+  counter-reset: dl var(--dl-i);
+}
+
+.card-yt .dl-pct::after {
+  content: counter(dl) "%";
+}
+
+@keyframes dl-progress {
+  0% {
+    --dl-i: 0;
+  }
+  12% {
+    --dl-i: 14;
+  }
+  38% {
+    --dl-i: 41;
+  }
+  62% {
+    --dl-i: 63;
+  }
+  82% {
+    --dl-i: 89;
+  }
+  92%,
+  100% {
+    --dl-i: 100;
+  }
+}
+
 .card-mixer {
   border-color: var(--color-line-2);
   background: linear-gradient(
@@ -2608,7 +3147,8 @@ button.action {
   margin-right: 0.375rem;
 }
 
-.card-mixer .bar {
+.card-mixer .bar,
+.card-yt .bar {
   height: 0.4375rem;
   background: linear-gradient(to bottom, rgb(0 0 0 / 55%), rgb(0 0 0 / 25%));
   box-shadow:
@@ -2616,7 +3156,8 @@ button.action {
     inset 0 -1px 0 var(--color-warm-10);
 }
 
-.card-mixer .bar i {
+.card-mixer .bar i,
+.card-yt .bar i {
   position: relative;
   background: linear-gradient(
     to bottom,
@@ -2628,7 +3169,8 @@ button.action {
     0 0 8px color-mix(in oklab, var(--color-accent) 55%, transparent);
 }
 
-.card-mixer .bar i::after {
+.card-mixer .bar i::after,
+.card-yt .bar i::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -4070,6 +4612,178 @@ button.action {
   color: var(--color-danger);
 }
 
+@property --app-i {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.card-apps {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-apps .card-art {
+  justify-content: center;
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-apps .card-row {
+  position: relative;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  padding: 0.375rem 0.5rem;
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 25%),
+    0 4px 10px -6px rgb(0 0 0 / 70%);
+}
+
+.card-apps .app-pct {
+  counter-reset: app var(--app-i);
+}
+
+.card-apps .app-pct::after {
+  content: counter(app) "%";
+}
+
+.card-apps .quit {
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 2px 4px -2px rgb(0 0 0 / 70%);
+}
+
+.card-apps .row-chrome {
+  --app-i: 42;
+  animation: apps-down 10s var(--ease-out) infinite;
+}
+
+.card-apps .row-node {
+  --app-i: 31;
+  z-index: 2;
+  animation: apps-up 10s var(--ease-out) infinite;
+}
+
+.card-apps .row-chrome .quit {
+  animation: quit-a 10s var(--ease-out) infinite;
+}
+
+.card-apps .row-node .quit {
+  animation: quit-b 10s var(--ease-out) infinite;
+}
+
+@keyframes apps-down {
+  0%,
+  35% {
+    transform: translateY(0);
+    --app-i: 42;
+  }
+  50%,
+  85% {
+    transform: translateY(calc(100% + 0.5rem));
+    --app-i: 17;
+  }
+  100% {
+    transform: translateY(0);
+    --app-i: 42;
+  }
+}
+
+@keyframes apps-up {
+  0%,
+  35% {
+    transform: translateY(0) scale(1);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      inset 0 -1px 0 rgb(0 0 0 / 25%),
+      0 4px 10px -6px rgb(0 0 0 / 70%);
+    --app-i: 31;
+  }
+  42%,
+  93% {
+    transform: translateY(calc(-50% - 0.25rem)) scale(1.035);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      inset 0 -1px 0 rgb(0 0 0 / 25%),
+      0 14px 26px -10px rgb(0 0 0 / 85%);
+  }
+  50%,
+  85% {
+    transform: translateY(calc(-100% - 0.5rem)) scale(1);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      inset 0 -1px 0 rgb(0 0 0 / 25%),
+      0 4px 10px -6px rgb(0 0 0 / 70%);
+    --app-i: 64;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    --app-i: 31;
+  }
+}
+
+@keyframes quit-a {
+  0%,
+  35% {
+    border-color: color-mix(in oklab, var(--color-danger) 60%, transparent);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      0 0 10px -1px color-mix(in oklab, var(--color-danger) 55%, transparent);
+  }
+  50%,
+  100% {
+    border-color: var(--color-line-2);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      0 2px 4px -2px rgb(0 0 0 / 70%);
+  }
+}
+
+@keyframes quit-b {
+  0%,
+  35% {
+    border-color: var(--color-line-2);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      0 2px 4px -2px rgb(0 0 0 / 70%);
+  }
+  50%,
+  85% {
+    border-color: color-mix(in oklab, var(--color-danger) 60%, transparent);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      0 0 10px -1px color-mix(in oklab, var(--color-danger) 55%, transparent);
+  }
+  100% {
+    border-color: var(--color-line-2);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      0 2px 4px -2px rgb(0 0 0 / 70%);
+  }
+}
+
 .camera {
   position: relative;
   height: 3.875rem;
@@ -4117,6 +4831,140 @@ button.action {
   color: var(--color-fg);
 }
 
+.card-camera {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-camera .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-camera .camera {
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 15%, rgb(255 255 255 / 7%), transparent 65%),
+    #000;
+  box-shadow:
+    inset 0 0 14px rgb(0 0 0 / 90%),
+    inset 0 1px 0 rgb(255 255 255 / 14%),
+    0 8px 18px -8px rgb(0 0 0 / 90%);
+}
+
+.card-camera .camera::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgb(255 255 255 / 22%) 50%,
+    transparent 58%
+  );
+  opacity: 0;
+  animation: cam-flash 8s var(--ease-out) infinite;
+}
+
+.card-camera .camera-head {
+  background: var(--color-muted);
+  animation: cam-frame 8s var(--ease-out) infinite;
+}
+
+.card-camera .camera-head::after {
+  background: var(--color-muted);
+}
+
+.card-camera .camera-flip {
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 2px 5px -2px rgb(0 0 0 / 85%);
+  animation: cam-flip 8s var(--ease-out) infinite;
+}
+
+@keyframes cam-frame {
+  0%,
+  38% {
+    transform: translate(-50%, -60%) scale(1);
+    opacity: 1;
+  }
+  46% {
+    transform: translate(-50%, -60%) scale(0.9);
+    opacity: 0.15;
+  }
+  54%,
+  88% {
+    transform: translate(-28%, -48%) scale(1.34);
+    opacity: 1;
+  }
+  96% {
+    transform: translate(-50%, -60%) scale(0.9);
+    opacity: 0.15;
+  }
+  100% {
+    transform: translate(-50%, -60%) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes cam-flash {
+  0%,
+  40% {
+    opacity: 0;
+  }
+  47% {
+    opacity: 1;
+  }
+  56%,
+  90% {
+    opacity: 0;
+  }
+  97% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cam-flip {
+  0%,
+  38% {
+    transform: rotate(0deg);
+    color: var(--color-fg);
+    border-color: transparent;
+  }
+  54% {
+    transform: rotate(360deg);
+    color: var(--color-accent);
+  }
+  88% {
+    transform: rotate(360deg);
+    color: var(--color-fg);
+  }
+  100% {
+    transform: rotate(720deg);
+    color: var(--color-fg);
+  }
+}
+
 .faq {
   border-top: 1px solid var(--color-line);
   padding-block: 6rem;
@@ -4135,6 +4983,26 @@ button.action {
   border: 1px solid var(--color-line);
   background: var(--color-surface);
   padding: 1.25rem 1.5rem;
+  transition: border-color 0.3s ease;
+}
+
+.faq details[open] {
+  border-color: var(--color-line-2);
+}
+
+.faq details[open] > :not(summary) {
+  animation: faq-open 0.4s var(--ease-out) both;
+}
+
+@keyframes faq-open {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .faq summary {
@@ -4155,7 +5023,7 @@ button.action {
 .faq summary span {
   flex-shrink: 0;
   color: var(--color-subtle);
-  transition: transform 0.2s ease;
+  transition: transform 0.35s var(--ease-out);
 }
 
 .faq details[open] summary span {

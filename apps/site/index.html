@@ -1031,15 +1031,16 @@
             <h4>CPU &amp; memory readout</h4>
             <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
           </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label">Build caches</span>
-                <span class="pill mono">8.2 GB</span>
+          <div class="card card-junk">
+            <div class="card-art">
+              <span class="junk-items">
+                <span class="pill mono">Caches 8.2 GB</span>
+                <span class="pill mono">Logs 2.1 GB</span>
+                <span class="pill mono">Cargo 1.4 GB</span>
               </span>
-              <span class="card-row">
-                <span class="bar"><i style="width: 64%"></i></span>
-                <span class="card-label mono">12.4 GB found</span>
+              <span class="bin" aria-hidden="true">
+                <i class="bin-lid"></i>
+                <i class="bin-body"></i>
               </span>
             </div>
             <h4>Junk cleaner</h4>
@@ -1048,30 +1049,30 @@
               the Trash.
             </p>
           </div>
-          <div class="card">
+          <div class="card card-apps">
             <div class="card-art stack">
-              <span class="card-row">
+              <span class="card-row row-chrome">
                 <span class="card-label">Chrome</span>
-                <span class="pill mono">42%</span>
+                <span class="pill mono app-pct"></span>
                 <span class="quit">✕</span>
               </span>
-              <span class="card-row">
+              <span class="card-row row-node">
                 <span class="card-label">node</span>
-                <span class="pill mono">31%</span>
+                <span class="pill mono app-pct"></span>
                 <span class="quit">✕</span>
               </span>
             </div>
             <h4>Running apps</h4>
             <p>Sort every open app by CPU or memory and quit the heavy ones in a click.</p>
           </div>
-          <div class="card">
+          <div class="card card-yt">
             <div class="card-art stack">
               <span class="pill mono" style="align-self: flex-start; max-width: 100%"
                 >youtube.com/watch?v=dQw4…</span
               >
               <span class="card-row">
-                <span class="bar"><i style="width: 64%"></i></span>
-                <span class="card-label mono">64%</span>
+                <span class="bar"><i></i></span>
+                <span class="card-label mono dl-pct"></span>
               </span>
             </div>
             <h4>YouTube audio</h4>
@@ -1080,15 +1081,20 @@
               progress.
             </p>
           </div>
-          <div class="card">
+          <div class="card card-drill">
             <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label">▸ edith</span>
+              <span class="card-row drill-parent">
+                <span class="drill-caret" aria-hidden="true">▸</span>
+                <span class="card-label">edith</span>
                 <span class="pill mono">$412</span>
               </span>
-              <span class="card-row" style="padding-left: 1rem">
-                <span class="card-label">notch-motion</span>
-                <span class="pill mono">$268</span>
+              <span class="drill-children">
+                <span class="drill-inner">
+                  <span class="card-row">
+                    <span class="card-label">notch-motion</span>
+                    <span class="pill mono">$268</span>
+                  </span>
+                </span>
               </span>
             </div>
             <h4>Project drilldown</h4>
@@ -1097,15 +1103,21 @@
               eats the budget.
             </p>
           </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <i class="dot sage"></i>
-                <span class="card-label">Spotify · Weightless</span>
+          <div class="card card-spotify">
+            <div class="card-art">
+              <span class="sp-art">
+                <img src="/music/cover-1.jpg" alt="" />
+                <img src="/music/cover-2.jpg" alt="" />
+                <img src="/music/cover-3.jpg" alt="" />
               </span>
-              <span class="card-row">
-                <span class="bar"><i style="width: 42%"></i></span>
-                <span class="card-label mono">-3:34</span>
+              <span class="sp-body">
+                <span class="sp-track">
+                  <span><i class="dot sage"></i>Spotify · Weightless</span>
+                  <span><i class="dot accent"></i>Apple Music · Nightcall</span>
+                  <span><i class="dot sage"></i>Spotify · Teardrop</span>
+                </span>
+                <span class="bar"><i></i></span>
+                <span class="card-label mono sp-time"></span>
               </span>
             </div>
             <h4>Spotify &amp; Apple Music</h4>
@@ -1114,7 +1126,7 @@
               local library.
             </p>
           </div>
-          <div class="card">
+          <div class="card card-camera">
             <div class="card-art">
               <span class="camera">
                 <span class="camera-head"></span>
