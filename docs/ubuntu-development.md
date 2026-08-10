@@ -22,6 +22,18 @@ swiftly use 6.3.2
 swift --version
 ```
 
+Swiftly installs into `~/.local/share/swiftly` and appends its `bin` directory to
+your shell profile. The current shell does not pick that up until you run `hash -r`
+or start a new one, so `swift --version` failing right after the install usually
+means a stale shell rather than a failed install.
+
+Swiftly also reports a set of packages its toolchain expects. They are not needed
+to build `edith-linux`, but install them so the rest of the toolchain works:
+
+```bash
+sudo apt install --yes gnupg2 libcurl4-openssl-dev libncurses-dev libz3-dev
+```
+
 Install the native build and package dependencies:
 
 ```bash
@@ -36,6 +48,10 @@ sudo apt install --yes \
   make \
   pkg-config
 ```
+
+`sudo apt update` exits non-zero when any configured third-party repository fails,
+which silently skips the install in an `apt update && apt install` chain. Run the
+two commands separately, or read the update output before trusting it.
 
 Verify that SwiftPM can discover GTK 4:
 
@@ -60,12 +76,31 @@ make linux-build
 make linux-run
 ```
 
-`make linux-run` requires a graphical desktop session. The diagnostic path is
-headless and is useful over SSH or in CI:
+`make linux-run` requires a graphical desktop session. A shell that is not part of
+one, such as a TTY, an SSH connection, or an editor's integrated terminal, has no
+`WAYLAND_DISPLAY` or `DISPLAY`, and the process then exits silently with status 0
+and no window rather than reporting the missing session. Point it at the running
+session instead:
+
+```bash
+WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) make linux-run
+```
+
+`ls /run/user/$(id -u)` names the Wayland socket, and `ls /tmp/.X11-unix` names the
+X displays, for a session that does not use `wayland-0`. On X11 pass `DISPLAY=:0`
+in place of `WAYLAND_DISPLAY`.
+
+The diagnostic path is headless and is useful over SSH or in CI:
 
 ```bash
 make linux-diagnose
 ```
+
+It prints the resolved XDG directories along with the extension and capability
+state. Every extension currently reports `unavailable` on Ubuntu, and
+`supportedCapabilities` is empty, because the Linux integrations described below
+are not implemented yet. That output is the expected result of a working build,
+not a broken installation.
 
 Build the same release package produced by CI:
 
