@@ -74,10 +74,16 @@ final class UsageStore: FeatureModule {
     func limits(for provider: LimitProvider) -> ProviderLimits {
         switch provider {
         case .claude:
-            return ProviderLimits(provider: provider, session: session, week: week)
+            return ProviderLimits(
+                provider: provider, session: Self.fresh(session), week: Self.fresh(week))
         case .codex:
-            return ProviderLimits(provider: provider, session: codexSession, week: codexWeek)
+            return ProviderLimits(
+                provider: provider, session: Self.fresh(codexSession), week: Self.fresh(codexWeek))
         }
+    }
+
+    private nonisolated static func fresh(_ window: LimitWindow?) -> LimitWindow? {
+        window.flatMap { ($0.resetsAt ?? .distantFuture) > Date() ? $0 : nil }
     }
 
     func providerEnabled(_ provider: LimitProvider) -> Bool {
@@ -172,18 +178,14 @@ final class UsageStore: FeatureModule {
     }
 
     private func seedFromHistory() {
-        let now = Date()
-        let fresh = { (w: LimitWindow?) -> LimitWindow? in
-            w.flatMap { ($0.resetsAt ?? .distantFuture) > now ? $0 : nil }
-        }
         if let last = LimitsHistory.latest(provider: .claude) {
-            session = fresh(last.session)
-            week = fresh(last.week)
+            session = Self.fresh(last.session)
+            week = Self.fresh(last.week)
             limitsUpdatedAt = last.date
         }
         if let last = LimitsHistory.latest(provider: .codex) {
-            codexSession = fresh(last.session)
-            codexWeek = fresh(last.week)
+            codexSession = Self.fresh(last.session)
+            codexWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
         if let limitsUpdatedAt {

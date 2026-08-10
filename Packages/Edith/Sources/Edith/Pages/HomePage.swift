@@ -23,6 +23,7 @@ struct HomePage: View {
         var presenterEnabled =
         false
     @Environment(\.colorScheme) private var scheme
+    @State private var usageCardHeight: CGFloat?
 
     private var dark: Bool { scheme == .dark }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
