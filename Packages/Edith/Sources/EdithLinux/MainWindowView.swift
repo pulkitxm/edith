@@ -51,6 +51,8 @@ struct MainWindowView: View {
         case .extensions:
             return ExtensionsPage()
         case .system:
+            return SystemPage()
+        case .settings:
             return CapabilitiesPage()
         case .about:
             return AboutPage()

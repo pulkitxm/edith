@@ -9,9 +9,12 @@ import Testing
         }
     }
 
-    @Test func ubuntuDoesNotClaimUnimplementedCapabilities() {
+    @Test func ubuntuOnlyClaimsCapabilitiesItImplements() {
         for capability in PlatformCapability.allCases {
-            #expect(!PlatformCapabilities.ubuntu.state(for: capability).isSupported)
+            let claimed = PlatformCapabilities.ubuntu.state(for: capability).isSupported
+            let implemented = PlatformCapabilities.ubuntuImplementedCapabilities.contains(
+                capability)
+            #expect(claimed == implemented)
         }
     }
 

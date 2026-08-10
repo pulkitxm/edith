@@ -104,7 +104,10 @@ public struct PlatformCapabilities: Equatable, Sendable {
                 .screenColorSampling: .integrationRequired("XDG Screenshot portal"),
                 .screenShareDetection: .integrationRequired("GNOME Shell extension"),
                 .windowDimming: .integrationRequired("GNOME Shell extension"),
+                .systemMetrics: .available,
             ]))
+
+    public static let ubuntuImplementedCapabilities: [PlatformCapability] = [.systemMetrics]
 
     private static func states(
         defaultState: PlatformCapabilityState,
