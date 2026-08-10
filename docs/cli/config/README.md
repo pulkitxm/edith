@@ -180,7 +180,7 @@ not here cannot be set, and `import` skips it.
 | `tabMachinesEnabled` | bool | `false` | shared | Machines extension: other computers over SSH. |
 | `machinesAutoConnect` | bool | none | shared | Connect to machines automatically when the app starts. |
 | `machinesNotifyDown` | bool | none | shared | Notify when a machine stops responding. |
-| `machinesNotifyDiskFull` | bool | none | shared | Notify when a machine's disk crosses the threshold. |
+| `machinesNotifyDiskFull` | bool | none | shared | Notify when a machine's disk crosses the threshold, or a filesystem stops responding. |
 | `machinesDiskThreshold` | number | `90` | shared | Disk usage percentage that triggers the disk alert. |
 
 ### `finder`

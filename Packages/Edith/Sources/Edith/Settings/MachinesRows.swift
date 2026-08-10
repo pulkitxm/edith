@@ -13,7 +13,7 @@ struct MachinesRows: View {
         Section {
             Toggle("Connect when the page opens", isOn: $autoConnect)
             Toggle("Notify when a machine goes offline", isOn: $notifyDown)
-            Toggle("Notify when a disk is nearly full", isOn: $notifyDisk)
+            Toggle("Notify when a disk is nearly full or stalled", isOn: $notifyDisk)
             if notifyDisk {
                 HStack {
                     Text("Warn above")
