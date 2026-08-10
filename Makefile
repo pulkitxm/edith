@@ -12,11 +12,32 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push linux-test linux-build linux-run linux-diagnose linux-metadata linux-package linux-check
 
 ci:
 	bun install --frozen-lockfile
 	$(MAKE) ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift
+
+linux-test:
+	swift test --package-path $(PKG)
+
+linux-build:
+	swift build --package-path $(PKG) --product edith-linux
+
+linux-run:
+	swift run --package-path $(PKG) edith-linux
+
+linux-diagnose:
+	swift run --package-path $(PKG) edith-linux --diagnose
+
+linux-metadata:
+	desktop-file-validate packaging/linux/com.pulkit.Edith.desktop
+	appstreamcli validate --no-net packaging/linux/com.pulkit.Edith.metainfo.xml
+
+linux-package:
+	packaging/debian/build-deb.sh
+
+linux-check: linux-test linux-metadata linux-package
 
 site-dev:
 	cd apps/site && python3 -m http.server 8000
@@ -136,17 +157,17 @@ reinstall: reset
 release:
 	@set -eu; \
 	test -n "$(V)" || { echo "release blocked: set V, for example make release V=1.8.0" >&2; exit 1; }; \
-	command -v gh >/dev/null 2>&1 || { echo "release blocked: gh CLI is not installed" >&2; exit 1; }; \
-	gh auth status >/dev/null 2>&1 || { echo "release blocked: gh CLI is not authenticated" >&2; exit 1; }; \
-	KEY=$$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' Resources/Info.plist 2>/dev/null || true); \
-	test -n "$$KEY" || { echo "release blocked: set SUPublicEDKey in Resources/Info.plist" >&2; exit 1; }; \
-	if command -v generate_appcast >/dev/null 2>&1; then \
-	  GENERATE_APPCAST=$$(command -v generate_appcast); \
-	else \
-	  GENERATE_APPCAST=$$(find build/SourcePackages/artifacts -type f -name generate_appcast -perm -u+x -print -quit 2>/dev/null || true); \
-	fi; \
-	test -n "$$GENERATE_APPCAST" \
-	  || { echo "release blocked: generate_appcast is not on PATH and not in build/SourcePackages/artifacts" >&2; exit 1; }; \
+	printf '%s\n' "$(V)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' \
+	  || { echo "release blocked: version must be major.minor.patch" >&2; exit 1; }; \
+	test "$$(git branch --show-current)" = main \
+	  || { echo "release blocked: manual releases must be cut from main" >&2; exit 1; }; \
+	test -z "$$(git status --porcelain)" \
+	  || { echo "release blocked: working tree is not clean" >&2; exit 1; }; \
+	git fetch origin main --tags; \
+	test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" \
+	  || { echo "release blocked: local main does not match origin/main" >&2; exit 1; }; \
+	! git rev-parse "v$(V)" >/dev/null 2>&1 \
+	  || { echo "release blocked: tag v$(V) already exists" >&2; exit 1; }; \
 	BUILD=$$(( $$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist) + 1 )); \
 	for p in Resources/Info.plist Resources/HelperInfo.plist; do \
 	  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(V)" $$p; \
@@ -154,30 +175,7 @@ release:
 	done; \
 	git commit -m "Bump version to $(V)" Resources/Info.plist Resources/HelperInfo.plist; \
 	git tag "v$(V)"; \
-	./build.sh --no-open --release; \
-	rm -rf dmg-root Edith.dmg; \
-	mkdir dmg-root; \
-	cp -R dist/Edith.app dmg-root/; \
-	ln -s /Applications dmg-root/Applications; \
-	hdiutil create -volname Edith -srcfolder dmg-root -format UDZO Edith.dmg; \
-	rm -rf dmg-root; \
-	rm -rf dist/appcast; \
-	mkdir dist/appcast; \
-	cp Edith.dmg dist/appcast/; \
-	"$$GENERATE_APPCAST" \
-	  --download-url-prefix "https://github.com/pulkitxm/edith/releases/download/v$(V)/" \
-	  dist/appcast; \
-	test -f dist/appcast/appcast.xml || mv dist/appcast/appcast dist/appcast/appcast.xml; \
-	test -f dist/appcast/appcast.xml || { echo "release blocked: generate_appcast did not create dist/appcast/appcast.xml" >&2; exit 1; }; \
-	grep -q 'url="https://github.com/pulkitxm/edith/releases/download/v$(V)/Edith.dmg"' dist/appcast/appcast.xml \
-	  || { echo "release blocked: appcast enclosure does not point at the v$(V) release asset" >&2; exit 1; }; \
-	git push origin HEAD "v$(V)"; \
-	gh release create "v$(V)" --title "Edith v$(V)" --generate-notes \
-	  Edith.dmg \
-	  dist/appcast/appcast.xml \
-	|| gh release upload "v$(V)" --clobber \
-	  Edith.dmg \
-	  dist/appcast/appcast.xml
+	git push --atomic origin HEAD:main "v$(V)"
 
 loc:
 	cloc --vcs=git

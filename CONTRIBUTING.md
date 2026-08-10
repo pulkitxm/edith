@@ -4,10 +4,12 @@ Issues and pull requests are welcome.
 
 ## Build and run
 
+### macOS
+
 ```bash
-./build.sh            # build into dist/Edith.app and launch it
-./build.sh --install  # build, copy to /Applications, launch
-cd Packages/Edith && ./test.sh   # run the Swift test suite
+./build.sh
+./build.sh --install
+cd Packages/Edith && ./test.sh
 ```
 
 Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
@@ -60,13 +62,28 @@ resolves to exists.
 `Packages/Edith/Sources/Edith/Resources/appicon.png`. Run `make icon` after
 changing the artwork.
 
+### Ubuntu
+
+Ubuntu 24.04 development uses Swift 6.3.2 and GTK 4. The shortest local loop is:
+
+```bash
+make linux-test
+make linux-build
+make linux-run
+```
+
+Use `make linux-check` to test the portable core, validate desktop metadata, and
+build the Debian package. The complete toolchain setup, packaging workflow,
+project layout, and cross-platform extension rules are in the
+[Ubuntu development guide](docs/ubuntu-development.md).
+
 ## Checks
 
 Run `make ci` before pushing; the pre-push hook runs the same gates.
 
 | Target | What it does |
 | --- | --- |
-| `make ci` | Everything below, after `bun install --frozen-lockfile`. |
+| `make ci` | All macOS, script, site, and policy checks below, after `bun install --frozen-lockfile`. |
 | `make ci-comments` | Fails on any disallowed comment in tracked source. |
 | `make ci-secrets` | Scans every tracked file for leaked secrets. |
 | `make ci-lint` | Biome format and lint for `scripts/` and `apps/site`. |
@@ -80,20 +97,26 @@ Run `make ci` before pushing; the pre-push hook runs the same gates.
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
 
 Other targets: `make build`, `make install`, `make reset`, `make reinstall`,
-`make icon`, `make site-dev` (serves `apps/site` on port 8000), `make loc`.
+`make icon`, `make site-dev` (serves `apps/site` on port 8000), `make loc`,
+`make linux-test`, `make linux-build`, `make linux-run`, `make linux-diagnose`,
+`make linux-metadata`, `make linux-package`, and `make linux-check`.
 
 This repo is kept comment-free and CI enforces it. Run `bun run strip-comments`
 if one slips in. Write names and structure that do not need prose.
 
 ## Releases
 
-Merging anything under `Packages/Edith/`, `Resources/`, `edth.xcodeproj/` or
-`build.sh` into `main` publishes a new patch version automatically. The `Release on merge` workflow bumps the last version component
-(`0.0.1` becomes `0.0.2`, never `0.1.1`), builds and signs the app, generates a
-signed Sparkle appcast, commits the bump, tags it, and publishes the release.
+Merging application, packaging, or release workflow changes into `main` publishes
+a new patch version automatically. The `Release on merge` workflow validates the
+release secrets, bumps the last version component (`0.0.1` becomes `0.0.2`, never
+`0.1.1`), commits the bump, and creates the tag. The tag workflow builds the signed
+DMG and the Ubuntu package in parallel, notarizes the DMG when Apple credentials are
+available, generates the signed Sparkle appcast, installs and diagnoses the Debian
+package, then publishes all three assets to one GitHub Release.
 
-`make release V=1.8.0` does the same sequence locally when you need to cut one by
-hand.
+`make release V=1.8.0` validates a clean, current `main`, commits the requested
+version, and pushes the tag atomically. The tag workflow builds and publishes the
+three release assets.
 
 ### Required secrets
 
@@ -102,6 +125,17 @@ hand.
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
 | `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
+
+### Optional notarization secrets
+
+The workflow notarizes and staples the DMG when all three Apple credentials are
+configured. A signed DMG is still published when they are absent.
+
+| Secret | Why |
+| --- | --- |
+| `NOTARY_KEY_ID` | Identifies the App Store Connect API key used for notarization. |
+| `NOTARY_ISSUER_ID` | Identifies the App Store Connect API key issuer. |
+| `NOTARY_KEY` | Contains the App Store Connect API private key. |
 
 `SPARKLE_PRIVATE_KEY` is the EdDSA key `generate_keys -x` exports, the private
 half of `SUPublicEDKey` in `Info.plist`:
@@ -124,9 +158,15 @@ gh secret set MACOS_CERT_P12 < <(base64 -i cert.p12)
 printf %s "<pick-a-password>" | gh secret set MACOS_CERT_PASSWORD
 ```
 
+A Developer ID Application certificate is preferred for public distribution.
+The workflow also accepts the configured Apple Development certificate so the
+signed release flow remains available, but Gatekeeper can warn on other Macs.
+
 The DMG is published as `Edith.dmg` rather than a versioned name so
 `releases/latest/download/Edith.dmg` always resolves to the newest build, which
-is what the website's download button uses.
+is what the website's download button uses. The Ubuntu asset is published as
+`Edith.deb` for the same stable latest-release URL, while its Debian metadata
+retains the release version.
 
 ### Why signing identity matters
 

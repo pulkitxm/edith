@@ -1,3 +1,5 @@
+import { currentDesktopPlatform } from "./platform.js";
+
 const tracks = [
   {
     title: "Weightless",
@@ -152,7 +154,33 @@ function startPresenterDemo() {
   window.setInterval(flip, 2200);
 }
 
+function startPlatformDownload() {
+  const platform = currentDesktopPlatform();
+  if (!platform) {
+    return;
+  }
+  const buttons = document.querySelectorAll("[data-download-os]");
+  for (const button of buttons) {
+    const matches = button.dataset.downloadOs === platform;
+    button.hidden = !matches;
+    button.classList.toggle("btn-solid", matches);
+    button.classList.toggle("btn-outline", !matches);
+  }
+  const note = document.querySelector(".hero-note");
+  if (note) {
+    note.textContent =
+      platform === "macos"
+        ? "Free forever. Requires macOS 14+ on Apple Silicon."
+        : "Free forever. Ubuntu 24.04 LTS on amd64. Native preview.";
+  }
+  const otherDownloads = document.querySelector("[data-other-downloads]");
+  if (otherDownloads) {
+    otherDownloads.hidden = false;
+  }
+}
+
 function start() {
+  startPlatformDownload();
   buildHeatmaps();
   buildSparks();
   startNowPlaying();

@@ -206,6 +206,10 @@ h4 {
   fill: currentColor;
 }
 
+[data-download-os="linux"] svg {
+  fill: #e95420;
+}
+
 .btn-solid {
   background: var(--color-fg);
   color: var(--color-bg);
@@ -214,6 +218,18 @@ h4 {
 .btn-accent {
   background: var(--color-accent);
   color: var(--color-accent-fg);
+}
+
+.btn-outline {
+  border-color: var(--color-line-2);
+  background: color-mix(in oklab, var(--color-surface) 72%, transparent);
+  color: var(--color-fg);
+}
+
+.btn-outline:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 52%, transparent);
+  box-shadow: 0 10px 32px -20px
+    color-mix(in oklab, var(--color-accent) 70%, transparent);
 }
 
 .btn-sm {
@@ -346,6 +362,24 @@ h4 {
   margin-top: 1rem;
   animation: hero-rise 0.8s var(--ease-out) both;
   animation-delay: 380ms;
+}
+
+.hero-other {
+  display: inline-block;
+  margin-top: 0.75rem;
+  border-bottom: 1px solid var(--color-line-2);
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.hero-other:hover {
+  border-color: var(--color-accent);
+  color: var(--color-fg);
+}
+
+.hero-other[hidden],
+.hero-cta .btn[hidden] {
+  display: none;
 }
 
 .hero-demo {
@@ -1729,13 +1763,112 @@ label.action {
 .download h2 {
   margin-inline: auto;
   max-width: 40rem;
+  margin-top: 1rem;
 }
 
-.download .btn {
-  margin-top: 2rem;
+.download-lede {
+  margin-inline: auto;
+  max-width: 42rem;
+  color: var(--color-muted);
+  font-size: 17px;
+  line-height: 1.65;
 }
 
 .download p {
+  margin-top: 0.75rem;
+}
+
+.download-grid {
+  display: grid;
+  gap: 1rem;
+  margin: 3rem auto 0;
+  max-width: 52rem;
+  text-align: left;
+}
+
+.download-card {
+  position: relative;
+  display: flex;
+  min-height: 23rem;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow: hidden;
+  border: 1px solid var(--color-line-2);
+  border-radius: 1.25rem;
+  padding: 2rem;
+  background:
+    radial-gradient(
+      90% 70% at 8% 0%,
+      color-mix(in oklab, var(--color-accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.download-card-linux {
+  background:
+    radial-gradient(
+      90% 70% at 8% 0%,
+      color-mix(in oklab, var(--color-sage) 15%, transparent),
+      transparent 70%
+    ),
+    var(--color-surface);
+}
+
+.download-card-linux .download-platform-icon {
+  color: #e95420;
+}
+
+.download-platform {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.download-platform-icon {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 1px solid var(--color-line-2);
+  border-radius: 0.875rem;
+  background: var(--color-surface-2);
+}
+
+.download-platform-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: currentColor;
+}
+
+.download-platform strong,
+.download-platform small {
+  display: block;
+}
+
+.download-platform strong {
+  font-size: 18px;
+}
+
+.download-platform small {
+  margin-top: 0.125rem;
+  color: var(--color-subtle);
+  font-size: 12px;
+}
+
+.download-card > p {
+  color: var(--color-muted);
+  line-height: 1.65;
+}
+
+.download-card .btn {
+  width: 100%;
+  margin-top: auto;
+}
+
+.download-card .fineprint {
+  align-self: center;
   margin-top: 0.75rem;
 }
 
@@ -1919,6 +2052,10 @@ label.action {
   .perf-grid {
     grid-template-columns: 5fr 7fr;
     align-items: start;
+  }
+
+  .download-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .footer-inner {

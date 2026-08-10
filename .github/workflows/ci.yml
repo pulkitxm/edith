@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
+      linux: ${{ steps.areas.outputs.linux }}
       promo: ${{ steps.areas.outputs.promo }}
       site: ${{ steps.areas.outputs.site }}
       scripts: ${{ steps.areas.outputs.scripts }}
@@ -54,6 +55,7 @@ jobs:
             fi
           }
           area swift '^(Packages/Edith/|Resources/|docs/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$|\.github/workflows/(ci|release)\.yml$)'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
           area scripts '^(scripts/|package\.json$|bun\.lock$|biome\.json$)'
@@ -80,6 +82,33 @@ jobs:
       - name: Site is self-contained
         if: needs.changes.outputs.site == 'true'
         run: make ci-site
+
+  ubuntu:
+    needs: changes
+    if: needs.changes.outputs.linux == 'true'
+    runs-on: ubuntu-24.04
+    container: swift:6.3.2-noble
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install native dependencies
+        run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
+      - name: Test portable core
+        run: make linux-test
+      - name: Validate desktop metadata
+        run: make linux-metadata
+      - name: Build Debian package
+        run: make linux-package
+      - name: Verify Debian package
+        run: |
+          dpkg-deb --info dist/linux/*.deb
+          dpkg-deb --contents dist/linux/*.deb
+          apt-get install -y ./dist/linux/*.deb
+          edith-linux --diagnose
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edith-ubuntu-amd64
+          path: dist/linux/*.deb
+          if-no-files-found: error
 
   promo-video:
     needs: changes

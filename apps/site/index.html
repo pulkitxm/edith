@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0e0f11" />
-    <title>Edith: Claude &amp; Codex usage tracker and Mac menu bar toolkit</title>
+    <title>Edith: native macOS and Ubuntu control center</title>
     <meta
       name="description"
-      content="Edith is a free, open source macOS menu bar app: Claude and Codex rate-limit tracking, usage analytics and alerts, a local music player, clipboard history, and a full set of Mac utilities in one app."
+      content="Edith is a free, open source native control center for macOS and Ubuntu with usage analytics, local music, clipboard tools, and system utilities."
     />
     <link rel="canonical" href="https://edith.pulkit.page/" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
@@ -17,11 +17,11 @@
     <meta property="og:site_name" content="Edith" />
     <meta
       property="og:title"
-      content="Edith: Claude &amp; Codex usage tracker and Mac menu bar toolkit"
+      content="Edith: native macOS and Ubuntu control center"
     />
     <meta
       property="og:description"
-      content="Free and open source macOS menu bar app for Claude and Codex rate-limit tracking, usage analytics, local music, and system tools. One app instead of twelve."
+      content="A free and open source native control center for macOS and Ubuntu. One app instead of twelve."
     />
     <meta property="og:url" content="https://edith.pulkit.page/" />
     <meta property="og:image" content="https://edith.pulkit.page/og-home.png" />
@@ -30,7 +30,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Edith: one menu bar app instead of twelve. Free and open source for macOS."
+      content="Edith: one native control center instead of twelve, for macOS and Ubuntu."
     />
     <meta property="og:video" content="https://edith.pulkit.page/announcement.mp4" />
     <meta property="og:video:type" content="video/mp4" />
@@ -39,16 +39,16 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="Edith: Claude &amp; Codex usage tracker and Mac menu bar toolkit"
+      content="Edith: native macOS and Ubuntu control center"
     />
     <meta
       name="twitter:description"
-      content="Free and open source macOS menu bar app for Claude and Codex rate-limit tracking, usage analytics, local music, and system tools. One app instead of twelve."
+      content="A free and open source native control center for macOS and Ubuntu. One app instead of twelve."
     />
     <meta name="twitter:image" content="https://edith.pulkit.page/og-home.png" />
     <meta
       name="twitter:image:alt"
-      content="Edith: one menu bar app instead of twelve. Free and open source for macOS."
+      content="Edith: one native control center instead of twelve, for macOS and Ubuntu."
     />
     <script type="application/ld+json">
       {
@@ -60,8 +60,11 @@
             "url": "https://edith.pulkit.page/",
             "image": "https://edith.pulkit.page/app-icon-512.png",
             "applicationCategory": "UtilitiesApplication",
-            "operatingSystem": "macOS 14+",
-            "downloadUrl": "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
+            "operatingSystem": ["macOS 14+", "Ubuntu 24.04 LTS"],
+            "downloadUrl": [
+              "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
+              "https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
+            ],
             "license": "https://www.gnu.org/licenses/gpl-3.0.html",
             "isAccessibleForFree": true,
             "offers": {
@@ -69,7 +72,7 @@
               "price": "0",
               "priceCurrency": "USD"
             },
-            "description": "A free, open source macOS menu bar app for Claude and Codex rate-limit tracking, usage analytics, a local music player, and system tools.",
+            "description": "A free, open source native control center for macOS and Ubuntu with usage analytics, local music, and system tools.",
             "featureList": [
               "Claude and Codex rate-limit tracking with live countdowns",
               "Menu bar session and weekly usage readout",
@@ -125,15 +128,15 @@
                 "name": "Does Edith send my usage data anywhere?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "No. Usage stays on your Mac, with no account and no telemetry. Optional iCloud backup merges your history across your own machines."
+                  "text": "No. Usage stays on your device, with no account and no telemetry. Optional iCloud backup merges history across your own Macs."
                 }
               },
               {
                 "@type": "Question",
-                "name": "Which Macs does Edith support?",
+                "name": "Which systems does Edith support?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Edith runs on macOS 14 and later, on Apple Silicon."
+                  "text": "The full app runs on macOS 14 and later on Apple Silicon. The native Ubuntu preview targets Ubuntu 24.04 LTS on amd64."
                 }
               }
             ]
@@ -157,7 +160,7 @@
         </nav>
         <a
           class="btn btn-solid btn-sm"
-          href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
+          href="#download"
           >Download</a
         >
       </div>
@@ -174,15 +177,16 @@
             width="88"
             height="88"
           />
-          <p class="eyebrow hero-eyebrow">For macOS</p>
-          <h1>One menu bar app<br />instead of twelve.</h1>
+          <p class="eyebrow hero-eyebrow">Native on macOS and Ubuntu</p>
+          <h1>One control center<br />instead of twelve.</h1>
           <p class="hero-lede">
-            Edith is a native Mac app for Claude and Codex rate-limit tracking, usage
-            analytics, local music, and system tools. Free and open source.
+            Get the complete native Mac app or the new native Ubuntu preview. Both share
+            Edith's portable core, extension catalog, and focus on efficient desktop tools.
           </p>
           <div class="hero-cta">
             <a
               class="btn btn-solid"
+              data-download-os="macos"
               href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -192,8 +196,25 @@
               </svg>
               Download for macOS
             </a>
+            <a
+              class="btn btn-outline"
+              data-download-os="linux"
+              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M17.61.455a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zM12.92.8C8.923.777 5.137 2.941 3.148 6.451a4.5 4.5 0 0 1 .26-.007 4.92 4.92 0 0 1 2.585.737A8.316 8.316 0 0 1 12.688 3.6 4.944 4.944 0 0 1 13.723.834 11.008 11.008 0 0 0 12.92.8zm9.226 4.994a4.915 4.915 0 0 1-1.918 2.246 8.36 8.36 0 0 1-.273 8.303 4.89 4.89 0 0 1 1.632 2.54 11.156 11.156 0 0 0 .559-13.089zM3.41 7.932A3.41 3.41 0 0 0 0 11.342a3.41 3.41 0 0 0 3.41 3.409 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zm2.027 7.866a4.908 4.908 0 0 1-2.915.358 11.1 11.1 0 0 0 7.991 6.698 11.234 11.234 0 0 0 2.422.249 4.879 4.879 0 0 1-.999-2.85 8.484 8.484 0 0 1-.836-.136 8.304 8.304 0 0 1-5.663-4.32zm11.405.928a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41z"
+                />
+              </svg>
+              Download for Ubuntu
+            </a>
           </div>
-          <p class="fineprint hero-note">Free forever. Requires macOS 14 or later.</p>
+          <p class="fineprint hero-note">
+            Free forever. macOS 14+ on Apple Silicon or Ubuntu 24.04 on amd64.
+          </p>
+          <a class="hero-other" data-other-downloads href="#download" hidden>
+            Other platforms
+          </a>
 
           <div class="hero-demo">
             <div class="window">
@@ -1100,16 +1121,19 @@
               <span aria-hidden="true">+</span>
             </summary>
             <p>
-              No. Usage stays on your Mac, with no account and no telemetry. Optional iCloud backup
-              merges your history across your own machines.
+              No. Usage stays on your device, with no account and no telemetry. Optional iCloud
+              backup merges your history across your own Macs.
             </p>
           </details>
           <details>
             <summary>
-              Which Macs does Edith support?
+              Which systems does Edith support?
               <span aria-hidden="true">+</span>
             </summary>
-            <p>Edith runs on macOS 14 and later, on Apple Silicon.</p>
+            <p>
+              The full app runs on macOS 14 and later on Apple Silicon. The native Ubuntu
+              preview targets Ubuntu 24.04 LTS on amd64.
+            </p>
           </details>
           <details>
             <summary>
@@ -1126,19 +1150,64 @@
       </section>
 
       <section id="download" class="wrap download" data-reveal-group>
-        <h2>Get Edith on your Mac.</h2>
-        <a
-          class="btn btn-accent"
-          href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"
-            />
-          </svg>
-          Download for macOS
-        </a>
-        <p class="fineprint">Free and open source. Requires macOS 14 or later.</p>
+        <p class="eyebrow">Choose your platform</p>
+        <h2>Native where you work.</h2>
+        <p class="download-lede">
+          One release, two native builds. Pick the complete Mac experience or help shape the
+          Ubuntu preview as its integrations come online.
+        </p>
+        <div class="download-grid">
+          <article class="download-card">
+            <div class="download-platform">
+              <span class="download-platform-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"
+                  />
+                </svg>
+              </span>
+              <span>
+                <strong>macOS</strong>
+                <small>Complete experience</small>
+              </span>
+            </div>
+            <p>
+              Every Edith extension, menu bar companion, and native system integration.
+            </p>
+            <a
+              class="btn btn-accent"
+              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
+            >
+              Download Edith.dmg
+            </a>
+            <span class="fineprint">macOS 14+ · Apple Silicon</span>
+          </article>
+          <article class="download-card download-card-linux">
+            <div class="download-platform">
+              <span class="download-platform-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M17.61.455a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zM12.92.8C8.923.777 5.137 2.941 3.148 6.451a4.5 4.5 0 0 1 .26-.007 4.92 4.92 0 0 1 2.585.737A8.316 8.316 0 0 1 12.688 3.6 4.944 4.944 0 0 1 13.723.834 11.008 11.008 0 0 0 12.92.8zm9.226 4.994a4.915 4.915 0 0 1-1.918 2.246 8.36 8.36 0 0 1-.273 8.303 4.89 4.89 0 0 1 1.632 2.54 11.156 11.156 0 0 0 .559-13.089zM3.41 7.932A3.41 3.41 0 0 0 0 11.342a3.41 3.41 0 0 0 3.41 3.409 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zm2.027 7.866a4.908 4.908 0 0 1-2.915.358 11.1 11.1 0 0 0 7.991 6.698 11.234 11.234 0 0 0 2.422.249 4.879 4.879 0 0 1-.999-2.85 8.484 8.484 0 0 1-.836-.136 8.304 8.304 0 0 1-5.663-4.32zm11.405.928a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41z"
+                  />
+                </svg>
+              </span>
+              <span>
+                <strong>Ubuntu</strong>
+                <small>Native preview</small>
+              </span>
+            </div>
+            <p>
+              A lean GTK 4 shell with the shared core, extension model, and Debian packaging.
+            </p>
+            <a
+              class="btn btn-solid"
+              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
+            >
+              Download Edith.deb
+            </a>
+            <span class="fineprint">Ubuntu 24.04 LTS · amd64</span>
+          </article>
+        </div>
       </section>
     </main>
 
@@ -1146,7 +1215,7 @@
       <div class="footer-inner">
         <div class="footer-brand">
           <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" />
-          <span>Edith. Made for macOS.</span>
+          <span>Edith. Native on macOS and Ubuntu.</span>
         </div>
         <div class="footer-links">
           <a href="#features">Features</a>
@@ -1158,6 +1227,6 @@
         </div>
       </div>
     </footer>
-    <script src="/main.js"></script>
+    <script type="module" src="/main.js"></script>
   </body>
 </html>
