@@ -144,19 +144,48 @@ final class MachineMonitor: FeatureModule {
         for alert in alerts { MachineMonitor.notify(alert) }
     }
 
+    nonisolated static let mountsMarker = "@@EDITH-MOUNTS@@"
+
     nonisolated static let diskCommand =
-        "df -Pk 2>/dev/null | awk 'NR>1 && $1 ~ /^\\// {print $1, $2, $3, $4, $6}'"
+        "df -Pk 2>/dev/null; echo '\(mountsMarker)'; mount 2>/dev/null"
 
     nonisolated static func parseDisks(_ output: String) -> [MachineFilesystem] {
-        output.split(separator: "\n").compactMap { line in
-            let parts = line.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
-            guard parts.count == 5, let total = Int64(parts[1]), let used = Int64(parts[2]),
-                let available = Int64(parts[3]), total > 0
+        let sections = output.components(separatedBy: mountsMarker)
+        let readOnly = sections.count > 1 ? readOnlyMounts(sections[1]) : []
+        return sections[0].split(separator: "\n").compactMap { line in
+            let parts = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
+            guard parts.count == 6, parts[0].hasPrefix("/"), let total = Int64(parts[1]),
+                let used = Int64(parts[2]), let available = Int64(parts[3]), total > 0
             else { return nil }
+            let mount = String(parts[5])
+            guard !readOnly.contains(mount) else { return nil }
             return MachineFilesystem(
-                fs: String(parts[0]), mount: String(parts[4]), totalKB: total, usedKB: used,
+                fs: String(parts[0]), mount: mount, totalKB: total, usedKB: used,
                 availKB: available)
         }
+    }
+
+    nonisolated static func readOnlyMounts(_ output: String) -> Set<String> {
+        var mounts: Set<String> = []
+        for line in output.split(separator: "\n") {
+            let text = String(line)
+            guard let onRange = text.range(of: " on ") else { continue }
+            let rest = text[onRange.upperBound...]
+            let mountEnd =
+                rest.range(of: " type ", options: .backwards)?.lowerBound
+                ?? rest.range(of: " (", options: .backwards)?.lowerBound
+            guard let mountEnd else { continue }
+            guard let open = text.range(of: "(", options: .backwards),
+                let close = text.range(of: ")", options: .backwards),
+                open.upperBound < close.lowerBound
+            else { continue }
+            let options = text[open.upperBound..<close.lowerBound]
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard options.contains("ro") || options.contains("read-only") else { continue }
+            mounts.insert(String(rest[..<mountEnd]))
+        }
+        return mounts
     }
 
     nonisolated static func notify(

@@ -14,11 +14,44 @@ import Testing
 
     @Test func parsesDfOutput() {
         let parsed = MachineMonitor.parseDisks(
-            "/dev/nvme0n1p2 500000000 250000000 225000000 /\n/dev/sda1 100 50 50 /mnt/My Disk")
+            """
+            Filesystem     1024-blocks      Used Available Capacity Mounted on
+            /dev/nvme0n1p2   500000000 250000000 225000000      50% /
+            /dev/sda1              100        50        50      50% /mnt/My Disk
+            """)
         #expect(parsed.count == 2)
         #expect(parsed[0].mount == "/")
         #expect(parsed[0].usedPercent == 50.0)
         #expect(parsed[1].mount == "/mnt/My Disk")
+    }
+
+    @Test func skipsReadOnlyFilesystemsThatAreAlwaysFull() {
+        let parsed = MachineMonitor.parseDisks(
+            """
+            Filesystem     1024-blocks      Used Available Capacity Mounted on
+            /dev/nvme0n1p5   503648256 289598472 188392392      61% /
+            /dev/sr0                5638      5638         0     100% /media/pulkit/SanDisk Unlocker
+            \(MachineMonitor.mountsMarker)
+            /dev/nvme0n1p5 on / type ext4 (rw,relatime,errors=remount-ro)
+            /dev/sr0 on /media/pulkit/SanDisk Unlocker type udf (ro,nosuid,nodev,uid=1000)
+            """)
+        #expect(parsed.map(\.mount) == ["/"])
+    }
+
+    @Test func readsReadOnlyMountsFromBothMountFormats() {
+        let linux = MachineMonitor.readOnlyMounts(
+            """
+            /dev/sr0 on /media/pulkit/SanDisk Unlocker type udf (ro,nosuid,nodev)
+            /dev/nvme0n1p5 on / type ext4 (rw,relatime,errors=remount-ro)
+            """)
+        #expect(linux == ["/media/pulkit/SanDisk Unlocker"])
+
+        let macOS = MachineMonitor.readOnlyMounts(
+            """
+            /dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)
+            /dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)
+            """)
+        #expect(macOS == ["/"])
     }
 
     @Test func flagsMountsOverThreshold() {
