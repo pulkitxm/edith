@@ -121,17 +121,19 @@ products += [
     .executable(name: "edith-linux", targets: ["EdithLinux"])
 ]
 
+dependencies += [
+    .package(url: "https://github.com/AparokshaUI/Adwaita", from: "0.2.6")
+]
+
 targets += [
-    .systemLibrary(
-        name: "CGTK",
-        pkgConfig: "gtk4",
-        providers: [.apt(["libgtk-4-dev"])]
-    ),
     .executableTarget(
         name: "EdithLinux",
-        dependencies: ["EdithCore", "CGTK"],
+        dependencies: [
+            "EdithCore",
+            .product(name: "Adwaita", package: "Adwaita"),
+        ],
         swiftSettings: [.swiftLanguageMode(.v5)]
-    ),
+    )
 ]
 #endif
 

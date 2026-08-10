@@ -1,31 +1,22 @@
 {
-  "originHash" : "e506b2938346f1d7ff2e53e2b8c084cf0eb67ef040697d67771c43fe04b60f66",
+  "originHash" : "72a37dd25ffb945c87b8d3bef14f5d490e2fd5f0f1458f2fee58b6f20b75a8c3",
   "pins" : [
     {
-      "identity" : "sparkle",
+      "identity" : "adwaita",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sparkle-project/Sparkle",
+      "location" : "https://github.com/AparokshaUI/Adwaita",
       "state" : {
-        "revision" : "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
-        "version" : "2.9.4"
+        "revision" : "c82957e2398a766458ff22129db26b46de75248b",
+        "version" : "0.2.6"
       }
     },
     {
-      "identity" : "swift-argument-parser",
+      "identity" : "levenshteintransformations",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser",
+      "location" : "https://github.com/david-swift/LevenshteinTransformations",
       "state" : {
-        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version" : "1.8.2"
-      }
-    },
-    {
-      "identity" : "swiftterm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/migueldeicaza/SwiftTerm",
-      "state" : {
-        "revision" : "dd2fb8ac5b861e7bf617c872895e338f38165648",
-        "version" : "1.15.0"
+        "revision" : "002c3ae5c48f30d61c96045fd3ceb9928aa778d2",
+        "version" : "0.1.3"
       }
     }
   ],
