@@ -141,6 +141,17 @@ FILES_APP="$APP/Contents/Library/Applications/Edith Files.app"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
 
+rm -rf "$FILES_APP/Contents/Frameworks"
+
+if [ "$RELEASE" = 1 ]; then
+  find "$APP" -type f -perm -u+x -print0 \
+    | while IFS= read -r -d '' binary; do
+        case "$(file -b "$binary")" in
+          *Mach-O*) strip -rSTx "$binary" 2>/dev/null || true ;;
+        esac
+      done
+fi
+
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
   echo "         changes every build, so macOS TCC permission grants (Screen" >&2
