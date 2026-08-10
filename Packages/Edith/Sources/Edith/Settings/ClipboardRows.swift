@@ -5,50 +5,50 @@ import SwiftUI
 
 struct ClipboardRows: View {
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private var enabled =
-    false
+        false
     @AppStorage(AppStorageKeys.Clipboard.maxItems, store: SharedDefaults.store) private
-    var maxItems = 200
+        var maxItems = 200
     @AppStorage(AppStorageKeys.Clipboard.maxItemBytes, store: SharedDefaults.store) private
-    var maxItemBytes =
-    10_000_000
+        var maxItemBytes =
+        10_000_000
     @AppStorage(AppStorageKeys.Clipboard.maxAgeDays, store: SharedDefaults.store) private
-    var maxAgeDays = 0
+        var maxAgeDays = 0
     @AppStorage(AppStorageKeys.Clipboard.ignoredApps, store: SharedDefaults.store) private
-    var ignoredApps = ""
+        var ignoredApps = ""
     @AppStorage(AppStorageKeys.Clipboard.autoPaste, store: SharedDefaults.store) private
-    var autoPaste = false
+        var autoPaste = false
     @AppStorage(AppStorageKeys.Clipboard.pastePlainText, store: SharedDefaults.store) private
-    var pastePlainText =
-    false
+        var pastePlainText =
+        false
     @AppStorage(AppStorageKeys.Clipboard.checkInterval, store: SharedDefaults.store) private
-    var checkInterval =
-    1.0
+        var checkInterval =
+        1.0
     @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
     private var accessibilityGranted = false
     @AppStorage(AppStorageKeys.Clipboard.popupAt, store: SharedDefaults.store) private var popupAt =
-    "cursor"
+        "cursor"
     @AppStorage(AppStorageKeys.Clipboard.pinTo, store: SharedDefaults.store) private var pinTo =
-    "top"
+        "top"
     @AppStorage(AppStorageKeys.Clipboard.showFooter, store: SharedDefaults.store) private
-    var showFooter = true
+        var showFooter = true
     @AppStorage(AppStorageKeys.Clipboard.saveFiles, store: SharedDefaults.store) private
-    var saveFiles = true
+        var saveFiles = true
     @AppStorage(AppStorageKeys.Clipboard.saveImages, store: SharedDefaults.store) private
-    var saveImages = true
+        var saveImages = true
     @AppStorage(AppStorageKeys.Clipboard.saveText, store: SharedDefaults.store) private
-    var saveText = true
-    
+        var saveText = true
+
     @State private var tab = "general"
     @State private var recentEntries: [ClipboardEntry] = []
     @State private var showHistory = false
     @State private var refreshObserver: NSObjectProtocol?
-    
+
     private var maxItemMB: Binding<Int> {
         Binding(
             get: { max(1, maxItemBytes / 1_000_000) },
             set: { maxItemBytes = $0 * 1_000_000 })
     }
-    
+
     var body: some View {
         Group {
             Section {
@@ -62,7 +62,7 @@ struct ClipboardRows: View {
                 .labelsHidden()
                 .pointerCursor()
             }
-            
+
             Group {
                 switch tab {
                 case "storage": storageSections
@@ -73,7 +73,7 @@ struct ClipboardRows: View {
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
-            
+
             Section {
                 if recentEntries.isEmpty {
                     Text("No clipboard history yet.")
@@ -101,7 +101,7 @@ struct ClipboardRows: View {
             ClipboardHistoryView()
         }
     }
-    
+
     @ViewBuilder private var generalSections: some View {
         Section {
             LabeledContent {
@@ -147,7 +147,7 @@ struct ClipboardRows: View {
             Text("Behavior")
         }
     }
-    
+
     @ViewBuilder private var storageSections: some View {
         Section {
             Toggle("Files", isOn: $saveFiles).pointerCursor()
@@ -207,7 +207,7 @@ struct ClipboardRows: View {
             .pointerCursor()
         }
     }
-    
+
     @ViewBuilder private var appearanceSections: some View {
         Section {
             Picker(selection: $popupAt) {
@@ -242,7 +242,7 @@ struct ClipboardRows: View {
             .pointerCursor()
         }
     }
-    
+
     @ViewBuilder private var ignoreSections: some View {
         Section {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -257,12 +257,12 @@ struct ClipboardRows: View {
             }
         }
     }
-    
+
     private func reload() {
         recentEntries = Array(
             ClipboardRepository.loadEntries().sorted { $0.createdAt > $1.createdAt }.prefix(5))
     }
-    
+
     private func recentRow(_ entry: ClipboardEntry) -> some View {
         HStack {
             Text(entry.displayPreview).lineLimit(1)

@@ -12,36 +12,36 @@ enum DashPalette {
         "#6f97bd", "#c98a6c", "#9c8bc0", "#b3bb6e", "#7fa0a0",
     ]
     static let other = "#b8b0a4"
-    
+
     static let lightColors = lightCat.map(color)
     static let darkColors = darkCat.map(color)
     static let otherColor = color(other)
     static let slateLight = color("#2f4858")
     static let slateDark = color("#7ea7be")
-    
+
     static func cat(_ dark: Bool) -> [String] { dark ? darkCat : lightCat }
     static func slate(_ dark: Bool) -> Color { dark ? slateDark : slateLight }
-    
+
     static func categorical(_ index: Int, dark: Bool) -> Color {
         let c = dark ? darkColors : lightColors
         return c[((index % c.count) + c.count) % c.count]
     }
-    
+
     static func modelColor(_ index: Int?, dark: Bool) -> Color {
         guard let index else { return otherColor }
         return categorical(index, dark: dark)
     }
-    
+
     static func sourceColor(_ index: Int?, dark: Bool) -> Color {
         guard let index else { return otherColor }
         return index == 0 ? slate(dark) : categorical(index - 1, dark: dark)
     }
-    
+
     static let inputColor = { (dark: Bool) in slate(dark) }
     static func outputColor(_ dark: Bool) -> Color { categorical(0, dark: dark) }
     static let cacheCreateColor = color("#c89b3c")
     static let cacheReadColor = color("#6a8d73")
-    
+
     static func color(_ hex: String) -> Color {
         var s = hex
         if s.hasPrefix("#") { s.removeFirst() }
@@ -63,7 +63,7 @@ struct DashUsage: Decodable {
     let totals: Totals?
     let daily: [Day]
     let sessions: [Session]?
-    
+
     struct Meta: Decodable {
         let label: String?
         let tool: String?
@@ -93,7 +93,7 @@ struct DashUsage: Decodable {
         let cost: Double?
         var tokens: Double {
             (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheCreationTokens ?? 0)
-            + (cacheReadTokens ?? 0)
+                + (cacheReadTokens ?? 0)
         }
     }
     struct Project: Decodable {
@@ -184,14 +184,14 @@ struct ProjectPath: Identifiable, Hashable {
 
 struct MachineGroup: Identifiable, Equatable {
     static let localID = "local"
-    
+
     let id: String
     let name: String
     let sourceIDs: [String]
     var agentNames: [String] = []
-    
+
     var isLocal: Bool { id == Self.localID }
-    
+
     var agentSummary: String { agentNames.joined(separator: ", ") }
 }
 
@@ -221,13 +221,13 @@ struct DayScale {
     var rawCost = 0.0
     var dayTokens = 0.0
     var dayCost = 0.0
-    
+
     func tokens(_ tokens: Double, _ cost: Double) -> Double {
         normalizedPart(
             tokens, alternate: cost, rawTotal: rawTokens, rawAlternateTotal: rawCost,
             target: dayTokens)
     }
-    
+
     func cost(_ cost: Double, _ tokens: Double) -> Double {
         normalizedPart(
             cost, alternate: tokens, rawTotal: rawCost, rawAlternateTotal: rawTokens,
@@ -385,7 +385,7 @@ final class DashboardModel {
     private(set) var heatDetail: [String: HeatDay] = [:]
     private(set) var chartData = DashChartData()
     private(set) var revision = 0
-    
+
     private(set) var allModels: [String] = []
     private(set) var allProjectPaths: [ProjectPath] = []
     private var pathByProjectName: [String: String] = [:]
@@ -397,7 +397,7 @@ final class DashboardModel {
     private(set) var monthOptions: [String] = []
     private var modelIndex: [String: Int] = [:]
     private var sourceIndex: [String: Int] = [:]
-    
+
     private var data: DashUsage?
     private var sortedPeriods: [String] = []
     private var ingestStamp = 0
@@ -405,15 +405,15 @@ final class DashboardModel {
     private var mtime: Date?
     private var dataDirWatch: DispatchSourceFileSystemObject?
     private var reloadDebounce: Task<Void, Never>?
-    
+
     private let cal = Calendar.current
     private let preferences: UserDefaults
-    
+
     init(preferences: UserDefaults = SharedDefaults.store) {
         self.preferences = preferences
         syncExtensionState()
     }
-    
+
     private func watchDataDir() {
         guard extensionEnabled, dataDirWatch == nil else { return }
         let fd = open(Repo.dataDir.path, O_EVTONLY)
@@ -427,7 +427,7 @@ final class DashboardModel {
         source.resume()
         dataDirWatch = source
     }
-    
+
     func syncExtensionState() {
         if extensionEnabled {
             watchDataDir()
@@ -438,11 +438,11 @@ final class DashboardModel {
             dataDirWatch = nil
         }
     }
-    
+
     private var extensionEnabled: Bool {
         preferences.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool ?? false
     }
-    
+
     private func scheduleReload() {
         guard extensionEnabled else { return }
         reloadDebounce?.cancel()
@@ -452,14 +452,14 @@ final class DashboardModel {
             await self?.load()
         }
     }
-    
+
     static let ymd: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
-    
+
     func modelColor(_ model: String, dark: Bool) -> Color {
         DashPalette.modelColor(modelIndex[model], dark: dark)
     }
@@ -469,7 +469,7 @@ final class DashboardModel {
     func sourceLabel(_ id: String) -> String {
         allSources.first { $0.id == id }?.label ?? id
     }
-    
+
     func load() async {
         syncExtensionState()
         guard extensionEnabled else { return }
@@ -477,8 +477,8 @@ final class DashboardModel {
         defer { loadAttempted = true }
         for attempt in 0..<4 {
             let m =
-            (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-            as? Date
+                (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
+                as? Date
             if let m, m == mtime, data != nil { return }
             if let parsed = try? await Task.detached(
                 priority: .utility,
@@ -495,7 +495,7 @@ final class DashboardModel {
             }
         }
     }
-    
+
     func ingest(_ parsed: DashUsage) {
         data = parsed
         sortedPeriods = parsed.daily.map(\.period).sorted()
@@ -510,7 +510,7 @@ final class DashboardModel {
             ids, meta: parsed.sourceMeta ?? [:], naming: Self.registryNames())
         defaultSources = (parsed.defaultSources ?? ids).filter { ids.contains($0) }
         if defaultSources.isEmpty { defaultSources = ids }
-        
+
         var costByModel: [String: Double] = [:]
         for day in parsed.daily {
             for (_, rows) in day.bySource ?? [:] {
@@ -522,7 +522,7 @@ final class DashboardModel {
         allModels = costByModel.sorted { $0.value > $1.value }.map(\.key)
         modelIndex = Dictionary(uniqueKeysWithValues: allModels.enumerated().map { ($1, $0) })
         defaultModels = allModels
-        
+
         var byPath: [String: (name: String, tokens: Double)] = [:]
         for day in parsed.daily {
             for p in day.projects ?? [] {
@@ -532,19 +532,19 @@ final class DashboardModel {
             }
         }
         allProjectPaths =
-        byPath
+            byPath
             .map { ProjectPath(path: $0.key, name: $0.value.name, tokens: $0.value.tokens) }
             .sorted { ($0.tokens, $1.path) > ($1.tokens, $0.path) }
         pathByProjectName = allProjectPaths.reversed()
             .reduce(into: [:]) { $0[$1.name] = $1.path }
-        
+
         rebuildCycles()
         var months = Set<String>()
         for d in parsed.daily where d.period.count >= 7 {
             months.insert(String(d.period.prefix(7)))
         }
         monthOptions = months.sorted(by: >)
-        
+
         if restored {
             reconcile()
         } else {
@@ -554,7 +554,7 @@ final class DashboardModel {
         loaded = true
         recompute()
     }
-    
+
     static func registryNames() -> [String: String] {
         var names: [String: String] = [:]
         for machine in MachineRegistry.machines() {
@@ -562,13 +562,13 @@ final class DashboardModel {
         }
         return names
     }
-    
+
     static func agentName(_ entry: DashUsage.Meta?, id: String, local: Bool) -> String {
         guard let entry else { return id }
         if local { return entry.label ?? entry.tool ?? id }
         return entry.tool ?? entry.label ?? id
     }
-    
+
     static func groupByMachine(
         _ ids: [String], meta: [String: DashUsage.Meta], naming: [String: String]
     ) -> [MachineGroup] {
@@ -583,8 +583,8 @@ final class DashboardModel {
             if sources[key] == nil {
                 order.append(key)
                 names[key] =
-                key == MachineGroup.localID
-                ? "This Mac" : (naming[key] ?? entry?.machine ?? key)
+                    key == MachineGroup.localID
+                    ? "This Mac" : (naming[key] ?? entry?.machine ?? key)
             }
             sources[key, default: []].append(id)
             agents[key, default: []].append(Self.agentName(entry, id: id, local: local))
@@ -597,15 +597,15 @@ final class DashboardModel {
         guard groups.count > 1 else { return [] }
         return groups
     }
-    
+
     func machineIsShown(_ group: MachineGroup) -> Bool {
         !group.sourceIDs.isEmpty && group.sourceIDs.allSatisfy { selectedSources.contains($0) }
     }
-    
+
     func machineIsPartlyShown(_ group: MachineGroup) -> Bool {
         group.sourceIDs.contains { selectedSources.contains($0) } && !machineIsShown(group)
     }
-    
+
     func showMachine(_ group: MachineGroup, _ shown: Bool) {
         var next = selectedSources
         if shown {
@@ -616,12 +616,12 @@ final class DashboardModel {
         guard !next.isEmpty else { return }
         selectedSources = next
     }
-    
+
     func showOnlyMachine(_ group: MachineGroup) {
         guard !group.sourceIDs.isEmpty else { return }
         selectedSources = Set(group.sourceIDs)
     }
-    
+
     private func restore() {
         loading = true
         defer { loading = false }
@@ -665,26 +665,26 @@ final class DashboardModel {
         d.set(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         d.set(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
     }
-    
+
     private func reconcile() {
         loading = true
         defer { loading = false }
         let validSources = Set(allSources.map(\.id))
         let keptSources =
-        UsageSourceSelection.reconcile(
-            selected: selectedSources, known: knownSources, available: validSources,
-            defaults: Set(defaultSources))
+            UsageSourceSelection.reconcile(
+                selected: selectedSources, known: knownSources, available: validSources,
+                defaults: Set(defaultSources))
         selectedSources = keptSources
         knownSources = validSources
         preferences.set(
             knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
         let validModels = Set(allModels)
         let keptModels =
-        selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
+            selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
         selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
         knownModels = validModels
     }
-    
+
     private func persist() {
         guard !loading else { return }
         let d = preferences
@@ -701,7 +701,7 @@ final class DashboardModel {
         d.set(projSortAscending, forKey: "projSortAsc")
         d.set(heatMetric.rawValue, forKey: "dashHeatMetric")
     }
-    
+
     private func encodeRange(_ r: DashRange) -> String {
         switch r {
         case .today: return "today"
@@ -714,12 +714,12 @@ final class DashboardModel {
         case .custom(let f, let t): return "custom:\(f)~\(t)"
         }
     }
-    
+
     private static func decodeSet(_ raw: String) -> Set<String>? {
         let values = Set(raw.split(separator: ",").map(String.init))
         return values.isEmpty ? nil : values
     }
-    
+
     private func decodeRange(_ s: String) -> DashRange {
         switch s {
         case "today": return .today
@@ -738,7 +738,7 @@ final class DashboardModel {
             return .cycle(nil)
         }
     }
-    
+
     func reset() {
         range = .cycle(nil)
         selectedSources = Set(defaultSources)
@@ -753,24 +753,24 @@ final class DashboardModel {
         projListOpen = false
         projQuery = ""
     }
-    
+
     private func parseYMD(_ s: String) -> Date? { Self.ymd.date(from: s) }
     private func ymdStr(_ d: Date) -> String { Self.ymd.string(from: d) }
-    
+
     var dataRange: ClosedRange<Date>? {
         guard let first = sortedPeriods.first, let last = sortedPeriods.last,
-              let e = parseYMD(first), let l = parseYMD(last)
+            let e = parseYMD(first), let l = parseYMD(last)
         else { return nil }
         return e...max(l, cal.startOfDay(for: Date()))
     }
-    
+
     func ymd(_ d: Date) -> String { ymdStr(d) }
-    
+
     private func rebuildCycles() {
         guard data != nil else { return }
         let periods = sortedPeriods
         guard let first = periods.first, let last = periods.last,
-              let earliest = parseYMD(first), let latest = parseYMD(last)
+            let earliest = parseYMD(first), let latest = parseYMD(last)
         else {
             cycleOptions = []
             return
@@ -786,17 +786,17 @@ final class DashboardModel {
         }
         cycleOptions = out.reversed()
     }
-    
+
     private func daysInMonth(_ date: Date) -> Int {
         cal.range(of: .day, in: .month, for: date)?.count ?? 30
     }
-    
+
     private func anchor(_ date: Date, _ day: Int) -> Date {
         var comps = cal.dateComponents([.year, .month], from: date)
         comps.day = min(day, daysInMonth(date))
         return cal.date(from: comps) ?? date
     }
-    
+
     private func cycleStart(_ date: Date) -> Date {
         let d = cal.component(.day, from: date)
         let a = min(billingDay, daysInMonth(date))
@@ -804,13 +804,13 @@ final class DashboardModel {
         let prev = cal.date(byAdding: .month, value: -1, to: date) ?? date
         return anchor(prev, billingDay)
     }
-    
+
     private func cycleEnd(_ start: Date) -> Date {
         let next = cal.date(byAdding: .month, value: 1, to: start) ?? start
         let a = anchor(next, billingDay)
         return cal.date(byAdding: .day, value: -1, to: a) ?? start
     }
-    
+
     private static let dayMonthFmt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -823,19 +823,19 @@ final class DashboardModel {
         f.dateFormat = "yyyy"
         return f
     }()
-    
+
     private func cycleLabel(_ start: Date, _ end: Date) -> String {
         let f = Self.dayMonthFmt
         let yf = Self.yearFmt
         let sameYear = yf.string(from: start) == yf.string(from: end)
         let left =
-        sameYear ? f.string(from: start) : "\(f.string(from: start)) \(yf.string(from: start))"
+            sameYear ? f.string(from: start) : "\(f.string(from: start)) \(yf.string(from: start))"
         return "\(left) – \(f.string(from: end)) \(yf.string(from: end))"
     }
-    
+
     private func window() -> (from: Date, to: Date)? {
         guard let first = sortedPeriods.first, let last = sortedPeriods.last,
-              let earliest = parseYMD(first), let dataLatest = parseYMD(last)
+            let earliest = parseYMD(first), let dataLatest = parseYMD(last)
         else { return nil }
         let today = cal.startOfDay(for: Date())
         let latest = max(today, dataLatest)
@@ -870,11 +870,11 @@ final class DashboardModel {
             return (min(fd, td), max(fd, td))
         }
     }
-    
+
     private func resortTotals() {
         modelTotals.sort(by: sortComparator)
     }
-    
+
     private func recompute() {
         guard loaded, let data, let win = window() else { return }
         revision &+= 1
@@ -882,19 +882,19 @@ final class DashboardModel {
         let toStr = ymdStr(win.to)
         let inRange = data.daily.filter { $0.period >= fromStr && $0.period <= toStr }
         let byDate = Dictionary(inRange.map { ($0.period, $0) }, uniquingKeysWith: { a, _ in a })
-        
+
         var rows: [DayDatum] = []
         var modelAgg:
-        [String: (
-            tokens: Double, cost: Double, input: Double, output: Double, cacheRead: Double,
-            days: Set<String>
-        )] = [:]
+            [String: (
+                tokens: Double, cost: Double, input: Double, output: Double, cacheRead: Double,
+                days: Set<String>
+            )] = [:]
         var dowTokens = [Double](repeating: 0, count: 7)
         var dowCost = [Double](repeating: 0, count: 7)
         var hourTok = [Double](repeating: 0, count: 24)
         var hourCost = [Double](repeating: 0, count: 24)
         var projAgg: [String: ProjAccum] = [:]
-        
+
         var cursor = win.from
         while cursor <= win.to {
             let key = ymdStr(cursor)
@@ -960,7 +960,7 @@ final class DashboardModel {
             if cursor <= win.from { break }
         }
         series = rows
-        
+
         let totalCost = modelAgg.values.reduce(0) { $0 + $1.cost }
         var totals = modelAgg.map { name, a in
             ModelTotal(
@@ -970,7 +970,7 @@ final class DashboardModel {
         }
         totals.sort(by: sortComparator)
         modelTotals = totals
-        
+
         let wdLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         dow = (0..<7).map {
             DOWDatum(label: wdLabels[$0], tokens: dowTokens[$0], cost: dowCost[$0])
@@ -978,7 +978,7 @@ final class DashboardModel {
         hourlyAll = (0..<24).map {
             HourDatum(id: $0, hour: $0, tokens: hourTok[$0], cost: hourCost[$0])
         }
-        
+
         let totalTokens = rows.reduce(0) { $0 + $1.tokens }
         let activeDays = Set(rows.filter { $0.tokens > 0 || $0.cost > 0 }.map(\.id))
         projectTree = buildProjectTree(
@@ -987,7 +987,7 @@ final class DashboardModel {
             ProjectAgg(id: $0.id, name: $0.name, tokens: $0.tokens, cost: $0.cost, share: $0.share)
         }
         .sorted { $0.tokens > $1.tokens }
-        
+
         buildKPIs(rows: rows, totalCost: totalCost)
         buildMeta(from: fromStr, to: toStr)
         let key = String(ingestStamp)
@@ -997,12 +997,12 @@ final class DashboardModel {
         }
         rebuildChartData()
     }
-    
+
     private func chatVisible(_ source: String?) -> Bool {
         guard let source, !source.isEmpty else { return true }
         return selectedSources.contains(source)
     }
-    
+
     func pathInScope(_ path: String?) -> Bool {
         guard !selectedPaths.isEmpty else { return true }
         guard let path, !path.isEmpty else { return false }
@@ -1012,15 +1012,15 @@ final class DashboardModel {
             return lower == s || lower.hasPrefix(s + "/")
         }
     }
-    
+
     private func chatInScope(_ c: DashUsage.Chat, fallback: String?) -> Bool {
         chatVisible(c.source) && pathInScope(c.path ?? fallback)
     }
-    
+
     private func knownPath(_ p: DashUsage.Project) -> String? {
         p.path ?? pathByProjectName[p.projectName ?? ""]
     }
-    
+
     private func rawUsage(_ p: DashUsage.Project, scoped: Bool) -> (tokens: Double, cost: Double) {
         guard ProjAccum.hasTokenedChat(p) else {
             guard !scoped || pathInScope(knownPath(p)) else { return (0, 0) }
@@ -1036,7 +1036,7 @@ final class DashboardModel {
             $0.1 += $1.cost ?? 0
         }
     }
-    
+
     private func projectShare(_ day: DashUsage.Day) -> (tokens: Double, cost: Double) {
         guard !selectedPaths.isEmpty else { return (1, 1) }
         var all = (tokens: 0.0, cost: 0.0)
@@ -1054,7 +1054,7 @@ final class DashboardModel {
             all.cost > 0 ? mine.cost / all.cost : 0
         )
     }
-    
+
     private func dayScale(_ day: DashUsage.Day, dayTokens: Double, dayCost: Double) -> DayScale {
         var scale = DayScale(dayTokens: dayTokens, dayCost: dayCost)
         for p in day.projects ?? [] {
@@ -1064,7 +1064,7 @@ final class DashboardModel {
         }
         return scale
     }
-    
+
     private func rebuildChartData() {
         var next = DashChartData()
         next.daily = series.map {
@@ -1115,12 +1115,12 @@ final class DashboardModel {
         }
         let costs = calendarDays.map(\.cost).filter { $0 > 0 }.sorted()
         next.heatCuts =
-        costs.isEmpty
-        ? [0, 0, 0]
-        : [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
+            costs.isEmpty
+            ? [0, 0, 0]
+            : [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
         chartData = next
     }
-    
+
     private struct ChatAcc {
         var title = ""
         var tokens = 0.0
@@ -1130,7 +1130,7 @@ final class DashboardModel {
         var firstTs = 0.0
         var lastTs = 0.0
         var days = Set<String>()
-        
+
         mutating func merge(_ c: DashUsage.Chat, period: String, scale: DayScale) {
             tokens += scale.tokens(c.tokens ?? 0, c.cost ?? 0)
             cost += scale.cost(c.cost ?? 0, c.tokens ?? 0)
@@ -1141,17 +1141,17 @@ final class DashboardModel {
             if let l = c.lastTs, l > lastTs { lastTs = l }
             if (c.tokens ?? 0) > 0 || (c.cost ?? 0) > 0 { days.insert(period) }
         }
-        
+
         var dur: Double { firstTs > 0 && lastTs > firstTs ? lastTs - firstTs : 0 }
     }
-    
+
     private struct ProjAccum {
         var main: [String: ChatAcc] = [:]
         var wts: [String: [String: ChatAcc]] = [:]
         var fallbackTokens = 0.0
         var fallbackCost = 0.0
         var fallbackDays = Set<String>()
-        
+
         mutating func absorb(
             _ p: DashUsage.Project, period: String, scale: DayScale,
             include: (DashUsage.Chat) -> Bool
@@ -1171,14 +1171,14 @@ final class DashboardModel {
                 }
             }
         }
-        
+
         static func hasTokenedChat(_ p: DashUsage.Project) -> Bool {
             let tokened = { (c: DashUsage.Chat) in (c.tokens ?? 0) > 0 || (c.cost ?? 0) > 0 }
             return (p.chats ?? []).contains(where: tokened)
-            || (p.worktrees ?? []).contains { ($0.chats ?? []).contains(where: tokened) }
+                || (p.worktrees ?? []).contains { ($0.chats ?? []).contains(where: tokened) }
         }
     }
-    
+
     private func buildProjectTree(
         _ agg: [String: ProjAccum], targetTokens: Double, targetCost: Double,
         targetDays: Set<String>
@@ -1187,8 +1187,8 @@ final class DashboardModel {
         }
         func chatRow(_ id: String, _ a: ChatAcc) -> ProjChat {
             let title =
-            a.title.isEmpty
-            ? (id.isEmpty ? "Untitled chat" : "Chat \(String(id.prefix(8)))") : a.title
+                a.title.isEmpty
+                ? (id.isEmpty ? "Untitled chat" : "Chat \(String(id.prefix(8)))") : a.title
             return ProjChat(
                 id: id, title: title, tokens: a.tokens, cost: a.cost, daySet: a.days,
                 dur: a.dur, lastActive: a.lastActive, source: a.source)
@@ -1201,7 +1201,7 @@ final class DashboardModel {
         func daysOf(_ chats: [ProjChat]) -> Set<String> {
             chats.reduce(into: Set<String>()) { $0.formUnion($1.daySet) }
         }
-        
+
         var rows: [ProjTreeRow] = []
         for (name, a) in agg {
             let mainChats = chatRows(a.main)
@@ -1217,32 +1217,32 @@ final class DashboardModel {
                     lastActive: chats.map(\.lastActive).max() ?? "",
                     chats: chats)
             }
-                .sorted { ($0.tokens, $1.name) > ($1.tokens, $0.name) }
+            .sorted { ($0.tokens, $1.name) > ($1.tokens, $0.name) }
             guard !mainChats.isEmpty || !worktrees.isEmpty || a.fallbackTokens > 0 else {
                 continue
             }
             let allDays = daysOf(mainChats + worktrees.flatMap(\.chats)).union(a.fallbackDays)
             let lastActive =
-            (mainChats.map(\.lastActive) + worktrees.map(\.lastActive)
-             + a.fallbackDays.sorted()).max() ?? ""
+                (mainChats.map(\.lastActive) + worktrees.map(\.lastActive)
+                + a.fallbackDays.sorted()).max() ?? ""
             rows.append(
                 ProjTreeRow(
                     id: "proj:\(name)", name: name,
                     tokens: mainChats.reduce(0) { $0 + $1.tokens }
-                    + worktrees.reduce(0) { $0 + $1.tokens } + a.fallbackTokens,
+                        + worktrees.reduce(0) { $0 + $1.tokens } + a.fallbackTokens,
                     cost: mainChats.reduce(0) { $0 + $1.cost }
-                    + worktrees.reduce(0) { $0 + $1.cost } + a.fallbackCost,
+                        + worktrees.reduce(0) { $0 + $1.cost } + a.fallbackCost,
                     days: allDays.count,
                     dur: mainChats.reduce(0) { $0 + $1.dur } + worktrees.reduce(0) { $0 + $1.dur },
                     lastActive: lastActive,
                     chats: mainChats, worktrees: worktrees))
         }
-        
+
         rows = normalizeProjectRows(
             rows, targetTokens: targetTokens, targetCost: targetCost, targetDays: targetDays)
         return sortTree(rows)
     }
-    
+
     private func normalizeProjectRows(
         _ rows: [ProjTreeRow], targetTokens: Double, targetCost: Double,
         targetDays: Set<String>
@@ -1294,7 +1294,7 @@ final class DashboardModel {
                 worktrees: row.worktrees.map(worktree))
         }
     }
-    
+
     func projLess(_ a: some ProjSortable, _ b: some ProjSortable) -> Bool {
         let asc = projSortAscending
         func cmp<T: Comparable>(_ x: T, _ y: T) -> Bool { asc ? x < y : x > y }
@@ -1308,12 +1308,12 @@ final class DashboardModel {
         case .lastActive: return cmp(a.lastActive, b.lastActive)
         }
     }
-    
+
     private func resortProjectTree() {
         guard !loading, !projectTree.isEmpty else { return }
         projectTree = sortTree(projectTree)
     }
-    
+
     private func sortTree(_ rows: [ProjTreeRow]) -> [ProjTreeRow] {
         rows.map { row in
             var r = row
@@ -1328,7 +1328,7 @@ final class DashboardModel {
         }
         .sorted(by: projLess)
     }
-    
+
     private func sortComparator(_ a: ModelTotal, _ b: ModelTotal) -> Bool {
         let asc = sortAscending
         func cmp<T: Comparable>(_ x: T, _ y: T) -> Bool { asc ? x < y : x > y }
@@ -1343,7 +1343,7 @@ final class DashboardModel {
         case .days: return cmp(a.days, b.days)
         }
     }
-    
+
     private func buildKPIs(rows: [DayDatum], totalCost: Double) {
         let totalTokens = rows.reduce(0) { $0 + $1.tokens }
         let active = rows.filter { $0.tokens > 0 }
@@ -1354,11 +1354,11 @@ final class DashboardModel {
         let cacheCreate = rows.reduce(0) { $0 + $1.cacheCreate }
         let cacheRate = (cacheRead + input) > 0 ? cacheRead / (cacheRead + input) : 0
         let top = modelTotals.max { $0.cost < $1.cost }
-        
+
         func share(_ v: Double) -> String {
             "\(DashFmt.pct(totalTokens > 0 ? v / totalTokens : 0)) of tokens"
         }
-        
+
         var out: [KPI] = [
             KPI(
                 label: "Total tokens", value: DashFmt.tokens(totalTokens),
@@ -1409,7 +1409,7 @@ final class DashboardModel {
         }
         kpis = out
     }
-    
+
     private func buildMeta(from: String, to: String) {
         guard let data else { return }
         var m = MetaLine()
@@ -1428,7 +1428,7 @@ final class DashboardModel {
         m.sessions = data.sessions?.count ?? 0
         meta = m
     }
-    
+
     private func buildCalendar(data: DashUsage) {
         let today = cal.startOfDay(for: Date())
         var detail: [String: HeatDay] = [:]
@@ -1492,7 +1492,7 @@ final class DashboardModel {
             detail[dayRow.period] = h
         }
         heatDetail = detail
-        
+
         var day = today
         if let first = sortedPeriods.first, let firstDate = parseYMD(first) {
             let start = cal.startOfDay(for: firstDate)

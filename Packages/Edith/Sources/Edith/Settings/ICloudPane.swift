@@ -4,34 +4,34 @@ import SwiftUI
 
 struct ICloudPane: View {
     @AppStorage(AppStorageKeys.Backup.icloud, store: SharedDefaults.store) private
-    var icloudBackup = true
+        var icloudBackup = true
     @AppStorage(AppStorageKeys.Backup.lastBackupAt, store: SharedDefaults.store) private
-    var lastBackupAt = 0.0
+        var lastBackupAt = 0.0
     @AppStorage(AppStorageKeys.Backup.settings, store: SharedDefaults.store) private
-    var backupSettings = true
+        var backupSettings = true
     @AppStorage(AppStorageKeys.Backup.usage, store: SharedDefaults.store) private var backupUsage =
-    true
+        true
     @AppStorage(AppStorageKeys.Backup.limits, store: SharedDefaults.store) private
-    var backupLimits = true
+        var backupLimits = true
     @AppStorage(AppStorageKeys.Music.backup, store: SharedDefaults.store) private var musicBackup =
-    false
+        false
     @AppStorage(AppStorageKeys.Music.lastBackupAt, store: SharedDefaults.store) private
-    var lastMusicBackupAt =
-    0.0
+        var lastMusicBackupAt =
+        0.0
     @AppStorage(AppStorageKeys.Clipboard.backup, store: SharedDefaults.store) private
-    var clipboardBackup = false
+        var clipboardBackup = false
     @AppStorage(AppStorageKeys.Clipboard.lastBackupAt, store: SharedDefaults.store)
     private var lastClipboardBackupAt = 0.0
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-    var musicEnabled = false
+        var musicEnabled = false
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
-    var clipboardEnabled =
-    false
+        var clipboardEnabled =
+        false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
-    var usageEnabled = false
-    
+        var usageEnabled = false
+
     private var cloudAvailable: Bool { icloudBackup && AppData.cloudAvailable }
-    
+
     var body: some View {
         Form {
             Section {
@@ -52,7 +52,7 @@ struct ICloudPane: View {
                     Text("iCloud Drive is not available on this Mac.")
                 }
             }
-            
+
             Section {
                 Toggle("Settings", isOn: $backupSettings)
                     .pointerCursor()
@@ -79,7 +79,7 @@ struct ICloudPane: View {
                 )
                 .font(.system(size: UIScale.pt(10)))
             }
-            
+
             if musicEnabled || clipboardEnabled {
                 Section {
                     if musicEnabled {
@@ -107,7 +107,7 @@ struct ICloudPane: View {
                     Text("Extensions")
                 }
             }
-            
+
             Section {
                 LabeledContent("App data folder") {
                     Button("Open") {
@@ -132,7 +132,7 @@ struct ICloudPane: View {
         .formStyle(.grouped)
         .navigationTitle("iCloud")
     }
-    
+
     private var backupSubtitle: String {
         if !icloudBackup { return "Syncs via iCloud Drive; newest copy wins across Macs" }
         if !cloudAvailable { return "iCloud Drive is not available on this Mac" }
@@ -142,7 +142,7 @@ struct ICloudPane: View {
         }
         return "Waiting for first backup…"
     }
-    
+
     private var musicSubtitle: String {
         if !icloudBackup { return "Turn on iCloud backup to back up your music folder" }
         if !cloudAvailable { return "iCloud Drive is not available on this Mac" }
@@ -152,7 +152,7 @@ struct ICloudPane: View {
         }
         return "Backs up your local music folder"
     }
-    
+
     private var clipboardSubtitle: String {
         if !icloudBackup { return "Turn on iCloud backup to back up clipboard history" }
         if !cloudAvailable { return "iCloud Drive is not available on this Mac" }

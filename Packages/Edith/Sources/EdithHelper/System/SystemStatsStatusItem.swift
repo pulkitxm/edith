@@ -8,7 +8,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
-    
+
     override init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
@@ -41,7 +41,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             },
         ]
     }
-    
+
     private func startTimer() {
         guard timer == nil else { return }
         previous = SystemStatsReader.readCPUTicks()
@@ -53,12 +53,12 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
-    
+
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
     }
-    
+
     func shutdown() {
         stopTimer()
         for observer in sleepObservers {
@@ -71,11 +71,11 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         lockObservers = []
         NSStatusBar.system.removeStatusItem(item)
     }
-    
+
     @objc private func clicked() {
         StatusItemMenu.handleClick(on: item) { MainApp.open(section: "system") }
     }
-    
+
     private func update() {
         var cpu = 0.0
         if let previous, let current = SystemStatsReader.readCPUTicks() {
@@ -91,13 +91,13 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         appendStat(symbol: "memorychip", value: memory, into: title)
         item.button?.attributedTitle = title
     }
-    
+
     private var tint: NSColor {
         LimitsStatusItem.nsColor(
             hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.statsColorHex))
-        ?? .white
+            ?? .white
     }
-    
+
     private func appendStat(symbol: String, value: Double, into out: NSMutableAttributedString) {
         let color = tint
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)

@@ -7,7 +7,7 @@ import Testing
     private let machine = Machine(
         id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!, name: "tuf",
         host: "10.0.0.4", port: 2222, username: "pulkit")
-    
+
     @Test func everyMountedVolumeIsRead() {
         let output = """
             /dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)
@@ -21,7 +21,7 @@ import Testing
         #expect(fuse.first?.mountPoint == "/Users/pulkit/Edith/tuf")
         #expect(volumes.first?.isReadOnly == true)
     }
-    
+
     @Test func aMacFuseMountNobodyRecordedIsStillRecognised() {
         let volumes = MachineMounts.parse(
             "pulkit@10.0.0.4:/home/pulkit on /Users/pulkit/Edith/tuf (macfuse, nodev)")
@@ -31,7 +31,7 @@ import Testing
         let other = Machine(name: "pi", host: "box", username: "pi")
         #expect(MachineMounts.mount(for: other, in: mounts) == nil)
     }
-    
+
     @Test func aRecordedMountIsMatchedByItsMountPointWhateverTheSourceSays() {
         let record = MachineMount(
             machineID: machine.id, target: machine.sshTarget, remotePath: "/srv",
@@ -43,7 +43,7 @@ import Testing
         #expect(MachineMounts.mount(for: machine, in: mounts)?.remotePath == "/srv")
         #expect(mounts.first?.isReadOnly == true)
     }
-    
+
     @Test func aRecordWhoseMountHasGoneIsDropped() {
         let record = MachineMount(
             machineID: machine.id, target: machine.sshTarget, remotePath: "/srv",
@@ -51,13 +51,13 @@ import Testing
         let volumes = MachineMounts.parse("/dev/disk3s1s1 on / (apfs, local)")
         #expect(MachineMounts.reconcile(records: [record], with: volumes).isEmpty)
     }
-    
+
     @Test func theMountPointIsNamedAfterTheMachine() {
         #expect(MachineMounts.mountPoint(for: machine).lastPathComponent == "tuf")
         let awkward = Machine(name: "web/prod", host: "h")
         #expect(MachineMounts.folderName(for: awkward) == "web-prod")
     }
-    
+
     @Test func theMountRidesTheSharedControlSocket() {
         let arguments = MachineMounts.mountArguments(
             machine: machine, remotePath: "/srv", mountPoint: "/Users/pulkit/Edith/tuf",
@@ -73,7 +73,7 @@ import Testing
         #expect(arguments.contains("volname=tuf"))
         #expect(!arguments.contains("ro"))
     }
-    
+
     @Test func theSecondAttemptDropsTheOptionsOnlyMacFuseKnows() {
         let arguments = MachineMounts.mountArguments(
             machine: machine, remotePath: "/srv", mountPoint: "/mnt/tuf", readOnly: true,
@@ -83,7 +83,7 @@ import Testing
         #expect(arguments.contains("ControlMaster=no"))
         #expect(arguments.contains("ro"))
     }
-    
+
     @Test func aManualMachineCarriesItsPortAndKey() {
         var keyed = machine
         keyed.auth = .keyFile(path: "/tmp/id_ed25519", hasPassphrase: false)
@@ -94,7 +94,7 @@ import Testing
         #expect(arguments.contains("IdentityFile=/tmp/id_ed25519"))
         #expect(arguments.contains("ro"))
     }
-    
+
     @Test func anAliasMachineIsLeftToTheSSHConfig() {
         var alias = machine
         alias.source = .sshConfigAlias("tuf-alias")
@@ -103,20 +103,20 @@ import Testing
         #expect(arguments.first == "tuf-alias:/srv")
         #expect(!arguments.contains("-p"))
     }
-    
+
     @Test func healthSaysWhatARepairWouldHaveToDo() {
         #expect(MountHealth.mounted.needsRepair == false)
         #expect(MountHealth.stale.needsRepair)
         #expect(MountHealth.gone.needsRepair)
         #expect(MountHealth.stale.describes == "not answering")
     }
-    
+
     private func scratchFile() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathComponent("mounts.json")
     }
-    
+
     @Test func aRecordSurvivesTheMountGoingAwaySoItCanBePutBack() {
         let file = scratchFile()
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
@@ -128,7 +128,7 @@ import Testing
         let other = Machine(name: "pi", host: "box")
         #expect(MachineMounts.recorded(for: other, in: file) == nil)
     }
-    
+
     @Test func anAdoptedMountIsNeverPutBackBecauseEdithDidNotMakeIt() {
         let file = scratchFile()
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
@@ -138,7 +138,7 @@ import Testing
         #expect(MachineMounts.records(in: file).isEmpty)
         #expect(MachineMounts.recorded(for: machine, in: file) == nil)
     }
-    
+
     @Test func aPasswordMachineKeepsItsAskpassRatherThanBatchMode() {
         var secret = machine
         secret.auth = .password
@@ -148,7 +148,7 @@ import Testing
         let agent = MachineMounts.options(machine: machine, readOnly: false)
         #expect(agent.contains("BatchMode=yes"))
     }
-    
+
     @Test func aMountPointWithSomethingInItIsRefused() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

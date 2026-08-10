@@ -8,11 +8,11 @@ struct UpdateSchedulePanel: View {
     @State private var customSeconds = ""
     @State private var clampNotice: String?
     @FocusState private var customFocused: Bool
-    
+
     private var showsCustomField: Bool {
         editingCustom || !UpdateCheckInterval.isPreset(updater.checkInterval)
     }
-    
+
     private var interval: Binding<TimeInterval> {
         Binding(
             get: { showsCustomField ? UpdateCheckInterval.customTag : updater.checkInterval },
@@ -29,13 +29,13 @@ struct UpdateSchedulePanel: View {
                 updater.checkInterval = value
             })
     }
-    
+
     private var automaticChecks: Binding<Bool> {
         Binding(
             get: { updater.automaticallyChecksForUpdates },
             set: { updater.automaticallyChecksForUpdates = $0 })
     }
-    
+
     private func commitCustomSeconds() {
         let typed = customSeconds.trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty, let entered = TimeInterval(typed) else {
@@ -48,7 +48,7 @@ struct UpdateSchedulePanel: View {
         customSeconds = String(Int(clamped))
         clampNotice = UpdateCheckInterval.clampNotice(entered: entered, applied: clamped)
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -66,7 +66,7 @@ struct UpdateSchedulePanel: View {
         }
         .frame(width: UIScale.pt(540), height: UIScale.pt(620))
     }
-    
+
     private var header: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             Text("Update checks")
@@ -78,7 +78,7 @@ struct UpdateSchedulePanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(20))
     }
-    
+
     private var countSummary: String {
         let automatic = updater.automaticCheckCount
         let total = updater.checkHistory.count
@@ -86,7 +86,7 @@ struct UpdateSchedulePanel: View {
         let auto = automatic == 1 ? "1 automatic check" : "\(automatic) automatic checks"
         return "\(auto) of \(total) recorded"
     }
-    
+
     private var schedule: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("Schedule")
@@ -126,17 +126,17 @@ struct UpdateSchedulePanel: View {
             }
         }
     }
-    
+
     private var rangeHint: String {
         let low = Int(UpdateCheckInterval.minimumSeconds)
         let high = Int(UpdateCheckInterval.maximumSeconds)
         return "Between \(low) and \(high) seconds."
     }
-    
+
     private var noticeStyle: AnyShapeStyle {
         clampNotice == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.orange)
     }
-    
+
     private var customField: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             HStack(spacing: UIScale.pt(8)) {
@@ -163,14 +163,14 @@ struct UpdateSchedulePanel: View {
         }
         .disabled(!updater.automaticallyChecksForUpdates)
     }
-    
+
     private var nextCheckDescription: String? {
         guard updater.automaticallyChecksForUpdates else { return "Automatic checks are off" }
         guard let last = updater.lastUpdateCheckDate else { return nil }
         let next = last.addingTimeInterval(updater.checkInterval)
         return "Next check around \(next.formatted(.dateTime.month().day().hour().minute()))"
     }
-    
+
     private var history: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {
@@ -203,7 +203,7 @@ struct UpdateSchedulePanel: View {
             }
         }
     }
-    
+
     private func row(_ record: UpdateCheckRecord) -> some View {
         HStack(spacing: UIScale.pt(10)) {
             Circle()
@@ -224,7 +224,7 @@ struct UpdateSchedulePanel: View {
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(9))
     }
-    
+
     private func color(for outcome: UpdateCheckRecord.Outcome) -> Color {
         switch outcome {
         case .upToDate: return .secondary
@@ -232,7 +232,7 @@ struct UpdateSchedulePanel: View {
         case .failed: return .red
         }
     }
-    
+
     private var footer: some View {
         HStack {
             Spacer()

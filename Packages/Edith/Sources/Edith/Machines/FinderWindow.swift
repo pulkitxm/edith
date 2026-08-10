@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 struct FinderPane: View {
     let model: FinderModel
-    
+
     var body: some View {
         FinderBody(model: model)
             .onAppear { FinderUndoBridge.register(model) }
@@ -19,7 +19,7 @@ struct FinderWindowView: View {
     init(session: MachineSession, path: String? = nil) {
         _model = State(wrappedValue: FinderModel(session: session, path: path))
     }
-    
+
     var body: some View {
         FinderBody(model: model)
     }
@@ -30,9 +30,9 @@ struct FinderBody: View {
     @Environment(\.colorScheme) private var scheme
     @State private var confirmDelete = false
     @FocusState private var searchFocused: Bool
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -92,7 +92,7 @@ struct FinderBody: View {
             Text("This cannot be undone.")
         }
     }
-    
+
     private func handle(_ key: FinderKey) -> Bool {
         switch key {
         case .rename:
@@ -135,7 +135,7 @@ struct FinderBody: View {
         }
         return true
     }
-    
+
     private var shortcuts: some View {
         ZStack {
             Button("") { model.setViewMode(.icon) }.keyboardShortcut("1", modifiers: .command)
@@ -173,7 +173,7 @@ struct FinderBody: View {
         .opacity(0)
         .allowsHitTesting(false)
     }
-    
+
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(8)) {
             Button {
@@ -183,7 +183,7 @@ struct FinderBody: View {
             }
             .buttonStyle(HoverButtonStyle())
             .help("Hide or show the sidebar (⌃⌘S)")
-            
+
             HStack(spacing: UIScale.pt(2)) {
                 Button {
                     model.goBack()
@@ -214,7 +214,7 @@ struct FinderBody: View {
                 .help("Home folder")
             }
             .buttonStyle(HoverButtonStyle())
-            
+
             Picker("", selection: viewModeBinding) {
                 ForEach(FileViewMode.allCases, id: \.self) { mode in
                     Image(systemName: mode.symbol).tag(mode)
@@ -224,7 +224,7 @@ struct FinderBody: View {
             .labelsHidden()
             .frame(width: UIScale.pt(90))
             .help("View as icons (⌘1) or list (⌘2)")
-            
+
             Menu {
                 ForEach(FileSortKey.allCases, id: \.self) { key in
                     Button {
@@ -238,7 +238,7 @@ struct FinderBody: View {
                         Label(
                             key.title,
                             systemImage: model.sortKey == key
-                            ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
+                                ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
                     }
                 }
                 Divider()
@@ -249,9 +249,9 @@ struct FinderBody: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Sort")
-            
+
             Spacer(minLength: UIScale.pt(4))
-            
+
             SearchField(
                 placeholder: "Search this folder", text: $model.searchQuery,
                 focus: $searchFocused
@@ -261,7 +261,7 @@ struct FinderBody: View {
             .onChange(of: model.searchQuery) { _, _ in
                 model.searchQueryChanged()
             }
-            
+
             Menu {
                 Button("New Folder") { Task { await model.newFolder() } }
                 Button("Upload Files…") { chooseUpload() }
@@ -294,11 +294,11 @@ struct FinderBody: View {
         .padding(.vertical, UIScale.pt(8))
         .background(.regularMaterial)
     }
-    
+
     private var viewModeBinding: Binding<FileViewMode> {
         Binding(get: { model.viewMode }, set: { model.viewMode = $0 })
     }
-    
+
     @ViewBuilder
     private var content: some View {
         ZStack {
@@ -328,7 +328,7 @@ struct FinderBody: View {
             return true
         }
     }
-    
+
     private var pathBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UIScale.pt(3)) {
@@ -346,7 +346,7 @@ struct FinderBody: View {
                         }
                         .foregroundStyle(
                             crumb.path == model.path
-                            ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
+                                ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
@@ -362,7 +362,7 @@ struct FinderBody: View {
         }
         .background(.thinMaterial)
     }
-    
+
     private var statusBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             if let message = model.statusMessage ?? model.errorMessage {
@@ -392,7 +392,7 @@ struct FinderBody: View {
         .padding(.vertical, UIScale.pt(4))
         .background(.thinMaterial)
     }
-    
+
     private func chooseUpload() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -402,7 +402,7 @@ struct FinderBody: View {
         let urls = panel.urls
         Task { await model.upload(urls) }
     }
-    
+
     private func chooseDownload() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -417,7 +417,7 @@ struct FinderBody: View {
 struct FinderRowContextMenu: View {
     let model: FinderModel
     let entry: RemoteFileEntry
-    
+
     var body: some View {
         Button("Open") { model.open(entry) }
         if entry.isDirectory {
@@ -448,7 +448,7 @@ struct FinderRowContextMenu: View {
 @MainActor
 enum FinderWindow {
     private static var windows: [String: NSWindow] = [:]
-    
+
     static func open(session: MachineSession, path: String? = nil) {
         let key = session.machine.id.uuidString + (path ?? "")
         if let existing = windows[key] {
@@ -478,7 +478,7 @@ enum FinderWindow {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-    
+
     static func forget(_ window: NSWindow) {
         windows = windows.filter { $0.value !== window }
     }
@@ -487,7 +487,7 @@ enum FinderWindow {
 @MainActor
 final class FinderWindowDelegate: NSObject, NSWindowDelegate {
     static let shared = FinderWindowDelegate()
-    
+
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         FinderWindow.forget(window)

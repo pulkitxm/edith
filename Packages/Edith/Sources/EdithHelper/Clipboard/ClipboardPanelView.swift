@@ -5,7 +5,7 @@ struct ClipboardPanelView: View {
     var store: ClipboardStore
     var onDismiss: () -> Void
     var onHeightChange: (CGFloat) -> Void
-    
+
     @State private var filterText = ""
     @State private var selectedID: String?
     @State private var keyboardScrollTick = 0
@@ -17,49 +17,49 @@ struct ClipboardPanelView: View {
     @State private var listHeight: CGFloat = 0
     @FocusState private var searchFocused: Bool
     @AppStorage(AppStorageKeys.Clipboard.showFooter, store: SharedDefaults.store) private
-    var showFooter = true
+        var showFooter = true
     @AppStorage(AppStorageKeys.Clipboard.pinTo, store: SharedDefaults.store) private var pinTo =
-    "top"
+        "top"
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
-    
+        "accent"
+
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
     private static let imageRowHeight: CGFloat = 48
     private static let footerHeight: CGFloat = 55
     private static let bottomPadding: CGFloat = 5
-    
+
     static func estimatedHeight(entries: [ClipboardEntry]) -> CGFloat {
         height(for: entries, showFooter: footerEnabled)
     }
-    
+
     private static var footerEnabled: Bool {
         SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.showFooter) as? Bool ?? true
     }
-    
+
     private static func rowHeight(for entry: ClipboardEntry) -> CGFloat {
         entry.kind == .image || entry.kind == .file ? imageRowHeight : rowHeight
     }
-    
+
     private static func height(for entries: [ClipboardEntry], showFooter: Bool) -> CGFloat {
         let rows = entries.isEmpty ? rowHeight : entries.reduce(0) { $0 + rowHeight(for: $1) }
         return headerHeight + rows + (showFooter ? footerHeight : 0) + bottomPadding
     }
-    
+
     private var pinToTop: Bool { pinTo != "bottom" }
-    
+
     private nonisolated static func arrange(
         _ entries: [ClipboardEntry], query: String, pinToTop: Bool
     ) -> [ClipboardEntry] {
         ClipboardActions.arrange(entries, query: query, pinToTop: pinToTop)
     }
-    
+
     private nonisolated static func search(
         _ entries: [ClipboardEntry], query: String, pinToTop: Bool
     ) async -> [ClipboardEntry] {
         arrange(entries, query: query, pinToTop: pinToTop)
     }
-    
+
     private func refreshVisible(selectFirst: Bool = false) {
         searchTask?.cancel()
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -82,18 +82,18 @@ struct ClipboardPanelView: View {
             reportHeight()
         }
     }
-    
+
     private func selectFirstRow() {
         selectedID = visible.first?.id
         keyboardScrollTick += 1
     }
-    
+
     private var digitShortcuts: [String: Int] {
         let unpinned = visible.filter { !$0.pinned }.prefix(9)
         return Dictionary(
             uniqueKeysWithValues: unpinned.enumerated().map { ($1.id, $0 + 1) })
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             searchField
@@ -114,7 +114,7 @@ struct ClipboardPanelView: View {
         .onChange(of: pinTo) { _, _ in refreshVisible() }
         .onChange(of: showFooter) { _, _ in reportHeight() }
     }
-    
+
     private var searchField: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -173,7 +173,7 @@ struct ClipboardPanelView: View {
         }
         .frame(height: 23)
     }
-    
+
     private var list: some View {
         ScrollViewReader { proxy in
             List {
@@ -203,7 +203,7 @@ struct ClipboardPanelView: View {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(
                                         selectedID == entry.id
-                                        ? themeColor(themeName) : Color.clear)
+                                            ? themeColor(themeName) : Color.clear)
                             )
                     }
                 }
@@ -227,7 +227,7 @@ struct ClipboardPanelView: View {
             }
         }
     }
-    
+
     private func row(_ entry: ClipboardEntry) -> some View {
         let selected = selectedID == entry.id
         return HStack(spacing: 6) {
@@ -258,7 +258,7 @@ struct ClipboardPanelView: View {
         }
         .onTapGesture { activate(entry, plainText: false) }
     }
-    
+
     @ViewBuilder private func rowContent(_ entry: ClipboardEntry) -> some View {
         switch entry.kind {
         case .image:
@@ -277,14 +277,14 @@ struct ClipboardPanelView: View {
             rowTitle(entry)
         }
     }
-    
+
     private func rowTitle(_ entry: ClipboardEntry) -> some View {
         Text(title(entry))
             .font(.system(size: 13))
             .lineLimit(1)
             .truncationMode(.tail)
     }
-    
+
     private var footer: some View {
         VStack(spacing: 0) {
             Divider()
@@ -295,24 +295,24 @@ struct ClipboardPanelView: View {
         }
         .padding(.horizontal, 5)
     }
-    
+
     private func footerRow(
         _ label: String, shortcut: String, action: @escaping () -> Void
     ) -> some View {
         FooterRow(label: label, shortcut: shortcut, action: action)
     }
-    
+
     private func title(_ entry: ClipboardEntry) -> String {
         entry.displayPreview
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
     }
-    
+
     private var selectedEntry: ClipboardEntry? {
         visible.first { $0.id == selectedID }
     }
-    
+
     private func move(_ delta: Int) {
         let items = visible
         guard !items.isEmpty else { return }
@@ -328,7 +328,7 @@ struct ClipboardPanelView: View {
         selectedID = items[next].id
         keyboardScrollTick += 1
     }
-    
+
     private func jumpToEdge(top: Bool) {
         let items = visible
         guard !items.isEmpty else { return }
@@ -340,22 +340,22 @@ struct ClipboardPanelView: View {
         }
         keyboardScrollTick += 1
     }
-    
+
     private func edgeShownIndex(in items: [ClipboardEntry], bottom: Bool) -> Int? {
         let shown = rowFrames.filter { $0.value.minY >= -1 && $0.value.maxY <= listHeight + 1 }
         let edge =
-        bottom
-        ? shown.max { $0.value.minY < $1.value.minY }
-        : shown.min { $0.value.minY < $1.value.minY }
+            bottom
+            ? shown.max { $0.value.minY < $1.value.minY }
+            : shown.min { $0.value.minY < $1.value.minY }
         guard let id = edge?.key else { return nil }
         return items.firstIndex { $0.id == id }
     }
-    
+
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         if press.modifiers.contains(.command),
-           let digit = press.key.character.wholeNumberValue, (1...9).contains(digit),
-           let id = digitShortcuts.first(where: { $0.value == digit })?.key,
-           let entry = visible.first(where: { $0.id == id })
+            let digit = press.key.character.wholeNumberValue, (1...9).contains(digit),
+            let id = digitShortcuts.first(where: { $0.value == digit })?.key,
+            let entry = visible.first(where: { $0.id == id })
         {
             activate(entry, plainText: press.modifiers.contains(.option))
             return .handled
@@ -371,7 +371,7 @@ struct ClipboardPanelView: View {
             }
         }
         if press.modifiers.contains(.option), press.key.character == "p",
-           let entry = selectedEntry
+            let entry = selectedEntry
         {
             store.togglePin(entry.id)
             return .handled
@@ -382,13 +382,13 @@ struct ClipboardPanelView: View {
         }
         return .ignored
     }
-    
+
     private func activate(_ entry: ClipboardEntry?, plainText: Bool) {
         guard let entry else { return }
         onDismiss()
         store.activate(entry, forcePlainText: plainText)
     }
-    
+
     private func deleteSelected() {
         guard let entry = selectedEntry else { return }
         let index = visible.firstIndex { $0.id == entry.id } ?? 0
@@ -401,21 +401,21 @@ struct ClipboardPanelView: View {
         }
         reportHeight()
     }
-    
+
     private func clear() {
         store.clear()
         visible = []
         selectedID = nil
         reportHeight()
     }
-    
+
     private func openPreferences() {
         SharedDefaults.store.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
         SharedDefaults.store.set("clipboard", forKey: "settingsSection")
         MainApp.openDashboard()
         onDismiss()
     }
-    
+
     private func reportHeight() {
         let sizingEntries = filterText.isEmpty ? visible : store.entries
         onHeightChange(Self.height(for: sizingEntries, showFooter: showFooter))
@@ -433,11 +433,11 @@ private struct FooterRow: View {
     let label: String
     let shortcut: String
     let action: () -> Void
-    
+
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
+        "accent"
     @State private var hovered = false
-    
+
     var body: some View {
         HStack {
             Text(label)

@@ -7,15 +7,15 @@ import Observation
 @Observable
 final class ColorPickerStore: FeatureModule {
     private(set) var history: [ColorSwatch] = []
-    
+
     init() {
         history = ColorHistoryStore.load()
     }
-    
+
     func shutdown() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.colorPicker)
     }
-    
+
     func registerHotKey() {
         GlobalHotKey.set(
             id: GlobalHotKey.ID.colorPicker, keyCode: ColorPickerHotKey.code,
@@ -24,7 +24,7 @@ final class ColorPickerStore: FeatureModule {
             self?.pick()
         }
     }
-    
+
     func pick() {
         NSColorSampler().show { [weak self] color in
             guard let color else { return }
@@ -33,11 +33,11 @@ final class ColorPickerStore: FeatureModule {
             }
         }
     }
-    
+
     func copyDefault(_ swatch: ColorSwatch) {
         copyToPasteboard(swatch.string(for: format))
     }
-    
+
     private func commit(_ color: NSColor) {
         guard let converted = color.usingColorSpace(profile.nsColorSpace) else { return }
         let swatch = ColorSwatch(
@@ -50,27 +50,27 @@ final class ColorPickerStore: FeatureModule {
         history = ColorHistoryStore.load()
         IPC.post(IPC.Name.settingsChanged)
     }
-    
+
     private func copyToPasteboard(_ string: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
     }
-    
+
     private var format: ColorCopyFormat {
         let raw = SharedDefaults.store.string(forKey: AppStorageKeys.ColorPicker.copyFormat) ?? ""
         return ColorCopyFormat(rawValue: raw) ?? .hex
     }
-    
+
     private var profile: ColorProfile {
         ColorProfile(
             rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.ColorPicker.profile) ?? "")
-        ?? .sRGB
+            ?? .sRGB
     }
-    
+
     private var historySize: Int {
         let raw =
-        SharedDefaults.store.object(forKey: AppStorageKeys.ColorPicker.historySize) as? Int
-        ?? 100
+            SharedDefaults.store.object(forKey: AppStorageKeys.ColorPicker.historySize) as? Int
+            ?? 100
         return min(max(raw, 1), 100)
     }
 }
@@ -81,7 +81,7 @@ enum ColorPickerHotKey {
     }
     static var mods: Int {
         SharedDefaults.store.object(forKey: "colorPickerHotKeyMods") as? Int
-        ?? (cmdKey | optionKey | controlKey)
+            ?? (cmdKey | optionKey | controlKey)
     }
     static var label: String {
         SharedDefaults.store.string(forKey: "colorPickerHotKeyLabel") ?? "⌃⌥⌘C"

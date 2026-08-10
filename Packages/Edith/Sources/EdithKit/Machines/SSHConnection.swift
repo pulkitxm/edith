@@ -4,7 +4,7 @@ public struct SSHExecResult: Sendable {
     public let status: Int32
     public let stdout: Data
     public let stderr: Data
-    
+
     public var stdoutText: String { String(decoding: stdout, as: UTF8.self) }
     public var stderrText: String { String(decoding: stderr, as: UTF8.self) }
     public var combinedText: String { stdoutText + stderrText }
@@ -19,7 +19,7 @@ public struct SSHOutputChunk: Sendable {
 public struct SSHConnectFailure: Equatable, Sendable {
     public let message: String
     public let isRecoverable: Bool
-    
+
     public init(message: String, isRecoverable: Bool) {
         self.message = message
         self.isRecoverable = isRecoverable
@@ -30,7 +30,7 @@ public enum SSHConnectionError: LocalizedError {
     case connectFailed(SSHConnectFailure)
     case commandFailed(command: String, status: Int32, stderr: String)
     case transferFailed(String)
-    
+
     public var errorDescription: String? {
         switch self {
         case let .connectFailed(failure):
@@ -48,7 +48,7 @@ private final class ResumeGate: @unchecked Sendable {
     private let lock = NSLock()
     private var claimed = false
     private var timeoutWorkItem: DispatchWorkItem?
-    
+
     func install(_ workItem: DispatchWorkItem) {
         lock.lock()
         if claimed {
@@ -59,7 +59,7 @@ private final class ResumeGate: @unchecked Sendable {
         timeoutWorkItem = workItem
         lock.unlock()
     }
-    
+
     func claim() -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -74,14 +74,14 @@ private final class ResumeGate: @unchecked Sendable {
 private final class PipeBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
-    
+
     func append(_ chunk: Data) {
         guard !chunk.isEmpty else { return }
         lock.lock()
         data.append(chunk)
         lock.unlock()
     }
-    
+
     func snapshot() -> Data {
         lock.lock()
         defer { lock.unlock() }
@@ -91,29 +91,29 @@ private final class PipeBuffer: @unchecked Sendable {
 
 public actor SSHConnection {
     public let machine: Machine
-    
+
     private var masterProcess: Process?
     private let socketPath: String
     private let knownHostsArgument: String
-    
+
     public init(machine: Machine) {
         self.machine = machine
         socketPath = MachinePaths.socketFile(for: machine.id).path
         let userKnownHosts = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".ssh/known_hosts").path
         knownHostsArgument =
-        "\"\(MachinePaths.knownHostsFile.path)\" \"\(userKnownHosts)\""
+            "\"\(MachinePaths.knownHostsFile.path)\" \"\(userKnownHosts)\""
     }
-    
+
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
-    
+
     public func connect() async throws {
         if await masterIsAlive() { return }
         MachinePaths.prepare()
         try? FileManager.default.removeItem(atPath: socketPath)
         masterProcess?.terminate()
         masterProcess = nil
-        
+
         let process = Process()
         process.executableURL = Self.executable
         process.arguments = masterArguments()
@@ -132,7 +132,7 @@ public actor SSHConnection {
                 SSHConnectFailure(message: error.localizedDescription, isRecoverable: true))
         }
         masterProcess = process
-        
+
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(25))
         while clock.now < deadline {
@@ -153,23 +153,23 @@ public actor SSHConnection {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         throw SSHConnectionError.connectFailed(
             pending.isEmpty
-            ? SSHConnectFailure(message: "Timed out while connecting.", isRecoverable: true)
-            : Self.friendlyConnectError(pending))
+                ? SSHConnectFailure(message: "Timed out while connecting.", isRecoverable: true)
+                : Self.friendlyConnectError(pending))
     }
-    
+
     public func disconnect() async {
         _ = try? await runControl(["-O", "exit"])
         masterProcess?.terminate()
         masterProcess = nil
         try? FileManager.default.removeItem(atPath: socketPath)
     }
-    
+
     public func masterIsAlive() async -> Bool {
         guard FileManager.default.fileExists(atPath: socketPath) else { return false }
         let result = try? await runControl(["-O", "check"])
         return result?.status == 0
     }
-    
+
     public func latencyMillis() async -> Double? {
         let start = DispatchTime.now()
         guard let result = try? await run("true", timeout: 10), result.succeeded else {
@@ -178,7 +178,7 @@ public actor SSHConnection {
         let nanos = DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds
         return Double(nanos) / 1_000_000
     }
-    
+
     @discardableResult
     public func run(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
@@ -218,10 +218,10 @@ public actor SSHConnection {
         return SSHExecResult(
             status: status, stdout: stdoutBuffer.snapshot(), stderr: stderrBuffer.snapshot())
     }
-    
+
     @discardableResult
     public func runChecked(_ command: String, timeout: TimeInterval = 60) async throws
-    -> SSHExecResult
+        -> SSHExecResult
     {
         let result = try await run(command, timeout: timeout)
         guard result.succeeded else {
@@ -230,11 +230,11 @@ public actor SSHConnection {
         }
         return result
     }
-    
+
     public nonisolated func streamProcess(command: String) -> Process {
         execProcess(command: command)
     }
-    
+
     public func download(
         remotePath: String, to localURL: URL, progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
@@ -280,7 +280,7 @@ public actor SSHConnection {
                 message.isEmpty ? "Download failed." : message)
         }
     }
-    
+
     public func upload(
         localURL: URL, toRemotePath remotePath: String,
         progress: (@Sendable (Int64) -> Void)? = nil
@@ -290,8 +290,8 @@ public actor SSHConnection {
             throw SSHConnectionError.transferFailed("Could not read the local file.")
         }
         let expected =
-        (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
-        ?? -1
+            (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
+            ?? -1
         let command = "cat > \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdinPipe = Pipe()
@@ -332,13 +332,13 @@ public actor SSHConnection {
         stderrPipe.fileHandleForReading.readabilityHandler = nil
         let reported = String(decoding: stderrBuffer.snapshot(), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         guard writeFailure == nil else {
             await discard(remotePath)
             throw SSHConnectionError.transferFailed(
                 reported.isEmpty
-                ? "The machine stopped accepting the file after \(sent) bytes."
-                : reported)
+                    ? "The machine stopped accepting the file after \(sent) bytes."
+                    : reported)
         }
         guard process.terminationStatus == 0 else {
             await discard(remotePath)
@@ -355,11 +355,11 @@ public actor SSHConnection {
                 "The machine kept a different file than the one that was sent.")
         }
     }
-    
+
     public func remoteFileSize(_ path: String) async -> Int64? {
         await remoteSize(path)
     }
-    
+
     private func remoteSize(_ path: String) async -> Int64? {
         let quoted = ShellQuote.quote(path)
         let command = "stat -c%s \(quoted) 2>/dev/null || stat -f%z \(quoted) 2>/dev/null"
@@ -368,11 +368,11 @@ public actor SSHConnection {
         }
         return Int64(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines))
     }
-    
+
     private func discard(_ path: String) async {
         _ = try? await run("rm -f \(ShellQuote.quote(path))", timeout: 30)
     }
-    
+
     public func addForward(_ forward: PortForward) async throws {
         let result = try await runControl(["-O", "forward", "-L", forward.forwardSpec])
         guard result.status == 0 else {
@@ -380,25 +380,25 @@ public actor SSHConnection {
                 command: "forward", status: result.status, stderr: result.stderrText)
         }
     }
-    
+
     public func cancelForward(_ forward: PortForward) async {
         _ = try? await runControl(["-O", "cancel", "-L", forward.forwardSpec])
     }
-    
+
     public nonisolated var controlSocketPath: String { socketPath }
-    
+
     public nonisolated static let controlPersist = "10m"
-    
+
     public nonisolated func masterArguments() -> [String] {
         ["-N", "-M", "-S", socketPath, "-o", "ControlPersist=\(Self.controlPersist)"]
-        + baseOptions() + targetArguments()
+            + baseOptions() + targetArguments()
     }
-    
+
     public nonisolated func execArguments(command: String) -> [String] {
         ["-T", "-S", socketPath, "-o", "BatchMode=yes", "-o", "LogLevel=ERROR"]
-        + baseOptions() + targetArguments() + [command]
+            + baseOptions() + targetArguments() + [command]
     }
-    
+
     public nonisolated func terminalArguments(remoteCommand: String? = nil) -> [String] {
         var arguments = ["-tt", "-S", socketPath] + baseOptions() + targetArguments()
         if let remoteCommand {
@@ -406,11 +406,11 @@ public actor SSHConnection {
         }
         return arguments
     }
-    
+
     public nonisolated func terminalEnvironment() -> [String] {
         environment().map { "\($0.key)=\($0.value)" }
     }
-    
+
     private nonisolated func execProcess(command: String) -> Process {
         let process = Process()
         process.executableURL = Self.executable
@@ -418,7 +418,7 @@ public actor SSHConnection {
         process.environment = environment()
         return process
     }
-    
+
     private func runControl(_ control: [String]) async throws -> SSHExecResult {
         let process = Process()
         process.executableURL = Self.executable
@@ -438,7 +438,7 @@ public actor SSHConnection {
         buffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
         return SSHExecResult(status: status, stdout: Data(), stderr: buffer.snapshot())
     }
-    
+
     private nonisolated func baseOptions() -> [String] {
         [
             "-o", "UserKnownHostsFile=\(knownHostsArgument)",
@@ -448,7 +448,7 @@ public actor SSHConnection {
             "-o", "ConnectTimeout=12",
         ]
     }
-    
+
     private nonisolated func targetArguments() -> [String] {
         switch machine.source {
         case let .sshConfigAlias(alias):
@@ -471,11 +471,11 @@ public actor SSHConnection {
             return arguments
         }
     }
-    
+
     private nonisolated func environment() -> [String: String] {
         MachineSSHEnvironment.make(for: machine)
     }
-    
+
     static func waitForExit(_ process: Process, timeout: TimeInterval) async -> Int32 {
         await withCheckedContinuation { continuation in
             let gate = ResumeGate()
@@ -503,7 +503,7 @@ public actor SSHConnection {
                 deadline: .now() + timeout, execute: timeoutWorkItem)
         }
     }
-    
+
     static func friendlyConnectError(_ stderr: String) -> SSHConnectFailure {
         let text = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowered = text.lowercased()
@@ -512,7 +512,7 @@ public actor SSHConnection {
         {
             return SSHConnectFailure(
                 message: "The machine's host key changed. If this is expected, forget the pinned "
-                + "key in the machine settings and reconnect.", isRecoverable: false)
+                    + "key in the machine settings and reconnect.", isRecoverable: false)
         }
         if lowered.contains("permission denied") || lowered.contains("too many authentication") {
             return SSHConnectFailure(

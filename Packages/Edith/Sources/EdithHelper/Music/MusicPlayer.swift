@@ -30,14 +30,14 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             broadcastState()
         }
     }
-    
+
     private enum QueueSource: Equatable {
         case all
         case folder(String)
         case directory(String)
         case favourites
     }
-    
+
     private var player: AVAudioPlayer?
     private var queueSource: QueueSource = .all {
         didSet {
@@ -70,7 +70,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     private var folderChangedIPCObserver: NSObjectProtocol?
     private var commandObserver: NSObjectProtocol?
     private var stateRequestObserver: NSObjectProtocol?
-    
+
     override init() {
         let saved = UserDefaults.standard.object(forKey: "musicVolume") as? Double
         volume = saved ?? 0.7
@@ -109,11 +109,11 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         broadcastState()
     }
-    
+
     private func track(for relativePath: String) -> Track {
         Track(url: TrackMeta.url(for: relativePath), relativePath: relativePath)
     }
-    
+
     private func source(from info: [AnyHashable: Any]) -> QueueSource? {
         switch MusicSourceRequest.decode(info) {
         case let .folder(path): return .folder(path)
@@ -123,7 +123,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         case nil: return nil
         }
     }
-    
+
     private func queue() async -> [Track] {
         if let queueCache { return queueCache }
         let source = queueSource
@@ -143,7 +143,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         if queueSource == source { queueCache = list }
         return list
     }
-    
+
     private func playOrder() async -> [Track] {
         let natural = await queue()
         guard isShuffling else { return natural }
@@ -152,7 +152,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         shuffledCache = order
         return order
     }
-    
+
     private func handleCommand(_ info: [AnyHashable: Any]) {
         switch info["action"] as? String {
         case "playPause": playPause()
@@ -185,7 +185,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         default: break
         }
     }
-    
+
     private func handleRenamed(from: String, to: String) {
         guard current?.relativePath == from else { return }
         current = track(for: to)
@@ -193,7 +193,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         persistPlayback()
         broadcastState()
     }
-    
+
     private func broadcastState() {
         let now = Date().timeIntervalSince1970
         guard now - lastBroadcast < broadcastInterval else {
@@ -210,7 +210,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self.postState()
         }
     }
-    
+
     private func postState() {
         IPC.post(
             IPC.Name.musicState,
@@ -225,7 +225,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
                 "at": Date().timeIntervalSince1970,
             ])
     }
-    
+
     private func startSaveTimer() {
         startLevelTimer()
         guard saveTimer == nil else { return }
@@ -234,13 +234,13 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         saveTimer?.tolerance = 5
     }
-    
+
     private func stopSaveTimer() {
         stopLevelTimer()
         saveTimer?.invalidate()
         saveTimer = nil
     }
-    
+
     private func startLevelTimer() {
         guard levelTimer == nil else { return }
         levelTick = 0
@@ -251,7 +251,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         levelTimer?.tolerance = 0.01
     }
-    
+
     private func stopLevelTimer() {
         levelTimer?.invalidate()
         levelTimer = nil
@@ -261,7 +261,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             IPC.post(IPC.Name.musicLevel, userInfo: ["level": PlaybackLevel.neutral])
         }
     }
-    
+
     private func sampleLevel() {
         guard let p = player, p.isPlaying else { return }
         p.updateMeters()
@@ -277,7 +277,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         guard levelTick % 2 == 0, Date() < levelSubscriberUntil else { return }
         IPC.post(IPC.Name.musicLevel, userInfo: ["level": smoothedLevel])
     }
-    
+
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
@@ -307,7 +307,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             return .success
         }
     }
-    
+
     private func updateNowPlaying() {
         let center = MPNowPlayingInfoCenter.default()
         guard let current else {
@@ -328,14 +328,14 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         center.nowPlayingInfo = info
         center.playbackState = isPlaying ? .playing : .paused
     }
-    
+
     private func attachArtwork(_ image: NSImage, for track: Track) {
         guard current == track, image.size.width > 0, image.size.height > 0 else { return }
         nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         artworkTrack = track
         updateNowPlaying()
     }
-    
+
     func rescan() {
         TrackMeta.invalidateCaches()
         queueCache = nil
@@ -348,7 +348,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             }
         }
     }
-    
+
     func toggle(_ track: Track) {
         if current == track {
             isPlaying ? pause() : resume()
@@ -357,7 +357,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             play(track)
         }
     }
-    
+
     private func playSource(_ source: QueueSource, start: Track?) {
         let previousSource = queueSource
         queueSource = source
@@ -374,7 +374,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self.play(first)
         }
     }
-    
+
     func playPause() {
         if isPlaying {
             pause()
@@ -387,9 +387,9 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             }
         }
     }
-    
+
     func next() { step(1) }
-    
+
     func previous() {
         if PlayQueue.previousRestarts(elapsed: elapsed) {
             seek(to: 0)
@@ -401,7 +401,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         step(-1, remember: false)
     }
-    
+
     private func step(_ delta: Int, remember: Bool = true) {
         Task { [weak self] in
             guard let self else { return }
@@ -412,7 +412,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self.play(list[next], remember: remember)
         }
     }
-    
+
     private func remember(_ track: Track) {
         guard let current, current != track else { return }
         history.append(current)
@@ -420,7 +420,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             history.removeFirst(history.count - PlayQueue.historyLimit)
         }
     }
-    
+
     private func play(_ track: Track, remember shouldRemember: Bool = true) {
         if shouldRemember { remember(track) }
         let crossfade = MusicFade.duration(from: SharedDefaults.store)
@@ -442,7 +442,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self.install(loaded.player, for: track, crossfade: crossfade)
         }
     }
-    
+
     private func install(_ p: AVAudioPlayer, for track: Track, crossfade: TimeInterval) {
         retirePlayer(over: crossfade)
         player = p
@@ -462,7 +462,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self.attachArtwork(art, for: track)
         }
     }
-    
+
     private func retirePlayer(over crossfade: TimeInterval) {
         guard let outgoing = player else { return }
         player = nil
@@ -478,7 +478,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self?.fadingOut.removeAll { $0 === outgoing }
         }
     }
-    
+
     private func pause() {
         isPlaying = false
         stopSaveTimer()
@@ -493,7 +493,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         updateNowPlaying()
         broadcastState()
     }
-    
+
     private func resume() {
         isPlaying = true
         startSaveTimer()
@@ -504,7 +504,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         updateNowPlaying()
         broadcastState()
     }
-    
+
     func stop() {
         persistPlayback()
         stopSaveTimer()
@@ -518,7 +518,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         updateNowPlaying()
         broadcastState()
     }
-    
+
     func shutdown() {
         stop()
         tracks = []
@@ -527,7 +527,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
             center.nextTrackCommand, center.previousTrackCommand,
         ]
-            .forEach { $0.removeTarget(nil) }
+        .forEach { $0.removeTarget(nil) }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         if let folderChangedObserver {
             NotificationCenter.default.removeObserver(folderChangedObserver)
@@ -550,15 +550,15 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             self.levelRequestObserver = nil
         }
     }
-    
+
     func progressNow() -> Double {
         guard let p = player, p.duration > 0 else { return 0 }
         return p.currentTime / p.duration
     }
-    
+
     var elapsed: TimeInterval { player?.currentTime ?? 0 }
     var trackDuration: TimeInterval { player?.duration ?? 0 }
-    
+
     func seek(to fraction: Double) {
         guard let p = player, p.duration > 0 else { return }
         p.currentTime = min(max(fraction, 0), 0.999) * p.duration
@@ -566,22 +566,22 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         persistPlayback()
         broadcastState()
     }
-    
+
     func durationLabel(for track: Track) async -> String? {
         await TrackMeta.durationLabel(for: track)
     }
-    
+
     func artwork(for track: Track) async -> NSImage? {
         await TrackMeta.artwork(for: track)
     }
-    
+
     private func persistPlayback() {
         guard let current else { return }
         PlaybackStore.save(
             track: current.relativePath, position: elapsed, playing: isPlaying,
             into: .standard)
     }
-    
+
     private func restoreLastPlayback() {
         guard current == nil, let snapshot = PlaybackStore.load(from: .standard) else { return }
         let track = self.track(for: snapshot.track)
@@ -604,7 +604,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         }
         updateNowPlaying()
     }
-    
+
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             if self.isLooping, let current = self.current {
@@ -618,7 +618,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
 
 final class LoadedAudio: @unchecked Sendable {
     let player: AVAudioPlayer
-    
+
     init?(url: URL) {
         guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
         player.prepareToPlay()
@@ -629,15 +629,15 @@ final class LoadedAudio: @unchecked Sendable {
 enum PlayQueue {
     static let restartThreshold: TimeInterval = 3
     static let historyLimit = 100
-    
+
     static func previousRestarts(elapsed: TimeInterval) -> Bool { elapsed > restartThreshold }
-    
+
     static func index(after current: Int?, delta: Int, count: Int) -> Int? {
         guard count > 0 else { return nil }
         let base = current ?? -delta
         return ((base + delta) % count + count) % count
     }
-    
+
     static func shuffled(_ list: [Track], startingWith current: Track?) -> [Track] {
         var shuffled = list.shuffled()
         if let current, let position = shuffled.firstIndex(of: current) {
@@ -645,7 +645,7 @@ enum PlayQueue {
         }
         return shuffled
     }
-    
+
     static func shuffleOrder(previous: [Track]?, natural: [Track], current: Track?) -> [Track] {
         guard let previous else { return shuffled(natural, startingWith: current) }
         let available = Set(natural.map(\.relativePath))
@@ -660,19 +660,19 @@ enum PlaybackStore {
     static let trackKey = "musicLastTrack"
     static let positionKey = "musicLastPosition"
     static let playingKey = "musicWasPlaying"
-    
+
     struct Snapshot: Equatable {
         let track: String
         let position: Double
         let playing: Bool
     }
-    
+
     static func save(track: String, position: Double, playing: Bool, into defaults: UserDefaults) {
         defaults.set(track, forKey: trackKey)
         defaults.set(position, forKey: positionKey)
         defaults.set(playing, forKey: playingKey)
     }
-    
+
     static func load(from defaults: UserDefaults) -> Snapshot? {
         guard let track = defaults.string(forKey: trackKey) else { return nil }
         return Snapshot(

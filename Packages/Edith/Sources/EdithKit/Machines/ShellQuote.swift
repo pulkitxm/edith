@@ -7,11 +7,11 @@ public enum ShellQuote {
         }
         return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
-    
+
     public static func command(_ argv: [String]) -> String {
         argv.map(quote).joined(separator: " ")
     }
-    
+
     private static let safeCharacters = Set(
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-+/=:@%,")
 }

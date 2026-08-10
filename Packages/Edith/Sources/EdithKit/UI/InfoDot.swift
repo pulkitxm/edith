@@ -3,11 +3,11 @@ import SwiftUI
 public struct InfoDot: View {
     private let text: String
     @State private var showing = false
-    
+
     public init(_ text: String) {
         self.text = text
     }
-    
+
     public var body: some View {
         Button {
             showing.toggle()

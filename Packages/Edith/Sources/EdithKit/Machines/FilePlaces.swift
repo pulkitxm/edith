@@ -4,9 +4,9 @@ public struct FilePlace: Identifiable, Equatable, Codable, Sendable {
     public var name: String
     public var path: String
     public var symbol: String
-    
+
     public var id: String { path }
-    
+
     public init(name: String, path: String, symbol: String) {
         self.name = name
         self.path = path
@@ -17,9 +17,9 @@ public struct FilePlace: Identifiable, Equatable, Codable, Sendable {
 public struct FilePlaceSection: Identifiable, Equatable, Sendable {
     public var title: String
     public var places: [FilePlace]
-    
+
     public var id: String { title }
-    
+
     public init(title: String, places: [FilePlace]) {
         self.title = title
         self.places = places
@@ -46,16 +46,16 @@ public enum FilePlaces {
         ]
         var sections = [FilePlaceSection(title: "Favorites", places: favorites)]
         let locations =
-        [FilePlace(name: "Macintosh HD", path: "/", symbol: "internaldrive")]
-        + volumes.map {
-            FilePlace(name: $0.lastPathComponent, path: $0.path, symbol: "externaldrive")
-        }
+            [FilePlace(name: "Macintosh HD", path: "/", symbol: "internaldrive")]
+            + volumes.map {
+                FilePlace(name: $0.lastPathComponent, path: $0.path, symbol: "externaldrive")
+            }
         sections.append(FilePlaceSection(title: "Locations", places: locations))
         return sections
     }
-    
+
     public static func remoteSections(home: String, extras: [String] = [])
-    -> [FilePlaceSection]
+        -> [FilePlaceSection]
     {
         let favorites = [
             FilePlace(name: "Home", path: home, symbol: "house"),
@@ -79,7 +79,7 @@ public enum FilePlaces {
             FilePlaceSection(title: "System", places: system),
         ]
     }
-    
+
     public static func homeDirectoryCommand() -> String {
         "echo $HOME"
     }
@@ -94,13 +94,13 @@ public struct FileClipboard: Equatable, Sendable {
     public var paths: [String]
     public var machineID: UUID
     public var operation: FileClipboardOperation
-    
+
     public init(paths: [String], machineID: UUID, operation: FileClipboardOperation) {
         self.paths = paths
         self.machineID = machineID
         self.operation = operation
     }
-    
+
     public func command(intoDirectory directory: String) -> String? {
         guard !paths.isEmpty else { return nil }
         switch operation {
@@ -120,18 +120,18 @@ public struct FileInfoSummary: Equatable, Sendable {
     public var modified: String
     public var permissions: String
     public var linkTarget: String?
-    
+
     public init(entry: RemoteFileEntry, sizeOverride: String? = nil) {
         name = entry.name
         path = entry.path
         kind = entry.kindDescription
         size = sizeOverride ?? (entry.isDirectory ? "—" : ByteFormatter.string(entry.sizeBytes))
         modified =
-        entry.modified.map { $0.formatted(date: .long, time: .standard) } ?? "Unknown"
+            entry.modified.map { $0.formatted(date: .long, time: .standard) } ?? "Unknown"
         permissions = FileInfoSummary.describe(mode: entry.mode)
         linkTarget = entry.linkTarget
     }
-    
+
     public static func describe(mode: String) -> String {
         let digits = mode.filter(\.isNumber)
         guard digits.count == 3 || digits.count == 4, let value = Int(digits, radix: 8) else {
@@ -142,7 +142,7 @@ public struct FileInfoSummary: Equatable, Sendable {
         let other = value & 7
         return "\(digits)  ·  \(rwx(owner))\(rwx(group))\(rwx(other))"
     }
-    
+
     private static func rwx(_ bits: Int) -> String {
         let read = bits & 4 != 0 ? "r" : "-"
         let write = bits & 2 != 0 ? "w" : "-"
@@ -158,7 +158,7 @@ public enum RenameSelection {
         guard !base.isEmpty, base != name, let range = name.range(of: base) else { return nil }
         return range
     }
-    
+
     public static func isValid(_ name: String) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && !trimmed.contains("/") && trimmed != "." && trimmed != ".."

@@ -4,22 +4,22 @@ import SwiftUI
 
 struct AboutPane: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
-    
+        "accent"
+
     private var theme: Color { themeColor(themeName) }
-    
+
     private var version: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
         return "Version \(short)"
     }
-    
+
     private let story = """
         Hi, I'm Pulkit, the builder of Edith. I used to pay for a whole shelf of \
         separate Mac apps: one to watch usage, one for the menu bar, one for music, \
         and on it went. It never sat right with me. So I set out to build a single \
         app that brings all of those little features under one roof. That's Edith.
         """
-    
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
@@ -34,7 +34,7 @@ struct AboutPane: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle("About")
     }
-    
+
     private var content: some View {
         VStack(spacing: UIScale.pt(18)) {
             if let icon = Brand.icon {

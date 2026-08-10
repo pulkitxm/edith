@@ -4,26 +4,26 @@ import Foundation
 @Observable
 public final class PresenterState {
     public static let shared = PresenterState()
-    
+
     public private(set) var manual = false
     public private(set) var autoActive = false
     public private(set) var autoReason: String?
-    
+
     public var active: Bool {
         FeatureGates.presenterActive(enabled: enabled, manual: manual, autoActive: autoActive)
     }
-    
+
     public private(set) var enabled = false
-    
+
     private var localToken: NSObjectProtocol?
     private var settingsToken: NSObjectProtocol?
     private var autoToken: NSObjectProtocol?
-    
+
     private init() {
         refresh()
         if enabled { startObserving() }
     }
-    
+
     public func syncEnabled(_ enabled: Bool) {
         if enabled {
             startObserving()
@@ -36,7 +36,7 @@ public final class PresenterState {
             if autoReason != nil { autoReason = nil }
         }
     }
-    
+
     private func startObserving() {
         guard localToken == nil else { return }
         localToken = NotificationCenter.default.addObserver(
@@ -49,7 +49,7 @@ public final class PresenterState {
             self?.refresh()
         }
     }
-    
+
     private func stopObserving() {
         if let localToken { NotificationCenter.default.removeObserver(localToken) }
         if let settingsToken { IPC.stopObserving(settingsToken) }
@@ -58,7 +58,7 @@ public final class PresenterState {
         settingsToken = nil
         autoToken = nil
     }
-    
+
     private func refresh() {
         let d = SharedDefaults.store
         let newEnabled = d.object(forKey: AppStorageKeys.Presenter.enabled) as? Bool ?? false

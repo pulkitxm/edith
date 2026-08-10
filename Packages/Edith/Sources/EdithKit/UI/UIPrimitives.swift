@@ -3,9 +3,9 @@ import SwiftUI
 
 public struct HoverButton: ViewModifier {
     @State private var hovering = false
-    
+
     public init() {}
-    
+
     @ViewBuilder
     public func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
@@ -39,7 +39,7 @@ public struct HoverButton: ViewModifier {
 
 public struct HoverButtonStyle: ButtonStyle {
     public init() {}
-    
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .modifier(HoverButton())
@@ -50,7 +50,7 @@ public struct HoverButtonStyle: ButtonStyle {
 
 extension View {
     public func hoverButton() -> some View { modifier(HoverButton()) }
-    
+
     @ViewBuilder
     public func pointerCursor() -> some View {
         if #available(macOS 15.0, *) {
@@ -65,7 +65,7 @@ extension View {
             }
         }
     }
-    
+
     @ViewBuilder
     public func presenterBlur(_ on: Bool) -> some View {
         if on {
@@ -74,11 +74,11 @@ extension View {
             self
         }
     }
-    
+
     public func settingsCaption() -> some View {
         font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
     }
-    
+
     @ViewBuilder
     public func card() -> some View {
         if #available(macOS 26.0, *) {
@@ -92,7 +92,7 @@ extension View {
                     .primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         }
     }
-    
+
     @available(macOS 26.0, *)
     private func edithGlassStyle(_ tint: Color?, interactive: Bool) -> Glass {
         var glass = Glass.regular
@@ -100,10 +100,10 @@ extension View {
         if interactive { glass = glass.interactive() }
         return glass
     }
-    
+
     @ViewBuilder
     public func edithGlass<S: Shape>(_ tint: Color? = nil, interactive: Bool = false, in shape: S)
-    -> some View
+        -> some View
     {
         if #available(macOS 26.0, *) {
             self.glassEffect(edithGlassStyle(tint, interactive: interactive), in: shape)
@@ -134,11 +134,11 @@ public func eyebrow(_ text: String) -> some View {
 
 public struct EmptyStateText: View {
     let text: String
-    
+
     public init(_ text: String) {
         self.text = text
     }
-    
+
     public var body: some View {
         Text(text)
             .font(.system(size: 12))
@@ -153,13 +153,13 @@ public struct TerminalLogView: View {
     let log: String
     let theme: Color
     var height: CGFloat = 140
-    
+
     public init(log: String, theme: Color, height: CGFloat = 140) {
         self.log = log
         self.theme = theme
         self.height = height
     }
-    
+
     public var body: some View {
         ScrollViewReader { proxy in
             ScrollView {

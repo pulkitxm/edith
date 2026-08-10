@@ -31,16 +31,16 @@ enum AudioProcessRegistry {
         return ids.compactMap { object in
             let pid = intProperty(object, kAudioProcessPropertyPID)
             guard pid > 0, let bundleID = stringProperty(object, kAudioProcessPropertyBundleID),
-                  !bundleID.isEmpty
+                !bundleID.isEmpty
             else { return nil }
             return (object, pid_t(pid), bundleID)
         }
     }
-    
+
     private static func intProperty(
         _ object: AudioObjectID, _ selector: AudioObjectPropertySelector
     )
-    -> Int32
+        -> Int32
     {
         var address = AudioObjectPropertyAddress(
             mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
@@ -50,7 +50,7 @@ enum AudioProcessRegistry {
         AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value)
         return value
     }
-    
+
     private static func stringProperty(
         _ object: AudioObjectID, _ selector: AudioObjectPropertySelector
     ) -> String? {
@@ -60,11 +60,11 @@ enum AudioProcessRegistry {
         var value: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr,
-              let string = value?.takeRetainedValue()
+            let string = value?.takeRetainedValue()
         else { return nil }
         return string as String
     }
-    
+
     static func defaultOutputUID() -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -81,7 +81,7 @@ enum AudioProcessRegistry {
         var uid: Unmanaged<CFString>?
         var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         guard AudioObjectGetPropertyData(device, &uidAddress, 0, nil, &uidSize, &uid) == noErr,
-              let value = uid?.takeRetainedValue()
+            let value = uid?.takeRetainedValue()
         else { return nil }
         return value as String
     }
@@ -94,9 +94,9 @@ final class AppVolumeTap {
     private var procID: AudioDeviceIOProcID?
     private let queue = DispatchQueue(label: "com.pulkit.edith.audiomixer.tap")
     nonisolated(unsafe) private var gain: Float = 1.0
-    
+
     func setGain(_ value: Float) { gain = max(0, min(4, value)) }
-    
+
     init?(processObjectID: AudioObjectID) {
         let description = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
         description.isPrivate = true
@@ -125,7 +125,7 @@ final class AppVolumeTap {
         ]
         var aggregate = AudioDeviceID(0)
         guard AudioHardwareCreateAggregateDevice(dictionary as CFDictionary, &aggregate) == noErr,
-              aggregate != 0
+            aggregate != 0
         else {
             destroy()
             return nil
@@ -160,7 +160,7 @@ final class AppVolumeTap {
         procID = proc
         AudioDeviceStart(aggregate, proc)
     }
-    
+
     private func tapUID(_ tap: AudioObjectID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioTapPropertyUID, mScope: kAudioObjectPropertyScopeGlobal,
@@ -168,11 +168,11 @@ final class AppVolumeTap {
         var value: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         guard AudioObjectGetPropertyData(tap, &address, 0, nil, &size, &value) == noErr,
-              let string = value?.takeRetainedValue()
+            let string = value?.takeRetainedValue()
         else { return nil }
         return string as String
     }
-    
+
     func destroy() {
         if let procID {
             AudioDeviceStop(aggregateID, procID)
@@ -188,6 +188,6 @@ final class AppVolumeTap {
             tapID = 0
         }
     }
-    
+
     deinit { destroy() }
 }

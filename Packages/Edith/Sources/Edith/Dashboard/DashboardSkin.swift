@@ -6,14 +6,14 @@ enum DashSkin {
     private static var themeName: String {
         SharedDefaults.store.string(forKey: AppStorageKeys.General.theme) ?? "accent"
     }
-    
+
     private static func shifted(_ color: Color, toward target: NSColor, by fraction: CGFloat)
-    -> Color
+        -> Color
     {
         let base = NSColor(color).usingColorSpace(.sRGB) ?? .black
         return Color(base.blended(withFraction: fraction, of: target) ?? base)
     }
-    
+
     private static let paperPair = (DashPalette.color("#f7f3ec"), DashPalette.color("#1a1714"))
     private static let paper2Pair = (DashPalette.color("#fffdf8"), DashPalette.color("#221d19"))
     private static let inkPair = (DashPalette.color("#241f1a"), DashPalette.color("#f1e9dc"))
@@ -24,7 +24,7 @@ enum DashSkin {
     private static let accentPair = (DashPalette.color("#d97757"), DashPalette.color("#e08a6a"))
     private static let accentDeepPair = (DashPalette.color("#b3543a"), DashPalette.color("#eea486"))
     private static let gridPair = (DashPalette.color("#ece5d8"), DashPalette.color("#2b2620"))
-    
+
     static func paper(_ d: Bool) -> Color { d ? paperPair.1 : paperPair.0 }
     static func paper2(_ d: Bool) -> Color { d ? paper2Pair.1 : paper2Pair.0 }
     static func ink(_ d: Bool) -> Color { d ? inkPair.1 : inkPair.0 }
@@ -46,7 +46,7 @@ enum DashSkin {
     static let ok = DashPalette.color("#34C759")
     static let warn = DashPalette.color("#FF9500")
     static let danger = DashPalette.color("#FF3B30")
-    
+
     static func serif(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .custom("Iowan Old Style", size: UIScale.pt(size)).weight(weight)
     }
@@ -72,7 +72,7 @@ struct SkinCard<Content: View>: View {
     let dark: Bool
     var fill = false
     @ViewBuilder var content: () -> Content
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {

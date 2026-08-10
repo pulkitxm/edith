@@ -13,13 +13,13 @@ public enum MusicLibrary {
         public let from: String
         public let to: String
     }
-    
+
     public static func sanitized(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
     }
-    
+
     public static func track(at relativePath: String) throws -> Track {
         let url = TrackMeta.url(for: relativePath)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -27,7 +27,7 @@ public enum MusicLibrary {
         }
         return Track(url: url, relativePath: relativePath)
     }
-    
+
     public static func folder(at relativePath: String) throws -> MusicFolder {
         guard !relativePath.isEmpty else {
             return MusicFolder(url: TrackMeta.url(for: ""), relativePath: "")
@@ -35,11 +35,11 @@ public enum MusicLibrary {
         let url = TrackMeta.url(for: relativePath)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
+            isDirectory.boolValue
         else { throw MusicLibraryError.noSuchFolder(relativePath) }
         return MusicFolder(url: url, relativePath: relativePath)
     }
-    
+
     @discardableResult
     public static func rename(_ track: Track, to name: String) throws -> Move {
         let base = sanitized(name)
@@ -49,14 +49,14 @@ public enum MusicLibrary {
             .appendingPathComponent(ext.isEmpty ? base : "\(base).\(ext)")
         return try relocate(from: track.url, to: destination)
     }
-    
+
     @discardableResult
     public static func move(_ track: Track, toFolder relativePath: String) throws -> Move {
         let folder = try folder(at: relativePath)
         let destination = folder.url.appendingPathComponent(track.url.lastPathComponent)
         return try relocate(from: track.url, to: destination)
     }
-    
+
     public static func trash(_ track: Track) throws {
         do {
             try FileManager.default.trashItem(at: track.url, resultingItemURL: nil)
@@ -64,10 +64,10 @@ public enum MusicLibrary {
             throw MusicLibraryError.failed(error.localizedDescription)
         }
     }
-    
+
     @discardableResult
     public static func createFolder(named name: String, under parent: String = "") throws
-    -> MusicFolder
+        -> MusicFolder
     {
         let base = sanitized(name)
         guard !base.isEmpty else { throw MusicLibraryError.emptyName }
@@ -84,7 +84,7 @@ public enum MusicLibrary {
         return MusicFolder(
             url: directory, relativePath: TrackMeta.relativePath(of: directory))
     }
-    
+
     @discardableResult
     public static func renameFolder(_ folder: MusicFolder, to name: String) throws -> Move {
         let base = sanitized(name)
@@ -92,7 +92,7 @@ public enum MusicLibrary {
         let destination = folder.url.deletingLastPathComponent().appendingPathComponent(base)
         return try relocate(from: folder.url, to: destination)
     }
-    
+
     public static func trashFolder(_ folder: MusicFolder) throws {
         guard !folder.relativePath.isEmpty else {
             throw MusicLibraryError.failed("the library root cannot be removed")
@@ -103,7 +103,7 @@ public enum MusicLibrary {
             throw MusicLibraryError.failed(error.localizedDescription)
         }
     }
-    
+
     @discardableResult
     public static func relocate(from source: URL, to destination: URL) throws -> Move {
         let from = TrackMeta.relativePath(of: source)

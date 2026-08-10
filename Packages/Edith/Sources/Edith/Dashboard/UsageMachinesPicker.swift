@@ -5,7 +5,7 @@ struct UsageMachinesPicker: View {
     let model: DashboardModel
     let dark: Bool
     let dismiss: () -> Void
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text("Machines")
@@ -42,12 +42,12 @@ struct UsageMachinesPicker: View {
         .padding(UIScale.pt(12))
         .frame(width: UIScale.pt(400))
     }
-    
+
     private var footnote: String {
         let shown = model.machineGroups.filter { model.machineIsShown($0) }.count
         return shown == 1 ? "1 machine shown" : "\(shown) machines shown"
     }
-    
+
     private func shownRow(_ group: MachineGroup) -> some View {
         let shown = model.machineIsShown(group)
         let partial = model.machineIsPartlyShown(group)
@@ -89,17 +89,17 @@ struct UsageMachinesPicker: View {
         .pointerCursor()
         .padding(.horizontal, UIScale.pt(2))
     }
-    
+
     private func agentCount(_ group: MachineGroup) -> String {
         group.sourceIDs.count == 1 ? "1 agent" : "\(group.sourceIDs.count) agents"
     }
-    
+
 }
 
 private struct MachineRowStyle: ButtonStyle {
     let dark: Bool
     @State private var hovering = false
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(

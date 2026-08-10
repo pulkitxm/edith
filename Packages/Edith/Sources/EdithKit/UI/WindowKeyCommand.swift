@@ -8,10 +8,10 @@ public enum WindowKeyCommand: Equatable, Sendable {
     case selectLast
     case cycleForward
     case cycleBackward
-    
+
     public static let tabKeyCode: UInt16 = 48
     public static let directSelectLimit = 8
-    
+
     public static func resolve(
         characters: String?, keyCode: UInt16, modifiers: NSEvent.ModifierFlags
     ) -> WindowKeyCommand? {
@@ -33,7 +33,7 @@ public enum WindowKeyCommand: Equatable, Sendable {
             return .select(digit - 1)
         }
     }
-    
+
     public static func resolvedIndex(
         for command: WindowKeyCommand, count: Int, current: Int
     ) -> Int? {
@@ -52,11 +52,11 @@ public enum WindowZoom {
     public static let range = 0.8...1.6
     public static let step = 0.1
     public static let defaultsKey = "mainWindowZoom"
-    
+
     public static func clamp(_ value: Double) -> Double {
         min(range.upperBound, max(range.lowerBound, (value * 100).rounded() / 100))
     }
-    
+
     public static func adjusted(_ value: Double, for command: WindowKeyCommand) -> Double? {
         switch command {
         case .zoomIn: return clamp(value + step)

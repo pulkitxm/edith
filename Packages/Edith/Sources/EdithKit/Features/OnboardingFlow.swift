@@ -3,7 +3,7 @@ import Foundation
 public struct OnboardingPermission: Equatable, Sendable {
     public let permission: ExtensionPermission
     public let required: Bool
-    
+
     public init(permission: ExtensionPermission, required: Bool) {
         self.permission = permission
         self.required = required
@@ -15,12 +15,12 @@ public enum OnboardingFlow {
     public static let iCloudBackupKey = AppStorageKeys.Backup.icloud
     public static let initialSelectedIDs: Set<String> = []
     public static let initialICloudBackup = true
-    
+
     public static func shouldShowOnboarding(defaults: UserDefaults = SharedDefaults.store) -> Bool {
         !defaults.bool(forKey: completionKey)
-        && defaults.bool(forKey: ExtensionDefaultsMigration.freshInstallKey)
+            && defaults.bool(forKey: ExtensionDefaultsMigration.freshInstallKey)
     }
-    
+
     public static func grantedPermissions(
         defaults: UserDefaults = SharedDefaults.store
     ) -> [ExtensionPermission: Bool] {
@@ -35,7 +35,7 @@ public enum OnboardingFlow {
                 return (permission, granted)
             })
     }
-    
+
     public static func missingPermissions(
         selectedIDs: Set<String>,
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries,
@@ -48,7 +48,7 @@ public enum OnboardingFlow {
         }
         return missingRequired.map { OnboardingPermission(permission: $0, required: true) }
     }
-    
+
     public static func hasOptionalPermissions(
         selectedIDs: Set<String>,
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
@@ -57,7 +57,7 @@ public enum OnboardingFlow {
             selectedIDs.contains($0.id) && !$0.optionalPermissions.isEmpty
         }
     }
-    
+
     public static func newlyGrantedCount(
         selectedIDs: Set<String>,
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries,
@@ -70,31 +70,31 @@ public enum OnboardingFlow {
             })
         return permissions.filter { baseline[$0] != true && current[$0] == true }.count
     }
-    
+
     public static func enabledExtensionIDs(
         settings: [String: Any],
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
     ) -> Set<String> {
         Set(entries.filter { settings[$0.defaultsKey] as? Bool == true }.map(\.id))
     }
-    
+
     public static func cloudBackupSelection(
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
     ) -> Set<String>? {
         let file = AppData.cloudDir.appendingPathComponent("settings.json")
         guard let data = try? Data(contentsOf: file),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             try? FileManager.default.startDownloadingUbiquitousItem(at: file)
             return nil
         }
         return enabledExtensionIDs(settings: dict, entries: entries)
     }
-    
+
     public static func seenKey(for entry: ExtensionRegistryEntry) -> String {
         "extensionPermissionsSeen.\(entry.id)"
     }
-    
+
     public static func finish(
         selectedIDs: Set<String>,
         icloudBackup: Bool = initialICloudBackup,
@@ -108,7 +108,7 @@ public enum OnboardingFlow {
         defaults.set(icloudBackup, forKey: iCloudBackupKey)
         defaults.set(true, forKey: completionKey)
     }
-    
+
     public static func skip(defaults: UserDefaults = SharedDefaults.store) {
         defaults.set(initialICloudBackup, forKey: iCloudBackupKey)
         defaults.set(true, forKey: completionKey)

@@ -7,7 +7,7 @@ public struct CompanionConversation: Codable, Equatable, Sendable, Identifiable 
     public let lastActiveAt: String
     public let messageCount: Int
     public let lastMessage: String?
-    
+
     public init(
         id: String, title: String, createdAt: String, lastActiveAt: String,
         messageCount: Int, lastMessage: String?
@@ -29,7 +29,7 @@ public struct CompanionMessage: Codable, Equatable, Sendable, Identifiable {
     public let model: String?
     public let latencyMs: Int?
     public let createdAt: String
-    
+
     public init(
         id: String, role: String, content: String, citations: [CompanionAskCitation]?,
         model: String?, latencyMs: Int?, createdAt: String
@@ -49,7 +49,7 @@ public struct CompanionConversationDetail: Codable, Equatable, Sendable {
     public let title: String
     public let createdAt: String
     public let messages: [CompanionMessage]
-    
+
     public init(id: String, title: String, createdAt: String, messages: [CompanionMessage]) {
         self.id = id
         self.title = title
@@ -72,7 +72,7 @@ public struct CompanionEpisodeDetail: Codable, Equatable, Sendable {
     public let sha256: String
     public let bytes: Int
     public let chunks: Int
-    
+
     public init(
         id: String, occurredAt: String, ingestedAt: String, kind: String, title: String,
         body: String?, bodyEn: String?, langs: [String], durationS: Double?, mediaRef: String?,
@@ -99,7 +99,7 @@ public struct CompanionSignal: Codable, Equatable, Sendable {
     public let tEndS: Double
     public let kind: String
     public let value: Double
-    
+
     public init(tStartS: Double, tEndS: Double, kind: String, value: Double) {
         self.tStartS = tStartS
         self.tEndS = tEndS
@@ -116,7 +116,7 @@ public struct CompanionReasonSettings: Codable, Equatable, Sendable {
     public let apiKeyHint: String
     public let configured: Bool
     public let description: String
-    
+
     public init(
         provider: String, url: String, model: String, hasApiKey: Bool, apiKeyHint: String,
         configured: Bool, description: String
@@ -135,7 +135,7 @@ public struct CompanionReasonTest: Codable, Equatable, Sendable {
     public let ok: Bool
     public let model: String
     public let latencyMs: Int
-    
+
     public init(ok: Bool, model: String, latencyMs: Int) {
         self.ok = ok
         self.model = model
@@ -145,7 +145,7 @@ public struct CompanionReasonTest: Codable, Equatable, Sendable {
 
 public struct CompanionNightlyStart: Codable, Equatable, Sendable {
     public let runId: String
-    
+
     public init(runId: String) {
         self.runId = runId
     }
@@ -153,7 +153,7 @@ public struct CompanionNightlyStart: Codable, Equatable, Sendable {
 
 public struct CompanionDeletion: Codable, Equatable, Sendable {
     public let deleted: String
-    
+
     public init(deleted: String) {
         self.deleted = deleted
     }
@@ -171,10 +171,10 @@ public enum CompanionMedia {
         if type.contains("audio/aiff") { return "aiff" }
         return "bin"
     }
-    
+
     public static func temporaryFile(title: String, contentType: String, data: Data) throws -> URL {
         let safe =
-        title
+            title
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
         let directory = FileManager.default.temporaryDirectory
@@ -200,27 +200,27 @@ extension CompanionClient {
     public func conversations(limit: Int) async throws -> [CompanionConversation] {
         try await getWithLimit("conversations", limit: limit)
     }
-    
+
     public func conversation(id: String) async throws -> CompanionConversationDetail {
         try await get("conversations/\(id)")
     }
-    
+
     public func deleteConversation(id: String) async throws -> CompanionDeletion {
         var request = URLRequest(url: url(for: "conversations/\(id)"))
         request.httpMethod = "DELETE"
         return try await self.request(request)
     }
-    
+
     public func episodeDetail(id: String) async throws -> CompanionEpisodeDetail {
         try await get("episodes/\(id)")
     }
-    
+
     public func signals(episodeId: String) async throws -> [CompanionSignal] {
         var components = URLComponents(url: url(for: "signals"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "episode", value: episodeId)]
         return try await request(URLRequest(url: components?.url ?? url(for: "signals")))
     }
-    
+
     public func media(episodeId: String) async throws -> (Data, String) {
         var request = URLRequest(url: url(for: "episodes/\(episodeId)/media"))
         request.timeoutInterval = 120
@@ -241,11 +241,11 @@ extension CompanionClient {
         }
         return (data, http.value(forHTTPHeaderField: "Content-Type") ?? "")
     }
-    
+
     public func reasonSettings() async throws -> CompanionReasonSettings {
         try await get("settings/reason")
     }
-    
+
     public func updateReasonSettings(
         provider: String?, url updatedURL: String?, model: String?, apiKey: String?
     ) async throws -> CompanionReasonSettings {
@@ -261,25 +261,25 @@ extension CompanionClient {
         }
         return try await self.request(request)
     }
-    
+
     public func testReason() async throws -> CompanionReasonTest {
         var request = URLRequest(url: url(for: "settings/reason/test"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request, timeout: 300)
     }
-    
+
     public func nightlyRun() async throws -> CompanionNightlyStart {
         var request = URLRequest(url: url(for: "nightly/run"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request, timeout: 1800)
     }
-    
+
     public func chat(message: String, conversationId: String?, persona: String? = nil)
-    -> AsyncThrowingStream<
-        CompanionChatEvent, Error
-    >
+        -> AsyncThrowingStream<
+            CompanionChatEvent, Error
+        >
     {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -324,7 +324,7 @@ extension CompanionClient {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
-    
+
     static func decodeChatEvent(name: String, payload: String) -> CompanionChatEvent? {
         let data = Data(payload.utf8)
         let decoder = JSONDecoder()
@@ -353,7 +353,7 @@ extension CompanionClient {
             return nil
         }
     }
-    
+
     private func getWithLimit<T: Decodable>(_ path: String, limit: Int) async throws -> T {
         var components = URLComponents(url: url(for: path), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "limit", value: String(limit))]

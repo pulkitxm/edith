@@ -15,7 +15,7 @@ import Testing
         var keys = Set<String>()
         while let url = files?.nextObject() as? URL {
             guard url.pathExtension == "swift",
-                  let source = try? String(contentsOf: url, encoding: .utf8)
+                let source = try? String(contentsOf: url, encoding: .utf8)
             else { continue }
             let range = NSRange(source.startIndex..., in: source)
             for match in regex.matches(in: source, range: range) {
@@ -28,7 +28,7 @@ import Testing
         #expect(
             keys.intersection(SettingsBackup.backedKeys).isSubset(of: SettingsBackup.sharedKeys))
     }
-    
+
     static func sourceFiles() -> [String] {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -39,13 +39,13 @@ import Testing
         var sources: [String] = []
         while let url = files?.nextObject() as? URL {
             guard url.pathExtension == "swift",
-                  let source = try? String(contentsOf: url, encoding: .utf8)
+                let source = try? String(contentsOf: url, encoding: .utf8)
             else { continue }
             sources.append(source)
         }
         return sources
     }
-    
+
     static func matches(_ pattern: String) throws -> Set<String> {
         let regex = try NSRegularExpression(pattern: pattern)
         var keys = Set<String>()
@@ -58,7 +58,7 @@ import Testing
         }
         return keys
     }
-    
+
     @Test func everyDirectlyWrittenPreferenceIsBackedUpOrDeviceLocal() throws {
         let keys = try Self.matches(#"store\.set\([^\n]*forKey:\s*"([^"]+)"\)"#)
             .filter { !$0.contains("\\(") }
@@ -68,7 +68,7 @@ import Testing
         #expect(
             keys.intersection(SettingsBackup.backedKeys).isSubset(of: SettingsBackup.sharedKeys))
     }
-    
+
     @Test func everyRecordedShortcutIsBackedUp() throws {
         let prefixes = try Self.matches(#"HotKeyRecorderControl\(keyPrefix:\s*"([^"]+)""#)
         #expect(prefixes.count >= 5)
@@ -82,7 +82,7 @@ import Testing
             }
         }
     }
-    
+
     @Test func iCloudBackupIsOnOutOfTheBox() {
         let defaults = UserDefaults(suiteName: "test.icloud.default")!
         defaults.removePersistentDomain(forName: "test.icloud.default")
@@ -93,7 +93,7 @@ import Testing
         #expect(defaults.bool(forKey: OnboardingFlow.iCloudBackupKey))
         defaults.removePersistentDomain(forName: "test.icloud.default")
     }
-    
+
     @Test func finishingOnboardingWithoutACloudBackupStillEnablesIt() {
         let defaults = UserDefaults(suiteName: "test.icloud.finish")!
         defaults.removePersistentDomain(forName: "test.icloud.finish")
@@ -101,12 +101,12 @@ import Testing
         #expect(defaults.bool(forKey: OnboardingFlow.iCloudBackupKey))
         defaults.removePersistentDomain(forName: "test.icloud.finish")
     }
-    
+
     @Test func sweepKeepsBackupsCurrentWithoutNotifications() {
         #expect(SettingsBackup.sweepInterval > 0)
         #expect(SettingsBackup.sweepInterval <= 60)
     }
-    
+
     @Test func configurableNonAppStoragePreferencesAreBackedUp() {
         let expected: Set<String> = [
             "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "notchAudioMixerEnabled",
@@ -114,7 +114,7 @@ import Testing
         #expect(expected.isSubset(of: Set(SettingsBackup.backedKeys)))
         #expect(expected.isSubset(of: SettingsBackup.sharedKeys))
     }
-    
+
     @Test func restoreProgressPreferencesAreDeviceLocal() {
         let expected: Set<String> = [
             "restorePending.usage", "restorePending.limits", "restorePending.music",
@@ -124,7 +124,7 @@ import Testing
         #expect(expected.isSubset(of: SettingsBackup.deviceLocalKeys))
         #expect(expected.isDisjoint(with: SettingsBackup.backedKeys))
     }
-    
+
     @Test func transferDecisionMatrix() {
         for dataClass in SettingsBackupDataClass.allCases {
             for masterEnabled in [false, true] {
@@ -144,7 +144,7 @@ import Testing
             }
         }
     }
-    
+
     @Test func enableTimeRestoreDecisionMatrix() {
         let extensionDataClasses: [SettingsBackupDataClass] = [
             .usage, .limits, .music, .clipboard,
@@ -160,14 +160,14 @@ import Testing
             }
         }
     }
-    
+
     @Test func missingCloudNamesExcludeExistingLocalNames() {
         let missing = settingsBackupMissingNames(
             cloudNames: ["one.mp3", "two.mp3", "nested/three.m4a"],
             localNames: ["two.mp3", "local-only.mp3"])
         #expect(missing == ["one.mp3", "nested/three.m4a"])
     }
-    
+
     @Test func pendingRestoreStateTracksUniqueCompletions() {
         var state = SettingsBackupPendingState(["one.mp3", "two.mp3"])
         #expect(state.remaining.count == 2)
@@ -178,11 +178,11 @@ import Testing
         state.complete("two.mp3")
         #expect(state.remaining.isEmpty)
     }
-    
+
     @Test func settingsImportSurvivesLeftoverLocalFileOnReinstall() {
         let now = Date()
         let staleCloud = now.addingTimeInterval(-3600)
-        
+
         #expect(
             settingsBackupShouldImport(
                 localFileExists: false, freshInstall: true, cloudDate: staleCloud, localDate: now))
@@ -201,7 +201,7 @@ import Testing
                 localFileExists: true, freshInstall: false, cloudDate: now,
                 localDate: now.addingTimeInterval(-1)))
     }
-    
+
     @Test func restoredPathValidationMatrix() {
         let home = URL(fileURLWithPath: "/Users/example")
         let cases: [(String, RestoredPathVerdict)] = [

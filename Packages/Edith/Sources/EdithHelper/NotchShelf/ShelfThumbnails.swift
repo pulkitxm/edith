@@ -4,15 +4,15 @@ import QuickLookThumbnailing
 struct ShelfThumbnailLRUCache<Key: Hashable, Value> {
     private var values: [Key: Value] = [:]
     private var accessOrder: [Key] = []
-    
+
     var count: Int { values.count }
-    
+
     mutating func value(for key: Key) -> Value? {
         guard let value = values[key] else { return nil }
         recordAccess(key)
         return value
     }
-    
+
     mutating func insert(_ value: Value, for key: Key, maxEntries: Int) {
         values[key] = value
         recordAccess(key)
@@ -22,7 +22,7 @@ struct ShelfThumbnailLRUCache<Key: Hashable, Value> {
             values.removeValue(forKey: oldest)
         }
     }
-    
+
     private mutating func recordAccess(_ key: Key) {
         accessOrder.removeAll { $0 == key }
         accessOrder.append(key)
@@ -32,9 +32,9 @@ struct ShelfThumbnailLRUCache<Key: Hashable, Value> {
 @MainActor
 enum ShelfThumbnails {
     private static var cache = ShelfThumbnailLRUCache<String, NSImage>()
-    
+
     private static let maxEntries = 200
-    
+
     static func thumbnail(for url: URL) async -> NSImage? {
         if let cached = cache.value(for: url.path) { return cached }
         let request = QLThumbnailGenerator.Request(

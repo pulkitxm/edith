@@ -8,9 +8,9 @@ private struct PowerIconButton: View {
     let enabled: Bool
     let dark: Bool
     let action: () -> Void
-    
+
     @State private var hovering = false
-    
+
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -37,16 +37,16 @@ struct MachinePowerControls: View {
     let session: MachineSession
     let model: MachinesModel
     let dark: Bool
-    
+
     @State private var confirmPower: String?
     @State private var message: String?
     @State private var messageIsFailure = false
     @State private var messageToken = 0
-    
+
     private var wakeAddress: String? {
         session.machine.wakeMACAddress ?? session.facts.macAddress
     }
-    
+
     var body: some View {
         HStack(spacing: UIScale.pt(8)) {
             if let message {
@@ -75,7 +75,7 @@ struct MachinePowerControls: View {
             model.store.update(updated)
         }
     }
-    
+
     private var controls: some View {
         HStack(spacing: UIScale.pt(1)) {
             PowerIconButton(
@@ -93,7 +93,7 @@ struct MachinePowerControls: View {
             PowerIconButton(
                 symbol: "bolt", tint: DashSkin.gold,
                 help: wakeAddress.map { "Wake this machine (\($0))" }
-                ?? "No wake address known yet",
+                    ?? "No wake address known yet",
                 enabled: wakeAddress != nil, dark: dark
             ) {
                 announce(model.wake(machine: session.machine), failure: false)
@@ -105,7 +105,7 @@ struct MachinePowerControls: View {
             RoundedRectangle(cornerRadius: UIScale.pt(9))
                 .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(0.5)))
     }
-    
+
     private func toast(_ text: String) -> some View {
         let tone = messageIsFailure ? DashSkin.danger : DashSkin.sage
         return HStack(spacing: UIScale.pt(6)) {
@@ -125,7 +125,7 @@ struct MachinePowerControls: View {
         .help(text)
         .transition(.move(edge: .trailing).combined(with: .opacity))
     }
-    
+
     private func announce(_ text: String?, failure: Bool) {
         guard let text, !text.isEmpty else { return }
         messageToken += 1
@@ -138,14 +138,14 @@ struct MachinePowerControls: View {
             withAnimation(.easeIn(duration: 0.16)) { message = nil }
         }
     }
-    
+
     private func runPower(_ action: String) {
         Task {
             let stdin = SudoPassword.stdin(machineID: session.machine.id)
             let command =
-            action == "reboot"
-            ? ServiceCommands.reboot(withSudoPassword: stdin != nil)
-            : ServiceCommands.shutdown(withSudoPassword: stdin != nil)
+                action == "reboot"
+                ? ServiceCommands.reboot(withSudoPassword: stdin != nil)
+                : ServiceCommands.shutdown(withSudoPassword: stdin != nil)
             let underway = action == "reboot" ? "Restarting…" : "Shutting down…"
             switch await session.runCommand(command, stdin: stdin, timeout: 20) {
             case .success:

@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class UpdaterModel: NSObject,
-                          @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate
+    @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate
 {
     private(set) var updateReady: String?
     private(set) var updaterAvailable = false
@@ -37,7 +37,7 @@ final class UpdaterModel: NSObject,
             updater.automaticallyDownloadsUpdates = automaticallyDownloadsUpdates
         }
     }
-    
+
     private var updaterController: SPUStandardUpdaterController?
     private var canCheckObservation: NSKeyValueObservation?
     private var automaticChecksObservation: NSKeyValueObservation?
@@ -46,7 +46,7 @@ final class UpdaterModel: NSObject,
     private var pendingUpdateVersion: String?
     private var updateCheckObserver: NSObjectProtocol?
     private let logURL: URL
-    
+
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
@@ -59,14 +59,14 @@ final class UpdaterModel: NSObject,
             await self?.startUpdater()
         }
     }
-    
+
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
-    
+
     func clearCheckHistory() {
         UpdateCheckLog.clear(at: logURL)
         checkHistory = []
     }
-    
+
     func recordCheck(
         kind: UpdateCheckRecord.Kind, outcome: UpdateCheckRecord.Outcome,
         version: String? = nil, detail: String? = nil, date: Date = Date()
@@ -79,14 +79,14 @@ final class UpdaterModel: NSObject,
         if let detail { payload["detail"] = detail }
         IPC.post(IPC.Name.updateCheckFinished, userInfo: payload)
     }
-    
+
     private func observeUpdateCheckRequests() {
         guard updateCheckObserver == nil else { return }
         updateCheckObserver = IPC.observe(IPC.Name.requestUpdateCheck) { [weak self] in
             MainActor.assumeIsolated { self?.checkForUpdatesInBackground() }
         }
     }
-    
+
     private func startUpdater() async {
         guard let updater else { return }
         do {
@@ -131,19 +131,19 @@ final class UpdaterModel: NSObject,
             }
         }
     }
-    
+
     var supportsGentleScheduledUpdateReminders: Bool { true }
-    
+
     func checkForUpdates() {
         guard updaterAvailable else { return }
         updaterController?.checkForUpdates(nil)
     }
-    
+
     func checkForUpdatesInBackground() {
         guard updaterAvailable, let updater, !updater.sessionInProgress else { return }
         updater.checkForUpdatesInBackground()
     }
-    
+
     func standardUserDriverWillHandleShowingUpdate(
         _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
         state: SPUUserUpdateState
@@ -154,20 +154,20 @@ final class UpdaterModel: NSObject,
         updateReady = version
         IPC.post(IPC.Name.updateReadyToInstall, userInfo: ["version": version])
     }
-    
+
     func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
         updateReady = nil
     }
-    
+
     func standardUserDriverWillFinishUpdateSession() {
         updateReady = nil
         lastUpdateCheckDate = updater?.lastUpdateCheckDate
     }
-    
+
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         pendingUpdateVersion = item.displayVersionString
     }
-    
+
     func updater(
         _ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck,
         error: (any Error)?
@@ -176,7 +176,7 @@ final class UpdaterModel: NSObject,
         pendingUpdateVersion = nil
         lastUpdateCheckDate = updater.lastUpdateCheckDate
         let kind: UpdateCheckRecord.Kind =
-        updateCheck == .updatesInBackground ? .automatic : .manual
+            updateCheck == .updatesInBackground ? .automatic : .manual
         if let error {
             let code = (error as NSError).code
             guard code != Int(Sparkle.SUError.noUpdateError.rawValue) else {

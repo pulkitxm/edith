@@ -11,17 +11,17 @@ import UserNotifications
 @Observable
 final class PermissionsModel {
     static let shared = PermissionsModel()
-    
+
     private(set) var notifications = false
     private(set) var accessibility = false
     private(set) var inputMonitoring = false
     private(set) var fullDisk = false
     private(set) var screenRecording = false
     private(set) var camera = false
-    
+
     private let eventStore = EKEventStore()
     private var ipcTokens: [NSObjectProtocol] = []
-    
+
     func startIPCBridge() {
         guard ipcTokens.isEmpty else { return }
         let grantTokens = ExtensionPermission.allCases.compactMap { permission in
@@ -35,10 +35,10 @@ final class PermissionsModel {
             Task { @MainActor [weak self] in self?.refresh() }
         }
         ipcTokens =
-        [IPC.observe(IPC.Name.requestPermissionsRefresh) { [weak self] in self?.refresh() }]
-        + grantTokens + [activeToken]
+            [IPC.observe(IPC.Name.requestPermissionsRefresh) { [weak self] in self?.refresh() }]
+            + grantTokens + [activeToken]
     }
-    
+
     func grant(_ permission: ExtensionPermission) {
         PermissionPromptTracker.record()
         switch permission {
@@ -52,7 +52,7 @@ final class PermissionsModel {
         case .bluetooth, .automation: break
         }
     }
-    
+
     func refresh() {
         accessibility = AXIsProcessTrusted()
         inputMonitoring = CGPreflightListenEventAccess()
@@ -67,7 +67,7 @@ final class PermissionsModel {
             mirrorToSharedDefaults()
         }
     }
-    
+
     private func mirrorToSharedDefaults() {
         let d = SharedDefaults.store
         var changed = false
@@ -85,9 +85,9 @@ final class PermissionsModel {
         setIfChanged(camera, "permCameraGranted")
         if changed { IPC.post(IPC.Name.permissionsRefreshed) }
     }
-    
+
     var needsAttention: Bool { PermissionsStatus.current }
-    
+
     func grantCalendar() {
         Task { @MainActor in
             _ = try? await eventStore.requestFullAccessToEvents()
@@ -95,7 +95,7 @@ final class PermissionsModel {
         }
         openSecuritySettings("Privacy_Calendars")
     }
-    
+
     func grantNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
             _, _ in
@@ -104,31 +104,31 @@ final class PermissionsModel {
         NSWorkspace.shared.open(
             URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
     }
-    
+
     func grantAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
         openSecuritySettings("Privacy_Accessibility")
         refreshAfterGrant()
     }
-    
+
     func grantInputMonitoring() {
         CGRequestListenEventAccess()
         openSecuritySettings("Privacy_ListenEvent")
         refreshAfterGrant()
     }
-    
+
     func grantFullDisk() {
         openSecuritySettings("Privacy_AllFiles")
         refreshAfterGrant()
     }
-    
+
     func grantScreenRecording() {
         CGRequestScreenCaptureAccess()
         openSecuritySettings("Privacy_ScreenCapture")
         refreshAfterGrant()
     }
-    
+
     func grantCamera() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .notDetermined:
@@ -140,12 +140,12 @@ final class PermissionsModel {
             refreshAfterGrant()
         }
     }
-    
+
     private func openSecuritySettings(_ anchor: String) {
         NSWorkspace.shared.open(
             URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!)
     }
-    
+
     private func refreshAfterGrant() {
         refresh()
         for delay in [0.5, 2.0] {
@@ -154,7 +154,7 @@ final class PermissionsModel {
             }
         }
     }
-    
+
     static func hasFullDiskAccess() -> Bool {
         let tcc = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/com.apple.TCC/TCC.db")

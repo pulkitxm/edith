@@ -11,7 +11,7 @@ import Testing
         #expect(sample?.bytesPerSecond == 29_330_000)
         #expect(sample?.filesRemaining == nil)
     }
-    
+
     @Test func readsTheFileCounterWhenAFileFinishes() {
         let sample = RsyncProgress.parse(
             "     41,943,040  33%   31.25MB/s    0:00:01 (xfr#1, to-chk=2/4)")
@@ -20,18 +20,18 @@ import Testing
         #expect(sample?.filesRemaining == 2)
         #expect(sample?.filesTotal == 4)
     }
-    
+
     @Test func splitsTheCarriageReturnStream() {
         let chunk =
-        "         32,768   0%    0.00kB/s    0:00:00  \r"
-        + "    125,829,120 100%   29.61MB/s    0:00:04 (xfr#3, to-chk=0/4)\r"
+            "         32,768   0%    0.00kB/s    0:00:00  \r"
+            + "    125,829,120 100%   29.61MB/s    0:00:04 (xfr#3, to-chk=0/4)\r"
         let samples = RsyncProgress.lines(from: chunk)
         #expect(samples.count == 2)
         #expect(samples.first?.percent == 0)
         #expect(samples.last?.percent == 100)
         #expect(samples.last?.filesRemaining == 0)
     }
-    
+
     @Test func ignoresEverythingThatIsNotAProgressRecord() {
         #expect(RsyncProgress.parse("") == nil)
         #expect(RsyncProgress.parse("sending incremental file list") == nil)
@@ -39,7 +39,7 @@ import Testing
         #expect(RsyncProgress.parse("total size is 125,829,120  speedup is 1.00") == nil)
         #expect(RsyncProgress.parse("rsync: command not found") == nil)
     }
-    
+
     @Test func understandsEveryRateUnit() {
         #expect(RsyncProgress.rate("0.00kB/s") == 0)
         #expect(RsyncProgress.rate("512B/s") == 512)
@@ -57,7 +57,7 @@ import Testing
         #expect(estimate.bytesPerSecond == 0)
         #expect(estimate.secondsRemaining == nil)
     }
-    
+
     @Test func smoothsSpikesInsteadOfFollowingThem() {
         var estimator = ThroughputEstimator(weight: 0.25)
         estimator.record(bytesPerSecond: 1000)
@@ -66,7 +66,7 @@ import Testing
         #expect(estimate.bytesPerSecond == 3000)
         #expect(estimate.secondsRemaining == 2)
     }
-    
+
     @Test func aStalledSampleDoesNotWipeTheEstimate() {
         var estimator = ThroughputEstimator()
         estimator.record(bytesPerSecond: 2000)
@@ -84,7 +84,7 @@ import Testing
         #expect(sample?.filesTotal == 1)
         #expect(sample?.totalIsEstimate == false)
     }
-    
+
     @Test func anIncrementalScanMarksTheTotalAsAnEstimate() {
         let growing = RsyncProgress.parse(
             "     41,943,040  33%   31.25MB/s    0:00:01 (xfr#1, ir-chk=1010/1050)")
@@ -94,7 +94,7 @@ import Testing
             "     41,943,040  33%   31.25MB/s    0:00:01 (xfr#1, to-chk=2/4)")
         #expect(settled?.totalIsEstimate == false)
     }
-    
+
     @Test func rejectsHumanReadableByteFieldsRatherThanMisreadingThem() {
         #expect(RsyncProgress.parse("        188.74M  33%   31.25MB/s    0:00:01") == nil)
         #expect(RsyncProgress.parse("          1.23G 100%   1.00GB/s    0:00:00") == nil)
@@ -104,12 +104,12 @@ import Testing
 @Suite struct TransferLineSplitterTests {
     @Test func reassemblesRecordsSplitAtArbitraryBoundaries() {
         let stream =
-        "\r      2,326,528   0%    1.99MB/s    0:05:06  "
-        + "\r    629,145,600 100%   20.24MB/s    0:00:29 (xfr#1, to-chk=0/1)\n"
+            "\r      2,326,528   0%    1.99MB/s    0:05:06  "
+            + "\r    629,145,600 100%   20.24MB/s    0:00:29 (xfr#1, to-chk=0/1)\n"
         var whole = TransferLineSplitter()
         let expected = whole.receive(stream)
         #expect(expected.count == 2)
-        
+
         var piecemeal = TransferLineSplitter()
         var rebuilt: [String] = []
         for character in stream {
@@ -118,7 +118,7 @@ import Testing
         rebuilt += piecemeal.flush()
         #expect(rebuilt == expected)
     }
-    
+
     @Test func holdsBackATrailingFragmentUntilItIsTerminated() {
         var splitter = TransferLineSplitter()
         #expect(splitter.receive("EDITH PID ").isEmpty)
@@ -132,7 +132,7 @@ import Testing
         #expect(TransferMarkers.parse("EDITH SCAN 12 4096") == .scan(files: 12, bytes: 4096))
         #expect(TransferMarkers.parse("EDITH ITEM 3 0") == .item(index: 3, exitStatus: 0))
     }
-    
+
     @Test func aFilenameCannotImpersonateAMarker() {
         #expect(TransferMarkers.parse("      1,024   0%  1MB/s  0:00:01 EDITH ITEM 3 0") == nil)
         #expect(TransferMarkers.parse("cp: 'EDITH ITEM 3 0' -> '/dst'") == nil)
@@ -148,17 +148,17 @@ import Testing
         #expect(gnu.rsync == .gnu(major: 3, minor: 2))
         #expect(gnu.tier == .rsyncProgress2)
         #expect(!gnu.isRoot)
-        
+
         let open = MachineTransferFacts.parse("rsync=openrsync: protocol version 29\npv=no")
         #expect(open.rsync == .openrsync)
         #expect(open.tier == .rsyncClassic)
-        
+
         let bare = MachineTransferFacts.parse("rsync=none\npv=no")
         #expect(bare.tier == .verboseCopy)
         let withPv = MachineTransferFacts.parse("rsync=none\npv=yes")
         #expect(withPv.tier == .tarPipe)
     }
-    
+
     @Test func readsTheRemainingProbeLines() {
         let facts = MachineTransferFacts.parse(
             "rsync=none\npv=yes\nfindprintf=yes\nuid=0")
@@ -178,7 +178,7 @@ import Testing
         #expect(TransferRoute.route(from: .localMac, to: .machine(b)) == .push(b))
         #expect(TransferRoute.route(from: .machine(a), to: .localMac) == .pull(a))
     }
-    
+
     @Test func theRunnerRefusesToCopyAFileOverItself() {
         let runner = TransferCommands.remoteRunner(
             pairs: [(source: "/a/x", target: "/b/x")], tier: .rsyncProgress2, scanBytes: nil)
@@ -186,7 +186,7 @@ import Testing
         #expect(runner.contains("EDITH ITEM $i 200"))
         #expect(runner.contains("echo \"EDITH PID $$\""))
     }
-    
+
     @Test func itemsAreIdentifiedByIndexNotName() {
         let runner = TransferCommands.remoteRunner(
             pairs: [(source: "/a/one", target: "/b/one"), (source: "/a/two", target: "/b/two")],
@@ -194,7 +194,7 @@ import Testing
         #expect(runner.contains("copy_one /a/one /b/one 0"))
         #expect(runner.contains("copy_one /a/two /b/two 1"))
     }
-    
+
     @Test func partialsNeverLandAtTheVisibleDestination() {
         for tier in [TransferTier.rsyncProgress2, .rsyncClassic] {
             let body = TransferCommands.copyBody(tier: tier, scanBytes: nil)
@@ -203,7 +203,7 @@ import Testing
             #expect(!body.contains(" --partial "))
         }
     }
-    
+
     @Test func everyPositionalPathIsGuardedAndQuoted() {
         let awkward = "/tmp/-weird name's/*.txt"
         let runner = TransferCommands.remoteRunner(
@@ -213,7 +213,7 @@ import Testing
         #expect(TransferCommands.scanCommand(paths: [awkward], gnuFind: true).contains("find -- "))
         #expect(TransferCommands.byteCount(path: awkward).contains(ShellQuote.quote(awkward)))
     }
-    
+
     @Test func cancelResumesAStoppedProcessBeforeTerminatingIt() {
         let cancel = TransferCommands.cancel(pid: 4321)
         let cont = cancel.range(of: "-CONT")
@@ -223,12 +223,12 @@ import Testing
         #expect(cont!.lowerBound < term!.lowerBound)
         #expect(TransferCommands.pause(pid: 4321).contains("-STOP -4321"))
     }
-    
+
     @Test func finalizeNeverRemovesTheTargetBeforeTheReplacementIsInPlace() {
         let file = TransferCommands.finalizeReplacingFile(part: "/d/.p", target: "/d/x")
         #expect(file == "mv -f /d/.p /d/x")
         #expect(!file.contains("rm"))
-        
+
         let directory = TransferCommands.finalizeReplacingDirectory(part: "/d/.p", target: "/d/x")
         let retire = directory.range(of: "mv /d/x /d/x.edith-old")
         let remove = directory.range(of: "rm -rf")
@@ -236,7 +236,7 @@ import Testing
         #expect(remove != nil)
         #expect(retire!.lowerBound < remove!.lowerBound)
     }
-    
+
     @Test func resumeCountsFromTheRightByte() {
         #expect(TransferCommands.resumeRead(path: "/a/b", fromByte: 0) == "cat -- /a/b")
         #expect(TransferCommands.resumeRead(path: "/a/b", fromByte: 100) == "tail -c +101 -- /a/b")
@@ -253,7 +253,7 @@ import Testing
         #expect(EtaPhrasing.bucket(seconds: 7500) == "About 2 hours")
         #expect(EtaPhrasing.bucket(seconds: 90000) == "About a day")
     }
-    
+
     @Test func saysNothingWhenThereIsNoEstimate() {
         #expect(EtaPhrasing.bucket(seconds: nil) == nil)
         #expect(EtaPhrasing.bucket(seconds: .infinity) == nil)

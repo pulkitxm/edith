@@ -6,9 +6,9 @@ public struct SSHConfigHost: Identifiable, Equatable, Sendable {
     public var user: String?
     public var port: Int?
     public var identityFile: String?
-    
+
     public var id: String { alias }
-    
+
     public init(
         alias: String, hostName: String? = nil, user: String? = nil, port: Int? = nil,
         identityFile: String? = nil
@@ -19,7 +19,7 @@ public struct SSHConfigHost: Identifiable, Equatable, Sendable {
         self.port = port
         self.identityFile = identityFile
     }
-    
+
     public var displayTarget: String {
         let host = hostName ?? alias
         let base = user.map { "\($0)@\(host)" } ?? host
@@ -32,13 +32,13 @@ public enum SSHConfigFile {
     public static var defaultPath: String {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh/config").path
     }
-    
+
     public static func concreteHosts(atPath path: String = defaultPath) -> [SSHConfigHost] {
         var visited = Set<String>()
         guard let lines = loadLines(path: path, visited: &visited) else { return [] }
         return concreteHosts(configLines: lines)
     }
-    
+
     public static func concreteHosts(configLines lines: [ConfigLine]) -> [SSHConfigHost] {
         var order: [String] = []
         var hosts: [String: SSHConfigHost] = [:]
@@ -75,17 +75,17 @@ public enum SSHConfigFile {
         }
         return order.compactMap { hosts[$0] }
     }
-    
+
     public struct ConfigLine: Equatable, Sendable {
         public let keyword: String
         public let arguments: [String]
-        
+
         public init(keyword: String, arguments: [String]) {
             self.keyword = keyword
             self.arguments = arguments
         }
     }
-    
+
     public static func parseLines(_ content: String) -> [ConfigLine] {
         content.split(separator: "\n", omittingEmptySubsequences: true).compactMap { rawLine in
             var tokens = tokenize(String(rawLine))
@@ -102,13 +102,13 @@ public enum SSHConfigFile {
             return ConfigLine(keyword: keyword, arguments: tokens)
         }
     }
-    
+
     public static func expandTilde(_ path: String) -> String {
         guard path.hasPrefix("~") else { return path }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return home + path.dropFirst()
     }
-    
+
     static func tokenize(_ line: String) -> [String] {
         var tokens: [String] = []
         var current = ""
@@ -133,16 +133,16 @@ public enum SSHConfigFile {
         if !current.isEmpty { tokens.append(current) }
         return tokens
     }
-    
+
     static func isConcreteAlias(_ pattern: String) -> Bool {
         !pattern.isEmpty && !pattern.contains("*") && !pattern.contains("?")
-        && !pattern.hasPrefix("!")
+            && !pattern.hasPrefix("!")
     }
-    
+
     private static func loadLines(path: String, visited: inout Set<String>) -> [ConfigLine]? {
         let standardized = URL(fileURLWithPath: expandTilde(path)).standardizedFileURL.path
         guard visited.insert(standardized).inserted,
-              let content = try? String(contentsOfFile: standardized, encoding: .utf8)
+            let content = try? String(contentsOfFile: standardized, encoding: .utf8)
         else { return nil }
         var lines: [ConfigLine] = []
         for line in parseLines(content) {
@@ -160,7 +160,7 @@ public enum SSHConfigFile {
         }
         return lines
     }
-    
+
     private static func resolveIncludePaths(_ pattern: String) -> [String] {
         let sshDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".ssh")

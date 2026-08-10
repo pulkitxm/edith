@@ -7,21 +7,21 @@ struct UsageView: View {
     @State private var showDiagnostics = false
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-    var presenterBlurMoney =
-    true
+        var presenterBlurMoney =
+        true
     @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
-    var presenterBlurUsage =
-    false
+        var presenterBlurUsage =
+        false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
+        "accent"
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
-    60
+        60
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
-    85
+        85
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
-    var selectedRaw =
-    LimitProvider.claude.rawValue
-    
+        var selectedRaw =
+        LimitProvider.claude.rawValue
+
     private var theme: Color { themeColor(themeName) }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
@@ -34,11 +34,11 @@ struct UsageView: View {
         nonmutating set { selectedRaw = newValue.rawValue }
     }
     private var limits: ProviderLimits { store.limits(for: selected) }
-    
+
     init(store: UsageStore) {
         self.store = store
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             limitsCard
@@ -55,7 +55,7 @@ struct UsageView: View {
             Task { await store.loadLimitHistory(provider: selected) }
         }
     }
-    
+
     private var limitsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -66,7 +66,7 @@ struct UsageView: View {
                 Spacer()
                 if let at = store.limitsUpdatedAt {
                     let next =
-                    store.nextLimitsRefresh
+                        store.nextLimitsRefresh
                         .map { $0.formatted(date: .omitted, time: .shortened) } ?? "-"
                     Text("updated \(at.formatted(date: .omitted, time: .shortened)) · next \(next)")
                         .font(.system(size: 10))
@@ -127,7 +127,7 @@ struct UsageView: View {
         }
         .card()
     }
-    
+
     private func ring(_ label: String, window: LimitWindow?) -> some View {
         let pct = window?.percent ?? 0
         let fill = color(for: pct)
@@ -161,7 +161,7 @@ struct UsageView: View {
         }
         .frame(maxWidth: .infinity)
     }
-    
+
     private func countdown(from now: Date, to reset: Date) -> String {
         let s = max(0, Int(reset.timeIntervalSince(now)))
         let d = s / 86400, h = (s % 86400) / 3600, m = (s % 3600) / 60, sec = s % 60
@@ -169,13 +169,13 @@ struct UsageView: View {
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
         return String(format: "%d:%02d", m, sec)
     }
-    
+
     private func color(for percent: Double) -> Color {
         if percent >= Double(crit) { return .red }
         if percent >= Double(warn) { return .orange }
         return usageSage
     }
-    
+
     private var activityCard: some View {
         let days = store.calendarDays
         let weeks: [[DayPoint]] = stride(from: 0, to: days.count, by: 7).map {
@@ -187,7 +187,7 @@ struct UsageView: View {
         }
         let cuts = [quartile(0.25), quartile(0.5), quartile(0.75)]
         let total = days.reduce(0) { $0 + $1.cost }
-        
+
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
                 eyebrow("ACTIVITY")
@@ -223,8 +223,8 @@ struct UsageView: View {
                                         .frame(width: 17, height: 17)
                                         .help(
                                             blurMoney
-                                            ? day.date.formatted(.dateTime.day().month())
-                                            : "\(day.date.formatted(.dateTime.day().month())) - $\(String(format: "%.2f", day.cost))"
+                                                ? day.date.formatted(.dateTime.day().month())
+                                                : "\(day.date.formatted(.dateTime.day().month())) - $\(String(format: "%.2f", day.cost))"
                                         )
                                 }
                             }
@@ -236,18 +236,18 @@ struct UsageView: View {
         }
         .card()
     }
-    
+
     private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {
         guard let first = weeks[index].first?.date else { return "" }
         let month = Calendar.current.component(.month, from: first)
         if index > 0, let prev = weeks[index - 1].first?.date,
-           Calendar.current.component(.month, from: prev) == month
+            Calendar.current.component(.month, from: prev) == month
         {
             return ""
         }
         return first.formatted(.dateTime.month(.abbreviated))
     }
-    
+
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
         if cost <= 0 { return .primary.opacity(0.08) }
         if cost <= cuts[0] { return theme.opacity(0.25) }
@@ -255,7 +255,7 @@ struct UsageView: View {
         if cost <= cuts[2] { return theme.opacity(0.7) }
         return theme
     }
-    
+
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -296,7 +296,7 @@ struct UsageView: View {
                 .help("Open the full dashboard")
             }
             .font(.system(size: 13))
-            
+
             HStack {
                 sourcePicker
                 Spacer()
@@ -306,11 +306,11 @@ struct UsageView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            
+
             if showLog {
                 logView
             }
-            
+
             if let err = store.statsError {
                 Text(err)
                     .font(.caption2)
@@ -338,7 +338,7 @@ struct UsageView: View {
         }
         .card()
     }
-    
+
     private var sourcePicker: some View {
         Menu {
             ForEach(store.sources) { source in
@@ -372,14 +372,14 @@ struct UsageView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
     }
-    
+
     private var sourceSummary: String {
         let picked = store.sources.filter { store.selectedSources.contains($0.id) }
         if picked.count == store.sources.count, !picked.isEmpty { return "All sources" }
         guard let first = picked.first else { return "Sources" }
         return picked.count == 1 ? first.label : "\(first.label) +\(picked.count - 1)"
     }
-    
+
     private var logView: some View {
         TerminalLogView(log: store.log, theme: theme, height: 130)
     }

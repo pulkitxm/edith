@@ -5,17 +5,17 @@ import SwiftUI
 @MainActor
 final class PaneViewStore {
     static let shared = PaneViewStore()
-    
+
     private struct Key: Hashable {
         let tab: UUID
         let machine: UUID
     }
-    
+
     private var finders: [Key: FinderModel] = [:]
     private var terminals: [Key: TerminalSessionHolder] = [:]
-    
+
     private init() {}
-    
+
     func finder(for tabID: UUID, session: MachineSession) -> FinderModel {
         let key = Key(tab: tabID, machine: session.id)
         if let existing = finders[key] { return existing }
@@ -23,7 +23,7 @@ final class PaneViewStore {
         finders[key] = model
         return model
     }
-    
+
     func terminal(for tabID: UUID, session: MachineSession) -> TerminalSessionHolder {
         let key = Key(tab: tabID, machine: session.id)
         if let existing = terminals[key] { return existing }
@@ -31,11 +31,11 @@ final class PaneViewStore {
         terminals[key] = holder
         return holder
     }
-    
+
     func terminalView(tabID: UUID, machineID: UUID) -> NSView? {
         terminals[Key(tab: tabID, machine: machineID)]?.terminalView
     }
-    
+
     func release(tabID: UUID) {
         finders = finders.filter { $0.key.tab != tabID }
         for (key, holder) in terminals where key.tab == tabID {
@@ -43,7 +43,7 @@ final class PaneViewStore {
             terminals.removeValue(forKey: key)
         }
     }
-    
+
     func releaseAll(except live: Set<UUID>) {
         finders = finders.filter { live.contains($0.key.tab) }
         for (key, holder) in terminals where !live.contains(key.tab) {
@@ -63,7 +63,7 @@ struct PaneContentView: View {
     let machines: MachinesModel
     let screen: PaneScreen
     let tabID: UUID
-    
+
     var body: some View {
         switch screen {
         case .overview: MachineOverviewTab(session: session)
@@ -85,13 +85,13 @@ struct WorkspacePaneView: View {
     let model: WorkspaceModel
     let machines: MachinesModel
     let dark: Bool
-    
+
     private var focused: Bool { model.layout.focused == pane.id }
-    
+
     private var selectedTab: PaneTab? {
         pane.tabs.first { $0.id == pane.selected } ?? pane.tabs.first
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             tabStrip
@@ -115,21 +115,21 @@ struct WorkspacePaneView: View {
             moveKeyboardFocusHere()
         }
     }
-    
+
     private func moveKeyboardFocusHere() {
         guard let tab = selectedTab else { return }
         let window = NSApp.keyWindow
         guard let window else { return }
         if tab.target.screen == .terminal,
-           let view = PaneViewStore.shared.terminalView(
-            tabID: tab.id, machineID: tab.target.machineID)
+            let view = PaneViewStore.shared.terminalView(
+                tabID: tab.id, machineID: tab.target.machineID)
         {
             window.makeFirstResponder(view)
         } else {
             window.makeFirstResponder(window.contentView)
         }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         if pane.tabs.isEmpty {
@@ -150,11 +150,11 @@ struct WorkspacePaneView: View {
             }
         }
     }
-    
+
     private var paneMachineID: UUID? {
         selectedTab?.target.machineID ?? pane.tabs.first?.target.machineID
     }
-    
+
     private var machinePicker: some View {
         let machineID = paneMachineID
         let machine = machines.allMachines.first { $0.id == machineID }
@@ -183,7 +183,7 @@ struct WorkspacePaneView: View {
         .fixedSize()
         .help("Show a different machine in this pane")
     }
-    
+
     private func retargetPane(to machineID: UUID) {
         let available = PaneScreen.available(
             isLocal: machines.isLocal(machineID),
@@ -196,14 +196,14 @@ struct WorkspacePaneView: View {
             PaneViewStore.shared.release(tabID: tab.id)
         }
     }
-    
+
     private var addableScreens: [PaneScreen] {
         guard let machineID = paneMachineID else { return [] }
         return PaneScreen.available(
             isLocal: machines.isLocal(machineID),
             hasDocker: machines.session(for: machineID).docker.isInstalled)
     }
-    
+
     private var tabStrip: some View {
         HStack(spacing: UIScale.pt(3)) {
             machinePicker
@@ -248,7 +248,7 @@ struct WorkspacePaneView: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Add a view to this pane")
-            
+
             Menu {
                 Button("Split Right") { split(.right) }
                 Button("Split Down") { split(.bottom) }
@@ -271,12 +271,12 @@ struct WorkspacePaneView: View {
         .padding(.vertical, UIScale.pt(8))
         .background(.thinMaterial)
     }
-    
+
     private func split(_ side: InsertSide) {
         guard let target = selectedTab?.target else { return }
         model.apply { $0.split(paneID: pane.id, side: side, target: target) }
     }
-    
+
     private func tabChip(_ tab: PaneTab) -> some View {
         let machine = machines.allMachines.first { $0.id == tab.target.machineID }
         let foreign = tab.target.machineID != paneMachineID
@@ -292,8 +292,8 @@ struct WorkspacePaneView: View {
                     .font(.system(size: UIScale.pt(9.5)))
                 Text(
                     foreign
-                    ? "\(machine?.name ?? "Machine") · \(tab.target.screen.title)"
-                    : tab.target.screen.title
+                        ? "\(machine?.name ?? "Machine") · \(tab.target.screen.title)"
+                        : tab.target.screen.title
                 )
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .lineLimit(1)
@@ -343,7 +343,7 @@ struct WorkspacePaneView: View {
             }
         }
     }
-    
+
     private func closeTab(_ tab: PaneTab) {
         if pane.tabs.count > 1 {
             model.closeTab(tab.id, in: pane.id)

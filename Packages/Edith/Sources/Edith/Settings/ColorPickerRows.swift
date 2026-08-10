@@ -5,16 +5,16 @@ import SwiftUI
 
 struct ColorPickerRows: View {
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
-    var colorPickerEnabled =
-    false
+        var colorPickerEnabled =
+        false
     @AppStorage(AppStorageKeys.ColorPicker.copyFormat, store: SharedDefaults.store) private
-    var copyFormat: ColorCopyFormat = .hex
+        var copyFormat: ColorCopyFormat = .hex
     @AppStorage(AppStorageKeys.ColorPicker.profile, store: SharedDefaults.store) private
-    var profile: ColorProfile = .sRGB
+        var profile: ColorProfile = .sRGB
     @AppStorage(AppStorageKeys.ColorPicker.historySize, store: SharedDefaults.store) private
-    var historySize = 100
+        var historySize = 100
     @State private var history: [ColorSwatch] = ColorHistoryStore.load()
-    
+
     var body: some View {
         Group {
             Section {
@@ -55,7 +55,7 @@ struct ColorPickerRows: View {
             }
             .disabled(!colorPickerEnabled)
             .opacity(colorPickerEnabled ? 1 : 0.5)
-            
+
             if colorPickerEnabled, !history.isEmpty {
                 Section {
                     ColorSwatchGrid(history: history, defaultFormat: copyFormat)
@@ -70,9 +70,9 @@ struct ColorPickerRows: View {
 private struct ColorSwatchGrid: View {
     let history: [ColorSwatch]
     let defaultFormat: ColorCopyFormat
-    
+
     private let columns = [GridItem(.adaptive(minimum: 28), spacing: UIScale.pt(6))]
-    
+
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(6)) {
             ForEach(history) { swatch in
@@ -85,7 +85,7 @@ private struct ColorSwatchGrid: View {
 private struct ColorSwatchChip: View {
     let swatch: ColorSwatch
     let defaultFormat: ColorCopyFormat
-    
+
     var body: some View {
         RoundedRectangle(cornerRadius: UIScale.pt(5))
             .fill(swatch.color)
@@ -103,7 +103,7 @@ private struct ColorSwatchChip: View {
             .help(swatch.string(for: defaultFormat))
             .pointerCursor()
     }
-    
+
     private func copy(_ format: ColorCopyFormat) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(swatch.string(for: format), forType: .string)

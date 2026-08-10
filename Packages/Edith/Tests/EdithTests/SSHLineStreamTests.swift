@@ -6,13 +6,13 @@ import Testing
 private final class StreamLines: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [(String, Bool)] = []
-    
+
     func append(_ line: String, _ stderr: Bool) {
         lock.lock()
         values.append((line, stderr))
         lock.unlock()
     }
-    
+
     func read() -> [(String, Bool)] {
         lock.lock()
         defer { lock.unlock() }
@@ -27,14 +27,14 @@ private final class StreamLines: @unchecked Sendable {
         process.arguments = ["-c", command]
         return process
     }
-    
+
     @Test func reportsTheProcessExitStatus() async throws {
         let stream = SSHLineStream(
             process: process("exit 27"), onLine: { _, _ in }, onExit: { _ in })
         try stream.start()
         #expect(await stream.waitForExit() == 27)
     }
-    
+
     @Test func waitingAfterExitReturnsTheStoredStatus() async throws {
         let stream = SSHLineStream(
             process: process("exit 19"), onLine: { _, _ in }, onExit: { _ in })
@@ -42,7 +42,7 @@ private final class StreamLines: @unchecked Sendable {
         #expect(await stream.waitForExit() == 19)
         #expect(await stream.waitForExit() == 19)
     }
-    
+
     @Test func everyConcurrentWaiterReceivesTheSameStatus() async throws {
         let stream = SSHLineStream(
             process: process("sleep 0.05; exit 11"), onLine: { _, _ in }, onExit: { _ in })
@@ -58,7 +58,7 @@ private final class StreamLines: @unchecked Sendable {
         #expect(statuses.count == 100)
         #expect(statuses.allSatisfy { $0 == 11 })
     }
-    
+
     @Test func cancellationResumesTheWait() async throws {
         let stream = SSHLineStream(
             process: process("sleep 30"), onLine: { _, _ in }, onExit: { _ in })
@@ -68,7 +68,7 @@ private final class StreamLines: @unchecked Sendable {
         task.cancel()
         #expect(await task.value == 130)
     }
-    
+
     @Test func cancellationBeforeWaitingIsStored() async throws {
         let stream = SSHLineStream(
             process: process("sleep 30"), onLine: { _, _ in }, onExit: { _ in })
@@ -76,7 +76,7 @@ private final class StreamLines: @unchecked Sendable {
         stream.cancel()
         #expect(await stream.waitForExit() == 130)
     }
-    
+
     @Test func trailingOutputIsDeliveredBeforeCompletion() async throws {
         let lines = StreamLines()
         let stream = SSHLineStream(
@@ -86,7 +86,7 @@ private final class StreamLines: @unchecked Sendable {
         #expect(await stream.waitForExit() == 0)
         #expect(lines.read().map(\.0) == ["trailing"])
     }
-    
+
     @Test func stdoutAndStderrStaySeparated() async throws {
         let lines = StreamLines()
         let stream = SSHLineStream(

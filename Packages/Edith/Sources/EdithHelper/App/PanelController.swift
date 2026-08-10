@@ -5,31 +5,31 @@ import SwiftUI
 @MainActor
 final class PanelController: NSObject {
     static var shared: PanelController?
-    
+
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let services: AppServices
     private var eventMonitor: Any?
     private var keyMonitor: Any?
-    
+
     var isOpen: Bool { popover.isShown }
     var statusItemFrame: NSRect? { statusItem.button?.window?.frame }
-    
+
     init(services: AppServices) {
         self.services = services
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.autosaveName = "edithGlasses"
         statusItem.isVisible = false
         super.init()
-        
+
         popover.behavior = .transient
         popover.animates = true
     }
-    
+
     func toggle() {
         MainApp.openDashboard()
     }
-    
+
     func open() {
         guard !popover.isShown, let button = statusItem.button else { return }
         let host = NSHostingController(
@@ -44,14 +44,14 @@ final class PanelController: NSObject {
         }
         startEventMonitor()
     }
-    
+
     func close() {
         guard popover.isShown else { return }
         popover.performClose(nil)
         popover.contentViewController = nil
         stopEventMonitor()
     }
-    
+
     private func startEventMonitor() {
         stopEventMonitor()
         eventMonitor = NSEvent.addGlobalMonitorForEvents(
@@ -66,7 +66,7 @@ final class PanelController: NSObject {
             return (handled ?? false) ? nil : event
         }
     }
-    
+
     private func handleMusicKey(code: UInt16, mods: NSEvent.ModifierFlags) -> Bool {
         guard let music = services.music else { return false }
         return MusicKeyCommand.handle(
@@ -81,7 +81,7 @@ final class PanelController: NSObject {
                 },
                 volumeBy: { delta in music.volume = min(max(music.volume + delta, 0), 1) }))
     }
-    
+
     private func stopEventMonitor() {
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)

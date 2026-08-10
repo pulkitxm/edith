@@ -6,11 +6,11 @@ import Observation
 public final class DashboardRefreshBridge {
     public private(set) var updating = false
     public private(set) var log = ""
-    
+
     private nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
     private let logURL: URL
     private nonisolated(unsafe) var tailTimer: Timer?
-    
+
     public init(logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log")) {
         self.logURL = logURL
         tokens.append(
@@ -23,16 +23,16 @@ public final class DashboardRefreshBridge {
             })
         reloadLog()
     }
-    
+
     deinit {
         tailTimer?.invalidate()
         for token in tokens { IPC.stopObserving(token) }
     }
-    
+
     public func requestRefresh() {
         IPC.post(IPC.Name.requestUsageRefresh)
     }
-    
+
     private func beginTail() {
         updating = true
         reloadLog()
@@ -44,14 +44,14 @@ public final class DashboardRefreshBridge {
         RunLoop.main.add(t, forMode: .common)
         tailTimer = t
     }
-    
+
     private func endTail() {
         tailTimer?.invalidate()
         tailTimer = nil
         updating = false
         reloadLog()
     }
-    
+
     private func reloadLog() {
         log = FileTail.read(logURL, maxBytes: 64 * 1024)
     }

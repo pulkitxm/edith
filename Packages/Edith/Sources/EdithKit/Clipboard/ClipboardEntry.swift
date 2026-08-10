@@ -13,7 +13,7 @@ public struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
     public let size: Int
     public let preview: String?
     public var pinned: Bool
-    
+
     public init(
         id: String = UUID().uuidString,
         sha256: String,
@@ -39,12 +39,12 @@ public struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
         self.preview = preview.map { String($0.prefix(500)) }
         self.pinned = pinned
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case id, sha256, types, ext, sourceApp, sourceBundleID, createdAt, lastCopiedAt, size,
-             preview, pinned
+            preview, pinned
     }
-    
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -61,7 +61,7 @@ public struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
         }
         pinned = try container.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
     }
-    
+
     public var kind: Kind {
         switch ext {
         case "png", "tiff", "jpg", "jpeg", "gif", "heic", "heif", "webp", "svg", "bmp",
@@ -96,24 +96,24 @@ public struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
             return .data
         }
     }
-    
+
     public enum Kind: String, CaseIterable, Sendable {
         case text, richText, html, image, file, document, media, data
     }
-    
+
     public var isTextual: Bool {
         switch kind {
         case .text, .richText, .html: return true
         default: return false
         }
     }
-    
+
     public var displayPreview: String {
         if let preview {
             let initial = preview.prefix(500)
             if initial.unicodeScalars.contains(where: {
                 !CharacterSet.whitespacesAndNewlines.contains($0)
-                && !CharacterSet.controlCharacters.contains($0)
+                    && !CharacterSet.controlCharacters.contains($0)
             }) {
                 return String(initial)
             }

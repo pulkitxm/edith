@@ -5,7 +5,7 @@ enum AppArtwork {
         .compactMap { $0?.appendingPathComponent("Edith_Edith.bundle") }
         .compactMap(Bundle.init(url:))
         .first
-    
+
     static let icon: NSImage? = {
         guard let url = resources?.url(forResource: "appicon", withExtension: "png") else {
             return nil

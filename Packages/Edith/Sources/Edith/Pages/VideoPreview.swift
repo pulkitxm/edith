@@ -7,7 +7,7 @@ import SwiftUI
 
 struct NativeVideoPlayer: NSViewRepresentable {
     let player: AVPlayer
-    
+
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
         view.player = player
@@ -17,7 +17,7 @@ struct NativeVideoPlayer: NSViewRepresentable {
         view.updatesNowPlayingInfoCenter = false
         return view
     }
-    
+
     func updateNSView(_ view: AVPlayerView, context: Context) {
         if view.player !== player { view.player = player }
     }
@@ -31,7 +31,7 @@ final class VideoPreviewSession {
     private(set) var isPlaying = false
     private(set) var duration: TimeInterval = 0
     private var statusObservation: NSKeyValueObservation?
-    
+
     init(track: Track, startingAt seconds: TimeInterval) {
         self.track = track
         player = AVPlayer(url: track.url)
@@ -46,32 +46,32 @@ final class VideoPreviewSession {
         }
         Task { [weak self] in
             guard let item = self?.player.currentItem,
-                  let loaded = try? await item.asset.load(.duration), loaded.seconds.isFinite
+                let loaded = try? await item.asset.load(.duration), loaded.seconds.isFinite
             else { return }
             self?.duration = loaded.seconds
             self?.publishNowPlaying()
         }
     }
-    
+
     var elapsed: TimeInterval {
         let time = player.currentTime().seconds
         return time.isFinite ? time : 0
     }
-    
+
     func prepare() {
         installRemoteCommands()
         publishNowPlaying()
     }
-    
+
     func start() {
         prepare()
         player.play()
     }
-    
+
     func applyVolume(_ value: Double) {
         player.volume = Float(min(max(value, 0), 1))
     }
-    
+
     func toggle() {
         if isPlaying {
             player.pause()
@@ -79,14 +79,14 @@ final class VideoPreviewSession {
             player.play()
         }
     }
-    
+
     func seek(toFraction fraction: Double) {
         guard duration > 0 else { return }
         player.seek(
             to: CMTime(seconds: min(max(fraction, 0), 1) * duration, preferredTimescale: 600))
         publishNowPlaying()
     }
-    
+
     func stop() {
         statusObservation = nil
         player.pause()
@@ -96,14 +96,14 @@ final class VideoPreviewSession {
         center.nowPlayingInfo = nil
         center.playbackState = .stopped
     }
-    
+
     private func setPlaying(_ playing: Bool) {
         guard playing != isPlaying else { return }
         isPlaying = playing
         publishNowPlaying()
         MusicRemote.shared.videoPlaybackChanged()
     }
-    
+
     private func publishNowPlaying() {
         let center = MPNowPlayingInfoCenter.default()
         var info: [String: Any] = [
@@ -118,7 +118,7 @@ final class VideoPreviewSession {
         center.nowPlayingInfo = info
         center.playbackState = isPlaying ? .playing : .paused
     }
-    
+
     private func installRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
@@ -142,14 +142,14 @@ final class VideoPreviewSession {
             return .success
         }
     }
-    
+
     private func removeRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
         [
             center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
             center.nextTrackCommand, center.previousTrackCommand,
         ]
-            .forEach { $0.removeTarget(nil) }
+        .forEach { $0.removeTarget(nil) }
     }
 }
 
@@ -167,7 +167,7 @@ struct VideoStage: View {
         _session = State(
             wrappedValue: VideoPreviewSession(track: track, startingAt: startAt))
     }
-    
+
     var body: some View {
         NativeVideoPlayer(player: session.player)
             .aspectRatio(16.0 / 9.0, contentMode: .fit)

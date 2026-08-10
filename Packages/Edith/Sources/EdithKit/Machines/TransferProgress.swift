@@ -7,7 +7,7 @@ public struct RsyncProgressSample: Equatable, Sendable {
     public var filesRemaining: Int?
     public var filesTotal: Int?
     public var totalIsEstimate: Bool
-    
+
     public init(
         bytesTransferred: Int64, percent: Int, bytesPerSecond: Double,
         filesRemaining: Int? = nil, filesTotal: Int? = nil, totalIsEstimate: Bool = false
@@ -23,7 +23,7 @@ public struct RsyncProgressSample: Equatable, Sendable {
 
 public enum RsyncProgress {
     static let counterKeys = ["to-chk=", "to-check=", "ir-chk="]
-    
+
     public static func parse(_ line: String) -> RsyncProgressSample? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -47,7 +47,7 @@ public enum RsyncProgress {
         }
         return sample
     }
-    
+
     static func rate(_ field: String) -> Double {
         let units: [(String, Double)] = [
             ("GB/s", 1_000_000_000), ("MB/s", 1_000_000), ("kB/s", 1000), ("B/s", 1),
@@ -59,7 +59,7 @@ public enum RsyncProgress {
         }
         return 0
     }
-    
+
     public static func lines(from chunk: String) -> [RsyncProgressSample] {
         chunk.split(whereSeparator: { $0 == "\r" || $0 == "\n" })
             .compactMap { parse(String($0)) }
@@ -69,7 +69,7 @@ public enum RsyncProgress {
 public struct TransferEstimate: Equatable, Sendable {
     public var bytesPerSecond: Double
     public var secondsRemaining: Double?
-    
+
     public init(bytesPerSecond: Double, secondsRemaining: Double?) {
         self.bytesPerSecond = bytesPerSecond
         self.secondsRemaining = secondsRemaining
@@ -79,11 +79,11 @@ public struct TransferEstimate: Equatable, Sendable {
 public struct ThroughputEstimator: Sendable {
     private var smoothed: Double?
     private let weight: Double
-    
+
     public init(weight: Double = 0.25) {
         self.weight = weight
     }
-    
+
     public mutating func record(bytesPerSecond: Double) {
         guard bytesPerSecond > 0 else { return }
         guard let current = smoothed else {
@@ -92,7 +92,7 @@ public struct ThroughputEstimator: Sendable {
         }
         smoothed = current + weight * (bytesPerSecond - current)
     }
-    
+
     public func estimate(bytesRemaining: Int64) -> TransferEstimate {
         guard let smoothed, smoothed > 0 else {
             return TransferEstimate(bytesPerSecond: 0, secondsRemaining: nil)

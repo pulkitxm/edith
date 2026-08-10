@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor
 enum OnboardingWindow {
     private static var window: NSWindow?
-    
+
     static func open() {
         if let window {
             window.makeKeyAndOrderFront(nil)
@@ -32,7 +32,7 @@ enum OnboardingWindow {
         onboardingWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-    
+
     static func close() {
         guard let window else {
             OnboardingFlow.skip()
@@ -41,7 +41,7 @@ enum OnboardingWindow {
         }
         window.performClose(nil)
     }
-    
+
     fileprivate static func forget() {
         window = nil
     }
@@ -50,7 +50,7 @@ enum OnboardingWindow {
 @MainActor
 private final class OnboardingWindowDelegate: NSObject, NSWindowDelegate {
     static let shared = OnboardingWindowDelegate()
-    
+
     func windowWillClose(_ notification: Notification) {
         OnboardingFlow.skip()
         OnboardingWindow.forget()

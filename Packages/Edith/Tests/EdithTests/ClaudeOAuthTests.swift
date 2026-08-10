@@ -4,28 +4,28 @@ import Testing
 
 @Suite struct ClaudeOAuthCredentialTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
-    
+
     @Test func detectsAccessTokenNearExpiry() throws {
         let credential = try decode(
             accessExpiresAt: now.addingTimeInterval(30),
             refreshExpiresAt: now.addingTimeInterval(3_600))
         #expect(credential.shouldRefresh(at: now))
     }
-    
+
     @Test func keepsAccessTokenWithTimeRemaining() throws {
         let credential = try decode(
             accessExpiresAt: now.addingTimeInterval(600),
             refreshExpiresAt: now.addingTimeInterval(3_600))
         #expect(!credential.shouldRefresh(at: now))
     }
-    
+
     @Test func rejectsExpiredRefreshToken() throws {
         let credential = try decode(
             accessExpiresAt: now.addingTimeInterval(-1),
             refreshExpiresAt: now.addingTimeInterval(-1))
         #expect(credential.usableRefreshToken(at: now) == nil)
     }
-    
+
     @Test func savesRotatedTokensAndPreservesOtherCredentials() throws {
         let credential = try decode(
             accessExpiresAt: now.addingTimeInterval(-1),
@@ -46,9 +46,9 @@ import Testing
         #expect(oauth["refreshTokenExpiresAt"] as? Int64 == 1_800_003_600_000)
         #expect(mcp["preserved"] as? Bool == true)
     }
-    
+
     private func decode(accessExpiresAt: Date, refreshExpiresAt: Date) throws
-    -> ClaudeOAuthCredential
+        -> ClaudeOAuthCredential
     {
         let data = try JSONSerialization.data(withJSONObject: [
             "mcpOAuth": ["preserved": true],

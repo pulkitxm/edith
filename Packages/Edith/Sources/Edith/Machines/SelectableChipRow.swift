@@ -9,7 +9,7 @@ struct SelectableChipRow<Trailing: View>: View {
     let dark: Bool
     let onSelect: () -> Void
     @ViewBuilder var trailing: () -> Trailing
-    
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: UIScale.pt(8)) {

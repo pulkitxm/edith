@@ -12,14 +12,14 @@ final class CompanionSetupModel {
     var name = ""
     var transport = "local"
     var at = ""
-    
+
     static let transports = ["local", "ssh", "context"]
     static let tiers = ["gpu-large", "gpu-small", "apple-metal", "cpu-only"]
-    
+
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-    
+
     func refresh() async {
         do {
             let client = client
@@ -30,7 +30,7 @@ final class CompanionSetupModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func add() async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !busy else { return }
@@ -45,7 +45,7 @@ final class CompanionSetupModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func probe(_ machine: CompanionMachine) async {
         guard !busy else { return }
         busy = true
@@ -57,7 +57,7 @@ final class CompanionSetupModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func setProfile(_ machine: CompanionMachine, tier: String) async {
         guard !busy else { return }
         busy = true
@@ -75,9 +75,9 @@ struct CompanionSetupScreen: View {
     @Bindable var model: CompanionSetupModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -94,7 +94,7 @@ struct CompanionSetupScreen: View {
         }
         .task { await model.refresh() }
     }
-    
+
     private var addCard: some View {
         SkinCard(title: "Add a machine", note: "the stack can run anywhere", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -116,14 +116,14 @@ struct CompanionSetupScreen: View {
                 }
                 Text(
                     "Nothing is assumed about it. Probing asks the machine what it is, and the "
-                    + "tier that comes back can be overridden."
+                        + "tier that comes back can be overridden."
                 )
                 .font(.system(size: UIScale.pt(11.5)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
     }
-    
+
     private var machinesCard: some View {
         SkinCard(title: "Machines", note: "what was detected", dark: dark) {
             if model.machines.isEmpty {
@@ -141,7 +141,7 @@ struct CompanionSetupScreen: View {
                                 MindChip(
                                     label: machine.effectiveProfile,
                                     tone: machine.effectiveProfile == "cpu-only"
-                                    ? .orange : .green)
+                                        ? .orange : .green)
                                 Spacer(minLength: 0)
                                 setupButton("Probe") { await model.probe(machine) }
                             }
@@ -157,7 +157,7 @@ struct CompanionSetupScreen: View {
                                     .font(.system(size: UIScale.pt(11)))
                                     .foregroundStyle(
                                         machine.effectiveProfile == tier
-                                        ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
                                     )
                                     .pointerCursor()
                                 }
@@ -168,7 +168,7 @@ struct CompanionSetupScreen: View {
             }
         }
     }
-    
+
     private var planCard: some View {
         SkinCard(title: "Plan", note: "what would run where", dark: dark) {
             if let plan = model.plan, !plan.placements.isEmpty {
@@ -204,7 +204,7 @@ struct CompanionSetupScreen: View {
             }
         }
     }
-    
+
     private func field(_ prompt: String, text: Binding<String>) -> some View {
         TextField(prompt, text: text)
             .textFieldStyle(.plain)
@@ -215,7 +215,7 @@ struct CompanionSetupScreen: View {
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
             .frame(minWidth: UIScale.pt(130))
     }
-    
+
     private func setupButton(
         _ title: String, filled: Bool = false, action: @escaping () async -> Void
     ) -> some View {

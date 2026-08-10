@@ -51,7 +51,7 @@ final class FinderModel {
     var iconSize = FinderDefaults.iconSize {
         didSet { FinderDefaults.iconSize = iconSize }
     }
-    
+
     let session: MachineSession
     private var history: [String] = []
     private var future: [String] = []
@@ -67,38 +67,38 @@ final class FinderModel {
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
-    
+
     init(session: MachineSession, path: String? = nil) {
         self.session = session
         self.path =
-        path
-        ?? (session.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
+            path
+            ?? (session.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
     }
-    
+
     var viewMode: FileViewMode {
         get { FileViewMode(rawValue: viewModeRaw) ?? .list }
         set { viewModeRaw = newValue.rawValue }
     }
-    
+
     var sortKey: FileSortKey {
         get { FileSortKey(rawValue: sortKeyRaw) ?? .name }
         set { sortKeyRaw = newValue.rawValue }
     }
-    
+
     var canGoBack: Bool { !history.isEmpty }
     var canGoForward: Bool { !future.isEmpty }
     var canGoUp: Bool { FileListing.parentPath(of: path) != nil }
-    
+
     var visibleEntries: [RemoteFileEntry] {
         if let searchResults { return searchResults }
         let base = showHidden ? entries : entries.filter { !$0.isHidden }
         return FileSorting.sort(base, by: sortKey, ascending: sortAscending)
     }
-    
+
     var selectedEntries: [RemoteFileEntry] {
         visibleEntries.filter { selection.contains($0.path) }
     }
-    
+
     var statusLine: String {
         let total = visibleEntries.count
         var text = "\(total) item\(total == 1 ? "" : "s")"
@@ -113,12 +113,12 @@ final class FinderModel {
         }
         return text
     }
-    
+
     func connectIfNeeded() {
         guard !session.isLocal else { return }
         if case .disconnected = session.state { session.start() }
     }
-    
+
     func waitForConnection(timeout: TimeInterval = 30) async {
         guard !session.isLocal else { return }
         let deadline = Date().addingTimeInterval(timeout)
@@ -128,23 +128,23 @@ final class FinderModel {
             try? await Task.sleep(for: .milliseconds(300))
         }
     }
-    
+
     func loadPlaces() async {
         if session.isLocal {
             let volumes =
-            FileManager.default.mountedVolumeURLs(
-                includingResourceValuesForKeys: [.volumeIsBrowsableKey],
-                options: [.skipHiddenVolumes]) ?? []
+                FileManager.default.mountedVolumeURLs(
+                    includingResourceValuesForKeys: [.volumeIsBrowsableKey],
+                    options: [.skipHiddenVolumes]) ?? []
             let external = volumes.filter { $0.path != "/" }
             places = FilePlaces.localSections(volumes: external)
             return
         }
         let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
         let home =
-        (try? result.get())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "~"
+            (try? result.get())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "~"
         places = FilePlaces.remoteSections(home: home.isEmpty ? "~" : home)
     }
-    
+
     func copySelection(operation: FileClipboardOperation) {
         let paths = selectedEntries.map(\.path)
         guard !paths.isEmpty else { return }
@@ -152,9 +152,9 @@ final class FinderModel {
             paths: paths, machineID: session.machine.id, operation: operation)
         flash(
             "\(operation == .copy ? "Copied" : "Cut") \(paths.count) item"
-            + (paths.count == 1 ? "" : "s"))
+                + (paths.count == 1 ? "" : "s"))
     }
-    
+
     func paste() async {
         guard let clipboard = Self.clipboard else { return }
         guard clipboard.machineID == session.machine.id else {
@@ -174,31 +174,31 @@ final class FinderModel {
         if !fromElsewhere.isEmpty {
             await perform(
                 intent: isCopy
-                ? .copyWithinMachine(fromElsewhere) : .moveWithinMachine(fromElsewhere),
+                    ? .copyWithinMachine(fromElsewhere) : .moveWithinMachine(fromElsewhere),
                 destination: path)
         }
         if !isCopy, errorMessage == nil { Self.clipboard = nil }
     }
-    
+
     func showInfo() {
         infoTarget = selectedEntries.first
         guard let target = infoTarget, target.isDirectory else { return }
         Task { await measure(target) }
     }
-    
+
     func infoSummary(for entry: RemoteFileEntry) -> FileInfoSummary {
         guard entry.isDirectory else { return FileInfoSummary(entry: entry) }
         return FileInfoSummary(entry: entry, sizeOverride: folderSummary(for: entry))
     }
-    
+
     func setViewMode(_ mode: FileViewMode) {
         viewMode = mode
     }
-    
+
     func toggleHidden() {
         showHidden.toggle()
     }
-    
+
     func resolveHomeIfNeeded() async {
         guard !session.isLocal, path == "~" || path.isEmpty else { return }
         let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
@@ -209,7 +209,7 @@ final class FinderModel {
             path = home
         }
     }
-    
+
     func load() async {
         await resolveHomeIfNeeded()
         loadToken += 1
@@ -229,7 +229,7 @@ final class FinderModel {
         }
         await loadFreeSpace()
     }
-    
+
     private func loadFreeSpace() async {
         if session.isLocal {
             let values = try? URL(fileURLWithPath: path).resourceValues(
@@ -243,7 +243,7 @@ final class FinderModel {
             freeSpaceKB = Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
-    
+
     func navigate(to newPath: String, recordHistory: Bool = true) {
         let target = expandingHome(newPath)
         guard target != path else { return }
@@ -259,43 +259,43 @@ final class FinderModel {
         searchQuery = ""
         Task { await load() }
     }
-    
+
     private func expandingHome(_ candidate: String) -> String {
         guard candidate == "~" || candidate.hasPrefix("~/") else { return candidate }
         guard let home = resolvedHome else { return candidate }
         if candidate == "~" { return home }
         return FileListing.join(parent: home, name: String(candidate.dropFirst(2)))
     }
-    
+
     func goBack() {
         guard let previous = history.popLast() else { return }
         future.append(path)
         navigate(to: previous, recordHistory: false)
     }
-    
+
     func goForward() {
         guard let next = future.popLast() else { return }
         history.append(path)
         navigate(to: next, recordHistory: false)
     }
-    
+
     func goUp() {
         guard let parent = FileListing.parentPath(of: path) else { return }
         navigate(to: parent)
     }
-    
+
     func goHome() {
         let target =
-        session.isLocal
-        ? FileManager.default.homeDirectoryForCurrentUser.path
-        : (places.first?.places.first?.path ?? "~")
+            session.isLocal
+            ? FileManager.default.homeDirectoryForCurrentUser.path
+            : (places.first?.places.first?.path ?? "~")
         navigate(to: target)
     }
-    
+
     func refresh() {
         Task { await load() }
     }
-    
+
     func open(_ entry: RemoteFileEntry) {
         if entry.isDirectory || entry.kind == .symlink {
             navigate(to: entry.path)
@@ -307,7 +307,7 @@ final class FinderModel {
         }
         Task { await openRemote(entry) }
     }
-    
+
     private func openRemote(_ entry: RemoteFileEntry) async {
         guard let connection = session.connectionRef else { return }
         let destination = PreviewCache.localURL(for: entry, machineID: session.machine.id)
@@ -325,7 +325,7 @@ final class FinderModel {
             statusMessage = nil
         }
     }
-    
+
     func openSelection() {
         let targets = selectedEntries
         guard !targets.isEmpty else { return }
@@ -336,7 +336,7 @@ final class FinderModel {
         }
         for entry in targets { open(entry) }
     }
-    
+
     func toggleQuickLook() {
         if quickLookPath != nil {
             quickLookPath = nil
@@ -344,19 +344,19 @@ final class FinderModel {
             quickLookPath = quickLookTarget
         }
     }
-    
+
     private var quickLookTarget: String? {
         let ordered = visibleEntries.filter { selection.contains($0.path) }
         return ordered.first?.path ?? visibleEntries.first?.path
     }
-    
+
     private func syncQuickLookToSelection() {
         guard quickLookPath != nil, let target = quickLookTarget, target != quickLookPath else {
             return
         }
         quickLookPath = target
     }
-    
+
     func measure(_ entry: RemoteFileEntry) async {
         guard entry.isDirectory, folderSizes[entry.path] == nil else { return }
         folderSizes[entry.path] = -1
@@ -367,14 +367,14 @@ final class FinderModel {
         let result = await session.runCommand(
             FileOperations.directorySizeCommand(path: entry.path), timeout: 60)
         if case let .success(output) = result,
-           let kilobytes = Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
+            let kilobytes = Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
         {
             folderSizes[entry.path] = kilobytes
         } else {
             folderSizes[entry.path] = 0
         }
     }
-    
+
     func folderSummary(for entry: RemoteFileEntry) -> String {
         guard let kilobytes = folderSizes[entry.path], kilobytes >= 0 else {
             return "Calculating size…"
@@ -385,12 +385,12 @@ final class FinderModel {
         }
         return text
     }
-    
+
     func renameSelection() {
         guard let entry = selectedEntries.first else { return }
         beginRename(entry)
     }
-    
+
     func click(_ entry: RemoteFileEntry, modifiers: EventModifiers) {
         if modifiers.contains(.shift) {
             selection = FileSelectionMath.rangeSelection(
@@ -405,21 +405,21 @@ final class FinderModel {
             cursor = entry.path
         }
     }
-    
+
     func selectAll() {
         let items = visibleEntries
         selection = Set(items.map(\.path))
         anchor = items.first?.path
         cursor = items.last?.path
     }
-    
+
     func invertSelection() {
         let items = visibleEntries
         selection = Set(items.map(\.path).filter { !selection.contains($0) })
         anchor = selection.isEmpty ? nil : items.first { selection.contains($0.path) }?.path
         cursor = anchor
     }
-    
+
     func moveSelection(by offset: Int, extend: Bool) {
         let items = visibleEntries
         guard !items.isEmpty else { return }
@@ -438,7 +438,7 @@ final class FinderModel {
         reveal(target.path)
         if quickLookPath != nil { quickLookPath = target.path }
     }
-    
+
     func moveSelection(_ direction: FinderMoveDirection, extend: Bool) {
         let stride = viewMode == .icon ? max(gridColumns, 1) : 1
         return switch direction {
@@ -448,7 +448,7 @@ final class FinderModel {
         case .right: moveSelection(by: viewMode == .icon ? 1 : 0, extend: extend)
         }
     }
-    
+
     func typeSelect(_ characters: String) {
         let now = Date()
         if now.timeIntervalSince(typeBufferAt) > 0.75 { typeBuffer = "" }
@@ -462,29 +462,29 @@ final class FinderModel {
         reveal(match)
         anchor = match
     }
-    
+
     func beginRename(_ entry: RemoteFileEntry) {
         renaming = entry.path
         renameText = entry.name
     }
-    
+
     func reveal(_ path: String?) {
         guard let path else { return }
         scrollTarget = path
     }
-    
+
     var canUndo: Bool { !undoStack.isEmpty }
-    
+
     var undoTitle: String? {
         guard let last = undoStack.last else { return nil }
         return "Undo \(last.label)"
     }
-    
+
     func recordUndo(_ step: FinderUndoStep) {
         undoStack.append(step)
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
     }
-    
+
     func undoLastOperation() async {
         guard let step = undoStack.popLast() else {
             flash("Nothing to undo")
@@ -501,12 +501,12 @@ final class FinderModel {
             flash("Undid \(step.label)")
         }
     }
-    
+
     func focusContext(on entry: RemoteFileEntry) {
         guard !selection.contains(entry.path) else { return }
         selection = [entry.path]
     }
-    
+
     func commitRename() async {
         guard let renaming else { return }
         let pool = searchResults ?? entries
@@ -526,10 +526,10 @@ final class FinderModel {
         let parent = FileListing.parentPath(of: entry.path) ?? path
         let siblings = entries.filter { $0.path != entry.path }
         let sameNameDifferentCase =
-        NameFolding.key(trimmed, caseInsensitive: true)
-        == NameFolding.key(entry.name, caseInsensitive: true)
+            NameFolding.key(trimmed, caseInsensitive: true)
+            == NameFolding.key(entry.name, caseInsensitive: true)
         if !sameNameDifferentCase,
-           !NameConflicts.conflicting(names: [trimmed], existing: siblings).isEmpty
+            !NameConflicts.conflicting(names: [trimmed], existing: siblings).isEmpty
         {
             errorMessage = "An item named \(trimmed) already exists here."
             return
@@ -550,7 +550,7 @@ final class FinderModel {
             reveal(target)
         }
     }
-    
+
     func newFolder() async {
         let name = FileOperations.newFolderName(existing: entries)
         let target = FileListing.join(parent: path, name: name)
@@ -561,11 +561,11 @@ final class FinderModel {
             beginRename(created)
         }
     }
-    
+
     func duplicateSelection() async {
         await duplicate(paths: selectedEntries.map(\.path))
     }
-    
+
     func duplicate(paths: [String]) async {
         guard !paths.isEmpty else { return }
         var taken = entries
@@ -580,7 +580,7 @@ final class FinderModel {
         }
         await load()
     }
-    
+
     func trashSelection(permanently: Bool) async {
         let paths = selectedEntries.map(\.path)
         guard !paths.isEmpty else { return }
@@ -598,13 +598,13 @@ final class FinderModel {
             return
         }
         let command =
-        permanently
-        ? FileOperations.deleteCommand(paths: paths)
-        : FileOperations.trashCommand(paths: paths)
+            permanently
+            ? FileOperations.deleteCommand(paths: paths)
+            : FileOperations.trashCommand(paths: paths)
         selection = []
         await run(command, reload: true)
     }
-    
+
     func copyPaths() {
         let paths = selectedEntries.map(\.path)
         guard !paths.isEmpty else { return }
@@ -612,7 +612,7 @@ final class FinderModel {
         NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
         flash("Copied \(paths.count) path\(paths.count == 1 ? "" : "s")")
     }
-    
+
     func flash(_ message: String) {
         statusMessage = message
         flashToken += 1
@@ -623,14 +623,14 @@ final class FinderModel {
             statusMessage = nil
         }
     }
-    
+
     func revealInFinder() {
         guard session.isLocal else { return }
         let urls = selectedEntries.map { URL(fileURLWithPath: $0.path) }
         guard !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
-    
+
     func download(to destination: URL) async {
         guard let connection = session.connectionRef else { return }
         for entry in selectedEntries where !entry.isDirectory {
@@ -644,7 +644,7 @@ final class FinderModel {
         }
         flash("Download finished")
     }
-    
+
     func upload(_ urls: [URL]) async {
         guard let connection = session.connectionRef else {
             for url in urls {
@@ -666,7 +666,7 @@ final class FinderModel {
         flash("Upload finished")
         await load()
     }
-    
+
     func searchQueryChanged() {
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
@@ -684,7 +684,7 @@ final class FinderModel {
             await runDeepSearch(trimmed, token: token)
         }
     }
-    
+
     private func runDeepSearch(_ query: String, token: Int) async {
         let shallow = entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
         guard !session.isLocal else {
@@ -695,7 +695,7 @@ final class FinderModel {
             guard token == searchToken else { return }
             var seen = Set(shallow.map { FilePathKey.canonical($0.path) })
             searchResults =
-            shallow + deep.filter { seen.insert(FilePathKey.canonical($0.path)).inserted }
+                shallow + deep.filter { seen.insert(FilePathKey.canonical($0.path)).inserted }
             return
         }
         let result = await session.runCommand(
@@ -714,11 +714,11 @@ final class FinderModel {
         }
         searchResults = combined
     }
-    
+
     func runSearch() async {
         searchQueryChanged()
     }
-    
+
     private func run(_ command: String, reload: Bool) async {
         let result = await session.runCommand(command, timeout: 120)
         var failureMessage: String?
@@ -728,13 +728,13 @@ final class FinderModel {
         if reload { await load() }
         if let failureMessage { errorMessage = failureMessage }
     }
-    
+
     func dragPayload() -> MachineItemsPayload {
         MachineItemsPayload(
             machineID: session.machine.id, paths: selectedEntries.map(\.path),
             isLocal: session.isLocal)
     }
-    
+
     func handleDrop(
         providers: [NSItemProvider], destination: String, optionHeld: Bool
     ) async {
@@ -750,7 +750,7 @@ final class FinderModel {
             } else if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 if let data = await provider.loadDataSafely(
                     forTypeIdentifier: UTType.fileURL.identifier),
-                   let url = URL(dataRepresentation: data, relativeTo: nil)
+                    let url = URL(dataRepresentation: data, relativeTo: nil)
                 {
                     localPaths.append(url.path)
                 }
@@ -763,13 +763,13 @@ final class FinderModel {
         else { return }
         await perform(intent: intent, destination: destination)
     }
-    
+
     private func destinationEntries(_ destination: String) async -> [RemoteFileEntry] {
         if destination == path { return entries }
         if case let .success(items) = await session.listFiles(path: destination) { return items }
         return []
     }
-    
+
     func perform(intent: DropIntent, destination: String) async {
         guard DropResolver.isDropAllowed(paths: intent.paths, destination: destination) else {
             return
@@ -784,7 +784,7 @@ final class FinderModel {
         }
         await commit(intent: intent, destination: destination, resolutions: [:])
     }
-    
+
     func commit(
         intent: DropIntent, destination: String,
         resolutions: [String: NameConflictResolution]
@@ -819,7 +819,7 @@ final class FinderModel {
             await transfer(paths: paths, fromMachine: from, into: destination)
         }
     }
-    
+
     private func transfer(paths: [String], fromMachine: UUID, into destination: String) async {
         guard let source = MachinesModel.shared.sessions[fromMachine] else { return }
         progress = FileOperationProgress(title: "Transferring", total: paths.count)
@@ -863,23 +863,23 @@ final class FinderModel {
             flash("Transferred \(completed) item\(completed == 1 ? "" : "s")")
         } else {
             errorMessage =
-            failures.count == 1
-            ? failures[0]
-            : "\(failures.count) of \(paths.count) items failed. \(failures[0])"
+                failures.count == 1
+                ? failures[0]
+                : "\(failures.count) of \(paths.count) items failed. \(failures[0])"
         }
         await load()
     }
-    
+
     enum TransferFailure: LocalizedError {
         case noConnection(String)
-        
+
         var errorDescription: String? {
             switch self {
             case let .noConnection(name): return "\(name) is not connected."
             }
         }
     }
-    
+
     private func uploadPaths(_ urls: [URL], into destination: String) async {
         guard !urls.isEmpty else { return }
         progress = FileOperationProgress(title: "Uploading", total: urls.count)
@@ -903,13 +903,13 @@ final class FinderModel {
         progress = nil
         await load()
     }
-    
+
     func moveSelection(into destination: String) async {
         let paths = selectedEntries.map(\.path)
         guard !paths.isEmpty else { return }
         await perform(intent: .moveWithinMachine(paths), destination: destination)
     }
-    
+
     func dragProvider(for entry: RemoteFileEntry) -> NSItemProvider {
         let provider = itemProvider(for: entry)
         if let data = dragPayload().encoded() {
@@ -922,11 +922,11 @@ final class FinderModel {
         }
         return provider
     }
-    
+
     func itemProvider(for entry: RemoteFileEntry) -> NSItemProvider {
         if session.isLocal {
             return NSItemProvider(contentsOf: URL(fileURLWithPath: entry.path))
-            ?? NSItemProvider()
+                ?? NSItemProvider()
         }
         let provider = NSItemProvider()
         provider.suggestedName = entry.name
@@ -967,7 +967,7 @@ final class FinderModel {
 
 enum FinderTransferError: LocalizedError {
     case notConnected
-    
+
     var errorDescription: String? { "The machine is not connected." }
 }
 

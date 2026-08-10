@@ -7,7 +7,7 @@ struct ArtworkThumb: View {
     var player: MusicPlayer
     var size: CGFloat = 36
     @State private var artwork: NSImage?
-    
+
     var body: some View {
         Group {
             if let artwork {
@@ -39,7 +39,7 @@ struct AmbientGlow: View {
     var player: MusicPlayer
     @Environment(\.colorScheme) private var scheme
     @State private var artwork: NSImage?
-    
+
     var body: some View {
         GeometryReader { geo in
             Group {

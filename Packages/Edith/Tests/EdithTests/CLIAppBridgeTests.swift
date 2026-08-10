@@ -6,13 +6,13 @@ import Testing
 private final class SendableCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
-    
+
     func increment() {
         lock.lock()
         value += 1
         lock.unlock()
     }
-    
+
     func read() -> Int {
         lock.lock()
         defer { lock.unlock() }
@@ -27,7 +27,7 @@ private final class SendableCounter: @unchecked Sendable {
         let reply = await waiter.wait()
         #expect(reply?["value"] as? String == "ready")
     }
-    
+
     @Test func deliveryResumesAWaitingCommand() async {
         let waiter = ReplyWaiter()
         let task = Task { await waiter.wait()?["value"] as? Int }
@@ -35,7 +35,7 @@ private final class SendableCounter: @unchecked Sendable {
         #expect(waiter.deliver(["value": 42]))
         #expect(await task.value == 42)
     }
-    
+
     @Test func theFirstReplyWins() async {
         let waiter = ReplyWaiter()
         #expect(waiter.deliver(["value": "first"]))
@@ -43,13 +43,13 @@ private final class SendableCounter: @unchecked Sendable {
         let reply = await waiter.wait()
         #expect(reply?["value"] as? String == "first")
     }
-    
+
     @Test func anEmptyReplyIsStillAReply() async {
         let waiter = ReplyWaiter()
         #expect(waiter.deliver([:]))
         #expect(await waiter.wait()?.isEmpty == true)
     }
-    
+
     @Test func cancellationResumesWithNoReply() async {
         let waiter = ReplyWaiter()
         let task = Task { await waiter.wait() == nil }
@@ -58,14 +58,14 @@ private final class SendableCounter: @unchecked Sendable {
         #expect(await task.value)
         #expect(waiter.isFinished)
     }
-    
+
     @Test func cancellationBeforeWaitingIsRetained() async {
         let waiter = ReplyWaiter()
         #expect(waiter.cancel())
         #expect(!waiter.cancel())
         #expect(await waiter.wait() == nil)
     }
-    
+
     @Test func onlyOneOfManyConcurrentRepliesIsAccepted() async {
         let waiter = ReplyWaiter()
         let accepted = await withTaskGroup(of: Bool.self, returning: Int.self) { group in
@@ -79,7 +79,7 @@ private final class SendableCounter: @unchecked Sendable {
         #expect(accepted == 1)
         #expect(await waiter.wait() != nil)
     }
-    
+
     @Test func independentWaitersDoNotInterfere() async {
         let values = await withTaskGroup(of: Int?.self, returning: [Int].self) { group in
             for value in 0..<100 {
@@ -97,7 +97,7 @@ private final class SendableCounter: @unchecked Sendable {
         }
         #expect(values.sorted() == Array(0..<100))
     }
-    
+
     @Test func appReplyTimeoutUsesOneTrigger() async {
         let counter = SendableCounter()
         let reply = await AppBridge.awaitReply(

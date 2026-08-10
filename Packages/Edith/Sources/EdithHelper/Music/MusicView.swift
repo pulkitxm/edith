@@ -3,7 +3,7 @@ import SwiftUI
 
 struct MusicView: View {
     var player: MusicPlayer
-    
+
     var body: some View {
         VStack(spacing: 10) {
             if player.tracks.isEmpty {
@@ -38,14 +38,14 @@ struct TrackRow: View {
     @State private var hovering = false
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-    var presenterBlurMusic =
-    true
+        var presenterBlurMusic =
+        true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
-    
+        "accent"
+
     private var theme: Color { themeColor(themeName) }
     private var isCurrent: Bool { player.current == track }
-    
+
     var body: some View {
         Button {
             player.toggle(track)
@@ -73,21 +73,21 @@ struct TrackRow: View {
                 }
                 .frame(width: 34, height: 34)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
-                
+
                 Text(track.title)
                     .font(.system(size: 13))
                     .lineLimit(1)
                     .foregroundStyle(isCurrent ? theme : .primary)
                     .presenterBlur(presenterState.active && presenterBlurMusic)
-                
+
                 Spacer()
-                
+
                 if isCurrent {
                     Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(theme)
                 }
-                
+
                 if let duration {
                     Text(duration)
                         .font(.system(size: 11))
@@ -102,7 +102,7 @@ struct TrackRow: View {
         .buttonStyle(.plain)
         .background(
             isCurrent
-            ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: 7)
         )
         .onHover { hovering = $0 }

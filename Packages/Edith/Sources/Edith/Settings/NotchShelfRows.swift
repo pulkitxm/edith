@@ -5,41 +5,41 @@ import SwiftUI
 
 struct NotchShelfRows: View {
     @AppStorage(AppStorageKeys.Notch.shelfEnabled, store: SharedDefaults.store) private
-    var enabled = false
+        var enabled = false
     @AppStorage(AppStorageKeys.Notch.shelfOpenOnDrag, store: SharedDefaults.store) private
-    var openOnDrag = true
+        var openOnDrag = true
     @AppStorage(AppStorageKeys.Notch.shelfOpenOnHover, store: SharedDefaults.store) private
-    var openOnHover = true
+        var openOnHover = true
     @AppStorage(AppStorageKeys.Notch.shelfRequireOption, store: SharedDefaults.store) private
-    var requireOption =
-    false
+        var requireOption =
+        false
     @AppStorage(AppStorageKeys.Notch.shelfKeepDuration, store: SharedDefaults.store) private
-    var keepDuration =
-    "forever"
+        var keepDuration =
+        "forever"
     @AppStorage(AppStorageKeys.Notch.shelfRemoveAfterDragOut, store: SharedDefaults.store)
     private var removeAfterDragOut = true
     @AppStorage(AppStorageKeys.Notch.shelfShowOnExternal, store: SharedDefaults.store)
     private var showOnExternal = true
     @AppStorage(AppStorageKeys.Notch.shelfHaptics, store: SharedDefaults.store) private
-    var haptics = true
+        var haptics = true
     @AppStorage(AppStorageKeys.Notch.shelfShowMusic, store: SharedDefaults.store) private
-    var showMusic = true
+        var showMusic = true
     @AppStorage(AppStorageKeys.Notch.alertsEnabled, store: SharedDefaults.store) private
-    var showAlerts = true
+        var showAlerts = true
     @AppStorage(AppStorageKeys.Notch.alertAudio, store: SharedDefaults.store) private
-    var alertAudio = true
+        var alertAudio = true
     @AppStorage(AppStorageKeys.Notch.alertPower, store: SharedDefaults.store) private
-    var alertPower = true
+        var alertPower = true
     @AppStorage(AppStorageKeys.Notch.alertBattery, store: SharedDefaults.store) private
-    var alertBattery = true
+        var alertBattery = true
     @AppStorage(AppStorageKeys.Notch.alertBluetooth, store: SharedDefaults.store) private
-    var alertBluetooth =
-    false
+        var alertBluetooth =
+        false
     @AppStorage(AppStorageKeys.Notch.audioMixerEnabled, store: SharedDefaults.store) private
-    var audioMixer =
-    false
+        var audioMixer =
+        false
     @State private var bluetoothAuthorization = CBManager.authorization
-    
+
     var body: some View {
         Group {
             Section {
@@ -63,7 +63,7 @@ struct NotchShelfRows: View {
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
-            
+
             Section {
                 Picker(selection: $keepDuration) {
                     Text("Forever").tag("forever")
@@ -87,7 +87,7 @@ struct NotchShelfRows: View {
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
-            
+
             Section {
                 Toggle("Show what's playing", isOn: $showMusic)
                     .pointerCursor()
@@ -111,8 +111,8 @@ struct NotchShelfRows: View {
                     Toggle("Bluetooth connect / disconnect", isOn: $alertBluetooth)
                         .pointerCursor()
                     if alertBluetooth,
-                       bluetoothAuthorization == .denied
-                        || bluetoothAuthorization == .restricted
+                        bluetoothAuthorization == .denied
+                            || bluetoothAuthorization == .restricted
                     {
                         Button("Open Bluetooth Privacy Settings...") {
                             NSWorkspace.shared.open(

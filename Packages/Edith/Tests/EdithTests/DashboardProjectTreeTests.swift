@@ -16,9 +16,9 @@ import Testing
         m.range = .all
         return m
     }
-    
+
     private var todayStr: String { DashboardModel.ymd.string(from: Date()) }
-    
+
     private func chat(
         _ id: String, tokens: Double, cost: Double = 1, title: String? = nil,
         source: String? = nil, path: String? = nil, firstTs: Double? = nil, lastTs: Double? = nil
@@ -31,7 +31,7 @@ import Testing
         if let lastTs { fields.append("\"lastTs\":\(lastTs)") }
         return "{\(fields.joined(separator: ","))}"
     }
-    
+
     private func usage(daily: String) -> String {
         """
         {"schemaVersion":4,"sources":["cli","codex"],
@@ -39,16 +39,16 @@ import Testing
          "daily":[\(daily)]}
         """
     }
-    
+
     private func day(_ period: String, projects: String, bySource: String? = nil) -> String {
         let objects =
-        (try? JSONSerialization.jsonObject(with: Data("[\(projects)]".utf8)))
-        as? [[String: Any]] ?? []
+            (try? JSONSerialization.jsonObject(with: Data("[\(projects)]".utf8)))
+            as? [[String: Any]] ?? []
         let tokens = objects.reduce(0.0) { $0 + (($1["tokens"] as? NSNumber)?.doubleValue ?? 0) }
         let cost = objects.reduce(0.0) { $0 + (($1["cost"] as? NSNumber)?.doubleValue ?? 0) }
         let sources =
-        bySource
-        ?? """
+            bySource
+                ?? """
                 "cli":[{"modelName":"m","inputTokens":\(tokens),"outputTokens":0,
                   "cacheCreationTokens":0,"cacheReadTokens":0,"cost":\(cost)}]
                 """
@@ -58,7 +58,7 @@ import Testing
              "projects":[\(projects)]}
             """
     }
-    
+
     @Test func chatFragmentsMergeAcrossDays() throws {
         let d1 = day(
             "2026-06-01",
@@ -82,7 +82,7 @@ import Testing
         #expect(c.lastActive == "2026-06-02")
         #expect(c.dur == 94000)
     }
-    
+
     @Test func worktreeGroupingAndNestedCount() throws {
         let d = day(
             "2026-06-01",
@@ -100,7 +100,7 @@ import Testing
         #expect(proj.worktrees[0].chats.count == 2)
         #expect(proj.tokens == 300)
     }
-    
+
     @Test func bareChatsFallBackToDayTotals() throws {
         let d = day(
             "2026-06-01",
@@ -115,7 +115,7 @@ import Testing
         #expect(proj.days == 1)
         #expect(proj.chats[0].title == "Chat deadbeef")
     }
-    
+
     @Test func projectWithoutChatsKeptViaFallback() throws {
         let d = day(
             "2026-06-01",
@@ -127,7 +127,7 @@ import Testing
         #expect(proj.tokens == 700)
         #expect(proj.expandable == false)
     }
-    
+
     @Test func emptyChatIdTitledUntitled() throws {
         let d = day(
             "2026-06-01",
@@ -137,7 +137,7 @@ import Testing
         let m = try model(usage(daily: d))
         #expect(m.projectTree.first?.chats.first?.title == "Untitled chat")
     }
-    
+
     @Test func sourceFilterHidesChatsAndRecomputesTotals() throws {
         let d = day(
             "2026-06-01",
@@ -158,7 +158,7 @@ import Testing
         #expect(proj.tokens == 150)
         #expect(!proj.chats.contains { $0.id == "b" })
     }
-    
+
     @Test func projectDroppedWhenAllChatsFiltered() throws {
         let d = day(
             "2026-06-01",
@@ -173,7 +173,7 @@ import Testing
         m.selectedSources = ["cli"]
         #expect(m.projectTree.isEmpty)
     }
-    
+
     @Test func worktreeDroppedWhenAllItsChatsFiltered() throws {
         let d = day(
             "2026-06-01",
@@ -193,7 +193,7 @@ import Testing
         #expect(proj.worktrees.isEmpty)
         #expect(proj.tokens == 100)
     }
-    
+
     @Test func sharesSumToOneAcrossVisibleProjects() throws {
         let d = day(
             "2026-06-01",
@@ -206,7 +206,7 @@ import Testing
         #expect(abs(total - 1) < 0.0001)
         #expect(abs((m.projectTree.first { $0.name == "b" }?.share ?? 0) - 0.7) < 0.0001)
     }
-    
+
     @Test func defaultSortIsCostDescending() throws {
         let d = day(
             "2026-06-01",
@@ -222,7 +222,7 @@ import Testing
         m.projSortAscending = true
         #expect(m.projectTree.map(\.name) == ["cheap", "pricey"])
     }
-    
+
     @Test func chatsSortedWithinProjectBySortKey() throws {
         let d = day(
             "2026-06-01",
@@ -237,7 +237,7 @@ import Testing
         m.projSortKey = .cost
         #expect(m.projectTree.first?.chats.map(\.id) == ["small", "big"])
     }
-    
+
     @Test func durationZeroWhenTimestampsMissingOrInverted() throws {
         let d = day(
             "2026-06-01",
@@ -251,7 +251,7 @@ import Testing
             #expect(c.dur == 0)
         }
     }
-    
+
     @Test func resetClearsDrilldownState() throws {
         let m = try model(usage(daily: day("2026-06-01", projects: "")))
         m.projSortKey = .name
@@ -264,7 +264,7 @@ import Testing
         #expect(m.projListOpen == false)
         #expect(m.projExpanded.isEmpty)
     }
-    
+
     @Test func projectAndHourlyTotalsMatchCanonicalFilteredUsage() throws {
         let d = day(
             "2026-06-01",
@@ -281,7 +281,7 @@ import Testing
         #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
         #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.cost } - 10) < 0.0001)
     }
-    
+
     @Test func todayRangeKeepsFullActivityCalendar() throws {
         let first = day(
             "2026-06-01",
@@ -304,7 +304,7 @@ import Testing
         let detail = try #require(m.heatDetail[todayStr])
         #expect(abs(detail.projects.reduce(0) { $0 + $1.value } - 200) < 0.0001)
     }
-    
+
     @Test func inflatedDayDoesNotShrinkOtherDaysProjects() throws {
         let noisy = day(
             "2026-06-01",
@@ -335,7 +335,7 @@ import Testing
         #expect(allTime >= today)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
     }
-    
+
     @Test func folderScopeCoversNestedPathsAndScopesSeries() throws {
         let d = day(
             "2026-06-01",
@@ -352,14 +352,14 @@ import Testing
                 """)
         let m = try model(usage(daily: d))
         #expect(m.allProjectPaths.map(\.path).sorted() == ["/drive/orbit", "/drive/other"])
-        
+
         m.selectedPaths = ["/drive/orbit"]
         #expect(m.projectTree.map(\.name) == ["orbit"])
         #expect(m.projectTree.first?.worktrees.map(\.name) == ["agent-1"])
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
         #expect(abs(m.modelTotals.reduce(0) { $0 + $1.cost } - 3) < 0.0001)
-        
+
         m.selectedPaths = ["/drive"]
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 1000) < 0.0001)
         m.selectedPaths = ["/drive/orbit/.claude/worktrees/agent-1"]
@@ -368,7 +368,7 @@ import Testing
         m.selectedPaths = []
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 1000) < 0.0001)
     }
-    
+
     @Test func folderScopeBackfillsPathsForOlderDays() throws {
         let legacy = day(
             "2026-06-01",
@@ -392,7 +392,7 @@ import Testing
         m.selectedPaths = ["/drive/orbit"]
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
     }
-    
+
     @Test func modelFilterLeavesActivityUnfiltered() throws {
         let d = day(
             "2026-06-01",
@@ -429,7 +429,7 @@ import Testing
         #expect(DashFmt.duration(3_660_000) == "1h 1m")
         #expect(DashFmt.duration(7_200_000) == "2h")
     }
-    
+
     @Test func dateShort() {
         #expect(DashFmt.dateShort("2026-06-01") == "Jun 1")
         #expect(DashFmt.dateShort("2026-12-31") == "Dec 31")
@@ -437,7 +437,7 @@ import Testing
         #expect(DashFmt.dateShort("garbage") == "-")
         #expect(DashFmt.dateShort("2026-13-01") == "-")
     }
-    
+
     @Test func usdLong() {
         #expect(DashFmt.usdLong(1234.5) == "$1,234.50")
         #expect(DashFmt.usdLong(0) == "$0.00")

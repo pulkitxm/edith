@@ -4,7 +4,7 @@ public enum MultiSelectLogic {
         public let anchor: ID?
         public let anchorSelected: Bool
         public let dismiss: Bool
-        
+
         public init(selection: Set<ID>, anchor: ID?, anchorSelected: Bool, dismiss: Bool) {
             self.selection = selection
             self.anchor = anchor
@@ -12,7 +12,7 @@ public enum MultiSelectLogic {
             self.dismiss = dismiss
         }
     }
-    
+
     public static func toggle<ID>(
         _ id: ID, selection: Set<ID>
     ) -> Outcome<ID> {
@@ -27,7 +27,7 @@ public enum MultiSelectLogic {
         }
         return Outcome(selection: next, anchor: id, anchorSelected: nowSelected, dismiss: false)
     }
-    
+
     public static func rangeApply<ID>(
         _ id: ID, order: [ID], selection: Set<ID>, anchor: ID?, anchorSelected: Bool
     ) -> Outcome<ID> {
@@ -46,7 +46,7 @@ public enum MultiSelectLogic {
         return Outcome(
             selection: next, anchor: anchor, anchorSelected: anchorSelected, dismiss: false)
     }
-    
+
     public static func rowClick<ID>(
         _ id: ID, order: [ID], selection: Set<ID>, anchor: ID?, anchorSelected: Bool,
         toggleModifier: Bool, rangeModifier: Bool
@@ -59,7 +59,7 @@ public enum MultiSelectLogic {
         if toggleModifier { return toggle(id, selection: selection) }
         return Outcome(selection: [id], anchor: id, anchorSelected: true, dismiss: true)
     }
-    
+
     public static func actionClick<ID>(
         _ id: ID, order: [ID], selection: Set<ID>
     ) -> Outcome<ID> {
@@ -69,11 +69,11 @@ public enum MultiSelectLogic {
         }
         return Outcome(selection: [id], anchor: id, anchorSelected: true, dismiss: false)
     }
-    
+
     public static func actionLabel<ID>(_ id: ID, selection: Set<ID>) -> String {
         selection == [id] ? "All" : "Only"
     }
-    
+
     public static func selectAll<ID>(order: [ID]) -> Outcome<ID> {
         Outcome(selection: Set(order), anchor: nil, anchorSelected: true, dismiss: false)
     }

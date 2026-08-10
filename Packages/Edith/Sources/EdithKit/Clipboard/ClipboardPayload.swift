@@ -6,7 +6,7 @@ public struct ClipboardCaptureOptions: Sendable {
     public let saveFiles: Bool
     public let saveImages: Bool
     public let saveText: Bool
-    
+
     public init(saveFiles: Bool, saveImages: Bool, saveText: Bool) {
         self.saveFiles = saveFiles
         self.saveImages = saveImages
@@ -19,7 +19,7 @@ public struct ClipboardPayload: Sendable {
     public let types: [String]
     public let ext: String
     public let preview: String
-    
+
     public init(data: Data, types: [String], ext: String, preview: String) {
         self.data = data
         self.types = types
@@ -32,13 +32,13 @@ public enum ClipboardPayloadExtractor {
     private static let maxPreviewCharacters = 500
     private static let maxSniffCharacters = 8_192
     private static let maxSniffBytes = 65_536
-    
+
     private struct Format {
         let type: NSPasteboard.PasteboardType
         let ext: String
         let preview: String
     }
-    
+
     private static let imageFormats = [
         Format(type: .png, ext: "png", preview: "PNG image"),
         Format(type: .tiff, ext: "tiff", preview: "TIFF image"),
@@ -52,14 +52,14 @@ public enum ClipboardPayloadExtractor {
         Format(type: .init("com.microsoft.ico"), ext: "ico", preview: "Icon image"),
         Format(type: .init("public.avif"), ext: "avif", preview: "AVIF image"),
     ]
-    
+
     private static let richTextFormats = [
         Format(type: .rtf, ext: "rtf", preview: "Rich text"),
         Format(
             type: .init("com.apple.flat-rtfd"), ext: "rtfd", preview: "Rich text with attachments"),
         Format(type: .html, ext: "html", preview: "HTML"),
     ]
-    
+
     private static let typedTextExtensions: [String: String] = [
         "public.json": "json",
         "public.xml": "xml",
@@ -77,7 +77,7 @@ public enum ClipboardPayloadExtractor {
         "com.netscape.javascript-source": "js",
         "public.swift-source": "swift",
     ]
-    
+
     @MainActor public static func extract(
         from pasteboard: NSPasteboard, options: ClipboardCaptureOptions
     ) -> ClipboardPayload? {
@@ -91,11 +91,11 @@ public enum ClipboardPayloadExtractor {
         if options.saveFiles, let data = binaryPayload(from: pasteboard) { return data }
         return nil
     }
-    
+
     private static func filePayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         let objects =
-        pasteboard.readObjects(
-            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []
+            pasteboard.readObjects(
+                forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? []
         let urls = objects.compactMap { ($0 as? NSURL) as URL? }.filter(\.isFileURL)
         guard !urls.isEmpty else { return legacyFileListPayload(from: pasteboard) }
         if urls.count == 1, let url = urls.first {
@@ -110,7 +110,7 @@ public enum ClipboardPayloadExtractor {
             data: data, types: [NSPasteboard.PasteboardType.fileURL.rawValue], ext: "files",
             preview: fileListPreview(urls))
     }
-    
+
     private static func legacyFileListPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         let type = NSPasteboard.PasteboardType("NSFilenamesPboardType")
         guard let value = pasteboard.propertyList(forType: type) as? [String], !value.isEmpty else {
@@ -126,12 +126,12 @@ public enum ClipboardPayloadExtractor {
         return ClipboardPayload(
             data: data, types: [type.rawValue], ext: "files", preview: fileListPreview(urls))
     }
-    
+
     private static func filePreview(for url: URL) -> String {
         let name = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-           isDirectory.boolValue
+            isDirectory.boolValue
         {
             return name.isEmpty ? "Folder" : "\(name) · Folder"
         }
@@ -143,19 +143,19 @@ public enum ClipboardPayloadExtractor {
         }
         return name.isEmpty ? url.path : name
     }
-    
+
     static func isOpaqueName(_ name: String) -> Bool {
         UUID(uuidString: (name as NSString).deletingPathExtension) != nil
     }
-    
+
     static func kindDescription(for url: URL) -> String? {
         let ext = url.pathExtension.lowercased()
         guard !ext.isEmpty, let type = UTType(filenameExtension: ext),
-              let description = type.localizedDescription
+            let description = type.localizedDescription
         else { return nil }
         return description.prefix(1).uppercased() + description.dropFirst()
     }
-    
+
     private static func initialFileText(_ url: URL) -> String? {
         let ext = url.pathExtension.lowercased()
         let name = url.lastPathComponent.lowercased()
@@ -178,18 +178,18 @@ public enum ClipboardPayloadExtractor {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: maxSniffBytes), !data.isEmpty,
-              let text = decodeText(data, permissive: true), hasRenderableText(text)
+            let text = decodeText(data, permissive: true), hasRenderableText(text)
         else { return nil }
         return String(preview(for: text, fallback: "Text file").prefix(320))
     }
-    
+
     private static func fileListPreview(_ urls: [URL]) -> String {
         let names = urls.prefix(3).map { filePreview(for: $0) }
         let remainder = urls.count - names.count
         let suffix = remainder > 0 ? ", +\(remainder) more" : ""
         return "\(urls.count) items · \(names.joined(separator: ", "))\(suffix)"
     }
-    
+
     private static func imagePayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         for format in imageFormats {
             if let data = pasteboard.data(forType: format.type), !data.isEmpty {
@@ -201,7 +201,7 @@ public enum ClipboardPayloadExtractor {
         for item in pasteboard.pasteboardItems ?? [] {
             for type in item.types {
                 guard let uniformType = UTType(type.rawValue), uniformType.conforms(to: .image),
-                      let data = item.data(forType: type), !data.isEmpty
+                    let data = item.data(forType: type), !data.isEmpty
                 else { continue }
                 let ext = safeExtension(uniformType.preferredFilenameExtension) ?? "image"
                 let name = uniformType.localizedDescription ?? "Image"
@@ -211,7 +211,7 @@ public enum ClipboardPayloadExtractor {
         }
         return nil
     }
-    
+
     private static func pdfPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         let formats = [
             Format(type: .pdf, ext: "pdf", preview: "PDF document"),
@@ -226,7 +226,7 @@ public enum ClipboardPayloadExtractor {
         }
         return nil
     }
-    
+
     private static func richTextPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         let directText = pasteboard.string(forType: .string)
         for format in richTextFormats {
@@ -251,14 +251,14 @@ public enum ClipboardPayloadExtractor {
         }
         return nil
     }
-    
+
     private static func standardTextPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         guard let text = pasteboard.string(forType: .string) else { return nil }
         return ClipboardPayload(
             data: Data(text.utf8), types: [NSPasteboard.PasteboardType.string.rawValue],
             ext: inferredTextExtension(text), preview: preview(for: text, fallback: "Text"))
     }
-    
+
     private static func typedTextPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         for item in pasteboard.pasteboardItems ?? [] {
             for type in item.types {
@@ -277,9 +277,9 @@ public enum ClipboardPayloadExtractor {
                     continue
                 }
                 let ext =
-                typedTextExtensions[type.rawValue]
-                ?? safeExtension(uniformType?.preferredFilenameExtension)
-                ?? inferredTextExtension(text)
+                    typedTextExtensions[type.rawValue]
+                    ?? safeExtension(uniformType?.preferredFilenameExtension)
+                    ?? inferredTextExtension(text)
                 return ClipboardPayload(
                     data: data, types: [type.rawValue], ext: ext,
                     preview: preview(
@@ -288,16 +288,16 @@ public enum ClipboardPayloadExtractor {
         }
         return nil
     }
-    
+
     private static func webURLPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         let type = NSPasteboard.PasteboardType.URL
         guard let value = pasteboard.string(forType: type), let url = URL(string: value),
-              !url.isFileURL
+            !url.isFileURL
         else { return nil }
         return ClipboardPayload(
             data: Data(value.utf8), types: [type.rawValue], ext: "weburl", preview: value)
     }
-    
+
     private static func binaryPayload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         let colorType = NSPasteboard.PasteboardType.color
         if let data = pasteboard.data(forType: colorType), !data.isEmpty {
@@ -307,7 +307,7 @@ public enum ClipboardPayloadExtractor {
         for item in pasteboard.pasteboardItems ?? [] {
             for type in item.types {
                 guard !reservedTypes.contains(type.rawValue),
-                      let data = item.data(forType: type), !data.isEmpty
+                    let data = item.data(forType: type), !data.isEmpty
                 else { continue }
                 let uniformType = UTType(type.rawValue)
                 if uniformType?.conforms(to: .text) == true
@@ -318,7 +318,7 @@ public enum ClipboardPayloadExtractor {
                 if decodeText(data, permissive: false) != nil { continue }
                 let ext = safeExtension(uniformType?.preferredFilenameExtension) ?? "data"
                 let description =
-                uniformType?.localizedDescription ?? binaryDescription(type.rawValue)
+                    uniformType?.localizedDescription ?? binaryDescription(type.rawValue)
                 return ClipboardPayload(
                     data: data, types: [type.rawValue], ext: ext,
                     preview: "\(description) · \(byteCount(data.count))")
@@ -326,7 +326,7 @@ public enum ClipboardPayloadExtractor {
         }
         return nil
     }
-    
+
     private static let reservedTypes: Set<String> = [
         NSPasteboard.PasteboardType.fileURL.rawValue,
         NSPasteboard.PasteboardType.string.rawValue,
@@ -337,7 +337,7 @@ public enum ClipboardPayloadExtractor {
         ClipboardPasteboardFilter.transientType,
         ClipboardPasteboardFilter.autoGeneratedType,
     ]
-    
+
     private static func preview(for text: String?, fallback: String) -> String {
         guard let text else { return fallback }
         guard !text.isEmpty else { return "Empty text" }
@@ -347,18 +347,18 @@ public enum ClipboardPayloadExtractor {
             CharacterSet.whitespacesAndNewlines.contains($0)
         }
         return whitespaceOnly
-        ? "Whitespace text"
-        : "Control characters"
+            ? "Whitespace text"
+            : "Control characters"
     }
-    
+
     private static func hasRenderableText(_ text: String?) -> Bool {
         guard let text else { return false }
         return text.prefix(maxPreviewCharacters).unicodeScalars.contains {
             !CharacterSet.whitespacesAndNewlines.contains($0)
-            && !CharacterSet.controlCharacters.contains($0)
+                && !CharacterSet.controlCharacters.contains($0)
         }
     }
-    
+
     private static func decodeText(_ data: Data, permissive: Bool) -> String? {
         let sample = Data(data.prefix(maxSniffBytes))
         let initialBytes = Array(sample.prefix(256))
@@ -389,23 +389,23 @@ public enum ClipboardPayloadExtractor {
         }
         return text
     }
-    
+
     private static func textLooksReadable(_ text: String) -> Bool {
         guard !text.isEmpty else { return true }
         let scalars = text.unicodeScalars
         let disallowed = scalars.filter {
             CharacterSet.controlCharacters.contains($0)
-            && !CharacterSet.whitespacesAndNewlines.contains($0)
+                && !CharacterSet.whitespacesAndNewlines.contains($0)
         }.count
         return Double(disallowed) / Double(scalars.count) < 0.02
     }
-    
+
     private static func inferredTextExtension(_ text: String) -> String {
         let sample = String(text.prefix(maxSniffCharacters))
         let trimmed = sample.trimmingCharacters(in: .whitespacesAndNewlines)
         if let data = trimmed.data(using: .utf8),
-           (trimmed.hasPrefix("{") || trimmed.hasPrefix("[")),
-           (try? JSONSerialization.jsonObject(with: data)) != nil
+            (trimmed.hasPrefix("{") || trimmed.hasPrefix("[")),
+            (try? JSONSerialization.jsonObject(with: data)) != nil
         {
             return "json"
         }
@@ -423,27 +423,27 @@ public enum ClipboardPayloadExtractor {
         if trimmed.contains(","), hasDelimitedRows(trimmed, separator: ",") { return "csv" }
         return "txt"
     }
-    
+
     private static func hasDelimitedRows(_ text: String, separator: Character) -> Bool {
         let rows = text.split(whereSeparator: \.isNewline).prefix(5)
         guard rows.count >= 2 else { return false }
         let counts = rows.map { $0.filter { $0 == separator }.count }
         return counts.first.map { $0 > 0 && counts.allSatisfy { $0 == counts.first } } ?? false
     }
-    
+
     private static func safeExtension(_ value: String?) -> String? {
         guard let value else { return nil }
         let safe = value.lowercased().filter { $0.isLetter || $0.isNumber }
         return safe.isEmpty ? nil : String(safe.prefix(12))
     }
-    
+
     private static func binaryDescription(_ identifier: String) -> String {
         if identifier.hasPrefix("dyn.") { return "App data" }
         let tail = identifier.split(separator: ".").last.map(String.init) ?? identifier
         let words = tail.replacingOccurrences(of: "-", with: " ")
         return words.isEmpty ? "Clipboard data" : words.capitalized
     }
-    
+
     private static func byteCount(_ count: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(count), countStyle: .file)
     }

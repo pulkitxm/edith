@@ -6,7 +6,7 @@ public struct MachineMount: Codable, Equatable, Sendable {
     public var remotePath: String
     public var mountPoint: String
     public var isReadOnly: Bool
-    
+
     public init(
         machineID: UUID? = nil, target: String, remotePath: String, mountPoint: String,
         isReadOnly: Bool = false
@@ -17,7 +17,7 @@ public struct MachineMount: Codable, Equatable, Sendable {
         self.mountPoint = mountPoint
         self.isReadOnly = isReadOnly
     }
-    
+
     public var source: String { "\(target):\(remotePath)" }
 }
 
@@ -25,13 +25,13 @@ public struct MountedVolume: Equatable, Sendable {
     public var source: String
     public var mountPoint: String
     public var kinds: [String]
-    
+
     public init(source: String, mountPoint: String, kinds: [String]) {
         self.source = source
         self.mountPoint = mountPoint
         self.kinds = kinds
     }
-    
+
     public var isReadOnly: Bool { kinds.contains("read-only") }
     public var looksLikeFUSE: Bool { kinds.contains { $0.contains("fuse") } }
 }
@@ -40,9 +40,9 @@ public enum MountHealth: String, Equatable, Sendable {
     case mounted
     case stale
     case gone
-    
+
     public var needsRepair: Bool { self != .mounted }
-    
+
     public var describes: String {
         switch self {
         case .mounted: return "mounted"
@@ -65,7 +65,7 @@ public enum MachineMountError: LocalizedError, Equatable {
     case notMounted(String)
     case mountPointBusy(String)
     case failed(String)
-    
+
     public var errorDescription: String? {
         switch self {
         case .toolMissing:
@@ -80,13 +80,13 @@ public enum MachineMountError: LocalizedError, Equatable {
             return message.isEmpty ? "The mount failed." : message
         }
     }
-    
+
     public var hint: String? {
         switch self {
         case .toolMissing:
             return "install FUSE-T, which needs no kernel extension: "
-            + "brew install --cask macos-fuse-t/cask/fuse-t "
-            + "macos-fuse-t/cask/fuse-t-sshfs"
+                + "brew install --cask macos-fuse-t/cask/fuse-t "
+                + "macos-fuse-t/cask/fuse-t-sshfs"
         case .mountPointBusy:
             return "pick another folder with --at, or empty that one"
         default:
@@ -98,14 +98,14 @@ public enum MachineMountError: LocalizedError, Equatable {
 final class MountOutput: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
-    
+
     func append(_ chunk: Data) {
         guard !chunk.isEmpty else { return }
         lock.lock()
         data.append(chunk)
         lock.unlock()
     }
-    
+
     func text() -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -115,12 +115,12 @@ final class MountOutput: @unchecked Sendable {
 
 public enum MachineMounts {
     nonisolated(unsafe) public static var root: URL =
-    FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Edith")
-    
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Edith")
+
     public static let toolName = "sshfs"
-    
+
     public static var recordsFile: URL { MachinePaths.dir.appendingPathComponent("mounts.json") }
-    
+
     public static func folderName(for machine: Machine) -> String {
         let cleaned = machine.name
             .replacingOccurrences(of: "/", with: "-")
@@ -128,17 +128,17 @@ public enum MachineMounts {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? machine.id.uuidString : cleaned
     }
-    
+
     public static func mountPoint(for machine: Machine) -> URL {
         root.appendingPathComponent(folderName(for: machine))
     }
-    
+
     public static func executable() -> URL? {
         CLIToolEnvironment.executable(named: toolName)
     }
-    
+
     public static var isAvailable: Bool { executable() != nil }
-    
+
     public static func parse(_ output: String) -> [MountedVolume] {
         output.split(separator: "\n").compactMap { line in
             let text = String(line)
@@ -155,11 +155,11 @@ public enum MachineMounts {
                 })
         }
     }
-    
+
     public static func mount(for machine: Machine, in mounts: [MachineMount]) -> MachineMount? {
         mounts.first { $0.machineID == machine.id || $0.target == machine.sshTarget }
     }
-    
+
     public static func adopted(_ volume: MountedVolume) -> MachineMount? {
         guard volume.looksLikeFUSE, let colon = volume.source.firstIndex(of: ":") else {
             return nil
@@ -169,9 +169,9 @@ public enum MachineMounts {
             remotePath: String(volume.source[volume.source.index(after: colon)...]),
             mountPoint: volume.mountPoint, isReadOnly: volume.isReadOnly)
     }
-    
+
     public static func reconcile(records: [MachineMount], with volumes: [MountedVolume])
-    -> [MachineMount]
+        -> [MachineMount]
     {
         let byPoint = Dictionary(
             volumes.map { ($0.mountPoint, $0) }, uniquingKeysWith: { first, _ in first })
@@ -188,25 +188,25 @@ public enum MachineMounts {
         }
         return live
     }
-    
+
     public static func volumes() async -> [MountedVolume] {
         parse(await run(URL(fileURLWithPath: "/sbin/mount"), []).output)
     }
-    
+
     public static func list() async -> [MachineMount] {
         reconcile(records: records(), with: await volumes())
     }
-    
+
     public static func tracked() async -> [MachineMount] {
         let live = reconcile(records: records(), with: await volumes())
         let known = Set(live.map(\.mountPoint))
         return live + records().filter { !known.contains($0.mountPoint) }
     }
-    
+
     public static func current(for machine: Machine) async -> MachineMount? {
         mount(for: machine, in: await list())
     }
-    
+
     public static func options(
         machine: Machine, readOnly: Bool, uid: uid_t = getuid(), gid: gid_t = getgid(),
         minimal: Bool = false
@@ -233,7 +233,7 @@ public enum MachineMounts {
         if readOnly { options.append("ro") }
         return options
     }
-    
+
     public static func mountArguments(
         machine: Machine, remotePath: String, mountPoint: String, readOnly: Bool,
         uid: uid_t = getuid(), gid: gid_t = getgid(), minimal: Bool = false
@@ -253,7 +253,7 @@ public enum MachineMounts {
         for option in options { arguments += ["-o", option] }
         return arguments
     }
-    
+
     @discardableResult
     public static func mount(
         machine: Machine, remotePath: String, at mountPoint: URL? = nil, readOnly: Bool = false
@@ -281,7 +281,7 @@ public enum MachineMounts {
         throw MachineMountError.failed(
             complaint.isEmpty ? "sshfs did not mount it and said nothing about why" : complaint)
     }
-    
+
     @discardableResult
     public static func unmount(machine: Machine) async throws -> MachineMount {
         guard let existing = await current(for: machine) else {
@@ -291,14 +291,14 @@ public enum MachineMounts {
         guard await current(for: machine) == nil else {
             throw MachineMountError.failed(
                 complaint.isEmpty
-                ? "\(existing.mountPoint) would not unmount; something may still be in it"
-                : complaint)
+                    ? "\(existing.mountPoint) would not unmount; something may still be in it"
+                    : complaint)
         }
         remember(records().filter { $0.mountPoint != existing.mountPoint })
         discardEmptyFolder(at: existing.mountPoint)
         return existing
     }
-    
+
     public static func health(of mount: MachineMount) async -> MountHealth {
         guard await volumes().contains(where: { $0.mountPoint == mount.mountPoint }) else {
             return .gone
@@ -307,11 +307,11 @@ public enum MachineMounts {
             URL(fileURLWithPath: "/usr/bin/stat"), ["-f%i", mount.mountPoint], timeout: 6)
         return probe.status == 0 ? .mounted : .stale
     }
-    
+
     public static func recorded(for machine: Machine, in file: URL? = nil) -> MachineMount? {
         records(in: file).first { $0.machineID == machine.id }
     }
-    
+
     @discardableResult
     public static func restore(machine: Machine) async -> MountRepair {
         guard let wanted = recorded(for: machine) else { return .nothingToDo }
@@ -329,7 +329,7 @@ public enum MachineMounts {
             return .failed(wanted, error.localizedDescription)
         }
     }
-    
+
     static func release(_ mountPoint: String) async -> String {
         var result = await run(URL(fileURLWithPath: "/sbin/umount"), [mountPoint], timeout: 20)
         if result.status != 0 {
@@ -343,9 +343,9 @@ public enum MachineMounts {
         }
         return explain(result.output)
     }
-    
+
     static func settled(machine: Machine, at destination: URL, remotePath: String) async
-    -> MachineMount?
+        -> MachineMount?
     {
         guard let volume = await volumes().first(where: { $0.mountPoint == destination.path })
         else { return nil }
@@ -353,7 +353,7 @@ public enum MachineMounts {
             machineID: machine.id, target: machine.sshTarget, remotePath: remotePath,
             mountPoint: destination.path, isReadOnly: volume.isReadOnly)
     }
-    
+
     private static func attach(
         _ tool: URL, _ arguments: [String], machine: Machine, at destination: URL,
         remotePath: String
@@ -388,13 +388,13 @@ public enum MachineMounts {
         pipe.fileHandleForReading.readabilityHandler = nil
         return (landed, landed == nil ? explain(output.text()) : "")
     }
-    
+
     static func prepare(_ mountPoint: URL) throws {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         if fm.fileExists(atPath: mountPoint.path, isDirectory: &isDirectory) {
             guard isDirectory.boolValue,
-                  (try? fm.contentsOfDirectory(atPath: mountPoint.path))?.isEmpty != false
+                (try? fm.contentsOfDirectory(atPath: mountPoint.path))?.isEmpty != false
             else { throw MachineMountError.mountPointBusy(mountPoint.path) }
             return
         }
@@ -404,12 +404,12 @@ public enum MachineMounts {
             throw MachineMountError.failed(error.localizedDescription)
         }
     }
-    
+
     public static func records(in file: URL? = nil) -> [MachineMount] {
         guard let data = try? Data(contentsOf: file ?? recordsFile) else { return [] }
         return (try? JSONDecoder().decode([MachineMount].self, from: data)) ?? []
     }
-    
+
     public static func remember(_ mounts: [MachineMount], in file: URL? = nil) {
         let destination = file ?? recordsFile
         let encoder = JSONEncoder()
@@ -419,21 +419,21 @@ public enum MachineMounts {
             at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: destination, options: .atomic)
     }
-    
+
     private static func discardEmptyFolder(at path: String) {
         let fm = FileManager.default
         guard path.hasPrefix(root.path + "/"),
-              (try? fm.contentsOfDirectory(atPath: path))?.isEmpty == true
+            (try? fm.contentsOfDirectory(atPath: path))?.isEmpty == true
         else { return }
         try? fm.removeItem(atPath: path)
     }
-    
+
     private static func explain(_ output: String) -> String {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         return trimmed.split(separator: "\n").last.map(String.init) ?? trimmed
     }
-    
+
     private static func run(
         _ executable: URL, _ arguments: [String], timeout: TimeInterval = 30
     ) async -> (status: Int32, output: String) {

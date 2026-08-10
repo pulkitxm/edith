@@ -16,7 +16,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         body(root.standardizedFileURL.path)
     }
-    
+
     @Test func scanFindsNestedPlayableFilesOnly() {
         withLibrary(["top.mp3", "notes.txt", "Rock/b.m4a", "Rock/Live/a.mov", "Empty/.keep"]) {
             base in
@@ -24,7 +24,7 @@ import Testing
             #expect(paths == ["Rock/b.m4a", "Rock/Live/a.mov", "top.mp3"])
         }
     }
-    
+
     @Test func entriesListDirectChildren() {
         withLibrary(["top.mp3", "notes.txt", "Rock/b.m4a"]) { base in
             let entries = TrackMeta.entries(in: "", base: base)
@@ -33,7 +33,7 @@ import Testing
             #expect(TrackMeta.subfolders(in: "Rock", base: base).isEmpty)
         }
     }
-    
+
     @Test func trackCountIsRecursiveAndCached() {
         withLibrary(["Rock/b.m4a", "Rock/Live/a.mov", "Rock/cover.jpg"]) { base in
             #expect(TrackMeta.trackCount(under: "Rock", base: base) == 2)
@@ -45,7 +45,7 @@ import Testing
             #expect(TrackMeta.trackCount(under: "Rock", base: base) == 3)
         }
     }
-    
+
     @Test func relativePathRoundTripsThroughURL() {
         withLibrary(["Rock/b.m4a"]) { base in
             let url = TrackMeta.url(for: "Rock/b.m4a", base: base)

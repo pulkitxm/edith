@@ -6,18 +6,18 @@ struct MarkdownBody: View {
     let dark: Bool
     var size: CGFloat = 12.5
     var bodyInk = false
-    
+
     private enum Block {
         case heading(Int, String)
         case items([(String, String)])
         case code(String)
         case paragraph(String)
     }
-    
+
     private var bodyColor: Color {
         bodyInk ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
@@ -25,7 +25,7 @@ struct MarkdownBody: View {
             }
         }
     }
-    
+
     private static func listMarker(_ line: String) -> (String, String)? {
         if line.hasPrefix("- ") || line.hasPrefix("* ") {
             return ("•", String(line.dropFirst(2)))
@@ -36,14 +36,14 @@ struct MarkdownBody: View {
         guard rest.hasPrefix(". ") else { return nil }
         return ("\(digits).", String(rest.dropFirst(2)))
     }
-    
+
     private var blocks: [Block] {
         var result: [Block] = []
         var items: [(String, String)] = []
         var paragraph: [String] = []
         var code: [String] = []
         var inCode = false
-        
+
         func flush() {
             if !items.isEmpty {
                 result.append(.items(items))
@@ -54,7 +54,7 @@ struct MarkdownBody: View {
                 paragraph = []
             }
         }
-        
+
         for rawLine in text.components(separatedBy: "\n") {
             let line = String(rawLine.trimmingCharacters(in: .whitespaces))
             if inCode {
@@ -101,7 +101,7 @@ struct MarkdownBody: View {
         flush()
         return result
     }
-    
+
     @ViewBuilder
     private func blockView(_ block: Block) -> some View {
         switch block {
@@ -143,12 +143,12 @@ struct MarkdownBody: View {
                 .textSelection(.enabled)
         }
     }
-    
+
     private func inline(_ source: String) -> AttributedString {
         (try? AttributedString(
             markdown: source,
             options: AttributedString.MarkdownParsingOptions(
                 interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-        ?? AttributedString(source)
+            ?? AttributedString(source)
     }
 }

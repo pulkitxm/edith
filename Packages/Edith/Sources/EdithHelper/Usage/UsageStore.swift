@@ -19,7 +19,7 @@ final class UsageStore: FeatureModule {
     private(set) var limitsError: String?
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
-    
+
     private(set) var stats: [RangeStat] = []
     private(set) var sources: [SourceInfo] = []
     var selectedSources: Set<String> = [] {
@@ -28,16 +28,16 @@ final class UsageStore: FeatureModule {
     private(set) var statsGeneratedAt: Date?
     private(set) var statsError: String?
     private(set) var calendarDays: [DayPoint] = []
-    
+
     private(set) var updating = false
     private(set) var log = ""
     private(set) var diagnostics = ""
-    
+
     private var defaultSources: [String] = []
     private var knownSources: Set<String> = []
     private var daily: [DailyRow] = []
     private var billingDay = 26
-    
+
     private var cachedClaudeCredential: ClaudeOAuthCredential?
     private var retryNotBefore: Date?
     private var usageMtime: Date?
@@ -66,11 +66,11 @@ final class UsageStore: FeatureModule {
     private(set) var limitPoints: [LimitPoint] = []
     private var historyMtime: Date?
     private var statusItem: LimitsStatusItem?
-    
+
     var availableProviders: [LimitProvider] {
         LimitProvider.allCases.filter { limits(for: $0).isAvailable && providerEnabled($0) }
     }
-    
+
     func limits(for provider: LimitProvider) -> ProviderLimits {
         switch provider {
         case .claude:
@@ -79,24 +79,24 @@ final class UsageStore: FeatureModule {
             return ProviderLimits(provider: provider, session: codexSession, week: codexWeek)
         }
     }
-    
+
     func providerEnabled(_ provider: LimitProvider) -> Bool {
         let key =
-        provider == .claude
-        ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled
+            provider == .claude
+            ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled
         return SharedDefaults.store.object(forKey: key) as? Bool ?? true
     }
-    
+
     nonisolated static func enabledLimitProviders(claude: Bool, codex: Bool) -> [LimitProvider] {
         [(LimitProvider.claude, claude), (.codex, codex)].compactMap { provider, enabled in
             enabled ? provider : nil
         }
     }
-    
+
     init() {
         seedFromHistory()
         startPolling()
-        
+
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -106,7 +106,7 @@ final class UsageStore: FeatureModule {
                 self?.stopPolling()
             }
         }
-        
+
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -124,7 +124,7 @@ final class UsageStore: FeatureModule {
                 }
             }
         }
-        
+
         let dnc = DistributedNotificationCenter.default()
         lockObservers = [
             dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) {
@@ -146,7 +146,7 @@ final class UsageStore: FeatureModule {
                 }
             },
         ]
-        
+
         if let app = NSApp, app.isRunning {
             syncStatusItem()
         } else {
@@ -156,21 +156,21 @@ final class UsageStore: FeatureModule {
                 Task { @MainActor in self?.syncStatusItem() }
             }
         }
-        
+
         refreshRequestObserver = IPC.observe(IPC.Name.requestUsageRefresh) { [weak self] in
             self?.runUpdate()
             Task { @MainActor in await self?.refreshLimits(force: true) }
         }
-        
+
         refreshStartedObserver = IPC.observe(IPC.Name.usageRefreshStarted) { [weak self] in
             Task { @MainActor in self?.adoptExternalRefresh() }
         }
-        
+
         limitsRefreshObserver = IPC.observe(IPC.Name.requestLimitsRefresh) { [weak self] in
             Task { @MainActor in await self?.refreshLimits(force: true) }
         }
     }
-    
+
     private func seedFromHistory() {
         let now = Date()
         let fresh = { (w: LimitWindow?) -> LimitWindow? in
@@ -190,7 +190,7 @@ final class UsageStore: FeatureModule {
             diag("seeded last-known limits from history (\(limitsUpdatedAt.formatted()))")
         }
     }
-    
+
     private func startPolling() {
         guard timer == nil else { return }
         let t = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
@@ -208,14 +208,14 @@ final class UsageStore: FeatureModule {
             await loadStats()
         }
     }
-    
+
     private func stopPolling() {
         guard timer != nil else { return }
         timer?.invalidate()
         timer = nil
         Log.lifecycle.notice("usage polling stopped")
     }
-    
+
     func shutdown() {
         stopPolling()
         for obs in lockObservers { DistributedNotificationCenter.default().removeObserver(obs) }
@@ -264,11 +264,11 @@ final class UsageStore: FeatureModule {
         machineTask?.cancel()
         machineTask = nil
     }
-    
+
     func syncStatusItem() {
         guard NSApp?.isRunning == true else { return }
         let on =
-        SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
+            SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
         if on, statusItem == nil {
             statusItem = LimitsStatusItem()
             updateStatusItem()
@@ -278,17 +278,17 @@ final class UsageStore: FeatureModule {
             statusItem = nil
         }
     }
-    
+
     func refreshMenuBarItem() {
         updateStatusItem()
     }
-    
+
     var nextLimitsRefresh: Date? {
         guard let fire = timer?.fireDate else { return nil }
         if let gate = retryNotBefore, gate > fire { return gate }
         return fire
     }
-    
+
     func refreshLimits(force: Bool = false) async {
         let now = Date()
         switch LimitsRefreshGate.decide(
@@ -304,7 +304,7 @@ final class UsageStore: FeatureModule {
         case .start:
             break
         }
-        
+
         limitsRefreshGeneration += 1
         let generation = limitsRefreshGeneration
         limitsRefreshStartedAt = now
@@ -315,7 +315,7 @@ final class UsageStore: FeatureModule {
                 refreshingLimits = false
             }
         }
-        
+
         let providers = Self.enabledLimitProviders(
             claude: providerEnabled(.claude), codex: providerEnabled(.codex))
         for provider in providers {
@@ -326,7 +326,7 @@ final class UsageStore: FeatureModule {
         }
         try? await Task.sleep(nanoseconds: 400_000_000)
     }
-    
+
     private func fetchLimitsOnce() async {
         guard var credential = currentClaudeCredential() else {
             limitsError = "Claude Code token not found"
@@ -341,7 +341,7 @@ final class UsageStore: FeatureModule {
             let usage = try await Self.fetchUsage(token: credential.accessToken)
             apply(usage)
             let msg =
-            "usage ok: session=\(Int((session?.percent ?? 0).rounded()))% week=\(Int((week?.percent ?? 0).rounded()))%"
+                "usage ok: session=\(Int((session?.percent ?? 0).rounded()))% week=\(Int((week?.percent ?? 0).rounded()))%"
             Log.usage.notice("\(msg, privacy: .public)")
             diag(msg)
             return
@@ -353,7 +353,7 @@ final class UsageStore: FeatureModule {
             report(error)
             return
         }
-        
+
         guard let latest = currentClaudeCredential() else {
             limitsError = "Claude Code token not found"
             diag("token re-read failed - keychain + credentials file both empty")
@@ -363,7 +363,7 @@ final class UsageStore: FeatureModule {
         do {
             let fresh: ClaudeOAuthCredential
             if latest.accessToken != credential.accessToken,
-               !latest.shouldRefresh(at: Date())
+                !latest.shouldRefresh(at: Date())
             {
                 fresh = latest
             } else {
@@ -377,7 +377,7 @@ final class UsageStore: FeatureModule {
             report(error)
         }
     }
-    
+
     private func report(_ error: Error) {
         let msg: String
         switch error {
@@ -389,7 +389,7 @@ final class UsageStore: FeatureModule {
             let deadline = LimitsRefreshGate.backoffDeadline(retryAfter: after, now: Date())
             retryNotBefore = deadline
             limitsError =
-            "Rate limited by Claude - retrying at \(deadline.formatted(date: .omitted, time: .shortened))"
+                "Rate limited by Claude - retrying at \(deadline.formatted(date: .omitted, time: .shortened))"
             msg = "429 rate limited - backing off \(Int(deadline.timeIntervalSinceNow))s"
         default:
             limitsError = "Offline"
@@ -400,7 +400,7 @@ final class UsageStore: FeatureModule {
         keepOrBlankMenuBar()
         scheduleQuickRetry()
     }
-    
+
     private func scheduleQuickRetry() {
         guard !hasLiveLimits, quickRetries < 6, retryNotBefore == nil else { return }
         quickRetries += 1
@@ -412,19 +412,19 @@ final class UsageStore: FeatureModule {
             await self?.refreshLimits()
         }
     }
-    
+
     private func diag(_ message: String) {
         diagnostics += "\(Self.diagTimeFormatter.string(from: Date()))  \(message)\n"
         if diagnostics.count > 20_000 { diagnostics = String(diagnostics.suffix(16_000)) }
     }
-    
+
     static let diagTimeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "HH:mm:ss"
         return f
     }()
-    
+
     private func keepOrBlankMenuBar() {
         if availableProviders.isEmpty {
             statusItem?.showUnavailable()
@@ -432,11 +432,11 @@ final class UsageStore: FeatureModule {
             updateStatusItem()
         }
     }
-    
+
     private func updateStatusItem() {
         statusItem?.update(availableProviders.map(limits(for:)))
     }
-    
+
     private func apply(_ usage: OAuthUsage) {
         session = usage.fiveHour.map {
             LimitWindow(percent: $0.utilization ?? 0, resetsAt: Self.parseISO($0.resetsAt))
@@ -456,7 +456,7 @@ final class UsageStore: FeatureModule {
         updateStatusItem()
         IPC.post(IPC.Name.limitsUpdated)
     }
-    
+
     private func fetchCodexLimitsOnce() async {
         do {
             let limits = try await Task.detached(priority: .utility) {
@@ -477,31 +477,31 @@ final class UsageStore: FeatureModule {
             keepOrBlankMenuBar()
         }
     }
-    
+
     private struct CodexWindow: Decodable {
         let usedPercent: Double
         let windowDurationMins: Double?
         let resetsAt: Double?
     }
-    
+
     private struct CodexSnapshot: Decodable {
         let primary: CodexWindow?
         let secondary: CodexWindow?
     }
-    
+
     private struct CodexRateLimitsResult: Decodable {
         let rateLimits: CodexSnapshot?
     }
-    
+
     private struct CodexResponse: Decodable {
         let id: Int?
         let result: CodexRateLimitsResult?
     }
-    
+
     private enum CodexLimitsError: LocalizedError {
         case executableMissing
         case unavailable
-        
+
         var errorDescription: String? {
             switch self {
             case .executableMissing: return "Codex is not installed"
@@ -509,9 +509,9 @@ final class UsageStore: FeatureModule {
             }
         }
     }
-    
+
     private nonisolated static let codexReadTimeout: TimeInterval = 25
-    
+
     private nonisolated static func readCodexLimits() throws -> ProviderLimits {
         guard let executable = codexExecutable() else { throw CodexLimitsError.executableMissing }
         let process = Process()
@@ -524,7 +524,7 @@ final class UsageStore: FeatureModule {
         process.standardOutput = output
         process.standardError = Pipe()
         try process.run()
-        
+
         let watchdog = DispatchWorkItem {
             guard process.isRunning else { return }
             Log.usage.error("codex app-server stopped responding - killing it")
@@ -536,12 +536,12 @@ final class UsageStore: FeatureModule {
             watchdog.cancel()
             if process.isRunning { process.terminate() }
         }
-        
+
         func send(_ object: [String: Any]) throws {
             let data = try JSONSerialization.data(withJSONObject: object)
             input.fileHandleForWriting.write(data + Data("\n".utf8))
         }
-        
+
         func response(id: Int) throws -> CodexResponse {
             var buffer = Data()
             while process.isRunning {
@@ -552,7 +552,7 @@ final class UsageStore: FeatureModule {
                     let line = buffer[..<newline]
                     buffer.removeSubrange(...newline)
                     if let value = try? JSONDecoder().decode(CodexResponse.self, from: line),
-                       value.id == id
+                        value.id == id
                     {
                         return value
                     }
@@ -560,7 +560,7 @@ final class UsageStore: FeatureModule {
             }
             throw CodexLimitsError.unavailable
         }
-        
+
         try send([
             "method": "initialize", "id": 0,
             "params": [
@@ -586,11 +586,11 @@ final class UsageStore: FeatureModule {
         let week = mapped.last { $0.duration >= 7 * 24 * 60 }?.value ?? mapped.last?.value
         return ProviderLimits(provider: .codex, session: session, week: week)
     }
-    
+
     private nonisolated static func codexExecutable() -> URL? {
         CLIToolEnvironment.executable(named: "codex")
     }
-    
+
     private struct OAuthUsage: Decodable {
         struct Window: Decodable {
             let utilization: Double?
@@ -607,13 +607,13 @@ final class UsageStore: FeatureModule {
             case sevenDay = "seven_day"
         }
     }
-    
+
     private enum FetchError: Error {
         case unauthorized
         case rateLimited(after: TimeInterval?)
         case http(Int)
     }
-    
+
     private nonisolated static let limitsSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 15
@@ -621,7 +621,7 @@ final class UsageStore: FeatureModule {
         config.waitsForConnectivity = false
         return URLSession(configuration: config)
     }()
-    
+
     private nonisolated static func fetchUsage(token: String) async throws -> OAuthUsage {
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -640,7 +640,7 @@ final class UsageStore: FeatureModule {
         default: throw FetchError.http(code)
         }
     }
-    
+
     private func currentClaudeCredential() -> ClaudeOAuthCredential? {
         if let cachedClaudeCredential { return cachedClaudeCredential }
         guard let credential = ClaudeCredentialStore.read() else {
@@ -656,9 +656,9 @@ final class UsageStore: FeatureModule {
         cachedClaudeCredential = credential
         return credential
     }
-    
+
     private func refreshClaudeCredential(_ credential: ClaudeOAuthCredential) async throws
-    -> ClaudeOAuthCredential
+        -> ClaudeOAuthCredential
     {
         let now = Date()
         guard let refreshToken = credential.usableRefreshToken(at: now) else {
@@ -676,9 +676,9 @@ final class UsageStore: FeatureModule {
         diag("Claude access token refreshed and saved")
         return refreshed
     }
-    
+
     private nonisolated static func fetchRefreshedClaudeToken(refreshToken: String) async throws
-    -> ClaudeOAuthRefreshResponse
+        -> ClaudeOAuthRefreshResponse
     {
         var request = URLRequest(
             url: URL(string: "https://platform.claude.com/v1/oauth/token")!)
@@ -705,21 +705,21 @@ final class UsageStore: FeatureModule {
             throw FetchError.http(code)
         }
     }
-    
+
     static let ymdParser: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
-    
+
     nonisolated static func parseISO(_ s: String?) -> Date? { EdithDate.parseISO(s) }
-    
+
     struct DailyRow: Decodable {
         let period: String
         let bySource: [String: [ModelRow]]
     }
-    
+
     struct ModelRow: Decodable {
         let inputTokens: Double?
         let outputTokens: Double?
@@ -728,10 +728,10 @@ final class UsageStore: FeatureModule {
         let cost: Double?
         var tokens: Double {
             (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheCreationTokens ?? 0)
-            + (cacheReadTokens ?? 0)
+                + (cacheReadTokens ?? 0)
         }
     }
-    
+
     private struct UsageFile: Decodable {
         let generatedAt: String?
         let sources: [String]?
@@ -740,14 +740,14 @@ final class UsageStore: FeatureModule {
         let daily: [DailyRow]
         struct Meta: Decodable { let label: String? }
     }
-    
+
     func loadStats() async {
         let url = Repo.usageJSON
         let mtime =
-        (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-        as? Date
+            (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
+            as? Date
         if let mtime, mtime == usageMtime { return }
-        
+
         let parsed: UsageFile
         do {
             parsed = try await Task.detached(priority: .utility) {
@@ -758,7 +758,7 @@ final class UsageStore: FeatureModule {
             diag("usage.json decode failed: \(error.localizedDescription)")
             return
         }
-        
+
         usageMtime = mtime
         statsError = nil
         daily = parsed.daily
@@ -772,7 +772,7 @@ final class UsageStore: FeatureModule {
             defaults: Set(defaultSources))
         knownSources = availableSources
     }
-    
+
     private func recomputeStats() {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
@@ -798,7 +798,7 @@ final class UsageStore: FeatureModule {
                     month: cal.component(.month, from: prev), day: prevAnchor))!
         }()
         let yesterday = cal.date(byAdding: .day, value: -1, to: today)!
-        
+
         let ranges: [(String, String, String)] = [
             ("Today", ymd(today), ymd(today)),
             ("Yesterday", ymd(yesterday), ymd(yesterday)),
@@ -817,7 +817,7 @@ final class UsageStore: FeatureModule {
             }
             return RangeStat(id: label, label: label, tokens: tokens, cost: cost)
         }
-        
+
         var costByDay: [String: Double] = [:]
         for row in daily {
             var cost = 0.0
@@ -829,7 +829,7 @@ final class UsageStore: FeatureModule {
         var points: [DayPoint] = []
         var day = weekStart
         if let first = daily.map(\.period).min(),
-           let firstDate = Self.ymdParser.date(from: first)
+            let firstDate = Self.ymdParser.date(from: first)
         {
             let start = cal.startOfDay(for: firstDate)
             let dow = (cal.component(.weekday, from: start) + 5) % 7
@@ -842,12 +842,12 @@ final class UsageStore: FeatureModule {
         }
         calendarDays = points
     }
-    
+
     func loadLimitHistory(provider: LimitProvider = .claude) async {
         let url = LimitsHistory.url
         let mtime =
-        (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-        as? Date
+            (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
+            as? Date
         historyMtime = mtime
         let since = Date().addingTimeInterval(-24 * 3600)
         let points = await Task.detached(priority: .utility) {
@@ -858,7 +858,7 @@ final class UsageStore: FeatureModule {
         }.value
         limitPoints = points
     }
-    
+
     func runUpdate(collectMachines: Bool = true) {
         if collectMachines { collectFromMachines(force: false) }
         guard !updating else { return }
@@ -884,20 +884,20 @@ final class UsageStore: FeatureModule {
             await self.finishRefresh()
         }
     }
-    
+
     private func beginTranscript() {
         updating = true
         refreshStartedAt = Date()
         refreshEvents = []
         log = UsageRefreshTranscript.render([], startedAt: refreshStartedAt ?? Date())
     }
-    
+
     private func append(_ event: UsageRefreshEvent) {
         refreshEvents.append(event)
         log = UsageRefreshTranscript.render(
             refreshEvents, startedAt: refreshStartedAt ?? Date())
     }
-    
+
     private func finishRefresh() async {
         updating = false
         refreshTask = nil
@@ -909,7 +909,7 @@ final class UsageStore: FeatureModule {
             runUpdate(collectMachines: false)
         }
     }
-    
+
     private func adoptExternalRefresh() {
         guard !updating else { return }
         beginTranscript()
@@ -927,7 +927,7 @@ final class UsageStore: FeatureModule {
             await self.finishRefresh()
         }
     }
-    
+
     private func collectFromMachines(force: Bool) {
         guard machineTask == nil else { return }
         let due = MachineUsageRound.due(force: force)
@@ -943,12 +943,12 @@ final class UsageStore: FeatureModule {
             await self?.finishedCollecting(changed: result.changedAnything)
         }
     }
-    
+
     private func noteMachine(_ message: String) {
         Log.usage.notice("machine usage \(message, privacy: .public)")
         diag("machine usage \(message)")
     }
-    
+
     private func finishedCollecting(changed: Bool) {
         machineTask = nil
         guard changed else { return }

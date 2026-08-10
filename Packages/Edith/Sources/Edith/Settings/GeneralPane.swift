@@ -17,18 +17,18 @@ struct SettingsPane: View {
             }
         }
     }
-    
+
     let updater: UpdaterModel
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
-    var tabRaw =
-    Tab.general.rawValue
-    
+        var tabRaw =
+        Tab.general.rawValue
+
     private var tab: Binding<Tab> {
         Binding(
             get: { Tab(rawValue: tabRaw) ?? .general },
             set: { tabRaw = $0.rawValue })
     }
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             PageHeader(
@@ -59,9 +59,9 @@ struct SettingsPane: View {
         .navigationTitle("Settings")
         .onAppear {
             tabRaw =
-            MainNavigationFallback.resolve(
-                mainWindowSection: MainDestination.settings.rawValue, settingsTab: tabRaw
-            ).settingsTab
+                MainNavigationFallback.resolve(
+                    mainWindowSection: MainDestination.settings.rawValue, settingsTab: tabRaw
+                ).settingsTab
         }
     }
 }
@@ -69,17 +69,17 @@ struct SettingsPane: View {
 private struct UpdatesPane: View {
     let updater: UpdaterModel
     @State private var showingSchedule = false
-    
+
     private var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
     }
-    
+
     private var automaticDownloads: Binding<Bool> {
         Binding(
             get: { updater.automaticallyDownloadsUpdates },
             set: { updater.automaticallyDownloadsUpdates = $0 })
     }
-    
+
     var body: some View {
         Group {
             if updater.updaterAvailable {
@@ -106,7 +106,7 @@ private struct UpdatesPane: View {
                     } header: {
                         Text("Version")
                     }
-                    
+
                     Section {
                         Toggle("Automatic updates", isOn: automaticDownloads)
                             .pointerCursor()
@@ -139,22 +139,22 @@ private struct UpdatesPane: View {
 
 struct GeneralPane: View {
     @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
-    var appearance = "system"
+        var appearance = "system"
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
+        "accent"
     @AppStorage(AppStorageKeys.General.lastPaletteTheme, store: SharedDefaults.store) private
-    var lastPaletteTheme =
-    "blue"
+        var lastPaletteTheme =
+        "blue"
     @AppStorage(AppStorageKeys.General.showDockIcon, store: SharedDefaults.store) private
-    var showDockIcon = true
+        var showDockIcon = true
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-    var mainWindowSection =
-    MainDestination.home.rawValue
+        var mainWindowSection =
+        MainDestination.home.rawValue
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
-    var settingsTab =
-    SettingsPane.Tab.general.rawValue
+        var settingsTab =
+        SettingsPane.Tab.general.rawValue
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
-    
+
     var body: some View {
         Form {
             Section {
@@ -165,7 +165,7 @@ struct GeneralPane: View {
                 }
                 .pointerCursor()
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
-                
+
                 LabeledContent("Theme") {
                     HStack(spacing: UIScale.pt(10)) {
                         Toggle(
@@ -185,7 +185,7 @@ struct GeneralPane: View {
             } header: {
                 Text("Appearance")
             }
-            
+
             Section {
                 Toggle("Show Dock icon", isOn: $showDockIcon)
                     .pointerCursor()
@@ -208,7 +208,7 @@ struct GeneralPane: View {
                 Text("Features are turned on and off from the Extensions page.")
                     .font(.system(size: UIScale.pt(10)))
             }
-            
+
             Section {
                 Button {
                     settingsTab = SettingsPane.Tab.permissions.rawValue
@@ -231,7 +231,7 @@ struct GeneralPane: View {
                 Text("Every permission Edith can ask for, in one place.")
                     .font(.system(size: UIScale.pt(10)))
             }
-            
+
             Section {
                 Button("Show welcome tour") {
                     SharedDefaults.store.removeObject(forKey: OnboardingFlow.completionKey)
@@ -241,7 +241,7 @@ struct GeneralPane: View {
             } header: {
                 Text("Welcome tour")
             }
-            
+
         }
         .formStyle(.grouped)
         .navigationTitle("General")
@@ -261,7 +261,7 @@ struct GeneralPane: View {
             grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
         }
     }
-    
+
     private var enabledExtensionPermissions: Set<ExtensionPermission> {
         let enabledEntries = ExtensionRegistry.entries.filter {
             SharedDefaults.store.bool(forKey: $0.defaultsKey)
@@ -269,19 +269,19 @@ struct GeneralPane: View {
         return Set(
             enabledEntries.flatMap { $0.requiredPermissions + $0.optionalPermissions })
     }
-    
+
     private var permissionSummary: String {
         let permissions = enabledExtensionPermissions
         guard !permissions.isEmpty else { return "No enabled extension needs access" }
         let granted = permissions.filter { grantedPermissions[$0] == true }.count
         return "\(granted) of \(permissions.count) granted"
     }
-    
+
     private func refreshPermissionState() {
         grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
         IPC.post(IPC.Name.requestPermissionsRefresh)
     }
-    
+
     private func swatch(_ name: String, color: Color) -> some View {
         Button {
             themeName = name

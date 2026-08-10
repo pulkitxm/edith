@@ -10,7 +10,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case camera
     case bluetooth
     case automation
-    
+
     public var displayName: String {
         switch self {
         case .calendar: "Calendar"
@@ -24,7 +24,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .automation: "Automation"
         }
     }
-    
+
     public var reason: String {
         switch self {
         case .calendar: "Required to read and show your schedule in Calendar."
@@ -41,7 +41,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .automation: "Asked when Notch Shelf first controls external playback."
         }
     }
-    
+
     public var grantedDefaultsKey: String? {
         switch self {
         case .calendar: "permCalendarGranted"
@@ -54,7 +54,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth, .automation: nil
         }
     }
-    
+
     public var symbolName: String {
         switch self {
         case .calendar: "calendar"
@@ -68,7 +68,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .automation: "gearshape.2"
         }
     }
-    
+
     public var grantRequest: Notification.Name? {
         switch self {
         case .calendar: IPC.Name.grantCalendar
@@ -81,7 +81,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth, .automation: nil
         }
     }
-    
+
     public var firstUseExplanation: String? {
         switch self {
         case .bluetooth:
@@ -125,7 +125,7 @@ public enum ExtensionMarketplaceCategory: String, CaseIterable, Hashable, Sendab
     case system = "System"
     case media = "Media"
     case utilities = "Utilities"
-    
+
     public var group: ExtensionGroup? {
         switch self {
         case .all: nil
@@ -146,8 +146,8 @@ public enum ExtensionMarketplaceFilter {
         return entries.filter { entry in
             let matchesCategory = category.group == nil || entry.group == category.group
             let matchesQuery =
-            trimmedQuery.isEmpty || entry.title.localizedCaseInsensitiveContains(trimmedQuery)
-            || entry.subtitle.localizedCaseInsensitiveContains(trimmedQuery)
+                trimmedQuery.isEmpty || entry.title.localizedCaseInsensitiveContains(trimmedQuery)
+                || entry.subtitle.localizedCaseInsensitiveContains(trimmedQuery)
             return matchesCategory && matchesQuery
         }
     }
@@ -164,7 +164,7 @@ public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
     public let requiredPermissions: [ExtensionPermission]
     public let optionalPermissions: [ExtensionPermission]
     public let requiredTools: [CLIToolSpec]
-    
+
     public init(
         id: String, title: String, subtitle: String, symbolName: String,
         group: ExtensionGroup, featured: Bool, defaultsKey: String,

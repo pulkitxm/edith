@@ -7,11 +7,11 @@ import Observation
 @Observable
 final class MicMuteEngine: NSObject, FeatureModule {
     private(set) var muted = false
-    
+
     private var savedVolumes: [AudioDeviceID: [UInt32: Float]] = [:]
     private var deviceListListener: AudioObjectPropertyListenerBlock?
     private var statusItem: NSStatusItem?
-    
+
     override init() {
         super.init()
         muted = SharedDefaults.store.bool(forKey: "micMuted")
@@ -19,7 +19,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
         observeDeviceList()
         syncSettings()
     }
-    
+
     func shutdown() {
         MicHotKey.unregister()
         if muted { apply(false) }
@@ -32,14 +32,14 @@ final class MicMuteEngine: NSObject, FeatureModule {
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
     }
-    
+
     func toggle() { setMuted(!muted) }
-    
+
     func syncSettings() {
         MicHotKey.register()
         updateStatusItemPresence()
     }
-    
+
     func setMuted(_ on: Bool) {
         guard on != muted else { return }
         muted = on
@@ -48,10 +48,10 @@ final class MicMuteEngine: NSObject, FeatureModule {
         updateIcon()
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
     }
-    
+
     func updateStatusItemPresence() {
         let wanted =
-        SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
+            SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
         if wanted, statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             StatusItemMenu.attach(to: item, target: self, action: #selector(statusClicked))
@@ -62,30 +62,30 @@ final class MicMuteEngine: NSObject, FeatureModule {
             statusItem = nil
         }
     }
-    
+
     @objc private func statusClicked() {
         guard let statusItem else { return }
         StatusItemMenu.handleClick(on: statusItem) { toggle() }
     }
-    
+
     private func updateIcon() {
         let name = muted ? "mic.slash.fill" : "mic.fill"
         let image = NSImage(systemSymbolName: name, accessibilityDescription: "Microphone")
         statusItem?.button?.image = image
         statusItem?.button?.contentTintColor = muted ? .systemRed : nil
     }
-    
+
     private func apply(_ on: Bool) {
         for device in Self.inputDevices() {
             Self.applyMute(on, to: device, saved: &savedVolumes)
         }
     }
-    
+
     private static let deviceListAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDevices,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain)
-    
+
     private func observeDeviceList() {
         var address = Self.deviceListAddress
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
@@ -98,7 +98,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
         AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
     }
-    
+
     static func inputDevices() -> [AudioDeviceID] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -117,7 +117,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
         else { return [] }
         return ids.filter { hasInputStreams($0) }
     }
-    
+
     private static func hasInputStreams(_ device: AudioDeviceID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
@@ -129,7 +129,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
         }
         return size > 0
     }
-    
+
     private static func applyMute(
         _ on: Bool, to device: AudioDeviceID, saved: inout [AudioDeviceID: [UInt32: Float]]
     ) {
@@ -140,7 +140,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
             if AudioObjectHasProperty(device, &mute) {
                 var settable: DarwinBoolean = false
                 if AudioObjectIsPropertySettable(device, &mute, &settable) == noErr,
-                   settable.boolValue
+                    settable.boolValue
                 {
                     var value: UInt32 = on ? 1 : 0
                     AudioObjectSetPropertyData(
@@ -151,7 +151,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
         }
         applyVolumeFallback(on, to: device, saved: &saved)
     }
-    
+
     private static func applyVolumeFallback(
         _ on: Bool, to device: AudioDeviceID, saved: inout [AudioDeviceID: [UInt32: Float]]
     ) {
@@ -161,8 +161,8 @@ final class MicMuteEngine: NSObject, FeatureModule {
                 mScope: kAudioObjectPropertyScopeInput, mElement: element)
             var settable: DarwinBoolean = false
             guard AudioObjectHasProperty(device, &volume),
-                  AudioObjectIsPropertySettable(device, &volume, &settable) == noErr,
-                  settable.boolValue
+                AudioObjectIsPropertySettable(device, &volume, &settable) == noErr,
+                settable.boolValue
             else { continue }
             if on {
                 var current: Float = 0

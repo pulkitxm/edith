@@ -19,7 +19,7 @@ import Testing
         keys.forEach { SharedDefaults.store.removeObject(forKey: $0) }
         body()
     }
-    
+
     @Test func panelHotKeyDefaults() {
         withCleanKeys("hotKey") {
             #expect(HotKey.code == kVK_ANSI_E)
@@ -27,7 +27,7 @@ import Testing
             #expect(HotKey.label == "⌥⌘E")
         }
     }
-    
+
     @Test func clipboardHotKeyDefaults() {
         withCleanKeys("clipboardHotKey") {
             #expect(ClipboardHotKey.code == kVK_ANSI_C)
@@ -35,7 +35,7 @@ import Testing
             #expect(ClipboardHotKey.label == "⌃⇧C")
         }
     }
-    
+
     @Test func focusDimHotKeyDefaults() {
         withCleanKeys("focusDimHotKey") {
             #expect(FocusDimHotKey.code == kVK_ANSI_F)
@@ -43,7 +43,7 @@ import Testing
             #expect(FocusDimHotKey.label == "⌥⌘F")
         }
     }
-    
+
     @Test func presenterHotKeyDefaults() {
         withCleanKeys("presenterHotKey") {
             #expect(PresenterHotKey.code == kVK_ANSI_P)
@@ -51,7 +51,7 @@ import Testing
             #expect(PresenterHotKey.label == "⇧⌥⌘P")
         }
     }
-    
+
     @Test func panelHotKeySaveRoundTrips() {
         withCleanKeys("hotKey") {
             HotKey.save(code: kVK_ANSI_J, mods: cmdKey | shiftKey, label: "⇧⌘J")
@@ -60,7 +60,7 @@ import Testing
             #expect(HotKey.label == "⇧⌘J")
         }
     }
-    
+
     @Test func clipboardHotKeySaveRoundTrips() {
         withCleanKeys("clipboardHotKey") {
             ClipboardHotKey.save(code: kVK_ANSI_V, mods: controlKey | optionKey, label: "⌃⌥V")

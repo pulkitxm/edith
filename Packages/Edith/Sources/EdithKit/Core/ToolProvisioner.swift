@@ -5,7 +5,7 @@ public struct CLICommandRequest: Equatable, Sendable {
     public let executableURL: URL
     public let arguments: [String]
     public let environment: [String: String]
-    
+
     public init(executableURL: URL, arguments: [String], environment: [String: String]) {
         self.executableURL = executableURL
         self.arguments = arguments
@@ -16,7 +16,7 @@ public struct CLICommandRequest: Equatable, Sendable {
 public struct CLICommandResult: Equatable, Sendable {
     public let terminationStatus: Int32
     public let output: String
-    
+
     public init(terminationStatus: Int32, output: String) {
         self.terminationStatus = terminationStatus
         self.output = output
@@ -36,7 +36,7 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     private let lock = NSLock()
     private var pending = ""
     private var complete = ""
-    
+
     func receive(_ data: Data) -> [String] {
         guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return [] }
         lock.lock()
@@ -51,7 +51,7 @@ private final class CLIStreamingOutput: @unchecked Sendable {
         }
         return lines
     }
-    
+
     func finish() -> (lines: [String], output: String) {
         lock.lock()
         defer { lock.unlock() }
@@ -105,18 +105,18 @@ public enum CLICommandRunner {
 @Observable
 public final class ToolProvisioner {
     public typealias RunCommand =
-    @Sendable (
-        CLICommandRequest, @escaping @Sendable (String) -> Void
-    ) async throws -> CLICommandResult
+        @Sendable (
+            CLICommandRequest, @escaping @Sendable (String) -> Void
+        ) async throws -> CLICommandResult
 
     public static let shared = ToolProvisioner()
 
     public private(set) var states: [String: CLIToolProvisionState] = [:]
     public private(set) var logs: [String: [String]] = [:]
-    
+
     private let installer: ToolInstaller
     private var tasks: [String: Task<Void, Never>] = [:]
-    
+
     public init(
         runCommand: @escaping RunCommand = { request, onLine in
             try await CLICommandRunner.run(request, onLine: onLine)
@@ -124,25 +124,25 @@ public final class ToolProvisioner {
     ) {
         self.installer = ToolInstaller(runCommand: runCommand)
     }
-    
+
     public func state(for tool: CLIToolSpec) -> CLIToolProvisionState {
         states[tool.id] ?? .idle
     }
-    
+
     @discardableResult
     public func check(_ tool: CLIToolSpec) -> Task<Void, Never> {
         start(tool, installIfMissing: false)
     }
-    
+
     @discardableResult
     public func provision(_ tool: CLIToolSpec) -> Task<Void, Never> {
         start(tool, installIfMissing: true)
     }
-    
+
     public func provision(_ tools: [CLIToolSpec]) {
         for tool in tools { provision(tool) }
     }
-    
+
     private func start(_ tool: CLIToolSpec, installIfMissing: Bool) -> Task<Void, Never> {
         if let task = tasks[tool.id] { return task }
         let task = Task { [weak self] in
@@ -153,7 +153,7 @@ public final class ToolProvisioner {
         tasks[tool.id] = task
         return task
     }
-    
+
     private func perform(_ tool: CLIToolSpec, installIfMissing: Bool) async {
         states[tool.id] = .checking
         logs[tool.id] = []
@@ -178,20 +178,20 @@ public final class ToolProvisioner {
                 name: .cliToolProvisioned, object: nil, userInfo: ["toolID": tool.id])
         } catch {
             let message =
-            (error as? ToolInstallFailure)?.description
-            ?? error.localizedDescription
+                (error as? ToolInstallFailure)?.description
+                ?? error.localizedDescription
             append(message, for: tool)
             states[tool.id] = .failed(
                 message: message, instruction: tool.installStrategy.instruction)
         }
     }
-    
+
     private func recorder(for tool: CLIToolSpec) -> ToolInstaller.Log {
         { [weak self] line in
             Task { @MainActor in self?.append(line, for: tool) }
         }
     }
-    
+
     private func append(_ line: String, for tool: CLIToolSpec) {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

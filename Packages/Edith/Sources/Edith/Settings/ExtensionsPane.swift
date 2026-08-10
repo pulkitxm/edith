@@ -20,51 +20,51 @@ enum ExtensionPermissionState {
 
 struct ExtensionsPane: View {
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
-    var usageEnabled = false
+        var usageEnabled = false
     @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
-    var claudeEnabled = true
+        var claudeEnabled = true
     @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
-    var codexEnabled = true
+        var codexEnabled = true
     @AppStorage(AppStorageKeys.Limits.inMenuBar, store: SharedDefaults.store) private
-    var limitsInMenuBar = true
+        var limitsInMenuBar = true
     @AppStorage(AppStorageKeys.Notify.master, store: SharedDefaults.store) private
-    var notifyMaster = false
+        var notifyMaster = false
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
-    var limitsProviderRaw =
-    LimitProvider.claude.rawValue
+        var limitsProviderRaw =
+        LimitProvider.claude.rawValue
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-    var musicEnabled = false
+        var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
-    var calendarEnabled =
-    false
+        var calendarEnabled =
+        false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-    var systemEnabled = false
+        var systemEnabled = false
     @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
-    var machinesEnabled =
-    false
+        var machinesEnabled =
+        false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
-    var companionEnabled =
-    false
+        var companionEnabled =
+        false
     @AppStorage(AppStorageKeys.MenuBar.systemStats, store: SharedDefaults.store) private
-    var systemStats = false
+        var systemStats = false
     @AppStorage(AppStorageKeys.Notch.shelfEnabled, store: SharedDefaults.store) private
-    var notchShelfEnabled =
-    false
+        var notchShelfEnabled =
+        false
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
-    var clipboardEnabled =
-    false
+        var clipboardEnabled =
+        false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
-    false
+        false
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
-    var micMuteEnabled = false
+        var micMuteEnabled = false
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
-    var colorPickerEnabled =
-    false
+        var colorPickerEnabled =
+        false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-    var presenterEnabled =
-    false
+        var presenterEnabled =
+        false
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
-    var preventSleep = false
+        var preventSleep = false
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -74,7 +74,7 @@ struct ExtensionsPane: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             PageHeader(
@@ -131,11 +131,11 @@ struct ExtensionsPane: View {
             ToolProvisioningSheet(entry: entry)
         }
     }
-    
+
     private var searchField: some View {
         SearchField(placeholder: "Search extensions", text: $query, typeAhead: true)
     }
-    
+
     private var categoryRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: UIScale.pt(8)) {
@@ -165,20 +165,20 @@ struct ExtensionsPane: View {
         }
         .scrollIndicators(.never)
     }
-    
+
     private var filteredEntries: [ExtensionRegistryEntry] {
         ExtensionMarketplaceFilter.filter(
             entries: ExtensionRegistry.entries, query: query, category: category)
     }
-    
+
     private var enabledEntries: [ExtensionRegistryEntry] {
         filteredEntries.filter { enabledBinding(for: $0).wrappedValue }
     }
-    
+
     private var availableEntries: [ExtensionRegistryEntry] {
         filteredEntries.filter { !enabledBinding(for: $0).wrappedValue }
     }
-    
+
     @ViewBuilder
     private func section(_ title: String, entries: [ExtensionRegistryEntry]) -> some View {
         if !entries.isEmpty {
@@ -203,22 +203,22 @@ struct ExtensionsPane: View {
             }
         }
     }
-    
+
     private var gridColumns: [GridItem] {
         [
             GridItem(.flexible(), spacing: UIScale.pt(14)),
             GridItem(.flexible(), spacing: UIScale.pt(14)),
         ]
     }
-    
+
     private func openSettings(for entry: ExtensionRegistryEntry) {
         guard entry.id != "calendar" else { return }
         selectedEntry = entry
     }
-    
+
     private func handleDeepLink(using proxy: ScrollViewProxy) {
         guard let id = SharedDefaults.store.string(forKey: "extensionsExpand"),
-              let entry = ExtensionRegistry.entries.first(where: { $0.id == id })
+            let entry = ExtensionRegistry.entries.first(where: { $0.id == id })
         else { return }
         SharedDefaults.store.removeObject(forKey: "extensionsExpand")
         query = ""
@@ -230,7 +230,7 @@ struct ExtensionsPane: View {
             openSettings(for: entry)
         }
     }
-    
+
     private var agentUsageBinding: Binding<Bool> {
         Binding(
             get: { usageEnabled },
@@ -239,14 +239,14 @@ struct ExtensionsPane: View {
             }
         )
     }
-    
+
     private var agentUsageState: AgentUsageSettingsState {
         AgentUsageSettingsState(
             enabled: usageEnabled, claudeEnabled: claudeEnabled, codexEnabled: codexEnabled,
             menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
             selectedProvider: LimitProvider(rawValue: limitsProviderRaw) ?? .claude)
     }
-    
+
     private func applyAgentUsageState(_ state: AgentUsageSettingsState) {
         usageEnabled = state.enabled
         claudeEnabled = state.claudeEnabled
@@ -254,7 +254,7 @@ struct ExtensionsPane: View {
         limitsInMenuBar = state.menuBarEnabled
         notifyMaster = state.alertsEnabled
     }
-    
+
     private func enabledBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
         switch entry.defaultsKey {
         case AppStorageKeys.Tabs.usageEnabled: agentUsageBinding
@@ -273,7 +273,7 @@ struct ExtensionsPane: View {
         default: .constant(false)
         }
     }
-    
+
     private func permissionAwareBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
         let enabled = enabledBinding(for: entry)
         return Binding(
@@ -301,30 +301,30 @@ struct ExtensionsPane: View {
                 }
             })
     }
-    
+
     private static func seenKey(for entry: ExtensionRegistryEntry) -> String {
         "extensionPermissionsSeen.\(entry.id)"
     }
-    
+
     private func hasSeenPermissions(for entry: ExtensionRegistryEntry) -> Bool {
         SharedDefaults.store.bool(forKey: Self.seenKey(for: entry))
     }
-    
+
     private func markPermissionsSeen(for entry: ExtensionRegistryEntry) {
         SharedDefaults.store.set(true, forKey: Self.seenKey(for: entry))
     }
-    
+
     private func markEnabledExtensionsSeen() {
         for entry in ExtensionRegistry.entries
         where SharedDefaults.store.bool(forKey: entry.defaultsKey) {
             markPermissionsSeen(for: entry)
         }
     }
-    
+
     private func refreshPermissionState() {
         grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
     }
-    
+
     private func requestPermissionRefresh() {
         IPC.post(IPC.Name.requestPermissionsRefresh)
         refreshPermissionState()
@@ -333,14 +333,14 @@ struct ExtensionsPane: View {
             refreshPermissionState()
         }
     }
-    
+
     private func enableRequestedExtensionIfReady() {
         guard let request = permissionRequest, !request.required.isEmpty,
-              request.entry.requiredPermissions.allSatisfy({ grantedPermissions[$0] == true })
+            request.entry.requiredPermissions.allSatisfy({ grantedPermissions[$0] == true })
         else { return }
         enableRequestedExtension(request)
     }
-    
+
     private func enableRequestedExtension(_ request: ExtensionPermissionRequest) {
         enabledBinding(for: request.entry).wrappedValue = true
         markPermissionsSeen(for: request.entry)
@@ -349,7 +349,7 @@ struct ExtensionsPane: View {
             showProvisioning(for: request.entry)
         }
     }
-    
+
     private func showProvisioning(for entry: ExtensionRegistryEntry) {
         let tools = entry.requiredTools.filter { $0.requirement.isActive() }
         guard !tools.isEmpty else { return }
@@ -362,7 +362,7 @@ struct ExtensionsPane: View {
             if hasMissingTool { provisioningEntry = entry }
         }
     }
-    
+
 }
 
 private struct ExtensionMarketplaceCard: View {
@@ -371,7 +371,7 @@ private struct ExtensionMarketplaceCard: View {
     let dark: Bool
     let open: () -> Void
     @State private var hovering = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             Button(action: open) {
@@ -440,7 +440,7 @@ private struct ExtensionMarketplaceCard: View {
         .shadow(color: .black.opacity(hovering ? 0.1 : 0), radius: UIScale.pt(8), y: 3)
         .onHover { hovering = $0 }
     }
-    
+
     private var permissions: [ExtensionPermission] {
         entry.requiredPermissions + entry.optionalPermissions
     }
@@ -449,7 +449,7 @@ private struct ExtensionMarketplaceCard: View {
 private struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -478,7 +478,7 @@ private struct ExtensionSettingsSheet: View {
             minHeight: UIScale.pt(260),
             idealHeight: idealHeight, maxHeight: UIScale.pt(620))
     }
-    
+
     private var idealHeight: CGFloat {
         switch entry.id {
         case "micMute", "systemStats": 300
@@ -495,7 +495,7 @@ private struct ExtensionSettingsSheet: View {
 private struct RequiredPermissionRows: View {
     let permissions: [ExtensionPermission]
     @State private var grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
-    
+
     var body: some View {
         Group {
             if !permissions.isEmpty {
@@ -504,14 +504,14 @@ private struct RequiredPermissionRows: View {
                         HStack(spacing: UIScale.pt(8)) {
                             Image(
                                 systemName: grantedPermissions[permission] == true
-                                ? "checkmark.circle.fill" : "circle"
+                                    ? "checkmark.circle.fill" : "circle"
                             )
                             .foregroundStyle(
                                 grantedPermissions[permission] == true ? .green : .secondary)
                             Text(permission.displayName)
                             Spacer()
                             if grantedPermissions[permission] != true,
-                               let request = permission.grantRequest
+                                let request = permission.grantRequest
                             {
                                 Button("Grant...") { IPC.post(request) }
                                     .pointerCursor()
@@ -538,7 +538,7 @@ private struct RequiredPermissionRows: View {
 
 private struct ExtensionDetailRows: View {
     let entry: ExtensionRegistryEntry
-    
+
     @ViewBuilder var body: some View {
         switch entry.id {
         case "usage": UsageRows()
@@ -561,7 +561,7 @@ private struct ExtensionPermissionRequest: Identifiable {
     let entry: ExtensionRegistryEntry
     let required: [ExtensionPermission]
     let optional: [ExtensionPermission]
-    
+
     var id: String { entry.id }
 }
 
@@ -572,11 +572,11 @@ private struct ExtensionPermissionSheet: View {
     let cancel: () -> Void
     let enable: () -> Void
     let refresh: () -> Void
-    
+
     private var requiredGranted: Bool {
         request.entry.requiredPermissions.allSatisfy { grantedPermissions[$0] == true }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             HStack(spacing: UIScale.pt(14)) {
@@ -633,7 +633,7 @@ private struct ExtensionPermissionSheet: View {
             refresh()
         }
     }
-    
+
     private func permissionCard(_ permission: ExtensionPermission, required: Bool) -> some View {
         let isGranted = grantedPermissions[permission] == true
         return HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -685,84 +685,84 @@ private struct ExtensionPermissionSheet: View {
 
 private struct UsageRows: View {
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private var enabled =
-    false
+        false
     @AppStorage(AppStorageKeys.Limits.inMenuBar, store: SharedDefaults.store) private
-    var limitsInMenuBar = true
+        var limitsInMenuBar = true
     @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
-    var claudeEnabled = true
+        var claudeEnabled = true
     @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
-    var codexEnabled = true
+        var codexEnabled = true
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
-    var limitsProviderRaw =
-    LimitProvider.claude.rawValue
+        var limitsProviderRaw =
+        LimitProvider.claude.rawValue
     @AppStorage(AppStorageKeys.MenuBar.colorMode, store: SharedDefaults.store) private
-    var menuBarColorMode =
-    "auto"
+        var menuBarColorMode =
+        "auto"
     @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
-    var smartColor = true
+        var smartColor = true
     @AppStorage(AppStorageKeys.MenuBar.subColorHex, store: SharedDefaults.store) private
-    var subColorHex =
-    "8E8E93"
+        var subColorHex =
+        "8E8E93"
     @AppStorage(AppStorageKeys.MenuBar.lowColorHex, store: SharedDefaults.store) private
-    var lowColorHex =
-    "34C759"
+        var lowColorHex =
+        "34C759"
     @AppStorage(AppStorageKeys.MenuBar.midColorHex, store: SharedDefaults.store) private
-    var midColorHex =
-    "FF9500"
+        var midColorHex =
+        "FF9500"
     @AppStorage(AppStorageKeys.MenuBar.highColorHex, store: SharedDefaults.store) private
-    var highColorHex =
-    "FF3B30"
+        var highColorHex =
+        "FF3B30"
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private
-    var warnPercent = 60
+        var warnPercent = 60
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private
-    var critPercent = 85
+        var critPercent = 85
     @AppStorage(AppStorageKeys.Limits.pacingMargin, store: SharedDefaults.store) private
-    var pacingMargin = 10.0
+        var pacingMargin = 10.0
     @AppStorage(AppStorageKeys.Budget.enabled, store: SharedDefaults.store) private
-    var budgetEnabled = false
+        var budgetEnabled = false
     @AppStorage(AppStorageKeys.Budget.mode, store: SharedDefaults.store) private var budgetMode =
-    "pace"
+        "pace"
     @AppStorage(AppStorageKeys.Budget.kind, store: SharedDefaults.store) private var budgetKind =
-    "weekly"
+        "weekly"
     @AppStorage(AppStorageKeys.Budget.capPercent, store: SharedDefaults.store) private
-    var budgetCap = 50.0
+        var budgetCap = 50.0
     @AppStorage(AppStorageKeys.Budget.deadline, store: SharedDefaults.store) private
-    var budgetDeadlineTS = 0.0
+        var budgetDeadlineTS = 0.0
     @AppStorage(AppStorageKeys.Notify.master, store: SharedDefaults.store) private
-    var notifyMaster = false
+        var notifyMaster = false
     @AppStorage(AppStorageKeys.Notify.trackSession, store: SharedDefaults.store) private
-    var trackSession = true
+        var trackSession = true
     @AppStorage(AppStorageKeys.Notify.trackWeekly, store: SharedDefaults.store) private
-    var trackWeekly = true
+        var trackWeekly = true
     @AppStorage(AppStorageKeys.Notify.recovery, store: SharedDefaults.store) private var recovery =
-    true
+        true
     @AppStorage(AppStorageKeys.Notify.pacingWarning, store: SharedDefaults.store) private
-    var pacingWarning = true
+        var pacingWarning = true
     @AppStorage(AppStorageKeys.Notify.pacingHot, store: SharedDefaults.store) private
-    var pacingHot = true
+        var pacingHot = true
     @AppStorage(AppStorageKeys.Notify.reminderSession, store: SharedDefaults.store) private
-    var reminderSession =
-    false
+        var reminderSession =
+        false
     @AppStorage(AppStorageKeys.Notify.reminderSessionOffsetMin, store: SharedDefaults.store)
     private var reminderSessionOffset = 30
     @AppStorage(AppStorageKeys.Notify.reminderWeekly, store: SharedDefaults.store) private
-    var reminderWeekly =
-    false
+        var reminderWeekly =
+        false
     @AppStorage(AppStorageKeys.Notify.reminderWeeklyOffsetMin, store: SharedDefaults.store)
     private var reminderWeeklyOffset = 120
     @AppStorage(AppStorageKeys.Notify.tokenExpired, store: SharedDefaults.store) private
-    var tokenExpired = true
+        var tokenExpired = true
     @State private var testSent = false
-    
+
     private var hasProvider: Bool { claudeEnabled || codexEnabled }
-    
+
     var body: some View {
         CLIToolStatusSection(
             tools: ExtensionRegistry.entries.first { $0.id == "usage" }?.requiredTools ?? [],
             extensionEnabled: enabled)
-        
+
         UsageMachineRows(extensionEnabled: enabled)
-        
+
         Section {
             Group {
                 Toggle("Claude limits", isOn: $claudeEnabled)
@@ -771,7 +771,7 @@ private struct UsageRows: View {
                     .pointerCursor()
                 Toggle("Show limits in the menu bar", isOn: $limitsInMenuBar)
                     .pointerCursor()
-                
+
                 if limitsInMenuBar {
                     Picker("Color", selection: colorModeBinding) {
                         Text("White").tag("white")
@@ -779,7 +779,7 @@ private struct UsageRows: View {
                         Text("Custom").tag("custom")
                     }
                     .pointerCursor()
-                    
+
                     if isCustomColor {
                         ColorPicker(
                             "Text (5h / 7d)", selection: hexBinding($subColorHex),
@@ -830,13 +830,13 @@ private struct UsageRows: View {
             if limitsInMenuBar {
                 Text(
                     isCustomColor
-                    ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
-                    : "White and Black force a single tint. Pick Custom to color by risk stage."
+                        ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
+                        : "White and Black force a single tint. Pick Custom to color by risk stage."
                 )
                 .font(.system(size: UIScale.pt(10)))
             }
         }
-        
+
         Section {
             Toggle("Pace my Claude usage", isOn: $budgetEnabled)
                 .pointerCursor()
@@ -865,8 +865,8 @@ private struct UsageRows: View {
                         selection: Binding(
                             get: {
                                 budgetDeadlineTS > 0
-                                ? Date(timeIntervalSinceReferenceDate: budgetDeadlineTS)
-                                : Date().addingTimeInterval(2 * 86400)
+                                    ? Date(timeIntervalSinceReferenceDate: budgetDeadlineTS)
+                                    : Date().addingTimeInterval(2 * 86400)
                             },
                             set: { budgetDeadlineTS = $0.timeIntervalSinceReferenceDate }),
                         displayedComponents: [.date, .hourAndMinute])
@@ -877,7 +877,7 @@ private struct UsageRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        
+
         Section {
             Toggle("Enable alerts", isOn: alertsBinding)
                 .pointerCursor()
@@ -946,7 +946,7 @@ private struct UsageRows: View {
             }
             .disabled(!notifyMaster)
             .opacity(notifyMaster ? 1 : 0.5)
-            
+
             HStack {
                 Button("Send test notification") {
                     IPC.post(IPC.Name.requestTestNotification)
@@ -975,7 +975,7 @@ private struct UsageRows: View {
             reconcileProviders()
         }
     }
-    
+
     private var alertsBinding: Binding<Bool> {
         Binding(
             get: { notifyMaster },
@@ -986,27 +986,27 @@ private struct UsageRows: View {
                 }
             })
     }
-    
+
     private var isCustomColor: Bool {
         menuBarColorMode == "custom" || menuBarColorMode == "auto"
     }
-    
+
     private var colorModeBinding: Binding<String> {
         Binding(
             get: { isCustomColor ? "custom" : menuBarColorMode },
             set: { menuBarColorMode = $0 })
     }
-    
+
     private func hexBinding(_ hex: Binding<String>) -> Binding<Color> {
         Binding(
             get: { DashPalette.color(hex.wrappedValue) },
             set: { hex.wrappedValue = $0.hex6 })
     }
-    
+
     private var selectedProvider: LimitProvider {
         LimitProvider(rawValue: limitsProviderRaw) ?? .claude
     }
-    
+
     private func reconcileProviders() {
         let state = AgentUsageSettingsFlow.providersChanged(
             AgentUsageSettingsState(
@@ -1021,11 +1021,11 @@ private struct UsageRows: View {
 
 private struct SystemStatsRows: View {
     @AppStorage(AppStorageKeys.MenuBar.systemStats, store: SharedDefaults.store) private
-    var enabled = false
+        var enabled = false
     @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
-    var statsColorHex =
-    "FFFFFF"
-    
+        var statsColorHex =
+        "FFFFFF"
+
     var body: some View {
         Section {
             ColorPicker(
@@ -1044,14 +1044,14 @@ private struct SystemStatsRows: View {
 
 private struct MusicRows: View {
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private var enabled =
-    false
+        false
     @AppStorage(MusicFade.enabledKey, store: SharedDefaults.store) private var crossfade = true
     @AppStorage(MusicFade.secondsKey, store: SharedDefaults.store) private var crossfadeSeconds =
-    MusicFade.defaultSeconds
-    
+        MusicFade.defaultSeconds
+
     var body: some View {
         CLIToolStatusSection(tools: [.youtubeDownloader], extensionEnabled: enabled)
-        
+
         Section {
             LabeledContent("Music folder") {
                 Button("Open in Finder") {
@@ -1084,10 +1084,10 @@ private struct MusicRows: View {
 
 private struct MicMuteRows: View {
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private var enabled =
-    false
+        false
     @AppStorage(AppStorageKeys.Mic.muteInMenuBar, store: SharedDefaults.store) private
-    var inMenuBar = true
-    
+        var inMenuBar = true
+
     var body: some View {
         Section {
             Toggle("Show in the menu bar", isOn: $inMenuBar)
@@ -1102,11 +1102,11 @@ private struct MicMuteRows: View {
 
 private struct SystemRows: View {
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-    var enabled = false
+        var enabled = false
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
-    var preventSleep = false
+        var preventSleep = false
     @State private var cleaningStarted = false
-    
+
     var body: some View {
         Section {
             Toggle(isOn: $preventSleep) {

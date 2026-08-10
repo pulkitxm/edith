@@ -4,10 +4,10 @@ import SwiftUI
 struct SystemView: View {
     @Environment(SystemStore.self) private var store
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
-    
+        "accent"
+
     private var theme: Color { themeColor(themeName) }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 12) {
@@ -36,7 +36,7 @@ struct SystemView: View {
                 }
             }
             .card()
-            
+
             VStack(alignment: .leading, spacing: 12) {
                 eyebrow("KEYBOARD")
                 Text(
@@ -45,7 +45,7 @@ struct SystemView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                
+
                 if !store.hasInputMonitoring || !store.hasAccessibility {
                     permissionRow(
                         "Input monitoring", granted: store.hasInputMonitoring,
@@ -88,7 +88,7 @@ struct SystemView: View {
         }
         .onAppear { store.refreshPermissions() }
     }
-    
+
     private func permissionRow(
         _ name: String, granted: Bool, grant: @escaping () -> Void
     ) -> some View {

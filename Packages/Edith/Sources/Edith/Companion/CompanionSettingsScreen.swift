@@ -26,11 +26,11 @@ final class CompanionSettingsModel {
     private(set) var savingTokens = false
     private(set) var syncingNotion = false
     private(set) var importing = false
-    
+
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-    
+
     func load() async {
         do {
             let settings = try await client.reasonSettings()
@@ -42,7 +42,7 @@ final class CompanionSettingsModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func saveTokens() async {
         guard !savingTokens else { return }
         let github = githubToken.trimmingCharacters(in: .whitespaces)
@@ -64,7 +64,7 @@ final class CompanionSettingsModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func clearToken(_ which: String) async {
         guard !savingTokens else { return }
         savingTokens = true
@@ -78,7 +78,7 @@ final class CompanionSettingsModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func importExport(source: String, url: URL) async {
         guard !importing else { return }
         importing = true
@@ -87,14 +87,14 @@ final class CompanionSettingsModel {
             let data = try Data(contentsOf: url)
             let outcome = try await client.importConnector(source: source, json: data)
             syncResult =
-            "\(source): read \(outcome.entriesRead), stored "
-            + "\(outcome.observationsInserted)"
+                "\(source): read \(outcome.entriesRead), stored "
+                + "\(outcome.observationsInserted)"
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
-    
+
     func syncNotion() async {
         guard !syncingNotion else { return }
         syncingNotion = true
@@ -102,20 +102,20 @@ final class CompanionSettingsModel {
         do {
             let outcome = try await client.syncNotion(full: false)
             syncResult =
-            "\(outcome.pagesWritten) pages, \(outcome.episodesIngested) new episodes"
+                "\(outcome.pagesWritten) pages, \(outcome.episodesIngested) new episodes"
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
-    
+
     private func apply(_ settings: CompanionReasonSettings) {
         current = settings
         provider = settings.provider == "openai" ? "openai" : "anthropic"
         model = settings.model
         url = settings.url
     }
-    
+
     func save() async {
         guard !saving else { return }
         saving = true
@@ -135,7 +135,7 @@ final class CompanionSettingsModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func test() async {
         guard !testing else { return }
         testing = true
@@ -151,7 +151,7 @@ final class CompanionSettingsModel {
             testResult = error.localizedDescription
         }
     }
-    
+
     func syncGithub() async {
         guard !syncing else { return }
         syncing = true
@@ -159,7 +159,7 @@ final class CompanionSettingsModel {
         do {
             let outcome = try await client.syncGithub()
             syncResult =
-            "\(outcome.eventsFetched) events, \(outcome.observationsInserted) new observations"
+                "\(outcome.eventsFetched) events, \(outcome.observationsInserted) new observations"
             error = nil
         } catch {
             syncResult = error.localizedDescription
@@ -175,9 +175,9 @@ struct CompanionSettingsScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @FocusState private var keyFocused: Bool
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -201,7 +201,7 @@ struct CompanionSettingsScreen: View {
             await model.load()
         }
     }
-    
+
     private var reasonerCard: some View {
         SkinCard(
             title: "Reasoner",
@@ -217,17 +217,17 @@ struct CompanionSettingsScreen: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(maxWidth: UIScale.pt(260))
-                
+
                 if model.provider == "openai" {
                     fieldLabel("Endpoint URL")
                     EdithTextField(placeholder: "http://ollama:11434/v1", text: $model.url)
                 }
-                
+
                 fieldLabel("Model")
                 EdithTextField(
                     placeholder: model.provider == "openai" ? "qwen3:1.7b" : "claude-sonnet-5",
                     text: $model.model)
-                
+
                 if model.provider == "anthropic" || !(model.current?.apiKeyHint.isEmpty ?? true) {
                     fieldLabel("API key")
                     SecureField(keyPlaceholder, text: $model.apiKey)
@@ -239,13 +239,13 @@ struct CompanionSettingsScreen: View {
                         .edithFieldSurface(focused: keyFocused)
                     Text(
                         "Stored on the companion and hot-swapped into the running service. "
-                        + "Never written to this Mac's defaults or the iCloud settings backup."
+                            + "Never written to this Mac's defaults or the iCloud settings backup."
                     )
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .padding(.top, UIScale.pt(2))
                 }
-                
+
                 HStack(spacing: UIScale.pt(8)) {
                     Button(model.saving ? "Saving…" : "Save") {
                         Task { await model.save() }
@@ -259,7 +259,7 @@ struct CompanionSettingsScreen: View {
                         HStack(spacing: UIScale.pt(4)) {
                             Image(
                                 systemName: model.testPassed
-                                ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                                    ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                             )
                             .foregroundStyle(model.testPassed ? .green : .orange)
                             Text(result)
@@ -270,7 +270,7 @@ struct CompanionSettingsScreen: View {
                     }
                 }
                 .padding(.top, UIScale.pt(10))
-                
+
                 if let current = model.current {
                     Text(current.description)
                         .font(.system(size: UIScale.pt(10.5)))
@@ -280,12 +280,12 @@ struct CompanionSettingsScreen: View {
             }
         }
     }
-    
+
     private var keyPlaceholder: String {
         guard let current = model.current, current.hasApiKey else { return "sk-…" }
         return "•••••••• current: \(current.apiKeyHint)"
     }
-    
+
     private func fieldLabel(_ label: String) -> some View {
         Text(label.uppercased())
             .font(.system(size: UIScale.pt(9.5), weight: .semibold))
@@ -293,7 +293,7 @@ struct CompanionSettingsScreen: View {
             .foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.top, UIScale.pt(9))
     }
-    
+
     private var healthCard: some View {
         SkinCard(title: "Health", note: home.healthy ? "healthy" : "degraded", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
@@ -320,7 +320,7 @@ struct CompanionSettingsScreen: View {
             }
         }
     }
-    
+
     private var connectorsCard: some View {
         SkinCard(
             title: "Connectors",
@@ -366,15 +366,15 @@ struct CompanionSettingsScreen: View {
                 }
                 Text(
                     "Tokens are stored on the companion, never on this Mac, and take effect "
-                    + "without a restart. Calendar, music and YouTube have no live API "
-                    + "worth using, so they come from an export you re-import."
+                        + "without a restart. Calendar, music and YouTube have no live API "
+                        + "worth using, so they come from an export you re-import."
                 )
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
     }
-    
+
     private func pickExport(_ source: String) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
@@ -383,7 +383,7 @@ struct CompanionSettingsScreen: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.importExport(source: source, url: url) }
     }
-    
+
     private func tokenRow(
         label: String, placeholder: String, text: Binding<String>,
         state: CompanionConnectorState?, which: String
@@ -396,8 +396,8 @@ struct CompanionSettingsScreen: View {
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(
                         state?.configured == true
-                        ? DashSkin.inkSoft(dark)
-                        : DashSkin.inkFaint(dark)
+                            ? DashSkin.inkSoft(dark)
+                            : DashSkin.inkFaint(dark)
                     )
                     .lineLimit(1)
                 if state?.configured == true {
@@ -419,7 +419,7 @@ struct CompanionSettingsScreen: View {
                 .edithFieldSurface(focused: false)
         }
     }
-    
+
     private var connectionCard: some View {
         SkinCard(title: "Connection", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {

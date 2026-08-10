@@ -11,7 +11,7 @@ public enum SystemVolume {
         guard !channels.isEmpty else { return 1 }
         return channels.reduce(0, +) / Double(channels.count)
     }
-    
+
     private static func defaultOutputDevice() -> AudioDeviceID? {
         var device = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -23,7 +23,7 @@ public enum SystemVolume {
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
         return status == noErr && device != kAudioObjectUnknown ? device : nil
     }
-    
+
     private static func isMuted(_ device: AudioDeviceID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyMute,
@@ -35,9 +35,9 @@ public enum SystemVolume {
         let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &muted)
         return status == noErr && muted == 1
     }
-    
+
     private static func scalar(_ device: AudioDeviceID, channel: AudioObjectPropertyElement)
-    -> Double?
+        -> Double?
     {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,

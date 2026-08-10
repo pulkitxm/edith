@@ -5,23 +5,23 @@ import SwiftUI
 
 struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
-    var clipboardEnabled =
-    false
+        var clipboardEnabled =
+        false
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
-    var colorPickerEnabled =
-    false
+        var colorPickerEnabled =
+        false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
-    false
+        false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-    var presenterEnabled =
-    false
-    
+        var presenterEnabled =
+        false
+
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
             clipboard: clipboardEnabled, focusDim: focusDimEnabled, presenter: presenterEnabled,
             colorPicker: colorPickerEnabled)
     }
-    
+
     var body: some View {
         Form {
             Section {
@@ -31,7 +31,7 @@ struct ShortcutsSettingsPane: View {
             } header: {
                 Text("Global")
             }
-            
+
             Section {
                 if extensionShortcuts.isEmpty {
                     Text("Extensions with shortcuts appear here when enabled.")
@@ -44,7 +44,7 @@ struct ShortcutsSettingsPane: View {
             } header: {
                 Text("Extensions")
             }
-            
+
             Section {
                 LabeledContent("Toggle sidebar") {
                     Text("⌘B")
@@ -79,7 +79,7 @@ struct ShortcutsSettingsPane: View {
         .formStyle(.grouped)
         .navigationTitle("Shortcuts")
     }
-    
+
     private func shortcutRow(
         _ title: String, subtitle: String, keyPrefix: String, defaultLabel: String
     ) -> some View {
@@ -93,7 +93,7 @@ struct ShortcutsSettingsPane: View {
             HotKeyRecorderControl(keyPrefix: keyPrefix, defaultLabel: defaultLabel)
         }
     }
-    
+
     @ViewBuilder
     private func extensionShortcutRow(_ shortcut: ExtensionShortcut) -> some View {
         switch shortcut {
@@ -123,7 +123,7 @@ struct HotKeyRecorderControl: View {
     @State private var recording = false
     @State private var monitor: Any?
     @State private var label = ""
-    
+
     var body: some View {
         Button {
             recording ? stop() : start()
@@ -139,11 +139,11 @@ struct HotKeyRecorderControl: View {
         .onDisappear { if recording { stop() } }
         .help("Click, then press the new shortcut (Esc cancels)")
     }
-    
+
     private var currentLabel: String {
         SharedDefaults.store.string(forKey: keyPrefix + "Label") ?? defaultLabel
     }
-    
+
     private func start() {
         recording = true
         NSApp.activate(ignoringOtherApps: true)
@@ -152,7 +152,7 @@ struct HotKeyRecorderControl: View {
             return nil
         }
     }
-    
+
     private func stop() {
         recording = false
         if let monitor {
@@ -161,7 +161,7 @@ struct HotKeyRecorderControl: View {
         }
         label = currentLabel
     }
-    
+
     private func handle(_ event: NSEvent) {
         if event.keyCode == 53 {
             stop()

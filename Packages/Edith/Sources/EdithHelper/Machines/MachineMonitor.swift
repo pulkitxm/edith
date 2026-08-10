@@ -6,7 +6,7 @@ enum MachineAlert: Equatable, Sendable {
     case unreachable(machine: String)
     case recovered(machine: String)
     case diskFull(machine: String, mount: String, percent: Double)
-    
+
     var identifier: String {
         switch self {
         case let .unreachable(machine), let .recovered(machine):
@@ -15,7 +15,7 @@ enum MachineAlert: Equatable, Sendable {
             return "machine.disk.\(machine).\(mount)"
         }
     }
-    
+
     var title: String {
         switch self {
         case let .unreachable(machine): return "\(machine) is offline"
@@ -23,7 +23,7 @@ enum MachineAlert: Equatable, Sendable {
         case let .diskFull(machine, _, _): return "\(machine) is running out of space"
         }
     }
-    
+
     var body: String {
         switch self {
         case .unreachable: return "Edith could not reach it over SSH."
@@ -37,7 +37,7 @@ enum MachineAlert: Equatable, Sendable {
 struct MachineHealth: Equatable, Sendable {
     var reachable: Bool
     var fullMounts: Set<String>
-    
+
     init(reachable: Bool = true, fullMounts: Set<String> = []) {
         self.reachable = reachable
         self.fullMounts = fullMounts
@@ -63,7 +63,7 @@ enum MachineMonitorLogic {
         }
         return alerts
     }
-    
+
     static func fullMounts(disks: [MachineFilesystem], threshold: Double) -> Set<String> {
         Set(disks.filter { $0.usedPercent >= threshold }.map(\.mount))
     }
@@ -75,17 +75,17 @@ final class MachineMonitor: FeatureModule {
     private var health: [UUID: MachineHealth] = [:]
     private var probing = false
     private let store = MachineStore()
-    
+
     init() {
         startPolling()
     }
-    
+
     func shutdown() {
         timer?.invalidate()
         timer = nil
         health = [:]
     }
-    
+
     private func startPolling() {
         let timer = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.probe() }
@@ -98,7 +98,7 @@ final class MachineMonitor: FeatureModule {
             probe()
         }
     }
-    
+
     private func probe() {
         guard !probing else { return }
         let machines = store.machines
@@ -107,8 +107,8 @@ final class MachineMonitor: FeatureModule {
         let notifyDisk = AppServices.preferenceOnByDefault(AppStorageKeys.Machines.notifyDiskFull)
         guard notifyDown || notifyDisk else { return }
         let threshold =
-        SharedDefaults.store.object(forKey: AppStorageKeys.Machines.diskThreshold) as? Double
-        ?? 90
+            SharedDefaults.store.object(forKey: AppStorageKeys.Machines.diskThreshold) as? Double
+            ?? 90
         probing = true
         Task { @MainActor in
             defer { probing = false }
@@ -119,7 +119,7 @@ final class MachineMonitor: FeatureModule {
             }
         }
     }
-    
+
     private func probe(
         machine: Machine, threshold: Double, notifyDown: Bool, notifyDisk: Bool
     ) async {
@@ -144,22 +144,22 @@ final class MachineMonitor: FeatureModule {
         health[machine.id] = current
         for alert in alerts { MachineMonitor.notify(alert) }
     }
-    
+
     nonisolated static let diskCommand =
-    "df -Pk 2>/dev/null | awk 'NR>1 && $1 ~ /^\\// {print $1, $2, $3, $4, $6}'"
-    
+        "df -Pk 2>/dev/null | awk 'NR>1 && $1 ~ /^\\// {print $1, $2, $3, $4, $6}'"
+
     nonisolated static func parseDisks(_ output: String) -> [MachineFilesystem] {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
             guard parts.count == 5, let total = Int64(parts[1]), let used = Int64(parts[2]),
-                  let available = Int64(parts[3]), total > 0
+                let available = Int64(parts[3]), total > 0
             else { return nil }
             return MachineFilesystem(
                 fs: String(parts[0]), mount: String(parts[4]), totalKB: total, usedKB: used,
                 availKB: available)
         }
     }
-    
+
     nonisolated static func notify(
         _ alert: MachineAlert, center: UNUserNotificationCenter = .current()
     ) {

@@ -6,12 +6,12 @@ import UserNotifications
 final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     private let defaults = UserDefaults.standard
     private var center: UNUserNotificationCenter { .current() }
-    
+
     override init() {
         super.init()
         center.delegate = self
     }
-    
+
     func evaluate(session: LimitWindow?, week: LimitWindow?) {
         let settings = NotifySettings.fromDefaults(SharedDefaults.store)
         guard settings.master else {
@@ -26,7 +26,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         for alert in alerts { send(alert) }
         scheduleReminders(session: session, week: week, settings: settings)
     }
-    
+
     func clearStateIfMasterOff() {
         guard !NotifySettings.fromDefaults(SharedDefaults.store).master else { return }
         for key in [
@@ -35,18 +35,18 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
             defaults.removeObject(forKey: key)
         }
     }
-    
+
     func cancelReminders() {
         center.removePendingNotificationRequests(withIdentifiers: [
             "reminder_session", "reminder_weekly",
         ])
     }
-    
+
     func notifyTokenExpired() {
         let settings = NotifySettings.fromDefaults(SharedDefaults.store)
         guard settings.master, settings.tokenExpired else { return }
         if let last = defaults.object(forKey: "notifTokenExpiredAt") as? Date,
-           Date().timeIntervalSince(last) < 3600
+            Date().timeIntervalSince(last) < 3600
         {
             return
         }
@@ -56,7 +56,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
                 id: "token_expired",
                 title: "Claude token expired", body: "Run claude to log in again"))
     }
-    
+
     func sendTest() async -> String {
         let status = await center.notificationSettings().authorizationStatus
         switch status {
@@ -65,7 +65,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         case .notDetermined:
             PermissionPromptTracker.record()
             let granted =
-            (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+                (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
             IPC.post(IPC.Name.requestPermissionsRefresh)
             guard granted else { return "Permission not granted" }
         default:
@@ -88,36 +88,36 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
         return delivered ? "Delivered" : "Sent but not delivered - check Focus / System Settings"
     }
-    
+
     func authorizationStatus() async -> UNAuthorizationStatus {
         await center.notificationSettings().authorizationStatus
     }
-    
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
     }
-    
+
     private func loadState() -> LimitNotifierState {
         var s = LimitNotifierState()
         s.sessionLevel =
-        UsageLevel(rawValue: defaults.integer(forKey: "notifSessionLevel")) ?? .green
+            UsageLevel(rawValue: defaults.integer(forKey: "notifSessionLevel")) ?? .green
         s.weeklyLevel = UsageLevel(rawValue: defaults.integer(forKey: "notifWeeklyLevel")) ?? .green
         s.sessionPacing =
-        PacingZone(rawValue: defaults.string(forKey: "notifSessionPacing") ?? "") ?? .onTrack
+            PacingZone(rawValue: defaults.string(forKey: "notifSessionPacing") ?? "") ?? .onTrack
         s.weeklyPacing =
-        PacingZone(rawValue: defaults.string(forKey: "notifWeeklyPacing") ?? "") ?? .onTrack
+            PacingZone(rawValue: defaults.string(forKey: "notifWeeklyPacing") ?? "") ?? .onTrack
         return s
     }
-    
+
     private func save(_ s: LimitNotifierState) {
         defaults.set(s.sessionLevel.rawValue, forKey: "notifSessionLevel")
         defaults.set(s.weeklyLevel.rawValue, forKey: "notifWeeklyLevel")
         defaults.set(s.sessionPacing.rawValue, forKey: "notifSessionPacing")
         defaults.set(s.weeklyPacing.rawValue, forKey: "notifWeeklyPacing")
     }
-    
+
     private func send(_ alert: LimitAlert) {
         let content = UNMutableNotificationContent()
         content.title = alert.title
@@ -130,7 +130,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
             }
         }
     }
-    
+
     private func scheduleReminders(
         session: LimitWindow?, week: LimitWindow?, settings: NotifySettings
     ) {
@@ -138,8 +138,8 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
             "reminder_session", "reminder_weekly",
         ])
         if settings.reminderSession,
-           let fire = LimitNotifierLogic.reminderFireDate(
-            reset: session?.resetsAt, offsetMinutes: settings.reminderSessionOffsetMin)
+            let fire = LimitNotifierLogic.reminderFireDate(
+                reset: session?.resetsAt, offsetMinutes: settings.reminderSessionOffsetMin)
         {
             schedule(
                 id: "reminder_session",
@@ -149,8 +149,8 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
                 at: fire)
         }
         if settings.reminderWeekly,
-           let fire = LimitNotifierLogic.reminderFireDate(
-            reset: week?.resetsAt, offsetMinutes: settings.reminderWeeklyOffsetMin)
+            let fire = LimitNotifierLogic.reminderFireDate(
+                reset: week?.resetsAt, offsetMinutes: settings.reminderWeeklyOffsetMin)
         {
             schedule(
                 id: "reminder_weekly",
@@ -160,7 +160,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
                 at: fire)
         }
     }
-    
+
     private func schedule(id: String, title: String, body: String, at fire: Date) {
         guard fire.timeIntervalSinceNow > 0 else { return }
         let content = UNMutableNotificationContent()

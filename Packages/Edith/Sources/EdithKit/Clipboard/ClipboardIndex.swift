@@ -6,13 +6,13 @@ public enum ClipboardIndex {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
-    
+
     private static func encoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
-    
+
     public static func decode(_ text: String) -> [ClipboardEntry] {
         let decoder = decoder()
         var out: [ClipboardEntry] = []
@@ -23,22 +23,22 @@ public enum ClipboardIndex {
         }
         return out
     }
-    
+
     public static func encode(_ entries: [ClipboardEntry]) -> String {
         guard !entries.isEmpty else { return "" }
         let encoder = encoder()
         return
-        entries
+            entries
             .compactMap { entry in
                 (try? encoder.encode(entry)).map { String(decoding: $0, as: UTF8.self) }
             }
             .joined(separator: "\n") + "\n"
     }
-    
+
     public static func encodeLine(_ entry: ClipboardEntry) -> String? {
         (try? encoder().encode(entry)).map { String(decoding: $0, as: UTF8.self) + "\n" }
     }
-    
+
     public static func applyRetention(
         _ entries: [ClipboardEntry],
         maxItems: Int,

@@ -14,11 +14,11 @@ final class CompanionMindModel {
     private(set) var savingCore = false
     private(set) var runningNightly = false
     private(set) var error: String?
-    
+
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-    
+
     func refresh() async {
         do {
             let client = client
@@ -33,7 +33,7 @@ final class CompanionMindModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func saveCore(section: String, content: String) async {
         guard !savingCore else { return }
         savingCore = true
@@ -45,7 +45,7 @@ final class CompanionMindModel {
             self.error = error.localizedDescription
         }
     }
-    
+
     func runNightly() async {
         guard !runningNightly else { return }
         runningNightly = true
@@ -63,7 +63,7 @@ enum MindDetail: Identifiable {
     case belief(CompanionBelief)
     case claim(CompanionClaim)
     case observation(CompanionObservation)
-    
+
     var id: String {
         switch self {
         case let .belief(belief): return "belief-\(belief.id)"
@@ -83,9 +83,9 @@ struct CompanionMindScreen: View {
     @State private var detail: MindDetail?
     @State private var editingSection: String?
     @State private var sectionDraft = ""
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -119,7 +119,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private var coreCard: some View {
         SkinCard(title: "Who you are", note: "always in context", dark: dark) {
             if model.core.isEmpty {
@@ -179,7 +179,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private var calibrationCard: some View {
         SkinCard(title: "Calibration", note: "in both directions", dark: dark) {
             if model.calibration.isEmpty {
@@ -204,7 +204,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private var beliefsCard: some View {
         SkinCard(title: "Beliefs", note: "what it concluded", dark: dark, fill: true) {
             if model.beliefs.isEmpty {
@@ -218,7 +218,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private func beliefRow(_ belief: CompanionBelief) -> some View {
         let superseded = belief.status != "active"
         return MindRow(dark: dark) {
@@ -248,7 +248,7 @@ struct CompanionMindScreen: View {
                                 .fill(DashSkin.accent(dark))
                                 .frame(
                                     width: barsFilled
-                                    ? geometry.size.width * CGFloat(belief.confidence) : 0)
+                                        ? geometry.size.width * CGFloat(belief.confidence) : 0)
                         }
                     }
                     .frame(height: UIScale.pt(5))
@@ -257,7 +257,7 @@ struct CompanionMindScreen: View {
             .opacity(superseded ? 0.55 : 1)
         }
     }
-    
+
     private var claimsCard: some View {
         SkinCard(title: "Claims", note: "checked against reality", dark: dark) {
             if model.claims.isEmpty {
@@ -282,7 +282,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func claimVerdict(_ claim: CompanionClaim) -> some View {
         switch claim.verdict {
@@ -296,7 +296,7 @@ struct CompanionMindScreen: View {
             MindChip(label: "unchecked", tone: DashSkin.inkFaint(dark))
         }
     }
-    
+
     private var observationsCard: some View {
         SkinCard(
             title: "Observed activity", note: "what the connectors saw", dark: dark
@@ -333,7 +333,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private var nightlyCard: some View {
         SkinCard(
             title: "Nightly run",
@@ -356,12 +356,12 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private func runSummary(_ run: CompanionRun) -> String {
         let when = String(run.startedAt.prefix(16)).replacingOccurrences(of: "T", with: " ")
         return run.ok ? "Last run \(when), all steps green" : "Last run \(when)"
     }
-    
+
     private func stepChips(_ run: CompanionRun) -> some View {
         FlowChips(spacing: UIScale.pt(6)) {
             ForEach(Array(run.steps.enumerated()), id: \.offset) { _, step in
@@ -386,7 +386,7 @@ struct CompanionMindScreen: View {
             }
         }
     }
-    
+
     private func emptyText(_ message: String) -> some View {
         Text(message)
             .font(.system(size: UIScale.pt(12)))
@@ -399,7 +399,7 @@ private struct MindRow<Content: View>: View {
     let action: () -> Void
     @ViewBuilder let content: () -> Content
     @State private var hovering = false
-    
+
     var body: some View {
         Button(action: action) {
             content()
@@ -422,7 +422,7 @@ private struct MindRow<Content: View>: View {
 struct MindChip: View {
     let label: String
     let tone: Color
-    
+
     var body: some View {
         Text(label)
             .font(.system(size: UIScale.pt(9.5), weight: .bold))
@@ -440,11 +440,11 @@ private struct MindDetailSheet: View {
     let openEpisode: (String) -> Void
     let close: () -> Void
     @State private var episodeRefs: [(String, String)] = []
-    
+
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-    
+
     private var contextIds: [String] {
         switch detail {
         case let .belief(belief): return belief.evidenceEpisodeIds
@@ -452,7 +452,7 @@ private struct MindDetailSheet: View {
         case .observation: return []
         }
     }
-    
+
     private func loadRefs() async {
         var refs: [(String, String)] = []
         for id in contextIds {
@@ -465,7 +465,7 @@ private struct MindDetailSheet: View {
         }
         episodeRefs = refs
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
@@ -495,7 +495,7 @@ private struct MindDetailSheet: View {
             await loadRefs()
         }
     }
-    
+
     private func contextRows(_ label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(label)
@@ -528,7 +528,7 @@ private struct MindDetailSheet: View {
             }
         }
     }
-    
+
     private var eyebrow: String {
         switch detail {
         case .belief: return "BELIEF"
@@ -536,7 +536,7 @@ private struct MindDetailSheet: View {
         case .observation: return "OBSERVED"
         }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         switch detail {
@@ -548,7 +548,7 @@ private struct MindDetailSheet: View {
             observationDetail(observation)
         }
     }
-    
+
     @ViewBuilder
     private func beliefDetail(_ belief: CompanionBelief) -> some View {
         Text(belief.statement)
@@ -574,7 +574,7 @@ private struct MindDetailSheet: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func claimDetail(_ claim: CompanionClaim) -> some View {
         Text(claim.statement)
@@ -617,7 +617,7 @@ private struct MindDetailSheet: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
-    
+
     @ViewBuilder
     private func observationDetail(_ observation: CompanionObservation) -> some View {
         Text(observation.summary)

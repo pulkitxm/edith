@@ -9,23 +9,23 @@ struct MachineProcessesTab: View {
     @State private var sortByMemory = false
     @State private var pendingKill: MachineProcess?
     @State private var message: String?
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     private var rows: [MachineProcess] {
         let all = session.sample?.procs ?? []
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         let filtered =
-        trimmed.isEmpty
-        ? all
-        : all.filter {
-            $0.name.localizedCaseInsensitiveContains(trimmed)
-            || $0.cmd.localizedCaseInsensitiveContains(trimmed)
-            || String($0.pid).contains(trimmed)
-        }
+            trimmed.isEmpty
+            ? all
+            : all.filter {
+                $0.name.localizedCaseInsensitiveContains(trimmed)
+                    || $0.cmd.localizedCaseInsensitiveContains(trimmed)
+                    || String($0.pid).contains(trimmed)
+            }
         return filtered.sorted { sortByMemory ? $0.rssKB > $1.rssKB : $0.cpu > $1.cpu }
     }
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             controls
@@ -45,7 +45,7 @@ struct MachineProcessesTab: View {
                         title: "Top processes",
                         note: session.sample.map {
                             "\($0.tasks.total > 0 ? "\($0.tasks.total) tasks · " : "")"
-                            + "sampled every 2s"
+                                + "sampled every 2s"
                         }, dark: dark
                     ) {
                         table
@@ -67,7 +67,7 @@ struct MachineProcessesTab: View {
             Text("PID \(pendingKill.map { String($0.pid) } ?? "")")
         }
     }
-    
+
     private var controls: some View {
         HStack(spacing: UIScale.pt(10)) {
             SearchField(placeholder: "Filter processes", text: $query)
@@ -84,7 +84,7 @@ struct MachineProcessesTab: View {
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(12))
     }
-    
+
     private var table: some View {
         VStack(spacing: UIScale.pt(0)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -115,7 +115,7 @@ struct MachineProcessesTab: View {
             }
         }
     }
-    
+
     private func columnHeader(_ title: String, width: CGFloat?, alignment: Alignment) -> some View {
         Text(title)
             .font(.system(size: UIScale.pt(9.5), weight: .semibold))
@@ -124,7 +124,7 @@ struct MachineProcessesTab: View {
             .frame(width: width, alignment: alignment)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: alignment)
     }
-    
+
     private func kill(signal: String) {
         guard let process = pendingKill else { return }
         pendingKill = nil
@@ -134,8 +134,8 @@ struct MachineProcessesTab: View {
             switch result {
             case let .success(output):
                 message =
-                ProcessCommands.hadAlreadyExited(output)
-                ? "\(process.name) had already exited." : nil
+                    ProcessCommands.hadAlreadyExited(output)
+                    ? "\(process.name) had already exited." : nil
             case let .failure(error):
                 message = "Could not end \(process.name): \(error.localizedDescription)"
             }
@@ -149,7 +149,7 @@ private struct ProcessRow: View {
     let canKill: Bool
     let onKill: () -> Void
     @State private var hovering = false
-    
+
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {

@@ -3,7 +3,7 @@ import Foundation
 public struct CompanionHealth: Codable, Equatable, Sendable {
     public let ok: Bool
     public let checks: [CompanionCheck]
-    
+
     public init(ok: Bool, checks: [CompanionCheck]) {
         self.ok = ok
         self.checks = checks
@@ -14,7 +14,7 @@ public struct CompanionCheck: Codable, Equatable, Sendable {
     public let name: String
     public let ok: Bool
     public let detail: String
-    
+
     public init(name: String, ok: Bool, detail: String) {
         self.name = name
         self.ok = ok
@@ -30,7 +30,7 @@ public struct CompanionStatus: Codable, Equatable, Sendable {
     public let chunks: Int
     public let pendingEpisodes: Int
     public let latestIngestedAt: String?
-    
+
     public init(
         sources: Int, episodes: Int, claims: Int, observations: Int,
         chunks: Int, pendingEpisodes: Int, latestIngestedAt: String?
@@ -43,7 +43,7 @@ public struct CompanionStatus: Codable, Equatable, Sendable {
         self.pendingEpisodes = pendingEpisodes
         self.latestIngestedAt = latestIngestedAt
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case sources
         case episodes
@@ -64,7 +64,7 @@ public struct CompanionSearchHit: Codable, Equatable, Sendable {
     public let kind: String
     public let snippet: String
     public let score: Double
-    
+
     public init(
         chunkId: String, episodeId: String, ord: Int, title: String, occurredAt: String,
         kind: String, snippet: String, score: Double
@@ -83,7 +83,7 @@ public struct CompanionSearchHit: Codable, Equatable, Sendable {
 public struct CompanionIndexOutcome: Codable, Equatable, Sendable {
     public let episodesIndexed: Int
     public let chunksCreated: Int
-    
+
     public init(episodesIndexed: Int, chunksCreated: Int) {
         self.episodesIndexed = episodesIndexed
         self.chunksCreated = chunksCreated
@@ -96,7 +96,7 @@ public struct CompanionEpisode: Codable, Equatable, Sendable {
     public let kind: String
     public let title: String
     public let sha256: String
-    
+
     public init(id: String, occurredAt: String, kind: String, title: String, sha256: String) {
         self.id = id
         self.occurredAt = occurredAt
@@ -104,7 +104,7 @@ public struct CompanionEpisode: Codable, Equatable, Sendable {
         self.title = title
         self.sha256 = sha256
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case occurredAt = "occurred_at"
@@ -118,7 +118,7 @@ public struct CompanionIngestFile: Codable, Equatable, Sendable {
     public let name: String
     public let text: String
     public let mtime: String?
-    
+
     public init(name: String, text: String, mtime: String? = nil) {
         self.name = name
         self.text = text
@@ -131,7 +131,7 @@ public struct CompanionIngestOutcome: Codable, Equatable, Sendable {
     public let status: String
     public let episodeId: String
     public let occurredAt: String
-    
+
     public init(name: String, status: String, episodeId: String, occurredAt: String) {
         self.name = name
         self.status = status
@@ -143,7 +143,7 @@ public struct CompanionIngestOutcome: Codable, Equatable, Sendable {
 public struct CompanionSyncOutcome: Codable, Equatable, Sendable {
     public let eventsFetched: Int
     public let observationsInserted: Int
-    
+
     public init(eventsFetched: Int, observationsInserted: Int) {
         self.eventsFetched = eventsFetched
         self.observationsInserted = observationsInserted
@@ -156,7 +156,7 @@ public struct CompanionObservation: Codable, Equatable, Sendable {
     public let observedAt: String
     public let kind: String
     public let summary: String
-    
+
     public init(id: String, source: String, observedAt: String, kind: String, summary: String) {
         self.id = id
         self.source = source
@@ -172,7 +172,7 @@ public struct CompanionAskCitation: Codable, Equatable, Sendable {
     public let support: String
     public let title: String
     public let occurredAt: String
-    
+
     public init(
         episodeId: String, quote: String, support: String, title: String, occurredAt: String
     ) {
@@ -196,7 +196,7 @@ public struct CompanionAskOutcome: Codable, Equatable, Sendable {
     public let opinion: String?
     public let beliefs: [CompanionBeliefHit]
     public let stages: [String]
-    
+
     public init(
         answer: String, citations: [CompanionAskCitation], chunksConsidered: Int, model: String,
         persona: String, abstained: Bool, grounding: CompanionGrounding, reframed: String?,
@@ -220,19 +220,19 @@ public struct CompanionRunStep: Codable, Equatable, Sendable {
     public let name: String
     public let ok: Bool
     public let detail: String?
-    
+
     public init(name: String, ok: Bool, detail: String? = nil) {
         self.name = name
         self.ok = ok
         self.detail = detail
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case name
         case ok
         case detail
     }
-    
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
@@ -249,7 +249,7 @@ public struct CompanionRunStep: Codable, Equatable, Sendable {
 
 struct JSONValueBox: Decodable, CustomStringConvertible {
     let description: String
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let object = try? container.decode([String: Double].self) {
@@ -270,7 +270,7 @@ public struct CompanionRun: Codable, Equatable, Sendable {
     public let finishedAt: String?
     public let ok: Bool
     public let steps: [CompanionRunStep]
-    
+
     public init(
         id: String, startedAt: String, finishedAt: String?, ok: Bool, steps: [CompanionRunStep]
     ) {
@@ -285,7 +285,7 @@ public struct CompanionRun: Codable, Equatable, Sendable {
 public struct CompanionExtractOutcome: Codable, Equatable, Sendable {
     public let episodesConsidered: Int
     public let claimsExtracted: Int
-    
+
     public init(episodesConsidered: Int, claimsExtracted: Int) {
         self.episodesConsidered = episodesConsidered
         self.claimsExtracted = claimsExtracted
@@ -297,7 +297,7 @@ public struct CompanionCorroborateOutcome: Codable, Equatable, Sendable {
     public let corroborated: Int
     public let contradicted: Int
     public let unclear: Int
-    
+
     public init(claimsChecked: Int, corroborated: Int, contradicted: Int, unclear: Int) {
         self.claimsChecked = claimsChecked
         self.corroborated = corroborated
@@ -316,7 +316,7 @@ public struct CompanionClaim: Codable, Equatable, Sendable {
     public let verdict: String?
     public let verdictNote: String?
     public let observationIds: [String]?
-    
+
     public init(
         id: String, statement: String, claimType: String, testable: Bool, assertedAt: String,
         episodeId: String?, verdict: String?, verdictNote: String?, observationIds: [String]?
@@ -337,7 +337,7 @@ public struct CompanionReflectOutcome: Codable, Equatable, Sendable {
     public let episodesConsidered: Int
     public let beliefsFormed: Int
     public let model: String
-    
+
     public init(episodesConsidered: Int, beliefsFormed: Int, model: String) {
         self.episodesConsidered = episodesConsidered
         self.beliefsFormed = beliefsFormed
@@ -353,7 +353,7 @@ public struct CompanionBelief: Codable, Equatable, Sendable {
     public let firstFormed: String
     public let evidenceEpisodeIds: [String]
     public let status: String
-    
+
     public init(
         id: String, statement: String, kind: String, confidence: Double, firstFormed: String,
         evidenceEpisodeIds: [String], status: String
@@ -371,7 +371,7 @@ public struct CompanionBelief: Codable, Equatable, Sendable {
 public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
     case unreachable(String)
     case badResponse(Int, String)
-    
+
     public var errorDescription: String? {
         switch self {
         case let .unreachable(detail):
@@ -384,35 +384,35 @@ public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
 
 public struct CompanionClient: Sendable {
     public let baseURL: URL
-    
+
     public init(baseURL: URL) {
         self.baseURL = baseURL
     }
-    
+
     public static func endpoint(override: String?) -> URL {
         let fallback = URL(string: "http://127.0.0.1:4820")!
         let value =
-        override
-        ?? ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
-        ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
+            override
+            ?? ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
+            ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
         guard let value, !value.isEmpty else { return fallback }
         return URL(string: value) ?? fallback
     }
-    
+
     public func health() async throws -> CompanionHealth {
         try await get("health", allowing: [503])
     }
-    
+
     public func status() async throws -> CompanionStatus {
         try await get("status")
     }
-    
+
     public func episodes(limit: Int) async throws -> [CompanionEpisode] {
         var components = URLComponents(url: url(for: "episodes"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
         return try await request(URLRequest(url: components?.url ?? url(for: "episodes")))
     }
-    
+
     public func search(query: String, k: Int) async throws -> [CompanionSearchHit] {
         var components = URLComponents(url: url(for: "search"), resolvingAgainstBaseURL: false)
         components?.queryItems = [
@@ -420,14 +420,14 @@ public struct CompanionClient: Sendable {
         ]
         return try await request(URLRequest(url: components?.url ?? url(for: "search")))
     }
-    
+
     public func index() async throws -> CompanionIndexOutcome {
         var request = URLRequest(url: url(for: "index"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request)
     }
-    
+
     public func ingest(files: [CompanionIngestFile]) async throws -> [CompanionIngestOutcome] {
         var request = URLRequest(url: url(for: "ingest"))
         request.httpMethod = "POST"
@@ -439,33 +439,33 @@ public struct CompanionClient: Sendable {
         }
         return try await self.request(request)
     }
-    
+
     public func runs(limit: Int) async throws -> [CompanionRun] {
         var components = URLComponents(url: url(for: "runs"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
         return try await request(URLRequest(url: components?.url ?? url(for: "runs")))
     }
-    
+
     public func extractClaims() async throws -> CompanionExtractOutcome {
         var request = URLRequest(url: url(for: "claims/extract"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request, timeout: 600)
     }
-    
+
     public func corroborate() async throws -> CompanionCorroborateOutcome {
         var request = URLRequest(url: url(for: "corroborate"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request, timeout: 600)
     }
-    
+
     public func claims(limit: Int) async throws -> [CompanionClaim] {
         var components = URLComponents(url: url(for: "claims"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
         return try await request(URLRequest(url: components?.url ?? url(for: "claims")))
     }
-    
+
     public func ask(question: String) async throws -> CompanionAskOutcome {
         var request = URLRequest(url: url(for: "ask"))
         request.httpMethod = "POST"
@@ -477,27 +477,27 @@ public struct CompanionClient: Sendable {
         }
         return try await self.request(request, timeout: 600)
     }
-    
+
     public func reflect() async throws -> CompanionReflectOutcome {
         var request = URLRequest(url: url(for: "reflect"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request, timeout: 600)
     }
-    
+
     public func beliefs(limit: Int) async throws -> [CompanionBelief] {
         var components = URLComponents(url: url(for: "beliefs"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
         return try await request(URLRequest(url: components?.url ?? url(for: "beliefs")))
     }
-    
+
     public func syncGithub() async throws -> CompanionSyncOutcome {
         var request = URLRequest(url: url(for: "connectors/github/sync"))
         request.httpMethod = "POST"
         request.httpBody = Data()
         return try await self.request(request, timeout: 120)
     }
-    
+
     public func observations(limit: Int, kind: String?) async throws -> [CompanionObservation] {
         var components = URLComponents(
             url: url(for: "observations"), resolvingAgainstBaseURL: false)
@@ -508,9 +508,9 @@ public struct CompanionClient: Sendable {
         components?.queryItems = items
         return try await request(URLRequest(url: components?.url ?? url(for: "observations")))
     }
-    
+
     public func ingestPdf(name: String, data: Data, mtime: String?) async throws
-    -> CompanionIngestOutcome
+        -> CompanionIngestOutcome
     {
         var request = URLRequest(url: url(for: "ingest/pdf"))
         request.httpMethod = "POST"
@@ -523,9 +523,9 @@ public struct CompanionClient: Sendable {
         }
         return try await self.request(request, timeout: 120)
     }
-    
+
     public func ingestAudio(name: String, data: Data, mtime: String?) async throws
-    -> CompanionIngestOutcome
+        -> CompanionIngestOutcome
     {
         var request = URLRequest(url: url(for: "ingest/audio"))
         request.httpMethod = "POST"
@@ -538,20 +538,20 @@ public struct CompanionClient: Sendable {
         }
         return try await self.request(request, timeout: 600)
     }
-    
+
     public func connectorSettings() async throws -> CompanionConnectorSettings {
         try await get("settings/connectors")
     }
-    
+
     public func updateConnectorSettings(github: String?, notion: String?) async throws
-    -> CompanionConnectorSettings
+        -> CompanionConnectorSettings
     {
         try await post(
             "settings/connectors", body: ConnectorTokenRequest(github: github, notion: notion))
     }
-    
+
     public func importConnector(source: String, json: Data) async throws
-    -> CompanionImportOutcome
+        -> CompanionImportOutcome
     {
         var request = URLRequest(url: url(for: "connectors/\(source)/import"))
         request.httpMethod = "POST"
@@ -559,199 +559,199 @@ public struct CompanionClient: Sendable {
         request.httpBody = json
         return try await self.request(request, timeout: 900)
     }
-    
+
     public func facts(asOf: String?, timeline: String, limit: Int) async throws
-    -> [CompanionFact]
+        -> [CompanionFact]
     {
         var query = ["timeline": timeline, "limit": String(limit)]
         if let asOf { query["asOf"] = asOf }
         return try await get("facts", query: query)
     }
-    
+
     public func correctBelief(id: String, retire: Bool, statement: String?) async throws
-    -> CompanionCorrectOutcome
+        -> CompanionCorrectOutcome
     {
         try await post(
             "beliefs/\(id)/correct",
             body: CorrectRequest(retire: retire, statement: statement))
     }
-    
+
     public func weekly() async throws -> CompanionCurateOutcome {
         try await post("reflect/weekly", body: EmptyBody(), timeout: 1800)
     }
-    
+
     public func db(_ action: String) async throws -> CompanionRebuildOutcome {
         try await post("db/\(action)", body: EmptyBody(), timeout: 900)
     }
-    
+
     public func rateTurn(id: String, rating: Int) async throws -> [String: CodableIgnored] {
         try await post("turns/\(id)/feedback", body: RatingRequest(rating: rating))
     }
-    
+
     public func personas() async throws -> [CompanionPersona] {
         try await get("personas")
     }
-    
+
     public func askPersona(question: String, persona: String?) async throws
-    -> CompanionAskOutcome
+        -> CompanionAskOutcome
     {
         try await post(
             "ask", body: PersonaAskRequest(question: question, persona: persona),
             timeout: 900)
     }
-    
+
     public func council(question: String, personas: [String]) async throws -> CompanionCouncil {
         try await post(
             "council", body: CouncilRequest(question: question, personas: personas), timeout: 1800)
     }
-    
+
     public func core() async throws -> [CompanionCoreSection] {
         try await get("core")
     }
-    
+
     public func writeCore(section: String, content: String) async throws -> [String: String] {
         try await post("core", body: CoreWriteRequest(section: section, content: content))
     }
-    
+
     public func hypotheses(limit: Int) async throws -> [CompanionHypothesis] {
         try await get("hypotheses", query: ["limit": String(limit)])
     }
-    
+
     public func runHypotheses() async throws -> [String: CodableIgnored] {
         try await post("hypotheses/run", body: EmptyBody(), timeout: 1800)
     }
-    
+
     public func predictions(limit: Int) async throws -> [CompanionPrediction] {
         try await get("predictions", query: ["limit": String(limit)])
     }
-    
+
     public func commitments(limit: Int) async throws -> [CompanionCommitment] {
         try await get("commitments", query: ["limit": String(limit)])
     }
-    
+
     public func discrepancies(limit: Int) async throws -> [CompanionDiscrepancy] {
         try await get("discrepancies", query: ["limit": String(limit)])
     }
-    
+
     public func overrideDiscrepancy(id: String, real: String) async throws -> [String: String] {
         try await post("discrepancies/\(id)/override", body: OverrideRequest(real: real))
     }
-    
+
     public func calibration() async throws -> [CompanionCalibration] {
         try await get("calibration")
     }
-    
+
     public func questions(limit: Int) async throws -> CompanionQuestionList {
         try await get("questions", query: ["limit": String(limit)])
     }
-    
+
     public func nextQuestion() async throws -> CompanionNextQuestion {
         try await post("questions/next", body: EmptyBody(), timeout: 60)
     }
-    
+
     public func answerQuestion(id: String, answer: String) async throws
-    -> CompanionQuestionAnswer
+        -> CompanionQuestionAnswer
     {
         try await post("questions/\(id)/answer", body: AnswerRequest(answer: answer), timeout: 120)
     }
-    
+
     public func skipQuestion(id: String) async throws -> [String: String] {
         try await post("questions/\(id)/skip", body: EmptyBody())
     }
-    
+
     public func muteTopic(_ topic: String) async throws -> MuteOutcome {
         try await post("questions/mute", body: MuteRequest(topic: topic))
     }
-    
+
     public func entities(limit: Int) async throws -> [CompanionEntity] {
         try await get("entities", query: ["limit": String(limit)])
     }
-    
+
     public func lenses() async throws -> [CompanionLens] {
         try await get("lenses")
     }
-    
+
     public func evals(limit: Int) async throws -> [CompanionEvalRun] {
         try await get("evals", query: ["limit": String(limit)])
     }
-    
+
     public func runEvals(persona: String?) async throws -> CompanionEvalOutcome {
         var query: [String: String] = [:]
         if let persona { query["persona"] = persona }
         return try await post("evals/run", body: EmptyBody(), query: query, timeout: 3600)
     }
-    
+
     public func standup(text: String, verify: Bool) async throws -> CompanionStandupOutcome {
         try await post("standup", body: StandupRequest(text: text, verify: verify), timeout: 1800)
     }
-    
+
     public func standupAggregate() async throws -> CompanionStandupReport {
         try await get("standup/aggregate")
     }
-    
+
     public func machines() async throws -> [CompanionMachine] {
         try await get("machines")
     }
-    
+
     public func addMachine(name: String, transport: String, endpoint: String) async throws
-    -> [String: String]
+        -> [String: String]
     {
         try await post(
             "machines",
             body: MachineRequest(name: name, transport: transport, endpoint: endpoint))
     }
-    
+
     public func probeMachine(name: String) async throws -> CompanionMachine {
         try await post("machines/\(name)/probe", body: EmptyBody(), timeout: 300)
     }
-    
+
     public func machinePlan() async throws -> CompanionPlan {
         try await get("machines/plan")
     }
-    
+
     public func setMachineProfile(name: String, profile: String) async throws -> [String: String] {
         try await post("machines/\(name)/profile", body: ProfileRequest(profile: profile))
     }
-    
+
     public func baselines() async throws -> CompanionBaselines {
         try await get("baselines")
     }
-    
+
     public func syncNotion(full: Bool) async throws -> CompanionNotionOutcome {
         try await post(
             "connectors/notion/sync", body: EmptyBody(), query: ["full": full ? "true" : "false"],
             timeout: 1800)
     }
-    
+
     public func ingestImage(name: String, data: Data, mtime: String?) async throws
-    -> CompanionIngestOutcome
+        -> CompanionIngestOutcome
     {
         try await post(
             "ingest/image",
             body: AudioIngestRequest(name: name, dataB64: data.base64EncodedString(), mtime: mtime),
             timeout: 900)
     }
-    
+
     public func ingestVideo(name: String, data: Data, mtime: String?) async throws
-    -> CompanionIngestOutcome
+        -> CompanionIngestOutcome
     {
         try await post(
             "ingest/video",
             body: AudioIngestRequest(name: name, dataB64: data.base64EncodedString(), mtime: mtime),
             timeout: 3600)
     }
-    
+
     public func why(id: String) async throws -> MemoryChain {
         try await get("memory/why/\(id)")
     }
-    
+
     func get<T: Decodable>(_ path: String, query: [String: String]) async throws -> T {
         var components = URLComponents(url: url(for: path), resolvingAgainstBaseURL: false)
         components?.queryItems = query.sorted { $0.key < $1.key }
             .map { URLQueryItem(name: $0.key, value: $0.value) }
         return try await request(URLRequest(url: components?.url ?? url(for: path)))
     }
-    
+
     func post<Body: Encodable, T: Decodable>(
         _ path: String, body: Body, query: [String: String] = [:], timeout: TimeInterval = 30
     ) async throws -> T {
@@ -770,15 +770,15 @@ public struct CompanionClient: Sendable {
         }
         return try await self.request(request, timeout: timeout)
     }
-    
+
     func get<T: Decodable>(_ path: String, allowing: Set<Int> = []) async throws -> T {
         try await request(URLRequest(url: url(for: path)), allowing: allowing)
     }
-    
+
     func request<T: Decodable>(
         _ request: URLRequest, allowing: Set<Int> = [], timeout: TimeInterval = 5
     ) async throws
-    -> T
+        -> T
     {
         var request = request
         request.timeoutInterval = timeout
@@ -801,11 +801,11 @@ public struct CompanionClient: Sendable {
             throw CompanionClientError.badResponse(http.statusCode, error.localizedDescription)
         }
     }
-    
+
     func url(for path: String) -> URL {
         baseURL.appendingPathComponent("v1").appendingPathComponent(path)
     }
-    
+
     private func responseText(_ data: Data) -> String {
         String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }

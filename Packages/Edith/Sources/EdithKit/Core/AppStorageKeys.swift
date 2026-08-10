@@ -16,7 +16,7 @@ public enum AppStorageKeys {
         public static let homeClockZones = "homeClockZones"
         public static let preventSleep = "preventSleep"
     }
-    
+
     public enum Backup {
         public static let limits = "backupLimits"
         public static let settings = "backupSettings"
@@ -24,7 +24,7 @@ public enum AppStorageKeys {
         public static let icloud = "icloudBackup"
         public static let lastBackupAt = "lastBackupAt"
     }
-    
+
     public enum Budget {
         public static let capPercent = "budgetCapPercent"
         public static let deadline = "budgetDeadline"
@@ -32,7 +32,7 @@ public enum AppStorageKeys {
         public static let kind = "budgetKind"
         public static let mode = "budgetMode"
     }
-    
+
     public enum Clipboard {
         public static let autoPaste = "clipboardAutoPaste"
         public static let backup = "clipboardBackup"
@@ -51,25 +51,25 @@ public enum AppStorageKeys {
         public static let showFooter = "clipboardShowFooter"
         public static let lastBackupAt = "lastClipboardBackupAt"
     }
-    
+
     public enum ColorPicker {
         public static let copyFormat = "colorPickerCopyFormat"
         public static let enabled = "colorPickerEnabled"
         public static let historySize = "colorPickerHistorySize"
         public static let profile = "colorPickerProfile"
     }
-    
+
     public enum Companion {
         public static let endpoint = "companionEndpoint"
         public static let tab = "companionTab"
     }
-    
+
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
         public static let intensity = "focusDimIntensity"
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
-    
+
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
         public static let codexEnabled = "codexLimitsEnabled"
@@ -79,7 +79,7 @@ public enum AppStorageKeys {
         public static let pacingMargin = "pacingMargin"
         public static let warnPercent = "warnPercent"
     }
-    
+
     public enum Machines {
         public static let autoConnect = "machinesAutoConnect"
         public static let diskThreshold = "machinesDiskThreshold"
@@ -89,7 +89,7 @@ public enum AppStorageKeys {
         public static let selection = "machinesSelection"
         public static let tab = "machinesTab"
     }
-    
+
     public enum MenuBar {
         public static let colorMode = "menuBarColorMode"
         public static let highColorHex = "menuBarHighColorHex"
@@ -99,19 +99,19 @@ public enum AppStorageKeys {
         public static let subColorHex = "menuBarSubColorHex"
         public static let systemStats = "menuBarSystemStats"
     }
-    
+
     public enum Mic {
         public static let muteEnabled = "micMuteEnabled"
         public static let muteInMenuBar = "micMuteInMenuBar"
     }
-    
+
     public enum Music {
         public static let lastBackupAt = "lastMusicBackupAt"
         public static let backup = "musicBackup"
         public static let downloadKind = "musicDownloadKind"
         public static let gridView = "musicGridView"
     }
-    
+
     public enum Notch {
         public static let alertAudio = "notchAlertAudio"
         public static let alertBattery = "notchAlertBattery"
@@ -129,7 +129,7 @@ public enum AppStorageKeys {
         public static let shelfShowMusic = "notchShelfShowMusic"
         public static let shelfShowOnExternal = "notchShelfShowOnExternal"
     }
-    
+
     public enum Notify {
         public static let master = "notifyMaster"
         public static let pacingHot = "notifyPacingHot"
@@ -143,12 +143,12 @@ public enum AppStorageKeys {
         public static let trackSession = "notifyTrackSession"
         public static let trackWeekly = "notifyTrackWeekly"
     }
-    
+
     public enum Permissions {
         public static let accessibilityGranted = "permAccessibilityGranted"
         public static let filter = "permissionsFilter"
     }
-    
+
     public enum Presenter {
         public static let autoEnabled = "presenterAutoEnabled"
         public static let blurCalendar = "presenterBlurCalendar"
@@ -162,7 +162,7 @@ public enum AppStorageKeys {
         public static let hideMenuBarNumbers = "presenterHideMenuBarNumbers"
         public static let mode = "presenterMode"
     }
-    
+
     public enum Tabs {
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"

@@ -14,7 +14,7 @@ final class FilesAppDelegate: NSObject, NSApplicationDelegate {
         else { return }
         FinderOpenBridge.open(machineID: request.machine, path: request.path)
     }
-    
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
@@ -22,9 +22,9 @@ final class FilesAppDelegate: NSObject, NSApplicationDelegate {
 
 public struct EdithFilesApp: App {
     @NSApplicationDelegateAdaptor(FilesAppDelegate.self) private var delegate
-    
+
     public init() {}
-    
+
     public var body: some Scene {
         Settings {
             Color.clear.frame(width: UIScale.pt(1), height: UIScale.pt(1))

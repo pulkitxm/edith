@@ -4,7 +4,7 @@ public enum ToolInstallFailure: Error, CustomStringConvertible, Equatable {
     case noPackageManager(String)
     case commandFailed(String, Int32)
     case unverified(String)
-    
+
     public var description: String {
         switch self {
         case let .noPackageManager(name):
@@ -19,21 +19,21 @@ public enum ToolInstallFailure: Error, CustomStringConvertible, Equatable {
 
 public struct ToolInstaller: Sendable {
     public typealias RunCommand =
-    @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws ->
-    CLICommandResult
-    
+        @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws ->
+        CLICommandResult
+
     public typealias Log = @Sendable (String) -> Void
-    
+
     private let runCommand: RunCommand
-    
+
     public init(
         runCommand: @escaping RunCommand = { try await CLICommandRunner.run($0, onLine: $1) }
     ) {
         self.runCommand = runCommand
     }
-    
+
     public func detectedVersion(of tool: CLIToolSpec, log: @escaping Log = { _ in }) async
-    -> String?
+        -> String?
     {
         let name: String
         let arguments: [String]
@@ -43,14 +43,14 @@ public struct ToolInstaller: Sendable {
             arguments = [executableName] + versionArguments
         }
         guard let result = try? await run(env(arguments), log: log),
-              result.terminationStatus == 0
+            result.terminationStatus == 0
         else { return nil }
         let version = result.output.components(separatedBy: .newlines).first {
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }?.trimmingCharacters(in: .whitespacesAndNewlines)
         return version ?? name
     }
-    
+
     @discardableResult
     public func install(_ tool: CLIToolSpec, log: @escaping Log = { _ in }) async throws -> String {
         switch tool.installStrategy {
@@ -67,7 +67,7 @@ public struct ToolInstaller: Sendable {
         }
         return version
     }
-    
+
     private func installStandaloneBinary(
         url: URL, destinationName: String, log: @escaping Log
     ) async throws {
@@ -97,7 +97,7 @@ public struct ToolInstaller: Sendable {
         try FileManager.default.moveItem(at: temporary, to: destination)
         log("Saved " + destination.path)
     }
-    
+
     private func installPackage(
         homebrewArguments: [String], npmPackage: String, displayName: String,
         log: @escaping Log
@@ -117,12 +117,12 @@ public struct ToolInstaller: Sendable {
         try await requireSuccess(
             env(["npm", "install", "-g", npmPackage]), named: "npm", log: log)
     }
-    
+
     private func isPresent(_ name: String, log: @escaping Log) async -> Bool {
         guard let result = try? await run(env([name, "--version"]), log: log) else { return false }
         return result.terminationStatus == 0
     }
-    
+
     private func requireSuccess(
         _ request: CLICommandRequest, named: String, log: @escaping Log
     ) async throws {
@@ -131,15 +131,15 @@ public struct ToolInstaller: Sendable {
             throw ToolInstallFailure.commandFailed(named, result.terminationStatus)
         }
     }
-    
+
     private func env(_ arguments: [String]) -> CLICommandRequest {
         CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: arguments,
             environment: CLIToolEnvironment.sanitized())
     }
-    
+
     private func run(_ request: CLICommandRequest, log: @escaping Log) async throws
-    -> CLICommandResult
+        -> CLICommandResult
     {
         try await runCommand(request, log)
     }

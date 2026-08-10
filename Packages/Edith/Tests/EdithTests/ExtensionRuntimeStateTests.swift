@@ -9,7 +9,7 @@ import Testing
         "SettingsBackup.swift", "OnboardingFlow.swift", "ExtensionDefaultsMigration.swift",
         "AppServices.swift", "OnboardingView.swift", "ExtensionsPane.swift",
     ]
-    
+
     static func runtimeSources() -> [(name: String, text: String)] {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -20,14 +20,14 @@ import Testing
         var sources: [(String, String)] = []
         while let url = files?.nextObject() as? URL {
             guard url.pathExtension == "swift",
-                  !allowedWriters.contains(url.lastPathComponent),
-                  let text = try? String(contentsOf: url, encoding: .utf8)
+                !allowedWriters.contains(url.lastPathComponent),
+                let text = try? String(contentsOf: url, encoding: .utf8)
             else { continue }
             sources.append((url.lastPathComponent, text))
         }
         return sources
     }
-    
+
     @Test func turningAFeatureOffNeverUninstallsItsExtension() throws {
         let sources = Self.runtimeSources()
         for entry in ExtensionRegistry.entries {
@@ -45,31 +45,31 @@ import Testing
             }
         }
     }
-    
+
     @Test func focusDimSeparatesInstalledFromActive() {
         #expect(FocusDimState.enabledKey != FocusDimState.activeKey)
         let defaults = UserDefaults(suiteName: "test.focusdim")!
         defaults.removePersistentDomain(forName: "test.focusdim")
         defer { defaults.removePersistentDomain(forName: "test.focusdim") }
-        
+
         defaults.set(true, forKey: FocusDimState.enabledKey)
         #expect(FocusDimState.isEnabled(defaults))
         #expect(!FocusDimState.isActive(defaults))
-        
+
         FocusDimState.setActive(true, defaults)
         #expect(FocusDimState.isActive(defaults))
         #expect(FocusDimState.isEnabled(defaults))
-        
+
         FocusDimState.setActive(false, defaults)
         #expect(!FocusDimState.isActive(defaults))
         #expect(FocusDimState.isEnabled(defaults), "turning dimming off must keep it installed")
     }
-    
+
     @Test func inactiveFocusDimIsNotReportedActiveWhenExtensionIsOff() {
         let defaults = UserDefaults(suiteName: "test.focusdim.off")!
         defaults.removePersistentDomain(forName: "test.focusdim.off")
         defer { defaults.removePersistentDomain(forName: "test.focusdim.off") }
-        
+
         defaults.set(true, forKey: FocusDimState.activeKey)
         #expect(!FocusDimState.isActive(defaults))
     }

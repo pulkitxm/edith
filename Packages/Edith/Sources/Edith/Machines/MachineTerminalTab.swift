@@ -10,9 +10,9 @@ final class TerminalSessionHolder {
     let terminalView = LocalProcessTerminalView(frame: .zero)
     private(set) var started = false
     private(set) var exitMessage: String?
-    
+
     private var delegateBox: TerminalProcessDelegate?
-    
+
     func start(executable: String, arguments: [String], environment: [String]) {
         guard !started else { return }
         started = true
@@ -20,8 +20,8 @@ final class TerminalSessionHolder {
         let delegate = TerminalProcessDelegate { [weak self] code in
             Task { @MainActor in
                 self?.exitMessage =
-                code == nil || code == 0
-                ? "Session ended." : "Session ended with status \(code ?? 0)."
+                    code == nil || code == 0
+                    ? "Session ended." : "Session ended with status \(code ?? 0)."
                 self?.started = false
             }
         }
@@ -30,42 +30,42 @@ final class TerminalSessionHolder {
         terminalView.startProcess(
             executable: executable, args: arguments, environment: environment)
     }
-    
+
     func restart(executable: String, arguments: [String], environment: [String]) {
         terminalView.terminate()
         started = false
         start(executable: executable, arguments: arguments, environment: environment)
     }
-    
+
     func stop() {
         guard started else { return }
         terminalView.terminate()
         started = false
     }
-    
+
     func applyTheme(dark: Bool) {
         terminalView.configureNativeColors()
         terminalView.nativeBackgroundColor =
-        dark
-        ? NSColor(calibratedRed: 0.09, green: 0.08, blue: 0.07, alpha: 1) : .white
+            dark
+            ? NSColor(calibratedRed: 0.09, green: 0.08, blue: 0.07, alpha: 1) : .white
         terminalView.nativeForegroundColor =
-        dark
-        ? NSColor(calibratedRed: 0.92, green: 0.9, blue: 0.86, alpha: 1) : .black
+            dark
+            ? NSColor(calibratedRed: 0.92, green: 0.9, blue: 0.86, alpha: 1) : .black
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     }
 }
 
 private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewDelegate {
     private let onExit: (Int32?) -> Void
-    
+
     init(onExit: @escaping (Int32?) -> Void) {
         self.onExit = onExit
     }
-    
+
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    
+
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         onExit(exitCode)
     }
@@ -74,14 +74,14 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
 struct TerminalPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
     let dark: Bool
-    
+
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         holder.applyTheme(dark: dark)
         let view = holder.terminalView
         DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
         return view
     }
-    
+
     func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
         holder.applyTheme(dark: dark)
     }
@@ -91,18 +91,18 @@ struct MachineTerminalTab: View {
     let session: MachineSession
     @State private var ownHolder = TerminalSessionHolder()
     private let injectedHolder: TerminalSessionHolder?
-    
+
     init(session: MachineSession, holder: TerminalSessionHolder? = nil) {
         self.session = session
         injectedHolder = holder
     }
-    
+
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             statusBar
@@ -116,7 +116,7 @@ struct MachineTerminalTab: View {
         }
         .onDisappear { if injectedHolder == nil { holder.stop() } }
     }
-    
+
     private var statusBar: some View {
         HStack(spacing: UIScale.pt(10)) {
             Text(session.isLocal ? "Local shell" : "SSH · \(session.machine.sshTarget)")
@@ -135,7 +135,7 @@ struct MachineTerminalTab: View {
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(8))
     }
-    
+
     private func startIfPossible() {
         guard !holder.started else { return }
         if session.isLocal {
@@ -149,9 +149,9 @@ struct MachineTerminalTab: View {
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(),
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
-            + connection.terminalEnvironment())
+                + connection.terminalEnvironment())
     }
-    
+
     private func restart() {
         holder.stop()
         startIfPossible()
@@ -164,9 +164,9 @@ struct ContainerTerminalSheet: View {
     @State private var holder = TerminalSessionHolder()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -191,7 +191,7 @@ struct ContainerTerminalSheet: View {
         .onAppear(perform: start)
         .onDisappear { holder.stop() }
     }
-    
+
     private func start() {
         guard let connection = session.connectionRef else { return }
         let command = DockerCommands.execShell(containerID: container.id)
@@ -199,6 +199,6 @@ struct ContainerTerminalSheet: View {
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(remoteCommand: command),
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
-            + connection.terminalEnvironment())
+                + connection.terminalEnvironment())
     }
 }

@@ -12,19 +12,19 @@ struct FilterMultiSelect: View {
     @Binding var selection: Set<String>
     let dark: Bool
     let dismiss: () -> Void
-    
+
     @State private var anchor: String?
     @State private var anchorSelected = true
     @State private var query = ""
-    
+
     private var searchable: Bool { options.count > 8 }
-    
+
     private var visible: [FilterSelectOption] {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard searchable, !q.isEmpty else { return options }
         return options.filter { $0.label.localizedCaseInsensitiveContains(q) }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if searchable {
@@ -42,12 +42,12 @@ struct FilterMultiSelect: View {
                             onToggle: { rangeModifier in
                                 apply(
                                     rangeModifier
-                                    ? MultiSelectLogic.rangeApply(
-                                        option.id, order: visible.map(\.id),
-                                        selection: selection, anchor: anchor,
-                                        anchorSelected: anchorSelected)
-                                    : MultiSelectLogic.toggle(
-                                        option.id, selection: selection))
+                                        ? MultiSelectLogic.rangeApply(
+                                            option.id, order: visible.map(\.id),
+                                            selection: selection, anchor: anchor,
+                                            anchorSelected: anchorSelected)
+                                        : MultiSelectLogic.toggle(
+                                            option.id, selection: selection))
                             },
                             onRowClick: { toggleModifier, rangeModifier in
                                 apply(
@@ -98,12 +98,12 @@ struct FilterMultiSelect: View {
         .padding(UIScale.pt(10))
         .frame(width: UIScale.pt(250))
     }
-    
+
     private var summary: String {
         selection.count == options.count
-        ? "All selected" : "\(selection.count) of \(options.count) selected"
+            ? "All selected" : "\(selection.count) of \(options.count) selected"
     }
-    
+
     private func apply(_ outcome: MultiSelectLogic.Outcome<String>) {
         selection = outcome.selection
         anchor = outcome.anchor
@@ -120,13 +120,13 @@ private struct FilterSelectRow: View {
     let onToggle: (Bool) -> Void
     let onRowClick: (Bool, Bool) -> Void
     let onAction: () -> Void
-    
+
     @State private var hovering = false
-    
+
     private var modifiers: NSEvent.ModifierFlags {
         NSApp.currentEvent?.modifierFlags ?? []
     }
-    
+
     var body: some View {
         HStack(spacing: UIScale.pt(8)) {
             Button {
@@ -178,7 +178,7 @@ private struct FilterSelectRow: View {
         )
         .onHover { hovering = $0 }
     }
-    
+
     private var checkbox: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(4))

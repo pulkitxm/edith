@@ -11,11 +11,11 @@ import Testing
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
-    
+
     private var derivedEntry: JunkCatalog.Entry {
         JunkCatalog.entries.first { $0.id == "derivedData" }!
     }
-    
+
     @Test func directorySizeSumsRegularFiles() throws {
         let home = tempHome()
         defer { try? FileManager.default.removeItem(at: home) }
@@ -24,7 +24,7 @@ import Testing
         try data.write(to: home.appendingPathComponent("b.bin"))
         #expect(JunkScanner.directorySize(home) >= 8192)
     }
-    
+
     @Test func scanCategoryListsChildrenAsItems() throws {
         let home = tempHome()
         defer { try? FileManager.default.removeItem(at: home) }
@@ -37,18 +37,18 @@ import Testing
             to: derived.appendingPathComponent("ProjA/build.o"))
         try Data(repeating: 1, count: 9000).write(
             to: derived.appendingPathComponent("ProjB/build.o"))
-        
+
         let category = JunkScanner.scanCategory(derivedEntry, home: home)
         #expect(category?.items.count == 2)
         #expect(category?.items.first?.name == "ProjB")
     }
-    
+
     @Test func absentCategoryReturnsNil() {
         let home = tempHome()
         defer { try? FileManager.default.removeItem(at: home) }
         #expect(JunkScanner.scanCategory(derivedEntry, home: home) == nil)
     }
-    
+
     @Test func categorySelectionReflectsItems() {
         var category = JunkCategory(
             id: "x", name: "X", detail: "",
@@ -65,13 +65,13 @@ import Testing
         #expect(category.selection == .all)
         #expect(category.selectedBytes == 2)
     }
-    
+
     @Test func drivesIncludeTheBootVolume() {
         let drives = JunkScanner.drives()
         #expect(!drives.isEmpty)
         #expect(drives.contains { !$0.isExternal && $0.totalBytes > 0 })
     }
-    
+
     @Test func driveScanningDefaultsToSystemVolumeAndRequiresExternalSelection() {
         let drives = [
             DriveInfo(
@@ -84,18 +84,18 @@ import Testing
                 id: "/Volumes/Archive", name: "Archive", totalBytes: 1, isRemovable: false,
                 isInternal: false),
         ]
-        
+
         #expect(JunkScanner.drivesForScanning(drives, selectedDriveIDs: nil).map(\.id) == ["/"])
         #expect(
             JunkScanner.drivesForScanning(
                 drives, selectedDriveIDs: ["/", "/Volumes/Backup"]
             ).map(\.id) == ["/", "/Volumes/Backup"])
     }
-    
+
     @Test func formatIsHumanReadable() {
         #expect(JunkScanner.format(1_500_000).contains("MB"))
     }
-    
+
     @Test func projectJunkFindsTargetsWithoutDescending() throws {
         let root = tempHome()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -106,7 +106,7 @@ import Testing
         let pycache = root.appendingPathComponent("proj/pkg/__pycache__")
         try FileManager.default.createDirectory(at: pycache, withIntermediateDirectories: true)
         try Data(repeating: 1, count: 1000).write(to: pycache.appendingPathComponent("x.pyc"))
-        
+
         let categories = JunkScanner.scanProjectJunk(roots: [root]) { _ in }
         #expect(categories.first { $0.id == "nodeModules" }?.items.count == 1)
         #expect(categories.contains { $0.id == "pycache" })

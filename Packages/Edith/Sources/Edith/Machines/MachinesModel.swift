@@ -11,15 +11,15 @@ final class MachinesModel {
     private(set) var store = MachineStore()
     private(set) var sessions: [UUID: MachineSession] = [:]
     var selection: UUID?
-    
+
     static let localMachineID = UUID(uuidString: "00000000-0000-0000-0000-0000000000ED")!
-    
+
     let localMachine = Machine(
         id: MachinesModel.localMachineID, name: "This Mac", host: "localhost",
         source: .manual, createdAt: Date(timeIntervalSince1970: 0))
-    
+
     private var machinesObserver: NSObjectProtocol?
-    
+
     private init() {
         MachinePaths.prepare()
         machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
@@ -29,17 +29,17 @@ final class MachinesModel {
             }
         }
     }
-    
+
     var allMachines: [Machine] {
         [localMachine] + store.machines
     }
-    
+
     func isLocal(_ id: UUID) -> Bool { id == Self.localMachineID }
-    
+
     func knows(_ id: UUID) -> Bool {
         id == Self.localMachineID || store.machine(id: id) != nil
     }
-    
+
     func session(for id: UUID) -> MachineSession {
         if let existing = sessions[id] { return existing }
         let isLocal = id == Self.localMachineID
@@ -48,32 +48,32 @@ final class MachinesModel {
         sessions[id] = session
         return session
     }
-    
+
     func selectedSession() -> MachineSession? {
         guard let selection else { return nil }
         return session(for: selection)
     }
-    
+
     func ensureSelection() {
         if let selection, allMachines.contains(where: { $0.id == selection }) { return }
         selection = allMachines.first?.id
     }
-    
+
     func restoreSelection(_ stored: String) {
         if selection == nil, let id = UUID(uuidString: stored),
-           allMachines.contains(where: { $0.id == id })
+            allMachines.contains(where: { $0.id == id })
         {
             selection = id
         }
         ensureSelection()
     }
-    
+
     func add(_ machine: Machine) {
         store.add(machine)
         selection = machine.id
         session(for: machine.id).start()
     }
-    
+
     func update(_ machine: Machine) {
         store.update(machine)
         if let session = sessions[machine.id] {
@@ -82,14 +82,14 @@ final class MachinesModel {
         }
         _ = session(for: machine.id)
     }
-    
+
     func remove(id: UUID) {
         sessions[id]?.stop()
         sessions[id] = nil
         store.remove(id: id)
         ensureSelection()
     }
-    
+
     func startSelected() {
         guard let selection else { return }
         let session = session(for: selection)
@@ -97,29 +97,29 @@ final class MachinesModel {
             session.start()
         }
     }
-    
+
     func stopAll() {
         for session in sessions.values { session.stop() }
         sessions = [:]
     }
-    
+
     func addForward(_ forward: PortForward) {
         store.addForward(forward)
     }
-    
+
     func removeForward(_ forward: PortForward) {
         Task { await session(for: forward.machineID).setForward(forward, active: false) }
         store.removeForward(id: forward.id)
     }
-    
+
     func addSnippet(_ snippet: CommandSnippet) {
         store.addSnippet(snippet)
     }
-    
+
     func removeSnippet(_ snippet: CommandSnippet) {
         store.removeSnippet(id: snippet.id)
     }
-    
+
     func snapshot(for id: UUID) -> MachineSnapshot {
         let session = session(for: id)
         let machine = session.machine
@@ -145,25 +145,25 @@ final class MachinesModel {
             hottestTemperature: slow?.temps.map(\.c).max(),
             os: session.hello?.os ?? "")
     }
-    
+
     var snapshots: [MachineSnapshot] {
         allMachines.map { snapshot(for: $0.id) }
     }
-    
+
     var fleet: FleetSummary {
         FleetMath.summarize(snapshots)
     }
-    
+
     func connectAll() {
         for machine in allMachines {
             let session = session(for: machine.id)
             if case .disconnected = session.state { session.start() }
         }
     }
-    
+
     func wake(machine: Machine) -> String {
         guard let mac = machine.wakeMACAddress,
-              let packet = WakeOnLAN.magicPacket(macAddress: mac)
+            let packet = WakeOnLAN.magicPacket(macAddress: mac)
         else {
             return "No MAC address stored for this machine yet."
         }
@@ -177,9 +177,9 @@ enum MachineTab: String, CaseIterable, Identifiable {
     case docker
     case terminal
     case tools
-    
+
     var id: String { rawValue }
-    
+
     var title: String {
         switch self {
         case .overview: return "Overview"
@@ -189,7 +189,7 @@ enum MachineTab: String, CaseIterable, Identifiable {
         case .tools: return "Tools"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .overview: return "gauge.with.needle"
@@ -199,7 +199,7 @@ enum MachineTab: String, CaseIterable, Identifiable {
         case .tools: return "wrench.and.screwdriver"
         }
     }
-    
+
     static func tabs(isLocal: Bool, hasDocker: Bool) -> [MachineTab] {
         if isLocal { return [.overview, .processes, .terminal] }
         return MachineTab.allCases.filter { $0 != .docker || hasDocker }
@@ -218,7 +218,7 @@ enum MachineStatusStyle {
         case .failed: return DashSkin.danger
         }
     }
-    
+
     static func label(_ state: MachineConnectionState) -> String {
         switch state {
         case let .connected(latency):

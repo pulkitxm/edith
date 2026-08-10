@@ -3,7 +3,7 @@ import Foundation
 public enum ExtensionDefaultsMigration {
     public static let markerKey = "extensionDefaultsMigrated"
     public static let freshInstallKey = "extensionDefaultsFreshInstall"
-    
+
     @discardableResult
     public static func migrate(
         defaults: UserDefaults = SharedDefaults.store,
@@ -20,15 +20,15 @@ public enum ExtensionDefaultsMigration {
             return false
         }
         let hasPriorInstall =
-        defaults.object(forKey: "hasPromptedPermissions") != nil
-        || ExtensionRegistry.entries.contains {
-            defaults.object(forKey: $0.defaultsKey) != nil
-        }
+            defaults.object(forKey: "hasPromptedPermissions") != nil
+            || ExtensionRegistry.entries.contains {
+                defaults.object(forKey: $0.defaultsKey) != nil
+            }
         if hasPriorInstall {
             for entry in ExtensionRegistry.entries {
                 let value =
-                defaults.object(forKey: entry.defaultsKey) as? Bool
-                ?? legacyDefaults[entry.defaultsKey, default: false]
+                    defaults.object(forKey: entry.defaultsKey) as? Bool
+                    ?? legacyDefaults[entry.defaultsKey, default: false]
                 defaults.set(value, forKey: entry.defaultsKey)
             }
             defaults.set(true, forKey: OnboardingFlow.completionKey)
@@ -37,7 +37,7 @@ public enum ExtensionDefaultsMigration {
         defaults.set(true, forKey: markerKey)
         return !hasPriorInstall
     }
-    
+
     private static let legacyDefaults: [String: Bool] = [
         AppStorageKeys.Tabs.usageEnabled: true,
         AppStorageKeys.Tabs.systemEnabled: true,

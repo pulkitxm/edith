@@ -12,7 +12,7 @@ struct OnboardingView: View {
         case ready
         case provisioning
     }
-    
+
     let onFinish: () -> Void
     private let baselineGrantedPermissions: [ExtensionPermission: Bool]
     @State private var cloudBackupFound = false
@@ -27,19 +27,19 @@ struct OnboardingView: View {
     @State private var showsAllExtensions = false
     @State private var grantedPermissions: [ExtensionPermission: Bool]
     @State private var permissionItems: [OnboardingPermission] = []
-    
+
     init(onFinish: @escaping () -> Void) {
         let baselineGrantedPermissions = OnboardingFlow.grantedPermissions()
         self.onFinish = onFinish
         self.baselineGrantedPermissions = baselineGrantedPermissions
         _grantedPermissions = State(initialValue: baselineGrantedPermissions)
     }
-    
+
     private var dark: Bool { colorScheme == .dark }
     private var glide: Animation {
         Motion.animation(Motion.glide, reduceMotion: reduceMotion)
     }
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             ZStack {
@@ -81,7 +81,7 @@ struct OnboardingView: View {
             refreshPermissions()
         }
     }
-    
+
     @ViewBuilder
     private var currentStep: some View {
         switch step {
@@ -99,7 +99,7 @@ struct OnboardingView: View {
             provisioningStep
         }
     }
-    
+
     private var welcomeStep: some View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 48)
@@ -132,7 +132,7 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, UIScale.pt(48))
     }
-    
+
     private var restoreStep: some View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
@@ -183,29 +183,29 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, UIScale.pt(48))
     }
-    
+
     private var restoreSymbol: String {
         guard cloudChecked else { return "icloud" }
         return cloudBackupFound ? "checkmark.icloud" : "icloud.slash"
     }
-    
+
     private var restoreTitle: String {
         guard cloudChecked else { return "Been here before?" }
         return cloudBackupFound ? "Backup found" : "No backup found"
     }
-    
+
     private var restoreDetail: String {
         guard cloudChecked else {
             return
-            "If you backed up Edith to iCloud, we can bring back your extensions, settings, and usage history."
+                "If you backed up Edith to iCloud, we can bring back your extensions, settings, and usage history."
         }
         if cloudBackupFound {
             return
-            "Your extensions are preselected and your settings and history will be restored once setup finishes."
+                "Your extensions are preselected and your settings and history will be restored once setup finishes."
         }
         return "No Edith data in iCloud Drive. You can turn on backups at the end of setup."
     }
-    
+
     private func checkForCloudBackup() {
         cloudChecking = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -222,7 +222,7 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     private var picksStep: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             stepHeading(
@@ -256,7 +256,7 @@ struct OnboardingView: View {
         .padding(.top, UIScale.pt(40))
         .padding(.horizontal, UIScale.pt(30))
     }
-    
+
     private var marketplaceCard: some View {
         Button {
             withAnimation(glide) { showsAllExtensions.toggle() }
@@ -295,7 +295,7 @@ struct OnboardingView: View {
         .buttonStyle(.plain)
         .pointerCursor()
     }
-    
+
     private var permissionsStep: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             stepHeading(
@@ -333,7 +333,7 @@ struct OnboardingView: View {
         .padding(.horizontal, UIScale.pt(38))
         .onAppear(perform: refreshPermissions)
     }
-    
+
     private var readyStep: some View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
@@ -356,8 +356,8 @@ struct OnboardingView: View {
             VStack(spacing: UIScale.pt(6)) {
                 Toggle(
                     cloudBackupFound
-                    ? "Restore my iCloud backup and keep syncing"
-                    : "Back up my settings to iCloud",
+                        ? "Restore my iCloud backup and keep syncing"
+                        : "Back up my settings to iCloud",
                     isOn: $icloudBackup
                 )
                 .toggleStyle(.switch)
@@ -408,7 +408,7 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, UIScale.pt(48))
     }
-    
+
     private var provisioningStep: some View {
         ToolProvisioningPanel(
             title: "Setting up your extensions", tools: selectedTools,
@@ -416,7 +416,7 @@ struct OnboardingView: View {
         )
         .padding(.horizontal, UIScale.pt(32))
     }
-    
+
     private var stepIndicator: some View {
         HStack(spacing: UIScale.pt(8)) {
             ForEach(Step.allCases, id: \.rawValue) { item in
@@ -429,7 +429,7 @@ struct OnboardingView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Step \(step.rawValue + 1) of \(Step.allCases.count)")
     }
-    
+
     @ViewBuilder
     private var footer: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -452,7 +452,7 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, UIScale.pt(30))
     }
-    
+
     private var appIcon: some View {
         Group {
             if let icon = AppArtwork.icon {
@@ -467,28 +467,28 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     private var displayedEntries: [ExtensionRegistryEntry] {
         showsAllExtensions
-        ? ExtensionRegistry.entries : ExtensionRegistry.entries.filter(\.featured)
+            ? ExtensionRegistry.entries : ExtensionRegistry.entries.filter(\.featured)
     }
-    
+
     private var gridColumns: [GridItem] {
         [
             GridItem(.flexible(), spacing: UIScale.pt(12)),
             GridItem(.flexible(), spacing: UIScale.pt(12)),
         ]
     }
-    
+
     private var picksDetail: String {
         if cloudBackupFound && !selectedIDs.isEmpty {
             return "We preselected the extensions from your iCloud backup. Adjust as you like."
         }
         return showsAllExtensions
-        ? "Choose any extensions you want ready on day one."
-        : "Start with a few favorites. You can change these anytime."
+            ? "Choose any extensions you want ready on day one."
+            : "Start with a few favorites. You can change these anytime."
     }
-    
+
     private var marketplaceDetail: String {
         if showsAllExtensions {
             return "Show System, Clipboard, Notch Shelf, and Agent Usage."
@@ -496,15 +496,15 @@ struct OnboardingView: View {
         return ExtensionRegistry.entries.filter { !$0.featured }.map(\.title).joined(
             separator: ", ")
     }
-    
+
     private var hotKeyLabel: String {
         SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
     }
-    
+
     private var continueLabel: String {
         selectedIDs.isEmpty ? "Continue" : "Continue (\(selectedIDs.count))"
     }
-    
+
     private var readySummary: String {
         let extensionCount = selectedIDs.count
         let extensionLabel = extensionCount == 1 ? "extension" : "extensions"
@@ -517,7 +517,7 @@ struct OnboardingView: View {
         let permissionLabel = permissionCount == 1 ? "permission" : "permissions"
         return "\(extensionSummary), \(permissionCount) \(permissionLabel) granted"
     }
-    
+
     private var selectedTools: [CLIToolSpec] {
         var seen = Set<String>()
         return ExtensionRegistry.entries
@@ -525,7 +525,7 @@ struct OnboardingView: View {
             .flatMap(\.requiredTools)
             .filter { $0.requirement.isActive() && seen.insert($0.id).inserted }
     }
-    
+
     private func stepHeading(_ title: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title)
@@ -536,7 +536,7 @@ struct OnboardingView: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
-    
+
     private func continueFromPicks() {
         grantedPermissions = OnboardingFlow.grantedPermissions()
         permissionItems = OnboardingFlow.missingPermissions(
@@ -548,12 +548,12 @@ struct OnboardingView: View {
             refreshPermissions()
         }
     }
-    
+
     private func finishSelection() {
         grantedPermissions = OnboardingFlow.grantedPermissions()
         move(to: .ready, direction: 1)
     }
-    
+
     private func completeOrProvisionOnboarding() {
         OnboardingFlow.finish(selectedIDs: selectedIDs, icloudBackup: icloudBackup)
         IPC.post(IPC.Name.settingsChanged)
@@ -563,7 +563,7 @@ struct OnboardingView: View {
             move(to: .provisioning, direction: 1)
         }
     }
-    
+
     private func goBack() {
         switch step {
         case .restore: move(to: .welcome, direction: -1)
@@ -572,12 +572,12 @@ struct OnboardingView: View {
         default: break
         }
     }
-    
+
     private func move(to nextStep: Step, direction: Double) {
         transitionDirection = direction
         withAnimation(glide) { step = nextStep }
     }
-    
+
     private func refreshPermissions() {
         IPC.post(IPC.Name.requestPermissionsRefresh)
         grantedPermissions = OnboardingFlow.grantedPermissions()
@@ -593,7 +593,7 @@ private struct ExtensionChoiceCard: View {
     let selected: Bool
     let dark: Bool
     let action: () -> Void
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             Button(action: action) {
@@ -651,7 +651,7 @@ private struct ExtensionChoiceCard: View {
                     lineWidth: selected ? 1.5 : 1)
         }
     }
-    
+
     private var permissionNote: String {
         let required = entry.requiredPermissions.map(\.displayName)
         let optional = entry.optionalPermissions.map(\.displayName)
@@ -659,7 +659,7 @@ private struct ExtensionChoiceCard: View {
         if !optional.isEmpty { return "Optional: \(optional.joined(separator: ", "))" }
         return "No permissions needed"
     }
-    
+
     private var permissions: [ExtensionPermission] {
         entry.requiredPermissions + entry.optionalPermissions
     }
@@ -670,7 +670,7 @@ private struct OnboardingPermissionCard: View {
     let granted: Bool
     let dark: Bool
     let grant: () -> Void
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: item.permission.symbolName)
@@ -725,7 +725,7 @@ private struct OnboardingPermissionCard: View {
 
 private struct OnboardingPrimaryButtonStyle: ButtonStyle {
     var compact = false
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: compact ? 12.5 : 14, weight: .semibold))

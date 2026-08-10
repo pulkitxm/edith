@@ -7,16 +7,16 @@ import Observation
 public final class CalendarStore: FeatureModule {
     public private(set) var events: [EKEvent] = []
     public private(set) var authStatus: EKAuthorizationStatus
-    
+
     private var daysLoaded = 14
     private static let maxDays = 120
-    
+
     private let store = EKEventStore()
     private var changeObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var refreshDebounce: Task<Void, Never>?
     private var fetchTask: Task<Void, Never>?
-    
+
     public init() {
         authStatus = EKEventStore.authorizationStatus(for: .event)
         if authStatus == .fullAccess { refresh() }
@@ -31,7 +31,7 @@ public final class CalendarStore: FeatureModule {
             Task { @MainActor in self?.scheduleRefresh() }
         }
     }
-    
+
     private func scheduleRefresh() {
         refreshDebounce?.cancel()
         refreshDebounce = Task { @MainActor [weak self] in
@@ -40,7 +40,7 @@ public final class CalendarStore: FeatureModule {
             self?.refresh()
         }
     }
-    
+
     public func shutdown() {
         refreshDebounce?.cancel()
         refreshDebounce = nil
@@ -51,14 +51,14 @@ public final class CalendarStore: FeatureModule {
         changeObserver = nil
         wakeObserver = nil
     }
-    
+
     public func refreshAuthStatus() {
         let status = EKEventStore.authorizationStatus(for: .event)
         guard status != authStatus else { return }
         authStatus = status
         if status == .fullAccess { refresh() }
     }
-    
+
     public func refresh() {
         fetchTask?.cancel()
         guard authStatus == .fullAccess else { return }
@@ -68,7 +68,7 @@ public final class CalendarStore: FeatureModule {
             self.events = fetched
         }
     }
-    
+
     @discardableResult
     public func refreshAndWait() async -> [EKEvent] {
         fetchTask?.cancel()
@@ -77,7 +77,7 @@ public final class CalendarStore: FeatureModule {
         events = fetched
         return fetched
     }
-    
+
     private func fetchEvents() async -> [EKEvent]? {
         guard authStatus == .fullAccess else { return nil }
         let start = Calendar.current.startOfDay(for: Date())
@@ -92,11 +92,11 @@ public final class CalendarStore: FeatureModule {
                 CalendarDayEvents.deduplicated(store.events(matching: predicate)))
         }.value
     }
-    
+
     public func loadMore() {
         guard daysLoaded < Self.maxDays else { return }
         daysLoaded = min(daysLoaded + 14, Self.maxDays)
         refresh()
     }
-    
+
 }

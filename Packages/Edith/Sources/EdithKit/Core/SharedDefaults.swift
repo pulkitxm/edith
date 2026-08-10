@@ -13,7 +13,7 @@ public enum SharedDefaults {
         store.register(defaults: registeredDefaults)
         return store
     }()
-    
+
     public static func migrate(
         from source: UserDefaults = .standard,
         to destination: UserDefaults = SharedDefaults.store,

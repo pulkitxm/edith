@@ -4,7 +4,7 @@ public struct MachineSessionSummary: Equatable, Sendable {
     public var who: [String]
     public var updatesAvailable: Int?
     public var macAddress: String?
-    
+
     public init(who: [String] = [], updatesAvailable: Int? = nil, macAddress: String? = nil) {
         self.who = who
         self.updatesAvailable = updatesAvailable
@@ -14,7 +14,7 @@ public struct MachineSessionSummary: Equatable, Sendable {
 
 public enum MachineFacts {
     public static let whoCommand = "who 2>/dev/null | head -20"
-    
+
     public static let macAddressCommand = """
         wireless=
         for iface in /sys/class/net/*; do
@@ -30,7 +30,7 @@ public enum MachineFacts {
         done
         if [ -n "$wireless" ]; then echo "$wireless"; fi
         """
-    
+
     public static let updatesCommand = """
         if command -v apt-get >/dev/null 2>&1; then \
         apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep -c '^Inst'; \
@@ -38,7 +38,7 @@ public enum MachineFacts {
         elif command -v pacman >/dev/null 2>&1; then pacman -Qu 2>/dev/null | wc -l; \
         else echo -1; fi
         """
-    
+
     public static func parseWho(_ output: String) -> [String] {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
@@ -49,13 +49,13 @@ public enum MachineFacts {
             return "\(user) on \(tty) since \(rest)"
         }
     }
-    
+
     public static func parseUpdates(_ output: String) -> Int? {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value = Int(trimmed), value >= 0 else { return nil }
         return value
     }
-    
+
     public static func parseMACAddress(_ output: String) -> String? {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         let pattern = "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$"
@@ -67,58 +67,58 @@ public enum MachineFacts {
 public enum ServiceCommands {
     public static func list() -> String {
         "systemctl list-units --type=service --all --no-pager --no-legend --plain 2>/dev/null"
-        + " | head -200"
+            + " | head -200"
     }
-    
+
     public static func action(_ action: String, unit: String, withSudoPassword: Bool = false)
-    -> String
+        -> String
     {
         guard withSudoPassword else {
             return "systemctl \(action) \(ShellQuote.quote(unit)) 2>&1 || "
-            + "sudo -n systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
+                + "sudo -n systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
         }
         return "sudo -S -p '' systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
     }
-    
+
     public static func journal(unit: String, lines: Int, follow: Bool) -> String {
         var command = "journalctl -u \(ShellQuote.quote(unit)) -n \(lines) --no-pager"
         if follow { command += " -f" }
         return command + " 2>&1"
     }
-    
+
     public static func reboot(withSudoPassword: Bool = false) -> String {
         withSudoPassword
-        ? "sudo -S -p '' systemctl reboot 2>&1"
-        : "sudo -n systemctl reboot 2>&1 || systemctl reboot 2>&1"
+            ? "sudo -S -p '' systemctl reboot 2>&1"
+            : "sudo -n systemctl reboot 2>&1 || systemctl reboot 2>&1"
     }
-    
+
     public static func shutdown(withSudoPassword: Bool = false) -> String {
         withSudoPassword
-        ? "sudo -S -p '' systemctl poweroff 2>&1"
-        : "sudo -n systemctl poweroff 2>&1 || systemctl poweroff 2>&1"
+            ? "sudo -S -p '' systemctl poweroff 2>&1"
+            : "sudo -n systemctl poweroff 2>&1 || systemctl poweroff 2>&1"
     }
-    
+
     public static let actions = ["start", "stop", "restart"]
 }
 
 public enum ProcessCommands {
     public static let signals = ["TERM", "KILL", "HUP", "INT", "QUIT", "USR1", "USR2"]
-    
+
     public static let goneMarker = "@EDITH-PROCESS-GONE@"
-    
+
     public static func kill(pid: Int, signal: String) -> String {
         "if kill -0 \(pid) 2>/dev/null || [ -d /proc/\(pid) ]; then "
-        + "kill -\(signal) \(pid) 2>&1; else echo \(goneMarker); fi"
+            + "kill -\(signal) \(pid) 2>&1; else echo \(goneMarker); fi"
     }
-    
+
     public static func hadAlreadyExited(_ output: String) -> Bool {
         output.contains(goneMarker)
     }
-    
+
     public static func normalizedSignal(_ raw: String) -> String? {
         let name =
-        raw.uppercased().hasPrefix("SIG")
-        ? String(raw.uppercased().dropFirst(3)) : raw.uppercased()
+            raw.uppercased().hasPrefix("SIG")
+            ? String(raw.uppercased().dropFirst(3)) : raw.uppercased()
         return signals.contains(name) ? name : nil
     }
 }
@@ -131,28 +131,28 @@ public enum PowerOutcome {
         guard status != 255 else { return true }
         let text = stderr.lowercased()
         return text.contains("connection closed") || text.contains("closed by remote host")
-        || text.contains("connection reset")
+            || text.contains("connection reset")
     }
-    
+
     public static func needsPrivilege(_ text: String) -> Bool {
         let lowered = text.lowercased()
         return lowered.contains("password is required")
-        || lowered.contains("interactive authentication required")
-        || lowered.contains("access denied")
-        || lowered.contains("not authorized")
-        || lowered.contains("permission denied")
+            || lowered.contains("interactive authentication required")
+            || lowered.contains("access denied")
+            || lowered.contains("not authorized")
+            || lowered.contains("permission denied")
     }
-    
+
     public static func sudoPasswordRefused(_ text: String) -> Bool {
         let lowered = text.lowercased()
         return lowered.contains("incorrect password attempt")
-        || lowered.contains("sorry, try again")
+            || lowered.contains("sorry, try again")
     }
-    
+
     public static func explain(_ error: Error) -> String {
         let text = error.localizedDescription
         let detail =
-        text
+            text
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
@@ -163,8 +163,8 @@ public enum PowerOutcome {
         }
         guard needsPrivilege(detail) else { return detail }
         return detail
-        + " Save this account's sudo password in the machine's settings, or give it"
-        + " passwordless sudo for systemctl."
+            + " Save this account's sudo password in the machine's settings, or give it"
+            + " passwordless sudo for systemctl."
     }
 }
 
@@ -174,9 +174,9 @@ public struct SystemdService: Identifiable, Equatable, Sendable {
     public var active: String
     public var sub: String
     public var describes: String
-    
+
     public var id: String { unit }
-    
+
     public init(unit: String, load: String, active: String, sub: String, describes: String) {
         self.unit = unit
         self.load = load
@@ -184,10 +184,10 @@ public struct SystemdService: Identifiable, Equatable, Sendable {
         self.sub = sub
         self.describes = describes
     }
-    
+
     public var isRunning: Bool { sub == "running" }
     public var isFailed: Bool { active == "failed" || sub == "failed" }
-    
+
     public var displayName: String {
         unit.hasSuffix(".service") ? String(unit.dropLast(8)) : unit
     }

@@ -7,7 +7,7 @@ import Foundation
 final class ClipboardStore: FeatureModule {
     private(set) var entries: [ClipboardEntry] = []
     private(set) var skippedOversizeAt: Date?
-    
+
     private var timer: DispatchSourceTimer?
     private var lastChangeCount = NSPasteboard.general.changeCount
     private var locked = false
@@ -16,10 +16,10 @@ final class ClipboardStore: FeatureModule {
     private var wakeObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var clipboardChangedObserver: NSObjectProtocol?
-    
+
     init() {
         entries = ClipboardRepository.loadEntries()
-        
+
         let dnc = DistributedNotificationCenter.default()
         lockObservers = [
             dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) {
@@ -59,10 +59,10 @@ final class ClipboardStore: FeatureModule {
                 guard info["sender"] as? String != Self.senderID else { return }
                 Task { @MainActor in self?.entries = ClipboardRepository.loadEntries() }
             })
-        
+
         startTimer()
     }
-    
+
     func shutdown() {
         stopTimer()
         for token in lockObservers { DistributedNotificationCenter.default().removeObserver(token) }
@@ -76,12 +76,12 @@ final class ClipboardStore: FeatureModule {
         settingsObserver = nil
         clipboardChangedObserver = nil
     }
-    
+
     private var interval: Double {
         SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.checkInterval) as? Double
-        ?? 1.0
+            ?? 1.0
     }
-    
+
     private func startTimer() {
         guard timer == nil else { return }
         let t = DispatchSource.makeTimerSource(queue: .main)
@@ -90,56 +90,56 @@ final class ClipboardStore: FeatureModule {
         t.resume()
         timer = t
     }
-    
+
     private func stopTimer() {
         timer?.cancel()
         timer = nil
     }
-    
+
     private func restartTimerIfIntervalChanged() {
         guard timer != nil else { return }
         stopTimer()
         startTimer()
     }
-    
+
     private func tick() {
         let pb = NSPasteboard.general
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount
         capture(from: pb)
     }
-    
+
     private func capture(from pb: NSPasteboard) {
         let rawTypes = (pb.types ?? []).map(\.rawValue)
         guard !ClipboardPasteboardFilter.shouldSkip(types: rawTypes) else { return }
-        
+
         let frontApp = NSWorkspace.shared.frontmostApplication
         let bundleID = frontApp?.bundleIdentifier
         let ignoreList = ClipboardIgnore.parseUserList(
             SharedDefaults.store.string(forKey: AppStorageKeys.Clipboard.ignoredApps) ?? "")
         guard !ClipboardIgnore.isIgnored(bundleID: bundleID, userList: ignoreList) else { return }
-        
+
         let defaults = SharedDefaults.store
         let options = ClipboardCaptureOptions(
             saveFiles: defaults.object(forKey: AppStorageKeys.Clipboard.saveFiles) as? Bool ?? true,
             saveImages: defaults.object(forKey: AppStorageKeys.Clipboard.saveImages) as? Bool
-            ?? true,
+                ?? true,
             saveText: defaults.object(forKey: AppStorageKeys.Clipboard.saveText) as? Bool ?? true)
         guard let captured = ClipboardPayloadExtractor.extract(from: pb, options: options) else {
             return
         }
-        
+
         let maxBytes =
-        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItemBytes) as? Int
-        ?? 10_000_000
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItemBytes) as? Int
+            ?? 10_000_000
         guard captured.data.count <= maxBytes else {
             skippedOversizeAt = Date()
             return
         }
-        
+
         let sha = ClipboardRepository.sha256Hex(captured.data)
         try? ClipboardRepository.writeBlob(captured.data, sha256: sha, ext: captured.ext)
-        
+
         let existing = entries.first { $0.sha256 == sha && $0.ext == captured.ext }
         if let existing {
             entries.removeAll { $0.id == existing.id }
@@ -155,29 +155,29 @@ final class ClipboardStore: FeatureModule {
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
     }
-    
+
     private static let senderID =
-    "clipboardStore-\(ProcessInfo.processInfo.processIdentifier)"
-    
+        "clipboardStore-\(ProcessInfo.processInfo.processIdentifier)"
+
     private func postChanged() {
         IPC.post(IPC.Name.clipboardChanged, userInfo: ["sender": Self.senderID])
     }
-    
+
     private func adopt(_ updated: [ClipboardEntry]) {
         entries = ClipboardActions.arrange(updated)
     }
-    
+
     private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
         let beforeRetention = entries.count
         let maxItems =
-        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int ?? 200
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int ?? 200
         let maxAgeDays =
-        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil
         entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
         let removedAny = entries.count != beforeRetention
         let appendedFastPath =
-        appended != nil && !removedAny && ClipboardRepository.appendEntry(appended!)
+            appended != nil && !removedAny && ClipboardRepository.appendEntry(appended!)
         if !appendedFastPath {
             try? ClipboardRepository.saveEntries(entries)
         }
@@ -186,7 +186,7 @@ final class ClipboardStore: FeatureModule {
         }
         postChanged()
     }
-    
+
     func togglePin(_ id: String) {
         guard let outcome = try? ClipboardActions.togglePin(ids: [id]), outcome.changed > 0 else {
             return
@@ -195,7 +195,7 @@ final class ClipboardStore: FeatureModule {
         SettingsBackup.shared.scheduleClipboardBackup()
         postChanged()
     }
-    
+
     func clear(includingPinned: Bool = false) {
         guard let outcome = try? ClipboardActions.clear(keepingPinned: !includingPinned) else {
             return
@@ -204,7 +204,7 @@ final class ClipboardStore: FeatureModule {
         SettingsBackup.shared.scheduleClipboardBackup()
         postChanged()
     }
-    
+
     func delete(_ id: String) {
         guard let outcome = try? ClipboardActions.delete(ids: [id]), outcome.changed > 0 else {
             return
@@ -212,11 +212,11 @@ final class ClipboardStore: FeatureModule {
         adopt(outcome.entries)
         postChanged()
     }
-    
+
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {
         let plain =
-        forcePlainText
-        || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
+            forcePlainText
+            || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
         guard let outcome = try? ClipboardActions.copy(entry, asPlainText: plain) else { return }
         lastChangeCount = NSPasteboard.general.changeCount
         if outcome.changed > 0 {
@@ -224,10 +224,10 @@ final class ClipboardStore: FeatureModule {
             SettingsBackup.shared.scheduleClipboardBackup()
             postChanged()
         }
-        
+
         let autoPaste =
-        SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.autoPaste)
-        && SharedDefaults.store.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+            SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.autoPaste)
+            && SharedDefaults.store.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
         guard autoPaste else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             ClipboardPasteSynth.synthesizeCommandV()

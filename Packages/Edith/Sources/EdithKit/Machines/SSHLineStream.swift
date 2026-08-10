@@ -3,7 +3,7 @@ import Foundation
 private final class LineSplitter: @unchecked Sendable {
     private let lock = NSLock()
     private var pending = ""
-    
+
     func receive(_ data: Data) -> [String] {
         guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return [] }
         lock.lock()
@@ -16,7 +16,7 @@ private final class LineSplitter: @unchecked Sendable {
         }
         return lines
     }
-    
+
     func flush() -> [String] {
         lock.lock()
         defer { lock.unlock() }
@@ -30,7 +30,7 @@ private final class StreamCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var status: Int32?
     private var continuations: [CheckedContinuation<Int32, Never>] = []
-    
+
     func wait() async -> Int32 {
         await withCheckedContinuation { continuation in
             lock.lock()
@@ -43,7 +43,7 @@ private final class StreamCompletion: @unchecked Sendable {
             }
         }
     }
-    
+
     func finish(_ status: Int32) {
         lock.lock()
         guard self.status == nil else {
@@ -68,7 +68,7 @@ public final class SSHLineStream: @unchecked Sendable {
     private let stdoutSplitter = LineSplitter()
     private let stderrSplitter = LineSplitter()
     private let completion = StreamCompletion()
-    
+
     public init(
         process: Process, stdinData: Data? = nil,
         onLine: @escaping @Sendable (String, Bool) -> Void,
@@ -79,7 +79,7 @@ public final class SSHLineStream: @unchecked Sendable {
         self.onLine = onLine
         self.onExit = onExit
     }
-    
+
     public func start() throws {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
@@ -129,7 +129,7 @@ public final class SSHLineStream: @unchecked Sendable {
             try process.run()
         }
     }
-    
+
     public func waitForExit() async -> Int32 {
         await withTaskCancellationHandler {
             await completion.wait()
@@ -137,7 +137,7 @@ public final class SSHLineStream: @unchecked Sendable {
             cancel()
         }
     }
-    
+
     public func cancel() {
         process.terminationHandler = nil
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
@@ -153,7 +153,7 @@ public final class SSHLineStream: @unchecked Sendable {
 public enum MachineCollector {
     public static let streamCommand = "sh -s -- --stream -i 2"
     public static let onceCommand = "sh -s -- --once"
-    
+
     public static func script() -> Data? {
         guard
             let url = BundledResources.url(

@@ -26,7 +26,7 @@ final class CleanerModel {
     private(set) var expanded: Set<String> = []
     private var driveSelection: Set<String>?
     private var scanToken: CancelToken?
-    
+
     init() {
         let confirmed = Set(
             SharedDefaults.store.array(forKey: Self.confirmedExternalPathsKey) as? [String] ?? [])
@@ -45,7 +45,7 @@ final class CleanerModel {
             }
         }
     }
-    
+
     func addCustomFolder(_ path: String) {
         let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
         guard !customFolders.contains(standardizedPath) else { return }
@@ -57,7 +57,7 @@ final class CleanerModel {
         driveSelection = selection
         SharedDefaults.store.set(Array(selection), forKey: "cleanerSelectedDrives")
     }
-    
+
     func removeCustomFolder(_ path: String) {
         customFolders.removeAll { $0 == path }
         SharedDefaults.store.set(customFolders, forKey: "cleanerCustomFolders")
@@ -67,15 +67,15 @@ final class CleanerModel {
         }
         removeExternalConfirmation(path)
     }
-    
+
     var reclaimableTotal: Int64 { categories.reduce(0) { $0 + $1.sizeBytes } }
     var selectedTotal: Int64 { categories.reduce(0) { $0 + $1.selectedBytes } }
-    
+
     var totalItemCount: Int { categories.reduce(0) { $0 + $1.items.count } }
     var selectedItemCount: Int {
         categories.reduce(0) { $0 + $1.items.filter(\.selected).count }
     }
-    
+
     var overallSelection: JunkSelection {
         let total = totalItemCount
         guard total > 0 else { return .none }
@@ -84,7 +84,7 @@ final class CleanerModel {
         if selected == total { return .all }
         return .some
     }
-    
+
     var filteredCategories: [JunkCategory] {
         guard !search.isEmpty else { return categories }
         let query = search.lowercased()
@@ -97,18 +97,18 @@ final class CleanerModel {
             return trimmed
         }
     }
-    
+
     func loadDriveOptions() {
         Task {
             let all = await Task.detached { JunkScanner.drives() }.value
             driveOptions = all
         }
     }
-    
+
     func isDriveSelected(_ id: String) -> Bool {
         driveSelection?.contains(id) ?? (id == "/")
     }
-    
+
     func toggleDrive(_ id: String) {
         var selection = driveSelection ?? ["/"]
         if selection.contains(id) {
@@ -121,12 +121,12 @@ final class CleanerModel {
         driveSelection = selection
         SharedDefaults.store.set(Array(selection), forKey: "cleanerSelectedDrives")
     }
-    
+
     private static func pathIsAllowed(_ path: String, confirmed: Set<String>) -> Bool {
         RestoredPathValidation.verdict(for: path) == .keep
-        || confirmed.contains(URL(fileURLWithPath: path).standardizedFileURL.path)
+            || confirmed.contains(URL(fileURLWithPath: path).standardizedFileURL.path)
     }
-    
+
     private func confirmExternalPathIfNeeded(_ path: String) {
         guard RestoredPathValidation.verdict(for: path) == .drop else { return }
         var confirmed = Set(
@@ -134,14 +134,14 @@ final class CleanerModel {
         confirmed.insert(URL(fileURLWithPath: path).standardizedFileURL.path)
         SharedDefaults.store.set(Array(confirmed), forKey: Self.confirmedExternalPathsKey)
     }
-    
+
     private func removeExternalConfirmation(_ path: String) {
         var confirmed = Set(
             SharedDefaults.store.array(forKey: Self.confirmedExternalPathsKey) as? [String] ?? [])
         confirmed.remove(URL(fileURLWithPath: path).standardizedFileURL.path)
         SharedDefaults.store.set(Array(confirmed), forKey: Self.confirmedExternalPathsKey)
     }
-    
+
     func scan() {
         guard !scanning else { return }
         scanning = true
@@ -205,17 +205,17 @@ final class CleanerModel {
             }
         }
     }
-    
+
     private func log(_ line: String) {
         logs.append(line)
         if logs.count > 200 { logs.removeFirst(logs.count - 200) }
     }
-    
+
     func cancelScan() {
         guard scanning else { return }
         scanToken?.cancelled = true
     }
-    
+
     private static func applyChoices(
         _ category: JunkCategory, items itemChoices: [String: Bool],
         categories categoryChoices: [String: Bool]
@@ -233,7 +233,7 @@ final class CleanerModel {
         }
         return updated
     }
-    
+
     func toggleAll() {
         let selectAll = overallSelection != .all
         var itemChoices = overrides
@@ -248,7 +248,7 @@ final class CleanerModel {
         overrides = itemChoices
         categoryDefaults = categoryChoices
     }
-    
+
     func toggleCategory(_ id: String) {
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let selectAll = categories[index].selection != .all
@@ -264,21 +264,21 @@ final class CleanerModel {
             categories[index].items[item].selected = selectAll
         }
     }
-    
+
     func toggleItem(categoryID: String, itemID: String) {
         guard let categoryIndex = categories.firstIndex(where: { $0.id == categoryID }),
-              let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
+            let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
         else { return }
         categories[categoryIndex].items[itemIndex].selected.toggle()
         var choices = overrides
         choices[itemID] = categories[categoryIndex].items[itemIndex].selected
         overrides = choices
     }
-    
+
     func toggleExpand(_ id: String) {
         if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
     }
-    
+
     func clean() {
         let items = categories.flatMap { $0.items.filter(\.selected) }
         guard !items.isEmpty else { return }
@@ -290,7 +290,7 @@ final class CleanerModel {
             scan()
         }
     }
-    
+
     private var overrides: [String: Bool] {
         get {
             (SharedDefaults.store.dictionary(forKey: "cleanerSelectionOverrides") ?? [:])
@@ -298,7 +298,7 @@ final class CleanerModel {
         }
         set { SharedDefaults.store.set(newValue, forKey: "cleanerSelectionOverrides") }
     }
-    
+
     private var categoryDefaults: [String: Bool] {
         get {
             (SharedDefaults.store.dictionary(forKey: "cleanerCategoryDefaults") ?? [:])
@@ -314,7 +314,7 @@ struct CleanerCard: View {
     @State private var showDrivePicker = false
     @State private var pickerScans = false
     @State private var confirmClean = false
-    
+
     var body: some View {
         SkinCard(title: "Reclaim developer space", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -364,7 +364,7 @@ struct CleanerCard: View {
             Text("Items go to the Trash, so you can restore them until you empty it.")
         }
     }
-    
+
     private var intro: some View {
         HStack {
             Text("Scan build caches, package managers, Claude Code logs, and your drives.")
@@ -373,7 +373,7 @@ struct CleanerCard: View {
             Button("Scan") { openPicker(scan: true) }.pointerCursor()
         }
     }
-    
+
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             if model.scanning {
@@ -405,7 +405,7 @@ struct CleanerCard: View {
             Spacer()
         }
     }
-    
+
     private var logView: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             ForEach(Array(model.logs.suffix(8).enumerated()), id: \.offset) { _, line in
@@ -421,7 +421,7 @@ struct CleanerCard: View {
         .clipped()
         .transition(.opacity)
     }
-    
+
     private var drivesView: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -452,11 +452,11 @@ struct CleanerCard: View {
             }
         }
     }
-    
+
     private var searchBar: some View {
         SearchField(placeholder: "Filter", text: $model.search)
     }
-    
+
     private var selectAllRow: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button {
@@ -474,7 +474,7 @@ struct CleanerCard: View {
         }
         .padding(.vertical, UIScale.pt(4))
     }
-    
+
     private var selectAllSymbol: String {
         switch model.overallSelection {
         case .all: "checkmark.square.fill"
@@ -482,14 +482,14 @@ struct CleanerCard: View {
         case .none: "square"
         }
     }
-    
+
     private var footer: some View {
         Button {
             confirmClean = true
         } label: {
             Text(
                 model.selectedTotal > 0
-                ? "Clean \(JunkScanner.format(model.selectedTotal))" : "Select items to clean"
+                    ? "Clean \(JunkScanner.format(model.selectedTotal))" : "Select items to clean"
             )
             .font(.system(size: UIScale.pt(14), weight: .semibold))
             .frame(maxWidth: .infinity)
@@ -502,7 +502,7 @@ struct CleanerCard: View {
         .pointerCursor()
         .padding(.top, UIScale.pt(2))
     }
-    
+
     private func openPicker(scan: Bool) {
         pickerScans = scan
         model.loadDriveOptions()
@@ -516,7 +516,7 @@ private struct DrivePickerSheet: View {
     let confirmTitle: String
     let onConfirm: () -> Void
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             Text("Choose where to search")
@@ -527,7 +527,7 @@ private struct DrivePickerSheet: View {
             )
             .font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.horizontal, UIScale.pt(20)).padding(.top, UIScale.pt(4))
-            
+
             ScrollView {
                 VStack(spacing: UIScale.pt(6)) {
                     if model.driveOptions.isEmpty {
@@ -540,14 +540,14 @@ private struct DrivePickerSheet: View {
                             HStack(spacing: UIScale.pt(10)) {
                                 Image(
                                     systemName: model.isDriveSelected(drive.id)
-                                    ? "checkmark.square.fill" : "square"
+                                        ? "checkmark.square.fill" : "square"
                                 )
                                 .foregroundStyle(
                                     model.isDriveSelected(drive.id)
-                                    ? DashSkin.accent(dark) : .secondary)
+                                        ? DashSkin.accent(dark) : .secondary)
                                 Image(
                                     systemName: drive.isExternal
-                                    ? "externaldrive.fill" : "internaldrive.fill"
+                                        ? "externaldrive.fill" : "internaldrive.fill"
                                 )
                                 .font(.system(size: UIScale.pt(12))).foregroundStyle(
                                     DashSkin.inkFaint(dark))
@@ -597,7 +597,7 @@ private struct DrivePickerSheet: View {
                 .padding(UIScale.pt(20))
             }
             .frame(maxHeight: UIScale.pt(280))
-            
+
             Divider()
             HStack {
                 Spacer()
@@ -614,7 +614,7 @@ private struct DrivePickerSheet: View {
         .background(DashSkin.paper(dark))
         .onAppear { model.loadDriveOptions() }
     }
-    
+
     private func folderRow(_ folder: String) -> some View {
         HStack(spacing: UIScale.pt(10)) {
             Button {
@@ -622,7 +622,7 @@ private struct DrivePickerSheet: View {
             } label: {
                 Image(
                     systemName: model.isDriveSelected(folder)
-                    ? "checkmark.square.fill" : "square"
+                        ? "checkmark.square.fill" : "square"
                 )
                 .foregroundStyle(model.isDriveSelected(folder) ? DashSkin.accent(dark) : .secondary)
             }
@@ -649,7 +649,7 @@ private struct DrivePickerSheet: View {
         .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
     }
-    
+
     private func chooseFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -669,17 +669,17 @@ private struct CleanerCategoryRow: View {
     let dark: Bool
     @State private var itemFilter = ""
     @State private var headerHover = false
-    
+
     private var isExpanded: Bool { model.expanded.contains(category.id) }
-    
+
     private var showItemFilter: Bool { category.items.count > 10 }
-    
+
     private var visibleItems: [JunkItem] {
         guard !itemFilter.isEmpty else { return category.items }
         let query = itemFilter.lowercased()
         return category.items.filter { $0.name.lowercased().contains(query) }
     }
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -735,7 +735,7 @@ private struct CleanerCategoryRow: View {
             Divider().opacity(0.3)
         }
     }
-    
+
     private var checkboxSymbol: String {
         switch category.selection {
         case .all: "checkmark.square.fill"
@@ -751,7 +751,7 @@ private struct CleanerItemRow: View {
     let item: JunkItem
     let dark: Bool
     @State private var hovering = false
-    
+
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: item.selected ? "checkmark.square.fill" : "square")
@@ -783,7 +783,7 @@ private struct CleanerItemRow: View {
 private struct DriveRow: View {
     let drive: DriveInfo
     let dark: Bool
-    
+
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             Image(systemName: drive.isExternal ? "externaldrive.fill" : "internaldrive.fill")
@@ -810,7 +810,7 @@ private struct DriveRow: View {
 private struct DriveSkeleton: View {
     let dark: Bool
     @State private var pulse = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             RoundedRectangle(cornerRadius: UIScale.pt(4)).frame(

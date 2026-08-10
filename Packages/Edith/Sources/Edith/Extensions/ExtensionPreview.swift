@@ -5,14 +5,14 @@ struct ExtensionPreview: View {
     let entry: ExtensionRegistryEntry
     let dark: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
             preview(phase: reduceMotion ? 1.1 : context.date.timeIntervalSinceReferenceDate)
         }
         .accessibilityHidden(true)
     }
-    
+
     @ViewBuilder
     private func preview(phase: Double) -> some View {
         switch entry.id {
@@ -31,7 +31,7 @@ struct ExtensionPreview: View {
         default: staticPreview
         }
     }
-    
+
     private func usagePreview(phase: Double) -> some View {
         let fill = CGFloat(0.48 + sin(phase * 1.7) * 0.2)
         return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -56,7 +56,7 @@ struct ExtensionPreview: View {
         .padding(.horizontal, UIScale.pt(15))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func systemPreview(phase: Double) -> some View {
         HStack(spacing: UIScale.pt(7)) {
             ForEach(Array(["⌘", "⌥", "E", "⏎"].enumerated()), id: \.offset) { index, key in
@@ -78,7 +78,7 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func machinesPreview(phase: Double) -> some View {
         let pulse = CGFloat(max(0, sin(phase * 2.1)))
         let bars = (0..<4).map { index in
@@ -92,7 +92,7 @@ struct ExtensionPreview: View {
                     .font(DashSkin.mono(6, weight: .semibold))
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
-            
+
             HStack(spacing: UIScale.pt(3)) {
                 ForEach(0..<3) { index in
                     Circle()
@@ -100,7 +100,7 @@ struct ExtensionPreview: View {
                         .frame(width: UIScale.pt(3), height: UIScale.pt(3))
                 }
             }
-            
+
             VStack(spacing: UIScale.pt(4)) {
                 HStack(spacing: UIScale.pt(4)) {
                     Circle()
@@ -131,7 +131,7 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func systemStatsPreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3.2)
         let percentages = [38, 47, 62, 54]
@@ -161,7 +161,7 @@ struct ExtensionPreview: View {
         .padding(.horizontal, UIScale.pt(13))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func micMutePreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3.2)
         let slashEntry = smoothed(clamped((progress - 0.25) / 0.14))
@@ -196,7 +196,7 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func calendarPreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3.2)
         let palette = [
@@ -225,7 +225,7 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func notchPreview(phase: Double) -> some View {
         let pulse = CGFloat((sin(phase * 1.8) + 1) / 2)
         return VStack(spacing: UIScale.pt(0)) {
@@ -243,7 +243,7 @@ struct ExtensionPreview: View {
         .padding(.bottom, UIScale.pt(7))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func clipboardPreview(phase: Double) -> some View {
         VStack(spacing: UIScale.pt(4)) {
             ForEach(0..<3) { index in
@@ -264,7 +264,7 @@ struct ExtensionPreview: View {
         .padding(.horizontal, UIScale.pt(25))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private var musicPreview: some View {
         HStack(spacing: UIScale.pt(13)) {
             PlaybackWave(
@@ -278,7 +278,7 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func focusDimPreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3)
         let backOpacity = 0.625 + cos(progress * Double.pi * 2) * 0.375
@@ -312,7 +312,7 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func presenterPreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3.2)
         let travel = smoothed(clamped((progress - 0.15) / 0.53))
@@ -347,7 +347,7 @@ struct ExtensionPreview: View {
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func colorPickerPreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3.4)
         let travel = smoothed(1 - abs(progress * 2 - 1))
@@ -373,19 +373,19 @@ struct ExtensionPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private func loopProgress(_ phase: Double, duration: Double) -> Double {
         phase.truncatingRemainder(dividingBy: duration) / duration
     }
-    
+
     private func clamped(_ value: Double) -> Double {
         min(max(value, 0), 1)
     }
-    
+
     private func smoothed(_ value: Double) -> Double {
         value * value * (3 - 2 * value)
     }
-    
+
     private func interpolatedPreviewColor(at progress: Double) -> Color {
         let scaled = progress * Double(previewColorStops.count - 1)
         let lowerIndex = min(Int(scaled), previewColorStops.count - 2)
@@ -398,7 +398,7 @@ struct ExtensionPreview: View {
             green: lower.green + (upper.green - lower.green) * amount,
             blue: lower.blue + (upper.blue - lower.blue) * amount)
     }
-    
+
     private var staticPreview: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
@@ -418,7 +418,7 @@ private struct PreviewColorStop {
     let red: Double
     let green: Double
     let blue: Double
-    
+
     var color: Color {
         Color(red: red, green: green, blue: blue)
     }
@@ -434,7 +434,7 @@ private let previewColorStops = [
 
 private struct BottomRoundedRectangle: Shape {
     let radius: CGFloat
-    
+
     func path(in rect: CGRect) -> Path {
         let cornerRadius = min(radius, min(rect.width / 2, rect.height))
         var path = Path()

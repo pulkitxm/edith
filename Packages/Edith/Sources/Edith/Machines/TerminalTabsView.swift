@@ -16,12 +16,12 @@ final class TerminalTabsModel {
     private(set) var tabs: [Tab] = []
     var selected: UUID?
     var broadcast = false
-    
+
     func ensureFirstTab(named title: String) {
         guard tabs.isEmpty else { return }
         addTab(named: title)
     }
-    
+
     @discardableResult
     func addTab(named title: String) -> Tab {
         let tab = Tab(title: title, holder: TerminalSessionHolder())
@@ -29,31 +29,31 @@ final class TerminalTabsModel {
         selected = tab.id
         return tab
     }
-    
+
     func closeTab(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].holder.stop()
         tabs.remove(at: index)
         if selected == id { selected = tabs.last?.id }
     }
-    
+
     func selectNext(backwards: Bool) {
         guard let selected, let index = tabs.firstIndex(where: { $0.id == selected }),
-              tabs.count > 1
+            tabs.count > 1
         else { return }
         let next =
-        backwards
-        ? (index - 1 + tabs.count) % tabs.count : (index + 1) % tabs.count
+            backwards
+            ? (index - 1 + tabs.count) % tabs.count : (index + 1) % tabs.count
         self.selected = tabs[next].id
     }
-    
+
     func send(_ text: String) {
         let targets = broadcast ? tabs : tabs.filter { $0.id == selected }
         for tab in targets {
             tab.holder.terminalView.send(txt: text)
         }
     }
-    
+
     func stopAll() {
         for tab in tabs { tab.holder.stop() }
         tabs = []
@@ -66,9 +66,9 @@ struct TerminalTabsView: View {
     @State private var model = TerminalTabsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var command = ""
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             tabBar
@@ -96,7 +96,7 @@ struct TerminalTabsView: View {
         }
         .background(shortcuts)
     }
-    
+
     private var shortcuts: some View {
         ZStack {
             Button("") { model.addTab(named: "Shell \(model.tabs.count + 1)") }
@@ -109,7 +109,7 @@ struct TerminalTabsView: View {
         .opacity(0)
         .allowsHitTesting(false)
     }
-    
+
     private var tabBar: some View {
         HStack(spacing: UIScale.pt(4)) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -135,7 +135,7 @@ struct TerminalTabsView: View {
                             }
                             .foregroundStyle(
                                 tab.id == model.selected
-                                ? DashSkin.ink(dark) : DashSkin.inkFaint(dark)
+                                    ? DashSkin.ink(dark) : DashSkin.inkFaint(dark)
                             )
                             .padding(.horizontal, UIScale.pt(10))
                             .padding(.vertical, UIScale.pt(6))
@@ -157,12 +157,12 @@ struct TerminalTabsView: View {
             }
             .buttonStyle(HoverButtonStyle())
             .help("New terminal (⌘T)")
-            
+
             Toggle("Broadcast", isOn: $model.broadcast)
                 .toggleStyle(.checkbox)
                 .font(.system(size: UIScale.pt(10.5)))
                 .help("Type once, send to every tab")
-            
+
             Button {
                 TerminalWindow.open(session: session)
             } label: {
@@ -175,7 +175,7 @@ struct TerminalTabsView: View {
         .padding(.vertical, UIScale.pt(9))
         .background(.thinMaterial)
     }
-    
+
     private var broadcastBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "dot.radiowaves.left.and.right")
@@ -201,7 +201,7 @@ struct TerminalTabsView: View {
 @MainActor
 enum TerminalWindow {
     private static var windows: [UUID: NSWindow] = [:]
-    
+
     static func open(session: MachineSession) {
         if let existing = windows[session.machine.id] {
             existing.makeKeyAndOrderFront(nil)
@@ -229,7 +229,7 @@ enum TerminalWindow {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-    
+
     static func forget(_ window: NSWindow) {
         windows = windows.filter { $0.value !== window }
     }
@@ -238,7 +238,7 @@ enum TerminalWindow {
 @MainActor
 final class TerminalWindowDelegate: NSObject, NSWindowDelegate {
     static let shared = TerminalWindowDelegate()
-    
+
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         TerminalWindow.forget(window)

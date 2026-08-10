@@ -7,9 +7,9 @@ struct SystemPage: View {
     @Environment(\.compactLayout) private var compact
     @State private var confirmQuitAll = false
     @State private var pendingQuit: RunningAppRow?
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             header
@@ -47,7 +47,7 @@ struct SystemPage: View {
             }
         }
     }
-    
+
     private var header: some View {
         PageHeader(
             "System",
@@ -69,14 +69,14 @@ struct SystemPage: View {
                 }
             })
     }
-    
+
     private var summary: some View {
         HStack(spacing: UIScale.pt(12)) {
             summaryCard("Running apps", "\(model.apps.count)")
             summaryCard("App memory", String(format: "%.1f GB", model.totalMemoryMB / 1024))
         }
     }
-    
+
     private func summaryCard(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(label.uppercased())
@@ -88,7 +88,7 @@ struct SystemPage: View {
         .padding(UIScale.pt(16))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
     }
-    
+
     private var columnHeaders: some View {
         HStack(spacing: UIScale.pt(10)) {
             headerButton("App", .name, width: nil, alignment: .leading)
@@ -100,7 +100,7 @@ struct SystemPage: View {
         }
         .padding(.bottom, UIScale.pt(6))
     }
-    
+
     private func headerButton(
         _ label: String, _ key: AppSortKey, width: CGFloat?, alignment: Alignment
     ) -> some View {
@@ -123,7 +123,7 @@ struct SystemPage: View {
         }
         .buttonStyle(.plain).pointerCursor()
     }
-    
+
     private var appList: some View {
         VStack(spacing: UIScale.pt(0)) {
             columnHeaders
@@ -146,12 +146,12 @@ struct SystemPage: View {
             }
         }
     }
-    
+
     fileprivate static func cpuLabel(_ percent: Double) -> String {
         percent >= 10 || percent == 0
-        ? String(format: "%.0f%%", percent) : String(format: "%.1f%%", percent)
+            ? String(format: "%.0f%%", percent) : String(format: "%.1f%%", percent)
     }
-    
+
     fileprivate static func memoryLabel(_ mb: Double) -> String {
         mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : String(format: "%.0f MB", mb)
     }
@@ -162,7 +162,7 @@ private struct SystemAppRow: View {
     let dark: Bool
     let onQuit: () -> Void
     @State private var hovering = false
-    
+
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             if let icon = app.icon {

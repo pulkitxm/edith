@@ -2,7 +2,7 @@ import CoreGraphics
 
 enum ClipboardPasteSynth {
     private static let vKeyCode: CGKeyCode = 9
-    
+
     static func synthesizeCommandV() {
         guard let source = CGEventSource(stateID: .hidSystemState) else { return }
         let down = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true)

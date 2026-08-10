@@ -27,7 +27,7 @@ final class DockerDetailModel {
     var logFilter = ""
 
     var inspectFailed = false
-    
+
     private var stream: SSHLineStream?
     private var nextLogID = 0
     private var logGeneration = 0
@@ -35,20 +35,20 @@ final class DockerDetailModel {
     private var pending: [DockerLogLine] = []
     private var flushTask: Task<Void, Never>?
     private var reattempts = 0
-    
+
     var logPlainText: String {
         visibleLogs.map { line in
             guard showTimestamps, let stamp = line.timestamp else { return line.text }
             return stamp + "  " + line.text
         }.joined(separator: "\n")
     }
-    
+
     var visibleLogs: [DockerLogLine] {
         let trimmed = logFilter.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return logs }
         return logs.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
     }
-    
+
     func startLogs(session: MachineSession, container: DockerContainer) {
         stopLogs()
         logs = []
@@ -64,7 +64,7 @@ final class DockerDetailModel {
         logGeneration += 1
         attachLogs(session: session, container: container, generation: logGeneration)
     }
-    
+
     private func attachLogs(
         session: MachineSession, container: DockerContainer, generation: Int
     ) {
@@ -87,7 +87,7 @@ final class DockerDetailModel {
                     guard let self, generation == self.logGeneration else { return }
                     self.flushPending()
                     let running =
-                    session.containers.first { $0.id == container.id }?.state.isRunning ?? false
+                        session.containers.first { $0.id == container.id }?.state.isRunning ?? false
                     guard running, self.reattempts < 5 else {
                         self.streamEnded = true
                         return
@@ -102,7 +102,7 @@ final class DockerDetailModel {
         try? stream.start()
         self.stream = stream
     }
-    
+
     func stopLogs() {
         logGeneration += 1
         flushTask?.cancel()
@@ -111,7 +111,7 @@ final class DockerDetailModel {
         stream?.cancel()
         stream = nil
     }
-    
+
     private func enqueue(_ line: DockerLogLine) {
         pending.append(line)
         guard flushTask == nil else { return }
@@ -122,20 +122,20 @@ final class DockerDetailModel {
             self.flushPending()
         }
     }
-    
+
     private func flushPending() {
         guard !pending.isEmpty else { return }
         logs.append(contentsOf: pending)
         pending = []
         if logs.count > 4000 { logs.removeFirst(logs.count - 4000) }
     }
-    
+
     func loadInspect(session: MachineSession, container: DockerContainer) async {
         inspectFailed = false
         let result = await session.runCommand(
             DockerCommands.inspectRaw(container.id), timeout: 30)
         guard case let .success(output) = result,
-              let summary = DockerParsing.inspectSummary(output)
+            let summary = DockerParsing.inspectSummary(output)
         else {
             inspect = nil
             inspectFailed = true
@@ -143,13 +143,13 @@ final class DockerDetailModel {
         }
         inspect = summary
     }
-    
+
     func loadProcesses(session: MachineSession, container: DockerContainer) async {
         let result = await session.runCommand(DockerCommands.top(container.id), timeout: 30)
         guard case let .success(output) = result else { return }
         processes = DockerParsing.processes(output)
     }
-    
+
     func loadFiles(session: MachineSession, container: DockerContainer, path: String) async {
         fileToken += 1
         let token = fileToken
@@ -163,7 +163,7 @@ final class DockerDetailModel {
         }
         files = FileListing.parse(output: output, parent: path)
     }
-    
+
     func record(container: DockerContainer) {
         if let cpu = container.cpuPercent {
             cpuHistory = MachineSession.appending(cpu, to: cpuHistory)
@@ -184,20 +184,20 @@ struct DockerContainerDetail: View {
     let onShell: () -> Void
     let onRemove: () -> Void
     let onSwitch: (DockerContainer) -> Void
-    
+
     @State private var model = DockerDetailModel()
     @State private var tab = DockerDetailTab.logs
-    
+
     private var live: DockerContainer {
         session.containers.first { $0.id == container.id } ?? container
     }
-    
+
     private var siblings: [DockerContainer] {
         session.containers
             .filter { $0.composeProject == live.composeProject }
             .sorted { $0.displayName < $1.displayName }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -214,7 +214,7 @@ struct DockerContainerDetail: View {
         .onDisappear { model.stopLogs() }
         .onChange(of: session.containers) { _, _ in model.record(container: live) }
     }
-    
+
     private var header: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -258,7 +258,7 @@ struct DockerContainerDetail: View {
         .padding(.horizontal, UIScale.pt(16))
         .padding(.vertical, UIScale.pt(12))
     }
-    
+
     @ViewBuilder
     private var switcher: some View {
         if siblings.count > 1 {
@@ -291,12 +291,12 @@ struct DockerContainerDetail: View {
             .help("Switch to another container in this group")
         }
     }
-    
+
     private func symbol(for sibling: DockerContainer) -> String {
         guard sibling.id != live.id else { return "checkmark" }
         return sibling.state.isRunning ? "circle.fill" : "circle"
     }
-    
+
     private var statusPill: some View {
         HStack(spacing: UIScale.pt(6)) {
             Circle()
@@ -307,7 +307,7 @@ struct DockerContainerDetail: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
-    
+
     private var tabBar: some View {
         HStack(spacing: UIScale.pt(4)) {
             ForEach(DockerDetailTab.allCases) { item in
@@ -376,7 +376,7 @@ struct DockerContainerDetail: View {
         .padding(.horizontal, UIScale.pt(16))
         .padding(.vertical, UIScale.pt(7))
     }
-    
+
     private func load(_ item: DockerDetailTab) async {
         switch item {
         case .inspect: await model.loadInspect(session: session, container: container)
@@ -385,7 +385,7 @@ struct DockerContainerDetail: View {
         default: break
         }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         switch tab {
@@ -396,7 +396,7 @@ struct DockerContainerDetail: View {
         case .files: filesView
         }
     }
-    
+
     private var logsView: some View {
         let visible = model.visibleLogs
         return ZStack(alignment: .bottom) {
@@ -437,7 +437,7 @@ struct DockerContainerDetail: View {
             }
         }
     }
-    
+
     private var inspectView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
@@ -470,7 +470,7 @@ struct DockerContainerDetail: View {
             .padding(UIScale.pt(16))
         }
     }
-    
+
     private func section(_ title: String, _ values: [String]) -> some View {
         let shown = values.filter { !$0.isEmpty }
         return VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -516,7 +516,7 @@ struct DockerContainerDetail: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-    
+
     private var statsView: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             statCard(
@@ -536,9 +536,9 @@ struct DockerContainerDetail: View {
         }
         .padding(UIScale.pt(16))
     }
-    
+
     private func statCard(_ title: String, value: String, history: [Double], color: Color)
-    -> some View
+        -> some View
     {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             HStack {
@@ -559,7 +559,7 @@ struct DockerContainerDetail: View {
         .padding(UIScale.pt(14))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
-    
+
     private func statItem(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label.uppercased())
@@ -570,7 +570,7 @@ struct DockerContainerDetail: View {
                 .foregroundStyle(DashSkin.ink(dark))
         }
     }
-    
+
     private var processesView: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -601,7 +601,7 @@ struct DockerContainerDetail: View {
             }
         }
     }
-    
+
     private var filesView: some View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(8)) {

@@ -4,7 +4,7 @@ import Testing
 
 @Suite struct LimitsHistoryTests {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
-    
+
     @Test func rowIsOneJSONLineAndKeyIgnoresTimestamp() throws {
         let s = LimitWindow(percent: 42.14, resetsAt: now.addingTimeInterval(3600))
         let w = LimitWindow(percent: 67.3, resetsAt: now.addingTimeInterval(86400))
@@ -13,14 +13,14 @@ import Testing
         #expect(a.key == b.key)
         #expect(a.line.hasSuffix("\n"))
         let obj =
-        try JSONSerialization.jsonObject(
-            with: Data(a.line.utf8)) as! [String: Any]
+            try JSONSerialization.jsonObject(
+                with: Data(a.line.utf8)) as! [String: Any]
         #expect(obj["s"] as! Double == 42.1)
         #expect(obj["w"] as! Double == 67.3)
         #expect(obj["ts"] is String)
         #expect(obj["sr"] is String)
     }
-    
+
     @Test func rowHandlesNils() throws {
         let a = LimitsHistory.row(session: nil, week: nil, now: now)
         let obj = try JSONSerialization.jsonObject(with: Data(a.line.utf8)) as! [String: Any]
@@ -28,7 +28,7 @@ import Testing
         #expect(obj["sr"] == nil)
         #expect(obj["ts"] is String)
     }
-    
+
     @Test func parseSkipsGarbageAndFiltersByDate() {
         let iso = ISO8601DateFormatter()
         let old = iso.string(from: now.addingTimeInterval(-100_000))
@@ -43,27 +43,27 @@ import Testing
         #expect(pts[0].s == 42.1)
         #expect(pts[0].w == 67.3)
     }
-    
+
     @Test func appendDedupesSeedsAndHealsTornTail() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-tests-\(UUID().uuidString)")
         let url = dir.appendingPathComponent("limits-history.jsonl")
         defer { try? FileManager.default.removeItem(at: dir) }
-        
+
         let s = LimitWindow(percent: 42.1, resetsAt: nil)
         let w = LimitWindow(percent: 67.3, resetsAt: nil)
-        
+
         var h = LimitsHistory(url: url)
         h.append(session: s, week: w, now: now)
         h.append(session: s, week: w, now: now.addingTimeInterval(300))
         var text = try String(contentsOf: url, encoding: .utf8)
         #expect(text.split(separator: "\n").count == 1)
-        
+
         var h2 = LimitsHistory(url: url)
         h2.append(session: s, week: w, now: now.addingTimeInterval(600))
         text = try String(contentsOf: url, encoding: .utf8)
         #expect(text.split(separator: "\n").count == 1)
-        
+
         let handle = try FileHandle(forWritingTo: url)
         _ = try handle.seekToEnd()
         try handle.write(contentsOf: Data("{\"ts\":\"torn".utf8))
@@ -77,16 +77,16 @@ import Testing
         let pts = LimitsHistory.parse(raw, since: .distantPast)
         #expect(pts.count == 2)
     }
-    
+
     @Test func latestReadsLastValidLine() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("limits-history.jsonl")
         defer { try? FileManager.default.removeItem(at: dir) }
-        
+
         #expect(LimitsHistory.latest(url: url) == nil)
-        
+
         let iso = ISO8601DateFormatter()
         let ts = iso.string(from: now)
         let reset = iso.string(from: now.addingTimeInterval(3600))
@@ -96,7 +96,7 @@ import Testing
             {"ts":"torn
             """
         try Data(text.utf8).write(to: url)
-        
+
         let latest = try #require(LimitsHistory.latest(url: url))
         #expect(abs(latest.date.timeIntervalSince(now)) < 1)
         #expect(latest.session?.percent == 42.1)
@@ -105,7 +105,7 @@ import Testing
         #expect(abs(sr.timeIntervalSince(now.addingTimeInterval(3600))) < 1)
         #expect(latest.week?.resetsAt == nil)
     }
-    
+
     @Test func mergeUnionsSortsAndDedupes() {
         let a = """
             {"ts":"2026-07-01T10:00:00Z","s":10,"w":5}
@@ -124,14 +124,14 @@ import Testing
         #expect(lines.contains { $0.contains("\"s\":20") })
         #expect(lines.contains { $0.contains("\"s\":30") })
     }
-    
+
     @Test func mergeDropsGarbageKeepsValid() {
         let a = "not json\n{\"ts\":\"2026-07-01T10:00:00Z\",\"s\":10,\"w\":5}\n"
         let lines = LimitsHistory.merge(a, "").split(separator: "\n").map(String.init)
         #expect(lines.count == 1)
         #expect(lines[0].contains("10:00:00"))
     }
-    
+
     @Test func providersAreStoredAndFilteredIndependently() throws {
         let claude = LimitsHistory.row(
             provider: .claude, session: LimitWindow(percent: 12, resetsAt: nil), week: nil,

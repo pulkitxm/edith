@@ -8,14 +8,14 @@ actor CLIGate {
     static let shared = CLIGate()
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
-    
+
     func acquire() async {
         while busy {
             await withCheckedContinuation { waiters.append($0) }
         }
         busy = true
     }
-    
+
     func release() {
         busy = false
         guard !waiters.isEmpty else { return }
@@ -27,17 +27,17 @@ struct CLIRun: Sendable {
     var stdout: String
     var stderr: String
     var code: Int32
-    
+
     var stdoutLines: [String] {
         stdout.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             .filter { !$0.isEmpty }
     }
-    
+
     func decoded() throws -> Any {
         try JSONSerialization.jsonObject(
             with: Data(stdout.utf8), options: [.fragmentsAllowed])
     }
-    
+
     var object: [String: Any]? { (try? decoded()) as? [String: Any] }
     var array: [Any]? { (try? decoded()) as? [Any] }
 }
@@ -50,7 +50,7 @@ final class CLIWorld: @unchecked Sendable {
     private(set) var posted: [(name: Notification.Name, info: [String: Any])] = []
     private(set) var scripts: [String] = []
     private let lock = NSLock()
-    
+
     init(_ label: String = UUID().uuidString) {
         suite = "test.cli.\(label)"
         sandbox = FileManager.default.temporaryDirectory
@@ -79,39 +79,39 @@ final class CLIWorld: @unchecked Sendable {
             throw CLIFailure.unavailable("no player in tests")
         }
     }
-    
+
     private func record(_ name: Notification.Name, _ info: [String: Any]) {
         lock.lock()
         posted.append((name, info))
         lock.unlock()
     }
-    
+
     private func note(script: String) {
         lock.lock()
         scripts.append(script)
         lock.unlock()
     }
-    
+
     func postedNames() -> [String] {
         lock.lock()
         defer { lock.unlock() }
         return posted.map(\.name.rawValue)
     }
-    
+
     func recordedScripts() -> [String] {
         lock.lock()
         defer { lock.unlock() }
         return scripts
     }
-    
+
     func helperRunning(_ running: Bool) {
         CLIEnvironment.isHelperRunning = { running }
     }
-    
+
     func answers(_ block: @escaping @Sendable (Notification.Name) -> [AnyHashable: Any]?) {
         CLIEnvironment.answer = block
     }
-    
+
     func players(_ snapshots: [MusicPlayer: PlayerSnapshot]) {
         CLIEnvironment.runAppleScript = { [weak self] source, _ in
             self?.note(script: source)
@@ -132,7 +132,7 @@ final class CLIWorld: @unchecked Sendable {
             return PlayerScript.notRunningMarker
         }
     }
-    
+
     func tearDown() {
         try? FileManager.default.removeItem(at: sandbox)
         shared.removePersistentDomain(forName: suite)
@@ -161,7 +161,7 @@ enum CLIProbe {
         world.tearDown()
         await CLIGate.shared.release()
     }
-    
+
     static func exclusive(_ body: () async throws -> Void) async rethrows {
         await CLIGate.shared.acquire()
         do {
@@ -172,13 +172,13 @@ enum CLIProbe {
         }
         await CLIGate.shared.release()
     }
-    
+
     static func run(_ arguments: [String]) async -> CLIRun {
         let box = RunBox()
         await inWorld { _ in box.value = await capture(arguments) }
         return box.value
     }
-    
+
     static func runInWorld(_ arguments: [String], _ setUp: (CLIWorld) -> Void) async -> CLIRun {
         let box = RunBox()
         await inWorld { world in
@@ -187,7 +187,7 @@ enum CLIProbe {
         }
         return box.value
     }
-    
+
     static func capture(_ arguments: [String]) async -> CLIRun {
         await capturing {
             var command = try EdRoot.parseAsRoot(arguments)
@@ -198,13 +198,13 @@ enum CLIProbe {
             }
         }
     }
-    
+
     static func isolate(_ body: () async throws -> Void) async -> CLIRun {
         let box = RunBox()
         await inWorld { _ in box.value = await capturing(body) }
         return box.value
     }
-    
+
     static func capturing(_ body: () async throws -> Void) async -> CLIRun {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-cli-probe-\(UUID().uuidString)")
@@ -215,7 +215,7 @@ enum CLIProbe {
         FileManager.default.createFile(atPath: outURL.path, contents: nil)
         FileManager.default.createFile(atPath: errURL.path, contents: nil)
         guard let outHandle = try? FileHandle(forWritingTo: outURL),
-              let errHandle = try? FileHandle(forWritingTo: errURL)
+            let errHandle = try? FileHandle(forWritingTo: errURL)
         else {
             return CLIRun(stdout: "", stderr: "could not open capture files", code: -1)
         }

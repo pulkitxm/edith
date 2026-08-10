@@ -5,23 +5,23 @@ import SwiftUI
 
 struct PresenterRows: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-    var presenterEnabled =
-    false
+        var presenterEnabled =
+        false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
-    var presenterMode = false
+        var presenterMode = false
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-    var presenterBlurMusic =
-    true
+        var presenterBlurMusic =
+        true
     @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-    var presenterBlurMoney =
-    true
+        var presenterBlurMoney =
+        true
     @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
-    var presenterBlurUsage =
-    false
+        var presenterBlurUsage =
+        false
     @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
     @AppStorage(AppStorageKeys.Presenter.autoEnabled, store: SharedDefaults.store) private
-    var autoEnabled = false
+        var autoEnabled = false
     @AppStorage(AppStorageKeys.Presenter.hideMenuBarNumbers, store: SharedDefaults.store)
     private var hideMenuBarNumbers = false
     @AppStorage(AppStorageKeys.Presenter.detectRecording, store: SharedDefaults.store)
@@ -30,7 +30,7 @@ struct PresenterRows: View {
     private var detectScreenSharing = true
     @AppStorage(AppStorageKeys.Presenter.detectMirroring, store: SharedDefaults.store)
     private var detectMirroring = true
-    
+
     var body: some View {
         Group {
             Section {
@@ -57,7 +57,7 @@ struct PresenterRows: View {
             } header: {
                 Text("Manual")
             }
-            
+
             Section {
                 Toggle(isOn: $autoEnabled) {
                     HStack(spacing: UIScale.pt(6)) {
@@ -113,7 +113,7 @@ struct PresenterRows: View {
                 )
                 .font(.system(size: UIScale.pt(10)))
             }
-            
+
             Section {
                 Button("Open Screen Recording Settings…") {
                     NSWorkspace.shared.open(
@@ -124,7 +124,7 @@ struct PresenterRows: View {
                 }
                 .pointerCursor()
             }
-            
+
             Section {
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P")

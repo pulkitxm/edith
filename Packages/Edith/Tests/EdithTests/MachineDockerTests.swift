@@ -17,7 +17,7 @@ import Testing
         "Image":"nginx:alpine","Labels":"","Names":"web","Ports":"","State":"exited",\
         "Status":"Exited (0) 3 days ago"}
         """
-    
+
     @Test func parsesContainers() {
         let containers = DockerParsing.containers(psOutput: psOutput)
         #expect(containers.count == 2)
@@ -35,7 +35,7 @@ import Testing
         #expect(web.ports.isEmpty)
         #expect(web.composeProject == nil)
     }
-    
+
     @Test func prefersExplicitHealthStatusField() {
         let output = """
             {"ID":"abc","Names":"db","Image":"postgres:17","State":"running",\
@@ -46,14 +46,14 @@ import Testing
         #expect(
             DockerParsing.parseHealth(status: "Up 2 hours (health: starting)") == .starting)
     }
-    
+
     @Test func deduplicatesBracketedIPv6PortEntries() {
         let ports = DockerParsing.parsePorts("0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp")
         #expect(ports.count == 1)
         #expect(ports[0].hostPort == 5433)
         #expect(ports[0].containerPort == 5432)
     }
-    
+
     @Test func deduplicatesIPv4AndIPv6PortEntries() {
         let ports = DockerParsing.parsePorts("0.0.0.0:5432->5432/tcp, :::5432->5432/tcp")
         #expect(ports.count == 1)
@@ -62,7 +62,7 @@ import Testing
         #expect(ports[0].proto == "tcp")
         #expect(ports[0].browserURL?.absoluteString == "http://localhost:5432")
     }
-    
+
     @Test func parsesUnpublishedPorts() {
         let ports = DockerParsing.parsePorts("80/tcp, 443/tcp")
         #expect(ports.map(\.containerPort) == [80, 443])
@@ -70,7 +70,7 @@ import Testing
         #expect(ports[0].browserURL == nil)
         #expect(ports[0].displayName == "80/tcp")
     }
-    
+
     @Test func parsesBinaryAndDecimalSizes() {
         #expect(DockerParsing.parseSize("7.75MiB") == Int64(7.75 * 1_048_576))
         #expect(DockerParsing.parseSize("15.61GiB") == Int64(15.61 * 1_073_741_824))
@@ -80,13 +80,13 @@ import Testing
         #expect(DockerParsing.parseSize("N/A") == nil)
         #expect(DockerParsing.parseSize("--") == nil)
     }
-    
+
     @Test func parsesPercentagesIncludingMulticoreAndSentinels() {
         #expect(DockerParsing.parsePercent("1.53%") == 1.53)
         #expect(DockerParsing.parsePercent("235.00%") == 235.0)
         #expect(DockerParsing.parsePercent("--") == nil)
     }
-    
+
     @Test func mergesStatsIntoContainers() {
         let stats = """
             {"ID":"a1b2c3d4e5f6","Name":"api-db-1","CPUPerc":"1.53%","MemPerc":"0.05%",\
@@ -101,7 +101,7 @@ import Testing
         #expect(merged[0].netRxBytes == 658_000)
         #expect(merged[1].cpuPercent == nil)
     }
-    
+
     @Test func parsesImagesAndFlagsDangling() {
         let output = """
             {"ID":"sha256:aaaa1111bbbb2222","Repository":"nginx","Tag":"alpine",\
@@ -118,7 +118,7 @@ import Testing
         #expect(images[1].dangling)
         #expect(images[1].displayName == "<none>:<none>")
     }
-    
+
     @Test func parsesVolumesAndMergesSystemDFDetails() {
         let volumes = DockerParsing.volumes(
             """
@@ -133,7 +133,7 @@ import Testing
         #expect(details["api_pgdata"]?.0 == 312_000_000)
         #expect(details["api_pgdata"]?.1 == 2)
     }
-    
+
     @Test func parsesDiskUsageReclaimable() {
         let usage = DockerParsing.diskUsage(
             """
@@ -145,7 +145,7 @@ import Testing
         #expect(usage[0].reclaimableBytes == 2_498_000_000)
         #expect(usage[0].totalCount == 12)
     }
-    
+
     @Test func ignoresNonJSONNoise() {
         let output = """
             Welcome to Ubuntu 24.04 LTS
@@ -153,35 +153,35 @@ import Testing
             """
         #expect(DockerParsing.images(output).count == 1)
     }
-    
+
     @Test func splitsTimestampedLogLines() {
         let line = DockerParsing.splitLogLine(
             "2026-08-06T12:34:56.789012345Z starting server on :3000", index: 0, isStderr: false)
         #expect(line.timestamp == "2026-08-06T12:34:56.789012345Z")
         #expect(line.text == "starting server on :3000")
-        
+
         let plain = DockerParsing.splitLogLine("no timestamp here", index: 1, isStderr: true)
         #expect(plain.timestamp == nil)
         #expect(plain.text == "no timestamp here")
         #expect(plain.isStderr)
     }
-    
+
     @Test func detectsAvailabilityStates() {
         let ok = DockerParsing.availability(
             versionOutput: "{\"Client\":{\"Version\":\"27.0\"},\"Server\":{\"Version\":\"27.0\"}}",
             versionStderr: "", status: 0)
         #expect(ok.isAvailable)
-        
+
         let denied = DockerParsing.availability(
             versionOutput: "",
             versionStderr: "permission denied while trying to connect to the Docker daemon socket",
             status: 1)
         #expect(denied.status == .permissionDenied)
-        
+
         let missing = DockerParsing.availability(
             versionOutput: "", versionStderr: "bash: docker: command not found", status: 127)
         #expect(missing.status == .missing)
-        
+
         let down = DockerParsing.availability(
             versionOutput: "",
             versionStderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock.",
@@ -196,27 +196,27 @@ import Testing
         #expect(DockerCommands.volumes().contains("'{{json .}}'"))
         #expect(!DockerCommands.images().contains("--format json"))
     }
-    
+
     @Test func batchesContainersAndStatsWithSeparator() {
         let command = DockerCommands.containersWithStats()
         #expect(command.contains("docker ps -a --no-trunc"))
         #expect(command.contains(DockerCommands.listSeparator))
         #expect(command.contains("docker stats --no-stream"))
     }
-    
+
     @Test func quotesIdentifiersInLifecycleCommands() {
         #expect(DockerCommands.lifecycle("stop", id: "web") == "docker stop -t 10 web")
         #expect(DockerCommands.lifecycle("rm", id: "a b") == "docker rm -f 'a b'")
         #expect(DockerCommands.lifecycle("start", id: "$(evil)") == "docker start '$(evil)'")
     }
-    
+
     @Test func execShellFallsBackFromBashToSh() {
         let command = DockerCommands.execShell(containerID: "web")
         #expect(command.hasPrefix("docker exec -it web sh -c "))
         #expect(command.contains("command -v bash"))
         #expect(command.contains("exec sh"))
     }
-    
+
     @Test func logsCommandCarriesTimestampsAndTail() {
         let command = DockerCommands.logs("web", tail: 200, follow: true)
         #expect(command == "docker logs --timestamps --tail 200 --follow web")
@@ -240,7 +240,7 @@ import Testing
         #expect(entries[2].sizeBytes == 2048)
         #expect(entries[2].modified == Date(timeIntervalSince1970: 1_754_000_100.5))
     }
-    
+
     @Test func sortsDirectoriesFirstThenCaseInsensitively() {
         let sep = FileListing.separator
         let output = [
@@ -251,7 +251,7 @@ import Testing
         let entries = FileListing.parse(output: output, parent: "/x")
         #expect(entries.map(\.name) == ["src", "Alpha.txt", "zeta.txt"])
     }
-    
+
     @Test func fallsBackToLSParsing() {
         let output = """
             total 12
@@ -265,7 +265,7 @@ import Testing
         #expect(entries[1].linkTarget == "/etc/hosts")
         #expect(entries[2].sizeBytes == 2048)
     }
-    
+
     @Test func joinsAndWalksPaths() {
         #expect(FileListing.join(parent: "/", name: "etc") == "/etc")
         #expect(FileListing.join(parent: "/home", name: "pulkit") == "/home/pulkit")
@@ -274,18 +274,18 @@ import Testing
         #expect(FileListing.parentPath(of: "/home") == "/")
         #expect(FileListing.parentPath(of: "/") == nil)
     }
-    
+
     @Test func buildsBreadcrumbs() {
         let crumbs = FileListing.breadcrumbs(for: "/home/pulkit/code")
         #expect(crumbs.map(\.name) == ["/", "home", "pulkit", "code"])
         #expect(crumbs.map(\.path) == ["/", "/home", "/home/pulkit", "/home/pulkit/code"])
     }
-    
+
     @Test func quotesPathsWithSpaces() {
         let command = FileListing.command(path: "/mnt/My Files", showHidden: true)
         #expect(command.contains("'/mnt/My Files'"))
     }
-    
+
     @Test func detectsHiddenEntries() {
         let entry = RemoteFileEntry(
             name: ".bashrc", path: "/home/p/.bashrc", kind: .file, sizeBytes: 10)
@@ -306,7 +306,7 @@ import Testing
         #expect(FilePreviewKind.kind(forExtension: "docx") == .quickLook)
         #expect(FilePreviewKind.kind(forExtension: "") == .quickLook)
     }
-    
+
     @Test func recognizesExtensionlessTextFiles() {
         #expect(FilePreviewKind.isPlainTextName("Dockerfile"))
         #expect(FilePreviewKind.isPlainTextName("/etc/Makefile"))
@@ -322,7 +322,7 @@ import Testing
         #expect(ByteFormatter.string(1_500_000) == "1.5 MB")
         #expect(ByteFormatter.string(250_000_000) == "250 MB")
     }
-    
+
     @Test func formatsRatesAndDurations() {
         #expect(ByteFormatter.rate(1_500_000) == "1.5 MB/s")
         #expect(ByteFormatter.rate(-5) == "0 B/s")
@@ -339,19 +339,19 @@ import Testing
         #expect(who.count == 2)
         #expect(who[0].hasPrefix("pulkit on pts/0 since 2026-08-06 10:11"))
     }
-    
+
     @Test func parsesUpdateCountsAndSentinel() {
         #expect(MachineFacts.parseUpdates("12\n") == 12)
         #expect(MachineFacts.parseUpdates("0") == 0)
         #expect(MachineFacts.parseUpdates("-1") == nil)
         #expect(MachineFacts.parseUpdates("garbage") == nil)
     }
-    
+
     @Test func validatesMACAddress() {
         #expect(MachineFacts.parseMACAddress("AA:BB:CC:DD:EE:FF\n") == "aa:bb:cc:dd:ee:ff")
         #expect(MachineFacts.parseMACAddress("not-a-mac") == nil)
     }
-    
+
     @Test func theWakeAddressComesFromARealNICRatherThanABridgeOrAVeth() {
         let command = MachineFacts.macAddressCommand
         #expect(command.contains("[ -e \"$iface/device\" ] || continue"))
@@ -359,7 +359,7 @@ import Testing
         #expect(command.contains("phy80211"))
         #expect(!command.contains("head -1"))
     }
-    
+
     @Test func buildsWakeOnLANMagicPacket() {
         let packet = WakeOnLAN.magicPacket(macAddress: "aa:bb:cc:dd:ee:ff")
         #expect(packet?.count == 102)
@@ -382,13 +382,13 @@ import Testing
         #expect(services[0].isRunning)
         #expect(services[2].isFailed)
     }
-    
+
     @Test func fallsBackToSudoForActions() {
         let command = ServiceCommands.action("restart", unit: "docker.service")
         #expect(command.contains("systemctl restart docker.service"))
         #expect(command.contains("sudo -n systemctl restart docker.service"))
     }
-    
+
     @Test func aStoredSudoPasswordReplacesTheGuessworkWithOneAttempt() {
         let unit = ServiceCommands.action(
             "restart", unit: "docker.service", withSudoPassword: true)
@@ -396,12 +396,12 @@ import Testing
         #expect(!unit.contains("sudo -n"))
         #expect(
             ServiceCommands.reboot(withSudoPassword: true)
-            == "sudo -S -p '' systemctl reboot 2>&1")
+                == "sudo -S -p '' systemctl reboot 2>&1")
         #expect(
             ServiceCommands.shutdown(withSudoPassword: true)
-            == "sudo -S -p '' systemctl poweroff 2>&1")
+                == "sudo -S -p '' systemctl poweroff 2>&1")
     }
-    
+
     @Test func theSudoPasswordIsNeverPutOnTheCommandLine() {
         let commands = [
             ServiceCommands.action("start", unit: "a.service", withSudoPassword: true),
@@ -413,11 +413,11 @@ import Testing
             #expect(command.contains("-p ''"))
         }
     }
-    
+
     @Test func journalCommandSupportsFollow() {
         #expect(
             ServiceCommands.journal(unit: "ssh.service", lines: 300, follow: true)
-            == "journalctl -u ssh.service -n 300 --no-pager -f 2>&1")
+                == "journalctl -u ssh.service -n 300 --no-pager -f 2>&1")
     }
 }
 
@@ -425,7 +425,7 @@ import Testing
     private func session() -> MachineSession {
         MachineSession(machine: Machine(name: "This Mac", host: "localhost"), local: true)
     }
-    
+
     private func sample(_ value: Double) -> MachineSample {
         MachineSample(
             ts: value, dt: 2, cpu: MachineCPU(total: value),
@@ -433,7 +433,7 @@ import Testing
             disk: MachineDiskIO(readBps: value * 2, writeBps: value * 3),
             net: MachineNetwork(rxBps: value * 4, txBps: value * 5))
     }
-    
+
     @Test func historyKeepsFixedWindow() {
         var history: [Double] = []
         for value in 0..<80 {
@@ -443,7 +443,7 @@ import Testing
         #expect(history.first == 20)
         #expect(history.last == 79)
     }
-    
+
     @Test func oneSamplePublishesAMetricsUpdate() {
         let session = session()
         var updates = 0
@@ -455,7 +455,7 @@ import Testing
         session.apply(sample: sample(10))
         #expect(updates == 1)
     }
-    
+
     @Test func oneMetricsUpdateCarriesEveryHistory() {
         let session = session()
         session.apply(sample: sample(10))
@@ -474,18 +474,18 @@ import Testing
     private func session() -> MachineSession {
         MachineSession(machine: Machine(name: "This Mac", host: "localhost"), local: true)
     }
-    
+
     @Test func dockerUsesTheBackgroundCadenceUntilObserved() {
         let session = session()
         #expect(
             session.currentDockerPollInterval
-            == MachineResourcePolicy.backgroundDockerPollInterval)
+                == MachineResourcePolicy.backgroundDockerPollInterval)
         session.beginDockerObservation()
         #expect(
             session.currentDockerPollInterval
-            == MachineResourcePolicy.foregroundDockerPollInterval)
+                == MachineResourcePolicy.foregroundDockerPollInterval)
     }
-    
+
     @Test func dockerStaysForegroundedUntilEveryObserverLeaves() {
         let session = session()
         session.beginDockerObservation()
@@ -493,20 +493,20 @@ import Testing
         session.endDockerObservation()
         #expect(
             session.currentDockerPollInterval
-            == MachineResourcePolicy.foregroundDockerPollInterval)
+                == MachineResourcePolicy.foregroundDockerPollInterval)
         session.endDockerObservation()
         #expect(
             session.currentDockerPollInterval
-            == MachineResourcePolicy.backgroundDockerPollInterval)
+                == MachineResourcePolicy.backgroundDockerPollInterval)
     }
-    
+
     @Test func unmatchedDisappearCannotMakeTheObserverCountNegative() {
         let session = session()
         session.endDockerObservation()
         session.endDockerObservation()
         #expect(
             session.currentDockerPollInterval
-            == MachineResourcePolicy.backgroundDockerPollInterval)
+                == MachineResourcePolicy.backgroundDockerPollInterval)
     }
 }
 
@@ -524,12 +524,12 @@ import Testing
         #expect(processes[0].command == "/usr/bin/postgres -D /var/lib/data")
         #expect(processes[1].command == "redis-server *:6379")
     }
-    
+
     @Test func topWithoutRowsIsEmpty() {
         #expect(DockerParsing.processes("PID USER %CPU %MEM RSS COMMAND").isEmpty)
         #expect(DockerParsing.processes("").isEmpty)
     }
-    
+
     @Test func parsesInspectSummary() {
         let output = """
             [{"Created":"2026-08-01T10:00:00Z",
@@ -551,21 +551,21 @@ import Testing
         #expect(summary.environment.contains("LANG=C"))
         #expect(summary.labels["role"] == "db")
     }
-    
+
     @Test func inspectHandlesGarbage() {
         #expect(DockerParsing.inspectSummary("not json") == nil)
         #expect(DockerParsing.inspectSummary("[]") == nil)
     }
-    
+
     @Test func parsesComposeProjectsFromArrayOrLines() {
         #expect(
             DockerParsing.composeProjects("[{\"Name\":\"api\"},{\"Name\":\"web\"}]")
-            == ["api", "web"])
+                == ["api", "web"])
         #expect(
             DockerParsing.composeProjects("{\"Name\":\"api\"}\n{\"Name\":\"web\"}")
-            == ["api", "web"])
+                == ["api", "web"])
     }
-    
+
     @Test func pruneAndDetailCommandsAreShaped() {
         #expect(DockerCommands.prune("images") == "docker image prune -af")
         #expect(DockerCommands.prune("volumes") == "docker volume prune -f")
@@ -596,7 +596,7 @@ import Testing
         #expect(rows[0].command == "postgres")
         #expect(rows[1].command == "postgres: checkpointer")
     }
-    
+
     @Test func readsThePlainFallbackWithoutShiftingColumns() {
         let output = """
             UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD
@@ -626,7 +626,7 @@ import Testing
         #expect(entries.first { $0.name == "bin" }?.isDirectory == true)
         #expect(entries.first { $0.name == "hosts" }?.sizeBytes == 220)
     }
-    
+
     @Test func stillParsesEpochStamps() {
         let output = "-rw-r--r-- 1 root root 220 1754390000 hosts"
         let entries = FileListing.parse(output: output, parent: "/etc")
@@ -641,7 +641,7 @@ import Testing
         DockerContainer(
             id: name, names: [name], image: "img", command: "cmd", state: state, status: "")
     }
-    
+
     @Test func aMixedGroupCanBothStartAndStop() {
         let plan = DockerGroupPlan(containers: [
             container("postgres", .running),
@@ -652,7 +652,7 @@ import Testing
         #expect(plan.startable.map(\.id) == ["redis"])
         #expect(plan.stoppable.map(\.id) == ["postgres", "clickhouse"])
     }
-    
+
     @Test func aFullyStoppedGroupOnlyStarts() {
         let plan = DockerGroupPlan(containers: [
             container("a", .exited), container("b", .created), container("c", .dead),
@@ -661,7 +661,7 @@ import Testing
         #expect(!plan.canStop)
         #expect(plan.startable.count == 3)
     }
-    
+
     @Test func aFullyRunningGroupOnlyStops() {
         let plan = DockerGroupPlan(containers: [
             container("a", .running), container("b", .restarting),
@@ -670,13 +670,13 @@ import Testing
         #expect(plan.canStop)
         #expect(plan.stoppable.count == 2)
     }
-    
+
     @Test func pausedContainersStopButNeverStart() {
         let plan = DockerGroupPlan(containers: [container("a", .paused)])
         #expect(!plan.canStart)
         #expect(plan.stoppable.map(\.id) == ["a"])
     }
-    
+
     @Test func transientStatesAreLeftAlone() {
         let plan = DockerGroupPlan(containers: [
             container("a", .removing), container("b", .unknown),
@@ -693,14 +693,14 @@ import Testing
         #expect(availability.status == .unknown)
         #expect(availability.isInstalled)
     }
-    
+
     @Test func onlyAMissingBinaryHidesTheTab() {
         let missing = DockerParsing.availability(
             versionOutput: "", versionStderr: "bash: docker: command not found", status: 127)
         #expect(missing.status == .missing)
         #expect(!missing.isInstalled)
     }
-    
+
     @Test func anInstalledButUnreachableDockerKeepsTheTab() {
         let down = DockerParsing.availability(
             versionOutput: "",
@@ -718,7 +718,7 @@ import Testing
     private func failure(_ text: String, status: Int32 = 1) -> Error {
         SSHConnectionError.commandFailed(command: "reboot", status: status, stderr: text)
     }
-    
+
     @Test func aMachineThatRefusesTheRequestIsNotReportedAsRestarting() {
         let denied = failure(
             "Failed to reboot: Interactive authentication required.")
@@ -726,25 +726,25 @@ import Testing
         #expect(PowerOutcome.explain(denied).contains("Interactive authentication required"))
         #expect(PowerOutcome.explain(denied).contains("passwordless sudo"))
     }
-    
+
     @Test func theSudoPasswordPromptIsRecognisedAsAPrivilegeProblem() {
         #expect(PowerOutcome.needsPrivilege("sudo: a password is required"))
         #expect(PowerOutcome.needsPrivilege("Failed to reboot: Access denied"))
         #expect(!PowerOutcome.needsPrivilege("no such unit"))
     }
-    
+
     @Test func aDroppedConnectionMeansTheRebootTookTheHostDown() {
         #expect(PowerOutcome.hostWentAway(failure("", status: 255)))
         #expect(PowerOutcome.hostWentAway(failure("Connection closed by remote host")))
         #expect(!PowerOutcome.hostWentAway(failure("Interactive authentication required.")))
     }
-    
+
     @Test func theLastMeaningfulLineIsWhatTheUserSees() {
         let noisy = failure(
             "sudo: a password is required\nFailed to reboot: Interactive authentication required.")
         #expect(PowerOutcome.explain(noisy).hasPrefix("Failed to reboot:"))
     }
-    
+
     @Test func anEmptyRefusalStillSaysSomething() {
         #expect(!PowerOutcome.explain(failure("")).isEmpty)
     }
@@ -756,13 +756,13 @@ import Testing
         #expect(ProcessCommands.normalizedSignal("SIGKILL") == "KILL")
         #expect(ProcessCommands.normalizedSignal("Hup") == "HUP")
     }
-    
+
     @Test func anInventedSignalIsRefusedRatherThanSentBlindly() {
         #expect(ProcessCommands.normalizedSignal("NOPE") == nil)
         #expect(ProcessCommands.normalizedSignal("") == nil)
         #expect(ProcessCommands.normalizedSignal("9") == nil)
     }
-    
+
     @Test func theKillLineChecksTheProcessIsStillThereBeforeSignallingIt() {
         let command = ProcessCommands.kill(pid: 42, signal: "TERM")
         #expect(command.contains("kill -0 42 2>/dev/null"))
@@ -770,7 +770,7 @@ import Testing
         #expect(command.contains("kill -TERM 42 2>&1"))
         #expect(command.contains("echo \(ProcessCommands.goneMarker)"))
     }
-    
+
     @Test func aProcessThatExitedBeforeTheSignalLandedIsToldApartFromAFailure() {
         #expect(ProcessCommands.hadAlreadyExited(ProcessCommands.goneMarker))
         #expect(!ProcessCommands.hadAlreadyExited(""))

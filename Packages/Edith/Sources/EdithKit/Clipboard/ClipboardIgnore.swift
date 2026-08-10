@@ -18,13 +18,13 @@ public enum ClipboardIgnore {
         "com.siber.roboform-mac",
         "com.strikesecurity.strikepass",
     ]
-    
+
     public static func parseUserList(_ raw: String) -> [String] {
         raw.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
-    
+
     public static func isIgnored(bundleID: String?, userList: [String]) -> Bool {
         guard let bundleID, !bundleID.isEmpty else { return false }
         return knownPasswordManagers.contains(bundleID) || userList.contains(bundleID)

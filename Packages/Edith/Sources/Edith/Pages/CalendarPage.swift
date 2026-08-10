@@ -9,18 +9,18 @@ struct CalendarPage: View {
     @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
+        "accent"
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    
+
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
     private var blurCalendar: Bool { presenterState.active && presenterBlurCalendar }
-    
+
     private var groupedDays: [(day: Date, events: [EKEvent])] {
         CalendarDayEvents.groupedByDay(store.events)
     }
-    
+
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             pageHeader
@@ -47,7 +47,7 @@ struct CalendarPage: View {
             store.refreshAuthStatus()
         }
     }
-    
+
     private var pageHeader: some View {
         PageHeader(
             "Calendar",
@@ -61,7 +61,7 @@ struct CalendarPage: View {
                 .buttonStyle(HoverButtonStyle())
             })
     }
-    
+
     private var agenda: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: UIScale.pt(20)) {
@@ -100,7 +100,7 @@ struct CalendarPage: View {
             .pageContent(compact)
         }
     }
-    
+
     private func dayHeader(_ day: Date) -> some View {
         let date = day.formatted(.dateTime.month(.abbreviated).day())
         return Text("\(dayName(day)) · \(date)".uppercased())
@@ -108,7 +108,7 @@ struct CalendarPage: View {
             .tracking(UIScale.pt(1.2))
             .foregroundStyle(.secondary)
     }
-    
+
     private func row(for event: EKEvent) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
             Text(timeRange(for: event))
@@ -122,7 +122,7 @@ struct CalendarPage: View {
                     .lineLimit(1)
                     .presenterBlur(blurCalendar)
                 if let location = event.location, !location.isEmpty,
-                   !location.hasPrefix("http")
+                    !location.hasPrefix("http")
                 {
                     Text(location)
                         .font(.system(size: UIScale.pt(11)))
@@ -148,21 +148,21 @@ struct CalendarPage: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel(for: event))
     }
-    
+
     private func dayName(_ day: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(day) { return "Today" }
         if calendar.isDateInTomorrow(day) { return "Tomorrow" }
         return day.formatted(.dateTime.weekday(.wide))
     }
-    
+
     private func timeRange(for event: EKEvent) -> String {
         guard !event.isAllDay else { return "All day" }
         let start = event.startDate.formatted(date: .omitted, time: .shortened)
         let end = event.endDate.formatted(date: .omitted, time: .shortened)
         return "\(start) – \(end)"
     }
-    
+
     private func providerColor(_ url: URL) -> Color {
         let host = url.host?.lowercased() ?? ""
         if host.contains("zoom.us") { return Color(red: 0.18, green: 0.55, blue: 1.0) }
@@ -171,7 +171,7 @@ struct CalendarPage: View {
         if host.contains("webex.com") { return Color(red: 0.0, green: 0.74, blue: 0.92) }
         return theme
     }
-    
+
     private func accessibilityLabel(for event: EKEvent) -> String {
         var parts = [timeRange(for: event), event.title ?? "Untitled"]
         if let location = event.location, !location.isEmpty, !location.hasPrefix("http") {
@@ -180,7 +180,7 @@ struct CalendarPage: View {
         if MeetingLink.url(for: event) != nil { parts.append("has meeting link") }
         return parts.joined(separator: ", ")
     }
-    
+
     private var permissionPrompt: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("CALENDAR ACCESS")

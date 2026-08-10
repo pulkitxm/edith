@@ -20,10 +20,10 @@ struct NotchShelfContentView: View {
     var isBuiltin = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var tabPill
-    
+
     private var isExpanded: Bool { controller.isExpanded(on: displayID) }
     private var isHovering: Bool { controller.isHovering(on: displayID) }
-    
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
@@ -55,7 +55,7 @@ struct NotchShelfContentView: View {
             }
         }
     }
-    
+
     @ViewBuilder private var layers: some View {
         if isExpanded {
             let size = expandedShape
@@ -78,20 +78,20 @@ struct NotchShelfContentView: View {
                 .transition(collapsedTransition)
         }
     }
-    
+
     private var expandedShape: CGSize {
         NotchGeometry.expandedShapeSize(
             tab: controller.activeTab, hasMusic: controller.nowPlaying != nil,
             notchHeight: collapsedBase.height)
     }
-    
+
     private var shapeSize: CGSize {
         if isExpanded { return expandedShape }
         if isBuiltin, controller.currentAlert != nil { return NotchGeometry.alertDropSize }
         return NotchGeometry.collapsedSize(
             base: collapsedBase, hasLiveActivity: controller.nowPlaying != nil)
     }
-    
+
     private var alertHandoff: AnyTransition {
         .asymmetric(
             insertion: AnyTransition.modifier(
@@ -103,14 +103,14 @@ struct NotchShelfContentView: View {
                 identity: NotchRiseFade(offset: 0, visible: true)
             ).animation(.easeIn(duration: 0.14)))
     }
-    
+
     private var collapsedTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
         return .asymmetric(
             insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.35)),
             removal: .opacity.animation(.easeOut(duration: 0.08)))
     }
-    
+
     private func hoverRect(in panel: CGSize) -> CGRect {
         let shape = shapeSize
         return CGRect(
@@ -118,42 +118,42 @@ struct NotchShelfContentView: View {
         )
         .insetBy(dx: -NotchGeometry.openMargin, dy: -NotchGeometry.openMargin)
     }
-    
+
     private var hoverScale: CGSize {
         guard !reduceMotion, isHovering, !isExpanded,
-              controller.currentAlert == nil
+            controller.currentAlert == nil
         else { return CGSize(width: 1, height: 1) }
         let shape = shapeSize
         return CGSize(
             width: 1 + NotchGeometry.hoverGrow / shape.width,
             height: 1 + NotchGeometry.hoverGrow / shape.height)
     }
-    
+
     private var topRadius: CGFloat {
         isExpanded || (isBuiltin && controller.currentAlert != nil)
-        ? NotchGeometry.expandedTopRadius : 0
+            ? NotchGeometry.expandedTopRadius : 0
     }
-    
+
     private var bottomRadius: CGFloat {
         if isBuiltin, controller.currentAlert != nil, !isExpanded {
             return NotchGeometry.alertBottomRadius
         }
         return isExpanded
-        ? NotchGeometry.expandedBottomRadius : NotchGeometry.collapsedBottomRadius
+            ? NotchGeometry.expandedBottomRadius : NotchGeometry.collapsedBottomRadius
     }
-    
+
     private var glide: Animation {
         reduceMotion
-        ? .easeInOut(duration: 0.2) : .spring(response: 0.36, dampingFraction: 0.9)
+            ? .easeInOut(duration: 0.2) : .spring(response: 0.36, dampingFraction: 0.9)
     }
-    
+
     private var contentTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
         return .asymmetric(
             insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.08)),
             removal: .opacity.animation(.easeOut(duration: 0.1)))
     }
-    
+
     @ViewBuilder private var collapsed: some View {
         if let track = controller.nowPlaying {
             NotchMusicWings(controller: controller, track: track)
@@ -167,7 +167,7 @@ struct NotchShelfContentView: View {
             .foregroundStyle(.white.opacity(0.7))
         }
     }
-    
+
     private var expanded: some View {
         VStack(spacing: 6) {
             header
@@ -176,7 +176,7 @@ struct NotchShelfContentView: View {
         }
         .padding(.top, collapsedBase.height)
     }
-    
+
     private var header: some View {
         HStack(spacing: 4) {
             ForEach(visibleTabs, id: \.self) { tab in
@@ -202,7 +202,7 @@ struct NotchShelfContentView: View {
             reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.9),
             value: controller.activeTab)
     }
-    
+
     private func iconTab(_ tab: NotchTab) -> some View {
         let active = controller.activeTab == tab
         return Button {
@@ -235,12 +235,12 @@ struct NotchShelfContentView: View {
         .buttonStyle(.plain).shelfPointer()
         .help(tab.title)
     }
-    
+
     private var visibleTabs: [NotchTab] {
         let mixerOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
         return NotchTab.allCases.filter { $0 != .audio || mixerOn }
     }
-    
+
     @ViewBuilder private var tabContent: some View {
         switch controller.activeTab {
         case .home: NotchHomeTab(controller: controller)
@@ -250,7 +250,7 @@ struct NotchShelfContentView: View {
         case .camera: NotchCameraTab()
         }
     }
-    
+
     private var filesCanvas: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
@@ -278,17 +278,17 @@ struct NotchShelfContentView: View {
 private struct NotchHomeTab: View {
     var controller: NotchShelfController
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
-    var preventSleep = false
+        var preventSleep = false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
-    var presenterMode = false
+        var presenterMode = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-    var presenterEnabled =
-    true
+        var presenterEnabled =
+        true
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-    var systemEnabled = true
+        var systemEnabled = true
     @AppStorage(AppStorageKeys.Notch.shelfShowMusic, store: SharedDefaults.store) private
-    var showMusic = true
-    
+        var showMusic = true
+
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
@@ -313,7 +313,7 @@ private struct NotchHomeTab: View {
         }
         .padding(.horizontal, 16).padding(.bottom, 14)
     }
-    
+
     private var quickActions: some View {
         HStack(spacing: 8) {
             if systemEnabled {
@@ -341,7 +341,7 @@ private struct NotchHomeTab: View {
             }
         }
     }
-    
+
     private func actionTile(
         _ icon: String, _ title: String, active: Bool, action: @escaping () -> Void
     ) -> some View {
@@ -355,12 +355,12 @@ private struct NotchHomeTab: View {
             .foregroundStyle(active ? Color.black : Color.white.opacity(0.85))
             .background(
                 active
-                ? Color(red: 0.79, green: 0.56, blue: 0.31) : Color.white.opacity(0.055),
+                    ? Color(red: 0.79, green: 0.56, blue: 0.31) : Color.white.opacity(0.055),
                 in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain).shelfPointer()
     }
-    
+
     private var emptyMusicCard: some View {
         VStack(spacing: 5) {
             Image(systemName: "music.note")
@@ -373,7 +373,7 @@ private struct NotchHomeTab: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
     }
-    
+
     private func ringsCard(_ usage: UsageStore) -> some View {
         NotchUsageRings(usage: usage)
             .frame(width: 180)
@@ -388,12 +388,12 @@ fileprivate struct NotchNowPlayingCard: View {
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store)
     private var presenterBlurMusic = true
-    
+
     init(controller: NotchShelfController, track: NotchNowPlaying) {
         self.controller = controller
         self.track = track
     }
-    
+
     var body: some View {
         HStack(spacing: 11) {
             artwork
@@ -436,12 +436,12 @@ fileprivate struct NotchNowPlayingCard: View {
         .padding(10)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
     }
-    
+
     private var isLocal: Bool {
         if case .local = track.source { return true }
         return false
     }
-    
+
     private var sourceLabel: String {
         var parts: [String] = []
         if !track.artist.isEmpty { parts.append(track.artist) }
@@ -451,7 +451,7 @@ fileprivate struct NotchNowPlayingCard: View {
         }
         return parts.joined(separator: " · ")
     }
-    
+
     private var artwork: some View {
         Button {
             controller.openNowPlayingApp()
@@ -473,9 +473,9 @@ fileprivate struct NotchNowPlayingCard: View {
         .buttonStyle(.plain).shelfPointer()
         .help("Open player")
     }
-    
+
     private func control(_ name: String, _ size: CGFloat, _ action: @escaping () -> Void)
-    -> some View
+        -> some View
     {
         Button(action: action) {
             Image(systemName: name)
@@ -490,7 +490,7 @@ fileprivate struct NotchNowPlayingCard: View {
 private struct NotchSeekBar: View {
     var controller: NotchShelfController
     @State private var dragFraction: Double?
-    
+
     var body: some View {
         GeometryReader { geo in
             let width = geo.size.width
@@ -521,13 +521,13 @@ private struct NotchUsageRings: View {
     var usage: UsageStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
-    var selectedRaw =
-    LimitProvider.claude.rawValue
+        var selectedRaw =
+        LimitProvider.claude.rawValue
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
-    LimitRing.defaultWarnPercent
+        LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
-    LimitRing.defaultCriticalPercent
-    
+        LimitRing.defaultCriticalPercent
+
     private var providers: [LimitProvider] { usage.availableProviders }
     private var selected: LimitProvider {
         get {
@@ -536,9 +536,9 @@ private struct NotchUsageRings: View {
         }
         nonmutating set { selectedRaw = newValue.rawValue }
     }
-    
+
     private var limits: ProviderLimits { usage.limits(for: selected) }
-    
+
     var body: some View {
         HStack(spacing: 20) {
             ring("5h", limits.session)
@@ -554,7 +554,7 @@ private struct NotchUsageRings: View {
         }
         .overlay(alignment: .topTrailing) { refreshButton.padding(6) }
     }
-    
+
     private var refreshButton: some View {
         Button {
             Task { await usage.refreshLimits(force: true) }
@@ -578,7 +578,7 @@ private struct NotchUsageRings: View {
         .disabled(usage.refreshingLimits)
         .help("Refresh limits now")
     }
-    
+
     private func ring(_ label: String, _ window: LimitWindow?) -> some View {
         let value = window?.percent ?? 0
         return VStack(spacing: 0) {
@@ -606,7 +606,7 @@ private struct NotchUsageRings: View {
                 .padding(.top, 2)
         }
     }
-    
+
     @ViewBuilder private func resetLabel(_ resetsAt: Date?) -> some View {
         if let reset = resetsAt, reset > Date() {
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -619,7 +619,7 @@ private struct NotchUsageRings: View {
             Text(" ").font(.system(size: 9))
         }
     }
-    
+
     private func countdown(from now: Date, to reset: Date) -> String {
         let s = max(0, Int(reset.timeIntervalSince(now)))
         let d = s / 86400
@@ -630,7 +630,7 @@ private struct NotchUsageRings: View {
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
         return String(format: "%d:%02d", m, sec)
     }
-    
+
     private func color(_ percent: Double) -> Color {
         LimitRing.color(percent: percent, warn: warn, critical: crit)
     }
@@ -638,7 +638,7 @@ private struct NotchUsageRings: View {
 
 private struct NotchClipboardTab: View {
     var controller: NotchShelfController
-    
+
     var body: some View {
         if let store = controller.clipboardStore {
             NotchClipboardList(store: store, controller: controller)
@@ -653,7 +653,7 @@ private struct NotchClipboardTab: View {
 private struct NotchClipboardList: View {
     var store: ClipboardStore
     let controller: NotchShelfController
-    
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 6) {
@@ -664,14 +664,14 @@ private struct NotchClipboardList: View {
             .padding(.horizontal, 16).padding(.bottom, 14)
         }
     }
-    
+
     private var sortedEntries: [ClipboardEntry] {
         store.entries.sorted { lhs, rhs in
             if lhs.pinned != rhs.pinned { return lhs.pinned }
             return lhs.lastCopiedAt > rhs.lastCopiedAt
         }
     }
-    
+
     private func row(_ entry: ClipboardEntry) -> some View {
         HStack(spacing: 10) {
             Button {
@@ -714,12 +714,12 @@ private struct NotchClipboardList: View {
 struct NotchRiseFade: ViewModifier, Animatable {
     var offset: CGFloat
     var visible: Bool
-    
+
     var animatableData: CGFloat {
         get { offset }
         set { offset = newValue }
     }
-    
+
     func body(content: Content) -> some View {
         content.offset(y: offset).opacity(visible ? 1 : 0)
     }
@@ -730,7 +730,7 @@ private struct NotchAlertDropView: View {
     var controller: NotchShelfController
     let glide: Animation
     @State private var appeared = false
-    
+
     var body: some View {
         let tint = Color(hex: alert.tint)
         return HStack(spacing: 11) {
@@ -786,7 +786,7 @@ private struct NotchMusicWings: View {
     var controller: NotchShelfController
     let track: NotchNowPlaying
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    
+
     var body: some View {
         HStack(spacing: 0) {
             artwork
@@ -797,28 +797,28 @@ private struct NotchMusicWings: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private var sourceKey: String { String(describing: track.source) }
-    
+
     private var artwork: some View {
         ZStack {
             wingIcon
                 .id(sourceKey)
                 .transition(
                     reduceMotion
-                    ? .opacity
-                    : .asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .opacity))
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity))
         }
         .animation(
             reduceMotion
-            ? .easeInOut(duration: 0.2) : .spring(response: 0.5, dampingFraction: 0.9),
+                ? .easeInOut(duration: 0.2) : .spring(response: 0.5, dampingFraction: 0.9),
             value: sourceKey
         )
         .clipped()
     }
-    
+
     @ViewBuilder private var wingIcon: some View {
         if let image = controller.nowPlayingArtwork {
             Image(nsImage: image)
@@ -840,12 +840,12 @@ private struct ShelfItemView: View {
     let canvasSize: CGSize
     @State private var handedOffToSystemDrag = false
     @State private var thumbnail: NSImage?
-    
+
     var body: some View {
         VStack(spacing: 4) {
             Image(
                 nsImage: thumbnail
-                ?? NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path)
+                    ?? NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path)
             )
             .resizable()
             .aspectRatio(contentMode: .fit)
@@ -881,7 +881,7 @@ private struct ShelfItemView: View {
             thumbnail = await ShelfThumbnails.thumbnail(for: controller.fileURL(for: item))
         }
     }
-    
+
     private var moveOrDragOut: some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named("shelfCanvas"))
             .onChanged { value in

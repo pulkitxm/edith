@@ -5,9 +5,9 @@ import SwiftUI
 enum MainDestination: String, CaseIterable, Identifiable {
     case home, dashboard, music, calendar, system, machines, companion
     case extensions, settings, about
-    
+
     var id: String { rawValue }
-    
+
     var title: String {
         switch self {
         case .home: return "Home"
@@ -22,7 +22,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .about: return "About"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .home: return "house.fill"
@@ -37,18 +37,18 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .about: return "info.circle"
         }
     }
-    
+
     static let homeItems: [MainDestination] = [
         .home, .dashboard, .music, .calendar, .system, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
     ]
-    
+
     static func resolve(_ raw: String) -> MainDestination {
         MainDestination(rawValue: raw) ?? .home
     }
-    
+
     var usesPaperBackground: Bool { Self.homeItems.contains(self) }
 }
 
@@ -67,7 +67,7 @@ enum MainNavigationFallback {
         let section = MainDestination(rawValue: mainWindowSection)?.rawValue ?? "home"
         let validSettingsTabs = ["general", "permissions", "shortcuts", "icloud", "updates"]
         let resolvedSettingsTab =
-        validSettingsTabs.contains(settingsTab) ? settingsTab : "general"
+            validSettingsTabs.contains(settingsTab) ? settingsTab : "general"
         return MainNavigationSelection(
             mainWindowSection: section, settingsTab: resolvedSettingsTab)
     }
@@ -76,14 +76,14 @@ enum MainNavigationFallback {
 enum Brand {
     static let icon: NSImage? = {
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-           let image = NSImage(contentsOf: url)
+            let image = NSImage(contentsOf: url)
         {
             return image
         }
         let devBundle = Bundle.main.bundleURL.appendingPathComponent("Edith_Edith.bundle")
         if let bundle = Bundle(url: devBundle),
-           let url = bundle.url(forResource: "appicon", withExtension: "png"),
-           let image = NSImage(contentsOf: url)
+            let url = bundle.url(forResource: "appicon", withExtension: "png"),
+            let image = NSImage(contentsOf: url)
         {
             return image
         }
@@ -95,8 +95,8 @@ struct TitlebarChrome: View {
     let height: CGFloat
     let width: CGFloat
     @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
-    var sidebarOpen = true
-    
+        var sidebarOpen = true
+
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             Button {
@@ -110,7 +110,7 @@ struct TitlebarChrome: View {
             .buttonStyle(HoverButtonStyle())
             .help("Toggle sidebar (⌘B)")
             .keyboardShortcut("b", modifiers: .command)
-            
+
             if sidebarOpen, width >= 130 {
                 HStack(alignment: .center, spacing: 6) {
                     if let icon = Brand.icon {
@@ -142,7 +142,7 @@ private struct SidebarNavRow: View {
     let action: () -> Void
     var detach: (() -> Void)?
     @State private var hovering = false
-    
+
     var body: some View {
         Button {
             if let detach, SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
@@ -212,23 +212,23 @@ extension NSEvent.ModifierFlags {
 private struct NavStack {
     private(set) var entries: [String] = []
     private(set) var index = -1
-    
+
     var canGoBack: Bool { index > 0 }
     var canGoForward: Bool { index >= 0 && index < entries.count - 1 }
-    
+
     mutating func record(_ location: String) {
         if index >= 0, entries[index] == location { return }
         if index < entries.count - 1 { entries.removeSubrange((index + 1)...) }
         entries.append(location)
         index = entries.count - 1
     }
-    
+
     mutating func goBack() -> String? {
         guard canGoBack else { return nil }
         index -= 1
         return entries[index]
     }
-    
+
     mutating func goForward() -> String? {
         guard canGoForward else { return nil }
         index += 1
@@ -248,54 +248,54 @@ struct MainWindowView: View {
         self.init(updater: UpdaterModel())
     }
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
-    var mainWindowSection =
-    MainDestination.home.rawValue
+        var mainWindowSection =
+        MainDestination.home.rawValue
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
-    var settingsTab = "general"
+        var settingsTab = "general"
     @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
-    var sidebarOpen = true
+        var sidebarOpen = true
     @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
-    var sidebarWidth = 230.0
+        var sidebarWidth = 230.0
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-    var systemEnabled = false
+        var systemEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-    var musicEnabled = false
+        var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
-    var usageEnabled = false
+        var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
-    var calendarEnabled =
-    false
+        var calendarEnabled =
+        false
     @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
-    var machinesEnabled =
-    false
+        var machinesEnabled =
+        false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
-    var companionEnabled =
-    false
+        var companionEnabled =
+        false
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
-    var preventSleep = false
+        var preventSleep = false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
-    var presenterMode = false
+        var presenterMode = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-    var presenterEnabled =
-    false
+        var presenterEnabled =
+        false
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-    var presenterBlurMusic =
-    true
+        var presenterBlurMusic =
+        true
     @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-    var presenterBlurMoney =
-    true
+        var presenterBlurMoney =
+        true
     @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
-    var presenterBlurUsage =
-    false
+        var presenterBlurUsage =
+        false
     @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-    "accent"
+        "accent"
     @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
-    var creditHidden = false
+        var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @AppStorage(AppStorageKeys.General.editMainWindowFullScreen) private var windowFullScreen =
-    false
+        false
     @State private var dragBaseWidth: Double?
     @State private var musicKeyMonitor: Any?
     @State private var windowKeyMonitor: Any?
@@ -312,22 +312,22 @@ struct MainWindowView: View {
     @Namespace private var sidebarSelectionNamespace
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    
+
     private var theme: Color { themeColor(themeName) }
-    
+
     private static let minSidebarWidth = 180.0
     private static let maxSidebarWidth = 320.0
     private static let defaultSidebarWidth = 230.0
     private static let trafficLightsInset = 94.0
     private static let chromeHeight = 31.0
     private static let fullScreenControlsInset = 12.0
-    
+
     private var clampedSidebarWidth: Double {
         min(Self.maxSidebarWidth, max(Self.minSidebarWidth, sidebarWidth))
     }
-    
+
     private var displaySidebarWidth: Double { UIScale.pt(clampedSidebarWidth) }
-    
+
     private var destination: MainDestination {
         let requested = MainDestination.resolve(navigationSelection.mainWindowSection)
         return switch requested {
@@ -340,12 +340,12 @@ struct MainWindowView: View {
         default: requested
         }
     }
-    
+
     private var navigationSelection: MainNavigationSelection {
         MainNavigationFallback.resolve(
             mainWindowSection: mainWindowSection, settingsTab: settingsTab)
     }
-    
+
     private var currentLocation: String {
         if destination == .settings {
             return "settings/\(navigationSelection.settingsTab)"
@@ -355,7 +355,7 @@ struct MainWindowView: View {
         }
         return navigationSelection.mainWindowSection
     }
-    
+
     private func navigate(to location: String) {
         restoringHistory = true
         let music = MainDestination.music.rawValue
@@ -365,21 +365,21 @@ struct MainWindowView: View {
         } else if location == music || location.hasPrefix(music + "/") {
             MusicRemote.shared.navigate(
                 to: location.hasPrefix(music + "/")
-                ? String(location.dropFirst(music.count + 1)) : "")
+                    ? String(location.dropFirst(music.count + 1)) : "")
             mainWindowSection = music
         } else {
             mainWindowSection = location
         }
     }
-    
+
     private func goBack() {
         if let location = nav.goBack() { navigate(to: location) }
     }
-    
+
     private func goForward() {
         if let location = nav.goForward() { navigate(to: location) }
     }
-    
+
     var body: some View {
         GeometryReader { geo in
             let bandHeight = Self.chromeHeight + UIScale.pt(10)
@@ -443,13 +443,13 @@ struct MainWindowView: View {
             permissionsNeedAttention = PermissionsStatus.current
         }
     }
-    
+
     private func applyNavigationFallback() {
         let resolved = navigationSelection
         mainWindowSection = resolved.mainWindowSection
         settingsTab = resolved.settingsTab
     }
-    
+
     private var historyShortcuts: some View {
         ZStack {
             Button("", action: goBack)
@@ -460,7 +460,7 @@ struct MainWindowView: View {
         .opacity(0)
         .allowsHitTesting(false)
     }
-    
+
     private func installMusicKeys() {
         guard musicKeyMonitor == nil else { return }
         musicKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -478,7 +478,7 @@ struct MainWindowView: View {
             return handled ? nil : event
         }
     }
-    
+
     private func syncMusicResources() {
         if musicEnabled {
             MusicRemote.shared.start()
@@ -488,24 +488,24 @@ struct MainWindowView: View {
             MusicRemote.shared.stop()
         }
     }
-    
+
     private func removeMusicKeys() {
         if let monitor = musicKeyMonitor {
             NSEvent.removeMonitor(monitor)
             musicKeyMonitor = nil
         }
     }
-    
+
     private var musicFooterVisible: Bool {
         musicEnabled
     }
-    
+
     private var detailShadow: Color {
         scheme == .dark ? .black.opacity(0.55) : .black.opacity(0.16)
     }
-    
+
     private var detailCorner: CGFloat { sidebarOpen ? 12 : 0 }
-    
+
     private func mainArea(_ bandHeight: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             sidebar(bandHeight)
@@ -514,7 +514,7 @@ struct MainWindowView: View {
                 .offset(x: sidebarOpen ? 0 : -displaySidebarWidth)
                 .opacity(sidebarOpen ? 1 : 0)
                 .allowsHitTesting(sidebarOpen)
-            
+
             detailColumn(bandHeight)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(
@@ -524,7 +524,7 @@ struct MainWindowView: View {
                 )
                 .padding(.leading, sidebarOpen ? displaySidebarWidth : 0)
                 .shadow(color: detailShadow, radius: UIScale.pt(18), x: -6, y: 0)
-            
+
             sidebarEdge
                 .frame(maxHeight: .infinity)
                 .offset(x: sidebarOpen ? displaySidebarWidth : 0)
@@ -534,7 +534,7 @@ struct MainWindowView: View {
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen)
     }
-    
+
     private func refreshPermissionsPill() {
         CalendarPermission.mirror()
         IPC.post(IPC.Name.requestPermissionsRefresh)
@@ -543,7 +543,7 @@ struct MainWindowView: View {
             permissionsNeedAttention = PermissionsStatus.current
         }
     }
-    
+
     private func chromeOverlay() -> some View {
         let inset = windowFullScreen ? Self.fullScreenControlsInset : Self.trafficLightsInset
         return VStack(spacing: 0) {
@@ -555,19 +555,19 @@ struct MainWindowView: View {
         .padding(.leading, inset)
         .ignoresSafeArea(edges: .top)
     }
-    
+
     private func band(_ color: Color, height: CGFloat) -> some View {
         color
             .frame(height: height)
             .allowsHitTesting(false)
     }
-    
+
     private func detailColumn(_ bandHeight: CGFloat) -> some View {
         GeometryReader { geo in
             VStack(spacing: UIScale.pt(0)) {
                 band(
                     destination.usesPaperBackground
-                    ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor),
+                        ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor),
                     height: bandHeight)
                 detail
                     .tint(theme)
@@ -575,11 +575,11 @@ struct MainWindowView: View {
             .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
         }
     }
-    
+
     private var footerVisible: Bool {
         systemEnabled || presenterEnabled || permissionsNeedAttention || updater.updateReady != nil
     }
-    
+
     private func sidebar(_ bandHeight: CGFloat) -> some View {
         ZStack {
             SidebarMaterial()
@@ -597,7 +597,7 @@ struct MainWindowView: View {
             }
         }
     }
-    
+
     private var sidebarList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -634,16 +634,16 @@ struct MainWindowView: View {
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShortcutHints)
     }
-    
+
     private func select(_ item: MainDestination) {
         if SectionWindow.focusExisting(item) { return }
         mainWindowSection = item.rawValue
     }
-    
+
     private func detach(_ item: MainDestination) {
         SectionWindow.open(item)
     }
-    
+
     private var visibleHomeItems: [MainDestination] {
         MainDestination.homeItems.filter { item in
             switch item {
@@ -657,11 +657,11 @@ struct MainWindowView: View {
             }
         }
     }
-    
+
     private var navigableItems: [MainDestination] {
         visibleHomeItems + MainDestination.appItems
     }
-    
+
     private func shortcutHint(for item: MainDestination) -> String? {
         guard showShortcutHints else { return nil }
         let items = navigableItems
@@ -669,7 +669,7 @@ struct MainWindowView: View {
         if index < WindowKeyCommand.directSelectLimit { return "⌘\(index + 1)" }
         return index == items.count - 1 ? "⌘9" : nil
     }
-    
+
     private func installWindowKeys() {
         guard windowKeyMonitor == nil else { return }
         windowKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -698,14 +698,14 @@ struct MainWindowView: View {
             return handled ? nil : event
         }
     }
-    
+
     private func removeWindowKeys() {
         if let monitor = windowKeyMonitor {
             NSEvent.removeMonitor(monitor)
             windowKeyMonitor = nil
         }
     }
-    
+
     private func installCommandHintMonitor() {
         guard commandHintMonitor == nil else { return }
         commandHintMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
@@ -728,7 +728,7 @@ struct MainWindowView: View {
             return event
         }
     }
-    
+
     private func removeCommandHintMonitor() {
         commandHintWork?.cancel()
         commandHintWork = nil
@@ -737,7 +737,7 @@ struct MainWindowView: View {
             commandHintMonitor = nil
         }
     }
-    
+
     private var sidebarFooter: some View {
         VStack(spacing: UIScale.pt(8)) {
             if let version = updater.updateReady {
@@ -752,7 +752,7 @@ struct MainWindowView: View {
         }
         .padding(UIScale.pt(10))
     }
-    
+
     private func updateReadyPill(_ version: String) -> some View {
         Button {
             updater.checkForUpdates()
@@ -775,7 +775,7 @@ struct MainWindowView: View {
         .pointerCursor()
         .help("Show update options")
     }
-    
+
     @ViewBuilder
     private var quickActions: some View {
         let tiles = [
@@ -810,7 +810,7 @@ struct MainWindowView: View {
             }
         }
     }
-    
+
     private var presenterQuickActionTile: some View {
         HStack(spacing: UIScale.pt(0)) {
             Button {
@@ -831,11 +831,11 @@ struct MainWindowView: View {
             .buttonStyle(.plain)
             .pointerCursor()
             .help("Blur sensitive numbers and track names everywhere in Edith")
-            
+
             Rectangle()
                 .fill(presenterMode ? Color.white.opacity(0.24) : Color.primary.opacity(0.08))
                 .frame(width: UIScale.pt(1), height: UIScale.pt(28))
-            
+
             Button {
                 presenterQuickActionsPresented.toggle()
             } label: {
@@ -859,7 +859,7 @@ struct MainWindowView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
     }
-    
+
     private var presenterQuickActionsPopover: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             Text("Presenter mode")
@@ -881,12 +881,12 @@ struct MainWindowView: View {
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))
     }
-    
+
     private func setPresenterMode(_ on: Bool) {
         presenterMode = on
         if !on { IPC.post(IPC.Name.presenterPauseAuto) }
     }
-    
+
     private func presenterQuickActionToggle(_ title: String, isOn: Binding<Bool>) -> some View {
         HStack(spacing: UIScale.pt(12)) {
             Text(title)
@@ -917,7 +917,7 @@ struct MainWindowView: View {
         }
         .pointerCursor()
     }
-    
+
     private func quickActionTile(
         icon: String, title: String, active: Bool, trigger: Int, help: String,
         action: @escaping () -> Void
@@ -944,7 +944,7 @@ struct MainWindowView: View {
         .pointerCursor()
         .help(help)
     }
-    
+
     private var sidebarEdge: some View {
         Rectangle()
             .fill(Color(nsColor: .separatorColor))
@@ -976,7 +976,7 @@ struct MainWindowView: View {
                     .onTapGesture(count: 2) { sidebarWidth = Self.defaultSidebarWidth }
             }
     }
-    
+
     @ViewBuilder
     private var credit: some View {
         if !creditHidden {
@@ -1009,7 +1009,7 @@ struct MainWindowView: View {
             .frame(maxWidth: .infinity)
         }
     }
-    
+
     private var permissionsPill: some View {
         Button {
             settingsTab = SettingsPane.Tab.permissions.rawValue
@@ -1030,7 +1030,7 @@ struct MainWindowView: View {
         .buttonStyle(.plain)
         .pointerCursor()
     }
-    
+
     @ViewBuilder
     private var detail: some View {
         switch destination {

@@ -6,14 +6,14 @@ import SwiftUI
 struct FocusDimRows: View {
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var enabled = false
     @AppStorage(AppStorageKeys.FocusDim.intensity, store: SharedDefaults.store) private
-    var intensity =
-    FocusDimMath.defaultIntensity
+        var intensity =
+        FocusDimMath.defaultIntensity
     @AppStorage(AppStorageKeys.FocusDim.animationDuration, store: SharedDefaults.store)
     private var animationDuration = FocusDimMath.defaultAnimationDuration
     @AppStorage(AppStorageKeys.FocusDim.otherDisplaysMode, store: SharedDefaults.store)
     private var otherDisplaysMode = FocusDimDisplayMode.perScreenFront
     @AppStorage(FocusDimState.activeKey, store: SharedDefaults.store) private var active = false
-    
+
     var body: some View {
         Section {
             Toggle("Dim now", isOn: $active)

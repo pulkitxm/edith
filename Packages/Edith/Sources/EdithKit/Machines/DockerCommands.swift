@@ -3,56 +3,56 @@ import Foundation
 public enum DockerCommands {
     public static let jsonFormat = "{{json .}}"
     public static let listSeparator = "@EDITHSPLIT@"
-    
+
     public static func version() -> String {
         "docker version --format \(ShellQuote.quote(jsonFormat)) 2>&1"
     }
-    
+
     public static func composeVersion() -> String {
         "docker compose version --short"
     }
-    
+
     public static func containersWithStats() -> String {
         let ps = "docker ps -a --no-trunc --format \(ShellQuote.quote(jsonFormat))"
         let stats =
-        "docker stats --no-stream --format \(ShellQuote.quote(jsonFormat)) 2>/dev/null"
+            "docker stats --no-stream --format \(ShellQuote.quote(jsonFormat)) 2>/dev/null"
         return "\(ps); echo \(ShellQuote.quote(listSeparator)); \(stats)"
     }
-    
+
     public static func images() -> String {
         "docker images --no-trunc --format \(ShellQuote.quote(jsonFormat))"
     }
-    
+
     public static func volumes() -> String {
         "docker volume ls --format \(ShellQuote.quote(jsonFormat))"
     }
-    
+
     public static func networks() -> String {
         "docker network ls --format \(ShellQuote.quote(jsonFormat))"
     }
-    
+
     public static func diskUsage() -> String {
         "docker system df --format \(ShellQuote.quote(jsonFormat))"
     }
-    
+
     public static func diskUsageVerbose() -> String {
         "docker system df -v --format \(ShellQuote.quote(jsonFormat))"
     }
-    
+
     public static func inspect(_ id: String) -> String {
         "docker inspect --format \(ShellQuote.quote(jsonFormat)) \(ShellQuote.quote(id))"
     }
-    
+
     public static func logs(_ id: String, tail: Int, follow: Bool) -> String {
         var command = "docker logs --timestamps --tail \(tail)"
         if follow { command += " --follow" }
         return command + " " + ShellQuote.quote(id)
     }
-    
+
     public static func lifecycle(_ action: String, id: String) -> String {
         lifecycle(action, ids: [id])
     }
-    
+
     public static func lifecycle(_ action: String, ids: [String]) -> String {
         let targets = ids.map(ShellQuote.quote).joined(separator: " ")
         switch action {
@@ -64,34 +64,34 @@ public enum DockerCommands {
             return "docker \(action) \(targets)"
         }
     }
-    
+
     public static func removeImage(_ id: String, force: Bool) -> String {
         "docker image rm \(force ? "-f " : "")\(ShellQuote.quote(id))"
     }
-    
+
     public static func pullImage(_ reference: String) -> String {
         "docker pull \(ShellQuote.quote(reference))"
     }
-    
+
     public static func pruneImages() -> String {
         "docker image prune -f"
     }
-    
+
     public static func removeVolume(_ name: String) -> String {
         "docker volume rm \(ShellQuote.quote(name))"
     }
-    
+
     public static func pruneVolumes() -> String {
         "docker volume prune -f"
     }
-    
+
     public static func composeAction(_ action: String, project: String) -> String {
         "docker compose -p \(ShellQuote.quote(project)) \(action)"
     }
-    
+
     public static func execShell(containerID: String) -> String {
         let inner =
-        "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
+            "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
         return "docker exec -it \(ShellQuote.quote(containerID)) sh -c \(ShellQuote.quote(inner))"
     }
 }
@@ -100,39 +100,39 @@ extension DockerCommands {
     public static func inspectRaw(_ id: String) -> String {
         "docker inspect \(ShellQuote.quote(id)) 2>/dev/null"
     }
-    
+
     public static func top(_ id: String) -> String {
         "docker top \(ShellQuote.quote(id)) -eo pid,user,pcpu,pmem,rss,args 2>/dev/null"
-        + " || docker top \(ShellQuote.quote(id))"
+            + " || docker top \(ShellQuote.quote(id))"
     }
-    
+
     public static func statsStream() -> String {
         "docker stats --format \(ShellQuote.quote(jsonFormat))"
     }
-    
+
     public static func listFiles(containerID: String, path: String) -> String {
         let inner =
-        "ls -lA --time-style=+%s \(ShellQuote.quote(path)) 2>/dev/null || ls -lA "
-        + ShellQuote.quote(path)
+            "ls -lA --time-style=+%s \(ShellQuote.quote(path)) 2>/dev/null || ls -lA "
+            + ShellQuote.quote(path)
         return "docker exec \(ShellQuote.quote(containerID)) sh -c \(ShellQuote.quote(inner))"
     }
-    
+
     public static func readFile(containerID: String, path: String, limit: Int) -> String {
         let inner = "head -c \(limit) \(ShellQuote.quote(path))"
         return "docker exec \(ShellQuote.quote(containerID)) sh -c \(ShellQuote.quote(inner))"
     }
-    
+
     public static func imageHistory(_ id: String) -> String {
         "docker image history --no-trunc --format \(ShellQuote.quote(jsonFormat)) "
-        + ShellQuote.quote(id)
+            + ShellQuote.quote(id)
     }
-    
+
     public static func composeProjects() -> String {
         "docker compose ls --format json 2>/dev/null"
     }
-    
+
     public static func composeAction(_ action: String, project: String, directory: String?)
-    -> String
+        -> String
     {
         var command = "docker compose -p \(ShellQuote.quote(project))"
         if let directory, !directory.isEmpty {
@@ -140,7 +140,7 @@ extension DockerCommands {
         }
         return command + " " + action
     }
-    
+
     public static func prune(_ what: String) -> String {
         switch what {
         case "images": return "docker image prune -af"
@@ -158,9 +158,9 @@ public struct DockerProcess: Identifiable, Equatable, Sendable {
     public var cpu: String
     public var memory: String
     public var command: String
-    
+
     public var id: String { pid }
-    
+
     public init(pid: String, user: String, cpu: String, memory: String, command: String) {
         self.pid = pid
         self.user = user
@@ -179,7 +179,7 @@ public struct DockerInspectSummary: Equatable, Sendable {
     public var mounts: [String]
     public var networks: [String]
     public var labels: [String: String]
-    
+
     public init(
         image: String = "", command: String = "", created: String = "",
         restartPolicy: String = "", environment: [String] = [], mounts: [String] = [],
@@ -228,11 +228,11 @@ extension DockerParsing {
                 memory: value(memColumn), command: value(commandColumn))
         }
     }
-    
+
     public static func inspectSummary(_ output: String) -> DockerInspectSummary? {
         guard let data = output.data(using: .utf8),
-              let array = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]],
-              let object = array.first
+            let array = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]],
+            let object = array.first
         else { return nil }
         let config = object["Config"] as? [String: Any] ?? [:]
         let hostConfig = object["HostConfig"] as? [String: Any] ?? [:]
@@ -254,7 +254,7 @@ extension DockerParsing {
             networks: networks,
             labels: config["Labels"] as? [String: String] ?? [:])
     }
-    
+
     public static func composeProjects(_ output: String) -> [String] {
         guard let data = output.data(using: .utf8) else { return [] }
         if let array = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {

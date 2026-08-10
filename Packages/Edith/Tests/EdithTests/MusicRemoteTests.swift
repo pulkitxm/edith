@@ -17,7 +17,7 @@ import Testing
         #expect(remote.volume == 0.4)
         #expect(abs(remote.elapsed - 30) < 1)
     }
-    
+
     @Test func emptyTrackClearsCurrentFile() {
         let remote = MusicRemote()
         remote.apply(["track": ""])
@@ -25,14 +25,14 @@ import Testing
         #expect(!remote.isPlaying)
         #expect(remote.duration == 0)
     }
-    
+
     @Test func missingVolumeKeepsPreviousValue() {
         let remote = MusicRemote()
         remote.apply(["volume": 0.25])
         remote.apply(["track": "song.mp3"])
         #expect(remote.volume == 0.25)
     }
-    
+
     @Test func elapsedClampsToDuration() {
         let remote = MusicRemote()
         remote.apply([
@@ -42,7 +42,7 @@ import Testing
         #expect(remote.elapsed == 100)
         #expect(remote.progress == 1)
     }
-    
+
     @Test func elapsedNeverGoesNegative() {
         let remote = MusicRemote()
         remote.apply([
@@ -52,7 +52,7 @@ import Testing
         #expect(remote.elapsed == 0)
         #expect(remote.progress == 0)
     }
-    
+
     @Test func zeroDurationYieldsZeroProgress() {
         let remote = MusicRemote()
         remote.apply(["elapsed": 42.0, "duration": 0.0, "isPlaying": false])

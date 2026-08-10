@@ -9,6 +9,6 @@ struct SidebarMaterial: NSViewRepresentable {
         view.state = .followsWindowActiveState
         return view
     }
-    
+
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

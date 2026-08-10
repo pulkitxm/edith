@@ -16,7 +16,7 @@ struct NotchAlert: Equatable, Identifiable, Sendable {
     let priority: NotchAlertPriority
     let autoHide: TimeInterval
     let settingsTab: String?
-    
+
     init(
         id: String, icon: String, tint: String = "#e0a83f", title: String, subtitle: String? = nil,
         priority: NotchAlertPriority = .medium, autoHide: TimeInterval = 3,
@@ -47,13 +47,13 @@ struct PowerSnapshot: Equatable, Sendable {
 enum NotchAlertLogic {
     static let pendingLimit = 3
     static let pendingTTL: TimeInterval = 60
-    
+
     static func shouldPreempt(current: NotchAlert?, incoming: NotchAlert) -> Bool {
         guard let current else { return true }
         if current.id == incoming.id { return true }
         return incoming.priority >= current.priority
     }
-    
+
     static func queue(
         _ pending: [PendingNotchAlert], adding alert: NotchAlert, at date: Date
     ) -> [PendingNotchAlert] {
@@ -62,7 +62,7 @@ enum NotchAlertLogic {
         if out.count > pendingLimit { out.removeFirst(out.count - pendingLimit) }
         return out
     }
-    
+
     static func dequeue(
         _ pending: [PendingNotchAlert], now: Date
     ) -> (next: NotchAlert?, rest: [PendingNotchAlert]) {
@@ -72,7 +72,7 @@ enum NotchAlertLogic {
         let next = fresh.removeFirst()
         return (next.alert, fresh)
     }
-    
+
     static func powerAlerts(
         now: PowerSnapshot, lastOnAC: Bool?, lastCapacity: Int?
     ) -> [NotchAlert] {

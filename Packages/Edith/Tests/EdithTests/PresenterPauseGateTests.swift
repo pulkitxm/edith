@@ -5,11 +5,11 @@ import Testing
     @Test func staysPausedWhileTheShareContinues() {
         #expect(PresenterPauseGate.stillPaused(hit: true))
     }
-    
+
     @Test func clearsAsSoonAsTheShareEnds() {
         #expect(!PresenterPauseGate.stillPaused(hit: false))
     }
-    
+
     @Test func doesNotRequireTheSourceAppToQuit() {
         let stillSharingWithAppOpen = true
         #expect(PresenterPauseGate.stillPaused(hit: stillSharingWithAppOpen))

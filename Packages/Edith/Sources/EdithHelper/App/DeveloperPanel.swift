@@ -5,7 +5,7 @@ import SwiftUI
 
 enum ProcessUptime {
     static let launchedAt = Date()
-    
+
     static var text: String {
         let seconds = Int(Date().timeIntervalSince(launchedAt))
         let h = seconds / 3600
@@ -34,21 +34,21 @@ struct DeveloperPanel: View {
     @State private var repoPath = SharedDefaults.store.string(forKey: "repoPath") ?? ""
     @State private var idleWakeups = EnergyStats.idleWakeups()
     @State private var refreshing = false
-    
+
     private var versionLine: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "-"
         let build = info?["CFBundleVersion"] as? String ?? "-"
         return "v\(version) (\(build)) · up \(ProcessUptime.text) · \(idleWakeups) idle wakeups"
     }
-    
+
     var body: some View {
         DisclosureGroup("Developer") {
             VStack(alignment: .leading, spacing: 8) {
                 Text(versionLine)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
-                
+
                 HStack(spacing: 12) {
                     Button("Force refresh") {
                         refreshing = true
@@ -64,7 +64,7 @@ struct DeveloperPanel: View {
                 }
                 .buttonStyle(.link)
                 .font(.system(size: 10))
-                
+
                 HStack(spacing: 6) {
                     TextField("Repo path override", text: $repoPath)
                         .textFieldStyle(.roundedBorder)
@@ -82,7 +82,7 @@ struct DeveloperPanel: View {
             idleWakeups = EnergyStats.idleWakeups()
         }
     }
-    
+
     private func revealRefreshLog() {
         let log = Repo.dataDir.appendingPathComponent("refresh.log")
         if FileManager.default.fileExists(atPath: log.path) {
@@ -91,13 +91,13 @@ struct DeveloperPanel: View {
             NSWorkspace.shared.open(Repo.dataDir)
         }
     }
-    
+
     private func saveRepoPath() {
         let trimmed = repoPath.trimmingCharacters(in: .whitespacesAndNewlines)
         Repo.setDevRootPath(trimmed.isEmpty ? nil : trimmed)
         IPC.post(IPC.Name.settingsChanged)
     }
-    
+
     private func browseRepoPath() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -107,7 +107,7 @@ struct DeveloperPanel: View {
         repoPath = url.path
         saveRepoPath()
     }
-    
+
     private func relaunch() {
         NSWorkspace.shared.openApplication(
             at: Bundle.main.bundleURL, configuration: NSWorkspace.OpenConfiguration())

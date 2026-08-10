@@ -17,9 +17,9 @@ struct MachineToolsTab: View {
     @State private var message: String?
     @State private var serviceFilter = ""
     @State private var mounting = false
-    
+
     private var dark: Bool { scheme == .dark }
-    
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -45,7 +45,7 @@ struct MachineToolsTab: View {
             await session.restoreMount()
         }
     }
-    
+
     private var diskCard: some View {
         SkinCard(
             title: "Disk",
@@ -87,12 +87,12 @@ struct MachineToolsTab: View {
                 } else {
                     Text(
                         MachineMounts.isAvailable
-                        ? MachineMounts.mountPoint(for: session.machine).path
-                        : "sshfs is not installed on this Mac"
+                            ? MachineMounts.mountPoint(for: session.machine).path
+                            : "sshfs is not installed on this Mac"
                     )
                     .font(
                         MachineMounts.isAvailable
-                        ? DashSkin.mono(11) : .system(size: UIScale.pt(11.5))
+                            ? DashSkin.mono(11) : .system(size: UIScale.pt(11.5))
                     )
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
@@ -110,7 +110,7 @@ struct MachineToolsTab: View {
             }
         }
     }
-    
+
     private var healthColor: Color {
         switch session.mountHealth {
         case .mounted: return DashSkin.ok
@@ -118,7 +118,7 @@ struct MachineToolsTab: View {
         case nil: return DashSkin.inkFaint(dark)
         }
     }
-    
+
     private func subtitle(for mount: MachineMount) -> String {
         var parts = [mount.remotePath]
         if mount.isReadOnly { parts.append("read only") }
@@ -129,7 +129,7 @@ struct MachineToolsTab: View {
         }
         return parts.joined(separator: "  ·  ")
     }
-    
+
     private func mountDisk() {
         mounting = true
         message = nil
@@ -148,7 +148,7 @@ struct MachineToolsTab: View {
             mounting = false
         }
     }
-    
+
     private func unmountDisk() {
         mounting = true
         message = nil
@@ -163,7 +163,7 @@ struct MachineToolsTab: View {
             mounting = false
         }
     }
-    
+
     private var forwardsCard: some View {
         SkinCard(
             title: "Port forwards",
@@ -175,7 +175,7 @@ struct MachineToolsTab: View {
                         Circle()
                             .fill(
                                 session.activeForwards.contains(forward.id)
-                                ? DashSkin.ok : DashSkin.inkFaint(dark)
+                                    ? DashSkin.ok : DashSkin.inkFaint(dark)
                             )
                             .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                         Text(forward.displayName)
@@ -230,7 +230,7 @@ struct MachineToolsTab: View {
             }
         }
     }
-    
+
     private var snippetsCard: some View {
         SkinCard(title: "Snippets", note: "Saved commands you run often", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -268,7 +268,7 @@ struct MachineToolsTab: View {
                     Button("Save") { saveSnippet() }
                         .disabled(
                             snippetTitle.trimmingCharacters(in: .whitespaces).isEmpty
-                            || snippetCommand.trimmingCharacters(in: .whitespaces).isEmpty
+                                || snippetCommand.trimmingCharacters(in: .whitespaces).isEmpty
                         )
                         .pointerCursor()
                 }
@@ -279,14 +279,14 @@ struct MachineToolsTab: View {
             }
         }
     }
-    
+
     private var filteredServices: [SystemdService] {
         let trimmed = serviceFilter.trimmingCharacters(in: .whitespaces)
         let base = session.services
         guard !trimmed.isEmpty else { return Array(base.prefix(40)) }
         return base.filter { $0.unit.localizedCaseInsensitiveContains(trimmed) }
     }
-    
+
     private var servicesCard: some View {
         SkinCard(
             title: "Services", note: session.services.isEmpty ? "systemd not detected" : nil,
@@ -302,8 +302,8 @@ struct MachineToolsTab: View {
                         Circle()
                             .fill(
                                 service.isFailed
-                                ? DashSkin.danger
-                                : (service.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
+                                    ? DashSkin.danger
+                                    : (service.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
                             )
                             .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                         Text(service.displayName)
@@ -328,7 +328,7 @@ struct MachineToolsTab: View {
             }
         }
     }
-    
+
     private func addForward() {
         guard let local = Int(newForwardLocal), let remote = Int(newForwardRemote) else { return }
         let host = newForwardHost.trimmingCharacters(in: .whitespaces)
@@ -340,21 +340,21 @@ struct MachineToolsTab: View {
         newForwardRemote = ""
         toggleForward(forward, on: true)
     }
-    
+
     private func toggleForward(_ forward: PortForward, on: Bool) {
         Task {
             if let failure = await session.setForward(forward, active: on) {
                 message = failure
             } else {
                 message =
-                on
-                ? "localhost:\(forward.localPort) now reaches "
-                + "\(forward.remoteHost):\(forward.remotePort)."
-                : nil
+                    on
+                    ? "localhost:\(forward.localPort) now reaches "
+                        + "\(forward.remoteHost):\(forward.remotePort)."
+                    : nil
             }
         }
     }
-    
+
     private func saveSnippet() {
         model.addSnippet(
             CommandSnippet(
@@ -364,7 +364,7 @@ struct MachineToolsTab: View {
         snippetTitle = ""
         snippetCommand = ""
     }
-    
+
     private func run(_ command: String) {
         runningSnippet = true
         snippetOutput = "$ \(command)\n"
@@ -377,7 +377,7 @@ struct MachineToolsTab: View {
             }
         }
     }
-    
+
     private func runService(_ action: String, unit: String) {
         Task {
             let machineID = session.machine.id
