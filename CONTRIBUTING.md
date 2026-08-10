@@ -41,8 +41,14 @@ Keychain Access, Certificate Assistant, Create a Certificate, named
 Before it signs a `--release` build, `build.sh` strips the binaries in `dist`.
 Xcode's Release configuration builds with `dwarf-with-dsym` and no stripping, and
 a plain `xcodebuild build` never strips, so every shipped binary would otherwise
-carry its full DWARF: 65MB of DMG rather than 43MB. The `.dSYM` bundles stay in
-`build/Build/Products/Release`, so a crash report is still symbolicatable.
+carry its full DWARF. The `.dSYM` bundles stay in `build/Build/Products/Release`,
+so a crash report is still symbolicatable.
+
+The Release configuration also pins `ARCHS = arm64`. Xcode's default builds a
+universal binary, which doubles every executable in the bundle; the SwiftPM build
+this project replaced only ever produced arm64, so the x86_64 slice was never
+something Edith shipped deliberately. Together with the stripping that is a 64MB
+DMG down to 23MB.
 
 It also deletes the `Frameworks` directory Xcode embeds inside the nested
 `Edith Files.app`. That app links Sparkle through the outer bundle, its rpath is
