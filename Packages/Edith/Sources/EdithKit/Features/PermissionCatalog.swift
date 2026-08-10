@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public struct PermissionUsage: Identifiable, Equatable, Sendable {

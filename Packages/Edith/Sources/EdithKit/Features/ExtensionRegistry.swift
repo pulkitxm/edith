@@ -1,4 +1,11 @@
+import EdithCore
 import Foundation
+
+public typealias ExtensionGroup = EdithCore.ExtensionGroup
+public typealias ExtensionMarketplaceCategory = EdithCore.ExtensionMarketplaceCategory
+public typealias ExtensionMarketplaceFilter = EdithCore.ExtensionMarketplaceFilter
+public typealias ExtensionRegistryEntry = EdithCore.ExtensionRegistryEntry
+public typealias ExtensionRegistry = EdithCore.ExtensionRegistry
 
 public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case calendar
@@ -90,6 +97,30 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "macOS will ask for Automation access when Notch Shelf first controls playback."
         default: nil
         }
+    }
+}
+
+public extension ExtensionRegistryEntry {
+    var requiredPermissions: [ExtensionPermission] {
+        switch id {
+        case "calendar": [.calendar]
+        case "focusDim", "presenter", "colorPicker": [.screenRecording]
+        default: []
+        }
+    }
+
+    var optionalPermissions: [ExtensionPermission] {
+        switch id {
+        case "usage", "machines": [.notifications]
+        case "system": [.accessibility, .inputMonitoring]
+        case "notchShelf": [.bluetooth, .camera, .automation]
+        case "clipboard": [.accessibility]
+        default: []
+        }
+    }
+
+    var requiredTools: [CLIToolSpec] {
+        requiredToolIDs.compactMap(ToolProvisioning.spec(id:))
     }
 }
 

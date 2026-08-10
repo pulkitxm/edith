@@ -106,6 +106,27 @@ import Testing
         }
     }
 
+    @Test func capabilityTiersDriveBothPlatformsFromOneRegistry() {
+        let clipboard = ExtensionRegistry.entries.first { $0.id == "clipboard" }!
+        let focusDim = ExtensionRegistry.entries.first { $0.id == "focusDim" }!
+        let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
+
+        #expect(clipboard.availability(on: .macOS) == .available)
+        #expect(
+            clipboard.availability(on: .ubuntu)
+                == .unavailable([.clipboardHistory]))
+        #expect(focusDim.availability(on: .ubuntu) == .unavailable([.windowDimming]))
+        #expect(usage.availability(on: .ubuntu) == .unavailable([.usageCollection]))
+    }
+
+    @Test func capabilityTiersDoNotOverlap() {
+        for entry in ExtensionRegistry.entries {
+            #expect(!entry.requiredCapabilities.isEmpty)
+            #expect(
+                Set(entry.requiredCapabilities).isDisjoint(with: entry.optionalCapabilities))
+        }
+    }
+
     @Test func missingRequiredPermissionsShowSheet() {
         let entry = ExtensionRegistry.entries.first { $0.id == "presenter" }!
         let decision = ExtensionPermissionFlow.decision(

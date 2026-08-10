@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public struct OnboardingPermission: Equatable, Sendable {

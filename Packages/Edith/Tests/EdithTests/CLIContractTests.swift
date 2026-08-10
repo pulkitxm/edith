@@ -506,6 +506,7 @@ enum JSONContract {
         #expect(rows.count == ExtensionRegistry.entries.count)
         let expected: Set<String> = [
             "id", "title", "summary", "group", "featured", "key", "enabled",
+            "requiredCapabilities", "optionalCapabilities",
             "requiredPermissions", "optionalPermissions", "missingRequiredPermissions",
             "requiredTools",
         ]

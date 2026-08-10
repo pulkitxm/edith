@@ -43,6 +43,8 @@ enum ExtensionLookup {
             "featured": .bool(entry.featured),
             "key": .string(entry.defaultsKey),
             "enabled": .bool(isEnabled(entry)),
+            "requiredCapabilities": .strings(entry.requiredCapabilities.map(\.rawValue)),
+            "optionalCapabilities": .strings(entry.optionalCapabilities.map(\.rawValue)),
             "requiredPermissions": .strings(entry.requiredPermissions.map(\.rawValue)),
             "optionalPermissions": .strings(entry.optionalPermissions.map(\.rawValue)),
             "missingRequiredPermissions": .strings(

@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum RestoredPathVerdict: Equatable {
@@ -24,10 +25,7 @@ public enum RestoredPathValidation {
 
 public enum AppData {
     public static let supportDir: URL = {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[
-            0
-        ]
-        .appendingPathComponent("Edith")
+        let dir = AppDirectories.current.data
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
