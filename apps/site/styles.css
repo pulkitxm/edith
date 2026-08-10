@@ -1506,14 +1506,6 @@ button.action {
   max-width: 35rem;
 }
 
-.section {
-  border-top: 1px solid var(--color-line);
-}
-
-.film + .section {
-  border-top: 0;
-}
-
 .split {
   margin-inline: auto;
   display: grid;
@@ -2402,12 +2394,21 @@ button.action {
   justify-content: center;
   border-radius: 0.375rem;
   border: 1px solid var(--color-line-2);
-  border-bottom-width: 2px;
-  background: var(--color-surface);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
   padding-inline: 0.375rem;
   font-family: var(--font-mono);
+  font-weight: 500;
   font-size: 11px;
-  color: var(--color-muted);
+  color: var(--color-fg);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 14%),
+    inset 0 -1px 0 rgb(0 0 0 / 35%),
+    0 2px 0 rgb(0 0 0 / 45%),
+    0 3px 6px -2px rgb(0 0 0 / 70%);
 }
 
 .key.lg {
@@ -2415,6 +2416,39 @@ button.action {
   min-width: 2.5rem;
   border-radius: 9px;
   font-size: 17px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    inset 0 -2px 0 rgb(0 0 0 / 40%),
+    0 3px 0 rgb(0 0 0 / 50%),
+    0 6px 12px -4px rgb(0 0 0 / 80%);
+}
+
+.card-shortcut {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-shortcut .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-shortcut .key {
+  position: relative;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgb(255 255 255 / 9%), transparent 60%),
+    linear-gradient(to bottom, var(--color-surface-2), var(--color-surface));
 }
 
 .bar {
@@ -2430,6 +2464,247 @@ button.action {
   height: 100%;
   border-radius: 9999px;
   background: var(--color-accent);
+}
+
+.card-alerts {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-alerts .card-art {
+  justify-content: flex-start;
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-alerts .notch {
+  position: relative;
+  z-index: 2;
+  background: linear-gradient(to bottom, #101013, #000);
+  box-shadow:
+    inset 0 -1px 0 rgb(255 255 255 / 8%),
+    0 3px 10px -3px rgb(0 0 0 / 90%);
+  animation: notch-emit 9s var(--ease-out) infinite;
+}
+
+.notch-alerts {
+  position: relative;
+  display: block;
+  flex: 1;
+  align-self: stretch;
+}
+
+.notch-alerts .pill {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  white-space: nowrap;
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  color: var(--color-fg);
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 30%),
+    0 6px 14px -6px rgb(0 0 0 / 85%);
+  opacity: 0;
+}
+
+.card-alerts .notch-alerts .pill:nth-child(1) {
+  animation: alert-drop 9s var(--ease-out) infinite;
+}
+
+.card-alerts .notch-alerts .pill:nth-child(2) {
+  animation: alert-drop 9s var(--ease-out) 3s infinite;
+}
+
+.card-alerts .notch-alerts .pill:nth-child(3) {
+  animation: alert-drop 9s var(--ease-out) 6s infinite;
+}
+
+@keyframes alert-drop {
+  0% {
+    transform: translate(-50%, -1.75rem) scale(0.8);
+    opacity: 0;
+  }
+  9% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+  24% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+  32% {
+    transform: translate(-50%, -1.25rem) scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -1.75rem) scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes notch-emit {
+  0%,
+  2% {
+    transform: scaleX(1);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 8%),
+      0 3px 10px -3px rgb(0 0 0 / 90%);
+  }
+  8%,
+  22% {
+    transform: scaleX(1.06);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 20%),
+      0 6px 16px -4px color-mix(in oklab, var(--color-accent) 40%, transparent);
+  }
+  36%,
+  100% {
+    transform: scaleX(1);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 8%),
+      0 3px 10px -3px rgb(0 0 0 / 90%);
+  }
+}
+
+.card-mixer {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-mixer .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-mixer .card-row {
+  margin-right: 0.375rem;
+}
+
+.card-mixer .bar {
+  height: 0.4375rem;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 55%), rgb(0 0 0 / 25%));
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 70%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-mixer .bar i {
+  position: relative;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-accent) 72%, white),
+    var(--color-accent)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 0 8px color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+.card-mixer .bar i::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 0.6875rem;
+  height: 0.6875rem;
+  transform: translate(50%, -50%);
+  border-radius: 9999px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-fg) 90%, transparent),
+    var(--color-muted)
+  );
+  box-shadow:
+    inset 0 -1px 1px rgb(0 0 0 / 35%),
+    0 1px 3px rgb(0 0 0 / 85%);
+}
+
+.card-mixer .card-row:nth-child(1) .bar i {
+  animation: mix-a 7s ease-in-out infinite;
+}
+
+.card-mixer .card-row:nth-child(2) .bar i {
+  animation: mix-b 9s ease-in-out infinite;
+}
+
+.card-mixer .card-row:nth-child(3) .bar i {
+  animation: mix-c 8s ease-in-out infinite;
+}
+
+@keyframes mix-a {
+  0%,
+  100% {
+    width: 35%;
+  }
+  22% {
+    width: 64%;
+  }
+  46% {
+    width: 26%;
+  }
+  72% {
+    width: 51%;
+  }
+}
+
+@keyframes mix-b {
+  0%,
+  100% {
+    width: 80%;
+  }
+  18% {
+    width: 54%;
+  }
+  44% {
+    width: 91%;
+  }
+  70% {
+    width: 66%;
+  }
+}
+
+@keyframes mix-c {
+  0%,
+  100% {
+    width: 55%;
+  }
+  26% {
+    width: 31%;
+  }
+  52% {
+    width: 74%;
+  }
+  80% {
+    width: 43%;
+  }
 }
 
 .card-label {
@@ -2474,6 +2749,166 @@ button.action {
   background: var(--color-accent);
 }
 
+@property --sample {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e08a6a;
+}
+
+.card-color {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%),
+    0 20px 44px -20px color-mix(in oklab, var(--sample) 30%, transparent);
+  animation: sample-cycle 9s ease-in-out infinite;
+}
+
+.card-color .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 30%), transparent);
+  box-shadow:
+    inset 0 2px 7px rgb(0 0 0 / 45%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-color .loupe {
+  border-color: var(--sample);
+  box-shadow:
+    inset 0 1px 2px rgb(255 255 255 / 25%),
+    0 0 14px -1px color-mix(in oklab, var(--sample) 70%, transparent),
+    0 4px 10px -4px rgb(0 0 0 / 80%);
+}
+
+.card-color .loupe::after {
+  background: var(--sample);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--sample) 80%, transparent);
+}
+
+.card-color .swatch {
+  position: relative;
+  border-color: color-mix(in oklab, var(--sample) 55%, transparent);
+  background: color-mix(in oklab, var(--sample) 14%, transparent);
+  color: var(--sample);
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 2px 6px -3px rgb(0 0 0 / 70%);
+}
+
+.swatch i {
+  font-style: normal;
+}
+
+.swatch i + i {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swatch i:nth-child(1) {
+  animation: swatch-1 9s ease-in-out infinite;
+}
+
+.swatch i:nth-child(2) {
+  animation: swatch-2 9s ease-in-out infinite;
+}
+
+.swatch i:nth-child(3) {
+  animation: swatch-3 9s ease-in-out infinite;
+}
+
+.swatch i:nth-child(4) {
+  animation: swatch-4 9s ease-in-out infinite;
+}
+
+@keyframes sample-cycle {
+  0%,
+  20% {
+    --sample: #e08a6a;
+  }
+  25%,
+  45% {
+    --sample: #6a8d9e;
+  }
+  50%,
+  70% {
+    --sample: #7a9e83;
+  }
+  75%,
+  95% {
+    --sample: #9e6a97;
+  }
+  100% {
+    --sample: #e08a6a;
+  }
+}
+
+@keyframes swatch-1 {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  25%,
+  95% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes swatch-2 {
+  0%,
+  20% {
+    opacity: 0;
+  }
+  25%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes swatch-3 {
+  0%,
+  45% {
+    opacity: 0;
+  }
+  50%,
+  70% {
+    opacity: 1;
+  }
+  75%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes swatch-4 {
+  0%,
+  70% {
+    opacity: 0;
+  }
+  75%,
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .win-ghost {
   height: 2.875rem;
   width: 4.5rem;
@@ -2492,6 +2927,121 @@ button.action {
 .win-ghost.front {
   transform: translate(-0.625rem, 0.375rem);
   box-shadow: var(--shadow-window);
+}
+
+.card-focus {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-focus .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 32%), transparent);
+  box-shadow:
+    inset 0 2px 7px rgb(0 0 0 / 45%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-focus .win-ghost {
+  display: flex;
+  align-items: center;
+  gap: 0.1875rem;
+  padding: 0.1875rem 0.3125rem;
+  background:
+    linear-gradient(
+      var(--color-surface-2) 12px,
+      color-mix(in oklab, var(--color-warm-10) 40%, transparent) 12px,
+      transparent 13px
+    ),
+    linear-gradient(to bottom, var(--color-surface-2), var(--color-surface));
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 30%);
+}
+
+.card-focus .win-ghost i {
+  display: block;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  flex-shrink: 0;
+  align-self: flex-start;
+  border-radius: 9999px;
+  box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 45%),
+    0 0 3px rgb(0 0 0 / 45%);
+}
+
+.card-focus .win-ghost i:nth-child(1) {
+  background: var(--color-window-close);
+}
+
+.card-focus .win-ghost i:nth-child(2) {
+  background: var(--color-window-minimize);
+}
+
+.card-focus .win-ghost i:nth-child(3) {
+  background: var(--color-window-expand);
+}
+
+.card-focus .win-ghost.back {
+  animation: focus-back 7s var(--ease-out) infinite;
+}
+
+.card-focus .win-ghost.front {
+  animation: focus-front 7s var(--ease-out) infinite;
+}
+
+@keyframes focus-back {
+  0%,
+  18% {
+    transform: translate(0.625rem, -0.375rem);
+    opacity: 0.35;
+  }
+  42%,
+  62% {
+    transform: translate(2.5625rem, 0);
+    opacity: 0.1;
+  }
+  86%,
+  100% {
+    transform: translate(0.625rem, -0.375rem);
+    opacity: 0.35;
+  }
+}
+
+@keyframes focus-front {
+  0%,
+  18% {
+    transform: translate(-0.625rem, 0.375rem) scale(1);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      inset 0 -1px 0 rgb(0 0 0 / 30%),
+      var(--shadow-window);
+  }
+  42%,
+  62% {
+    transform: translate(-2.5625rem, 0) scale(1.07);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      inset 0 -1px 0 rgb(0 0 0 / 30%),
+      0 16px 30px -8px rgb(0 0 0 / 90%);
+  }
+  86%,
+  100% {
+    transform: translate(-0.625rem, 0.375rem) scale(1);
+    box-shadow:
+      inset 0 1px 0 var(--color-warm-10),
+      inset 0 -1px 0 rgb(0 0 0 / 30%),
+      var(--shadow-window);
+  }
 }
 
 .notch {
@@ -2530,6 +3080,98 @@ button.action {
     var(--color-surface);
 }
 
+.card-notch {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-notch .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 32%), transparent);
+  box-shadow:
+    inset 0 2px 7px rgb(0 0 0 / 45%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-notch .notch {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(to bottom, #101013, #000);
+  box-shadow:
+    inset 0 -1px 0 rgb(255 255 255 / 8%),
+    0 3px 10px -3px rgb(0 0 0 / 90%);
+  animation: notch-hold 9s var(--ease-out) infinite;
+}
+
+.card-notch .file {
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 3px 7px -3px rgb(0 0 0 / 80%);
+  animation: file-park 9s var(--ease-out) infinite;
+}
+
+.card-notch .file:nth-child(2) {
+  animation-delay: 0.45s;
+}
+
+.card-notch .file:nth-child(3) {
+  animation-delay: 0.9s;
+}
+
+@keyframes file-park {
+  0%,
+  6% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  22%,
+  46% {
+    transform: translateY(-1.9rem) scale(0.5);
+    opacity: 0;
+  }
+  56% {
+    transform: translateY(-1.3rem) scale(0.8);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes notch-hold {
+  0%,
+  14% {
+    transform: scaleX(1);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 8%),
+      0 3px 10px -3px rgb(0 0 0 / 90%);
+  }
+  30%,
+  50% {
+    transform: scaleX(1.08);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 18%),
+      0 6px 16px -4px color-mix(in oklab, var(--color-accent) 45%, transparent);
+  }
+  68%,
+  100% {
+    transform: scaleX(1);
+    box-shadow:
+      inset 0 -1px 0 rgb(255 255 255 / 8%),
+      0 3px 10px -3px rgb(0 0 0 / 90%);
+  }
+}
+
 .clip-row {
   display: flex;
   min-width: 0;
@@ -2546,6 +3188,430 @@ button.action {
   flex-shrink: 0;
   border-radius: 9999px;
   background: var(--color-line-2);
+}
+
+.card-clocks {
+  --spread-a: 16%;
+  --spread-b: 84%;
+  --spread-ta: 50%;
+  --spread-tb: 50%;
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-clocks .card-art {
+  position: relative;
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 32%), transparent);
+  box-shadow:
+    inset 0 2px 7px rgb(0 0 0 / 45%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-clocks .pill {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface)
+  );
+  color: var(--color-fg);
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 30%),
+    0 3px 8px -3px rgb(0 0 0 / 75%);
+}
+
+.card-clocks .pill:nth-child(1) {
+  animation: clock-sf 12s var(--ease-out) infinite;
+}
+
+.card-clocks .pill:nth-child(2) {
+  animation: clock-ny 12s var(--ease-out) infinite;
+}
+
+.card-clocks .pill:nth-child(3) {
+  animation: clock-ldn 12s var(--ease-out) infinite;
+}
+
+@keyframes clock-sf {
+  0%,
+  22% {
+    left: var(--spread-a);
+    top: var(--spread-ta);
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  30%,
+  38% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 1;
+  }
+  46%,
+  70% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 0;
+  }
+  78%,
+  100% {
+    left: var(--spread-a);
+    top: var(--spread-ta);
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes clock-ny {
+  0%,
+  22% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  30%,
+  38% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 0;
+  }
+  46%,
+  54% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 1;
+  }
+  62%,
+  70% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 0;
+  }
+  78%,
+  100% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes clock-ldn {
+  0%,
+  22% {
+    left: var(--spread-b);
+    top: var(--spread-tb);
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  30%,
+  54% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 0;
+  }
+  62%,
+  70% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1.14);
+    opacity: 1;
+  }
+  78%,
+  100% {
+    left: var(--spread-b);
+    top: var(--spread-tb);
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.card-calendar {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-calendar .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 32%), transparent);
+  box-shadow:
+    inset 0 2px 7px rgb(0 0 0 / 45%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-calendar .card-row {
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  padding: 0.375rem 0.5rem;
+}
+
+.card-calendar .card-row:nth-child(1) {
+  animation: cal-row-a 8s var(--ease-out) infinite;
+}
+
+.card-calendar .card-row:nth-child(2) {
+  animation: cal-row-b 8s var(--ease-out) infinite;
+}
+
+.card-calendar .card-row:nth-child(1) .dot {
+  animation: cal-dot-a 8s var(--ease-out) infinite;
+}
+
+.card-calendar .card-row:nth-child(2) .dot {
+  animation: cal-dot-b 8s var(--ease-out) infinite;
+}
+
+.card-calendar .card-row .pill {
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 2px 5px -2px rgb(0 0 0 / 70%);
+}
+
+.card-calendar .card-row:nth-child(1) .pill {
+  animation: cal-join-a 8s var(--ease-out) infinite;
+}
+
+.card-calendar .card-row:nth-child(2) .pill {
+  animation: cal-join-b 8s var(--ease-out) infinite;
+}
+
+@keyframes cal-row-a {
+  0%,
+  38% {
+    border-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+  50%,
+  88% {
+    border-color: transparent;
+    background: transparent;
+  }
+  100% {
+    border-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+}
+
+@keyframes cal-row-b {
+  0%,
+  38% {
+    border-color: transparent;
+    background: transparent;
+  }
+  50%,
+  88% {
+    border-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+  100% {
+    border-color: transparent;
+    background: transparent;
+  }
+}
+
+@keyframes cal-dot-a {
+  0%,
+  38% {
+    box-shadow: 0 0 10px var(--color-accent);
+  }
+  50%,
+  88% {
+    box-shadow: none;
+  }
+  100% {
+    box-shadow: 0 0 10px var(--color-accent);
+  }
+}
+
+@keyframes cal-dot-b {
+  0%,
+  38% {
+    box-shadow: none;
+  }
+  50%,
+  88% {
+    box-shadow: 0 0 10px var(--color-sage);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@keyframes cal-join-a {
+  0%,
+  38% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50%,
+  88% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cal-join-b {
+  0%,
+  38% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  50%,
+  88% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+.card-clip {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-clip .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 32%), transparent);
+  box-shadow:
+    inset 0 2px 7px rgb(0 0 0 / 45%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-clip .clip-row {
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    0 3px 8px -4px rgb(0 0 0 / 70%);
+  animation: clip-paste 6s var(--ease-out) infinite;
+}
+
+.card-clip .key {
+  animation: key-press 6s var(--ease-out) infinite;
+}
+
+.card-clip .card-row {
+  animation: clip-enter 6s var(--ease-out) infinite;
+}
+
+.card-clip .card-row:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.card-clip .card-row:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+@keyframes key-press {
+  0%,
+  16% {
+    transform: translateY(0);
+    color: var(--color-fg);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 14%),
+      inset 0 -1px 0 rgb(0 0 0 / 35%),
+      0 2px 0 rgb(0 0 0 / 45%),
+      0 3px 6px -2px rgb(0 0 0 / 70%);
+  }
+  22%,
+  30% {
+    transform: translateY(2px);
+    color: var(--color-accent);
+    box-shadow:
+      inset 0 2px 5px rgb(0 0 0 / 55%),
+      inset 0 -1px 0 var(--color-warm-10),
+      0 0 12px -2px color-mix(in oklab, var(--color-accent) 55%, transparent);
+  }
+  40%,
+  100% {
+    transform: translateY(0);
+    color: var(--color-fg);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 14%),
+      inset 0 -1px 0 rgb(0 0 0 / 35%),
+      0 2px 0 rgb(0 0 0 / 45%),
+      0 3px 6px -2px rgb(0 0 0 / 70%);
+  }
+}
+
+@keyframes clip-paste {
+  0%,
+  20% {
+    border-color: var(--color-line-2);
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+  26%,
+  38% {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, transparent);
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+  52%,
+  100% {
+    border-color: var(--color-line-2);
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+}
+
+@keyframes clip-enter {
+  0%,
+  30% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  38% {
+    transform: translateY(-0.55rem);
+    opacity: 0;
+  }
+  52% {
+    transform: translateY(0.35rem);
+    opacity: 0;
+  }
+  66%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .mic {
@@ -2580,6 +3646,165 @@ button.action {
   background: var(--color-danger);
 }
 
+.card-mic {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-mic .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-mic .mic {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 28%),
+    inset 0 -1px 0 rgb(0 0 0 / 30%),
+    0 2px 5px -2px rgb(0 0 0 / 80%);
+  animation: mic-body 6s var(--ease-out) infinite;
+}
+
+.card-mic .mic::before {
+  animation: mic-arc 6s var(--ease-out) infinite;
+}
+
+.card-mic .mic::after {
+  box-shadow: 0 0 7px color-mix(in oklab, var(--color-danger) 70%, transparent);
+  animation: mic-slash 6s ease-in-out infinite;
+}
+
+.mic-state {
+  position: relative;
+}
+
+.mic-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+.mic-live {
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+}
+
+.card-mic .mic-muted {
+  animation: mic-label-off 6s var(--ease-out) infinite;
+}
+
+.card-mic .mic-live {
+  animation: mic-label-on 6s var(--ease-out) infinite;
+}
+
+@keyframes mic-slash {
+  0%,
+  14% {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  30%,
+  74% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  88%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+}
+
+@keyframes mic-body {
+  0%,
+  14% {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-sage) 70%, white),
+      var(--color-sage)
+    );
+  }
+  30%,
+  74% {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-subtle) 70%, white),
+      var(--color-subtle)
+    );
+  }
+  88%,
+  100% {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-sage) 70%, white),
+      var(--color-sage)
+    );
+  }
+}
+
+@keyframes mic-arc {
+  0%,
+  14% {
+    border-color: var(--color-sage);
+  }
+  30%,
+  74% {
+    border-color: var(--color-subtle);
+  }
+  88%,
+  100% {
+    border-color: var(--color-sage);
+  }
+}
+
+@keyframes mic-label-off {
+  0%,
+  14% {
+    opacity: 0;
+  }
+  30%,
+  74% {
+    opacity: 1;
+  }
+  88%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes mic-label-on {
+  0%,
+  14% {
+    opacity: 1;
+  }
+  30%,
+  74% {
+    opacity: 0;
+  }
+  88%,
+  100% {
+    opacity: 1;
+  }
+}
+
 .lock {
   position: relative;
   margin-top: 0.5625rem;
@@ -2603,6 +3828,107 @@ button.action {
   border-bottom: 0;
 }
 
+.card-local {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-local .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-local .lock {
+  animation: lock-body 6s var(--ease-out) infinite;
+}
+
+.card-local .lock::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 55%);
+  box-shadow: 0 3px 0 -0.5px rgb(0 0 0 / 55%);
+}
+
+.card-local .lock::before {
+  transform-origin: 100% 100%;
+  animation: lock-shackle 6s var(--ease-out) infinite;
+}
+
+@keyframes lock-shackle {
+  0%,
+  18% {
+    transform: translateY(-4px) rotate(24deg);
+    border-color: var(--color-subtle);
+  }
+  36%,
+  78% {
+    transform: translateY(0) rotate(0deg);
+    border-color: var(--color-muted);
+  }
+  94%,
+  100% {
+    transform: translateY(-4px) rotate(24deg);
+    border-color: var(--color-subtle);
+  }
+}
+
+@keyframes lock-body {
+  0%,
+  18% {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-subtle) 70%, white),
+      var(--color-subtle)
+    );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 30%),
+      inset 0 -2px 0 rgb(0 0 0 / 30%),
+      0 3px 6px -2px rgb(0 0 0 / 80%);
+  }
+  36%,
+  78% {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-accent) 70%, white),
+      var(--color-accent)
+    );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 30%),
+      inset 0 -2px 0 rgb(0 0 0 / 30%),
+      0 3px 6px -2px rgb(0 0 0 / 80%),
+      0 0 14px -1px color-mix(in oklab, var(--color-accent) 65%, transparent);
+  }
+  94%,
+  100% {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-subtle) 70%, white),
+      var(--color-subtle)
+    );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 30%),
+      inset 0 -2px 0 rgb(0 0 0 / 30%),
+      0 3px 6px -2px rgb(0 0 0 / 80%);
+  }
+}
+
 .stat-strip {
   display: flex;
   flex: 1;
@@ -2617,6 +3943,118 @@ button.action {
   font-size: 11px;
   color: var(--color-fg);
   font-variant-numeric: tabular-nums;
+}
+
+@property --cpu-i {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 3;
+}
+
+@property --mem-a {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 6;
+}
+
+@property --mem-b {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 2;
+}
+
+.card-stats {
+  border-color: var(--color-line-2);
+  background: linear-gradient(
+    to bottom,
+    var(--color-surface-2),
+    var(--color-surface) 60%
+  );
+  box-shadow:
+    inset 0 1px 0 var(--color-warm-10),
+    inset 0 -1px 0 rgb(0 0 0 / 28%),
+    0 14px 30px -16px rgb(0 0 0 / 80%);
+}
+
+.card-stats .card-art {
+  border-color: var(--color-line-2);
+  background: linear-gradient(to bottom, rgb(0 0 0 / 34%), transparent);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.card-stats .stat-strip {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 60%), rgb(0 0 0 / 30%));
+  box-shadow:
+    inset 0 2px 5px rgb(0 0 0 / 70%),
+    inset 0 -1px 0 var(--color-warm-10);
+}
+
+.stat-cpu {
+  --cpu-i: 3;
+  counter-reset: cpu var(--cpu-i);
+  animation: stat-cpu 8s ease-in-out infinite;
+}
+
+.stat-cpu::after {
+  content: "CPU " counter(cpu) "%";
+  text-shadow: 0 0 8px currentColor;
+}
+
+.stat-mem {
+  --mem-a: 6;
+  --mem-b: 2;
+  counter-reset: mema var(--mem-a) memb var(--mem-b);
+  animation: stat-mem 8s ease-in-out infinite;
+}
+
+.stat-mem::after {
+  content: counter(mema) "." counter(memb) " GB";
+}
+
+@keyframes stat-cpu {
+  0%,
+  100% {
+    --cpu-i: 3;
+    color: var(--color-sage);
+  }
+  22% {
+    --cpu-i: 11;
+    color: var(--color-sage);
+  }
+  46% {
+    --cpu-i: 38;
+    color: var(--color-accent);
+  }
+  58% {
+    --cpu-i: 57;
+    color: var(--color-danger);
+  }
+  78% {
+    --cpu-i: 14;
+    color: var(--color-accent);
+  }
+}
+
+@keyframes stat-mem {
+  0%,
+  100% {
+    --mem-a: 6;
+    --mem-b: 2;
+  }
+  25% {
+    --mem-a: 6;
+    --mem-b: 9;
+  }
+  50% {
+    --mem-a: 7;
+    --mem-b: 6;
+  }
+  75% {
+    --mem-a: 6;
+    --mem-b: 8;
+  }
 }
 
 .quit {
@@ -2677,24 +4115,6 @@ button.action {
   background: rgb(255 255 255 / 12%);
   font-size: 10px;
   color: var(--color-fg);
-}
-
-.centered {
-  border-top: 1px solid var(--color-line);
-  padding-block: 6rem;
-  text-align: center;
-}
-
-.centered h2 {
-  margin-inline: auto;
-  margin-top: 1rem;
-  max-width: 47.5rem;
-}
-
-.centered p.lede {
-  margin-inline: auto;
-  margin-top: 1.5rem;
-  max-width: 38.75rem;
 }
 
 .faq {
@@ -3105,6 +4525,15 @@ button.action {
 
   .feature-cell:nth-last-child(-n + 3) {
     border-bottom: 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 960px) {
+  .card-clocks {
+    --spread-a: 50%;
+    --spread-b: 50%;
+    --spread-ta: 18%;
+    --spread-tb: 82%;
   }
 }
 

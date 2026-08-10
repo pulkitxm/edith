@@ -889,23 +889,25 @@
           <h2>Everything else you'd otherwise install one by one.</h2>
         </div>
         <div class="cards" data-reveal-group>
-          <div class="card">
+          <div class="card card-color">
             <div class="card-art">
               <span class="loupe"></span>
-              <span class="pill mono is-accent">#F5A623</span>
+              <span class="pill mono is-accent swatch">
+                <i>#E08A6A</i><i>#6A8D9E</i><i>#7A9E83</i><i>#9E6A97</i>
+              </span>
             </div>
             <h4>Color picker</h4>
             <p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p>
           </div>
-          <div class="card">
+          <div class="card card-focus">
             <div class="card-art">
-              <span class="win-ghost back"></span>
-              <span class="win-ghost front"></span>
+              <span class="win-ghost back"><i></i><i></i><i></i></span>
+              <span class="win-ghost front"><i></i><i></i><i></i></span>
             </div>
             <h4>Focus dim</h4>
             <p>Dims everything behind your active app so one window is all you see.</p>
           </div>
-          <div class="card">
+          <div class="card card-notch">
             <div class="card-art stack">
               <span class="notch"></span>
               <span class="file-row">
@@ -915,7 +917,7 @@
             <h4>Notch shelf</h4>
             <p>Park files under the notch mid-drag, then drop them wherever they belong.</p>
           </div>
-          <div class="card">
+          <div class="card card-clip">
             <div class="card-art stack">
               <span class="clip-row">
                 <span class="ghost-line" style="width: 60%"></span>
@@ -927,7 +929,7 @@
             <h4>Clipboard history</h4>
             <p>Everything you copied, one shortcut away, with instant paste.</p>
           </div>
-          <div class="card">
+          <div class="card card-calendar">
             <div class="card-art stack">
               <span class="card-row">
                 <i class="dot accent"></i>
@@ -936,13 +938,14 @@
               </span>
               <span class="card-row">
                 <i class="dot sage"></i>
-                <span class="card-label">1:30 Design review</span>
+                <span class="card-label">1:30 Design</span>
+                <span class="pill is-accent">Join</span>
               </span>
             </div>
             <h4>Calendar</h4>
             <p>Today's schedule in the panel and the app, with one-tap join links.</p>
           </div>
-          <div class="card">
+          <div class="card card-clocks">
             <div class="card-art">
               <span class="pill mono">SF 11:59</span>
               <span class="pill mono">NY 2:29</span>
@@ -951,7 +954,7 @@
             <h4>World clocks</h4>
             <p>Local time plus the offices you care about, at a glance.</p>
           </div>
-          <div class="card">
+          <div class="card card-shortcut">
             <div class="card-art">
               <span class="key lg">⌥</span>
               <span class="key lg">⌘</span>
@@ -962,7 +965,7 @@
               Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.
             </p>
           </div>
-          <div class="card">
+          <div class="card card-local">
             <div class="card-art">
               <span class="lock"></span>
               <span class="card-label">Stays on this Mac</span>
@@ -970,10 +973,13 @@
             <h4>Local first</h4>
             <p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p>
           </div>
-          <div class="card">
+          <div class="card card-mic">
             <div class="card-art">
               <span class="mic"></span>
-              <span class="pill"><i class="dot danger"></i>All mics muted</span>
+              <span class="pill mic-state">
+                <span class="mic-lbl mic-muted"><i class="dot danger"></i>All mics muted</span>
+                <span class="mic-lbl mic-live"><i class="dot sage"></i>Mic live</span>
+              </span>
             </div>
             <h4>Mic mute</h4>
             <p>
@@ -981,30 +987,32 @@
               safe.
             </p>
           </div>
-          <div class="card">
+          <div class="card card-mixer">
             <div class="card-art stack">
               <span class="card-row">
                 <span class="card-label fixed">Safari</span>
-                <span class="bar"><i style="width: 35%"></i></span>
+                <span class="bar"><i></i></span>
               </span>
               <span class="card-row">
                 <span class="card-label fixed">Music</span>
-                <span class="bar"><i style="width: 80%"></i></span>
+                <span class="bar"><i></i></span>
               </span>
               <span class="card-row">
                 <span class="card-label fixed">Zoom</span>
-                <span class="bar"><i style="width: 55%"></i></span>
+                <span class="bar"><i></i></span>
               </span>
             </div>
             <h4>Audio mixer</h4>
             <p>Per-app volume from the panel. Quiet the browser, keep the music.</p>
           </div>
-          <div class="card">
+          <div class="card card-alerts">
             <div class="card-art stack">
               <span class="notch"></span>
-              <span class="pill" style="align-self: center"
-                ><i class="dot sage"></i>AirPods connected</span
-              >
+              <span class="notch-alerts">
+                <span class="pill"><i class="dot sage"></i>AirPods connected</span>
+                <span class="pill"><i class="dot accent"></i>Charger connected</span>
+                <span class="pill"><i class="dot sage"></i>Output: Studio Display</span>
+              </span>
             </div>
             <h4>Notch alerts</h4>
             <p>
@@ -1012,9 +1020,13 @@
               notch.
             </p>
           </div>
-          <div class="card">
+          <div class="card card-stats">
             <div class="card-art">
-              <span class="stat-strip">CPU 3% · 6.2 GB<span class="subtle">Wed 14:22</span></span>
+              <span class="stat-strip">
+                <span class="stat-cpu"></span>
+                <span class="stat-mem"></span>
+                <span class="subtle">Wed 14:22</span>
+              </span>
             </div>
             <h4>CPU &amp; memory readout</h4>
             <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
@@ -1161,13 +1173,65 @@
         </div>
       </section>
 
-      <section class="wrap centered" data-reveal-group>
-        <p class="eyebrow">Local first</p>
-        <h2>Your usage never leaves your Mac.</h2>
-        <p class="lede">
-          No account. No telemetry. Optional iCloud backup merges cleanly across machines so your
-          history follows you between a MacBook and a Mac mini.
+      <section id="download" class="wrap download" data-reveal-group>
+        <p class="eyebrow">Choose your platform</p>
+        <h2>Native where you work.</h2>
+        <p class="download-lede">
+          One release, two native builds. Pick the complete Mac experience or help shape the
+          Ubuntu preview as its integrations come online.
         </p>
+        <div class="download-grid">
+          <article class="download-card">
+            <div class="download-platform">
+              <span class="download-platform-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"
+                  />
+                </svg>
+              </span>
+              <span>
+                <strong>macOS</strong>
+                <small>Complete experience</small>
+              </span>
+            </div>
+            <p>
+              Every Edith extension, menu bar companion, and native system integration.
+            </p>
+            <a
+              class="btn btn-accent"
+              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
+            >
+              Download Edith.dmg
+            </a>
+            <span class="fineprint">macOS 14+ · Apple Silicon</span>
+          </article>
+          <article class="download-card download-card-linux">
+            <div class="download-platform">
+              <span class="download-platform-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M17.61.455a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zM12.92.8C8.923.777 5.137 2.941 3.148 6.451a4.5 4.5 0 0 1 .26-.007 4.92 4.92 0 0 1 2.585.737A8.316 8.316 0 0 1 12.688 3.6 4.944 4.944 0 0 1 13.723.834 11.008 11.008 0 0 0 12.92.8zm9.226 4.994a4.915 4.915 0 0 1-1.918 2.246 8.36 8.36 0 0 1-.273 8.303 4.89 4.89 0 0 1 1.632 2.54 11.156 11.156 0 0 0 .559-13.089zM3.41 7.932A3.41 3.41 0 0 0 0 11.342a3.41 3.41 0 0 0 3.41 3.409 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zm2.027 7.866a4.908 4.908 0 0 1-2.915.358 11.1 11.1 0 0 0 7.991 6.698 11.234 11.234 0 0 0 2.422.249 4.879 4.879 0 0 1-.999-2.85 8.484 8.484 0 0 1-.836-.136 8.304 8.304 0 0 1-5.663-4.32zm11.405.928a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41z"
+                  />
+                </svg>
+              </span>
+              <span>
+                <strong>Ubuntu</strong>
+                <small>Native preview</small>
+              </span>
+            </div>
+            <p>
+              A lean GTK 4 shell with the shared core, extension model, and Debian packaging.
+            </p>
+            <a
+              class="btn btn-solid"
+              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
+            >
+              Download Edith.deb
+            </a>
+            <span class="fineprint">Ubuntu 24.04 LTS · amd64</span>
+          </article>
+        </div>
       </section>
 
       <section id="faq" class="wrap faq">
@@ -1245,66 +1309,6 @@
         </div>
       </section>
 
-      <section id="download" class="wrap download" data-reveal-group>
-        <p class="eyebrow">Choose your platform</p>
-        <h2>Native where you work.</h2>
-        <p class="download-lede">
-          One release, two native builds. Pick the complete Mac experience or help shape the
-          Ubuntu preview as its integrations come online.
-        </p>
-        <div class="download-grid">
-          <article class="download-card">
-            <div class="download-platform">
-              <span class="download-platform-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"
-                  />
-                </svg>
-              </span>
-              <span>
-                <strong>macOS</strong>
-                <small>Complete experience</small>
-              </span>
-            </div>
-            <p>
-              Every Edith extension, menu bar companion, and native system integration.
-            </p>
-            <a
-              class="btn btn-accent"
-              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
-            >
-              Download Edith.dmg
-            </a>
-            <span class="fineprint">macOS 14+ · Apple Silicon</span>
-          </article>
-          <article class="download-card download-card-linux">
-            <div class="download-platform">
-              <span class="download-platform-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M17.61.455a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zM12.92.8C8.923.777 5.137 2.941 3.148 6.451a4.5 4.5 0 0 1 .26-.007 4.92 4.92 0 0 1 2.585.737A8.316 8.316 0 0 1 12.688 3.6 4.944 4.944 0 0 1 13.723.834 11.008 11.008 0 0 0 12.92.8zm9.226 4.994a4.915 4.915 0 0 1-1.918 2.246 8.36 8.36 0 0 1-.273 8.303 4.89 4.89 0 0 1 1.632 2.54 11.156 11.156 0 0 0 .559-13.089zM3.41 7.932A3.41 3.41 0 0 0 0 11.342a3.41 3.41 0 0 0 3.41 3.409 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zm2.027 7.866a4.908 4.908 0 0 1-2.915.358 11.1 11.1 0 0 0 7.991 6.698 11.234 11.234 0 0 0 2.422.249 4.879 4.879 0 0 1-.999-2.85 8.484 8.484 0 0 1-.836-.136 8.304 8.304 0 0 1-5.663-4.32zm11.405.928a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41z"
-                  />
-                </svg>
-              </span>
-              <span>
-                <strong>Ubuntu</strong>
-                <small>Native preview</small>
-              </span>
-            </div>
-            <p>
-              A lean GTK 4 shell with the shared core, extension model, and Debian packaging.
-            </p>
-            <a
-              class="btn btn-solid"
-              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
-            >
-              Download Edith.deb
-            </a>
-            <span class="fineprint">Ubuntu 24.04 LTS · amd64</span>
-          </article>
-        </div>
-      </section>
     </main>
 
     <footer class="site-footer">
