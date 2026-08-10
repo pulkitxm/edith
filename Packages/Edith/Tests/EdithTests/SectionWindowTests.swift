@@ -12,14 +12,14 @@ import Testing
         #expect(!SectionWindowCommand.shouldDetach([]))
         #expect(!SectionWindowCommand.shouldDetach(.option))
     }
-
+    
     @Test func filesIsNotATabBecauseItOpensItsOwnWindow() {
         #expect(!MachineTab.allCases.map(\.rawValue).contains("files"))
         #expect(
             MachineTab.tabs(isLocal: true, hasDocker: true) == [.overview, .processes, .terminal])
         #expect(MachineTab.tabs(isLocal: false, hasDocker: true).contains(.docker))
     }
-
+    
     @Test func machinesWithoutDockerInstalledHideTheDockerTab() {
         #expect(!MachineTab.tabs(isLocal: false, hasDocker: false).contains(.docker))
         #expect(MachineTab.tabs(isLocal: false, hasDocker: false).contains(.overview))
@@ -29,7 +29,7 @@ import Testing
         #expect(DockerAvailability(status: .unknown).isInstalled)
         #expect(DockerAvailability(status: .permissionDenied).isInstalled)
     }
-
+    
     @Test func everyVisibleSectionExceptAboutCanDetach() {
         let visible: [MainDestination] = [.home, .dashboard, .machines]
         let detachable = SectionWindowCommand.detachableDestinations(visibleHomeItems: visible)
@@ -38,7 +38,7 @@ import Testing
         #expect(detachable.contains(.settings))
         #expect(!detachable.contains(.about))
     }
-
+    
     @Test func detachableListFollowsEnabledExtensions() {
         let detachable = SectionWindowCommand.detachableDestinations(visibleHomeItems: [.home])
         #expect(!detachable.contains(.music))
@@ -54,29 +54,29 @@ import Testing
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "\t", keyCode: 48, modifiers: [.control, .shift], tabbed: true)
-                == .previousTab)
+            == .previousTab)
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "\t", keyCode: 48, modifiers: .control, tabbed: false) == nil)
     }
-
+    
     @Test func commandNumberSelectsTabByIndex() {
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "1", keyCode: 18, modifiers: .command, tabbed: true)
-                == .selectTab(index: 0))
+            == .selectTab(index: 0))
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "9", keyCode: 25, modifiers: .command, tabbed: true)
-                == .selectTab(index: 8))
+            == .selectTab(index: 8))
     }
-
+    
     @Test func commandNumberIsLeftToTheSidebarWhenNotTabbed() {
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "1", keyCode: 18, modifiers: .command, tabbed: false) == nil)
     }
-
+    
     @Test func ignoresOutOfRangeAndExtraModifiers() {
         #expect(
             WindowTabKeyCommand.resolve(
@@ -84,17 +84,17 @@ import Testing
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "1", keyCode: 18, modifiers: [.command, .option], tabbed: true)
-                == nil)
+            == nil)
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "a", keyCode: 0, modifiers: .command, tabbed: true) == nil)
     }
-
+    
     @Test func controlTabIsNotConfusedWithCommandTab() {
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "\t", keyCode: 48, modifiers: [.control, .command], tabbed: true)
-                == nil)
+            == nil)
     }
 }
 
@@ -107,58 +107,58 @@ import Testing
             windowNumber: 0, context: nil, characters: characters,
             charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode)!
     }
-
+    
     @Test func returnRenamesAndCommandReturnOpens() {
         #expect(FinderKey.resolve(event: event(keyCode: 36)) == .rename)
         #expect(
             FinderKey.resolve(event: event(keyCode: 36, modifiers: .command)) == .openSelection)
     }
-
+    
     @Test func arrowsMoveAndExtendSelection() {
         #expect(FinderKey.resolve(event: event(keyCode: 125)) == .move(.down, extend: false))
         #expect(
             FinderKey.resolve(event: event(keyCode: 125, modifiers: .shift))
-                == .move(.down, extend: true))
+            == .move(.down, extend: true))
         #expect(
             FinderKey.resolve(event: event(keyCode: 126, modifiers: .command))
-                == .enclosingFolder)
+            == .enclosingFolder)
     }
-
+    
     @Test func spaceIsQuickLookAndEscapeCancels() {
         #expect(FinderKey.resolve(event: event(keyCode: 49)) == .quickLook)
         #expect(FinderKey.resolve(event: event(keyCode: 53)) == .cancel)
     }
-
+    
     @Test func deleteNeedsCommandAndOptionMeansImmediate() {
         #expect(FinderKey.resolve(event: event(keyCode: 51)) == nil)
         #expect(FinderKey.resolve(event: event(keyCode: 51, modifiers: .command)) == .trash)
         #expect(
             FinderKey.resolve(event: event(keyCode: 51, modifiers: [.command, .option]))
-                == .deleteImmediately)
+            == .deleteImmediately)
     }
-
+    
     @Test func commandLettersMapToActions() {
         #expect(
             FinderKey.resolve(event: event(keyCode: 8, characters: "c", modifiers: .command))
-                == .copy)
+            == .copy)
         #expect(
             FinderKey.resolve(
                 event: event(keyCode: 8, characters: "c", modifiers: [.command, .option]))
-                == .copyPath)
+            == .copyPath)
         #expect(
             FinderKey.resolve(
                 event: event(keyCode: 45, characters: "n", modifiers: [.command, .shift]))
-                == .newFolder)
+            == .newFolder)
         #expect(
             FinderKey.resolve(event: event(keyCode: 18, characters: "1", modifiers: .command))
-                == .iconView)
+            == .iconView)
     }
-
+    
     @Test func plainLettersTypeSelect() {
         #expect(FinderKey.resolve(event: event(keyCode: 0, characters: "a")) == .type("a"))
         #expect(
             FinderKey.resolve(event: event(keyCode: 0, characters: "a", modifiers: .option))
-                == nil)
+            == nil)
     }
 }
 
@@ -173,20 +173,20 @@ import Testing
         ]
         return model
     }
-
+    
     @Test func previewFollowsANewSelectionWhileItIsOpen() {
         let model = finder()
         model.selection = ["/d/a.txt"]
         model.toggleQuickLook()
         #expect(model.quickLookPath == "/d/a.txt")
-
+        
         model.selection = ["/d/b.txt"]
         #expect(model.quickLookPath == "/d/b.txt")
-
+        
         model.moveSelection(by: 1, extend: false)
         #expect(model.quickLookPath == "/d/c.txt")
     }
-
+    
     @Test func selectionChangesDoNotOpenAClosedPreview() {
         let model = finder()
         model.selection = ["/d/a.txt"]
@@ -194,7 +194,7 @@ import Testing
         model.selection = ["/d/b.txt"]
         #expect(model.quickLookPath == nil)
     }
-
+    
     @Test func previewOpensOnTheSelectedFileAndClosesAgain() {
         let model = finder()
         model.selection = ["/d/c.txt"]
@@ -213,9 +213,9 @@ import Testing
         #expect(
             WorkspaceKeyCommand.resolve(
                 characters: nil, keyCode: 123, modifiers: [.command, .option])
-                == .previousPaneTab)
+            == .previousPaneTab)
     }
-
+    
     @Test func commandControlArrowsMovePaneFocus() {
         #expect(
             WorkspaceKeyCommand.resolve(
@@ -224,7 +224,7 @@ import Testing
             WorkspaceKeyCommand.resolve(
                 characters: nil, keyCode: 123, modifiers: [.command, .control]) == .previousPane)
     }
-
+    
     @Test func commandShiftBracketsWalkTerminalTabs() {
         #expect(
             WorkspaceKeyCommand.resolve(
@@ -232,9 +232,9 @@ import Testing
         #expect(
             WorkspaceKeyCommand.resolve(
                 characters: "[", keyCode: 33, modifiers: [.command, .shift])
-                == .previousTerminalTab)
+            == .previousTerminalTab)
     }
-
+    
     @Test func plainArrowsAndSingleModifiersAreLeftAlone() {
         #expect(WorkspaceKeyCommand.resolve(characters: nil, keyCode: 124, modifiers: []) == nil)
         #expect(
@@ -261,20 +261,20 @@ import Testing
         layout = model.layout
         return model
     }
-
+    
     @Test func tabCyclingWrapsAroundThePane() {
         let model = model()
         guard let pane = model.layout.root.panes.first else { return }
         let order = pane.tabs.map(\.id)
         #expect(order.count == 3)
         #expect(model.layout.root.panes.first?.selected == order[2])
-
+        
         #expect(model.cycleTab(backwards: false))
         #expect(model.layout.root.panes.first?.selected == order[0])
         #expect(model.cycleTab(backwards: true))
         #expect(model.layout.root.panes.first?.selected == order[2])
     }
-
+    
     @Test func paneFocusMovesBetweenSplits() {
         let model = model()
         guard let pane = model.layout.root.panes.first else { return }
@@ -282,14 +282,14 @@ import Testing
         model.apply { $0.split(paneID: pane.id, side: .right, target: target) }
         let panes = model.layout.root.panes
         #expect(panes.count == 2)
-
+        
         model.apply { $0.focused = panes[0].id }
         #expect(model.cyclePane(backwards: false))
         #expect(model.layout.focused == panes[1].id)
         #expect(model.cyclePane(backwards: false))
         #expect(model.layout.focused == panes[0].id)
     }
-
+    
     @Test func aSinglePaneWithOneTabHasNothingToCycle() {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-workspace-\(UUID().uuidString).json")
@@ -306,15 +306,15 @@ import Testing
         #expect(withCaps.chordOnly == .command)
         #expect(withCaps.chordOnly != withCaps)
     }
-
+    
     @Test func arrowKeyFunctionFlagsAreIgnored() {
         let arrow: NSEvent.ModifierFlags = [.command, .option, .function, .numericPad]
         #expect(arrow.chordOnly == [.command, .option])
         #expect(
             WorkspaceKeyCommand.resolve(characters: nil, keyCode: 124, modifiers: arrow)
-                == .nextPaneTab)
+            == .nextPaneTab)
     }
-
+    
     @Test func terminalTabsMatchByKeyCodeBecauseShiftRewritesTheCharacter() {
         #expect(
             WorkspaceKeyCommand.resolve(
@@ -322,14 +322,14 @@ import Testing
         #expect(
             WorkspaceKeyCommand.resolve(
                 characters: "{", keyCode: 33, modifiers: [.command, .shift])
-                == .previousTerminalTab)
+            == .previousTerminalTab)
     }
-
+    
     @Test func windowTabShortcutsSurviveCapsLock() {
         #expect(
             WindowTabKeyCommand.resolve(
                 characters: "2", keyCode: 19, modifiers: [.command, .capsLock], tabbed: true)
-                == .selectTab(index: 1))
+            == .selectTab(index: 1))
     }
 }
 
@@ -338,17 +338,17 @@ import Testing
         DockerLogLine(id: 0, timestamp: "2026-08-07T10:00:00Z", text: "starting", isStderr: false),
         DockerLogLine(id: 1, timestamp: "2026-08-07T10:00:01Z", text: "boom", isStderr: true),
     ]
-
+    
     @Test func plainTextCarriesEveryVisibleLineForCopying() {
         let model = DockerDetailModel()
         model.logs = lines
         model.showTimestamps = false
         #expect(model.logPlainText == "starting\nboom")
-
+        
         model.showTimestamps = true
         #expect(model.logPlainText.contains("2026-08-07T10:00:00Z  starting"))
     }
-
+    
     @Test func theFilterNarrowsWhatIsCopiedAsWellAsWhatIsShown() {
         let model = DockerDetailModel()
         model.logs = lines
@@ -357,7 +357,7 @@ import Testing
         #expect(model.visibleLogs.count == 1)
         #expect(model.logPlainText == "boom")
     }
-
+    
     @Test func theLogDocumentChangesWhenAnyPresentationOptionChanges() {
         let base = LogDocument(lines: lines, showTimestamps: false, wraps: true, fontSize: 11)
         #expect(
@@ -376,17 +376,17 @@ import Testing
             windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
             isARepeat: false, keyCode: keyCode)!
     }
-
+    
     @Test func horizontalArrowsMoveAndCommandArrowsNavigate() {
         #expect(FinderKey.resolve(event: event(keyCode: 123)) == .move(.left, extend: false))
         #expect(FinderKey.resolve(event: event(keyCode: 124)) == .move(.right, extend: false))
         #expect(
             FinderKey.resolve(event: event(keyCode: 123, modifiers: .shift))
-                == .move(.left, extend: true))
+            == .move(.left, extend: true))
         #expect(FinderKey.resolve(event: event(keyCode: 123, modifiers: .command)) == .back)
         #expect(FinderKey.resolve(event: event(keyCode: 124, modifiers: .command)) == .forward)
     }
-
+    
     @Test func duplicateUndoAndInvertHaveShortcuts() {
         func key(_ character: String, _ modifiers: NSEvent.ModifierFlags) -> FinderKey? {
             FinderKey.resolve(
@@ -407,7 +407,7 @@ import Testing
     private func line(_ id: Int, _ text: String) -> DockerLogLine {
         DockerLogLine(id: id, timestamp: "t\(id)", text: text, isStderr: false)
     }
-
+    
     private func controller(_ lines: [DockerLogLine], font: Double = 11) -> LogTextViewController {
         let controller = LogTextViewController()
         controller.loadView()
@@ -416,14 +416,14 @@ import Testing
             palette: palette, follow: false)
         return controller
     }
-
+    
     private let palette = LogPalette(
         text: .white, stderr: .red, timestamp: .gray, background: .black)
-
+    
     @Test func appendingLinesKeepsWhatWasAlreadyRendered() {
         let controller = controller([line(0, "alpha"), line(1, "beta")])
         #expect(controller.renderedText == "alpha\nbeta\n")
-
+        
         controller.apply(
             LogDocument(
                 lines: [line(0, "alpha"), line(1, "beta"), line(2, "gamma")],
@@ -431,7 +431,7 @@ import Testing
             palette: palette, follow: false)
         #expect(controller.renderedText == "alpha\nbeta\ngamma\n")
     }
-
+    
     @Test func trimmingTheFrontDropsExactlyTheOldestLines() {
         let controller = controller([line(0, "one"), line(1, "two"), line(2, "three")])
         controller.apply(
@@ -441,7 +441,7 @@ import Testing
             palette: palette, follow: false)
         #expect(controller.renderedText == "two\nthree\nfour\n")
     }
-
+    
     @Test func aChangedFilterRebuildsRatherThanAppending() {
         let controller = controller([line(0, "alpha"), line(1, "beta"), line(2, "gamma")])
         controller.apply(
@@ -449,7 +449,7 @@ import Testing
             palette: palette, follow: false)
         #expect(controller.renderedText == "beta\n")
     }
-
+    
     @Test func changingPresentationRebuildsWithTheNewFormatting() {
         let controller = controller([line(0, "alpha")])
         #expect(controller.renderedText == "alpha\n")
@@ -458,7 +458,7 @@ import Testing
             palette: palette, follow: false)
         #expect(controller.renderedText == "t0  alpha\n")
     }
-
+    
     @Test func clearingEverythingEmptiesTheView() {
         let controller = controller([line(0, "alpha"), line(1, "beta")])
         controller.apply(

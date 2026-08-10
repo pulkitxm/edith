@@ -12,7 +12,7 @@ import Testing
             #expect(CommandCrawler.name(of: type(of: parsed)) == action.name)
         }
     }
-
+    
     @Test func theActionListNamesEveryActionTheCommandGroupHas() async {
         let result = await CLIProbe.run(["app", "actions", "--json"])
         #expect(result.code == 0)
@@ -23,7 +23,7 @@ import Testing
             #expect(row["available"] as? Bool == false)
         }
     }
-
+    
     @Test func anActionThatNeedsTheMenuBarSaysSoWhenItIsClosed() async {
         for name in ["clean-keys", "test-notification", "open"] {
             let result = await CLIProbe.run(["app", name])
@@ -32,7 +32,7 @@ import Testing
             #expect(result.stdout.isEmpty)
         }
     }
-
+    
     @Test func anActionThatNeedsTheMainWindowSaysSoWhenItIsClosed() async {
         for name in ["quit", "check-updates"] {
             let result = await CLIProbe.run(["app", name])
@@ -40,7 +40,7 @@ import Testing
             #expect(result.stderr.contains("main window"))
         }
     }
-
+    
     @Test func eachActionPostsItsOwnNotificationAndNoOther() async throws {
         let expected: [String: Notification.Name] = [
             "clean-keys": IPC.Name.requestKeyboardClean,
@@ -56,7 +56,7 @@ import Testing
             }
         }
     }
-
+    
     @Test func quitAsksTheMainAppRatherThanTheMenuBar() async throws {
         try await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
@@ -66,7 +66,7 @@ import Testing
             #expect(result.object?["action"] as? String == "quit")
         }
     }
-
+    
     @Test func anUpdateCheckWaitsForTheAppToFinishAndReportsTheOutcome() async throws {
         try await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
@@ -79,7 +79,7 @@ import Testing
             #expect(world.postedNames() == [IPC.Name.requestUpdateCheck.rawValue])
         }
     }
-
+    
     @Test func anUpdateCheckThatGoesQuietIsDiagnosedRatherThanCallingItDone() async throws {
         try await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
@@ -90,7 +90,7 @@ import Testing
             #expect(result.stderr.contains("did not answer"))
         }
     }
-
+    
     @Test func noWaitReturnsWithoutClaimingTheCheckFinished() async throws {
         try await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
@@ -100,13 +100,13 @@ import Testing
             #expect(result.object?["finished"] as? Bool == false)
         }
     }
-
+    
     @Test func theUpdateLogIsReadWithoutTheAppRunning() async {
         let result = await CLIProbe.run(["app", "updates", "--json"])
         #expect(result.code == 0)
         #expect(result.array != nil)
     }
-
+    
     @Test func anUnknownActionIsNotFound() {
         #expect(throws: CLIFailure.self) { try AppActions.named("self-destruct") }
     }
@@ -129,13 +129,13 @@ import Testing
         }
         try ClipboardRepository.saveEntries(entries)
     }
-
+    
     @Test func anEmptyHistoryIsUnavailableRatherThanACrash() async {
         let result = await CLIProbe.run(["clipboard", "get", "1"])
         #expect(result.code == ExitCodes.unavailable)
         #expect(result.stderr.contains("empty"))
     }
-
+    
     @Test func listingIsPinnedThenNewestFirstAndNumberedFromOne() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -150,7 +150,7 @@ import Testing
                 ])
         }
     }
-
+    
     @Test func theCLIAndThePanelNumberTheSameEntries() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -160,7 +160,7 @@ import Testing
             #expect(rows.map { $0["id"] as? String } == panel.map(\.id))
         }
     }
-
+    
     @Test func gettingAnEntryPrintsItsTextAndNothingElse() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 2)
@@ -169,7 +169,7 @@ import Testing
             #expect(result.stdout == "entry number 1\n")
         }
     }
-
+    
     @Test func statsCountEveryEntryAndWhatItWeighs() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -185,7 +185,7 @@ import Testing
             #expect(kinds.first?["count"] as? Int == 3)
         }
     }
-
+    
     @Test func statsOnAnEmptyHistoryReportZeroRatherThanFailing() async {
         let result = await CLIProbe.run(["clipboard", "stats", "--json"])
         #expect(result.code == 0)
@@ -193,7 +193,7 @@ import Testing
         #expect(result.object?["sizeBytes"] as? Int == 0)
         #expect(result.object?["oldest"] as? String == nil)
     }
-
+    
     @Test func pinningKeepsAnEntryAndMovesItToTheTop() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -207,7 +207,7 @@ import Testing
             #expect(world.postedNames().contains(IPC.Name.clipboardChanged.rawValue))
         }
     }
-
+    
     @Test func pinningSomethingAlreadyPinnedSaysSoAndStillSucceeds() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -217,7 +217,7 @@ import Testing
             #expect(result.stderr.contains("already pinned"))
         }
     }
-
+    
     @Test func unpinningLetsAnEntryAgeOutAgain() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -226,7 +226,7 @@ import Testing
             #expect(ClipboardRepository.loadEntries().allSatisfy { !$0.pinned })
         }
     }
-
+    
     @Test func searchingMatchesThePreviewAndTheSourceApp() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -234,15 +234,15 @@ import Testing
             let rows = hit.array as? [[String: Any]] ?? []
             #expect(rows.count == 1)
             #expect(rows.first?["preview"] as? String == "entry number 2")
-
+            
             let byApp = await CLIProbe.capture(["clipboard", "ls", "--search", "tester", "--json"])
             #expect((byApp.array as? [Any])?.count == 3)
-
+            
             let miss = await CLIProbe.capture(["clipboard", "ls", "--search", "nope", "--json"])
             #expect((miss.array as? [Any])?.isEmpty == true)
         }
     }
-
+    
     @Test func copyingAnEntryBumpsItToTheTopTheWayClickingItDoes() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -257,10 +257,10 @@ import Testing
             #expect((after?.lastCopiedAt ?? .distantPast) > (before?.lastCopiedAt ?? .distantPast))
             #expect(
                 ClipboardActions.arrange(ClipboardRepository.loadEntries()).first?.preview
-                    == "entry number 0")
+                == "entry number 0")
         }
     }
-
+    
     @Test func aStaleSnapshotCannotClobberAnEntryWrittenAfterIt() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 2)
@@ -281,7 +281,7 @@ import Testing
             #expect(!previews.contains("entry number 1"))
         }
     }
-
+    
     @Test func anIndexOutsideTheHistoryIsNotFound() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 2)
@@ -292,7 +292,7 @@ import Testing
             }
         }
     }
-
+    
     @Test func removingAnEntryLeavesTheRest() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -303,7 +303,7 @@ import Testing
             #expect(world.postedNames().contains(IPC.Name.clipboardChanged.rawValue))
         }
     }
-
+    
     @Test func clearingCanKeepThePinnedOnes() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -317,7 +317,7 @@ import Testing
             #expect(rows.first?["pinned"] as? Bool == true)
         }
     }
-
+    
     @Test func clearingWithoutKeepingAnythingEmptiesIt() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
@@ -326,7 +326,7 @@ import Testing
             #expect(result.object?["remaining"] as? Int == 0)
         }
     }
-
+    
     @Test func aPreviewWithNewlinesNeverBreaksTheTable() async throws {
         try await CLIProbe.inWorld { world in
             let data = Data("first line\nsecond line".utf8)
@@ -354,13 +354,13 @@ import Testing
         guard let data = try? JSONEncoder().encode(swatches) else { return }
         world.shared.set(data, forKey: "colorPickerHistory")
     }
-
+    
     @Test func anEmptyHistoryListsNothingRatherThanFailing() async {
         let result = await CLIProbe.run(["color", "ls", "--json"])
         #expect(result.code == 0)
         #expect((result.array as? [Any])?.isEmpty == true)
     }
-
+    
     @Test func everySwatchCarriesEveryFormat() async throws {
         try await CLIProbe.inWorld { world in
             Self.seed(world, count: 2)
@@ -373,7 +373,7 @@ import Testing
             }
         }
     }
-
+    
     @Test func oneFormatPrintsOneColumnOfValues() async throws {
         try await CLIProbe.inWorld { world in
             Self.seed(world, count: 2)
@@ -383,13 +383,13 @@ import Testing
             #expect(result.stdoutLines.allSatisfy { $0.hasPrefix("#") })
         }
     }
-
+    
     @Test func anUnknownFormatIsNotFoundAndListsTheRealOnes() async {
         let result = await CLIProbe.run(["color", "ls", "--format", "cmyk"])
         #expect(result.code == ExitCodes.notFound)
         #expect(result.stderr.contains("formats:"))
     }
-
+    
     @Test func clearingForgetsEverySwatch() async throws {
         try await CLIProbe.inWorld { world in
             Self.seed(world, count: 4)
@@ -398,7 +398,7 @@ import Testing
             #expect(ColorHistoryStore.load(from: world.shared).isEmpty)
         }
     }
-
+    
     @Test func colourIsSpeltBothWays() throws {
         for name in ["color", "colour"] {
             let parsed = try EdRoot.parseAsRoot([name, "ls"])
@@ -422,13 +422,13 @@ import Testing
         }
         ShelfIndex.save(items)
     }
-
+    
     @Test func anEmptyShelfListsNothingRatherThanFailing() async {
         let result = await CLIProbe.run(["shelf", "ls", "--json"])
         #expect(result.code == 0)
         #expect((result.array as? [Any])?.isEmpty == true)
     }
-
+    
     @Test func itemsAreNewestFirstAndCarryTheirPath() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["one.txt", "two.txt"])
@@ -440,7 +440,7 @@ import Testing
             #expect((rows.first?["path"] as? String)?.hasSuffix("two.txt") == true)
         }
     }
-
+    
     @Test func addingAFileCopiesItOntoTheShelf() async throws {
         try await CLIProbe.inWorld { world in
             let source = world.sandbox.appendingPathComponent("source.txt")
@@ -451,7 +451,7 @@ import Testing
             #expect(FileManager.default.fileExists(atPath: source.path))
         }
     }
-
+    
     @Test func addingTheSameNameTwiceNeverOverwrites() async throws {
         try await CLIProbe.inWorld { world in
             let source = world.sandbox.appendingPathComponent("dupe.txt")
@@ -463,12 +463,12 @@ import Testing
             #expect(Set(names).count == 2)
         }
     }
-
+    
     @Test func addingAMissingFileIsNotFound() async {
         let result = await CLIProbe.run(["shelf", "add", "/nowhere/at/all.txt"])
         #expect(result.code == ExitCodes.notFound)
     }
-
+    
     @Test func removingTakesTheFileWithIt() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["one.txt", "two.txt"])
@@ -478,7 +478,7 @@ import Testing
             #expect(!FileManager.default.fileExists(atPath: gone.path))
         }
     }
-
+    
     @Test func clearingEmptiesTheWholeShelf() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["a", "b", "c"])
@@ -487,7 +487,7 @@ import Testing
             #expect(ShelfIndex.load().isEmpty)
         }
     }
-
+    
     @Test func anIndexOutsideTheShelfIsNotFound() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["a"])
@@ -504,13 +504,13 @@ import Testing
         let rows = result.array as? [[String: Any]] ?? []
         #expect(rows.compactMap { $0["category"] as? String } == JunkCatalog.entries.map(\.id))
     }
-
+    
     @Test func anUnknownCategoryIsNotFoundAndListsTheRealOnes() async {
         let result = await CLIProbe.run(["cleaner", "scan", "--category", "bitcoin"])
         #expect(result.code == ExitCodes.notFound)
         #expect(result.stderr.contains("categories:"))
     }
-
+    
     @Test func scanningAHomeWithNoCachesFindsNothing() async throws {
         try await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture(["cleaner", "scan", "--json"])
@@ -519,7 +519,7 @@ import Testing
             #expect((result.object?["categories"] as? [Any])?.isEmpty == true)
         }
     }
-
+    
     @Test func scanningFindsWhatIsThereAndSizesIt() async throws {
         try await CLIProbe.inWorld { world in
             let cache = world.sandbox.appendingPathComponent("Library/Caches/Homebrew/downloads")
@@ -537,7 +537,7 @@ import Testing
             #expect(categories.first?["category"] as? String == "homebrew")
         }
     }
-
+    
     @Test func cleaningRefusesToTouchAnythingWithoutYes() async throws {
         try await CLIProbe.inWorld { world in
             let cache = world.sandbox.appendingPathComponent("Library/Caches/Homebrew/downloads")
@@ -555,7 +555,7 @@ import Testing
             #expect(FileManager.default.fileExists(atPath: file.path))
         }
     }
-
+    
     @Test func theDriveListNamesTheBootVolume() async {
         let result = await CLIProbe.run(["cleaner", "drives", "--json"])
         #expect(result.code == 0)
@@ -572,12 +572,12 @@ import Testing
             #expect(command.contains("prune"))
         }
     }
-
+    
     @Test func pruningVolumesIsNeverFoldedIntoSystem() {
         #expect(DockerCommands.prune("system") != DockerCommands.prune("volumes"))
         #expect(DockerCommands.prune("volumes").contains("volume prune"))
     }
-
+    
     @Test func anUnknownPruneTargetIsNotFoundBeforeAnySSH() async {
         let result = await CLIProbe.run([
             "machines", "docker", "prune", "nowhere-at-all", "everything",
@@ -585,7 +585,7 @@ import Testing
         #expect(result.code == ExitCodes.notFound)
         #expect(result.stderr.contains("try:"))
     }
-
+    
     @Test func everyComposeVerbBuildsACommandScopedToItsProject() {
         for action in ["up -d", "down", "restart", "pull"] {
             let command = DockerCommands.composeAction(
@@ -595,7 +595,7 @@ import Testing
             #expect(command.hasSuffix(action))
         }
     }
-
+    
     @Test func composeVerbsAreReachableAsSubcommands() throws {
         for name in ["up", "down", "restart", "pull", "logs"] {
             let parsed = try EdRoot.parseAsRoot([
@@ -608,12 +608,12 @@ import Testing
         let bare = try EdRoot.parseAsRoot(["machines", "docker", "compose", "m"])
         #expect(CommandCrawler.name(of: type(of: bare)) == "ls")
     }
-
+    
     @Test func theMachineMayComeFirstForComposeToo() {
         #expect(
             ArgumentRewriting.rewrite(
                 ["machines", "tuf", "docker", "compose", "up", "web"], machines: ["tuf"])
-                == ["machines", "docker", "compose", "up", "tuf", "web"])
+            == ["machines", "docker", "compose", "up", "tuf", "web"])
     }
 }
 
@@ -629,7 +629,7 @@ import Testing
             #expect(result.stderr.contains("open Edith"))
         }
     }
-
+    
     @Test func undoReportsWhenNoWindowHasAnythingToUndo() async throws {
         try await CLIProbe.inWorld { world in
             MachineRegistry.add(Machine(name: "Builder", host: "10.0.0.9"))
@@ -640,7 +640,7 @@ import Testing
             #expect(result.stderr.contains("anything to undo"))
         }
     }
-
+    
     @Test func undoReportsWhatItUndid() async throws {
         try await CLIProbe.inWorld { world in
             MachineRegistry.add(Machine(name: "Builder", host: "10.0.0.9"))
@@ -654,7 +654,7 @@ import Testing
             #expect(result.object?["what"] as? String == "Undo Move")
         }
     }
-
+    
     @Test func aMachineThatDoesNotExistIsNotFoundBeforeTheAppIsAsked() async throws {
         try await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
@@ -681,7 +681,7 @@ import Testing
         }
         try ClipboardRepository.saveEntries(entries)
     }
-
+    
     @Test func theNumberAFilteredListPrintsIsTheNumberGetTakes() async throws {
         try await CLIProbe.inWorld { _ in
             try seed(6)
@@ -692,7 +692,7 @@ import Testing
             #expect(!rows.isEmpty)
             for row in rows {
                 guard let index = row["index"] as? Int,
-                    let preview = row["preview"] as? String
+                      let preview = row["preview"] as? String
                 else { continue }
                 let fetched = await CLIProbe.capture(["clipboard", "get", String(index)])
                 #expect(
@@ -701,7 +701,7 @@ import Testing
             }
         }
     }
-
+    
     @Test func theNumberAPinnedListPrintsIsTheNumberUnpinTakes() async throws {
         try await CLIProbe.inWorld { _ in
             try seed(6)
@@ -718,7 +718,7 @@ import Testing
             #expect(ClipboardRepository.loadEntries().allSatisfy { !$0.pinned })
         }
     }
-
+    
     @Test func filteringNeverRenumbersWhatIsLeft() async throws {
         try await CLIProbe.inWorld { _ in
             try seed(6)
@@ -743,7 +743,7 @@ import Testing
             }
         }
     }
-
+    
     @Test func aValueOutsideWhatAnOptionAcceptsIsAUsageError() async {
         for arguments in [
             ["clipboard", "ls", "--limit=-1"], ["color", "ls", "--limit=-1"],
@@ -754,13 +754,13 @@ import Testing
             #expect(result.stdout.isEmpty)
         }
     }
-
+    
     @Test func zeroMeansEverythingForColoursJustAsItDoesForTheClipboard() async {
         let result = await CLIProbe.run(["color", "ls", "--limit", "0", "--json"])
         #expect(result.code == 0)
         #expect(result.array != nil)
     }
-
+    
     @Test func aMistypedConfigSubcommandIsNotAnEmptyListing() async {
         for typo in ["lst", "exprot", "describ"] {
             let result = await CLIProbe.run(["config", typo])
@@ -774,13 +774,13 @@ import Testing
     @Test func aTrailingSlashMeansPutItInThatDirectory() {
         #expect(RemoteDestination.joined("/tmp/uploads", "clip.mov") == "/tmp/uploads/clip.mov")
     }
-
+    
     @Test func aNameWithSpacesSurvivesBeingJoined() {
         #expect(
             RemoteDestination.joined("/home/pulkit/Desktop/uploads", "Screen Recording 1.mov")
-                == "/home/pulkit/Desktop/uploads/Screen Recording 1.mov")
+            == "/home/pulkit/Desktop/uploads/Screen Recording 1.mov")
     }
-
+    
     @Test func aBareSlashStillProducesAnAbsolutePath() {
         #expect(RemoteDestination.joined("", "clip.mov") == "/clip.mov")
     }

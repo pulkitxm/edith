@@ -3,23 +3,25 @@ import EdithKit
 import SwiftUI
 
 struct DownloadSheet: View {
-    @ObservedObject private var downloader = YoutubeDownloader.shared
+    @State private var downloader = YoutubeDownloader.shared
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
     @Environment(\.colorScheme) private var scheme
     @State private var urlText = ""
     @State private var filenamePrefix = ""
     @State private var logItem: YoutubeDownloader.DownloadItem?
     @State private var confirmClearHistory = false
-    @AppStorage("musicDownloadKind", store: SharedDefaults.store) private var downloadKindRaw =
-        DownloadKind.audio.rawValue
+    @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
+    var downloadKindRaw =
+    DownloadKind.audio.rawValue
     @State private var estimate: DownloadEstimate?
     @State private var estimating = false
-
+    
     private var downloadKind: DownloadKind {
         DownloadKind(rawValue: downloadKindRaw) ?? .audio
     }
-
+    
     private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
     private var parsedCount: Int {
@@ -29,7 +31,7 @@ struct DownloadSheet: View {
     private var canStart: Bool {
         parsedCount > 0
     }
-
+    
     private var activeItems: [YoutubeDownloader.DownloadItem] {
         downloader.items.filter {
             switch $0.status {
@@ -77,7 +79,7 @@ struct DownloadSheet: View {
         if errors > 0 { parts.append("\(errors) failed") }
         return parts.joined(separator: " · ")
     }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             header
@@ -91,7 +93,7 @@ struct DownloadSheet: View {
         .frame(width: UIScale.pt(560), height: UIScale.pt(580))
         .background(DashSkin.paper(dark))
     }
-
+    
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
             Text("Download YouTube Audio")
@@ -141,7 +143,7 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
     }
-
+    
     private func unavailableView(_ reason: String) -> some View {
         VStack(spacing: UIScale.pt(14)) {
             Spacer()
@@ -157,7 +159,7 @@ struct DownloadSheet: View {
         }
         .padding(.horizontal, UIScale.pt(40))
     }
-
+    
     @ViewBuilder
     private var content: some View {
         if downloader.items.isEmpty {
@@ -197,7 +199,7 @@ struct DownloadSheet: View {
             }
         }
     }
-
+    
     private var urlInput: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             label("VIDEO URLS")
@@ -226,7 +228,7 @@ struct DownloadSheet: View {
                         urlText.isEmpty ? DashSkin.line(dark) : DashSkin.lineStrong(dark),
                         lineWidth: UIScale.pt(1))
             )
-
+            
             HStack(spacing: UIScale.pt(10)) {
                 if parsedCount > 0 {
                     HStack(spacing: UIScale.pt(4)) {
@@ -255,7 +257,7 @@ struct DownloadSheet: View {
             .frame(height: UIScale.pt(16))
         }
     }
-
+    
     private var formatRow: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             label("FORMAT")
@@ -280,7 +282,7 @@ struct DownloadSheet: View {
         }
         .task(id: urlText) { await refreshEstimate() }
     }
-
+    
     private func sizeChip(_ kind: DownloadKind) -> some View {
         let selected = kind == downloadKind
         return HStack(spacing: UIScale.pt(4)) {
@@ -294,13 +296,13 @@ struct DownloadSheet: View {
             selected ? theme.opacity(0.12) : Color.clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
     }
-
+    
     private func sizeText(_ kind: DownloadKind) -> String {
         guard let bytes = estimate?.bytes(for: kind) else { return estimating ? "…" : "—" }
         let formatted = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
         return (estimate?.approximate == true ? "~" : "") + formatted
     }
-
+    
     private func refreshEstimate() async {
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty, downloader.unavailableReason == nil else {
@@ -318,7 +320,7 @@ struct DownloadSheet: View {
         }
         estimate = total
     }
-
+    
     private var optionsRow: some View {
         HStack(spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -339,7 +341,7 @@ struct DownloadSheet: View {
             }
         }
     }
-
+    
     private var startRow: some View {
         HStack {
             Spacer()
@@ -360,7 +362,7 @@ struct DownloadSheet: View {
             .pointerCursor()
         }
     }
-
+    
     private var urlBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             EdithTextField(placeholder: "Add more YouTube URLs...", text: $urlText)
@@ -378,7 +380,7 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(8))
     }
-
+    
     private var progressHeader: some View {
         VStack(spacing: UIScale.pt(6)) {
             HStack {
@@ -409,7 +411,7 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(10))
     }
-
+    
     private var activeQueue: some View {
         ScrollView {
             LazyVStack(spacing: UIScale.pt(4)) {
@@ -422,7 +424,7 @@ struct DownloadSheet: View {
         }
         .scrollIndicators(.hidden)
     }
-
+    
     private var historyHeader: some View {
         HStack {
             Text("HISTORY")
@@ -449,7 +451,7 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(8))
     }
-
+    
     private var historyList: some View {
         ScrollView {
             LazyVStack(spacing: UIScale.pt(2)) {
@@ -462,7 +464,7 @@ struct DownloadSheet: View {
         }
         .scrollIndicators(.hidden)
     }
-
+    
     private var emptyState: some View {
         VStack(spacing: UIScale.pt(6)) {
             Spacer()
@@ -475,7 +477,7 @@ struct DownloadSheet: View {
             Spacer()
         }
     }
-
+    
     private func queueCard(_ item: YoutubeDownloader.DownloadItem) -> some View {
         let isActive: Bool
         let tint: Color
@@ -486,7 +488,7 @@ struct DownloadSheet: View {
         case .interrupted: isActive = false; tint = .orange
         default: isActive = false; tint = DashSkin.inkFaint(dark)
         }
-
+        
         return HStack(spacing: UIScale.pt(10)) {
             Group {
                 switch item.status {
@@ -518,9 +520,9 @@ struct DownloadSheet: View {
                 }
             }
             .frame(width: UIScale.pt(20))
-
+            
             DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
-
+            
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(item.resolvedTitle ?? displayURL(item.url))
                     .font(.system(size: UIScale.pt(12)))
@@ -529,7 +531,7 @@ struct DownloadSheet: View {
                     )
                     .lineLimit(1)
                     .truncationMode(.middle)
-
+                
                 switch item.status {
                 case .queued:
                     EmptyView()
@@ -565,9 +567,9 @@ struct DownloadSheet: View {
                     EmptyView()
                 }
             }
-
+            
             Spacer(minLength: 4)
-
+            
             switch item.status {
             case .error, .interrupted:
                 Button("Retry") {
@@ -586,14 +588,14 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(10))
         .background(
             isActive
-                ? DashSkin.paper2(dark) : Color.clear,
+            ? DashSkin.paper2(dark) : Color.clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(9))
         )
         .overlay(
             isActive
-                ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
-                    theme.opacity(0.3), lineWidth: UIScale.pt(1))
-                : nil
+            ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
+                theme.opacity(0.3), lineWidth: UIScale.pt(1))
+            : nil
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -603,7 +605,7 @@ struct DownloadSheet: View {
             }
         }
     }
-
+    
     private func historyRow(_ item: YoutubeDownloader.DownloadItem) -> some View {
         HStack(spacing: UIScale.pt(10)) {
             Group {
@@ -625,16 +627,16 @@ struct DownloadSheet: View {
                 }
             }
             .frame(width: UIScale.pt(18))
-
+            
             DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(30))
-
+            
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(item.resolvedTitle ?? displayURL(item.url))
                     .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .truncationMode(.middle)
-
+                
                 switch item.status {
                 case .done:
                     Text(displayURL(item.url))
@@ -654,9 +656,9 @@ struct DownloadSheet: View {
                     EmptyView()
                 }
             }
-
+            
             Spacer(minLength: 4)
-
+            
             switch item.status {
             case .error, .interrupted:
                 Button("Retry") {
@@ -675,7 +677,7 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(8))
         .background(Color.clear, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
     }
-
+    
     private func logSheet(_ item: YoutubeDownloader.DownloadItem) -> some View {
         let live = downloader.items.first(where: { $0.id == item.id }) ?? item
         return VStack(spacing: UIScale.pt(0)) {
@@ -698,9 +700,9 @@ struct DownloadSheet: View {
             }
             .padding(.horizontal, UIScale.pt(20))
             .padding(.vertical, UIScale.pt(12))
-
+            
             Divider().overlay(DashSkin.line(dark))
-
+            
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(live.logs.isEmpty ? "Waiting for output…" : live.logs)
@@ -719,7 +721,7 @@ struct DownloadSheet: View {
         .frame(width: UIScale.pt(480), height: UIScale.pt(360))
         .background(DashSkin.paper(dark))
     }
-
+    
     private var controlsRow: some View {
         HStack(spacing: UIScale.pt(8)) {
             if !downloader.items.isEmpty {
@@ -763,14 +765,14 @@ struct DownloadSheet: View {
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(10))
     }
-
+    
     private func label(_ text: String) -> some View {
         Text(text)
             .font(.system(size: UIScale.pt(10), weight: .semibold))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .tracking(UIScale.pt(0.6))
     }
-
+    
     private func statusBadge(_ text: String, color: Color) -> some View {
         Text(text)
             .font(.system(size: UIScale.pt(9.5), weight: .medium))
@@ -779,26 +781,26 @@ struct DownloadSheet: View {
             .padding(.vertical, UIScale.pt(1))
             .background(color.opacity(0.12), in: Capsule())
     }
-
+    
     private func displayURL(_ url: URL) -> String {
         let id: String
         if url.host?.contains("youtu.be") == true {
             id = url.lastPathComponent
         } else {
             id =
-                URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
         }
         return "youtube.com/watch?v=\(id.prefix(11))"
     }
-
+    
     private func startDownload() {
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
         downloader.enqueue(urls: urls, prefix: filenamePrefix, kind: downloadKind)
         urlText = ""
     }
-
+    
     private func addMore() {
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty else { return }
@@ -811,7 +813,7 @@ private struct DownloadThumb: View {
     let url: URL
     let dark: Bool
     var height: CGFloat = 32
-
+    
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(5)).fill(DashSkin.paper2(dark))
@@ -828,7 +830,7 @@ private struct DownloadThumb: View {
         .frame(width: height * 16 / 9, height: height)
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(5)))
     }
-
+    
     private var placeholder: some View {
         Image(systemName: "play.rectangle.fill")
             .font(.system(size: height * 0.4))

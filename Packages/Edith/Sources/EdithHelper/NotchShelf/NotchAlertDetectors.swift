@@ -16,19 +16,19 @@ final class NotchAlertDetectors {
     private var lastCapacity: Int?
     private var warmingUp = true
     private var bluetoothPreferenceWasEnabled = false
-
+    
     init(post: @escaping (NotchAlert) -> Void) {
         self.post = post
     }
-
+    
     private func enabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
     }
-
+    
     private var bluetoothEnabled: Bool {
-        SharedDefaults.store.object(forKey: "notchAlertBluetooth") as? Bool == true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Notch.alertBluetooth) as? Bool == true
     }
-
+    
     func start() {
         lastOutputDevice = Self.defaultOutputDevice()
         let snapshot = Self.readPower()
@@ -44,7 +44,7 @@ final class NotchAlertDetectors {
             self?.warmingUp = false
         }
     }
-
+    
     func stop() {
         if let audioListener {
             var address = AudioObjectPropertyAddress(
@@ -63,7 +63,7 @@ final class NotchAlertDetectors {
         bluetoothWatcher?.stop()
         bluetoothWatcher = nil
     }
-
+    
     private func startBluetooth() {
         guard bluetoothEnabled, bluetoothWatcher == nil else { return }
         let watcher = BluetoothWatcher { [weak self] name, connected in
@@ -79,7 +79,7 @@ final class NotchAlertDetectors {
         watcher.start()
         bluetoothWatcher = watcher
     }
-
+    
     func syncBluetooth() {
         let isEnabled = bluetoothEnabled
         let wasEnabled = bluetoothPreferenceWasEnabled
@@ -94,7 +94,7 @@ final class NotchAlertDetectors {
             bluetoothWatcher = nil
         }
     }
-
+    
     private func startAudio() {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -107,19 +107,19 @@ final class NotchAlertDetectors {
         AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
     }
-
+    
     private func audioChanged() {
         let device = Self.defaultOutputDevice()
         guard device != lastOutputDevice, device != 0 else { return }
         lastOutputDevice = device
-        guard !warmingUp, enabled("notchAlertAudio") else { return }
+        guard !warmingUp, enabled(AppStorageKeys.Notch.alertAudio) else { return }
         post(
             NotchAlert(
                 id: "audio.output", icon: "hifispeaker.fill", tint: "#4db3e6",
                 title: Self.deviceName(device), subtitle: "Audio output", priority: .low,
                 autoHide: 2.5))
     }
-
+    
     private func startPower() {
         let context = Unmanaged.passUnretained(self).toOpaque()
         guard
@@ -134,7 +134,7 @@ final class NotchAlertDetectors {
         powerSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
     }
-
+    
     private func powerChanged() {
         let now = Self.readPower()
         defer {
@@ -145,11 +145,13 @@ final class NotchAlertDetectors {
         let alerts = NotchAlertLogic.powerAlerts(
             now: now, lastOnAC: lastOnAC, lastCapacity: lastCapacity)
         for alert in alerts {
-            let flag = alert.id == "battery.low" ? "notchAlertBattery" : "notchAlertPower"
+            let flag =
+            alert.id == "battery.low"
+            ? AppStorageKeys.Notch.alertBattery : AppStorageKeys.Notch.alertPower
             if enabled(flag) { post(alert) }
         }
     }
-
+    
     private static func defaultOutputDevice() -> AudioDeviceID {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -161,7 +163,7 @@ final class NotchAlertDetectors {
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
         return device
     }
-
+    
     private static func deviceName(_ device: AudioDeviceID) -> String {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioObjectPropertyName,
@@ -173,10 +175,10 @@ final class NotchAlertDetectors {
         guard status == noErr, let value = name?.takeRetainedValue() else { return "Output device" }
         return value as String
     }
-
+    
     private static func readPower() -> PowerSnapshot {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-            let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
+              let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
         else { return PowerSnapshot() }
         for source in sources {
             guard
@@ -197,11 +199,11 @@ final class BluetoothWatcher: NSObject {
     private let changed: @MainActor (String, Bool) -> Void
     private var connectNotification: IOBluetoothUserNotification?
     private var disconnectNotifications: [String: IOBluetoothUserNotification] = [:]
-
+    
     init(changed: @escaping @MainActor (String, Bool) -> Void) {
         self.changed = changed
     }
-
+    
     func start() {
         connectNotification = IOBluetoothDevice.register(
             forConnectNotifications: self, selector: #selector(deviceConnected(_:device:)))
@@ -210,20 +212,20 @@ final class BluetoothWatcher: NSObject {
             watchDisconnect(device)
         }
     }
-
+    
     func stop() {
         connectNotification?.unregister()
         connectNotification = nil
         for notification in disconnectNotifications.values { notification.unregister() }
         disconnectNotifications.removeAll()
     }
-
+    
     private func watchDisconnect(_ device: IOBluetoothDevice) {
         guard let key = device.addressString, disconnectNotifications[key] == nil else { return }
         disconnectNotifications[key] = device.register(
             forDisconnectNotification: self, selector: #selector(deviceDisconnected(_:device:)))
     }
-
+    
     @objc private func deviceConnected(
         _ notification: IOBluetoothUserNotification, device: IOBluetoothDevice
     ) {
@@ -231,13 +233,13 @@ final class BluetoothWatcher: NSObject {
         watchDisconnect(device)
         Task { @MainActor in self.changed(name, true) }
     }
-
+    
     @objc private func deviceDisconnected(
         _ notification: IOBluetoothUserNotification, device: IOBluetoothDevice
     ) {
         let name = device.name ?? "Bluetooth device"
         if let key = device.addressString,
-            let note = disconnectNotifications.removeValue(forKey: key)
+           let note = disconnectNotifications.removeValue(forKey: key)
         {
             note.unregister()
         }

@@ -1,16 +1,18 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class WorkspaceModel: ObservableObject {
+@Observable
+final class WorkspaceModel {
     static let shared = WorkspaceModel(machines: .shared)
 
-    @Published var layout: WorkspaceLayout
-    @Published var store: WorkspaceStore
-
+    var layout: WorkspaceLayout
+    var store: WorkspaceStore
+    
     private let file: URL
-
+    
     init(machines: MachinesModel, file: URL = MachinePaths.workspacesFile) {
         self.file = file
         let loaded = WorkspaceModel.load(file)
@@ -19,7 +21,7 @@ final class WorkspaceModel: ObservableObject {
         store = loaded ?? WorkspaceStore(layouts: [fallback], currentID: fallback.id)
         layout = loaded?.current ?? fallback
     }
-
+    
     func persist() {
         store.upsert(layout)
         guard let data = try? JSONEncoder().encode(store) else { return }
@@ -27,21 +29,21 @@ final class WorkspaceModel: ObservableObject {
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
     }
-
+    
     private static func load(_ file: URL) -> WorkspaceStore? {
         guard let data = try? Data(contentsOf: file) else { return nil }
         return try? JSONDecoder().decode(WorkspaceStore.self, from: data)
     }
-
+    
     func apply(_ change: (inout WorkspaceLayout) -> Void) {
         change(&layout)
         persist()
     }
-
+    
     func applyWithoutPersisting(_ change: (inout WorkspaceLayout) -> Void) {
         change(&layout)
     }
-
+    
     func use(_ preset: WorkspaceLayout) {
         let live = Set(preset.root.panes.flatMap { $0.tabs.map(\.id) })
         layout = preset
@@ -50,7 +52,7 @@ final class WorkspaceModel: ObservableObject {
         persist()
         PaneViewStore.shared.releaseAll(except: live)
     }
-
+    
     func retargetPane(_ paneID: UUID, tabID: UUID, to target: PaneTarget) {
         apply { layout in
             layout.root.updatePane(paneID) { pane in
@@ -59,7 +61,7 @@ final class WorkspaceModel: ObservableObject {
             }
         }
     }
-
+    
     func addTab(to paneID: UUID, target: PaneTarget) {
         apply { layout in
             layout.root.updatePane(paneID) { pane in
@@ -69,12 +71,12 @@ final class WorkspaceModel: ObservableObject {
             }
         }
     }
-
+    
     @discardableResult
     func cycleTab(backwards: Bool) -> Bool {
         guard let pane = layout.root.pane(layout.focused) ?? layout.root.panes.first,
-            pane.tabs.count > 1,
-            let index = pane.tabs.firstIndex(where: { $0.id == pane.selected })
+              pane.tabs.count > 1,
+              let index = pane.tabs.firstIndex(where: { $0.id == pane.selected })
         else { return false }
         let count = pane.tabs.count
         let next = backwards ? (index - 1 + count) % count : (index + 1) % count
@@ -85,21 +87,21 @@ final class WorkspaceModel: ObservableObject {
         }
         return true
     }
-
+    
     @discardableResult
     func cyclePane(backwards: Bool) -> Bool {
         let panes = layout.root.panes
         guard panes.count > 1 else { return false }
         let current = panes.firstIndex { $0.id == layout.focused } ?? 0
         let next =
-            backwards
-            ? (current - 1 + panes.count) % panes.count
-            : (current + 1) % panes.count
+        backwards
+        ? (current - 1 + panes.count) % panes.count
+        : (current + 1) % panes.count
         let target = panes[next].id
         apply { $0.focused = target }
         return true
     }
-
+    
     @discardableResult
     func closeFocusedTab() -> Bool {
         guard let pane = layout.root.pane(layout.focused) ?? layout.root.panes.first else {
@@ -117,7 +119,7 @@ final class WorkspaceModel: ObservableObject {
         for id in orphans { PaneViewStore.shared.release(tabID: id) }
         return true
     }
-
+    
     func closeTab(_ tabID: UUID, in paneID: UUID) {
         var shouldClosePane = false
         apply { layout in
@@ -135,16 +137,16 @@ final class WorkspaceModel: ObservableObject {
 }
 
 struct WorkspaceView: View {
-    @ObservedObject var machines: MachinesModel
-    @ObservedObject private var model = WorkspaceModel.shared
+    let machines: MachinesModel
+    @State private var model = WorkspaceModel.shared
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     init(machines: MachinesModel) {
         self.machines = machines
     }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -158,7 +160,7 @@ struct WorkspaceView: View {
         .background(DashSkin.paper(dark))
         .onAppear { machines.connectAll() }
     }
-
+    
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(8)) {
             Menu {
@@ -174,7 +176,7 @@ struct WorkspaceView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Choose a layout")
-
+            
             Button {
                 model.apply { $0.root.equalize() }
             } label: {
@@ -182,7 +184,7 @@ struct WorkspaceView: View {
             }
             .buttonStyle(HoverButtonStyle())
             .help("Even out the panes")
-
+            
             Text("\(model.layout.paneCount) pane\(model.layout.paneCount == 1 ? "" : "s")")
                 .font(.system(size: UIScale.pt(10.5)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
@@ -191,7 +193,7 @@ struct WorkspaceView: View {
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(7))
     }
-
+    
     private enum Preset {
         case comparison
         case docker
@@ -199,7 +201,7 @@ struct WorkspaceView: View {
         case files
         case single
     }
-
+    
     private func usePreset(_ preset: Preset) {
         let ids = machines.allMachines.map(\.id)
         let remote = machines.allMachines.filter { !machines.isLocal($0.id) }.map(\.id)
@@ -233,13 +235,13 @@ struct WorkspaceView: View {
 
 struct WorkspaceNodeView: View {
     let node: LayoutNode
-    @ObservedObject var model: WorkspaceModel
-    @ObservedObject var machines: MachinesModel
+    let model: WorkspaceModel
+    let machines: MachinesModel
     let size: CGSize
     let dark: Bool
-
+    
     private static let dividerWidth: CGFloat = 6
-
+    
     var body: some View {
         switch node {
         case let .pane(pane):
@@ -249,23 +251,23 @@ struct WorkspaceNodeView: View {
             splitBody(split)
         }
     }
-
+    
     @ViewBuilder
     private func splitBody(_ split: SplitNode) -> some View {
         let horizontal = split.axis == .horizontal
         let dividers = CGFloat(split.children.count - 1) * Self.dividerWidth
         let available = (horizontal ? size.width : size.height) - dividers
         let layout =
-            horizontal
-            ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+        horizontal
+        ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
         layout {
             ForEach(Array(split.children.enumerated()), id: \.element.id) { index, child in
                 let length = max(60, available * split.ratios[index])
                 WorkspaceNodeView(
                     node: child, model: model, machines: machines,
                     size: horizontal
-                        ? CGSize(width: length, height: size.height)
-                        : CGSize(width: size.width, height: length),
+                    ? CGSize(width: length, height: size.height)
+                    : CGSize(width: size.width, height: length),
                     dark: dark
                 )
                 .frame(
@@ -291,7 +293,7 @@ struct WorkspaceNodeView: View {
             }
         }
     }
-
+    
     private func resize(split: SplitNode, index: Int, delta: CGFloat, available: CGFloat) {
         guard available > 0 else { return }
         let change = Double(delta / available)
@@ -317,7 +319,7 @@ private struct WorkspaceDivider: View {
     let onEqualize: () -> Void
     @State private var hovering = false
     @State private var lastTranslation: CGFloat = 0
-
+    
     var body: some View {
         Rectangle()
             .fill(hovering ? DashSkin.accent(dark).opacity(0.5) : DashSkin.line(dark))
@@ -342,8 +344,8 @@ private struct WorkspaceDivider: View {
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
                         let travelled =
-                            axis == .horizontal
-                            ? value.translation.width : value.translation.height
+                        axis == .horizontal
+                        ? value.translation.width : value.translation.height
                         onDrag(travelled - lastTranslation)
                         lastTranslation = travelled
                     }

@@ -5,14 +5,14 @@ import SwiftUI
 public enum ColorProfile: String, CaseIterable, Codable, Sendable {
     case sRGB
     case displayP3
-
+    
     public var displayName: String {
         switch self {
         case .sRGB: "sRGB"
         case .displayP3: "Display P3"
         }
     }
-
+    
     public var nsColorSpace: NSColorSpace {
         switch self {
         case .sRGB: .sRGB
@@ -23,7 +23,7 @@ public enum ColorProfile: String, CaseIterable, Codable, Sendable {
 
 public enum ColorCopyFormat: String, CaseIterable, Sendable {
     case hex, rgb, hsl, swiftUI, nsColor
-
+    
     public var displayName: String {
         switch self {
         case .hex: "Hex"
@@ -42,7 +42,7 @@ public struct ColorSwatch: Codable, Identifiable, Equatable, Sendable {
     public let blue: Double
     public let profile: ColorProfile
     public let pickedAt: Date
-
+    
     public init(
         id: UUID = UUID(), red: Double, green: Double, blue: Double, profile: ColorProfile,
         pickedAt: Date = Date()
@@ -54,14 +54,14 @@ public struct ColorSwatch: Codable, Identifiable, Equatable, Sendable {
         self.profile = profile
         self.pickedAt = pickedAt
     }
-
+    
     public var color: Color {
         switch profile {
         case .sRGB: Color(.sRGB, red: red, green: green, blue: blue, opacity: 1)
         case .displayP3: Color(.displayP3, red: red, green: green, blue: blue, opacity: 1)
         }
     }
-
+    
     public func string(for format: ColorCopyFormat) -> String {
         ColorFormatting.string(red: red, green: green, blue: blue, format: format)
     }
@@ -69,7 +69,7 @@ public struct ColorSwatch: Codable, Identifiable, Equatable, Sendable {
 
 public enum ColorFormatting {
     public static func string(red: Double, green: Double, blue: Double, format: ColorCopyFormat)
-        -> String
+    -> String
     {
         switch format {
         case .hex: hex(red: red, green: green, blue: blue)
@@ -79,29 +79,29 @@ public enum ColorFormatting {
         case .nsColor: nsColor(red: red, green: green, blue: blue)
         }
     }
-
+    
     public static func hex(red: Double, green: Double, blue: Double) -> String {
         String(format: "#%02X%02X%02X", byte(red), byte(green), byte(blue))
     }
-
+    
     public static func rgb(red: Double, green: Double, blue: Double) -> String {
         "rgb(\(byte(red)), \(byte(green)), \(byte(blue)))"
     }
-
+    
     public static func hsl(red: Double, green: Double, blue: Double) -> String {
         let (h, s, l) = rgbToHSL(red: red, green: green, blue: blue)
         return
-            "hsl(\(Int((h * 360).rounded())), \(Int((s * 100).rounded()))%, \(Int((l * 100).rounded()))%)"
+        "hsl(\(Int((h * 360).rounded())), \(Int((s * 100).rounded()))%, \(Int((l * 100).rounded()))%)"
     }
-
+    
     public static func swiftUIColor(red: Double, green: Double, blue: Double) -> String {
         "Color(red: \(decimal(red)), green: \(decimal(green)), blue: \(decimal(blue)))"
     }
-
+    
     public static func nsColor(red: Double, green: Double, blue: Double) -> String {
         "NSColor(red: \(decimal(red)), green: \(decimal(green)), blue: \(decimal(blue)), alpha: 1.0)"
     }
-
+    
     public static func rgbToHSL(red: Double, green: Double, blue: Double) -> (
         h: Double, s: Double, l: Double
     ) {
@@ -121,11 +121,11 @@ public enum ColorFormatting {
         }
         return (h, s, l)
     }
-
+    
     private static func byte(_ value: Double) -> Int {
         Int((min(max(value, 0), 1) * 255).rounded())
     }
-
+    
     private static func decimal(_ value: Double) -> String {
         String(format: "%.4f", min(max(value, 0), 1))
     }
@@ -133,32 +133,32 @@ public enum ColorFormatting {
 
 public enum ColorHistoryStore {
     private static let key = "colorPickerHistory"
-
+    
     public static func load(from defaults: UserDefaults = SharedDefaults.store)
-        -> [ColorSwatch]
+    -> [ColorSwatch]
     {
         guard let data = defaults.data(forKey: key),
-            let swatches = try? JSONDecoder().decode([ColorSwatch].self, from: data)
+              let swatches = try? JSONDecoder().decode([ColorSwatch].self, from: data)
         else { return [] }
         return swatches
     }
-
+    
     public static func add(
         _ swatch: ColorSwatch, limit: Int, into defaults: UserDefaults = SharedDefaults.store
     ) {
         save(inserting(swatch, into: load(from: defaults), limit: limit), into: defaults)
     }
-
+    
     public static func inserting(_ swatch: ColorSwatch, into history: [ColorSwatch], limit: Int)
-        -> [ColorSwatch]
+    -> [ColorSwatch]
     {
         Array(([swatch] + history).prefix(max(0, limit)))
     }
-
+    
     public static func clear(in defaults: UserDefaults = SharedDefaults.store) {
         defaults.removeObject(forKey: key)
     }
-
+    
     private static func save(
         _ swatches: [ColorSwatch], into defaults: UserDefaults = SharedDefaults.store
     ) {

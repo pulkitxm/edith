@@ -1,31 +1,33 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class CompanionDeskModel: ObservableObject {
-    @Published private(set) var question: CompanionQuestion?
-    @Published private(set) var budget: (asked: Int, total: Int) = (0, 3)
-    @Published private(set) var beliefs: [CompanionBelief] = []
-    @Published private(set) var predictions: [CompanionPrediction] = []
-    @Published private(set) var discrepancies: [CompanionDiscrepancy] = []
-    @Published private(set) var hypotheses: [CompanionHypothesis] = []
-    @Published private(set) var lastResolution: String?
-    @Published private(set) var busy = false
-    @Published private(set) var error: String?
-    @Published var draft = ""
-
+@Observable
+final class CompanionDeskModel {
+    private(set) var question: CompanionQuestion?
+    private(set) var budget: (asked: Int, total: Int) = (0, 3)
+    private(set) var beliefs: [CompanionBelief] = []
+    private(set) var predictions: [CompanionPrediction] = []
+    private(set) var discrepancies: [CompanionDiscrepancy] = []
+    private(set) var hypotheses: [CompanionHypothesis] = []
+    private(set) var lastResolution: String?
+    private(set) var busy = false
+    private(set) var error: String?
+    var draft = ""
+    
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-
+    
     var resolvedPredictions: [CompanionPrediction] {
         predictions.filter { $0.outcome != nil }
     }
-
+    
     var openDiscrepancies: [CompanionDiscrepancy] {
         discrepancies.filter { !$0.dismissed }
     }
-
+    
     func refresh() async {
         do {
             let client = client
@@ -40,7 +42,7 @@ final class CompanionDeskModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func askNext() async {
         guard !busy else { return }
         busy = true
@@ -57,10 +59,10 @@ final class CompanionDeskModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func answer() async {
         guard let question, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            !busy
+              !busy
         else { return }
         busy = true
         defer { busy = false }
@@ -75,7 +77,7 @@ final class CompanionDeskModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func skip() async {
         guard let question, !busy else { return }
         busy = true
@@ -88,7 +90,7 @@ final class CompanionDeskModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func mute() async {
         guard let question, !busy else { return }
         busy = true
@@ -102,7 +104,7 @@ final class CompanionDeskModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func markReal(_ discrepancy: CompanionDiscrepancy, note: String) async {
         guard !busy else { return }
         busy = true
@@ -117,14 +119,14 @@ final class CompanionDeskModel: ObservableObject {
 }
 
 struct CompanionDeskScreen: View {
-    @ObservedObject var model: CompanionDeskModel
+    @Bindable var model: CompanionDeskModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var overrideTarget: CompanionDiscrepancy?
     @State private var overrideNote = ""
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -147,7 +149,7 @@ struct CompanionDeskScreen: View {
             overrideSheet(discrepancy)
         }
     }
-
+    
     private var questionCard: some View {
         SkinCard(title: "Today", note: "what it wants to know", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -178,8 +180,8 @@ struct CompanionDeskScreen: View {
                 } else {
                     Text(
                         model.budget.asked >= model.budget.total
-                            ? "That is all it will ask today."
-                            : "Nothing pressing. It keeps to \(model.budget.total) a day."
+                        ? "That is all it will ask today."
+                        : "Nothing pressing. It keeps to \(model.budget.total) a day."
                     )
                     .font(.system(size: UIScale.pt(12.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
@@ -191,7 +193,7 @@ struct CompanionDeskScreen: View {
             }
         }
     }
-
+    
     private var beliefsCard: some View {
         SkinCard(title: "Overnight", note: "what it concluded", dark: dark, fill: true) {
             if model.beliefs.isEmpty {
@@ -225,7 +227,7 @@ struct CompanionDeskScreen: View {
             }
         }
     }
-
+    
     private var predictionsCard: some View {
         SkinCard(title: "Resolved", note: "what it got right and wrong", dark: dark, fill: true) {
             if model.resolvedPredictions.isEmpty {
@@ -248,7 +250,7 @@ struct CompanionDeskScreen: View {
             }
         }
     }
-
+    
     private var discrepanciesCard: some View {
         SkinCard(title: "Waiting on you", note: "where the record disagreed", dark: dark) {
             if model.openDiscrepancies.isEmpty {
@@ -281,7 +283,7 @@ struct CompanionDeskScreen: View {
             }
         }
     }
-
+    
     private func overrideSheet(_ discrepancy: CompanionDiscrepancy) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text("What actually happened?")
@@ -313,7 +315,7 @@ struct CompanionDeskScreen: View {
         .frame(width: UIScale.pt(420))
         .background(DashSkin.paper(dark))
     }
-
+    
     private func deskButton(
         _ title: String, filled: Bool = false, action: @escaping () async -> Void
     ) -> some View {
@@ -334,7 +336,7 @@ struct CompanionDeskScreen: View {
         .pointerCursor()
         .disabled(model.busy)
     }
-
+    
     private func emptyText(_ text: String) -> some View {
         Text(text)
             .font(.system(size: UIScale.pt(12)))

@@ -10,7 +10,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case camera
     case bluetooth
     case automation
-
+    
     public var displayName: String {
         switch self {
         case .calendar: "Calendar"
@@ -24,7 +24,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .automation: "Automation"
         }
     }
-
+    
     public var reason: String {
         switch self {
         case .calendar: "Required to read and show your schedule in Calendar."
@@ -41,12 +41,12 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .automation: "Asked when Notch Shelf first controls external playback."
         }
     }
-
+    
     public var grantedDefaultsKey: String? {
         switch self {
         case .calendar: "permCalendarGranted"
         case .notifications: "permNotificationsGranted"
-        case .accessibility: "permAccessibilityGranted"
+        case .accessibility: AppStorageKeys.Permissions.accessibilityGranted
         case .inputMonitoring: "permInputMonitoringGranted"
         case .fullDisk: "permFullDiskGranted"
         case .screenRecording: "permScreenRecordingGranted"
@@ -54,7 +54,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth, .automation: nil
         }
     }
-
+    
     public var symbolName: String {
         switch self {
         case .calendar: "calendar"
@@ -68,7 +68,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .automation: "gearshape.2"
         }
     }
-
+    
     public var grantRequest: Notification.Name? {
         switch self {
         case .calendar: IPC.Name.grantCalendar
@@ -81,7 +81,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth, .automation: nil
         }
     }
-
+    
     public var firstUseExplanation: String? {
         switch self {
         case .bluetooth:
@@ -125,7 +125,7 @@ public enum ExtensionMarketplaceCategory: String, CaseIterable, Hashable, Sendab
     case system = "System"
     case media = "Media"
     case utilities = "Utilities"
-
+    
     public var group: ExtensionGroup? {
         switch self {
         case .all: nil
@@ -146,8 +146,8 @@ public enum ExtensionMarketplaceFilter {
         return entries.filter { entry in
             let matchesCategory = category.group == nil || entry.group == category.group
             let matchesQuery =
-                trimmedQuery.isEmpty || entry.title.localizedCaseInsensitiveContains(trimmedQuery)
-                || entry.subtitle.localizedCaseInsensitiveContains(trimmedQuery)
+            trimmedQuery.isEmpty || entry.title.localizedCaseInsensitiveContains(trimmedQuery)
+            || entry.subtitle.localizedCaseInsensitiveContains(trimmedQuery)
             return matchesCategory && matchesQuery
         }
     }
@@ -164,7 +164,7 @@ public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
     public let requiredPermissions: [ExtensionPermission]
     public let optionalPermissions: [ExtensionPermission]
     public let requiredTools: [CLIToolSpec]
-
+    
     public init(
         id: String, title: String, subtitle: String, symbolName: String,
         group: ExtensionGroup, featured: Bool, defaultsKey: String,
@@ -190,69 +190,70 @@ public enum ExtensionRegistry {
             id: "usage", title: "Agent Usage",
             subtitle: "Claude and Codex limits, usage stats, and alerts.",
             symbolName: "chart.bar.fill", group: .agent, featured: true,
-            defaultsKey: "tabUsageEnabled", optionalPermissions: [.notifications],
+            defaultsKey: AppStorageKeys.Tabs.usageEnabled, optionalPermissions: [.notifications],
             requiredTools: [.claudeCode, .codex]),
         ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
             symbolName: "switch.2", group: .system, featured: true,
-            defaultsKey: "tabSystemEnabled",
+            defaultsKey: AppStorageKeys.Tabs.systemEnabled,
             optionalPermissions: [.accessibility, .inputMonitoring]),
         ExtensionRegistryEntry(
             id: "machines", title: "Machines",
             subtitle: "Your other computers over SSH: stats, files, Docker, and a terminal.",
             symbolName: "server.rack", group: .system, featured: true,
-            defaultsKey: "tabMachinesEnabled", optionalPermissions: [.notifications]),
+            defaultsKey: AppStorageKeys.Tabs.machinesEnabled, optionalPermissions: [.notifications]),
         ExtensionRegistryEntry(
             id: "companion", title: "Companion",
             subtitle: "Your notes, voice memos and activity, remembered and searchable.",
             symbolName: "brain.head.profile", group: .agent, featured: false,
-            defaultsKey: "tabCompanionEnabled"),
+            defaultsKey: AppStorageKeys.Tabs.companionEnabled),
         ExtensionRegistryEntry(
             id: "systemStats", title: "CPU & Memory in menu bar",
             subtitle: "Live CPU and memory readout as a menu bar item.",
             symbolName: "gauge.with.needle", group: .system, featured: false,
-            defaultsKey: "menuBarSystemStats"),
+            defaultsKey: AppStorageKeys.MenuBar.systemStats),
         ExtensionRegistryEntry(
             id: "micMute", title: "Mic Mute",
             subtitle: "Mute every microphone system-wide with ⌘⇧M or the menu bar icon.",
             symbolName: "mic.slash.fill", group: .system, featured: false,
-            defaultsKey: "micMuteEnabled"),
+            defaultsKey: AppStorageKeys.Mic.muteEnabled),
         ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys.",
             symbolName: "music.note", group: .media, featured: false,
-            defaultsKey: "tabMusicEnabled", requiredTools: [.youtubeDownloader]),
+            defaultsKey: AppStorageKeys.Tabs.musicEnabled, requiredTools: [.youtubeDownloader]),
         ExtensionRegistryEntry(
             id: "calendar", title: "Calendar",
             subtitle: "Shows your schedule in the panel and the app.",
             symbolName: "calendar", group: .media, featured: false,
-            defaultsKey: "tabCalendarEnabled", requiredPermissions: [.calendar]),
+            defaultsKey: AppStorageKeys.Tabs.calendarEnabled, requiredPermissions: [.calendar]),
         ExtensionRegistryEntry(
             id: "notchShelf", title: "Notch Shelf",
             subtitle: "File shelf, now playing, camera, and alerts around the notch.",
             symbolName: "tray.and.arrow.down", group: .media, featured: true,
-            defaultsKey: "notchShelfEnabled",
+            defaultsKey: AppStorageKeys.Notch.shelfEnabled,
             optionalPermissions: [.bluetooth, .camera, .automation]),
         ExtensionRegistryEntry(
             id: "clipboard", title: "Clipboard",
             subtitle: "Clipboard history with instant paste.",
             symbolName: "doc.on.clipboard", group: .utilities, featured: true,
-            defaultsKey: "clipboardEnabled", optionalPermissions: [.accessibility]),
+            defaultsKey: AppStorageKeys.Clipboard.enabled, optionalPermissions: [.accessibility]),
         ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,
-            defaultsKey: "focusDimEnabled", requiredPermissions: [.screenRecording]),
+            defaultsKey: FocusDimState.enabledKey, requiredPermissions: [.screenRecording]),
         ExtensionRegistryEntry(
             id: "presenter", title: "Presenter",
             subtitle: "Blurs sensitive numbers while sharing your screen.",
             symbolName: "theatermasks.fill", group: .utilities, featured: false,
-            defaultsKey: "presenterEnabled", requiredPermissions: [.screenRecording]),
+            defaultsKey: AppStorageKeys.Presenter.enabled, requiredPermissions: [.screenRecording]),
         ExtensionRegistryEntry(
             id: "colorPicker", title: "Color Picker",
             subtitle: "System loupe on a hotkey, sampled color to your clipboard.",
             symbolName: "eyedropper", group: .utilities, featured: false,
-            defaultsKey: "colorPickerEnabled", requiredPermissions: [.screenRecording]),
+            defaultsKey: AppStorageKeys.ColorPicker.enabled, requiredPermissions: [.screenRecording]
+        ),
     ]
 }

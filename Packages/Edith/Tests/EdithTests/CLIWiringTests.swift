@@ -6,17 +6,17 @@ import Testing
         .deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent()
         .appendingPathComponent("Sources")
-
+    
     static func swiftFiles(in target: String) -> [String] {
         let root = sources.appendingPathComponent(target)
         let names =
-            FileManager.default.enumerator(atPath: root.path)?
+        FileManager.default.enumerator(atPath: root.path)?
             .compactMap { $0 as? String }.filter { $0.hasSuffix(".swift") } ?? []
         return names.compactMap {
             try? String(contentsOf: root.appendingPathComponent($0), encoding: .utf8)
         }
     }
-
+    
     static func matches(_ pattern: String, in texts: [String]) -> Set<String> {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         var found: Set<String> = []
@@ -24,19 +24,19 @@ import Testing
             let range = NSRange(text.startIndex..., in: text)
             for match in regex.matches(in: text, range: range) {
                 guard match.numberOfRanges > 1,
-                    let captured = Range(match.range(at: 1), in: text)
+                      let captured = Range(match.range(at: 1), in: text)
                 else { continue }
                 found.insert(String(text[captured]))
             }
         }
         return found
     }
-
+    
     static let cli = swiftFiles(in: "EdithCLI")
     static let app =
-        swiftFiles(in: "Edith") + swiftFiles(in: "EdithHelper")
-        + swiftFiles(in: "EdithKit")
-
+    swiftFiles(in: "Edith") + swiftFiles(in: "EdithHelper")
+    + swiftFiles(in: "EdithKit")
+    
     @Test func everyNotificationTheCLISendsIsObservedSomewhere() {
         let sent = Self.matches(
             #"(?:AppBridge|IPC)\.post\(\s*IPC\.Name\.(\w+)"#, in: Self.cli)
@@ -47,7 +47,7 @@ import Testing
             sent.subtracting(observed).isEmpty,
             "the CLI posts these and nothing listens: \(sent.subtracting(observed).sorted())")
     }
-
+    
     @Test func everyReplyTheCLIWaitsForIsPostedSomewhere() {
         let awaited = Self.matches(
             #"awaitReply\(\s*\n?\s*IPC\.Name\.(\w+)"#, in: Self.cli)
@@ -56,7 +56,7 @@ import Testing
         let orphans = awaited.subtracting(posted).sorted()
         #expect(orphans.isEmpty, "the CLI waits for these and nothing sends them: \(orphans)")
     }
-
+    
     @Test func everyNameInTheIPCCatalogIsUsedByBothHalves() throws {
         let catalog = try String(
             contentsOf: Self.sources.appendingPathComponent("EdithKit/Core/IPC.swift"),

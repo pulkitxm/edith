@@ -6,7 +6,7 @@ public struct JunkItem: Identifiable, Sendable {
     public let path: URL
     public var sizeBytes: Int64
     public var selected: Bool
-
+    
     public init(id: String, name: String, path: URL, sizeBytes: Int64, selected: Bool) {
         self.id = id
         self.name = name
@@ -25,17 +25,17 @@ public struct JunkCategory: Identifiable, Sendable {
     public let name: String
     public let detail: String
     public var items: [JunkItem]
-
+    
     public init(id: String, name: String, detail: String, items: [JunkItem]) {
         self.id = id
         self.name = name
         self.detail = detail
         self.items = items
     }
-
+    
     public var sizeBytes: Int64 { items.reduce(0) { $0 + $1.sizeBytes } }
     public var selectedBytes: Int64 { items.filter(\.selected).reduce(0) { $0 + $1.sizeBytes } }
-
+    
     public var selection: JunkSelection {
         let selected = items.filter(\.selected).count
         if selected == 0 { return .none }
@@ -50,7 +50,7 @@ public struct DriveInfo: Identifiable, Sendable {
     public let totalBytes: Int64
     public let isRemovable: Bool
     public let isInternal: Bool
-
+    
     public init(
         id: String, name: String, totalBytes: Int64, isRemovable: Bool, isInternal: Bool
     ) {
@@ -60,7 +60,7 @@ public struct DriveInfo: Identifiable, Sendable {
         self.isRemovable = isRemovable
         self.isInternal = isInternal
     }
-
+    
     public var isExternal: Bool { isRemovable || !isInternal }
 }
 
@@ -71,7 +71,7 @@ public enum JunkCatalog {
         public let detail: String
         public let relativePaths: [String]
         public let defaultOn: Bool
-
+        
         public init(
             id: String, name: String, detail: String, relativePaths: [String], defaultOn: Bool
         ) {
@@ -82,7 +82,7 @@ public enum JunkCatalog {
             self.defaultOn = defaultOn
         }
     }
-
+    
     public static let entries: [Entry] = [
         Entry(
             id: "derivedData", name: "Xcode DerivedData",
@@ -124,7 +124,7 @@ public enum JunkCatalog {
             detail: "MCP server logs that can grow very large.",
             relativePaths: ["Library/Caches/claude-cli-nodejs"], defaultOn: true),
     ]
-
+    
     public static func resolve(_ entry: Entry, home: URL) -> [URL] {
         entry.relativePaths
             .map { home.appendingPathComponent($0) }
@@ -150,13 +150,13 @@ public enum JunkScanner {
             seen += 1
             if seen & 0x3ff == 0, isCancelled() { break }
             guard let values = try? item.resourceValues(forKeys: Set(keys)),
-                values.isRegularFile == true
+                  values.isRegularFile == true
             else { continue }
             total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
         }
         return total
     }
-
+    
     public static func scanCategory(
         _ entry: JunkCatalog.Entry, home: URL, isCancelled: () -> Bool = { false }
     ) -> JunkCategory? {
@@ -165,9 +165,9 @@ public enum JunkScanner {
         var items: [JunkItem] = []
         for path in paths {
             let children =
-                (try? FileManager.default.contentsOfDirectory(
-                    at: path, includingPropertiesForKeys: nil,
-                    options: [.skipsHiddenFiles])) ?? []
+            (try? FileManager.default.contentsOfDirectory(
+                at: path, includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles])) ?? []
             if children.isEmpty {
                 let size = directorySize(path, isCancelled: isCancelled)
                 if size > 0 {
@@ -192,7 +192,7 @@ public enum JunkScanner {
         items.sort { $0.sizeBytes > $1.sizeBytes }
         return JunkCategory(id: entry.id, name: entry.name, detail: entry.detail, items: items)
     }
-
+    
     public static func drives() -> [DriveInfo] {
         let keys: [URLResourceKey] = [
             .volumeNameKey, .volumeTotalCapacityKey, .volumeIsRemovableKey,
@@ -214,14 +214,14 @@ public enum JunkScanner {
         }
         .sorted { $0.isExternal == $1.isExternal ? $0.totalBytes > $1.totalBytes : !$0.isExternal }
     }
-
+    
     public static func drivesForScanning(
         _ drives: [DriveInfo], selectedDriveIDs: Set<String>?
     ) -> [DriveInfo] {
         let selection = selectedDriveIDs ?? ["/"]
         return drives.filter { selection.contains($0.id) }
     }
-
+    
     public static func clean(_ items: [JunkItem]) -> Int64 {
         var reclaimed: Int64 = 0
         for item in items {
@@ -231,19 +231,19 @@ public enum JunkScanner {
         }
         return reclaimed
     }
-
+    
     public static func format(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
-
+    
     public struct ProjectTarget: Sendable {
         public let dir: String
         public let categoryID: String
         public let categoryName: String
         public let detail: String
-
+        
         public init(dir: String, categoryID: String, categoryName: String, detail: String) {
             self.dir = dir
             self.categoryID = categoryID
@@ -251,7 +251,7 @@ public enum JunkScanner {
             self.detail = detail
         }
     }
-
+    
     public static let projectTargets: [ProjectTarget] = [
         ProjectTarget(
             dir: "node_modules", categoryID: "nodeModules", categoryName: "node_modules",
@@ -281,12 +281,12 @@ public enum JunkScanner {
             dir: ".turbo", categoryID: "turbo", categoryName: "Turborepo cache",
             detail: "Rebuilt on next build."),
     ]
-
+    
     private static let walkSkip: Set<String> = [
         "System", "Library", "Applications", "usr", "bin", "sbin", "opt", "private", "cores",
         "dev", "Volumes", "Network", "Photos Library.photoslibrary",
     ]
-
+    
     public static func scanProjectJunk(
         roots: [URL], isCancelled: @escaping () -> Bool = { false },
         progress: @escaping (String) -> Void
@@ -298,7 +298,7 @@ public enum JunkScanner {
         let budget = 600
         let maxDepth = 9
         let fm = FileManager.default
-
+        
         func walk(_ dir: URL, depth: Int) {
             guard depth <= maxDepth, count < budget, !isCancelled() else { return }
             guard
@@ -328,7 +328,7 @@ public enum JunkScanner {
                 walk(child, depth: depth + 1)
             }
         }
-
+        
         for root in roots {
             if isCancelled() { break }
             progress(
@@ -336,7 +336,7 @@ public enum JunkScanner {
             )
             walk(root, depth: 0)
         }
-
+        
         return projectTargets.reduce(into: [String: JunkCategory]()) { result, target in
             guard result[target.categoryID] == nil, let items = itemsByCategory[target.categoryID]
             else { return }
@@ -348,7 +348,7 @@ public enum JunkScanner {
         .values
         .sorted { $0.sizeBytes > $1.sizeBytes }
     }
-
+    
     private static func projectLabel(_ url: URL) -> String {
         (url.path as NSString).abbreviatingWithTildeInPath
     }

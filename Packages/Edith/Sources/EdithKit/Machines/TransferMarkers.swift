@@ -4,7 +4,7 @@ public enum TransferMarker: Equatable, Sendable {
     case pid(Int32)
     case scan(files: Int, bytes: Int64)
     case item(index: Int, exitStatus: Int32)
-
+    
     public static let refusedIdenticalFile: Int32 = 200
 }
 
@@ -33,9 +33,9 @@ public enum TransferMarkers {
 
 public struct TransferLineSplitter: Sendable {
     private var fragment = ""
-
+    
     public init() {}
-
+    
     public mutating func receive(_ text: String) -> [String] {
         fragment += text
         var lines: [String] = []
@@ -54,7 +54,7 @@ public struct TransferLineSplitter: Sendable {
         fragment = trailing
         return lines
     }
-
+    
     public mutating func flush() -> [String] {
         defer { fragment = "" }
         return fragment.isEmpty ? [] : [fragment]

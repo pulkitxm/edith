@@ -4,17 +4,22 @@ import SwiftUI
 struct BudgetCardView: View {
     let theme: Color
     let dark: Bool
-
-    @AppStorage("budgetEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("budgetMode", store: SharedDefaults.store) private var modeRaw = "pace"
-    @AppStorage("budgetKind", store: SharedDefaults.store) private var kindRaw = "weekly"
-    @AppStorage("budgetCapPercent", store: SharedDefaults.store) private var cap = 50.0
-    @AppStorage("budgetDeadline", store: SharedDefaults.store) private var deadlineTS = 0.0
+    
+    @AppStorage(AppStorageKeys.Budget.enabled, store: SharedDefaults.store) private var enabled =
+    false
+    @AppStorage(AppStorageKeys.Budget.mode, store: SharedDefaults.store) private var modeRaw =
+    "pace"
+    @AppStorage(AppStorageKeys.Budget.kind, store: SharedDefaults.store) private var kindRaw =
+    "weekly"
+    @AppStorage(AppStorageKeys.Budget.capPercent, store: SharedDefaults.store) private var cap =
+    50.0
+    @AppStorage(AppStorageKeys.Budget.deadline, store: SharedDefaults.store) private
+    var deadlineTS = 0.0
     @State private var latest: DashLimitPoint?
-
+    
     private var kind: LimitWindowKind { kindRaw == "session" ? .session : .weekly }
     private var mode: BudgetMode { BudgetMode(rawValue: modeRaw) ?? .pace }
-
+    
     private var status: BudgetStatus? {
         guard enabled, let latest else { return nil }
         let pct = kind == .session ? latest.s : latest.w
@@ -22,13 +27,13 @@ struct BudgetCardView: View {
         guard let pct, let reset else { return nil }
         let start = reset.addingTimeInterval(-kind.duration)
         let deadline =
-            mode == .cap && deadlineTS > 0
-            ? Date(timeIntervalSinceReferenceDate: deadlineTS) : reset
+        mode == .cap && deadlineTS > 0
+        ? Date(timeIntervalSinceReferenceDate: deadlineTS) : reset
         return LimitMath.budgetStatus(
             actual: pct, capPercent: cap, start: start, deadline: deadline, now: Date(),
             resetsAt: mode == .pace ? reset : nil)
     }
-
+    
     var body: some View {
         SkinCard(title: "Personal budget", dark: dark) {
             if let status {
@@ -36,8 +41,8 @@ struct BudgetCardView: View {
             } else {
                 Text(
                     enabled
-                        ? "Waiting for usage data…"
-                        : "Set a personal cap in Settings › Usage to pace your Claude spend."
+                    ? "Waiting for usage data…"
+                    : "Set a personal cap in Settings › Usage to pace your Claude spend."
                 )
                 .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(60), alignment: .leading)
@@ -45,7 +50,7 @@ struct BudgetCardView: View {
         }
         .task { latest = DashLimits.loadLatest() }
     }
-
+    
     private func content(_ status: BudgetStatus) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
@@ -69,7 +74,7 @@ struct BudgetCardView: View {
             }
         }
     }
-
+    
     private func meter(_ status: BudgetStatus) -> some View {
         GeometryReader { geo in
             let w = geo.size.width
@@ -83,14 +88,14 @@ struct BudgetCardView: View {
         }
         .frame(height: UIScale.pt(8))
     }
-
+    
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
             Text(value).font(.system(size: UIScale.pt(14), weight: .medium)).monospacedDigit()
         }
     }
-
+    
     private func statePill(_ state: BudgetState) -> some View {
         Text(label(state))
             .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -98,7 +103,7 @@ struct BudgetCardView: View {
             .background(color(state).opacity(0.18), in: Capsule())
             .foregroundStyle(color(state))
     }
-
+    
     private func label(_ state: BudgetState) -> String {
         switch state {
         case .onPace: "On pace"
@@ -108,7 +113,7 @@ struct BudgetCardView: View {
         case .noData: "No data"
         }
     }
-
+    
     private func color(_ state: BudgetState) -> Color {
         switch state {
         case .onPace, .under: DashSkin.ok

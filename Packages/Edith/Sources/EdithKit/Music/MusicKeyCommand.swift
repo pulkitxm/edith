@@ -6,7 +6,7 @@ public enum MusicKeyCommand {
         public var playPause: () -> Void
         public var seekBy: (TimeInterval) -> Void
         public var volumeBy: (Double) -> Void
-
+        
         public init(
             playPause: @escaping () -> Void,
             seekBy: @escaping (TimeInterval) -> Void,
@@ -17,10 +17,10 @@ public enum MusicKeyCommand {
             self.volumeBy = volumeBy
         }
     }
-
+    
     public static let seekStep: TimeInterval = 5
     public static let volumeStep: Double = 0.05
-
+    
     public static func handle(
         keyCode: UInt16, modifiers: NSEvent.ModifierFlags, active: Bool, _ handlers: Handlers
     ) -> Bool {
@@ -38,7 +38,7 @@ public enum MusicKeyCommand {
         }
         return true
     }
-
+    
     private static func isEditingText() -> Bool {
         guard let responder = NSApp.keyWindow?.firstResponder else { return false }
         if let text = responder as? NSTextView { return text.isFieldEditor || text.isEditable }

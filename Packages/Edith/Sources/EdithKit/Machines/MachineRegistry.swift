@@ -5,7 +5,7 @@ public enum MachineRegistry {
         public let machines: URL
         public let forwards: URL
         public let snippets: URL
-
+        
         public init(
             machines: URL = MachinePaths.machinesFile,
             forwards: URL = MachinePaths.forwardsFile,
@@ -16,12 +16,12 @@ public enum MachineRegistry {
             self.snippets = snippets
         }
     }
-
+    
     public struct Contents: Sendable {
         public var machines: [Machine]
         public var forwards: [PortForward]
         public var snippets: [CommandSnippet]
-
+        
         public init(
             machines: [Machine] = [], forwards: [PortForward] = [],
             snippets: [CommandSnippet] = []
@@ -31,26 +31,26 @@ public enum MachineRegistry {
             self.snippets = snippets
         }
     }
-
+    
     public static func load(_ files: Files = Files()) -> Contents {
         Contents(
             machines: decode(files.machines) ?? [],
             forwards: decode(files.forwards) ?? [],
             snippets: decode(files.snippets) ?? [])
     }
-
+    
     public static func machines(_ files: Files = Files()) -> [Machine] {
         decode(files.machines) ?? []
     }
-
+    
     public static func forwards(_ files: Files = Files()) -> [PortForward] {
         decode(files.forwards) ?? []
     }
-
+    
     public static func snippets(_ files: Files = Files()) -> [CommandSnippet] {
         decode(files.snippets) ?? []
     }
-
+    
     @discardableResult
     public static func add(_ machine: Machine, _ files: Files = Files()) -> [Machine] {
         var all = machines(files)
@@ -58,7 +58,7 @@ public enum MachineRegistry {
         encode(all, to: files.machines)
         return all
     }
-
+    
     @discardableResult
     public static func update(_ machine: Machine, _ files: Files = Files()) -> [Machine] {
         var all = machines(files)
@@ -71,7 +71,7 @@ public enum MachineRegistry {
         }
         return all
     }
-
+    
     @discardableResult
     public static func remove(id: UUID, _ files: Files = Files()) -> Contents {
         var contents = load(files)
@@ -84,17 +84,17 @@ public enum MachineRegistry {
         MachineSecrets.deleteAll(machineID: id)
         return contents
     }
-
+    
     @discardableResult
     public static func addForward(_ forward: PortForward, _ files: Files = Files())
-        -> [PortForward]
+    -> [PortForward]
     {
         var all = forwards(files)
         all.append(forward)
         encode(all, to: files.forwards)
         return all
     }
-
+    
     @discardableResult
     public static func removeForward(id: UUID, _ files: Files = Files()) -> [PortForward] {
         var all = forwards(files)
@@ -102,20 +102,20 @@ public enum MachineRegistry {
         encode(all, to: files.forwards)
         return all
     }
-
+    
     @discardableResult
     public static func addSnippet(_ snippet: CommandSnippet, _ files: Files = Files())
-        -> [CommandSnippet]
+    -> [CommandSnippet]
     {
         var all = snippets(files)
         all.append(snippet)
         encode(all, to: files.snippets)
         return all
     }
-
+    
     @discardableResult
     public static func updateSnippet(_ snippet: CommandSnippet, _ files: Files = Files())
-        -> [CommandSnippet]
+    -> [CommandSnippet]
     {
         var all = snippets(files)
         guard let index = all.firstIndex(where: { $0.id == snippet.id }) else { return all }
@@ -123,7 +123,7 @@ public enum MachineRegistry {
         encode(all, to: files.snippets)
         return all
     }
-
+    
     @discardableResult
     public static func removeSnippet(id: UUID, _ files: Files = Files()) -> [CommandSnippet] {
         var all = snippets(files)
@@ -131,22 +131,22 @@ public enum MachineRegistry {
         encode(all, to: files.snippets)
         return all
     }
-
+    
     public static func forwards(machineID: UUID, in all: [PortForward]) -> [PortForward] {
         all.filter { $0.machineID == machineID }
     }
-
+    
     public static func snippets(machineID: UUID, in all: [CommandSnippet]) -> [CommandSnippet] {
         all.filter { $0.machineID == nil || $0.machineID == machineID }
     }
-
+    
     private static func decode<T: Decodable>(_ file: URL) -> T? {
         guard let data = try? Data(contentsOf: file) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(T.self, from: data)
     }
-
+    
     private static func encode<T: Encodable>(_ value: T, to file: URL) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

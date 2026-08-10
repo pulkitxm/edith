@@ -31,16 +31,16 @@ enum ProjColumns {
 }
 
 struct ProjectDrilldownView: View {
-    @ObservedObject var model: DashboardModel
+    @Bindable var model: DashboardModel
     let dark: Bool
     var blur = false
     var blurTokens = false
-
+    
     private static let chatsPerGroup = 20
     private static let rowHeight: CGFloat = 27
     private static let minTableHeight: CGFloat = 520
     private static let maxTableHeight: CGFloat = 760
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -82,7 +82,7 @@ struct ProjectDrilldownView: View {
             }
         }
     }
-
+    
     private var toggleButton: some View {
         Button {
             model.projListOpen.toggle()
@@ -100,7 +100,7 @@ struct ProjectDrilldownView: View {
         .buttonStyle(.plain)
         .pointerCursor()
     }
-
+    
     private var headerRow: some View {
         HStack(spacing: UIScale.pt(0)) {
             headerCell("Project", .name, width: ProjColumns.project)
@@ -115,9 +115,9 @@ struct ProjectDrilldownView: View {
         .padding(.horizontal, UIScale.pt(8))
         .padding(.vertical, UIScale.pt(6))
     }
-
+    
     @ViewBuilder private func headerCell(_ title: String, _ key: ProjSortKey, width: CGFloat?)
-        -> some View
+    -> some View
     {
         Button {
             sortBy(key)
@@ -136,7 +136,7 @@ struct ProjectDrilldownView: View {
         }
         .buttonStyle(.plain).pointerCursor()
     }
-
+    
     private func sortBy(_ key: ProjSortKey) {
         if model.projSortKey == key {
             model.projSortAscending.toggle()
@@ -145,7 +145,7 @@ struct ProjectDrilldownView: View {
             model.projSortAscending = key == .name
         }
     }
-
+    
     private func toggleExpand(_ id: String) {
         if model.projExpanded.contains(id) {
             model.projExpanded.remove(id)
@@ -153,7 +153,7 @@ struct ProjectDrilldownView: View {
             model.projExpanded.insert(id)
         }
     }
-
+    
     private var flatRows: [(node: ProjNode, depth: Int)] {
         var out: [(ProjNode, Int)] = []
         func add(_ node: ProjNode, _ depth: Int) {
@@ -165,23 +165,23 @@ struct ProjectDrilldownView: View {
         for node in nodes { add(node, 0) }
         return out
     }
-
+    
     private var tableHeight: CGFloat {
         min(
             max(CGFloat(model.projectTree.count + 1) * Self.rowHeight + 44, Self.minTableHeight),
             Self.maxTableHeight)
     }
-
+    
     private var matchedTree: [ProjTreeRow] {
         let q = model.projQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return model.projectTree }
         func hit(_ s: String) -> Bool { s.localizedCaseInsensitiveContains(q) }
         return model.projectTree.filter { p in
             hit(p.name) || p.chats.contains { hit($0.title) }
-                || p.worktrees.contains { hit($0.name) || $0.chats.contains { hit($0.title) } }
+            || p.worktrees.contains { hit($0.name) || $0.chats.contains { hit($0.title) } }
         }
     }
-
+    
     private var nodes: [ProjNode] {
         matchedTree.map { p in
             var kids = chatNodes(p.chats, parent: p.id)
@@ -198,7 +198,7 @@ struct ProjectDrilldownView: View {
                 chatId: nil, badge: p.nestedCount, children: kids.isEmpty ? nil : kids)
         }
     }
-
+    
     private func chatNodes(_ chats: [ProjChat], parent: String) -> [ProjNode] {
         var out = chats.prefix(Self.chatsPerGroup).map { c in
             ProjNode(
@@ -221,7 +221,7 @@ struct ProjectDrilldownView: View {
         }
         return out
     }
-
+    
     private func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -238,9 +238,9 @@ private struct ProjectRow: View {
     let onToggle: () -> Void
     let onCopy: (String) -> Void
     @State private var hovering = false
-
+    
     private var hasChildren: Bool { node.children?.isEmpty == false }
-
+    
     var body: some View {
         content
             .padding(.horizontal, UIScale.pt(8))
@@ -250,7 +250,7 @@ private struct ProjectRow: View {
             .onHover { hovering = $0 }
             .onTapGesture { if hasChildren { onToggle() } }
     }
-
+    
     @ViewBuilder private var content: some View {
         let row = HStack(spacing: UIScale.pt(0)) {
             nameColumn
@@ -270,7 +270,7 @@ private struct ProjectRow: View {
             row
         }
     }
-
+    
     private var nameColumn: some View {
         HStack(spacing: UIScale.pt(5)) {
             if hasChildren {
@@ -289,7 +289,7 @@ private struct ProjectRow: View {
         .foregroundStyle(tint)
         .frame(width: ProjColumns.project, alignment: .leading)
     }
-
+    
     @ViewBuilder private var iconView: some View {
         let img = ZStack(alignment: .topTrailing) {
             Image(systemName: icon).font(.system(size: UIScale.pt(10)))
@@ -299,7 +299,7 @@ private struct ProjectRow: View {
                     .offset(x: 7, y: -4)
             }
         }
-        .frame(width: UIScale.pt(16), height: UIScale.pt(14), alignment: .leading)
+            .frame(width: UIScale.pt(16), height: UIScale.pt(14), alignment: .leading)
         if let chatId = node.chatId, !chatId.isEmpty {
             Button {
                 onCopy(chatId)
@@ -310,7 +310,7 @@ private struct ProjectRow: View {
             img
         }
     }
-
+    
     private func num(_ text: String, width: CGFloat, blurWhen: Bool = false) -> some View {
         Text(text)
             .font(DashSkin.mono(11))
@@ -319,7 +319,7 @@ private struct ProjectRow: View {
             .frame(width: width, alignment: .leading)
             .presenterBlur(blurWhen)
     }
-
+    
     private var tint: Color {
         switch node.kind {
         case .project, .worktree: return DashSkin.ink(dark)
@@ -327,7 +327,7 @@ private struct ProjectRow: View {
         case .more: return DashSkin.inkFaint(dark)
         }
     }
-
+    
     private var icon: String {
         switch node.kind {
         case .project: return "folder"

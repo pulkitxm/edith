@@ -10,9 +10,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: NSObjectProtocol?
     private var settingsChangeDebounce: Timer?
     private var appStarted = false
-
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
-        applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        applyAppearance(
+            SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         InputFocus.install()
         ScrollForwarding.install()
         RetiredLicenseCleanup.run()
@@ -20,7 +21,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         startApp()
         SectionWindowMenu.install()
     }
-
+    
     private func startApp() {
         guard !appStarted else {
             showInitialWindow()
@@ -33,7 +34,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         launchHelperIfNeeded()
         let dashboard = DashboardModel.shared
         dashboard.syncExtensionState()
-        if SharedDefaults.store.bool(forKey: "tabUsageEnabled") {
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled) {
             Task { await dashboard.load() }
         }
         showInitialWindow()
@@ -50,12 +51,14 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-
+    
     private func applyConfiguredActivationPolicy() {
-        let showDockIcon = SharedDefaults.store.object(forKey: "showDockIcon") as? Bool ?? true
+        let showDockIcon =
+        SharedDefaults.store.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool
+        ?? true
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
     }
-
+    
     private func showInitialWindow() {
         if OnboardingFlow.shouldShowOnboarding() {
             OnboardingWindow.open()
@@ -63,14 +66,14 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             MainWindow.open()
         }
     }
-
+    
     private func scheduleSettingsChangedBroadcast() {
         settingsChangeDebounce?.invalidate()
         settingsChangeDebounce = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
             IPC.post(IPC.Name.settingsChanged)
         }
     }
-
+    
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !appStarted {
             startApp()
@@ -79,7 +82,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         return true
     }
-
+    
     func applicationWillTerminate(_ notification: Notification) {
         if settingsChangeDebounce?.isValid == true {
             IPC.post(IPC.Name.settingsChanged)
@@ -87,7 +90,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         settingsChangeDebounce?.invalidate()
         settingsChangeDebounce = nil
     }
-
+    
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
@@ -114,7 +117,7 @@ private func launchHelperIfNeeded() {
         withBundleIdentifier: helperBundleIdentifier
     ).first {
         guard let installedAt = helperInstalledDate(helperURL),
-            let launchedAt = running.launchDate, launchedAt < installedAt
+              let launchedAt = running.launchDate, launchedAt < installedAt
         else { return }
         running.forceTerminate()
         relaunchHelper(at: helperURL, after: running)
@@ -127,7 +130,7 @@ private func launchHelperIfNeeded() {
 private func helperInstalledDate(_ helperURL: URL) -> Date? {
     let exec = helperURL.appendingPathComponent("Contents/MacOS/Edith")
     return (try? FileManager.default.attributesOfItem(atPath: exec.path)[.modificationDate])
-        as? Date
+    as? Date
 }
 
 private func relaunchHelper(at url: URL, after proc: NSRunningApplication) {
@@ -144,11 +147,11 @@ private func relaunchHelper(at url: URL, after proc: NSRunningApplication) {
 
 public struct EdithApp: App {
     @NSApplicationDelegateAdaptor(MainAppDelegate.self) private var delegate
-
+    
     public init() {
         _ = AskpassEntry.runIfRequested()
     }
-
+    
     public var body: some Scene {
         Settings {
             SettingsRedirect()
@@ -162,11 +165,12 @@ private struct SettingsRedirect: View {
             .frame(width: UIScale.pt(1), height: UIScale.pt(1))
             .onAppear {
                 SharedDefaults.store.set(
-                    MainDestination.settings.rawValue, forKey: "mainWindowSection")
+                    MainDestination.settings.rawValue,
+                    forKey: AppStorageKeys.General.mainWindowSection)
                 DispatchQueue.main.async {
                     for window in NSApp.windows
                     where window.identifier?.rawValue.contains("Settings") == true
-                        || window.title == "Edith Settings"
+                    || window.title == "Edith Settings"
                     {
                         window.close()
                     }

@@ -9,16 +9,16 @@ private final class ClipboardFloatingPanel: NSPanel {
 @MainActor
 final class ClipboardPanel: NSObject, NSWindowDelegate {
     static let shared = ClipboardPanel()
-
+    
     static let width: CGFloat = 450
     static let maxHeight: CGFloat = 800
-
+    
     weak var store: ClipboardStore?
-
+    
     private var panel: NSPanel?
     private var hosting: NSHostingView<AnyView>?
     private var showCount = 0
-
+    
     func toggle() {
         if let panel, panel.isVisible {
             hide()
@@ -26,7 +26,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
             show()
         }
     }
-
+    
     func show() {
         guard let store else { return }
         let p = panel ?? makePanel()
@@ -47,11 +47,11 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         p.orderFrontRegardless()
         p.makeKey()
     }
-
+    
     func hide() {
         panel?.orderOut(nil)
     }
-
+    
     private func resize(toFit height: CGFloat) {
         guard let panel, panel.isVisible else { return }
         let clamped = min(height, Self.maxHeight)
@@ -62,7 +62,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         frame.origin = ClipboardPopupPosition.clampedToScreen(frame.origin, frame.size)
         panel.setFrame(frame, display: true)
     }
-
+    
     private func makePanel() -> NSPanel {
         let p = ClipboardFloatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 400),
@@ -79,7 +79,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         p.isReleasedWhenClosed = false
         p.isMovableByWindowBackground = true
         p.delegate = self
-
+        
         let effect = NSVisualEffectView()
         effect.material = .popover
         effect.blendingMode = .behindWindow
@@ -87,7 +87,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         effect.wantsLayer = true
         effect.layer?.cornerRadius = 9
         effect.layer?.masksToBounds = true
-
+        
         let host = NSHostingView(rootView: AnyView(EmptyView()))
         host.translatesAutoresizingMaskIntoConstraints = false
         effect.addSubview(host)
@@ -102,15 +102,15 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         panel = p
         return p
     }
-
+    
     nonisolated func windowDidResignKey(_ notification: Notification) {
         Task { @MainActor in ClipboardPanel.shared.hide() }
     }
-
+    
     nonisolated func windowDidMove(_ notification: Notification) {
         Task { @MainActor in
             guard let panel = ClipboardPanel.shared.panel, panel.isVisible,
-                NSEvent.pressedMouseButtons & 1 == 1
+                  NSEvent.pressedMouseButtons & 1 == 1
             else { return }
             ClipboardPopupPosition.saveLastPosition(frame: panel.frame, screen: panel.screen)
         }

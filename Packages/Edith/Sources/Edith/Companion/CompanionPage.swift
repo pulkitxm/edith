@@ -1,5 +1,6 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -11,9 +12,9 @@ enum CompanionTab: String, CaseIterable, Identifiable {
     case mind
     case setup
     case settings
-
+    
     var id: String { rawValue }
-
+    
     var title: String {
         switch self {
         case .chat: return "Chat"
@@ -25,7 +26,7 @@ enum CompanionTab: String, CaseIterable, Identifiable {
         case .settings: return "Settings"
         }
     }
-
+    
     var icon: String {
         switch self {
         case .chat: return "bubble.left.and.text.bubble.right"
@@ -40,17 +41,18 @@ enum CompanionTab: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-final class CompanionHomeModel: ObservableObject {
-    @Published private(set) var checks: [CompanionCheck] = []
-    @Published private(set) var status: CompanionStatus?
-    @Published private(set) var error: String?
-
+@Observable
+final class CompanionHomeModel {
+    private(set) var checks: [CompanionCheck] = []
+    private(set) var status: CompanionStatus?
+    private(set) var error: String?
+    
     var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-
+    
     var healthy: Bool { !checks.isEmpty && checks.allSatisfy(\.ok) }
-
+    
     func refresh() async {
         do {
             let client = client
@@ -64,24 +66,24 @@ final class CompanionHomeModel: ObservableObject {
 }
 
 struct CompanionPage: View {
-    @StateObject private var home = CompanionHomeModel()
-    @StateObject private var chat = CompanionChatModel()
-    @StateObject private var capture = CompanionCaptureModel()
-    @StateObject private var library = CompanionLibraryModel()
-    @StateObject private var mind = CompanionMindModel()
-    @StateObject private var desk = CompanionDeskModel()
-    @StateObject private var setup = CompanionSetupModel()
-    @StateObject private var reason = CompanionSettingsModel()
-    @AppStorage("companionTab", store: SharedDefaults.store)
+    @State private var home = CompanionHomeModel()
+    @State private var chat = CompanionChatModel()
+    @State private var capture = CompanionCaptureModel()
+    @State private var library = CompanionLibraryModel()
+    @State private var mind = CompanionMindModel()
+    @State private var desk = CompanionDeskModel()
+    @State private var setup = CompanionSetupModel()
+    @State private var reason = CompanionSettingsModel()
+    @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var tabGlow
-
+    
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             header
@@ -108,7 +110,7 @@ struct CompanionPage: View {
             }
         }
     }
-
+    
     private var header: some View {
         PageHeader(
             "Companion",
@@ -127,7 +129,7 @@ struct CompanionPage: View {
                 if let status = home.status {
                     Text(
                         "\(status.episodes) episodes, \(status.chunks) chunks indexed, "
-                            + "\(status.observations) observations"
+                        + "\(status.observations) observations"
                     )
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -136,7 +138,7 @@ struct CompanionPage: View {
         )
         .pageGutter(compact)
     }
-
+    
     private var tabBar: some View {
         HStack(spacing: UIScale.pt(4)) {
             ForEach(CompanionTab.allCases) { item in
@@ -174,7 +176,7 @@ struct CompanionPage: View {
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(12))
     }
-
+    
     private var screens: some View {
         ZStack {
             screenStack
@@ -186,7 +188,7 @@ struct CompanionPage: View {
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
             value: library.dropTargeted)
     }
-
+    
     private var dropOverlay: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(14))
@@ -210,7 +212,7 @@ struct CompanionPage: View {
         .allowsHitTesting(false)
         .transition(.opacity)
     }
-
+    
     private var screenStack: some View {
         ZStack {
             screen(.chat)
@@ -243,7 +245,7 @@ struct CompanionPage: View {
                 .accessibilityHidden(tab != .settings)
         }
     }
-
+    
     @ViewBuilder
     private func screen(_ item: CompanionTab) -> some View {
         switch item {
@@ -268,7 +270,7 @@ struct CompanionPage: View {
         case .settings: CompanionSettingsScreen(model: reason, home: home)
         }
     }
-
+    
     private func select(_ item: CompanionTab) {
         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
             tabRaw = item.rawValue
@@ -287,7 +289,7 @@ enum CompanionDrop {
                 urls.append(url)
             } else if let data = try? await provider.loadItem(
                 forTypeIdentifier: UTType.fileURL.identifier) as? Data,
-                let url = URL(dataRepresentation: data, relativeTo: nil)
+                      let url = URL(dataRepresentation: data, relativeTo: nil)
             {
                 urls.append(url)
             }

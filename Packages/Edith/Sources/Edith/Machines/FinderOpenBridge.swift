@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 enum FinderOpenBridge {
     private static var observer: NSObjectProtocol?
-
+    
     static func start() {
         guard observer == nil else { return }
         observer = IPC.observe(
@@ -18,7 +18,7 @@ enum FinderOpenBridge {
                 Task { @MainActor in open(machineID: id, path: path) }
             })
     }
-
+    
     static func open(machineID: UUID, path: String?) {
         let model = MachinesModel.shared
         guard model.store.machines.contains(where: { $0.id == machineID }) else {

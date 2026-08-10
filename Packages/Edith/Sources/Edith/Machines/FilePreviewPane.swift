@@ -2,6 +2,7 @@ import AVKit
 import AppKit
 import EdithKit
 import Highlighter
+import Observation
 import PDFKit
 import Quartz
 import SwiftUI
@@ -16,7 +17,7 @@ enum PreviewCache {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appendingPathComponent(entry.name)
     }
-
+    
     static func sweep(limitBytes: Int64 = 512 * 1024 * 1024) {
         let fm = FileManager.default
         let root = MachinePaths.previewCacheDir
@@ -29,15 +30,15 @@ enum PreviewCache {
         var total: Int64 = 0
         for entry in entries {
             let files =
-                (try? fm.contentsOfDirectory(
-                    at: entry, includingPropertiesForKeys: [.fileSizeKey, .contentAccessDateKey],
-                    options: [])) ?? []
+            (try? fm.contentsOfDirectory(
+                at: entry, includingPropertiesForKeys: [.fileSizeKey, .contentAccessDateKey],
+                options: [])) ?? []
             let size = files.reduce(Int64(0)) { sum, file in
                 sum + Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
             }
             let accessed =
-                (try? entry.resourceValues(forKeys: [.contentAccessDateKey]))?.contentAccessDate
-                ?? Date.distantPast
+            (try? entry.resourceValues(forKeys: [.contentAccessDateKey]))?.contentAccessDate
+            ?? Date.distantPast
             sized.append((entry, accessed, size))
             total += size
         }
@@ -51,7 +52,8 @@ enum PreviewCache {
 }
 
 @MainActor
-final class FilePreviewModel: ObservableObject {
+@Observable
+final class FilePreviewModel {
     enum Content: Equatable {
         case empty
         case loading
@@ -64,11 +66,11 @@ final class FilePreviewModel: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var content = Content.empty
+    private(set) var content = Content.empty
     private var task: Task<Void, Never>?
-
+    
     static let textPreviewLimit = 400 * 1024
-
+    
     func load(entry: RemoteFileEntry?, session: MachineSession) {
         task?.cancel()
         guard let entry, !entry.isDirectory else {
@@ -99,9 +101,9 @@ final class FilePreviewModel: ObservableObject {
                 let playable = (try? await asset.load(.isPlayable)) ?? false
                 guard !Task.isCancelled else { return }
                 content =
-                    playable
-                    ? .media(url)
-                    : .unsupported(url, reason: "macOS cannot play this format natively.")
+                playable
+                ? .media(url)
+                : .unsupported(url, reason: "macOS cannot play this format natively.")
             case .unsupported:
                 content = .unsupported(
                     url, reason: "macOS cannot play this format natively. Open it in another app.")
@@ -111,7 +113,7 @@ final class FilePreviewModel: ObservableObject {
             PreviewCache.sweep()
         }
     }
-
+    
     private func resolvedKind(for entry: RemoteFileEntry) -> FilePreviewKind {
         let byExtension = FilePreviewKind.kind(forExtension: entry.fileExtension)
         if byExtension == .quickLook, FilePreviewKind.isPlainTextName(entry.name) {
@@ -119,7 +121,7 @@ final class FilePreviewModel: ObservableObject {
         }
         return byExtension
     }
-
+    
     private func loadText(entry: RemoteFileEntry, session: MachineSession) async {
         let truncated = entry.sizeBytes > Int64(Self.textPreviewLimit)
         if session.isLocal {
@@ -144,13 +146,13 @@ final class FilePreviewModel: ObservableObject {
             content = .failed(error.localizedDescription)
         }
     }
-
+    
     private func decode(_ data: Data) -> String {
         String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .isoLatin1)
-            ?? ""
+        ?? String(data: data, encoding: .isoLatin1)
+        ?? ""
     }
-
+    
     private func materialize(entry: RemoteFileEntry, session: MachineSession) async -> URL? {
         if session.isLocal { return URL(fileURLWithPath: entry.path) }
         let destination = PreviewCache.localURL(for: entry, machineID: session.machine.id)
@@ -172,12 +174,12 @@ final class FilePreviewModel: ObservableObject {
 
 struct FilePreviewPane: View {
     let entry: RemoteFileEntry?
-    @ObservedObject var session: MachineSession
-    @StateObject private var model = FilePreviewModel()
+    let session: MachineSession
+    @State private var model = FilePreviewModel()
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -190,7 +192,7 @@ struct FilePreviewPane: View {
         }
         .onAppear { model.load(entry: entry, session: session) }
     }
-
+    
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             if let entry {
@@ -216,7 +218,7 @@ struct FilePreviewPane: View {
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(10))
     }
-
+    
     @ViewBuilder
     private var content: some View {
         switch model.content {
@@ -267,7 +269,7 @@ struct FilePreviewPane: View {
             placeholder(message, symbol: "exclamationmark.triangle")
         }
     }
-
+    
     private func placeholder(_ text: String, symbol: String) -> some View {
         VStack(spacing: UIScale.pt(10)) {
             Image(systemName: symbol)
@@ -289,7 +291,7 @@ private struct CodePreview: View {
     let truncated: Bool
     let dark: Bool
     @State private var highlighted: NSAttributedString?
-
+    
     var body: some View {
         VStack(spacing: 0) {
             if truncated {
@@ -308,7 +310,7 @@ private struct CodePreview: View {
                 text: text, language: language, dark: dark)
         }
     }
-
+    
     private var highlightKey: String {
         "\(language ?? "")-\(dark)-\(text.count)"
     }
@@ -316,10 +318,10 @@ private struct CodePreview: View {
 
 actor SyntaxHighlighting {
     static let shared = SyntaxHighlighting()
-
+    
     private var highlighter: Highlighter?
     private var currentTheme: String?
-
+    
     func highlight(text: String, language: String?, dark: Bool) -> NSAttributedString? {
         guard text.count < 400_000 else { return nil }
         let theme = dark ? "atom-one-dark" : "atom-one-light"
@@ -334,7 +336,7 @@ actor SyntaxHighlighting {
         let resolved = Self.languageName(for: language)
         return highlighter.highlight(text, as: resolved)
     }
-
+    
     static func languageName(for ext: String?) -> String? {
         guard let ext, !ext.isEmpty else { return nil }
         let map: [String: String] = [
@@ -355,7 +357,7 @@ private struct HighlightedTextView: NSViewRepresentable {
     let attributed: NSAttributedString?
     let plain: String
     let dark: Bool
-
+    
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
         guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
@@ -371,7 +373,7 @@ private struct HighlightedTextView: NSViewRepresentable {
             width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         return scrollView
     }
-
+    
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         if let attributed {
@@ -386,7 +388,7 @@ private struct HighlightedTextView: NSViewRepresentable {
 
 private struct PDFPreview: NSViewRepresentable {
     let url: URL
-
+    
     func makeNSView(context: Context) -> PDFView {
         let view = PDFView()
         view.autoScales = true
@@ -394,7 +396,7 @@ private struct PDFPreview: NSViewRepresentable {
         view.backgroundColor = .clear
         return view
     }
-
+    
     func updateNSView(_ view: PDFView, context: Context) {
         if view.document?.documentURL != url {
             view.document = PDFDocument(url: url)
@@ -404,19 +406,19 @@ private struct PDFPreview: NSViewRepresentable {
 
 private struct QuickLookPreview: NSViewRepresentable {
     let url: URL
-
+    
     func makeNSView(context: Context) -> QLPreviewView {
         let view = QLPreviewView(frame: .zero, style: .normal) ?? QLPreviewView()
         view.shouldCloseWithWindow = false
         view.autostarts = false
         return view
     }
-
+    
     func updateNSView(_ view: QLPreviewView, context: Context) {
         view.previewItem = url as NSURL
         view.refreshPreviewItem()
     }
-
+    
     static func dismantleNSView(_ view: QLPreviewView, coordinator: ()) {
         view.close()
     }

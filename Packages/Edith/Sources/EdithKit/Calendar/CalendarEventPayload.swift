@@ -9,7 +9,7 @@ public struct CalendarEventPayload: Codable, Equatable, Sendable {
     public var isAllDay: Bool
     public var location: String?
     public var meetingURL: String?
-
+    
     public init(
         title: String, calendar: String, start: Date, end: Date, isAllDay: Bool,
         location: String? = nil, meetingURL: String? = nil
@@ -27,7 +27,7 @@ public struct CalendarEventPayload: Codable, Equatable, Sendable {
 public enum CalendarEventBridge {
     public static let payloadKey = "events"
     public static let statusKey = "status"
-
+    
     public static func payloads(_ events: [EKEvent]) -> [CalendarEventPayload] {
         CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(events)).map { event in
             CalendarEventPayload(
@@ -40,19 +40,19 @@ public enum CalendarEventBridge {
                 meetingURL: MeetingLink.url(for: event)?.absoluteString)
         }
     }
-
+    
     public static func encode(_ payloads: [CalendarEventPayload]) -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(payloads) else { return "[]" }
         return String(decoding: data, as: UTF8.self)
     }
-
+    
     public static func decode(_ text: String) -> [CalendarEventPayload] {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         guard let data = text.data(using: .utf8),
-            let payloads = try? decoder.decode([CalendarEventPayload].self, from: data)
+              let payloads = try? decoder.decode([CalendarEventPayload].self, from: data)
         else { return [] }
         return payloads
     }

@@ -8,9 +8,9 @@ enum DockerScreen: String, CaseIterable, Identifiable {
     case volumes
     case networks
     case system
-
+    
     var id: String { rawValue }
-
+    
     var title: String {
         switch self {
         case .containers: return "Containers"
@@ -20,7 +20,7 @@ enum DockerScreen: String, CaseIterable, Identifiable {
         case .system: return "Disk usage"
         }
     }
-
+    
     var icon: String {
         switch self {
         case .containers: return "shippingbox"
@@ -38,9 +38,9 @@ enum DockerDetailTab: String, CaseIterable, Identifiable {
     case stats
     case processes
     case files
-
+    
     var id: String { rawValue }
-
+    
     var title: String {
         switch self {
         case .logs: return "Logs"
@@ -54,9 +54,9 @@ enum DockerDetailTab: String, CaseIterable, Identifiable {
 
 struct PrunePlan: Identifiable, Equatable {
     let kind: String
-
+    
     var id: String { kind }
-
+    
     var title: String {
         switch kind {
         case "images": return "Prune unused images?"
@@ -65,15 +65,15 @@ struct PrunePlan: Identifiable, Equatable {
         default: return "Prune the build cache?"
         }
     }
-
+    
     var detail: String {
         switch kind {
         case "images":
             return "Every image no container is using is deleted on the machine and has to be "
-                + "pulled again."
+            + "pulled again."
         case "volumes":
             return "Every volume no container is using is deleted on the machine, along with the "
-                + "data inside it. This cannot be undone."
+            + "data inside it. This cannot be undone."
         case "networks": return "Every network no container is attached to is deleted."
         default: return "The build cache is deleted, so the next build starts from scratch."
         }
@@ -81,7 +81,7 @@ struct PrunePlan: Identifiable, Equatable {
 }
 
 struct DockerConsoleView: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
     @State private var screen = DockerScreen.containers
     @State private var query = ""
@@ -91,9 +91,9 @@ struct DockerConsoleView: View {
     @State private var terminalFor: DockerContainer?
     @State private var pendingRemoval: DockerContainer?
     @State private var pendingPrune: PrunePlan?
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         Group {
             if session.docker.isAvailable {
@@ -149,7 +149,7 @@ struct DockerConsoleView: View {
         .onAppear { session.beginDockerObservation() }
         .onDisappear { session.endDockerObservation() }
     }
-
+    
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(session.machine.name.uppercased())
@@ -184,7 +184,7 @@ struct DockerConsoleView: View {
                     .padding(.vertical, UIScale.pt(6))
                     .background(
                         screen == item
-                            ? DashSkin.accent(dark).opacity(0.16) : .clear,
+                        ? DashSkin.accent(dark).opacity(0.16) : .clear,
                         in: RoundedRectangle(cornerRadius: UIScale.pt(6))
                     )
                     .contentShape(Rectangle())
@@ -209,7 +209,7 @@ struct DockerConsoleView: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .background(.thinMaterial)
     }
-
+    
     @ViewBuilder
     private var detail: some View {
         if let container = selected {
@@ -238,7 +238,7 @@ struct DockerConsoleView: View {
             }
         }
     }
-
+    
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
             Text(screen.title)
@@ -271,7 +271,7 @@ struct DockerConsoleView: View {
         .padding(.horizontal, UIScale.pt(16))
         .padding(.vertical, UIScale.pt(12))
     }
-
+    
     @ViewBuilder
     private var list: some View {
         switch screen {
@@ -291,7 +291,7 @@ struct DockerConsoleView: View {
                     perform(
                         DockerCommands.lifecycle(action, ids: containers.map(\.id)), on: key,
                         describing: "\(action == "start" ? "Start" : "Stop") failed for "
-                            + (project.isEmpty ? "Standalone" : project))
+                        + (project.isEmpty ? "Standalone" : project))
                 })
         case .images:
             DockerSimpleList(
@@ -309,7 +309,7 @@ struct DockerConsoleView: View {
             DockerUsageView(session: session, dark: dark)
         }
     }
-
+    
     private var imageRows: [DockerRow] {
         session.images
             .filter { query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(query) }
@@ -321,7 +321,7 @@ struct DockerConsoleView: View {
                     badge: $0.dangling ? "dangling" : nil)
             }
     }
-
+    
     private var volumeRows: [DockerRow] {
         session.volumes
             .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
@@ -332,7 +332,7 @@ struct DockerConsoleView: View {
                     symbol: "externaldrive", badge: $0.inUse ? "in use" : nil)
             }
     }
-
+    
     private var networkRows: [DockerRow] {
         session.networks
             .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
@@ -342,7 +342,7 @@ struct DockerConsoleView: View {
                     symbol: "network", badge: nil)
             }
     }
-
+    
     private func perform(_ command: String, on id: String, describing: String? = nil) {
         busyIDs.insert(id)
         error = nil
@@ -368,11 +368,11 @@ struct DockerRow: Identifiable {
 }
 
 struct DockerUnavailableView: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             Image(systemName: symbol)
@@ -389,7 +389,7 @@ struct DockerUnavailableView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-
+    
     private var title: String {
         switch session.docker.status {
         case .missing: return "Docker is not installed on this machine."
@@ -398,7 +398,7 @@ struct DockerUnavailableView: View {
         case .available, .unknown: return ""
         }
     }
-
+    
     private var detail: String {
         switch session.docker.status {
         case .missing: return "Install Docker Engine there and this screen fills in."
@@ -408,7 +408,7 @@ struct DockerUnavailableView: View {
         case .available, .unknown: return ""
         }
     }
-
+    
     private var symbol: String {
         switch session.docker.status {
         case .permissionDenied: return "lock"
@@ -421,7 +421,7 @@ struct DockerUnavailableView: View {
 @MainActor
 enum DockerWindow {
     private static var windows: [UUID: NSWindow] = [:]
-
+    
     static func open(session: MachineSession) {
         if let existing = windows[session.machine.id] {
             existing.makeKeyAndOrderFront(nil)
@@ -449,7 +449,7 @@ enum DockerWindow {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-
+    
     static func forget(_ window: NSWindow) {
         windows = windows.filter { $0.value !== window }
     }
@@ -458,7 +458,7 @@ enum DockerWindow {
 @MainActor
 final class DockerWindowDelegate: NSObject, NSWindowDelegate {
     static let shared = DockerWindowDelegate()
-
+    
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         DockerWindow.forget(window)

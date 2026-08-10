@@ -7,25 +7,25 @@ enum Logo {
         Bundle.main.url(forResource: "MenuBar", withExtension: "png")
             .flatMap { NSImage(contentsOf: $0) }
     }
-
+    
     static let menuBar: NSImage = {
         let image =
-            loadTile()
-            ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
+        loadTile()
+        ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
         image.size = NSSize(width: 20, height: 20)
         return image
     }()
-
+    
     static let header: NSImage =
-        loadTile()
-        ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
+    loadTile()
+    ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
 }
 
 @MainActor
 func migratedServices() -> AppServices {
     let d = UserDefaults.standard
     if !d.bool(forKey: "migratedFromControlCenter"),
-        let old = d.persistentDomain(forName: "com.pulkit.control-center")
+       let old = d.persistentDomain(forName: "com.pulkit.control-center")
     {
         for (key, value) in old where !key.hasPrefix("NSStatusItem") {
             if d.object(forKey: key) == nil { d.set(value, forKey: key) }
@@ -60,10 +60,10 @@ private func anEarlierInstanceIsRunning() -> Bool {
 @main
 struct EdithApp: App {
     @NSApplicationDelegateAdaptor(MenuBarAppDelegate.self) private var appDelegate
-
+    
     init() {
         _ = ProcessUptime.launchedAt
-
+        
         NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
         ) { _ in
@@ -76,12 +76,14 @@ struct EdithApp: App {
         DispatchQueue.global(qos: .utility).async {
             CLIInstaller.installIfNeeded()
         }
-        applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        applyAppearance(
+            SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         let services = AppState.services
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
             SettingsBackup.shared.settingsDidChange()
-            applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+            applyAppearance(
+                SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
@@ -121,7 +123,7 @@ struct EdithApp: App {
             services.presenter?.pauseUntilShareEnds()
         }
         _ = IPC.observe(IPC.Name.requestCalendarEvents) {
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 guard let store = services.calendar else {
                     IPC.post(
                         IPC.Name.calendarEvents,
@@ -134,13 +136,13 @@ struct EdithApp: App {
                         userInfo: [CalendarEventBridge.statusKey: "notAuthorized"])
                     return
                 }
-                store.refresh()
+                let events = await store.refreshAndWait()
                 IPC.post(
                     IPC.Name.calendarEvents,
                     userInfo: [
                         CalendarEventBridge.statusKey: "ok",
                         CalendarEventBridge.payloadKey: CalendarEventBridge.encode(
-                            CalendarEventBridge.payloads(store.events)),
+                            CalendarEventBridge.payloads(events)),
                     ])
             }
         }
@@ -149,10 +151,10 @@ struct EdithApp: App {
         }
         PermissionsModel.shared.startIPCBridge()
         PermissionsModel.shared.refresh()
-
+        
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53, !NSColorPanel.shared.isVisible,
-                PanelController.shared?.isOpen == true
+               PanelController.shared?.isOpen == true
             {
                 dismissPanel()
                 return nil
@@ -160,7 +162,7 @@ struct EdithApp: App {
             return event
         }
     }
-
+    
     var body: some Scene {
         Settings {
             EmptyView()
@@ -184,11 +186,11 @@ enum GlobalHotKey {
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
     }
-
+    
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
     fileprivate static var actions: [UInt32: () -> Void] = [:]
     private static var handlerInstalled = false
-
+    
     private static func installHandlerOnce() {
         guard !handlerInstalled else { return }
         var eventType = EventTypeSpec(
@@ -207,7 +209,7 @@ enum GlobalHotKey {
             }, 1, &eventType, nil, nil)
         handlerInstalled = true
     }
-
+    
     static func set(id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void) {
         installHandlerOnce()
         clear(id: id)
@@ -218,7 +220,7 @@ enum GlobalHotKey {
             UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref)
         refs[id] = ref
     }
-
+    
     static func clear(id: UInt32) {
         if let ref = refs.removeValue(forKey: id) {
             UnregisterEventHotKey(ref)
@@ -237,17 +239,17 @@ enum HotKey {
     static var label: String {
         SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
     }
-
+    
     static func register() {
         GlobalHotKey.set(id: GlobalHotKey.ID.panel, keyCode: code, modifiers: mods) {
             togglePanel()
         }
     }
-
+    
     static func unregister() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.panel)
     }
-
+    
     static func save(code: Int, mods: Int, label: String) {
         SharedDefaults.store.set(code, forKey: "hotKeyCode")
         SharedDefaults.store.set(mods, forKey: "hotKeyMods")
@@ -261,14 +263,15 @@ enum ClipboardHotKey {
     }
     static var mods: Int {
         SharedDefaults.store.object(forKey: "clipboardHotKeyMods") as? Int
-            ?? (controlKey | shiftKey)
+        ?? (controlKey | shiftKey)
     }
     static var label: String {
         SharedDefaults.store.string(forKey: "clipboardHotKeyLabel") ?? "⌃⇧C"
     }
-
+    
     static func register() {
-        let enabled = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        let enabled =
+        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
         guard enabled else {
             GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
             return
@@ -277,11 +280,11 @@ enum ClipboardHotKey {
             MainActor.assumeIsolated { ClipboardPanel.shared.toggle() }
         }
     }
-
+    
     static func unregister() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
     }
-
+    
     static func save(code: Int, mods: Int, label: String) {
         SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
         SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
@@ -299,9 +302,9 @@ enum MicHotKey {
     static var label: String {
         SharedDefaults.store.string(forKey: "micHotKeyLabel") ?? "⌘⇧M"
     }
-
+    
     static func register() {
-        let enabled = SharedDefaults.store.bool(forKey: "micMuteEnabled")
+        let enabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Mic.muteEnabled)
         guard enabled else {
             GlobalHotKey.clear(id: GlobalHotKey.ID.micMute)
             return
@@ -310,11 +313,11 @@ enum MicHotKey {
             MainActor.assumeIsolated { AppState.services.micMute?.toggle() }
         }
     }
-
+    
     static func unregister() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.micMute)
     }
-
+    
     static func save(code: Int, mods: Int, label: String) {
         SharedDefaults.store.set(code, forKey: "micHotKeyCode")
         SharedDefaults.store.set(mods, forKey: "micHotKeyMods")
@@ -332,7 +335,7 @@ enum FocusDimHotKey {
     static var label: String {
         SharedDefaults.store.string(forKey: "focusDimHotKeyLabel") ?? "⌥⌘F"
     }
-
+    
     static func register() {
         guard SharedDefaults.store.bool(forKey: FocusDimState.enabledKey) else {
             unregister()
@@ -342,7 +345,7 @@ enum FocusDimHotKey {
             toggleFocusDim()
         }
     }
-
+    
     static func unregister() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.focusDim)
     }
@@ -360,27 +363,28 @@ enum PresenterHotKey {
     }
     static var mods: Int {
         SharedDefaults.store.object(forKey: "presenterHotKeyMods") as? Int
-            ?? (cmdKey | optionKey | shiftKey)
+        ?? (cmdKey | optionKey | shiftKey)
     }
     static var label: String {
         SharedDefaults.store.string(forKey: "presenterHotKeyLabel") ?? "⇧⌥⌘P"
     }
-
+    
     static func register() {
-        let enabled = SharedDefaults.store.object(forKey: "presenterEnabled") as? Bool ?? false
+        let enabled =
+        SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.enabled) as? Bool ?? false
         guard enabled else {
             GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
             return
         }
         GlobalHotKey.set(id: GlobalHotKey.ID.presenterToggle, keyCode: code, modifiers: mods) {
             let d = SharedDefaults.store
-            let enabled = !d.bool(forKey: "presenterMode")
-            d.set(enabled, forKey: "presenterMode")
+            let enabled = !d.bool(forKey: AppStorageKeys.Presenter.mode)
+            d.set(enabled, forKey: AppStorageKeys.Presenter.mode)
             if !enabled { IPC.post(IPC.Name.presenterPauseAuto) }
             IPC.post(IPC.Name.settingsChanged)
         }
     }
-
+    
     static func unregister() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
     }
@@ -411,16 +415,16 @@ struct TabInfo {
 let allTabs: [TabInfo] = [
     TabInfo(
         id: "usage", title: "Agent Usage",
-        subtitle: "limit polling, usage stats", enabledKey: "tabUsageEnabled"),
+        subtitle: "limit polling, usage stats", enabledKey: AppStorageKeys.Tabs.usageEnabled),
     TabInfo(
         id: "music", title: "Music",
-        subtitle: "player, media keys", enabledKey: "tabMusicEnabled"),
+        subtitle: "player, media keys", enabledKey: AppStorageKeys.Tabs.musicEnabled),
     TabInfo(
         id: "system", title: "System",
-        subtitle: "prevent sleep, keyboard cleaning", enabledKey: "tabSystemEnabled"),
+        subtitle: "prevent sleep, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
     TabInfo(
         id: "calendar", title: "Calendar",
-        subtitle: "today's schedule", enabledKey: "tabCalendarEnabled"),
+        subtitle: "today's schedule", enabledKey: AppStorageKeys.Tabs.calendarEnabled),
 ]
 
 func orderedTabIDs(_ raw: String) -> [String] {
@@ -433,40 +437,53 @@ func orderedTabIDs(_ raw: String) -> [String] {
 }
 
 struct RootView: View {
-    @EnvironmentObject private var services: AppServices
-    @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
-        false
-    @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var focusDimEnabled = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
-        false
-    @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
-        "usage,music,system"
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
-        "dashboard"
-    @StateObject private var permissions = PermissionsModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @State private var showDeveloper = false
+    let services: AppServices
 
+    init(services: AppServices) {
+        self.services = services
+    }
+
+    @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+    var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+    var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+    var systemEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+    var calendarEnabled =
+    false
+    @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
+    false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+    var presenterEnabled =
+    false
+    @AppStorage(AppStorageKeys.Tabs.order, store: SharedDefaults.store) private var tabOrderRaw =
+    "usage,music,system"
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+    var mainWindowSection =
+    "dashboard"
+    private var permissions = PermissionsModel.shared
+    private var presenterState = PresenterState.shared
+    @State private var showDeveloper = false
+    
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
             guard let info = allTabs.first(where: { $0.id == id }) else { return nil }
             let on =
-                switch id {
-                case "usage": usageEnabled
-                case "music": musicEnabled
-                case "system": systemEnabled
-                case "calendar": calendarEnabled
-                default: false
-                }
+            switch id {
+            case "usage": usageEnabled
+            case "music": musicEnabled
+            case "system": systemEnabled
+            case "calendar": calendarEnabled
+            default: false
+            }
             return on ? (info.id, info.title) : nil
         }
     }
-
+    
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 10) {
@@ -542,12 +559,12 @@ struct RootView: View {
                 } label: {
                     Image(
                         systemName: permissions.needsAttention
-                            ? "exclamationmark.triangle.fill" : "checkmark.shield"
+                        ? "exclamationmark.triangle.fill" : "checkmark.shield"
                     )
                     .font(.system(size: 13))
                     .foregroundStyle(
                         permissions.needsAttention
-                            ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                        ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help(permissions.needsAttention ? "Permissions need attention" : "Permissions")
@@ -596,7 +613,7 @@ struct RootView: View {
             }
             .animation(.easeInOut(duration: 0.22), value: tab)
             if showDeveloper {
-                DeveloperPanel()
+                DeveloperPanel(services: services)
             }
         }
         .tint(themeColor(themeName))
@@ -616,17 +633,17 @@ struct RootView: View {
         .background(PanelBackground())
         .onExitCommand { dismissPanel() }
     }
-
+    
     @ViewBuilder
     private var tabBody: some View {
         if tab == "usage", let store = services.usage {
-            UsageView().environmentObject(store)
+            UsageView(store: store)
         } else if tab == "music", let player = services.music {
-            MusicView().environmentObject(player)
+            MusicView(player: player)
         } else if tab == "system", let system = services.system {
-            SystemView().environmentObject(system)
+            SystemView().environment(system)
         } else if tab == "calendar", let calendar = services.calendar {
-            CalendarView().environmentObject(calendar)
+            CalendarView().environment(calendar)
         } else if enabledTabs.isEmpty {
             Text("All tabs are off - enable one in Edith's settings (⚙)")
                 .font(.system(size: 12))
@@ -634,7 +651,7 @@ struct RootView: View {
                 .padding(.vertical, 28)
         }
     }
-
+    
     private var presenterBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "eye.fill")
@@ -654,7 +671,7 @@ struct RootView: View {
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
-
+    
     private func pinTab() {
         if !enabledTabs.contains(where: { $0.id == tab }), let first = enabledTabs.first {
             tab = first.id
@@ -664,7 +681,7 @@ struct RootView: View {
 
 private struct PanelBackground: View {
     @Environment(\.colorScheme) private var scheme
-
+    
     var body: some View {
         (scheme == .dark ? Color.black.opacity(0.55) : Color.white.opacity(0.45))
             .ignoresSafeArea()

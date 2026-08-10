@@ -5,7 +5,7 @@ struct TabBar: View {
     let tabs: [(id: String, title: String)]
     @Binding var selection: String
     let theme: Color
-
+    
     var body: some View {
         HStack(spacing: 4) {
             ForEach(tabs, id: \.id) { entry in
@@ -15,7 +15,7 @@ struct TabBar: View {
         .padding(3)
         .background(.primary.opacity(0.06), in: Capsule())
     }
-
+    
     private func chip(_ entry: (id: String, title: String)) -> some View {
         let selected = selection == entry.id
         return Button {

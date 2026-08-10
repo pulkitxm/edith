@@ -9,30 +9,30 @@ import Testing
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
-
+    
     @Test func parsesEveryEventTheScriptEmits() {
         #expect(
             UsageRefreshEvent.parse("phase\tcli\t28 days\t0.88")
-                == .phase(name: "cli", detail: "28 days", seconds: 0.88))
+            == .phase(name: "cli", detail: "28 days", seconds: 0.88))
         #expect(
             UsageRefreshEvent.parse("note\tdiscovering sources")
-                == .note("discovering sources"))
+            == .note("discovering sources"))
         #expect(
             UsageRefreshEvent.parse("summary\tsources\tcli, codex")
-                == .summary(label: "sources", value: "cli, codex"))
+            == .summary(label: "sources", value: "cli, codex"))
         #expect(
             UsageRefreshEvent.parse("error\tno usage found from any source")
-                == .failure("no usage found from any source"))
+            == .failure("no usage found from any source"))
         #expect(UsageRefreshEvent.parse("done\t7.80") == .finished(seconds: 7.8))
     }
-
+    
     @Test func ignoresLinesThatAreNotEvents() {
         #expect(UsageRefreshEvent.parse("") == nil)
         #expect(UsageRefreshEvent.parse("some stray jq warning") == nil)
         #expect(UsageRefreshEvent.parse("phase\tcli") == nil)
         #expect(UsageRefreshEvent.parse("done") == nil)
     }
-
+    
     @Test func wireLineRoundTripsThroughParse() {
         let events: [UsageRefreshEvent] = [
             .phase(name: "walk", detail: "120038 messages", seconds: 2.53),
@@ -45,7 +45,7 @@ import Testing
             #expect(UsageRefreshEvent.parse(event.wireLine) == event)
         }
     }
-
+    
     @Test func transcriptMatchesTheLayoutTheAppUsedToPrint() {
         let started = Date(timeIntervalSince1970: 0)
         let text = UsageRefreshTranscript.render(
@@ -62,7 +62,7 @@ import Testing
         #expect(lines.contains("  ✓ sources   cli"))
         #expect(lines.contains("  ✓ done in 1.50s"))
     }
-
+    
     @Test func transcriptRulesOffTheSummaryBlockOnce() {
         let text = UsageRefreshTranscript.render(
             [
@@ -72,7 +72,7 @@ import Testing
         let rules = text.split(separator: "\n").filter { $0.contains(UsageRefreshTranscript.rule) }
         #expect(rules.count == 2)
     }
-
+    
     @Test func lockIsExclusiveAcrossHolders() {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -86,7 +86,7 @@ import Testing
         #expect(UsageRefreshLock.isHeld(at: url) == false)
         #expect(UsageRefreshLock.acquire(at: url) != nil)
     }
-
+    
     @Test func followerReadsEventsWrittenByAnotherProcess() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -99,7 +99,7 @@ import Testing
             .write(to: url, atomically: true, encoding: .utf8)
         #expect(UsageRefreshFollower.read(url) == events)
     }
-
+    
     @Test func thePipelineShipsInsideTheKitBundle() {
         #expect(UsageRefreshRunner.scriptURL() != nil)
     }

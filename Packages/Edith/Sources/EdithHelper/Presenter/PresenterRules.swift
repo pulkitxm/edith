@@ -13,14 +13,14 @@ enum PresenterRules {
         let owners: [String]
         let titles: [String]
     }
-
+    
     struct GeometryRule {
         let reason: String
         let owners: [String]
         let width: ClosedRange<Double>
         let height: ClosedRange<Double>
     }
-
+    
     static let titleRules: [TitleRule] = [
         TitleRule(
             reason: "Zoom share detected",
@@ -35,20 +35,20 @@ enum PresenterRules {
             owners: ["Microsoft Teams", "MSTeams"],
             titles: ["sharing your screen", "you're presenting", "meeting controls"]),
     ]
-
+    
     static let geometryRules: [GeometryRule] = [
         GeometryRule(
             reason: "Zoom share detected", owners: ["zoom.us"],
             width: 200...420, height: 30...70)
     ]
-
+    
     static func firstMatch(in windows: [PresenterWindowInfo], titlesAvailable: Bool) -> String? {
         if titlesAvailable, let reason = firstTitleMatch(in: windows) {
             return reason
         }
         return firstGeometryMatch(in: windows)
     }
-
+    
     private static func firstTitleMatch(in windows: [PresenterWindowInfo]) -> String? {
         for window in windows {
             for rule in titleRules
@@ -65,7 +65,7 @@ enum PresenterRules {
         }
         return nil
     }
-
+    
     private static func firstGeometryMatch(in windows: [PresenterWindowInfo]) -> String? {
         for window in windows {
             for rule in geometryRules

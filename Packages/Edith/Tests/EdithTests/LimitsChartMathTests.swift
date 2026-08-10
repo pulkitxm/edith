@@ -6,11 +6,11 @@ import Testing
 
 @Suite struct LimitsChartMathTests {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
-
+    
     @Test func emptyPointsProduceNoSamples() {
         #expect(LimitsChartView.samples(from: [], now: now).isEmpty)
     }
-
+    
     @Test func sessionOnlyPointOlderThanNowGetsCarryForwardTail() {
         let points = [LimitPoint(date: now.addingTimeInterval(-3600), s: 42, w: nil)]
         let samples = LimitsChartView.samples(from: points, now: now)
@@ -20,7 +20,7 @@ import Testing
         #expect(weekly.count == 0)
         #expect(session.contains { $0.date == now && $0.value == 42 })
     }
-
+    
     @Test func pointWithBothSeriesProducesFourSamples() {
         let points = [LimitPoint(date: now.addingTimeInterval(-3600), s: 42, w: 67)]
         let samples = LimitsChartView.samples(from: points, now: now)
@@ -28,13 +28,13 @@ import Testing
         #expect(samples.filter { $0.series == "Session" }.count == 2)
         #expect(samples.filter { $0.series == "Weekly" }.count == 2)
     }
-
+    
     @Test func lastPointExactlyAtNowHasNoTailDuplicate() {
         let points = [LimitPoint(date: now, s: 42, w: 67)]
         let samples = LimitsChartView.samples(from: points, now: now)
         #expect(samples.count == 2)
     }
-
+    
     @Test func burstOfSessionResetsWithinMinGapCollapsesToOneMarker() {
         let pts = [
             DashLimitPoint(t: now, s: 10, w: nil, sr: now, wr: nil),

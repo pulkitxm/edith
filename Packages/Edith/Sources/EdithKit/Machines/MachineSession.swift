@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 
 private struct MachineLiveMetrics {
     var sample: MachineSample?
@@ -12,31 +13,32 @@ private struct MachineLiveMetrics {
 }
 
 @MainActor
-public final class MachineSession: ObservableObject {
+@Observable
+public final class MachineSession {
     public let machine: Machine
     public nonisolated var id: UUID { machine.id }
 
-    @Published public private(set) var state: MachineConnectionState = .disconnected
-    @Published public private(set) var hello: MachineHello?
-    @Published public private(set) var slow: MachineSlow?
-    @Published private var liveMetrics = MachineLiveMetrics()
-    @Published public private(set) var docker = DockerAvailability(status: .unknown)
-    @Published public private(set) var containersLoaded = false
-    @Published public private(set) var containers: [DockerContainer] = []
-    @Published public private(set) var images: [DockerImage] = []
-    @Published public private(set) var volumes: [DockerVolume] = []
-    @Published public private(set) var diskUsage: [DockerDiskUsage] = []
-    @Published public private(set) var networks: [DockerNetwork] = []
-    @Published public private(set) var services: [SystemdService] = []
-    @Published public private(set) var facts = MachineSessionSummary()
-    @Published public private(set) var activeForwards: Set<UUID> = []
-    @Published public private(set) var mount: MachineMount?
-    @Published public private(set) var mountHealth: MountHealth?
-    @Published public private(set) var isRemounting = false
-    @Published public private(set) var isLocal: Bool
-
+    public private(set) var state: MachineConnectionState = .disconnected
+    public private(set) var hello: MachineHello?
+    public private(set) var slow: MachineSlow?
+    private var liveMetrics = MachineLiveMetrics()
+    public private(set) var docker = DockerAvailability(status: .unknown)
+    public private(set) var containersLoaded = false
+    public private(set) var containers: [DockerContainer] = []
+    public private(set) var images: [DockerImage] = []
+    public private(set) var volumes: [DockerVolume] = []
+    public private(set) var diskUsage: [DockerDiskUsage] = []
+    public private(set) var networks: [DockerNetwork] = []
+    public private(set) var services: [SystemdService] = []
+    public private(set) var facts = MachineSessionSummary()
+    public private(set) var activeForwards: Set<UUID> = []
+    public private(set) var mount: MachineMount?
+    public private(set) var mountHealth: MountHealth?
+    public private(set) var isRemounting = false
+    public private(set) var isLocal: Bool
+    
     public static let historyLength = 60
-
+    
     public var sample: MachineSample? { liveMetrics.sample }
     public var cpuHistory: [Double] { liveMetrics.cpuHistory }
     public var memHistory: [Double] { liveMetrics.memHistory }
@@ -44,7 +46,7 @@ public final class MachineSession: ObservableObject {
     public var netTxHistory: [Double] { liveMetrics.netTxHistory }
     public var diskReadHistory: [Double] { liveMetrics.diskReadHistory }
     public var diskWriteHistory: [Double] { liveMetrics.diskWriteHistory }
-
+    
     private let connection: SSHConnection?
     private let localSampler: LocalMachineSampler?
     private var metricsStream: SSHLineStream?
@@ -55,13 +57,13 @@ public final class MachineSession: ObservableObject {
     private var metricsRestartTask: Task<Void, Never>?
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
-    private var wakeObserver: NSObjectProtocol?
+    private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
     private var dockerObserverCount = 0
     private var dockerRefreshRunning = false
     private var dockerInventoryRefreshRunning = false
-
+    
     public init(machine: Machine, local: Bool = false) {
         self.machine = machine
         isLocal = local
@@ -69,15 +71,15 @@ public final class MachineSession: ObservableObject {
         localSampler = local ? LocalMachineSampler() : nil
         observeWake()
     }
-
+    
     deinit {
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
     }
-
+    
     public var connectionRef: SSHConnection? { connection }
-
+    
     public func start() {
         guard !state.isConnected, !state.isBusy else { return }
         guard !machine.isMissing else {
@@ -91,7 +93,7 @@ public final class MachineSession: ObservableObject {
         state = .connecting
         connect(afterFailures: 0, closingFirst: false)
     }
-
+    
     public func stop() {
         reconnects = false
         cancelWork()
@@ -101,7 +103,7 @@ public final class MachineSession: ObservableObject {
         Task { await connection?.disconnect() }
         state = .disconnected
     }
-
+    
     public func retry() {
         guard !isLocal else {
             stop()
@@ -116,7 +118,7 @@ public final class MachineSession: ObservableObject {
         state = .connecting
         connect(afterFailures: 0, closingFirst: true)
     }
-
+    
     private func cancelWork() {
         supervisor?.cancel()
         supervisor = nil
@@ -135,7 +137,7 @@ public final class MachineSession: ObservableObject {
         metricsStream?.cancel()
         metricsStream = nil
     }
-
+    
     private func connect(afterFailures failures: Int, closingFirst: Bool) {
         reconnects = true
         supervisor?.cancel()
@@ -176,19 +178,19 @@ public final class MachineSession: ObservableObject {
             }
         }
     }
-
+    
     private static func failure(from error: Error) -> SSHConnectFailure {
         if case let SSHConnectionError.connectFailed(failure) = error { return failure }
         return SSHConnectFailure(message: error.localizedDescription, isRecoverable: true)
     }
-
+    
     private func handleDrop() {
         guard state.isConnected else { return }
         cancelWork()
         state = .reconnecting
         connect(afterFailures: 0, closingFirst: false)
     }
-
+    
     private func observeWake() {
         guard !isLocal else { return }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -197,7 +199,7 @@ public final class MachineSession: ObservableObject {
             Task { @MainActor in self?.reconnectAfterWake() }
         }
     }
-
+    
     private func reconnectAfterWake() {
         guard reconnects, !machine.isMissing else { return }
         Task { await restoreMount() }
@@ -209,7 +211,7 @@ public final class MachineSession: ObservableObject {
         case .connecting, .disconnected: break
         }
     }
-
+    
     private func probeConnection() {
         probeTask?.cancel()
         probeTask = Task { [weak self] in
@@ -220,7 +222,7 @@ public final class MachineSession: ObservableObject {
             handleDrop()
         }
     }
-
+    
     private func startLocal() {
         state = .connected(latencyMillis: 0)
         hello = localSampler?.hello()
@@ -239,7 +241,7 @@ public final class MachineSession: ObservableObject {
             }
         }
     }
-
+    
     private func startMetricsStream() {
         guard let connection, let script = MachineCollector.script() else { return }
         let process = connection.streamProcess(command: MachineCollector.streamCommand)
@@ -261,7 +263,7 @@ public final class MachineSession: ObservableObject {
             handleMetricsStreamEnded()
         }
     }
-
+    
     private func handleMetricsStreamEnded() {
         guard state.isConnected else { return }
         metricsStream = nil
@@ -277,7 +279,7 @@ public final class MachineSession: ObservableObject {
             startMetricsStream()
         }
     }
-
+    
     private func apply(record: MachineMetricRecord) {
         switch record {
         case let .hello(value): hello = value
@@ -285,7 +287,7 @@ public final class MachineSession: ObservableObject {
         case let .slow(value): slow = value
         }
     }
-
+    
     func apply(sample value: MachineSample) {
         var next = liveMetrics
         next.sample = value
@@ -297,7 +299,7 @@ public final class MachineSession: ObservableObject {
         next.diskWriteHistory = Self.appending(value.disk.writeBps, to: next.diskWriteHistory)
         liveMetrics = next
     }
-
+    
     public static func appending(_ value: Double, to history: [Double]) -> [Double] {
         guard !history.isEmpty else {
             return Array(repeating: value, count: historyLength)
@@ -309,7 +311,7 @@ public final class MachineSession: ObservableObject {
         }
         return next
     }
-
+    
     private func startLatencyProbe() {
         latencyTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -327,24 +329,24 @@ public final class MachineSession: ObservableObject {
             }
         }
     }
-
+    
     public func refreshDockerNow() {
         Task { await refreshDocker() }
     }
-
+    
     public func beginDockerObservation() {
         dockerObserverCount += 1
         refreshDockerNow()
     }
-
+    
     public func endDockerObservation() {
         dockerObserverCount = max(0, dockerObserverCount - 1)
     }
-
+    
     var currentDockerPollInterval: TimeInterval {
         MachineResourcePolicy.dockerPollInterval(observerCount: dockerObserverCount)
     }
-
+    
     private func startDockerPolling() {
         dockerTask = Task { [weak self] in
             guard let self, let connection else { return }
@@ -373,7 +375,7 @@ public final class MachineSession: ObservableObject {
             }
         }
     }
-
+    
     private func refreshDocker() async {
         guard let connection, docker.isAvailable, !dockerRefreshRunning else { return }
         dockerRefreshRunning = true
@@ -385,11 +387,11 @@ public final class MachineSession: ObservableObject {
         let sections = result.stdoutText.components(separatedBy: DockerCommands.listSeparator)
         let parsed = DockerParsing.containers(psOutput: sections.first ?? "")
         containers =
-            sections.count > 1
-            ? DockerParsing.applyStats(sections[1], to: parsed) : parsed
+        sections.count > 1
+        ? DockerParsing.applyStats(sections[1], to: parsed) : parsed
         containersLoaded = true
     }
-
+    
     public func refreshImagesAndVolumes() async {
         guard let connection, docker.isAvailable, !dockerInventoryRefreshRunning else { return }
         dockerInventoryRefreshRunning = true
@@ -418,7 +420,7 @@ public final class MachineSession: ObservableObject {
         }
         diskUsage = DockerParsing.diskUsage(usageOut?.stdoutText ?? "")
     }
-
+    
     @discardableResult
     public func runDocker(_ command: String) async -> Result<String, Error> {
         guard let connection else {
@@ -440,7 +442,7 @@ public final class MachineSession: ObservableObject {
             return .failure(error)
         }
     }
-
+    
     public func runCommand(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
@@ -460,7 +462,7 @@ public final class MachineSession: ObservableObject {
             return .failure(error)
         }
     }
-
+    
     private func runLocalCommand(_ command: String) async -> Result<String, Error> {
         await Task.detached(priority: .userInitiated) {
             let process = Process()
@@ -485,7 +487,7 @@ public final class MachineSession: ObservableObject {
             return .success(text)
         }.value
     }
-
+    
     public func refreshServices() async {
         guard !isLocal, let connection else { return }
         guard let result = try? await connection.run(ServiceCommands.list(), timeout: 30) else {
@@ -493,7 +495,7 @@ public final class MachineSession: ObservableObject {
         }
         services = ServiceCommands.parse(result.stdoutText)
     }
-
+    
     private func loadFacts() async {
         guard let connection else { return }
         async let whoResult = try? connection.run(MachineFacts.whoCommand, timeout: 15)
@@ -505,7 +507,7 @@ public final class MachineSession: ObservableObject {
             updatesAvailable: MachineFacts.parseUpdates(updates?.stdoutText ?? ""),
             macAddress: MachineFacts.parseMACAddress(mac?.stdoutText ?? ""))
     }
-
+    
     private func startMountWatch() {
         guard !isLocal else { return }
         mountTask?.cancel()
@@ -517,7 +519,7 @@ public final class MachineSession: ObservableObject {
             }
         }
     }
-
+    
     @discardableResult
     public func restoreMount() async -> MountRepair {
         guard !isLocal, !isRemounting else { return .nothingToDo }
@@ -545,7 +547,7 @@ public final class MachineSession: ObservableObject {
         }
         return repair
     }
-
+    
     private func replayForwards(on connection: SSHConnection) async {
         let forwards = Array(rememberedForwards.values)
         var failedIDs: Set<UUID> = []
@@ -560,7 +562,7 @@ public final class MachineSession: ObservableObject {
             rememberedForwards, failedIDs: failedIDs)
         activeForwards = Set(rememberedForwards.keys)
     }
-
+    
     public func setForward(_ forward: PortForward, active: Bool) async -> String? {
         guard let connection else { return "Not connected." }
         if active {
@@ -578,7 +580,7 @@ public final class MachineSession: ObservableObject {
         activeForwards.remove(forward.id)
         return nil
     }
-
+    
     public func listFiles(path: String) async -> Result<[RemoteFileEntry], Error> {
         if isLocal {
             return .success(Self.listLocalFiles(path: path))
@@ -590,8 +592,8 @@ public final class MachineSession: ObservableObject {
             let entries = FileListing.parse(output: result.stdoutText, parent: path)
             if entries.isEmpty, !result.succeeded {
                 let message =
-                    result.stderrText.isEmpty
-                    ? "Could not read that folder." : result.stderrText
+                result.stderrText.isEmpty
+                ? "Could not read that folder." : result.stderrText
                 return .failure(
                     SSHConnectionError.commandFailed(
                         command: "list", status: result.status, stderr: message))
@@ -601,7 +603,7 @@ public final class MachineSession: ObservableObject {
             return .failure(error)
         }
     }
-
+    
     public nonisolated static func searchLocalFiles(
         root: String, query: String, limit: Int = 300
     ) -> [RemoteFileEntry] {
@@ -627,7 +629,7 @@ public final class MachineSession: ObservableObject {
         }
         return found
     }
-
+    
     nonisolated static func listLocalFiles(path: String) -> [RemoteFileEntry] {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [
@@ -641,8 +643,8 @@ public final class MachineSession: ObservableObject {
         let entries = urls.map { url -> RemoteFileEntry in
             let values = try? url.resourceValues(forKeys: Set(keys))
             let kind: FileEntryKind =
-                values?.isSymbolicLink == true
-                ? .symlink : (values?.isDirectory == true ? .directory : .file)
+            values?.isSymbolicLink == true
+            ? .symlink : (values?.isDirectory == true ? .directory : .file)
             return RemoteFileEntry(
                 name: url.lastPathComponent,
                 path: FileListing.join(parent: path, name: url.lastPathComponent), kind: kind,

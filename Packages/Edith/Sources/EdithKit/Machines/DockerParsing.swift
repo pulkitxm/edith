@@ -8,14 +8,14 @@ public enum DockerParsing {
             return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         }
     }
-
+    
     public static func string(_ object: [String: Any], _ key: String) -> String {
         if let value = object[key] as? String { return value }
         if let value = object[key] as? Int { return String(value) }
         if let value = object[key] as? Double { return String(value) }
         return ""
     }
-
+    
     public static func parseSize(_ text: String) -> Int64? {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, trimmed != "N/A", trimmed != "--" else { return nil }
@@ -32,13 +32,13 @@ public enum DockerParsing {
         }
         return Double(trimmed).map { Int64($0) }
     }
-
+    
     public static func parsePercent(_ text: String) -> Double? {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasSuffix("%") else { return nil }
         return Double(trimmed.dropLast())
     }
-
+    
     public static func parsePair(_ text: String) -> (Int64?, Int64?) {
         let parts = text.split(separator: "/", maxSplits: 1).map {
             $0.trimmingCharacters(in: .whitespaces)
@@ -46,7 +46,7 @@ public enum DockerParsing {
         guard parts.count == 2 else { return (nil, nil) }
         return (parseSize(parts[0]), parseSize(parts[1]))
     }
-
+    
     public static func parsePorts(_ text: String) -> [DockerPortMapping] {
         var seen = Set<DockerPortMapping>()
         var mappings: [DockerPortMapping] = []
@@ -79,10 +79,10 @@ public enum DockerParsing {
         }
         return mappings.sorted { lhs, rhs in
             (lhs.hostPort ?? Int.max, lhs.containerPort)
-                < (rhs.hostPort ?? Int.max, rhs.containerPort)
+            < (rhs.hostPort ?? Int.max, rhs.containerPort)
         }
     }
-
+    
     public static func parseLabels(_ text: String) -> [String: String] {
         var labels: [String: String] = [:]
         for pair in text.split(separator: ",") {
@@ -92,7 +92,7 @@ public enum DockerParsing {
         }
         return labels
     }
-
+    
     public static func parseHealth(status: String, healthStatus: String = "") -> DockerHealth {
         if let explicit = DockerHealth(rawValue: healthStatus.lowercased()) { return explicit }
         let lowered = status.lowercased()
@@ -101,7 +101,7 @@ public enum DockerParsing {
         if lowered.contains("health: starting") { return .starting }
         return .none
     }
-
+    
     public static func containers(psOutput: String) -> [DockerContainer] {
         jsonLines(psOutput).compactMap { object in
             let id = string(object, "ID")
@@ -123,23 +123,23 @@ public enum DockerParsing {
                 createdAt: string(object, "CreatedAt"))
         }
     }
-
+    
     public static func applyStats(_ statsOutput: String, to containers: [DockerContainer])
-        -> [DockerContainer]
+    -> [DockerContainer]
     {
         var byID: [String: [String: Any]] = [:]
         for object in jsonLines(statsOutput) {
             let id =
-                string(object, "ID").isEmpty
-                ? string(object, "Container") : string(object, "ID")
+            string(object, "ID").isEmpty
+            ? string(object, "Container") : string(object, "ID")
             guard !id.isEmpty else { continue }
             byID[id] = object
         }
         return containers.map { container in
             var updated = container
             let stats =
-                byID[container.id] ?? byID[container.shortID]
-                ?? byID.first { container.id.hasPrefix($0.key) }?.value
+            byID[container.id] ?? byID[container.shortID]
+            ?? byID.first { container.id.hasPrefix($0.key) }?.value
             guard let stats else { return updated }
             updated.cpuPercent = parsePercent(string(stats, "CPUPerc"))
             let memory = parsePair(string(stats, "MemUsage"))
@@ -151,7 +151,7 @@ public enum DockerParsing {
             return updated
         }
     }
-
+    
     public static func images(_ output: String) -> [DockerImage] {
         jsonLines(output).compactMap { object in
             let id = string(object, "ID")
@@ -165,7 +165,7 @@ public enum DockerParsing {
                 dangling: repository == "<none>" || tag == "<none>")
         }
     }
-
+    
     public static func volumes(_ output: String) -> [DockerVolume] {
         jsonLines(output).compactMap { object in
             let name = string(object, "Name")
@@ -175,7 +175,7 @@ public enum DockerParsing {
                 mountpoint: string(object, "Mountpoint"))
         }
     }
-
+    
     public static func networks(_ output: String) -> [DockerNetwork] {
         jsonLines(output).compactMap { object in
             let id = string(object, "ID")
@@ -185,13 +185,13 @@ public enum DockerParsing {
                 scope: string(object, "Scope"))
         }
     }
-
+    
     public static func diskUsage(_ output: String) -> [DockerDiskUsage] {
         jsonLines(output).compactMap { object in
             let type = string(object, "Type")
             guard !type.isEmpty else { return nil }
             let reclaimable =
-                string(object, "Reclaimable")
+            string(object, "Reclaimable")
                 .split(separator: " ").first.map(String.init) ?? ""
             return DockerDiskUsage(
                 type: type, totalCount: Int(string(object, "TotalCount")) ?? 0,
@@ -200,11 +200,11 @@ public enum DockerParsing {
                 reclaimableBytes: parseSize(reclaimable) ?? 0)
         }
     }
-
+    
     public static func volumeDetails(systemDFOutput: String) -> [String: (Int64?, Int?)] {
         guard let data = systemDFOutput.data(using: .utf8),
-            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-            let entries = object["Volumes"] as? [[String: Any]]
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let entries = object["Volumes"] as? [[String: Any]]
         else { return [:] }
         var result: [String: (Int64?, Int?)] = [:]
         for entry in entries {
@@ -215,14 +215,14 @@ public enum DockerParsing {
         }
         return result
     }
-
+    
     public static func splitLogLine(_ line: String, index: Int, isStderr: Bool) -> DockerLogLine {
         guard let space = line.firstIndex(of: " ") else {
             return DockerLogLine(id: index, timestamp: nil, text: line, isStderr: isStderr)
         }
         let candidate = String(line[..<space])
         guard candidate.count >= 20, candidate.contains("T"),
-            candidate.hasSuffix("Z") || candidate.contains("+")
+              candidate.hasSuffix("Z") || candidate.contains("+")
         else {
             return DockerLogLine(id: index, timestamp: nil, text: line, isStderr: isStderr)
         }
@@ -230,9 +230,9 @@ public enum DockerParsing {
             id: index, timestamp: candidate,
             text: String(line[line.index(after: space)...]), isStderr: isStderr)
     }
-
+    
     public static func availability(versionOutput: String, versionStderr: String, status: Int32)
-        -> DockerAvailability
+    -> DockerAvailability
     {
         if status == 0, let object = jsonLines(versionOutput).first {
             let server = object["Server"] as? [String: Any]

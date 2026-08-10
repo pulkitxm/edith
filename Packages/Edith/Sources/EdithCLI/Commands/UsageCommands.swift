@@ -94,7 +94,8 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 }
                 guard answered != nil else {
                     throw AppBridge.silence(
-                        "refreshing the rate limits", extensionKey: "tabUsageEnabled")
+                        "refreshing the rate limits", extensionKey: AppStorageKeys.Tabs.usageEnabled
+                    )
                 }
             }
             let providers = LimitsReport.providers()

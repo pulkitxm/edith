@@ -16,7 +16,7 @@ import Testing
         #expect(try MusicPlayer.named("builtin") == .builtin)
         #expect(try MusicPlayer.named("edith") == .builtin)
     }
-
+    
     @Test func anUnknownPlayerIsNotFoundAndListsTheRealOnes() {
         do {
             _ = try MusicPlayer.named("winamp")
@@ -28,7 +28,7 @@ import Testing
             Issue.record("unexpected error \(error)")
         }
     }
-
+    
     @Test func onlyExternalPlayersHaveAProcessToAddress() {
         #expect(MusicPlayer.builtin.processName == nil)
         #expect(MusicPlayer.spotify.processName == "Spotify")
@@ -43,7 +43,7 @@ import Testing
     ) -> PlayerSnapshot {
         PlayerSnapshot(player: player, isRunning: running, isPlaying: playing, title: title)
     }
-
+    
     @Test func aPlayingPlayerBeatsALoadedButPausedOne() throws {
         let resolved = try MusicTargeting.resolve([
             Self.snapshot(.builtin, playing: false, title: "old.mp3"),
@@ -51,7 +51,7 @@ import Testing
         ])
         #expect(resolved.player == .spotify)
     }
-
+    
     @Test func theBuiltInWinsWhenNothingElseIsPlaying() throws {
         let resolved = try MusicTargeting.resolve([
             Self.snapshot(.builtin, title: "loaded.mp3"),
@@ -59,7 +59,7 @@ import Testing
         ])
         #expect(resolved.player == .builtin)
     }
-
+    
     @Test func aLoadedPlayerBeatsARunningEmptyOne() throws {
         let resolved = try MusicTargeting.resolve([
             Self.snapshot(.builtin, title: ""),
@@ -67,7 +67,7 @@ import Testing
         ])
         #expect(resolved.player == .spotify)
     }
-
+    
     @Test func onlyTheRunningPlayerIsEverChosen() throws {
         let resolved = try MusicTargeting.resolve([
             Self.snapshot(.builtin, running: false, title: "loaded.mp3"),
@@ -76,7 +76,7 @@ import Testing
         ])
         #expect(resolved.player == .spotify)
     }
-
+    
     @Test func nothingRunningIsUnavailableRatherThanAGuess() {
         do {
             _ = try MusicTargeting.resolve([
@@ -92,11 +92,11 @@ import Testing
             Issue.record("unexpected error \(error)")
         }
     }
-
+    
     @Test func anEmptyObservationIsUnavailable() {
         #expect(throws: CLIFailure.self) { try MusicTargeting.resolve([]) }
     }
-
+    
     @Test func forcingAPlayerOverridesEvenALoudlyPlayingOne() throws {
         let resolved = try MusicTargeting.resolve(
             [
@@ -105,7 +105,7 @@ import Testing
             ], forced: .builtin)
         #expect(resolved.player == .builtin)
     }
-
+    
     @Test func forcingAPlayerThatIsNotRunningFailsWithoutLaunchingIt() {
         do {
             _ = try MusicTargeting.resolve(
@@ -118,7 +118,7 @@ import Testing
             Issue.record("unexpected error \(error)")
         }
     }
-
+    
     @Test func forcingAPlayerThatWasNeverObservedIsNotFound() {
         do {
             _ = try MusicTargeting.resolve([Self.snapshot(.spotify)], forced: .apple)
@@ -129,7 +129,7 @@ import Testing
             Issue.record("unexpected error \(error)")
         }
     }
-
+    
     @Test func theLastPlayerWeDroveBreaksATieSoPauseThenPlayStaysPut() throws {
         let observed = [
             Self.snapshot(.builtin, title: "loaded.mp3"),
@@ -138,7 +138,7 @@ import Testing
         #expect(try MusicTargeting.resolve(observed).player == .builtin)
         #expect(try MusicTargeting.resolve(observed, preferred: .spotify).player == .spotify)
     }
-
+    
     @Test func thePreferenceNeverOutranksAPlayerThatIsActuallyPlaying() throws {
         let resolved = try MusicTargeting.resolve(
             [
@@ -147,7 +147,7 @@ import Testing
             ], preferred: .builtin)
         #expect(resolved.player == .spotify)
     }
-
+    
     @Test func rankingIsOrderedPlayingThenLoadedThenRunning() {
         #expect(MusicTargeting.rank(Self.snapshot(.spotify, running: false)) == 0)
         #expect(MusicTargeting.rank(Self.snapshot(.spotify)) == 1)
@@ -172,12 +172,12 @@ import Testing
             }
         }
     }
-
+    
     @Test func theBuiltInPlayerHasNoAppleScriptToRun() {
         #expect(PlayerScript.snapshot(.builtin) == nil)
         #expect(PlayerScript.command(.pause, on: .builtin) == nil)
     }
-
+    
     @Test func spotifyDurationsAreScaledFromMillisecondsButAppleMusicIsNot() throws {
         let spotify = try #require(PlayerScript.snapshot(.spotify))
         let apple = try #require(PlayerScript.snapshot(.apple))
@@ -185,32 +185,32 @@ import Testing
         #expect(apple.contains("(duration of current track)"))
         #expect(!apple.contains("/ 1000"))
     }
-
+    
     @Test func stopIsARealVerbOnAppleMusicAndARewindOnSpotify() {
         #expect(PlayerScript.verbs(.stop, on: .apple) == ["stop"])
         #expect(
             PlayerScript.verbs(.stop, on: .spotify) == ["pause", "set player position to 0"])
     }
-
+    
     @Test func playPauseAndToggleAreThreeDifferentVerbs() {
         #expect(PlayerScript.verbs(.play, on: .spotify) == ["play"])
         #expect(PlayerScript.verbs(.pause, on: .spotify) == ["pause"])
         #expect(PlayerScript.verbs(.toggle, on: .spotify) == ["playpause"])
     }
-
+    
     @Test func volumeIsClampedAndSentAsAPercentage() {
         #expect(PlayerScript.verbs(.volume(0.4), on: .spotify) == ["set sound volume to 40"])
         #expect(PlayerScript.verbs(.volume(-1), on: .spotify) == ["set sound volume to 0"])
         #expect(PlayerScript.verbs(.volume(9), on: .spotify) == ["set sound volume to 100"])
     }
-
+    
     @Test func aNotRunningAnswerYieldsAnIdlePlayerRatherThanAGuess() {
         let parsed = PlayerScript.parse(PlayerScript.notRunningMarker, player: .spotify)
         #expect(!parsed.isRunning)
         #expect(!parsed.isPlaying)
         #expect(!parsed.hasTrack)
     }
-
+    
     @Test func aWellFormedAnswerBecomesASnapshot() {
         let fields = [
             "ok", "playing", "Meri Kahani", "Atif Aslam", "45.6", "192.9", "80",
@@ -225,13 +225,13 @@ import Testing
         #expect(parsed.durationSeconds == 192.9)
         #expect(parsed.volume == 0.8)
     }
-
+    
     @Test func aTruncatedAnswerStillReportsThePlayerAsRunning() {
         let parsed = PlayerScript.parse("ok\u{1F}paused", player: .apple)
         #expect(parsed.isRunning)
         #expect(!parsed.hasTrack)
     }
-
+    
     @Test func aPausedAnswerIsNotReportedAsPlaying() {
         let fields = ["ok", "paused", "Song", "", "1", "2", "50"]
         let parsed = PlayerScript.parse(
@@ -248,13 +248,13 @@ import Testing
         #expect(failure.kind == .unavailable)
         #expect(failure.hint?.contains("Automation") == true)
     }
-
+    
     @Test func aMissingApplicationIsReportedAsNotRunning() {
         let failure = AppleScriptHost.failure(from: "execution error: (-600)")
         #expect(failure.kind == .unavailable)
         #expect(failure.message.contains("not running"))
     }
-
+    
     @Test func anythingElseKeepsTheOriginalComplaintAsTheHint() {
         let failure = AppleScriptHost.failure(from: "execution error: something odd (-1728)")
         #expect(failure.kind == .unavailable)
@@ -269,7 +269,7 @@ import Testing
                 BuiltinCommand("pause"), BuiltinCommand("seek", value: 0),
             ])
     }
-
+    
     @Test func everyActionMapsOntoAVerbTheAppAlreadyUnderstands() {
         let known: Set<String> = [
             "playPause", "pause", "resume", "next", "previous", "seek", "volume",
@@ -283,20 +283,20 @@ import Testing
             }
         }
     }
-
+    
     @Test func playAndPauseAreNeverTheSameCommandAsToggle() {
         #expect(MusicSession.builtinCommands(.play) != MusicSession.builtinCommands(.toggle))
         #expect(MusicSession.builtinCommands(.pause) != MusicSession.builtinCommands(.toggle))
         #expect(MusicSession.builtinCommands(.pause) != MusicSession.builtinCommands(.play))
     }
-
+    
     @Test func volumeTravelsAsAFraction() {
         #expect(MusicSession.builtinCommands(.volume(0.25)).first?.value == 0.25)
         #expect(
             MusicSession.builtinCommands(.volume(0.25)).first?.userInfo["value"] as? Double
-                == 0.25)
+            == 0.25)
     }
-
+    
     @Test func theBuiltInReplyBecomesASnapshotWithJustTheFileName() {
         let snapshot = MusicSession.decodeBuiltin([
             "track": "albums/Gal ban gyi.mp3", "isPlaying": true, "elapsed": 103.0,
@@ -307,13 +307,13 @@ import Testing
         #expect(snapshot.title == "Gal ban gyi.mp3")
         #expect(snapshot.volume == 0.4)
     }
-
+    
     @Test func anEmptyBuiltInReplyIsRunningButIdle() {
         let snapshot = MusicSession.decodeBuiltin([:])
         #expect(snapshot.isRunning)
         #expect(!snapshot.hasTrack)
     }
-
+    
     @Test func theReportNamesEveryPlayerAndTheActiveOne() {
         let all = MusicPlayer.allCases.map { PlayerSnapshot(player: $0) }
         let active = PlayerSnapshot(player: .spotify, isRunning: true, title: "x")
@@ -329,7 +329,7 @@ import Testing
         }
         #expect(players.count == MusicPlayer.allCases.count)
     }
-
+    
     @Test func aReportWithNoActivePlayerSaysSoRatherThanOmittingTheKey() {
         guard
             case let .object(fields) = MusicSession.report(
@@ -354,28 +354,28 @@ import Testing
             #expect(idle.line.contains("(\(player.displayName))"))
         }
     }
-
+    
     @Test func theClockIsMinutesAndSeconds() {
         let snapshot = PlayerSnapshot(
             player: .spotify, isRunning: true, isPlaying: true, title: "Song",
             elapsedSeconds: 65, durationSeconds: 185)
         #expect(snapshot.line.contains("1:05/3:05"))
     }
-
+    
     @Test func aTrackWithNoArtistDoesNotLeaveADanglingSeparator() {
         let snapshot = PlayerSnapshot(
             player: .builtin, isRunning: true, title: "Gal ban gyi.mp3", elapsedSeconds: 0,
             durationSeconds: 0)
         #expect(snapshot.line == "paused  Gal ban gyi.mp3  0:00/0:00  (Edith)")
     }
-
+    
     @Test func nonFiniteTimesNeverCrashTheFormatter() {
         let snapshot = PlayerSnapshot(
             player: .spotify, isRunning: true, title: "Song",
             elapsedSeconds: .nan, durationSeconds: .infinity)
         #expect(snapshot.line.contains("0:00"))
     }
-
+    
     @Test func theSnapshotJSONKeepsAStableKeySet() {
         guard case let .object(fields) = PlayerSnapshot(player: .spotify).json else {
             Issue.record("snapshot should be an object")
@@ -414,7 +414,7 @@ import Testing
             #expect(world.recordedScripts().allSatisfy { !$0.contains("\"Music\"\n\tpause") })
         }
     }
-
+    
     @Test func pauseTargetsTheLibraryWhenNoExternalPlayerIsRunning() async throws {
         try await CLIProbe.inWorld { world in
             world.helperRunning(true)
@@ -427,7 +427,7 @@ import Testing
             #expect(world.postedNames().contains(IPC.Name.musicCommand.rawValue))
         }
     }
-
+    
     @Test func statusWithNoPlayerAtAllExitsUnavailable() async throws {
         try await CLIProbe.inWorld { world in
             world.helperRunning(false)
@@ -438,7 +438,7 @@ import Testing
             #expect(result.stderr.contains("no music player is running"))
         }
     }
-
+    
     @Test func statusJSONIsOneDocumentListingEveryPlayer() async throws {
         try await CLIProbe.inWorld { world in
             world.players([
@@ -453,7 +453,7 @@ import Testing
             #expect((object["players"] as? [Any])?.count == MusicPlayer.allCases.count)
         }
     }
-
+    
     @Test func aForcedPlayerThatIsNotRunningIsNeverLaunched() async throws {
         try await CLIProbe.inWorld { world in
             world.players([:])
@@ -465,20 +465,20 @@ import Testing
             }
         }
     }
-
+    
     @Test func anUnknownForcedPlayerIsNotFound() async {
         let result = await CLIProbe.run(["music", "pause", "--player", "winamp"])
         #expect(result.code == ExitCodes.notFound)
         #expect(result.stdout.isEmpty)
     }
-
+    
     @Test func nowplayingAndNpAreTheSameCommandAsMusic() throws {
         for name in ["music", "nowplaying", "np"] {
             let parsed = try EdRoot.parseAsRoot([name, "status"])
             #expect(type(of: parsed).configuration.commandName == "status")
         }
     }
-
+    
     @Test func volumeOutsideZeroToOneIsRejectedBeforeAnyPlayerIsTouched() async throws {
         try await CLIProbe.inWorld { world in
             world.players([

@@ -3,7 +3,7 @@ import Foundation
 public enum FilesLaunch {
     public static let machineFlag = "--machine"
     public static let pathFlag = "--path"
-
+    
     public static func parse(_ arguments: [String]) -> (machine: UUID, path: String?)? {
         var machine: UUID?
         var path: String?

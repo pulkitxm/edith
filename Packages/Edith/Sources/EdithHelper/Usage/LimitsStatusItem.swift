@@ -4,9 +4,9 @@ import EdithKit
 @MainActor
 final class LimitsStatusItem {
     nonisolated(unsafe) static private(set) weak var button: NSStatusBarButton?
-
+    
     private let item: NSStatusItem
-
+    
     init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.autosaveName = "limits"
@@ -15,21 +15,22 @@ final class LimitsStatusItem {
         Self.button = item.button
         showUnavailable()
     }
-
+    
     func remove() {
         NSStatusBar.system.removeStatusItem(item)
         Self.button = nil
     }
-
+    
     @objc private func clicked() {
         StatusItemMenu.handleClick(on: item) { MainApp.open(section: "dashboard") }
     }
-
+    
     func update(_ providers: [ProviderLimits]) {
         let title = NSMutableAttributedString()
         let masked =
-            PresenterState.shared.active
-            && (SharedDefaults.store.object(forKey: "presenterHideMenuBarNumbers") as? Bool ?? false)
+        PresenterState.shared.active
+        && (SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            as? Bool ?? false)
         if providers.count == 1, let limits = providers.first {
             segment("5h", window: limits.session, kind: .session, into: title, masked: masked)
             title.append(NSAttributedString(string: "  "))
@@ -46,9 +47,9 @@ final class LimitsStatusItem {
         }
         item.button?.attributedTitle = title
     }
-
+    
     func showUnavailable() { update([]) }
-
+    
     private func providerSegment(
         _ limits: ProviderLimits, into out: NSMutableAttributedString, masked: Bool
     ) {
@@ -70,7 +71,7 @@ final class LimitsStatusItem {
                 ]))
         compactValue(limits.week, kind: .weekly, into: out, masked: masked)
     }
-
+    
     private func compactValue(
         _ window: LimitWindow?, kind: LimitWindowKind, into out: NSMutableAttributedString,
         masked: Bool
@@ -91,7 +92,7 @@ final class LimitsStatusItem {
         out.append(
             NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
     }
-
+    
     private func segment(
         _ label: String, window: LimitWindow?, kind: LimitWindowKind,
         into out: NSMutableAttributedString, masked: Bool
@@ -140,14 +141,14 @@ final class LimitsStatusItem {
                     .foregroundColor: tint.withAlphaComponent(0.75),
                 ]))
     }
-
+    
     private func color(for window: LimitWindow, kind: LimitWindowKind) -> NSColor {
         let d = SharedDefaults.store
-        if d.object(forKey: "smartColor") as? Bool ?? true {
+        if d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true {
             let risk = LimitMath.smartRisk(
                 utilization: window.percent, resetsAt: window.resetsAt,
                 windowDuration: kind.duration,
-                pacingMargin: d.object(forKey: "pacingMargin") as? Double ?? 10)
+                pacingMargin: d.object(forKey: AppStorageKeys.Limits.pacingMargin) as? Double ?? 10)
             return Self.color(forRisk: risk, low: lowColor, mid: midColor, high: highColor)
         }
         switch UsageLevel.from(pct: window.percent, thresholds: .fromDefaults(d)) {
@@ -156,18 +157,21 @@ final class LimitsStatusItem {
         case .red: return highColor
         }
     }
-
-    private var mode: String { SharedDefaults.store.string(forKey: "menuBarColorMode") ?? "auto" }
-
+    
+    private var mode: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode) ?? "auto"
+    }
+    
     private var subColor: NSColor? {
         switch mode {
         case "white": return .white
         case "black": return .black
         default:
-            return Self.nsColor(hex: SharedDefaults.store.string(forKey: "menuBarSubColorHex"))
+            return Self.nsColor(
+                hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.subColorHex))
         }
     }
-
+    
     private var numberOverride: NSColor? {
         switch mode {
         case "white": return .white
@@ -175,16 +179,16 @@ final class LimitsStatusItem {
         default: return nil
         }
     }
-
+    
     private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
         guard mode == "custom" || mode == "auto" else { return fallback }
         return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
     }
-
-    private var lowColor: NSColor { anchor("menuBarLowColorHex", .systemGreen) }
-    private var midColor: NSColor { anchor("menuBarMidColorHex", .systemOrange) }
-    private var highColor: NSColor { anchor("menuBarHighColorHex", .systemRed) }
-
+    
+    private var lowColor: NSColor { anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen) }
+    private var midColor: NSColor { anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange) }
+    private var highColor: NSColor { anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed) }
+    
     static func color(
         forRisk risk: Double, low: NSColor = .systemGreen, mid: NSColor = .systemOrange,
         high: NSColor = .systemRed
@@ -195,7 +199,7 @@ final class LimitsStatusItem {
         if r <= 0.55 { return interpolateHSB(low, mid, t: (r - 0.30) / 0.25) }
         return interpolateHSB(mid, high, t: (r - 0.55) / 0.30)
     }
-
+    
     static func nsColor(hex: String?) -> NSColor? {
         guard var s = hex else { return nil }
         if s.hasPrefix("#") { s.removeFirst() }
@@ -205,7 +209,7 @@ final class LimitsStatusItem {
             green: CGFloat((v >> 8) & 0xff) / 255,
             blue: CGFloat(v & 0xff) / 255, alpha: 1)
     }
-
+    
     private static func interpolateHSB(_ a: NSColor, _ b: NSColor, t: Double) -> NSColor {
         let f = CGFloat(max(0, min(1, t)))
         guard let x = a.usingColorSpace(.sRGB), let y = b.usingColorSpace(.sRGB) else { return a }

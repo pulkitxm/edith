@@ -4,10 +4,10 @@ import SwiftUI
 
 struct ArtworkThumb: View {
     let track: Track
-    @ObservedObject var player: MusicPlayer
+    var player: MusicPlayer
     var size: CGFloat = 36
     @State private var artwork: NSImage?
-
+    
     var body: some View {
         Group {
             if let artwork {
@@ -36,10 +36,10 @@ struct ArtworkThumb: View {
 
 struct AmbientGlow: View {
     let track: Track
-    @ObservedObject var player: MusicPlayer
+    var player: MusicPlayer
     @Environment(\.colorScheme) private var scheme
     @State private var artwork: NSImage?
-
+    
     var body: some View {
         GeometryReader { geo in
             Group {

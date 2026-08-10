@@ -12,12 +12,12 @@ struct ClaudeOAuthCredential {
     let refreshTokenExpiresAt: Date?
     let source: ClaudeCredentialSource
     private let document: [String: Any]
-
+    
     static func decode(_ data: Data, source: ClaudeCredentialSource) -> ClaudeOAuthCredential? {
         guard let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let oauth = document["claudeAiOauth"] as? [String: Any],
-            let accessToken = oauth["accessToken"] as? String,
-            !accessToken.isEmpty
+              let oauth = document["claudeAiOauth"] as? [String: Any],
+              let accessToken = oauth["accessToken"] as? String,
+              !accessToken.isEmpty
         else { return nil }
         return ClaudeOAuthCredential(
             accessToken: accessToken,
@@ -27,18 +27,18 @@ struct ClaudeOAuthCredential {
             source: source,
             document: document)
     }
-
+    
     func shouldRefresh(at now: Date, leeway: TimeInterval = 60) -> Bool {
         guard let expiresAt else { return false }
         return expiresAt <= now.addingTimeInterval(leeway)
     }
-
+    
     func usableRefreshToken(at now: Date) -> String? {
         guard let refreshToken else { return nil }
         if let refreshTokenExpiresAt, refreshTokenExpiresAt <= now { return nil }
         return refreshToken
     }
-
+    
     func updatedData(with response: ClaudeOAuthRefreshResponse, now: Date) throws -> Data {
         var updated = document
         var oauth = updated["claudeAiOauth"] as? [String: Any] ?? [:]
@@ -55,12 +55,12 @@ struct ClaudeOAuthCredential {
         updated["claudeAiOauth"] = oauth
         return try JSONSerialization.data(withJSONObject: updated)
     }
-
+    
     private static func nonempty(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
         return value
     }
-
+    
     private static func millisecondsDate(_ value: Any?) -> Date? {
         guard let number = value as? NSNumber else { return nil }
         return Date(timeIntervalSince1970: number.doubleValue / 1000)
@@ -72,7 +72,7 @@ struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
     let refreshToken: String?
     let expiresIn: TimeInterval
     let refreshTokenExpiresIn: TimeInterval?
-
+    
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
@@ -83,7 +83,7 @@ struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
 
 enum ClaudeCredentialStoreError: LocalizedError {
     case keychainUpdateFailed(Int32)
-
+    
     var errorDescription: String? {
         switch self {
         case .keychainUpdateFailed(let status):
@@ -94,10 +94,10 @@ enum ClaudeCredentialStoreError: LocalizedError {
 
 enum ClaudeCredentialStore {
     private static let keychainService = "Claude Code-credentials"
-
+    
     static func read() -> ClaudeOAuthCredential? {
         if let data = keychainData(),
-            let credential = ClaudeOAuthCredential.decode(data, source: .keychain)
+           let credential = ClaudeOAuthCredential.decode(data, source: .keychain)
         {
             return credential
         }
@@ -106,7 +106,7 @@ enum ClaudeCredentialStore {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return ClaudeOAuthCredential.decode(data, source: .file(url))
     }
-
+    
     static func persist(_ data: Data, source: ClaudeCredentialSource) throws {
         switch source {
         case .keychain:
@@ -117,7 +117,7 @@ enum ClaudeCredentialStore {
                 [.posixPermissions: 0o600], ofItemAtPath: url.path)
         }
     }
-
+    
     private static func keychainData() -> Data? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
@@ -130,7 +130,7 @@ enum ClaudeCredentialStore {
         guard process.terminationStatus == 0 else { return nil }
         return output.fileHandleForReading.readDataToEndOfFile()
     }
-
+    
     private static func updateKeychain(_ data: Data) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")

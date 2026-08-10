@@ -5,22 +5,28 @@ import EventKit
 import SwiftUI
 
 struct HomePage: View {
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
-        true
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
-        false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
-        false
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+    var presenterBlurMoney =
+    true
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+    var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+    var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+    var calendarEnabled =
+    false
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+    var systemEnabled = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+    var presenterEnabled =
+    false
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
-
+    
     var body: some View {
         GeometryReader { geo in
             let compact = geo.size.width < UIScale.pt(640)
@@ -80,7 +86,7 @@ struct HomePage: View {
             if usageEnabled { await model.load() }
         }
     }
-
+    
     private var background: some View {
         DashSkin.paper(dark)
             .overlay(alignment: .topTrailing) {
@@ -103,12 +109,12 @@ struct HomePage: View {
 
 enum HomeMath {
     static let maxZones = 2
-
+    
     static let zoneSuggestions = [
         "Europe/London", "Europe/Berlin", "Asia/Kolkata", "Asia/Tokyo", "Asia/Singapore",
         "Australia/Sydney", "America/Chicago", "America/Sao_Paulo", "Asia/Dubai",
     ]
-
+    
     static func salutation(hour: Int) -> String {
         switch hour {
         case 5..<12: return "Good morning"
@@ -117,24 +123,24 @@ enum HomeMath {
         default: return "Up late"
         }
     }
-
+    
     static func clockLabel(hour24: Int, minute: Int, second: Int) -> String {
         let h = hour24 % 12 == 0 ? 12 : hour24 % 12
         return String(format: "%d:%02d:%02d", h, minute, second)
     }
-
+    
     static func cityName(_ id: String) -> String {
         (id.split(separator: "/").last.map(String.init) ?? id)
             .replacingOccurrences(of: "_", with: " ")
     }
-
+    
     static func offsetLabel(seconds: Int) -> String {
         if seconds == 0 { return "same time" }
         let hours = Double(seconds) / 3600
         return hours == hours.rounded()
-            ? String(format: "%+.0fh", hours) : String(format: "%+.1fh", hours)
+        ? String(format: "%+.0fh", hours) : String(format: "%+.1fh", hours)
     }
-
+    
     static func topModels(days: [HeatDay?], limit: Int = 3) -> [NamedValue] {
         var totals: [String: Double] = [:]
         for day in days {
@@ -146,7 +152,7 @@ enum HomeMath {
             NamedValue(id: $0.key, name: $0.key, value: $0.value)
         }
     }
-
+    
     static func zoneMatches(query: String, taken: Set<String>) -> [String] {
         if query.isEmpty {
             return zoneSuggestions.filter { !taken.contains($0) }
@@ -163,13 +169,13 @@ private struct HomeHeader: View {
     let dark: Bool
     @Environment(\.compactLayout) private var compact
     @ObservedObject private var visibility = WindowVisibility.shared
-
+    
     private var firstName: String {
         let full = NSFullUserName()
         let name = full.isEmpty ? NSUserName() : full
         return name.split(separator: " ").first.map(String.init) ?? name
     }
-
+    
     private func clockString(_ now: Date) -> String {
         let cal = Calendar.current
         return HomeMath.clockLabel(
@@ -177,11 +183,11 @@ private struct HomeHeader: View {
             minute: cal.component(.minute, from: now),
             second: cal.component(.second, from: now))
     }
-
+    
     private func salutation(_ date: Date) -> String {
         HomeMath.salutation(hour: Calendar.current.component(.hour, from: date))
     }
-
+    
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let now = context.date
@@ -195,13 +201,13 @@ private struct HomeHeader: View {
             }
         }
     }
-
+    
     private func greeting(_ now: Date) -> some View {
         (Text("\(salutation(now)), ")
-            + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
-            + Text("."))
+         + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
+         + Text("."))
     }
-
+    
     private func subtitle(_ now: Date) -> some View {
         Text(
             now.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
@@ -211,7 +217,7 @@ private struct HomeHeader: View {
         .foregroundStyle(DashSkin.inkFaint(dark))
         .lineLimit(1).minimumScaleFactor(0.7)
     }
-
+    
     private func clockText(_ date: Date) -> some View {
         Text(clockString(date))
             .font(PageMetrics.titleFont(compact))
@@ -219,7 +225,7 @@ private struct HomeHeader: View {
             .monospacedDigit()
             .lineLimit(1).minimumScaleFactor(0.6)
     }
-
+    
     private func clockBlock(_ now: Date, alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: UIScale.pt(2)) {
             if visibility.visible {
@@ -231,7 +237,7 @@ private struct HomeHeader: View {
             }
             Text(
                 "\(Calendar.current.component(.hour, from: now) < 12 ? "AM" : "PM")"
-                    + " · \(TimeZone.current.abbreviation() ?? "local")"
+                + " · \(TimeZone.current.abbreviation() ?? "local")"
             )
             .font(DashSkin.mono(11)).tracking(UIScale.pt(1.2))
             .foregroundStyle(DashSkin.inkFaint(dark))
@@ -242,15 +248,16 @@ private struct HomeHeader: View {
 private struct WorldClocksCard: View {
     let dark: Bool
     @Environment(\.compactLayout) private var compact
-    @AppStorage("homeClockZones", store: SharedDefaults.store) private var zonesRaw =
-        "America/New_York,America/Los_Angeles"
+    @AppStorage(AppStorageKeys.General.homeClockZones, store: SharedDefaults.store) private
+    var zonesRaw =
+    "America/New_York,America/Los_Angeles"
     @State private var showAdd = false
     @State private var query = ""
-
+    
     private var zoneIDs: [String] {
         zonesRaw.split(separator: ",").map(String.init).filter { TimeZone(identifier: $0) != nil }
     }
-
+    
     var body: some View {
         SkinCard(title: "World clocks", note: "hover a clock to remove", dark: dark) {
             TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -273,25 +280,25 @@ private struct WorldClocksCard: View {
             }
         }
     }
-
+    
     private func remove(_ id: String) {
         zonesRaw = zoneIDs.filter { $0 != id }.joined(separator: ",")
     }
-
+    
     private func add(_ id: String) {
         guard zoneIDs.count < HomeMath.maxZones, !zoneIDs.contains(id),
-            TimeZone(identifier: id) != nil
+              TimeZone(identifier: id) != nil
         else { return }
         zonesRaw = (zoneIDs + [id]).joined(separator: ",")
         showAdd = false
         query = ""
     }
-
+    
     private var matches: [String] {
         HomeMath.zoneMatches(
             query: query, taken: Set(zoneIDs + [TimeZone.current.identifier]))
     }
-
+    
     private var addButton: some View {
         Button {
             showAdd = true
@@ -364,15 +371,15 @@ private struct ClockTile: View {
     let onRemove: (() -> Void)?
     @Environment(\.compactLayout) private var compact
     @State private var hovering = false
-
+    
     private var faceSize: CGFloat { compact ? 64 : 96 }
     private var tileWidth: CGFloat { compact ? 92 : 112 }
-
+    
     private var offsetLabel: String {
         HomeMath.offsetLabel(
             seconds: zone.secondsFromGMT(for: date) - TimeZone.current.secondsFromGMT(for: date))
     }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             ClockFace(zone: zone, dark: dark)
@@ -417,7 +424,7 @@ private struct ClockFace: View {
     let zone: TimeZone
     let dark: Bool
     @ObservedObject private var visibility = WindowVisibility.shared
-
+    
     var body: some View {
         if visibility.visible {
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -427,7 +434,7 @@ private struct ClockFace: View {
             face(Date())
         }
     }
-
+    
     private func face(_ date: Date) -> some View {
         Canvas { ctx, size in
             var cal = Calendar(identifier: .gregorian)
@@ -436,23 +443,23 @@ private struct ClockFace: View {
             let minute = Double(cal.component(.minute, from: date))
             let second = Double(cal.component(.second, from: date))
             let isDay = (6..<18).contains(cal.component(.hour, from: date))
-
+            
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let radius = min(size.width, size.height) / 2 - 1
-
+            
             let face =
-                isDay
-                ? DashSkin.paper2(dark) : DashPalette.color(dark ? "#12100d" : "#2e2822")
+            isDay
+            ? DashSkin.paper2(dark) : DashPalette.color(dark ? "#12100d" : "#2e2822")
             let mark = isDay ? DashSkin.inkFaint(dark) : DashPalette.color("#8a7d6c")
             let hand = isDay ? DashSkin.ink(dark) : DashPalette.color("#f1e9dc")
-
+            
             let dial = Path(
                 ellipseIn: CGRect(
                     x: center.x - radius, y: center.y - radius,
                     width: radius * 2, height: radius * 2))
             ctx.fill(dial, with: .color(face))
             ctx.stroke(dial, with: .color(DashSkin.lineStrong(dark)), lineWidth: UIScale.pt(1))
-
+            
             for i in 0..<12 {
                 let angle = Double(i) / 12 * 2 * .pi
                 let long = i % 3 == 0
@@ -466,7 +473,7 @@ private struct ClockFace: View {
                     style: StrokeStyle(
                         lineWidth: long ? 1.6 : 1, lineCap: .round))
             }
-
+            
             let hourAngle = (hour + minute / 60) / 12 * 2 * .pi
             let minuteAngle = (minute + second / 60) / 60 * 2 * .pi
             let secondAngle = second / 60 * 2 * .pi
@@ -487,13 +494,13 @@ private struct ClockFace: View {
                 with: .color(DashSkin.accent(dark)))
         }
     }
-
+    
     private func point(_ center: CGPoint, _ radius: CGFloat, _ angle: Double) -> CGPoint {
         CGPoint(
             x: center.x + radius * CGFloat(sin(angle)),
             y: center.y - radius * CGFloat(cos(angle)))
     }
-
+    
     private func drawHand(
         _ ctx: inout GraphicsContext, _ center: CGPoint, length: CGFloat, angle: Double,
         width: CGFloat, color: Color
@@ -507,15 +514,20 @@ private struct ClockFace: View {
 
 private struct QuickActionsCard: View {
     let dark: Bool
-    @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenterMode = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
-        false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+    var preventSleep = false
+    @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
+    var presenterMode = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+    var presenterEnabled =
+    false
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+    var systemEnabled = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    
     private var theme: Color { themeColor(themeName) }
-
+    
     var body: some View {
         SkinCard(title: "Quick actions", dark: dark) {
             HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -546,7 +558,7 @@ private struct QuickActionsCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
-
+    
     private func tile(
         icon: String, title: String, sub: String, active: Bool, action: @escaping () -> Void
     ) -> some View {
@@ -583,19 +595,24 @@ private struct QuickActionsCard: View {
 
 private struct MeetingsCard: View {
     let dark: Bool
-    @StateObject private var store = CalendarStore()
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
-    private var presenterBlurCalendar = true
+    @State private var store = CalendarStore()
+    private var presenterState = PresenterState.shared
 
+    init(dark: Bool) {
+        self.dark = dark
+    }
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
+    private var presenterBlurCalendar = true
+    
     private var theme: Color { themeColor(themeName) }
     private var blurCalendar: Bool { presenterState.active && presenterBlurCalendar }
-
+    
     private var todayEvents: [EKEvent] {
         store.events.filter { Calendar.current.isDateInToday($0.startDate) }
     }
-
+    
     var body: some View {
         SkinCard(title: "Today's meetings", note: note, dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(0)) {
@@ -625,13 +642,13 @@ private struct MeetingsCard: View {
             store.refreshAuthStatus()
         }
     }
-
+    
     private var note: String {
         guard store.authStatus == .fullAccess else { return "" }
         let count = todayEvents.count
         return count == 0 ? "" : "\(count) event\(count == 1 ? "" : "s")"
     }
-
+    
     private func row(_ event: EKEvent) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
             Text(timeLabel(event))
@@ -659,14 +676,14 @@ private struct MeetingsCard: View {
         }
         .padding(.vertical, UIScale.pt(6))
     }
-
+    
     private func timeLabel(_ event: EKEvent) -> String {
         guard !event.isAllDay else { return "All day" }
         let start = event.startDate.formatted(date: .omitted, time: .shortened)
         let end = event.endDate.formatted(date: .omitted, time: .shortened)
         return "\(start)–\(end)"
     }
-
+    
     private var accessPrompt: some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "calendar.badge.exclamationmark")
@@ -692,9 +709,10 @@ struct JumpLink: View {
     let title: String
     let destination: MainDestination
     let dark: Bool
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
-        MainDestination.home.rawValue
-
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+    var mainWindowSection =
+    MainDestination.home.rawValue
+    
     var body: some View {
         Button {
             mainWindowSection = destination.rawValue
@@ -715,25 +733,30 @@ struct JumpLink: View {
 
 private struct UsageSummaryCard: View {
     let dark: Bool
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
-        true
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+    var presenterBlurMoney =
+    true
 
+    init(dark: Bool) {
+        self.dark = dark
+    }
+    
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
-
+    
     private static let ymd: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
-
+    
     private func day(_ offset: Int) -> HeatDay? {
         let cal = Calendar.current
         let date = cal.date(byAdding: .day, value: -offset, to: cal.startOfDay(for: Date()))!
         return model.heatDetail[Self.ymd.string(from: date)]
     }
-
+    
     private var lastDays: [(date: Date, cost: Double, tokens: Double)] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
@@ -743,11 +766,11 @@ private struct UsageSummaryCard: View {
             return (date, detail?.cost ?? 0, detail?.tokens ?? 0)
         }
     }
-
+    
     private var weekModels: [NamedValue] {
         HomeMath.topModels(days: (0..<7).map(day))
     }
-
+    
     var body: some View {
         SkinCard(title: "Agent usage", note: "last 14 days", dark: dark) {
             if model.loaded {
@@ -790,7 +813,7 @@ private struct UsageSummaryCard: View {
             }
         }
     }
-
+    
     private func stat(_ label: String, cost: Double, tokens: Double) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label.uppercased())
@@ -806,7 +829,7 @@ private struct UsageSummaryCard: View {
                 .presenterBlur(blurMoney)
         }
     }
-
+    
     private var chart: some View {
         Chart(lastDays, id: \.date) { entry in
             BarMark(
@@ -816,7 +839,7 @@ private struct UsageSummaryCard: View {
             .cornerRadius(2)
             .foregroundStyle(
                 Calendar.current.isDateInToday(entry.date)
-                    ? DashSkin.accent(dark) : DashSkin.accent(dark).opacity(0.45))
+                ? DashSkin.accent(dark) : DashSkin.accent(dark).opacity(0.45))
         }
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: 3)) { value in
@@ -836,21 +859,28 @@ private struct UsageSummaryCard: View {
 
 private struct MusicCard: View {
     let dark: Bool
-    @ObservedObject private var remote = MusicRemote.shared
+    @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
-        true
+    private var presenterState = PresenterState.shared
 
+    init(dark: Bool) {
+        self.dark = dark
+    }
+    
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+    var presenterBlurMusic =
+    true
+    
     private var theme: Color { themeColor(themeName) }
     private var blur: Bool { presenterState.active && presenterBlurMusic }
-
+    
     private var upNext: [Track] {
         remote.tracks.filter { $0.relativePath != remote.currentFile }.prefix(4)
             .map { $0 }
     }
-
+    
     var body: some View {
         SkinCard(
             title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks",
@@ -876,13 +906,13 @@ private struct MusicCard: View {
         }
         .onAppear { remote.start() }
     }
-
+    
     private var elapsedText: some View {
         Text("\(TrackMeta.timeLabel(remote.elapsed)) / \(TrackMeta.timeLabel(remote.duration))")
             .font(DashSkin.mono(9.5))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }
-
+    
     private func nowPlaying(_ track: Track) -> some View {
         HStack(spacing: UIScale.pt(10)) {
             HomeArtworkThumb(track: track, size: 40)
@@ -921,7 +951,7 @@ private struct MusicCard: View {
             .buttonStyle(HoverButtonStyle())
         }
     }
-
+    
     private func trackRow(_ track: Track) -> some View {
         Button {
             remote.toggle(track)
@@ -949,7 +979,7 @@ private struct HomeArtworkThumb: View {
     let track: Track
     var size: CGFloat = 36
     @State private var artwork: NSImage?
-
+    
     var body: some View {
         Group {
             if let artwork {

@@ -5,7 +5,7 @@ public enum FileSortKey: String, CaseIterable, Codable, Sendable {
     case size
     case modified
     case kind
-
+    
     public var title: String {
         switch self {
         case .name: return "Name"
@@ -19,14 +19,14 @@ public enum FileSortKey: String, CaseIterable, Codable, Sendable {
 public enum FileViewMode: String, CaseIterable, Codable, Sendable {
     case icon
     case list
-
+    
     public var title: String {
         switch self {
         case .icon: return "Icons"
         case .list: return "List"
         }
     }
-
+    
     public var symbol: String {
         switch self {
         case .icon: return "square.grid.2x2"
@@ -49,7 +49,7 @@ public enum FileSorting {
             return ascending ? ordered == .orderedAscending : ordered == .orderedDescending
         }
     }
-
+    
     static func compare(
         _ lhs: RemoteFileEntry, _ rhs: RemoteFileEntry, key: FileSortKey
     ) -> ComparisonResult {
@@ -87,13 +87,13 @@ public enum FileSelectionMath {
         in entries: [RemoteFileEntry], from anchor: String?, to target: String
     ) -> Set<String> {
         guard let anchor,
-            let start = entries.firstIndex(where: { $0.path == anchor }),
-            let end = entries.firstIndex(where: { $0.path == target })
+              let start = entries.firstIndex(where: { $0.path == anchor }),
+              let end = entries.firstIndex(where: { $0.path == target })
         else { return [target] }
         let bounds = start <= end ? start...end : end...start
         return Set(entries[bounds].map(\.path))
     }
-
+    
     public static func toggled(_ selection: Set<String>, path: String) -> Set<String> {
         var next = selection
         if next.contains(path) {
@@ -103,7 +103,7 @@ public enum FileSelectionMath {
         }
         return next
     }
-
+    
     public static func typeSelectMatch(
         in entries: [RemoteFileEntry], prefix: String, after current: String?
     ) -> String? {
@@ -113,7 +113,7 @@ public enum FileSelectionMath {
         }
         guard !matches.isEmpty else { return nil }
         guard let current, let index = matches.firstIndex(where: { $0.path == current }),
-            prefix.count == 1
+              prefix.count == 1
         else { return matches.first?.path }
         return matches[(index + 1) % matches.count].path
     }
@@ -127,7 +127,7 @@ public enum FileOperations {
         while taken.contains("untitled folder \(index)") { index += 1 }
         return "untitled folder \(index)"
     }
-
+    
     public static func duplicateName(of name: String, existing: [RemoteFileEntry]) -> String {
         let taken = Set(existing.map(\.name))
         let base = (name as NSString).deletingPathExtension
@@ -141,7 +141,7 @@ public enum FileOperations {
         }
         return candidate
     }
-
+    
     public static func trashCommand(paths: [String]) -> String {
         let trashFiles = "$HOME/.local/share/Trash/files"
         let trashInfo = "$HOME/.local/share/Trash/info"
@@ -153,28 +153,28 @@ public enum FileOperations {
             let target = "\(trashFiles)/\(base)"
             lines.append(
                 "n=\(ShellQuote.quote("")); t=\"\(target)\"; "
-                    + "if [ -e \"$t\" ]; then t=\"$t.$(date +%s)\"; fi; "
-                    + "printf '[Trash Info]\\nPath=%s\\nDeletionDate=%s\\n' \(quoted) \(stamp) "
-                    + "> \"\(trashInfo)/$(basename \"$t\").trashinfo\" && "
-                    + "mv \(quoted) \"$t\"")
+                + "if [ -e \"$t\" ]; then t=\"$t.$(date +%s)\"; fi; "
+                + "printf '[Trash Info]\\nPath=%s\\nDeletionDate=%s\\n' \(quoted) \(stamp) "
+                + "> \"\(trashInfo)/$(basename \"$t\").trashinfo\" && "
+                + "mv \(quoted) \"$t\"")
         }
         return lines.joined(separator: "; ")
     }
-
+    
     public static func deleteCommand(paths: [String]) -> String {
         "rm -rf " + paths.map(ShellQuote.quote).joined(separator: " ")
     }
-
+    
     public static func copyCommand(paths: [String], toDirectory directory: String) -> String {
         "cp -a " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
-            + ShellQuote.quote(directory)
+        + ShellQuote.quote(directory)
     }
-
+    
     public static func moveCommand(paths: [String], toDirectory directory: String) -> String {
         "mv " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
-            + ShellQuote.quote(directory)
+        + ShellQuote.quote(directory)
     }
-
+    
     public static func renameCommand(
         path: String, to newPath: String, viaTemporary: Bool = false
     ) -> String {
@@ -186,22 +186,22 @@ public enum FileOperations {
         let staging = ShellQuote.quote(path + ".edith-rename")
         return "mv \(source) \(staging) && mv \(staging) \(destination)"
     }
-
+    
     public static func makeDirectoryCommand(path: String) -> String {
         "mkdir -p \(ShellQuote.quote(path))"
     }
-
+    
     public static func directorySizeCommand(path: String) -> String {
         "du -sk \(ShellQuote.quote(path)) 2>/dev/null | cut -f1"
     }
-
+    
     public static func freeSpaceCommand(path: String) -> String {
         "df -Pk \(ShellQuote.quote(path)) 2>/dev/null | awk 'NR==2 {print $4}'"
     }
-
+    
     public static func searchCommand(path: String, query: String, limit: Int = 300) -> String {
         "find \(ShellQuote.quote(path)) -iname \(ShellQuote.quote("*\(query)*")) "
-            + "-not -path '*/.git/*' 2>/dev/null | head -\(limit)"
+        + "-not -path '*/.git/*' 2>/dev/null | head -\(limit)"
     }
 }
 

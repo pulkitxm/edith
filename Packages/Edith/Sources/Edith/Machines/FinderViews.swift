@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 enum FileIcons {
     private static var cache: [String: NSImage] = [:]
-
+    
     static func icon(for entry: RemoteFileEntry) -> NSImage {
         if entry.isDirectory { return cached(key: "__folder", type: .folder) }
         if entry.kind == .symlink { return cached(key: "__link", type: .symbolicLink) }
@@ -16,7 +16,7 @@ enum FileIcons {
         }
         return cached(key: "__data", type: .data)
     }
-
+    
     private static func cached(key: String, type: UTType) -> NSImage {
         if let existing = cache[key] { return existing }
         let image = NSWorkspace.shared.icon(for: type)
@@ -36,11 +36,11 @@ enum FinderClick {
 }
 
 struct FinderIconView: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         ScrollViewReader { proxy in
             GeometryReader { geometry in
@@ -91,15 +91,15 @@ extension FinderIconView {
 }
 
 private struct FinderIconCell: View {
-    @ObservedObject var model: FinderModel
+    @Bindable var model: FinderModel
     let entry: RemoteFileEntry
     let dark: Bool
     @State private var hovering = false
     @State private var dropTargeted = false
     @FocusState private var renameFocused: Bool
-
+    
     private var selected: Bool { model.selection.contains(entry.path) }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(6)) {
             Image(nsImage: FileIcons.icon(for: entry))
@@ -114,10 +114,10 @@ private struct FinderIconCell: View {
             RoundedRectangle(cornerRadius: UIScale.pt(8))
                 .fill(
                     dropTargeted
-                        ? DashSkin.accent(dark).opacity(0.38)
-                        : (selected
-                            ? DashSkin.accent(dark).opacity(0.2)
-                            : (hovering ? DashSkin.inkFaint(dark).opacity(0.08) : .clear)))
+                    ? DashSkin.accent(dark).opacity(0.38)
+                    : (selected
+                       ? DashSkin.accent(dark).opacity(0.2)
+                       : (hovering ? DashSkin.inkFaint(dark).opacity(0.08) : .clear)))
         )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -145,7 +145,7 @@ private struct FinderIconCell: View {
         }
         .contextMenu { FinderRowContextMenu(model: model, entry: entry) }
     }
-
+    
     @ViewBuilder
     private var label: some View {
         if model.renaming == entry.path {
@@ -172,11 +172,11 @@ private struct FinderIconCell: View {
 }
 
 struct FinderListView: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -202,7 +202,7 @@ struct FinderListView: View {
             .onTapGesture { model.selection = [] }
         }
     }
-
+    
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
             headerButton("Name", key: .name)
@@ -219,7 +219,7 @@ struct FinderListView: View {
         .padding(.vertical, UIScale.pt(5))
         .background(.thinMaterial)
     }
-
+    
     private func headerButton(_ title: String, key: FileSortKey) -> some View {
         Button {
             if model.sortKey == key {
@@ -248,15 +248,15 @@ struct FinderListView: View {
 }
 
 private struct FinderListRow: View {
-    @ObservedObject var model: FinderModel
+    @Bindable var model: FinderModel
     let entry: RemoteFileEntry
     let dark: Bool
     @State private var hovering = false
     @State private var dropTargeted = false
     @FocusState private var renameFocused: Bool
-
+    
     private var selected: Bool { model.selection.contains(entry.path) }
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Image(nsImage: FileIcons.icon(for: entry))
@@ -282,10 +282,10 @@ private struct FinderListRow: View {
         .padding(.vertical, UIScale.pt(4))
         .background(
             dropTargeted
-                ? DashSkin.accent(dark).opacity(0.34)
-                : (selected
-                    ? DashSkin.accent(dark).opacity(0.22)
-                    : (hovering ? DashSkin.inkFaint(dark).opacity(0.07) : .clear))
+            ? DashSkin.accent(dark).opacity(0.34)
+            : (selected
+               ? DashSkin.accent(dark).opacity(0.22)
+               : (hovering ? DashSkin.inkFaint(dark).opacity(0.07) : .clear))
         )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -313,7 +313,7 @@ private struct FinderListRow: View {
         }
         .contextMenu { FinderRowContextMenu(model: model, entry: entry) }
     }
-
+    
     @ViewBuilder
     private var nameLabel: some View {
         if model.renaming == entry.path {
@@ -342,16 +342,16 @@ private struct FinderListRow: View {
 }
 
 struct QuickLookOverlay: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
     @State private var shown = false
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     private var entry: RemoteFileEntry? {
         model.visibleEntries.first { $0.path == model.quickLookPath }
     }
-
+    
     var body: some View {
         ZStack {
             Color.black.opacity(0.28)
@@ -370,12 +370,12 @@ struct QuickLookOverlay: View {
             Task { await model.measure(entry) }
         }
     }
-
+    
     private func close() {
         withAnimation(.easeOut(duration: 0.16)) { shown = false }
         model.quickLookPath = nil
     }
-
+    
     private var panel: some View {
         VStack(spacing: 0) {
             header
@@ -390,7 +390,7 @@ struct QuickLookOverlay: View {
         }
         .shadow(color: .black.opacity(0.45), radius: UIScale.pt(34), y: 14)
     }
-
+    
     private var header: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button {
@@ -429,7 +429,7 @@ struct QuickLookOverlay: View {
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(9))
     }
-
+    
     @ViewBuilder
     private func body(for entry: RemoteFileEntry?) -> some View {
         if let entry, entry.isDirectory {
@@ -438,7 +438,7 @@ struct QuickLookOverlay: View {
             FilePreviewPane(entry: entry, session: model.session)
         }
     }
-
+    
     private func folderSummary(_ entry: RemoteFileEntry) -> some View {
         HStack(spacing: UIScale.pt(24)) {
             Image(nsImage: FileIcons.icon(for: entry))
@@ -456,7 +456,7 @@ struct QuickLookOverlay: View {
                 if let modified = entry.modified {
                     Text(
                         "Last modified "
-                            + modified.formatted(date: .abbreviated, time: .shortened)
+                        + modified.formatted(date: .abbreviated, time: .shortened)
                     )
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -473,11 +473,11 @@ struct QuickLookOverlay: View {
 }
 
 struct FinderSidebar: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
@@ -502,14 +502,14 @@ struct FinderSidebar: View {
 }
 
 private struct FinderSidebarRow: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let place: FilePlace
     let dark: Bool
     @State private var hovering = false
     @State private var targeted = false
-
+    
     private var selected: Bool { model.path == place.path }
-
+    
     var body: some View {
         Button {
             model.navigate(to: place.path)
@@ -533,11 +533,11 @@ private struct FinderSidebarRow: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(6))
                     .fill(
                         selected
-                            ? DashSkin.accent(dark).opacity(0.18)
-                            : (targeted
-                                ? DashSkin.accent(dark).opacity(0.28)
-                                : (hovering
-                                    ? DashSkin.inkFaint(dark).opacity(0.08) : .clear))
+                        ? DashSkin.accent(dark).opacity(0.18)
+                        : (targeted
+                           ? DashSkin.accent(dark).opacity(0.28)
+                           : (hovering
+                              ? DashSkin.inkFaint(dark).opacity(0.08) : .clear))
                     )
                     .padding(.horizontal, UIScale.pt(6))
             )
@@ -561,13 +561,13 @@ private struct FinderSidebarRow: View {
 }
 
 struct FinderInfoSheet: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let entry: RemoteFileEntry
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         let summary = model.infoSummary(for: entry)
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
@@ -616,7 +616,7 @@ struct FinderInfoSheet: View {
         .frame(width: UIScale.pt(420), height: UIScale.pt(360))
         .background(DashSkin.paper(dark))
     }
-
+    
     private func infoRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
             Text(label)
@@ -634,19 +634,19 @@ struct FinderInfoSheet: View {
 }
 
 struct FinderConflictSheet: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let conflict: FinderModel.PendingConflict
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             Text(
                 conflict.names.count == 1
-                    ? "An item named \"\(conflict.names[0])\" already exists here."
-                    : "\(conflict.names.count) items already exist here."
+                ? "An item named \"\(conflict.names[0])\" already exists here."
+                : "\(conflict.names.count) items already exist here."
             )
             .font(DashSkin.serif(17))
             .foregroundStyle(DashSkin.ink(dark))
@@ -683,7 +683,7 @@ struct FinderConflictSheet: View {
         .frame(width: UIScale.pt(440), height: UIScale.pt(240))
         .background(DashSkin.paper(dark))
     }
-
+    
     private func resolve(_ resolution: NameConflictResolution) {
         let resolutions = Dictionary(
             uniqueKeysWithValues: conflict.names.map { ($0, resolution) })

@@ -10,11 +10,11 @@ import Testing
         host: "192.168.1.12", username: "pulkit", source: .sshConfigAlias("tuf"))
     static let manual = Machine(name: "Builder", host: "10.0.0.9", port: 2222, username: "root")
     static let all = [alias, manual]
-
+    
     @Test func namesIncludeBothTheLabelAndTheSSHAlias() {
         #expect(MachineDirectory.names(from: Self.all) == ["Asus TUF 7", "tuf", "Builder"])
     }
-
+    
     @Test func resolutionAcceptsNameAliasAndIdentifier() throws {
         let byName = try MachineDirectory.resolve("asus tuf 7", in: Self.all)
         let byAlias = try MachineDirectory.resolve("tuf", in: Self.all)
@@ -23,12 +23,12 @@ import Testing
         #expect(byAlias.id == Self.alias.id)
         #expect(byID.id == Self.alias.id)
     }
-
+    
     @Test func aUniquePrefixResolves() throws {
         let resolved = try MachineDirectory.resolve("buil", in: Self.all)
         #expect(resolved.id == Self.manual.id)
     }
-
+    
     @Test func anAmbiguousPrefixFailsLoudly() {
         let machines = [
             Machine(name: "build-a", host: "a"), Machine(name: "build-b", host: "b"),
@@ -37,7 +37,7 @@ import Testing
             try MachineDirectory.resolve("build", in: machines)
         }
     }
-
+    
     @Test func anUnknownNameIsNotFoundRatherThanAGenericFailure() {
         do {
             _ = try MachineDirectory.resolve("nope", in: Self.all)
@@ -48,7 +48,7 @@ import Testing
             Issue.record("unexpected error \(error)")
         }
     }
-
+    
     @Test func anEmptyMachineListExplainsHowToAddOne() {
         do {
             _ = try MachineDirectory.resolve("tuf", in: [])
@@ -60,7 +60,7 @@ import Testing
             Issue.record("unexpected error \(error)")
         }
     }
-
+    
     @Test func summaryCarriesTheFieldsAnAgentNeeds() {
         guard case let .object(fields) = MachineDirectory.summary(Self.alias) else {
             Issue.record("summary should be an object")
@@ -72,7 +72,7 @@ import Testing
         #expect(fields["source"] == .string("sshConfigAlias"))
         #expect(fields["port"] == .int(22))
     }
-
+    
     @Test func manualMachinesReportNoAlias() {
         guard case let .object(fields) = MachineDirectory.summary(Self.manual) else {
             Issue.record("summary should be an object")
@@ -82,12 +82,12 @@ import Testing
         #expect(fields["sshTarget"] == .string("root@10.0.0.9"))
         #expect(fields["port"] == .int(2222))
     }
-
+    
     @Test func loadingAMissingFileYieldsNoMachinesRatherThanCrashing() {
         let missing = URL(fileURLWithPath: "/nonexistent/machines.json")
         #expect(MachineDirectory.load(from: missing).isEmpty)
     }
-
+    
     @Test func samplesEncodeIntoStableFieldNames() {
         let sample = MachineSample(
             ts: 1_700_000_000, dt: 2, cpu: MachineCPU(total: 12.5, steal: 0, cores: [10, 15]),
@@ -95,8 +95,8 @@ import Testing
             load: [1, 2, 3], tasks: MachineTasks(runnable: 1, total: 200), uptime: 60,
             net: MachineNetwork(rxBps: 100, txBps: 50))
         guard case let .object(fields) = MachineReports.sample(sample),
-            case let .object(cpu)? = fields["cpu"],
-            case let .object(memory)? = fields["memory"]
+              case let .object(cpu)? = fields["cpu"],
+              case let .object(memory)? = fields["memory"]
         else {
             Issue.record("sample should be a nested object")
             return
@@ -105,11 +105,11 @@ import Testing
         #expect(memory["usedPercent"] == .double(60))
         #expect(fields["load"] == .doubles([1, 2, 3]))
     }
-
+    
     @Test func dockerAvailabilityIsReportedAsAState() {
         #expect(
             MachineReports.availability(DockerAvailability(status: .missing))
-                == .object(["state": .string("missing")]))
+            == .object(["state": .string("missing")]))
         guard
             case let .object(fields) = MachineReports.availability(
                 DockerAvailability(status: .available(serverVersion: "27.0", hasCompose: true)))
@@ -127,7 +127,7 @@ import Testing
         MachineRegistry.add(
             Machine(name: "Builder", host: "10.0.0.9", port: 2222, username: "root"))
     }
-
+    
     @Test func addingAMachinePutsItOnTheListTheAppReads() async throws {
         try await CLIProbe.inWorld { world in
             let result = await CLIProbe.capture([
@@ -141,7 +141,7 @@ import Testing
             #expect(world.postedNames().contains(IPC.Name.machinesChanged.rawValue))
         }
     }
-
+    
     @Test func aDuplicateNameIsRefusedRatherThanMakingTheNameAmbiguous() async throws {
         try await CLIProbe.inWorld { _ in
             Self.seed()
@@ -153,7 +153,7 @@ import Testing
             #expect(MachineRegistry.machines().count == 1)
         }
     }
-
+    
     @Test func aPortOutsideTheLegalRangeIsRejectedBeforeAnythingIsWritten() async throws {
         try await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture([
@@ -163,7 +163,7 @@ import Testing
             #expect(MachineRegistry.machines().isEmpty)
         }
     }
-
+    
     @Test func aKeyFileThatIsNotThereIsNotFoundRatherThanStoredBlindly() async throws {
         try await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture([
@@ -173,7 +173,7 @@ import Testing
             #expect(MachineRegistry.machines().isEmpty)
         }
     }
-
+    
     @Test func editingChangesOnlyWhatIsNamed() async throws {
         try await CLIProbe.inWorld { _ in
             Self.seed()
@@ -190,7 +190,7 @@ import Testing
             #expect(after.username == before.username)
         }
     }
-
+    
     @Test func removingWithoutSayingYesTouchesNothing() async throws {
         try await CLIProbe.inWorld { world in
             Self.seed()
@@ -201,7 +201,7 @@ import Testing
             #expect(!world.postedNames().contains(IPC.Name.machinesChanged.rawValue))
         }
     }
-
+    
     @Test func removingTakesTheForwardsAndSnippetsWithIt() async throws {
         try await CLIProbe.inWorld { _ in
             Self.seed()
@@ -214,7 +214,7 @@ import Testing
                 PortForward(machineID: other.id, localPort: 9090, remotePort: 90))
             MachineRegistry.addSnippet(
                 CommandSnippet(machineID: target.id, title: "logs", command: "journalctl"))
-
+            
             let result = await CLIProbe.capture(["machines", "rm", "builder", "--yes", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["forwards"] as? Int == 1)
@@ -224,7 +224,7 @@ import Testing
             #expect(MachineRegistry.snippets().isEmpty)
         }
     }
-
+    
     @Test func forwardsAreNumberedByLocalPortAndCannotCollide() async throws {
         try await CLIProbe.inWorld { _ in
             Self.seed()
@@ -240,14 +240,14 @@ import Testing
             ])
             let rows = listed.array as? [[String: Any]] ?? []
             #expect(rows.map { $0["localPort"] as? Int } == [8080, 9090])
-
+            
             let clash = await CLIProbe.capture([
                 "machines", "forwards", "add", "builder", "--local", "8080",
                 "--remote", "81", "--json",
             ])
             #expect(clash.code == ExitCodes.failure)
             #expect(MachineRegistry.forwards().count == 2)
-
+            
             let removed = await CLIProbe.capture([
                 "machines", "forwards", "rm", "builder", "1", "--json",
             ])
@@ -255,7 +255,7 @@ import Testing
             #expect(MachineRegistry.forwards().map(\.localPort) == [9090])
         }
     }
-
+    
     @Test func aForwardNumberOutsideTheListIsNotFound() async throws {
         try await CLIProbe.inWorld { _ in
             Self.seed()
@@ -264,7 +264,7 @@ import Testing
             #expect(result.stderr.contains("numbered from 1"))
         }
     }
-
+    
     @Test func aSharedSnippetShowsUpOnEveryMachine() async throws {
         try await CLIProbe.inWorld { _ in
             Self.seed()
@@ -279,15 +279,15 @@ import Testing
             let theirs = await CLIProbe.capture(["machines", "snippets", "ls", "other", "--json"])
             #expect(
                 (mine.array as? [[String: Any]] ?? []).map { $0["title"] as? String }
-                    == ["disk", "logs"])
+                == ["disk", "logs"])
             #expect(
                 (theirs.array as? [[String: Any]] ?? []).map { $0["title"] as? String }
-                    == ["disk"])
+                == ["disk"])
             #expect(MachineRegistry.snippets().first?.command == "df -h")
             #expect(MachineRegistry.snippets().first?.machineID == nil)
         }
     }
-
+    
     @Test func theStoreAndTheCLIReadTheSameList() async throws {
         try await CLIProbe.inWorld { _ in
             _ = await CLIProbe.capture([

@@ -1,8 +1,10 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class CompanionChatModel: ObservableObject {
+@Observable
+final class CompanionChatModel {
     struct DisplayMessage: Identifiable, Equatable {
         let id: String
         let role: String
@@ -11,28 +13,28 @@ final class CompanionChatModel: ObservableObject {
         var streaming: Bool
     }
 
-    @Published private(set) var conversations: [CompanionConversation] = []
-    @Published private(set) var messages: [DisplayMessage] = []
-    @Published private(set) var activeConversationId: String?
-    @Published var draft = ""
-    @Published private(set) var streaming = false
-    @Published private(set) var model: String?
-    @Published private(set) var error: String?
-    @Published private(set) var loaded = false
-    @Published private(set) var personas: [CompanionPersona] = []
-    @Published var persona: String?
-    @Published private(set) var council: CompanionCouncil?
-    @Published private(set) var councilRunning = false
-    @Published private(set) var councilQuestion: String?
-
+    private(set) var conversations: [CompanionConversation] = []
+    private(set) var messages: [DisplayMessage] = []
+    private(set) var activeConversationId: String?
+    var draft = ""
+    private(set) var streaming = false
+    private(set) var model: String?
+    private(set) var error: String?
+    private(set) var loaded = false
+    private(set) var personas: [CompanionPersona] = []
+    var persona: String?
+    private(set) var council: CompanionCouncil?
+    private(set) var councilRunning = false
+    private(set) var councilQuestion: String?
+    
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-
+    
     func loadPersonas() async {
         personas = (try? await client.personas()) ?? []
     }
-
+    
     func askCouncil() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !councilRunning, !streaming else { return }
@@ -53,12 +55,12 @@ final class CompanionChatModel: ObservableObject {
             councilQuestion = nil
         }
     }
-
+    
     func dismissCouncil() {
         council = nil
         councilQuestion = nil
     }
-
+    
     func loadConversations() async {
         do {
             conversations = try await client.conversations(limit: 50)
@@ -67,7 +69,7 @@ final class CompanionChatModel: ObservableObject {
             if !loaded { self.error = error.localizedDescription }
         }
     }
-
+    
     func open(_ id: String) async {
         activeConversationId = id
         do {
@@ -82,19 +84,19 @@ final class CompanionChatModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func newChat() {
         guard !streaming else { return }
         activeConversationId = nil
         messages = []
     }
-
+    
     func delete(_ id: String) async {
         _ = try? await client.deleteConversation(id: id)
         if activeConversationId == id { newChat() }
         await loadConversations()
     }
-
+    
     func send() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !streaming else { return }
@@ -134,13 +136,13 @@ final class CompanionChatModel: ObservableObject {
         }
         update(replyId) { $0.streaming = false }
         if let index = messages.firstIndex(where: { $0.id == replyId }),
-            messages[index].content.isEmpty
+           messages[index].content.isEmpty
         {
             messages.remove(at: index)
         }
         await loadConversations()
     }
-
+    
     private func update(_ id: String, _ change: (inout DisplayMessage) -> Void) {
         guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
         change(&messages[index])
@@ -148,17 +150,17 @@ final class CompanionChatModel: ObservableObject {
 }
 
 struct CompanionChatScreen: View {
-    @ObservedObject var model: CompanionChatModel
-    @ObservedObject var home: CompanionHomeModel
+    @Bindable var model: CompanionChatModel
+    let home: CompanionHomeModel
     var openEpisode: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var caretDim = false
     @FocusState private var composerFocused: Bool
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(0)) {
             if !compact {
@@ -172,7 +174,7 @@ struct CompanionChatScreen: View {
             await model.loadPersonas()
         }
     }
-
+    
     private var rail: some View {
         VStack(spacing: UIScale.pt(6)) {
             Button {
@@ -212,7 +214,7 @@ struct CompanionChatScreen: View {
         .padding(.horizontal, UIScale.pt(10))
         .frame(width: UIScale.pt(210))
     }
-
+    
     private var thread: some View {
         VStack(spacing: UIScale.pt(0)) {
             if model.messages.isEmpty {
@@ -253,7 +255,7 @@ struct CompanionChatScreen: View {
             composer
         }
     }
-
+    
     private var greeting: some View {
         VStack(spacing: UIScale.pt(12)) {
             Spacer()
@@ -286,7 +288,7 @@ struct CompanionChatScreen: View {
         }
         .frame(maxWidth: .infinity)
     }
-
+    
     @ViewBuilder
     private func messageView(_ message: CompanionChatModel.DisplayMessage) -> some View {
         if message.role == "user" {
@@ -329,12 +331,12 @@ struct CompanionChatScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-
+    
     private var assistantEyebrow: String {
         let model = model.model.map { " · \($0)" } ?? ""
         return "COMPANION\(model)".uppercased()
     }
-
+    
     private func citationChips(_ citations: [CompanionAskCitation]) -> some View {
         FlowChips(spacing: UIScale.pt(6)) {
             ForEach(Array(citations.enumerated()), id: \.offset) { index, citation in
@@ -344,7 +346,7 @@ struct CompanionChatScreen: View {
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
-
+    
     private var personaBar: some View {
         HStack(spacing: UIScale.pt(6)) {
             personaChip(id: nil, label: "Default")
@@ -364,13 +366,13 @@ struct CompanionChatScreen: View {
             .disabled(model.councilRunning || model.streaming)
             .help(
                 model.councilRunning
-                    ? "Analyst, coach and skeptic are answering; this takes a minute"
-                    : "Type a question, then ask analyst, coach and skeptic at once")
+                ? "Analyst, coach and skeptic are answering; this takes a minute"
+                : "Type a question, then ask analyst, coach and skeptic at once")
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(6))
     }
-
+    
     private func personaChip(id: String?, label: String) -> some View {
         let selected = model.persona == id
         return Button {
@@ -391,7 +393,7 @@ struct CompanionChatScreen: View {
         .buttonStyle(.plain)
         .pointerCursor()
     }
-
+    
     @ViewBuilder
     private var councilPanel: some View {
         if model.councilRunning, model.council == nil {
@@ -442,7 +444,7 @@ struct CompanionChatScreen: View {
             .padding(.bottom, UIScale.pt(8))
         }
     }
-
+    
     private var composer: some View {
         HStack(alignment: .center, spacing: UIScale.pt(10)) {
             Image(systemName: "bubble.left")
@@ -464,7 +466,7 @@ struct CompanionChatScreen: View {
                     .font(.system(size: UIScale.pt(24)))
                     .foregroundStyle(
                         model.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.streaming
-                            ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
+                        ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
             }
             .buttonStyle(.plain)
             .pointerCursor()
@@ -494,7 +496,7 @@ private struct CitationChip: View {
     let dark: Bool
     let open: (String) -> Void
     @State private var showing = false
-
+    
     var body: some View {
         Button {
             showing = true
@@ -544,7 +546,7 @@ private struct CitationChip: View {
             .frame(minWidth: UIScale.pt(240), maxWidth: UIScale.pt(360), alignment: .leading)
         }
     }
-
+    
     private var supportLabel: String {
         citation.support == "inference" ? "between the lines" : citation.support
     }
@@ -557,7 +559,7 @@ private struct ConversationRow: View {
     let open: () -> Void
     let delete: () -> Void
     @State private var hovering = false
-
+    
     var body: some View {
         Button(action: open) {
             HStack(spacing: UIScale.pt(4)) {
@@ -604,7 +606,7 @@ private struct ConversationRow: View {
 struct FlowChips<Content: View>: View {
     let spacing: CGFloat
     @ViewBuilder let content: Content
-
+    
     var body: some View {
         HStack(spacing: spacing) {
             content

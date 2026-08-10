@@ -4,37 +4,51 @@ import EdithKit
 import SwiftUI
 
 struct ClipboardRows: View {
-    @AppStorage("clipboardEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("clipboardMaxItems", store: SharedDefaults.store) private var maxItems = 200
-    @AppStorage("clipboardMaxItemBytes", store: SharedDefaults.store) private var maxItemBytes =
-        10_000_000
-    @AppStorage("clipboardMaxAgeDays", store: SharedDefaults.store) private var maxAgeDays = 0
-    @AppStorage("clipboardIgnoredApps", store: SharedDefaults.store) private var ignoredApps = ""
-    @AppStorage("clipboardAutoPaste", store: SharedDefaults.store) private var autoPaste = false
-    @AppStorage("clipboardPastePlainText", store: SharedDefaults.store) private var pastePlainText =
-        false
-    @AppStorage("clipboardCheckInterval", store: SharedDefaults.store) private var checkInterval =
-        1.0
-    @AppStorage("permAccessibilityGranted", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private var enabled =
+    false
+    @AppStorage(AppStorageKeys.Clipboard.maxItems, store: SharedDefaults.store) private
+    var maxItems = 200
+    @AppStorage(AppStorageKeys.Clipboard.maxItemBytes, store: SharedDefaults.store) private
+    var maxItemBytes =
+    10_000_000
+    @AppStorage(AppStorageKeys.Clipboard.maxAgeDays, store: SharedDefaults.store) private
+    var maxAgeDays = 0
+    @AppStorage(AppStorageKeys.Clipboard.ignoredApps, store: SharedDefaults.store) private
+    var ignoredApps = ""
+    @AppStorage(AppStorageKeys.Clipboard.autoPaste, store: SharedDefaults.store) private
+    var autoPaste = false
+    @AppStorage(AppStorageKeys.Clipboard.pastePlainText, store: SharedDefaults.store) private
+    var pastePlainText =
+    false
+    @AppStorage(AppStorageKeys.Clipboard.checkInterval, store: SharedDefaults.store) private
+    var checkInterval =
+    1.0
+    @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
     private var accessibilityGranted = false
-    @AppStorage("clipboardPopupAt", store: SharedDefaults.store) private var popupAt = "cursor"
-    @AppStorage("clipboardPinTo", store: SharedDefaults.store) private var pinTo = "top"
-    @AppStorage("clipboardShowFooter", store: SharedDefaults.store) private var showFooter = true
-    @AppStorage("clipboardSaveFiles", store: SharedDefaults.store) private var saveFiles = true
-    @AppStorage("clipboardSaveImages", store: SharedDefaults.store) private var saveImages = true
-    @AppStorage("clipboardSaveText", store: SharedDefaults.store) private var saveText = true
-
+    @AppStorage(AppStorageKeys.Clipboard.popupAt, store: SharedDefaults.store) private var popupAt =
+    "cursor"
+    @AppStorage(AppStorageKeys.Clipboard.pinTo, store: SharedDefaults.store) private var pinTo =
+    "top"
+    @AppStorage(AppStorageKeys.Clipboard.showFooter, store: SharedDefaults.store) private
+    var showFooter = true
+    @AppStorage(AppStorageKeys.Clipboard.saveFiles, store: SharedDefaults.store) private
+    var saveFiles = true
+    @AppStorage(AppStorageKeys.Clipboard.saveImages, store: SharedDefaults.store) private
+    var saveImages = true
+    @AppStorage(AppStorageKeys.Clipboard.saveText, store: SharedDefaults.store) private
+    var saveText = true
+    
     @State private var tab = "general"
     @State private var recentEntries: [ClipboardEntry] = []
     @State private var showHistory = false
     @State private var refreshObserver: NSObjectProtocol?
-
+    
     private var maxItemMB: Binding<Int> {
         Binding(
             get: { max(1, maxItemBytes / 1_000_000) },
             set: { maxItemBytes = $0 * 1_000_000 })
     }
-
+    
     var body: some View {
         Group {
             Section {
@@ -48,7 +62,7 @@ struct ClipboardRows: View {
                 .labelsHidden()
                 .pointerCursor()
             }
-
+            
             Group {
                 switch tab {
                 case "storage": storageSections
@@ -59,11 +73,11 @@ struct ClipboardRows: View {
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
-
+            
             Section {
                 if recentEntries.isEmpty {
                     Text("No clipboard history yet.")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                        .settingsCaption()
                 } else {
                     ForEach(recentEntries) { entry in
                         recentRow(entry)
@@ -87,7 +101,7 @@ struct ClipboardRows: View {
             ClipboardHistoryView()
         }
     }
-
+    
     @ViewBuilder private var generalSections: some View {
         Section {
             LabeledContent {
@@ -128,19 +142,19 @@ struct ClipboardRows: View {
             Toggle("Paste without formatting", isOn: $pastePlainText)
                 .pointerCursor()
             Text("Strips fonts, colors and links so pasted text matches the destination.")
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
         } header: {
             Text("Behavior")
         }
     }
-
+    
     @ViewBuilder private var storageSections: some View {
         Section {
             Toggle("Files", isOn: $saveFiles).pointerCursor()
             Toggle("Images", isOn: $saveImages).pointerCursor()
             Toggle("Text", isOn: $saveText).pointerCursor()
             Text("Change what types of copied content should be stored.")
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
         } header: {
             Text("Save")
         }
@@ -193,7 +207,7 @@ struct ClipboardRows: View {
             .pointerCursor()
         }
     }
-
+    
     @ViewBuilder private var appearanceSections: some View {
         Section {
             Picker(selection: $popupAt) {
@@ -228,7 +242,7 @@ struct ClipboardRows: View {
             .pointerCursor()
         }
     }
-
+    
     @ViewBuilder private var ignoreSections: some View {
         Section {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -239,16 +253,16 @@ struct ClipboardRows: View {
                 Text(
                     "Copies made in these apps are never recorded (password managers are pre-listed)."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
             }
         }
     }
-
+    
     private func reload() {
         recentEntries = Array(
             ClipboardRepository.loadEntries().sorted { $0.createdAt > $1.createdAt }.prefix(5))
     }
-
+    
     private func recentRow(_ entry: ClipboardEntry) -> some View {
         HStack {
             Text(entry.displayPreview).lineLimit(1)
@@ -257,7 +271,6 @@ struct ClipboardRows: View {
             Text("·")
             Text(entry.createdAt.formatted(.relative(presentation: .named)))
         }
-        .font(.system(size: UIScale.pt(10)))
-        .foregroundStyle(.secondary)
+        .settingsCaption()
     }
 }

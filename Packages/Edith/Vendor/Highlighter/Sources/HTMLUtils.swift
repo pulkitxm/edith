@@ -13,7 +13,7 @@ import Foundation
  Utility class for processing certain HTML entities.
  */
 internal class HTMLUtils {
-
+    
     /**
      Decode the HTML character entity to the corresponding Unicode character.
      
@@ -23,14 +23,14 @@ internal class HTMLUtils {
      * `decode("&#x20ac;")` returns `"€"`
      * `decode("&lt;")`     returns `"<"`
      * `decode("&foo;")`    returns `nil`
-    
+     
      - Parameters:
-        - entity: The HTML entity code.
+     - entity: The HTML entity code.
      
      - Returns: The entity as a Swift Character, or `nil` if it could not be decoded.
-    */
+     */
     class func decode(_ entity: String) -> Character? {
-
+        
         if entity.lowercased().hasPrefix("&#x") {
             return decodeNumeric(String(entity[entity.index(entity.startIndex, offsetBy: 3)...]), base: 16)
         } else if entity.hasPrefix("&#") {
@@ -39,8 +39,8 @@ internal class HTMLUtils {
             return characterEntities[entity]
         }
     }
-
-
+    
+    
     /**
      Decode a numerically encoded HTML character entity to the corresponding Unicode character.
      
@@ -48,19 +48,19 @@ internal class HTMLUtils {
      
      * `decodeNumeric("&#64;")`    returns `"@"`,
      * `decodeNumeric("&#x20ac;")` returns `"€"`
-    
+     
      - Parameters:
-        - entityValue: The HTML entity numeric code.
-        - base:        The numeric base of the value.
+     - entityValue: The HTML entity numeric code.
+     - base:        The numeric base of the value.
      
      - Returns: The entity as a Swift Character, or `nil` if it could not be decoded.
-    */
+     */
     class func decodeNumeric(_ entityValue: String, base: Int32) -> Character? {
-
+        
         let code: UInt32 = UInt32(strtoul(entityValue, nil, base))
         return Character(UnicodeScalar(code)!)
     }
-
+    
 }
 
 
@@ -68,14 +68,14 @@ internal class HTMLUtils {
  Dictionary of HTML entities and the characters they refer to.
  */
 private let characterEntities: [String: Character] = [
-
+    
     // XML predefined entities
     "&quot;"     : "\"",
     "&amp;"      : "&",
     "&apos;"     : "'",
     "&lt;"       : "<",
     "&gt;"       : ">",
-
+    
     // HTML character entity references
     "&nbsp;"     : "\u{00A0}",
     "&iexcl;"    : "\u{00A1}",

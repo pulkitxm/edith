@@ -3,7 +3,7 @@ import Foundation
 public enum ShellProfile {
     public static let beginMarker = "# >>> edith completions >>>"
     public static let endMarker = "# <<< edith completions <<<"
-
+    
     public static func file(
         for shell: CompletionScripts.Shell,
         home: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -14,23 +14,23 @@ public enum ShellProfile {
         case .fish: return nil
         }
     }
-
+    
     public static func block(_ line: String) -> String {
         [beginMarker, line, endMarker].joined(separator: "\n")
     }
-
+    
     public static func managedLine(in text: String) -> String? {
         let lines = text.components(separatedBy: "\n")
         guard let start = lines.firstIndex(of: beginMarker),
-            let end = lines[start...].firstIndex(of: endMarker), end > start
+              let end = lines[start...].firstIndex(of: endMarker), end > start
         else { return nil }
         return lines[(start + 1)..<end].joined(separator: "\n")
     }
-
+    
     public static func stripped(_ text: String, sourcing script: String? = nil) -> String {
         var lines = text.components(separatedBy: "\n")
         while let start = lines.firstIndex(of: beginMarker),
-            let end = lines[start...].firstIndex(of: endMarker), end > start
+              let end = lines[start...].firstIndex(of: endMarker), end > start
         {
             lines.removeSubrange(start...end)
         }
@@ -39,14 +39,14 @@ public enum ShellProfile {
         }
         return lines.joined(separator: "\n")
     }
-
+    
     public static func sourcesScript(_ line: String, script: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("source ") || trimmed.hasPrefix(". ") else { return false }
         let name = (script as NSString).lastPathComponent
         return trimmed.hasSuffix(script) || trimmed.hasSuffix("/" + name)
     }
-
+    
     public static func applying(_ line: String, to text: String, script: String? = nil) -> String {
         var body = stripped(text, sourcing: script)
         while body.hasSuffix("\n") { body.removeLast() }
@@ -55,13 +55,13 @@ public enum ShellProfile {
         }
         return body + "\n\n" + block(line) + "\n"
     }
-
+    
     public static func removing(from text: String) -> String {
         var body = stripped(text)
         while body.hasSuffix("\n\n") { body.removeLast() }
         return body
     }
-
+    
     @discardableResult
     public static func install(
         line: String, into file: URL, script: String? = nil,
@@ -71,7 +71,7 @@ public enum ShellProfile {
             String(decoding: $0, as: UTF8.self)
         }
         if let existing, managedLine(in: existing) == line,
-            stripped(existing, sourcing: script) == stripped(existing)
+           stripped(existing, sourcing: script) == stripped(existing)
         {
             return false
         }
@@ -79,7 +79,7 @@ public enum ShellProfile {
         try Data(updated.utf8).write(to: file, options: .atomic)
         return true
     }
-
+    
     @discardableResult
     public static func uninstall(from file: URL, fileManager: FileManager = .default) throws -> Bool
     {

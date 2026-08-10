@@ -17,34 +17,34 @@ final class PresenterDetector: FeatureModule {
         "com.hnc.Discord",
         "com.apple.QuickTimePlayerX",
     ]
-
+    
     private var gateApps: Set<String> = []
     private var launchObserver: NSObjectProtocol?
     private var terminateObserver: NSObjectProtocol?
     private var screenParamsObserver: NSObjectProtocol?
     private var windowScanTimer: DispatchSourceTimer?
     private var sessionTimer: Timer?
-
+    
     private var debouncer = PresenterDebouncer()
     private var currentReason: String?
     private var paused: Bool
-
+    
     private var windowHit = false
     private var windowReason: String?
     private var recordingHit = false
     private var sharingHit = false
     private var mirrorHit = false
-
+    
     private var publishedActive = false
     private var publishedReason: String?
-
+    
     init() {
         paused = SharedDefaults.store.bool(forKey: "presenterAutoPaused")
         publishedActive = SharedDefaults.store.bool(forKey: "presenterAutoActive")
         publishedReason = SharedDefaults.store.string(forKey: "presenterAutoReason")
         gateApps = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
             .intersection(Self.watchedBundleIDs)
-
+        
         launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
@@ -60,17 +60,17 @@ final class PresenterDetector: FeatureModule {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkMirroring() }
         }
-
+        
         syncWindowScanTimer()
         syncSessionTimer()
         checkMirroring()
         evaluate()
     }
-
+    
     func applySettings() {
         syncSessionTimer()
     }
-
+    
     func shutdown() {
         if let launchObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(launchObserver)
@@ -90,24 +90,24 @@ final class PresenterDetector: FeatureModule {
         sessionTimer = nil
         publish(active: false, reason: nil)
     }
-
+    
     func pauseUntilShareEnds() {
         paused = true
         SharedDefaults.store.set(true, forKey: "presenterAutoPaused")
         evaluate()
     }
-
+    
     private func handleLaunch(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-            let id = app.bundleIdentifier, Self.watchedBundleIDs.contains(id)
+              let id = app.bundleIdentifier, Self.watchedBundleIDs.contains(id)
         else { return }
         gateApps.insert(id)
         syncWindowScanTimer()
     }
-
+    
     private func handleTerminate(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-            let id = app.bundleIdentifier
+              let id = app.bundleIdentifier
         else { return }
         gateApps.remove(id)
         syncWindowScanTimer()
@@ -118,7 +118,7 @@ final class PresenterDetector: FeatureModule {
             evaluate()
         }
     }
-
+    
     private func syncWindowScanTimer() {
         guard !gateApps.isEmpty else {
             windowScanTimer?.cancel()
@@ -134,10 +134,11 @@ final class PresenterDetector: FeatureModule {
         timer.resume()
         windowScanTimer = timer
     }
-
+    
     private func syncSessionTimer() {
         let detectSharing =
-            SharedDefaults.store.object(forKey: "presenterDetectScreenSharing") as? Bool ?? true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectScreenSharing)
+        as? Bool ?? true
         guard detectSharing else {
             sessionTimer?.invalidate()
             sessionTimer = nil
@@ -154,35 +155,38 @@ final class PresenterDetector: FeatureModule {
         sessionTimer?.tolerance = 5
         tickSession()
     }
-
+    
     private func scanWindows() {
         let titlesAvailable = CGPreflightScreenCaptureAccess()
         windowReason = PresenterRules.firstMatch(
             in: titlesAvailable ? Self.currentWindows() : [], titlesAvailable: titlesAvailable)
         windowHit = windowReason != nil
-
+        
         let detectRecording =
-            SharedDefaults.store.object(forKey: "presenterDetectRecording") as? Bool ?? true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectRecording) as? Bool
+        ?? true
         recordingHit = detectRecording && Self.isProcessRunning(named: "screencapture")
-
+        
         evaluate()
     }
-
+    
     private func tickSession() {
         let detectSharing =
-            SharedDefaults.store.object(forKey: "presenterDetectScreenSharing") as? Bool ?? true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectScreenSharing)
+        as? Bool ?? true
         sharingHit = detectSharing && Self.isRemoteSessionActive()
         checkMirroring()
         evaluate()
     }
-
+    
     private func checkMirroring() {
         let detectMirroring =
-            SharedDefaults.store.object(forKey: "presenterDetectMirroring") as? Bool ?? true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectMirroring) as? Bool
+        ?? true
         mirrorHit = detectMirroring && Self.isAnyDisplayMirrored()
         evaluate()
     }
-
+    
     private func evaluate() {
         let hit = windowHit || recordingHit || sharingHit || mirrorHit
         if paused {
@@ -194,15 +198,15 @@ final class PresenterDetector: FeatureModule {
             SharedDefaults.store.set(false, forKey: "presenterAutoPaused")
         }
         let reason =
-            windowReason
-            ?? (recordingHit ? "Screen recording detected" : nil)
-            ?? (sharingHit ? "Screen Sharing detected" : nil)
-            ?? (mirrorHit ? "Mirrored display detected" : nil)
+        windowReason
+        ?? (recordingHit ? "Screen recording detected" : nil)
+        ?? (sharingHit ? "Screen Sharing detected" : nil)
+        ?? (mirrorHit ? "Mirrored display detected" : nil)
         let active = debouncer.record(hit: hit)
         currentReason = active ? (reason ?? currentReason) : nil
         publish(active: active, reason: currentReason)
     }
-
+    
     private func publish(active: Bool, reason: String?) {
         guard active != publishedActive || reason != publishedReason else { return }
         publishedActive = active
@@ -216,7 +220,7 @@ final class PresenterDetector: FeatureModule {
         }
         IPC.post(IPC.Name.presenterAutoActiveChanged)
     }
-
+    
     private static func currentWindows() -> [PresenterWindowInfo] {
         guard
             let list = CGWindowListCopyWindowInfo(
@@ -231,7 +235,7 @@ final class PresenterDetector: FeatureModule {
             return PresenterWindowInfo(ownerName: owner, title: title, width: width, height: height)
         }
     }
-
+    
     private static func isProcessRunning(named target: String) -> Bool {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
         var size = 0
@@ -253,12 +257,12 @@ final class PresenterDetector: FeatureModule {
             return false
         }
     }
-
+    
     private static func isRemoteSessionActive() -> Bool {
         guard let info = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
         return (info["kCGSSessionOnConsoleKey"] as? Bool) == false
     }
-
+    
     private static func isAnyDisplayMirrored() -> Bool {
         var count: UInt32 = 0
         CGGetActiveDisplayList(0, nil, &count)

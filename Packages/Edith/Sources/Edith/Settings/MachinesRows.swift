@@ -2,13 +2,18 @@ import EdithKit
 import SwiftUI
 
 struct MachinesRows: View {
-    @AppStorage("tabMachinesEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("machinesNotifyDown", store: SharedDefaults.store) private var notifyDown = true
-    @AppStorage("machinesNotifyDiskFull", store: SharedDefaults.store) private var notifyDisk = true
-    @AppStorage("machinesDiskThreshold", store: SharedDefaults.store) private var diskThreshold =
-        90.0
-    @AppStorage("machinesAutoConnect", store: SharedDefaults.store) private var autoConnect = true
-
+    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
+    var enabled = false
+    @AppStorage(AppStorageKeys.Machines.notifyDown, store: SharedDefaults.store) private
+    var notifyDown = true
+    @AppStorage(AppStorageKeys.Machines.notifyDiskFull, store: SharedDefaults.store) private
+    var notifyDisk = true
+    @AppStorage(AppStorageKeys.Machines.diskThreshold, store: SharedDefaults.store) private
+    var diskThreshold =
+    90.0
+    @AppStorage(AppStorageKeys.Machines.autoConnect, store: SharedDefaults.store) private
+    var autoConnect = true
+    
     var body: some View {
         Section {
             Toggle("Connect when the page opens", isOn: $autoConnect)
@@ -29,11 +34,11 @@ struct MachinesRows: View {
         } footer: {
             Text(
                 "Checks run in the background while Edith is open and notify once per change, "
-                    + "not repeatedly.")
+                + "not repeatedly.")
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-
+        
         Section {
             LabeledContent("Connections") {
                 Text("System ssh with connection sharing")
@@ -52,8 +57,8 @@ struct MachinesRows: View {
         } footer: {
             Text(
                 "Edith reuses your existing SSH setup, so agent keys, jump hosts, and per-host "
-                    + "options in your config keep working. Host keys are pinned on first "
-                    + "connection.")
+                + "options in your config keep working. Host keys are pinned on first "
+                + "connection.")
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

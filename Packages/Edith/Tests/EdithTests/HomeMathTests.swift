@@ -14,21 +14,21 @@ import Testing
         #expect(HomeMath.salutation(hour: 21) == "Good evening")
         #expect(HomeMath.salutation(hour: 22) == "Up late")
     }
-
+    
     @Test func clockLabelUsesTwelveHourFormat() {
         #expect(HomeMath.clockLabel(hour24: 0, minute: 0, second: 0) == "12:00:00")
         #expect(HomeMath.clockLabel(hour24: 12, minute: 5, second: 9) == "12:05:09")
         #expect(HomeMath.clockLabel(hour24: 13, minute: 30, second: 0) == "1:30:00")
         #expect(HomeMath.clockLabel(hour24: 23, minute: 59, second: 59) == "11:59:59")
     }
-
+    
     @Test func cityNameUsesLastPathComponent() {
         #expect(HomeMath.cityName("America/New_York") == "New York")
         #expect(HomeMath.cityName("Asia/Kolkata") == "Kolkata")
         #expect(HomeMath.cityName("America/Argentina/Buenos_Aires") == "Buenos Aires")
         #expect(HomeMath.cityName("UTC") == "UTC")
     }
-
+    
     @Test func offsetLabelFormatsWholeAndHalfHours() {
         #expect(HomeMath.offsetLabel(seconds: 0) == "same time")
         #expect(HomeMath.offsetLabel(seconds: 3600) == "+1h")
@@ -37,7 +37,7 @@ import Testing
         #expect(HomeMath.offsetLabel(seconds: -34200) == "-9.5h")
         #expect(HomeMath.offsetLabel(seconds: 46800) == "+13h")
     }
-
+    
     @Test func emptyQueryReturnsSuggestionsMinusTaken() {
         let taken: Set<String> = ["Europe/London", "Asia/Tokyo"]
         let matches = HomeMath.zoneMatches(query: "", taken: taken)
@@ -46,29 +46,29 @@ import Testing
         #expect(matches.contains("Asia/Kolkata"))
         #expect(matches == HomeMath.zoneSuggestions.filter { !taken.contains($0) })
     }
-
+    
     @Test func queryMatchesKnownZonesCaseInsensitively() {
         #expect(HomeMath.zoneMatches(query: "kolkata", taken: []).contains("Asia/Kolkata"))
         #expect(HomeMath.zoneMatches(query: "TOKYO", taken: []).contains("Asia/Tokyo"))
     }
-
+    
     @Test func querySpacesMatchUnderscoredIdentifiers() {
         #expect(HomeMath.zoneMatches(query: "new york", taken: []).contains("America/New_York"))
     }
-
+    
     @Test func queryExcludesTakenZones() {
         let matches = HomeMath.zoneMatches(query: "kolkata", taken: ["Asia/Kolkata"])
         #expect(!matches.contains("Asia/Kolkata"))
     }
-
+    
     @Test func queryResultsAreCappedAtFourteen() {
         #expect(HomeMath.zoneMatches(query: "a", taken: []).count <= 14)
     }
-
+    
     @Test func nonsenseQueryReturnsNothing() {
         #expect(HomeMath.zoneMatches(query: "zzzznotacity", taken: []).isEmpty)
     }
-
+    
     @Test func topModelsAggregatesAcrossDays() {
         let monday = HeatDay(
             date: Date(),
@@ -82,7 +82,7 @@ import Testing
         #expect(top.map(\.name) == ["opus", "haiku"])
         #expect(top.first?.value == 15)
     }
-
+    
     @Test func topModelsCapsAtLimit() {
         let day = HeatDay(
             date: Date(),
@@ -92,12 +92,12 @@ import Testing
         #expect(HomeMath.topModels(days: [day]).count == 3)
         #expect(HomeMath.topModels(days: [day], limit: 2).count == 2)
     }
-
+    
     @Test func topModelsEmptyForNoData() {
         #expect(HomeMath.topModels(days: [nil, nil]).isEmpty)
         #expect(HomeMath.topModels(days: []).isEmpty)
     }
-
+    
     @Test func suggestionsAreAllValidTimeZones() {
         for id in HomeMath.zoneSuggestions {
             #expect(TimeZone(identifier: id) != nil, "\(id) is not a valid timezone")

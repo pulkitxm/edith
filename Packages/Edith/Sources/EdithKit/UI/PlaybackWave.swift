@@ -9,12 +9,12 @@ public enum MusicTick {
 public enum MeterLevel {
     public static let floorDecibels = -46.0
     public static let ceilingDecibels = -6.0
-
+    
     public static func gain(appVolume: Double, systemVolume: Double) -> Double {
         let combined = min(max(appVolume, 0), 1) * min(max(systemVolume, 0), 1)
         return combined.squareRoot()
     }
-
+    
     public static func level(decibels: Double, gain: Double, previous: Double) -> Double {
         let span = ceilingDecibels - floorDecibels
         let loudness = min(max((decibels - floorDecibels) / span, 0), 1)
@@ -26,14 +26,14 @@ public enum MeterLevel {
 public final class PlaybackLevel: ObservableObject {
     public static let shared = PlaybackLevel()
     public static let neutral = 0.5
-
+    
     @Published public private(set) var level = PlaybackLevel.neutral
-
+    
     public func update(_ value: Double) {
         let next = min(max(value, 0), 1)
         if abs(next - level) > 0.004 { level = next }
     }
-
+    
     public func reset() {
         if level != Self.neutral { level = Self.neutral }
     }
@@ -44,14 +44,14 @@ public struct PlaybackWave: View {
     let color: Color
     var barCount: Int
     var maxHeight: CGFloat
-
+    
     public init(playing: Bool, color: Color, barCount: Int = 5, maxHeight: CGFloat = 18) {
         self.playing = playing
         self.color = color
         self.barCount = barCount
         self.maxHeight = maxHeight
     }
-
+    
     public var body: some View {
         WaveLayers(playing: playing, color: color, barCount: barCount, maxHeight: maxHeight)
             .frame(
@@ -64,11 +64,11 @@ private struct WaveLayers: NSViewRepresentable {
     let color: Color
     let barCount: Int
     let maxHeight: CGFloat
-
+    
     func makeNSView(context: Context) -> WaveBarsView {
         WaveBarsView()
     }
-
+    
     func updateNSView(_ view: WaveBarsView, context: Context) {
         view.apply(
             playing: playing, color: NSColor(color), barCount: barCount, maxHeight: maxHeight)
@@ -82,7 +82,7 @@ private final class WaveBarsView: NSView {
     private var barColor = NSColor.white
     private var level = CGFloat(PlaybackLevel.neutral)
     private var levelObserver: AnyCancellable?
-
+    
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -92,16 +92,16 @@ private final class WaveBarsView: NSView {
             MainActor.assumeIsolated { self?.setLevel(CGFloat(value)) }
         }
     }
-
+    
     required init?(coder: NSCoder) { nil }
-
+    
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         effectiveAppearance.performAsCurrentDrawingAppearance {
             bars.forEach { $0.backgroundColor = barColor.cgColor }
         }
     }
-
+    
     func apply(playing: Bool, color: NSColor, barCount: Int, maxHeight: CGFloat) {
         barColor = color
         if bars.count != barCount {
@@ -132,12 +132,12 @@ private final class WaveBarsView: NSView {
         animating = playing
         playing ? startWave() : settleWave()
     }
-
+    
     private static let resting: CGFloat = 0.15
     private static let transition = 0.4
-
+    
     private var envelope: CGFloat { 0.28 + 0.72 * level }
-
+    
     private func startWave() {
         CATransaction.begin()
         CATransaction.setAnimationDuration(Self.transition)
@@ -149,14 +149,14 @@ private final class WaveBarsView: NSView {
         container.transform = CATransform3DMakeScale(1, envelope, 1)
         CATransaction.commit()
     }
-
+    
     private func settleWave() {
         CATransaction.begin()
         CATransaction.setAnimationDuration(Self.transition)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
         for bar in bars {
             let held =
-                bar.presentation()?.value(forKeyPath: "transform.scale.y") as? CGFloat ?? 1
+            bar.presentation()?.value(forKeyPath: "transform.scale.y") as? CGFloat ?? 1
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             bar.removeAnimation(forKey: "wave")
@@ -172,7 +172,7 @@ private final class WaveBarsView: NSView {
         container.transform = CATransform3DMakeScale(1, Self.resting, 1)
         CATransaction.commit()
     }
-
+    
     private func setLevel(_ value: CGFloat) {
         level = value
         guard animating else { return }
@@ -182,7 +182,7 @@ private final class WaveBarsView: NSView {
         container.transform = CATransform3DMakeScale(1, envelope, 1)
         CATransaction.commit()
     }
-
+    
     private static func texture() -> CAKeyframeAnimation {
         var values = (0..<12).map { _ in CGFloat.random(in: 0.25...1) }
         values.append(values[0])

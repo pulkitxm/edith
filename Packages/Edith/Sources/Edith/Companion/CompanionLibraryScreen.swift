@@ -1,31 +1,33 @@
 import AVFoundation
 import AppKit
 import EdithKit
+import Observation
 import PDFKit
 import SwiftUI
 
 @MainActor
-final class CompanionLibraryModel: ObservableObject {
-    @Published var dropTargeted = false
-    @Published var query = ""
-    @Published private(set) var episodes: [CompanionEpisode] = []
-    @Published private(set) var hits: [CompanionSearchHit] = []
-    @Published private(set) var ingesting = false
-    @Published private(set) var ingestSummary: String?
-    @Published private(set) var indexing = false
-    @Published private(set) var selectedId: String?
-    @Published private(set) var detail: CompanionEpisodeDetail?
-    @Published private(set) var signals: [CompanionSignal] = []
-    @Published private(set) var media: Data?
-    @Published private(set) var loadingDetail = false
-    @Published private(set) var error: String?
+@Observable
+final class CompanionLibraryModel {
+    var dropTargeted = false
+    var query = ""
+    private(set) var episodes: [CompanionEpisode] = []
+    private(set) var hits: [CompanionSearchHit] = []
+    private(set) var ingesting = false
+    private(set) var ingestSummary: String?
+    private(set) var indexing = false
+    private(set) var selectedId: String?
+    private(set) var detail: CompanionEpisodeDetail?
+    private(set) var signals: [CompanionSignal] = []
+    private(set) var media: Data?
+    private(set) var loadingDetail = false
+    private(set) var error: String?
     let playback = AudioPlayback()
     private var searchTask: Task<Void, Never>?
-
+    
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-
+    
     func refresh() async {
         do {
             episodes = try await client.episodes(limit: 60)
@@ -34,7 +36,7 @@ final class CompanionLibraryModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func searchChanged() {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -55,7 +57,7 @@ final class CompanionLibraryModel: ObservableObject {
             }
         }
     }
-
+    
     func select(_ id: String) async {
         guard selectedId != id else { return }
         playback.stop()
@@ -82,7 +84,7 @@ final class CompanionLibraryModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func closeDetail() {
         playback.stop()
         selectedId = nil
@@ -90,7 +92,7 @@ final class CompanionLibraryModel: ObservableObject {
         signals = []
         media = nil
     }
-
+    
     func openExternally() async {
         guard let detail else { return }
         do {
@@ -102,7 +104,7 @@ final class CompanionLibraryModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func indexNow() async {
         indexing = true
         defer { indexing = false }
@@ -113,7 +115,7 @@ final class CompanionLibraryModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func ingest(urls: [URL]) async {
         guard !urls.isEmpty, !ingesting else { return }
         ingesting = true
@@ -154,21 +156,22 @@ final class CompanionLibraryModel: ObservableObject {
 }
 
 @MainActor
-final class AudioPlayback: ObservableObject {
-    @Published private(set) var playing = false
-    @Published private(set) var progress: Double = 0
-    @Published private(set) var currentTime: TimeInterval = 0
+@Observable
+final class AudioPlayback {
+    private(set) var playing = false
+    private(set) var progress: Double = 0
+    private(set) var currentTime: TimeInterval = 0
     private var player: AVAudioPlayer?
     private var timer: Timer?
-
+    
     var duration: TimeInterval { player?.duration ?? 0 }
     var loaded: Bool { player != nil }
-
+    
     func load(_ data: Data) {
         stop()
         player = try? AVAudioPlayer(data: data)
     }
-
+    
     func toggle() {
         guard let player else { return }
         if playing {
@@ -183,7 +186,7 @@ final class AudioPlayback: ObservableObject {
             }
         }
     }
-
+    
     func stop() {
         player?.stop()
         player = nil
@@ -192,7 +195,7 @@ final class AudioPlayback: ObservableObject {
         currentTime = 0
         timer?.invalidate()
     }
-
+    
     private func refresh() {
         guard let player else { return }
         currentTime = player.currentTime
@@ -207,14 +210,14 @@ final class AudioPlayback: ObservableObject {
 }
 
 struct CompanionLibraryScreen: View {
-    @ObservedObject var model: CompanionLibraryModel
-    @ObservedObject var home: CompanionHomeModel
+    @Bindable var model: CompanionLibraryModel
+    let home: CompanionHomeModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             stats
@@ -239,7 +242,7 @@ struct CompanionLibraryScreen: View {
             model.searchChanged()
         }
     }
-
+    
     private var stats: some View {
         HStack(spacing: UIScale.pt(10)) {
             statTile(value: "\(home.status?.episodes ?? 0)", label: "episodes")
@@ -259,7 +262,7 @@ struct CompanionLibraryScreen: View {
                 "Pick Markdown notes, voice recordings, or PDFs; dropping files anywhere works too")
         }
     }
-
+    
     private func statTile(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text(value)
@@ -279,7 +282,7 @@ struct CompanionLibraryScreen: View {
             RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
         }
     }
-
+    
     private var pendingTile: some View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
@@ -312,7 +315,7 @@ struct CompanionLibraryScreen: View {
                 .strokeBorder(pending > 0 ? Color.orange.opacity(0.6) : DashSkin.line(dark))
         }
     }
-
+    
     private func pickAndIngest() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -326,7 +329,7 @@ struct CompanionLibraryScreen: View {
             await home.refresh()
         }
     }
-
+    
     private var listColumn: some View {
         VStack(spacing: UIScale.pt(6)) {
             SearchField(placeholder: "Search your memory", text: $model.query)
@@ -357,7 +360,7 @@ struct CompanionLibraryScreen: View {
         }
         .frame(maxWidth: .infinity)
     }
-
+    
     private func episodeRow(_ episode: CompanionEpisode) -> some View {
         Button {
             Task { await model.select(episode.id) }
@@ -381,14 +384,14 @@ struct CompanionLibraryScreen: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(
                         model.selectedId == episode.id
-                            ? DashSkin.accent(dark) : DashSkin.line(dark))
+                        ? DashSkin.accent(dark) : DashSkin.line(dark))
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .pointerCursor()
     }
-
+    
     private func hitRow(_ hit: CompanionSearchHit) -> some View {
         Button {
             Task { await model.select(hit.episodeId) }
@@ -418,14 +421,14 @@ struct CompanionLibraryScreen: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(
                         model.selectedId == hit.episodeId
-                            ? DashSkin.accent(dark) : DashSkin.line(dark))
+                        ? DashSkin.accent(dark) : DashSkin.line(dark))
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .pointerCursor()
     }
-
+    
     private func kindChip(_ kind: String) -> some View {
         Text(kind.uppercased())
             .font(.system(size: UIScale.pt(9), weight: .bold))
@@ -438,7 +441,7 @@ struct CompanionLibraryScreen: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(5)).strokeBorder(DashSkin.line(dark))
             }
     }
-
+    
     private var detailColumn: some View {
         SkinCard(title: model.detail?.title ?? "Episode", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -479,7 +482,7 @@ struct CompanionLibraryScreen: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
     }
-
+    
     private func detailMeta(_ detail: CompanionEpisodeDetail) -> String {
         var parts = [detail.kind, String(detail.occurredAt.prefix(10))]
         if let duration = detail.durationS, duration > 0 {
@@ -491,12 +494,12 @@ struct CompanionLibraryScreen: View {
         parts.append("\(detail.chunks) chunks")
         return parts.joined(separator: " · ")
     }
-
+    
     private func durationLabel(_ seconds: Double) -> String {
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
     }
-
+    
     @ViewBuilder
     private func preview(_ detail: CompanionEpisodeDetail) -> some View {
         switch detail.kind {
@@ -512,7 +515,7 @@ struct CompanionLibraryScreen: View {
             .frame(maxHeight: UIScale.pt(340))
         }
     }
-
+    
     @ViewBuilder
     private func voicePreview(_ detail: CompanionEpisodeDetail) -> some View {
         VoicePlayerBar(playback: model.playback, dark: dark)
@@ -526,7 +529,7 @@ struct CompanionLibraryScreen: View {
         .frame(maxHeight: UIScale.pt(220))
         signalBars
     }
-
+    
     @ViewBuilder
     private func pdfPreview(_ detail: CompanionEpisodeDetail) -> some View {
         if let media = model.media {
@@ -548,7 +551,7 @@ struct CompanionLibraryScreen: View {
             .frame(maxHeight: UIScale.pt(320))
         }
     }
-
+    
     private var signalBars: some View {
         let pauses = model.signals.filter { $0.kind == "pause_s" }
         let wpm = model.signals.filter { $0.kind == "wpm" }.map(\.value)
@@ -573,7 +576,7 @@ struct CompanionLibraryScreen: View {
             }
         }
     }
-
+    
     private func signalBar(label: String, detail: String, fraction: Double) -> some View {
         HStack(spacing: UIScale.pt(8)) {
             Text(label)
@@ -598,9 +601,9 @@ struct CompanionLibraryScreen: View {
 }
 
 struct VoicePlayerBar: View {
-    @ObservedObject var playback: AudioPlayback
+    let playback: AudioPlayback
     let dark: Bool
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button {
@@ -636,7 +639,7 @@ struct VoicePlayerBar: View {
             RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
         }
     }
-
+    
     private func timeLabel(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
@@ -645,13 +648,13 @@ struct VoicePlayerBar: View {
 
 struct PdfPreview: NSViewRepresentable {
     let data: Data
-
+    
     final class Coordinator {
         var loaded: Int = 0
     }
-
+    
     func makeCoordinator() -> Coordinator { Coordinator() }
-
+    
     func makeNSView(context: Context) -> PDFView {
         let view = PDFView()
         view.autoScales = true
@@ -660,7 +663,7 @@ struct PdfPreview: NSViewRepresentable {
         context.coordinator.loaded = data.hashValue
         return view
     }
-
+    
     func updateNSView(_ view: PDFView, context: Context) {
         guard context.coordinator.loaded != data.hashValue else { return }
         view.document = PDFDocument(data: data)

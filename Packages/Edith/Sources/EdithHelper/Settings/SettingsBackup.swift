@@ -1,6 +1,7 @@
 import AppKit
 import EdithKit
 import Foundation
+import Observation
 
 enum SettingsBackupDataClass: String, CaseIterable, Hashable, Sendable {
     case settings
@@ -23,11 +24,11 @@ func settingsBackupMissingNames(cloudNames: Set<String>, localNames: Set<String>
 
 struct SettingsBackupPendingState: Equatable, Sendable {
     private(set) var remaining: Set<String>
-
+    
     init(_ names: Set<String> = []) {
         remaining = names
     }
-
+    
     mutating func complete(_ name: String) {
         remaining.remove(name)
     }
@@ -71,161 +72,223 @@ func settingsBackupEnableRestoreDecision(
 }
 
 @MainActor
-final class SettingsBackup: ObservableObject {
+@Observable
+final class SettingsBackup {
     static let shared = SettingsBackup()
 
-    @Published private(set) var musicBackupRunning = false
-    @Published private(set) var clipboardBackupRunning = false
-
+    private(set) var musicBackupRunning = false
+    private(set) var clipboardBackupRunning = false
+    
     nonisolated static let backedKeys = [
-        "onboardingCompleted", "dashPaths", "musicCrossfadeEnabled", "musicCrossfadeSeconds",
-        "theme", "tab", "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
-        "presenterBlurUsage",
-        "presenterEnabled",
-        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
-        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
+        AppStorageKeys.General.theme, "tab", AppStorageKeys.Presenter.mode,
+        AppStorageKeys.Presenter.blurMusic, AppStorageKeys.Presenter.blurMoney,
+        AppStorageKeys.Presenter.blurUsage,
+        AppStorageKeys.Presenter.enabled,
+        AppStorageKeys.Presenter.autoEnabled, AppStorageKeys.Presenter.hideMenuBarNumbers,
+        AppStorageKeys.Presenter.detectRecording,
+        AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
-        "tabUsageEnabled", "tabMusicEnabled", "usageMachines",
-        "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "musicDownloadKind", "repoPath",
-        "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
-        "tabSystemEnabled", "preventSleep", "tabOrder",
-        "tabMachinesEnabled", "machinesNotifyDown", "machinesNotifyDiskFull",
-        "machinesDiskThreshold", "machinesAutoConnect",
-        "tabCompanionEnabled", "companionEndpoint",
+        AppStorageKeys.Tabs.usageEnabled, AppStorageKeys.Tabs.musicEnabled, "usageMachines",
+        "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", AppStorageKeys.Music.downloadKind,
+        "repoPath",
+        AppStorageKeys.Backup.icloud, AppStorageKeys.Music.backup,
+        AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
+        AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
+        AppStorageKeys.Tabs.order,
+        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDiskFull,
+        AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
+        AppStorageKeys.Tabs.companionEnabled, AppStorageKeys.Companion.endpoint,
         "finderViewMode", "finderSortKey", "finderSortAscending", "finderShowHidden",
         "finderIconSize", "dockerLogWrap", "dockerLogTimestamps", "dockerLogFontSize",
-        "backupSettings", "backupUsage", "backupLimits",
-        "budgetEnabled", "budgetMode", "budgetKind", "budgetCapPercent", "budgetDeadline",
-        "claudeLimitsEnabled", "codexLimitsEnabled", "limitsProvider",
-        "limitsInMenuBar", "menuBarColorMode", "smartColor",
-        "menuBarSubColorHex", "menuBarLowColorHex", "menuBarMidColorHex", "menuBarHighColorHex",
-        "menuBarStatsColorHex", "warnPercent", "critPercent", "pacingMargin",
-        "notifyMaster", "notifyTrackSession", "notifyTrackWeekly",
-        "notifyRecovery", "notifyPacingWarning", "notifyPacingHot",
-        "notifyReminderSession", "notifyReminderSessionOffsetMin",
-        "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
-        "notifyTokenExpired",
+        AppStorageKeys.Backup.settings, AppStorageKeys.Backup.usage, AppStorageKeys.Backup.limits,
+        AppStorageKeys.Budget.enabled, AppStorageKeys.Budget.mode, AppStorageKeys.Budget.kind,
+        AppStorageKeys.Budget.capPercent, AppStorageKeys.Budget.deadline,
+        AppStorageKeys.Limits.claudeEnabled, AppStorageKeys.Limits.codexEnabled,
+        AppStorageKeys.Limits.provider,
+        AppStorageKeys.Limits.inMenuBar, AppStorageKeys.MenuBar.colorMode,
+        AppStorageKeys.General.smartColor,
+        AppStorageKeys.MenuBar.subColorHex, AppStorageKeys.MenuBar.lowColorHex,
+        AppStorageKeys.MenuBar.midColorHex, AppStorageKeys.MenuBar.highColorHex,
+        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.Limits.warnPercent,
+        AppStorageKeys.Limits.critPercent, AppStorageKeys.Limits.pacingMargin,
+        AppStorageKeys.Notify.master, AppStorageKeys.Notify.trackSession,
+        AppStorageKeys.Notify.trackWeekly,
+        AppStorageKeys.Notify.recovery, AppStorageKeys.Notify.pacingWarning,
+        AppStorageKeys.Notify.pacingHot,
+        AppStorageKeys.Notify.reminderSession, AppStorageKeys.Notify.reminderSessionOffsetMin,
+        AppStorageKeys.Notify.reminderWeekly, AppStorageKeys.Notify.reminderWeeklyOffsetMin,
+        AppStorageKeys.Notify.tokenExpired,
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
         "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
-        "menuBarSystemStats", "micMuteEnabled", "micMuteInMenuBar",
+        AppStorageKeys.MenuBar.systemStats, AppStorageKeys.Mic.muteEnabled,
+        AppStorageKeys.Mic.muteInMenuBar,
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
-        "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
-        "notchShelfShowOnExternal", "notchShelfHaptics", "notchShelfShowMusic",
-        "notchAlertsEnabled", "notchAlertAudio", "notchAlertPower", "notchAlertBattery",
-        "notchAlertBluetooth", "notchAudioMixerEnabled",
-        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
-        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
-        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
-        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
-        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
-        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
+        AppStorageKeys.Notch.shelfOpenOnHover,
+        AppStorageKeys.Notch.shelfRequireOption, AppStorageKeys.Notch.shelfKeepDuration,
+        AppStorageKeys.Notch.shelfRemoveAfterDragOut,
+        AppStorageKeys.Notch.shelfShowOnExternal, AppStorageKeys.Notch.shelfHaptics,
+        AppStorageKeys.Notch.shelfShowMusic,
+        AppStorageKeys.Notch.alertsEnabled, AppStorageKeys.Notch.alertAudio,
+        AppStorageKeys.Notch.alertPower, AppStorageKeys.Notch.alertBattery,
+        AppStorageKeys.Notch.alertBluetooth, AppStorageKeys.Notch.audioMixerEnabled,
+        AppStorageKeys.Clipboard.enabled, "clipboardHotKeyCode", "clipboardHotKeyMods",
+        "clipboardHotKeyLabel",
+        AppStorageKeys.Clipboard.maxItems, AppStorageKeys.Clipboard.maxItemBytes,
+        AppStorageKeys.Clipboard.maxAgeDays,
+        AppStorageKeys.Clipboard.ignoredApps, AppStorageKeys.Clipboard.autoPaste,
+        AppStorageKeys.Clipboard.pastePlainText,
+        AppStorageKeys.Clipboard.checkInterval, AppStorageKeys.Clipboard.backup,
+        AppStorageKeys.Clipboard.lastBackupAt,
+        AppStorageKeys.Clipboard.popupAt, AppStorageKeys.Clipboard.pinTo,
+        AppStorageKeys.Clipboard.showFooter,
+        AppStorageKeys.Clipboard.saveFiles, AppStorageKeys.Clipboard.saveImages,
+        AppStorageKeys.Clipboard.saveText,
         "clipboardWindowPositionX", "clipboardWindowPositionY",
-        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
-        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
+        FocusDimState.enabledKey, AppStorageKeys.FocusDim.intensity,
+        AppStorageKeys.FocusDim.animationDuration,
+        AppStorageKeys.FocusDim.otherDisplaysMode, "focusDimHotKeyCode", "focusDimHotKeyMods",
         "focusDimHotKeyLabel",
-        "colorPickerEnabled", "colorPickerCopyFormat", "colorPickerProfile",
-        "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
+        AppStorageKeys.ColorPicker.enabled, AppStorageKeys.ColorPicker.copyFormat,
+        AppStorageKeys.ColorPicker.profile,
+        AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
-        "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "tabCalendarEnabled", "musicLooping", "musicShuffling", "musicGridView",
+        AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
+        AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
+        AppStorageKeys.Tabs.calendarEnabled, "musicLooping", "musicShuffling",
+        AppStorageKeys.Music.gridView,
         "musicFavourites", "musicLastTrack", "musicLastPosition", "musicWasPlaying",
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+        AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
+        AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
     ]
-
+    
     nonisolated static let sharedKeys: Set<String> = [
-        "onboardingCompleted", "dashPaths", "musicCrossfadeEnabled", "musicCrossfadeSeconds",
-        "theme", "lastPaletteTheme", "appearance", "musicDownloadKind",
-        "presenterMode", "presenterEnabled", "presenterBlurMusic", "presenterBlurMoney",
-        "presenterBlurUsage",
-        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
-        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
+        AppStorageKeys.General.theme, AppStorageKeys.General.lastPaletteTheme,
+        AppStorageKeys.General.appearance, AppStorageKeys.Music.downloadKind,
+        AppStorageKeys.Presenter.mode, AppStorageKeys.Presenter.enabled,
+        AppStorageKeys.Presenter.blurMusic, AppStorageKeys.Presenter.blurMoney,
+        AppStorageKeys.Presenter.blurUsage,
+        AppStorageKeys.Presenter.autoEnabled, AppStorageKeys.Presenter.hideMenuBarNumbers,
+        AppStorageKeys.Presenter.detectRecording,
+        AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
-        "tabUsageEnabled", "tabMusicEnabled", "tabSystemEnabled", "tabCalendarEnabled", "tabOrder",
+        AppStorageKeys.Tabs.usageEnabled, AppStorageKeys.Tabs.musicEnabled,
+        AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.Tabs.calendarEnabled,
+        AppStorageKeys.Tabs.order,
         "usageMachines",
-        "tabMachinesEnabled", "machinesNotifyDown", "machinesNotifyDiskFull",
-        "machinesDiskThreshold", "machinesAutoConnect",
-        "tabCompanionEnabled", "companionEndpoint",
+        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDiskFull,
+        AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
+        AppStorageKeys.Tabs.companionEnabled, AppStorageKeys.Companion.endpoint,
         "finderViewMode", "finderSortKey", "finderSortAscending", "finderShowHidden",
         "finderIconSize", "dockerLogWrap", "dockerLogTimestamps", "dockerLogFontSize",
-        "icloudBackup", "lastBackupAt", "musicBackup", "lastMusicBackupAt",
-        "backupSettings", "backupUsage", "backupLimits",
-        "budgetEnabled", "budgetMode", "budgetKind", "budgetCapPercent", "budgetDeadline",
-        "claudeLimitsEnabled", "codexLimitsEnabled", "limitsProvider",
-        "limitsInMenuBar", "menuBarColorMode", "smartColor",
-        "menuBarSubColorHex", "menuBarLowColorHex", "menuBarMidColorHex", "menuBarHighColorHex",
-        "menuBarStatsColorHex", "warnPercent", "critPercent", "pacingMargin",
-        "notifyMaster", "notifyTrackSession", "notifyTrackWeekly",
-        "notifyRecovery", "notifyPacingWarning", "notifyPacingHot",
-        "notifyReminderSession", "notifyReminderSessionOffsetMin",
-        "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
-        "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
+        AppStorageKeys.Backup.icloud, AppStorageKeys.Backup.lastBackupAt,
+        AppStorageKeys.Music.backup, AppStorageKeys.Music.lastBackupAt,
+        AppStorageKeys.Backup.settings, AppStorageKeys.Backup.usage, AppStorageKeys.Backup.limits,
+        AppStorageKeys.Budget.enabled, AppStorageKeys.Budget.mode, AppStorageKeys.Budget.kind,
+        AppStorageKeys.Budget.capPercent, AppStorageKeys.Budget.deadline,
+        AppStorageKeys.Limits.claudeEnabled, AppStorageKeys.Limits.codexEnabled,
+        AppStorageKeys.Limits.provider,
+        AppStorageKeys.Limits.inMenuBar, AppStorageKeys.MenuBar.colorMode,
+        AppStorageKeys.General.smartColor,
+        AppStorageKeys.MenuBar.subColorHex, AppStorageKeys.MenuBar.lowColorHex,
+        AppStorageKeys.MenuBar.midColorHex, AppStorageKeys.MenuBar.highColorHex,
+        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.Limits.warnPercent,
+        AppStorageKeys.Limits.critPercent, AppStorageKeys.Limits.pacingMargin,
+        AppStorageKeys.Notify.master, AppStorageKeys.Notify.trackSession,
+        AppStorageKeys.Notify.trackWeekly,
+        AppStorageKeys.Notify.recovery, AppStorageKeys.Notify.pacingWarning,
+        AppStorageKeys.Notify.pacingHot,
+        AppStorageKeys.Notify.reminderSession, AppStorageKeys.Notify.reminderSessionOffsetMin,
+        AppStorageKeys.Notify.reminderWeekly, AppStorageKeys.Notify.reminderWeeklyOffsetMin,
+        AppStorageKeys.Notify.tokenExpired, "hotKeyCode", "hotKeyMods", "hotKeyLabel",
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
         "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
-        "menuBarSystemStats", "micMuteEnabled", "micMuteInMenuBar",
+        AppStorageKeys.MenuBar.systemStats, AppStorageKeys.Mic.muteEnabled,
+        AppStorageKeys.Mic.muteInMenuBar,
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        "preventSleep", "repoPath",
-        "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
-        "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
-        "notchShelfShowOnExternal", "notchShelfHaptics", "notchShelfShowMusic",
-        "notchAlertsEnabled", "notchAlertAudio", "notchAlertPower", "notchAlertBattery",
-        "notchAlertBluetooth", "notchAudioMixerEnabled",
-        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
-        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
-        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
-        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
-        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
-        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        AppStorageKeys.General.preventSleep, "repoPath",
+        AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
+        AppStorageKeys.Notch.shelfOpenOnHover,
+        AppStorageKeys.Notch.shelfRequireOption, AppStorageKeys.Notch.shelfKeepDuration,
+        AppStorageKeys.Notch.shelfRemoveAfterDragOut,
+        AppStorageKeys.Notch.shelfShowOnExternal, AppStorageKeys.Notch.shelfHaptics,
+        AppStorageKeys.Notch.shelfShowMusic,
+        AppStorageKeys.Notch.alertsEnabled, AppStorageKeys.Notch.alertAudio,
+        AppStorageKeys.Notch.alertPower, AppStorageKeys.Notch.alertBattery,
+        AppStorageKeys.Notch.alertBluetooth, AppStorageKeys.Notch.audioMixerEnabled,
+        AppStorageKeys.Clipboard.enabled, "clipboardHotKeyCode", "clipboardHotKeyMods",
+        "clipboardHotKeyLabel",
+        AppStorageKeys.Clipboard.maxItems, AppStorageKeys.Clipboard.maxItemBytes,
+        AppStorageKeys.Clipboard.maxAgeDays,
+        AppStorageKeys.Clipboard.ignoredApps, AppStorageKeys.Clipboard.autoPaste,
+        AppStorageKeys.Clipboard.pastePlainText,
+        AppStorageKeys.Clipboard.checkInterval, AppStorageKeys.Clipboard.backup,
+        AppStorageKeys.Clipboard.lastBackupAt,
+        AppStorageKeys.Clipboard.popupAt, AppStorageKeys.Clipboard.pinTo,
+        AppStorageKeys.Clipboard.showFooter,
+        AppStorageKeys.Clipboard.saveFiles, AppStorageKeys.Clipboard.saveImages,
+        AppStorageKeys.Clipboard.saveText,
         "clipboardWindowPositionX", "clipboardWindowPositionY",
-        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
-        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
+        FocusDimState.enabledKey, AppStorageKeys.FocusDim.intensity,
+        AppStorageKeys.FocusDim.animationDuration,
+        AppStorageKeys.FocusDim.otherDisplaysMode, "focusDimHotKeyCode", "focusDimHotKeyMods",
         "focusDimHotKeyLabel",
-        "colorPickerEnabled", "colorPickerCopyFormat", "colorPickerProfile",
-        "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
+        AppStorageKeys.ColorPicker.enabled, AppStorageKeys.ColorPicker.copyFormat,
+        AppStorageKeys.ColorPicker.profile,
+        AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
-        "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "musicGridView", "musicFavourites",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+        AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
+        AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
+        AppStorageKeys.Music.gridView, "musicFavourites",
+        AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
+        AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
     ]
-
+    
     nonisolated static let deviceLocalKeys: Set<String> = [
-        "extensionsExpand", "hasPromptedPermissions", "lastBackupAt", "lastMusicBackupAt",
-        "lastClipboardBackupAt", "micMuted", "migratedFromControlCenter",
+        "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
+        AppStorageKeys.Music.lastBackupAt,
+        AppStorageKeys.Clipboard.lastBackupAt, "micMuted", "migratedFromControlCenter",
         "notifSessionLevel", "notifSessionPacing", "notifTokenExpiredAt", "notifWeeklyLevel",
-        "notifWeeklyPacing", "permissionsFilter", "permissionPromptCount", "permissionHintShown",
+        "notifWeeklyPacing", AppStorageKeys.Permissions.filter, "permissionPromptCount",
+        "permissionHintShown",
         "focusDimActive",
-        "permAccessibilityGranted", "permCalendarGranted",
+        AppStorageKeys.Permissions.accessibilityGranted, "permCalendarGranted",
         "permCameraGranted", "permFullDiskGranted", "permInputMonitoringGranted",
         "permNotificationsGranted",
         "permScreenRecordingGranted", "presenterAutoActive", "presenterAutoPaused",
         "presenterAutoReason", "settingsSection", "musicFolderPath", "musicFolderStale",
         "musicFolderExternalConfirmation", "musicRevealPath", "repoPathExternalConfirmation",
         "cleanerConfirmedExternalPaths",
-        "mainWindowZoom", "EdithMainWindowFullScreen", "machinesSelection", "machinesTab",
-        "machinesMode", "companionTab",
-        "completionsAutoRefresh", "completionScriptPaths",
+        "mainWindowZoom", AppStorageKeys.General.editMainWindowFullScreen,
+        AppStorageKeys.Machines.selection, AppStorageKeys.Machines.tab,
+        AppStorageKeys.Machines.mode, AppStorageKeys.Companion.tab,
+        CompletionScripts.autoRefreshKey, "completionScriptPaths",
         "restorePending.usage", "restorePending.limits", "restorePending.music",
         "restorePending.clipboard", "restoreTimedOut.usage", "restoreTimedOut.limits",
         "restoreTimedOut.music", "restoreTimedOut.clipboard",
     ]
-
+    
     private func store(for key: String) -> UserDefaults {
         Self.sharedKeys.contains(key) ? SharedDefaults.store : .standard
     }
-
+    
     private var debounce: Timer?
     private var sweep: Timer?
     static let sweepInterval: TimeInterval = 30
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
     private var cloudFile: URL { AppData.cloudDir.appendingPathComponent("settings.json") }
-
+    
     private var localLimits: URL { LimitsHistory.url }
     private var cloudLimits: URL {
         AppData.cloudDir.appendingPathComponent("data/limits-history.jsonl")
@@ -234,8 +297,8 @@ final class SettingsBackup: ObservableObject {
     private var cloudUsage: URL { AppData.cloudDir.appendingPathComponent("data/usage.json") }
     private var observedICloudBackup = false
     private var pendingRestoreItems:
-        [SettingsBackupDataClass: [String: SettingsBackupRestoreItem]] =
-            [:]
+    [SettingsBackupDataClass: [String: SettingsBackupRestoreItem]] =
+    [:]
     private var pendingRestoreStates: [SettingsBackupDataClass: SettingsBackupPendingState] = [:]
     private var restoreTasks: [SettingsBackupDataClass: Task<Void, Never>] = [:]
     private var settingsRestorePending = false
@@ -245,15 +308,15 @@ final class SettingsBackup: ObservableObject {
     private var musicFolderObserver: NSObjectProtocol?
     static let settingsRestoreRetryInterval: TimeInterval = 3
     static let settingsRestoreDeadlineInterval: TimeInterval = 600
-
+    
     private var cloudEnabled: Bool {
-        SharedDefaults.store.bool(forKey: "icloudBackup") && AppData.cloudAvailable
+        SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud) && AppData.cloudAvailable
     }
-
+    
     private func flag(_ key: String) -> Bool {
         store(for: key).object(forKey: key) as? Bool ?? true
     }
-
+    
     private func transferDecision(
         for dataClass: SettingsBackupDataClass
     ) -> SettingsBackupTransferDecision {
@@ -261,35 +324,35 @@ final class SettingsBackup: ObservableObject {
         let extensionEnabled: Bool
         switch dataClass {
         case .settings:
-            subToggleEnabled = flag("backupSettings")
+            subToggleEnabled = flag(AppStorageKeys.Backup.settings)
             extensionEnabled = true
         case .usage:
-            subToggleEnabled = flag("backupUsage")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "tabUsageEnabled")
+            subToggleEnabled = flag(AppStorageKeys.Backup.usage)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled)
         case .limits:
-            subToggleEnabled = flag("backupLimits")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "tabUsageEnabled")
+            subToggleEnabled = flag(AppStorageKeys.Backup.limits)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled)
         case .music:
-            subToggleEnabled = SharedDefaults.store.bool(forKey: "musicBackup")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "tabMusicEnabled")
+            subToggleEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Music.backup)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.musicEnabled)
         case .clipboard:
-            subToggleEnabled = SharedDefaults.store.bool(forKey: "clipboardBackup")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "clipboardEnabled")
+            subToggleEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.backup)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled)
         }
         return settingsBackupTransferDecision(
             for: dataClass,
-            masterEnabled: SharedDefaults.store.bool(forKey: "icloudBackup"),
+            masterEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud),
             subToggleEnabled: subToggleEnabled,
             extensionEnabled: extensionEnabled)
     }
-
+    
     func restoreDataOnEnable(for dataClass: SettingsBackupDataClass) {
         guard cloudEnabled else { return }
         let dataExists = cloudDataExists(for: dataClass)
         guard
             settingsBackupEnableRestoreDecision(
                 for: dataClass, cloudDataExists: dataExists,
-                masterEnabled: SharedDefaults.store.bool(forKey: "icloudBackup"))
+                masterEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud))
         else { return }
         let restoreOnly = SettingsBackupTransferDecision(shouldRestore: true, shouldExport: false)
         switch dataClass {
@@ -310,7 +373,7 @@ final class SettingsBackup: ObservableObject {
             restoreClipboard(decision: restoreOnly)
         }
     }
-
+    
     private func cloudDataExists(for dataClass: SettingsBackupDataClass) -> Bool {
         let fm = FileManager.default
         switch dataClass {
@@ -318,24 +381,24 @@ final class SettingsBackup: ObservableObject {
             return false
         case .usage:
             return fm.fileExists(atPath: cloudUsage.path)
-                || fm.fileExists(atPath: placeholderURL(for: cloudUsage).path)
+            || fm.fileExists(atPath: placeholderURL(for: cloudUsage).path)
         case .limits:
             return fm.fileExists(atPath: cloudLimits.path)
-                || fm.fileExists(atPath: placeholderURL(for: cloudLimits).path)
+            || fm.fileExists(atPath: placeholderURL(for: cloudLimits).path)
         case .music:
             let directory = AppData.cloudDir.appendingPathComponent("music")
             return !((try? fm.contentsOfDirectory(atPath: directory.path)) ?? []).isEmpty
         case .clipboard:
             let index = cloudClipboardDir.appendingPathComponent("index.jsonl")
             return fm.fileExists(atPath: index.path)
-                || fm.fileExists(atPath: placeholderURL(for: index).path)
+            || fm.fileExists(atPath: placeholderURL(for: index).path)
         }
     }
-
+    
     private func placeholderURL(for url: URL) -> URL {
         url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).icloud")
     }
-
+    
     private func restoreArchive(
         _ source: URL,
         destination: URL,
@@ -344,8 +407,8 @@ final class SettingsBackup: ObservableObject {
         requireApplicationSupportDestination: Bool
     ) {
         guard decision.shouldRestore,
-            !requireApplicationSupportDestination || isApplicationSupportURL(destination),
-            cloudFileExists(at: source)
+              !requireApplicationSupportDestination || isApplicationSupportURL(destination),
+              cloudFileExists(at: source)
         else {
             clearRestoreState(for: dataClass)
             return
@@ -357,21 +420,21 @@ final class SettingsBackup: ObservableObject {
             ],
             for: dataClass)
     }
-
+    
     private func isApplicationSupportURL(_ url: URL) -> Bool {
         let supportPath = AppData.supportDir.standardizedFileURL.path
         let path = url.standardizedFileURL.path
         return path == supportPath || path.hasPrefix(supportPath + "/")
     }
-
+    
     private func cloudFileExists(at url: URL) -> Bool {
         let fm = FileManager.default
         return fm.fileExists(atPath: url.path)
-            || fm.fileExists(atPath: placeholderURL(for: url).path)
+        || fm.fileExists(atPath: placeholderURL(for: url).path)
     }
-
+    
     private func missingRestoreItems(from source: URL, to destination: URL)
-        -> [SettingsBackupRestoreItem]
+    -> [SettingsBackupRestoreItem]
     {
         let cloudFiles = filesByRelativeName(in: source, normalizePlaceholders: true)
         let localNames = Set(filesByRelativeName(in: destination).keys)
@@ -385,7 +448,7 @@ final class SettingsBackup: ObservableObject {
                 destination: destination.appendingPathComponent(name))
         }
     }
-
+    
     private func filesByRelativeName(
         in root: URL,
         normalizePlaceholders: Bool = false
@@ -412,13 +475,13 @@ final class SettingsBackup: ObservableObject {
         }
         return files
     }
-
+    
     private func relativeName(of url: URL, in root: URL) -> String? {
         let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
         guard url.path.hasPrefix(rootPath) else { return nil }
         return String(url.path.dropFirst(rootPath.count))
     }
-
+    
     private func normalizedPlaceholderName(_ name: String) -> String {
         let path = name as NSString
         let component = path.lastPathComponent
@@ -427,7 +490,7 @@ final class SettingsBackup: ObservableObject {
         let parent = path.deletingLastPathComponent
         return parent.isEmpty ? original : (parent as NSString).appendingPathComponent(original)
     }
-
+    
     private func beginProgressiveRestore(
         _ items: [SettingsBackupRestoreItem],
         for dataClass: SettingsBackupDataClass
@@ -471,7 +534,7 @@ final class SettingsBackup: ObservableObject {
             }
         }
     }
-
+    
     private func isCloudFileCurrent(_ url: URL) -> Bool {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return false }
@@ -482,7 +545,7 @@ final class SettingsBackup: ObservableObject {
         }
         return fm.isReadableFile(atPath: url.path)
     }
-
+    
     private func requestCloudDownload(for url: URL) {
         do {
             try FileManager.default.startDownloadingUbiquitousItem(at: url)
@@ -491,10 +554,10 @@ final class SettingsBackup: ObservableObject {
                 at: url.deletingLastPathComponent())
         }
     }
-
+    
     private func processPendingRestore(for dataClass: SettingsBackupDataClass) {
         guard var state = pendingRestoreStates[dataClass],
-            let items = pendingRestoreItems[dataClass]
+              let items = pendingRestoreItems[dataClass]
         else { return }
         for name in state.remaining.sorted() {
             guard let item = items[name], restoreIfReady(item, for: dataClass) else { continue }
@@ -506,7 +569,7 @@ final class SettingsBackup: ObservableObject {
             finishRestore(for: dataClass)
         }
     }
-
+    
     private func restoreIfReady(
         _ item: SettingsBackupRestoreItem,
         for dataClass: SettingsBackupDataClass
@@ -544,7 +607,7 @@ final class SettingsBackup: ObservableObject {
             }
         }
     }
-
+    
     private func restoreDidChange(_ dataClass: SettingsBackupDataClass) {
         switch dataClass {
         case .settings:
@@ -560,7 +623,7 @@ final class SettingsBackup: ObservableObject {
             IPC.post(IPC.Name.clipboardChanged)
         }
     }
-
+    
     private func finishRestore(for dataClass: SettingsBackupDataClass) {
         restoreTasks[dataClass]?.cancel()
         restoreTasks.removeValue(forKey: dataClass)
@@ -573,7 +636,7 @@ final class SettingsBackup: ObservableObject {
             IPC.post(IPC.Name.clipboardChanged)
         }
     }
-
+    
     private func timeOutRestore(for dataClass: SettingsBackupDataClass) {
         let remaining = pendingRestoreStates[dataClass]?.remaining ?? []
         restoreTasks[dataClass]?.cancel()
@@ -589,7 +652,7 @@ final class SettingsBackup: ObservableObject {
             "iCloud restore timed out for %@ with %ld files remaining: %@",
             dataClass.rawValue, remaining.count, remaining.sorted().joined(separator: ", "))
     }
-
+    
     private func clearRestoreState(for dataClass: SettingsBackupDataClass) {
         let previousPending = SharedDefaults.store.integer(
             forKey: "restorePending.\(dataClass.rawValue)")
@@ -603,21 +666,21 @@ final class SettingsBackup: ObservableObject {
             IPC.post(IPC.Name.musicFolderChanged)
         }
     }
-
+    
     private func setRestorePending(_ count: Int, for dataClass: SettingsBackupDataClass) {
         SharedDefaults.store.set(count, forKey: "restorePending.\(dataClass.rawValue)")
     }
-
+    
     private func setRestoreTimedOut(_ count: Int, for dataClass: SettingsBackupDataClass) {
         SharedDefaults.store.set(count, forKey: "restoreTimedOut.\(dataClass.rawValue)")
     }
-
+    
     func start() {
         for dataClass in SettingsBackupDataClass.allCases
         where dataClass != .settings && restoreTasks[dataClass] == nil {
             clearRestoreState(for: dataClass)
         }
-        observedICloudBackup = SharedDefaults.store.bool(forKey: "icloudBackup")
+        observedICloudBackup = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
         beginSettingsRestore()
         let restored = restoreFromCloud()
         export()
@@ -653,14 +716,14 @@ final class SettingsBackup: ObservableObject {
             }
         }
     }
-
+    
     func settingsDidChange() {
-        let icloudBackup = SharedDefaults.store.bool(forKey: "icloudBackup")
+        let icloudBackup = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
         let shouldRestore = icloudBackup && !observedICloudBackup
         observedICloudBackup = icloudBackup
         if shouldRestore {
             _ = restoreFromCloud()
-            observedICloudBackup = SharedDefaults.store.bool(forKey: "icloudBackup")
+            observedICloudBackup = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
             exportLimits()
             exportUsage()
             backupMusic()
@@ -668,7 +731,7 @@ final class SettingsBackup: ObservableObject {
         scheduleExport()
         scheduleClipboardBackup()
     }
-
+    
     @discardableResult
     private func restoreFromCloud() -> (music: Bool, clipboard: Bool) {
         guard cloudEnabled else {
@@ -698,7 +761,7 @@ final class SettingsBackup: ObservableObject {
                 shouldRestore: decisions[.clipboard]!.shouldExport, shouldExport: false))
         return (music, clipboard)
     }
-
+    
     private func shutdown() {
         sweep?.invalidate()
         sweep = nil
@@ -712,19 +775,19 @@ final class SettingsBackup: ObservableObject {
             setRestorePending(0, for: dataClass)
         }
     }
-
+    
     func debounceFlush() {
         if debounce?.isValid == true {
             debounce?.invalidate()
             export()
         }
     }
-
+    
     func backupMusic() {
         guard !musicBackupRunning, cloudEnabled,
-            pendingRestoreStates[.music] == nil,
-            transferDecision(for: .music).shouldExport,
-            FileManager.default.fileExists(atPath: Repo.musicDir.path)
+              pendingRestoreStates[.music] == nil,
+              transferDecision(for: .music).shouldExport,
+              FileManager.default.fileExists(atPath: Repo.musicDir.path)
         else { return }
         musicBackupRunning = true
         let destination = AppData.cloudDir.appendingPathComponent("music")
@@ -738,7 +801,7 @@ final class SettingsBackup: ObservableObject {
                 self.musicBackupRunning = false
                 if process.terminationStatus == 0 {
                     SharedDefaults.store.set(
-                        Date().timeIntervalSince1970, forKey: "lastMusicBackupAt")
+                        Date().timeIntervalSince1970, forKey: AppStorageKeys.Music.lastBackupAt)
                 }
             }
         }
@@ -748,7 +811,7 @@ final class SettingsBackup: ObservableObject {
             musicBackupRunning = false
         }
     }
-
+    
     @discardableResult
     private func restoreMusic(
         decision: SettingsBackupTransferDecision,
@@ -756,7 +819,7 @@ final class SettingsBackup: ObservableObject {
     ) -> Bool {
         let destination = Repo.musicDir
         guard decision.shouldRestore,
-            !requireApplicationSupportDestination || isApplicationSupportURL(destination)
+              !requireApplicationSupportDestination || isApplicationSupportURL(destination)
         else {
             clearRestoreState(for: .music)
             return false
@@ -766,11 +829,11 @@ final class SettingsBackup: ObservableObject {
         beginProgressiveRestore(items, for: .music)
         return !items.isEmpty
     }
-
+    
     private var localClipboardDir: URL { ClipboardPaths.dir }
     private var cloudClipboardDir: URL { AppData.cloudDir.appendingPathComponent("clipboard") }
     private var clipboardDebounce: Timer?
-
+    
     func scheduleClipboardBackup() {
         guard cloudEnabled, transferDecision(for: .clipboard).shouldExport else {
             clipboardDebounce?.invalidate()
@@ -782,11 +845,11 @@ final class SettingsBackup: ObservableObject {
             Task { @MainActor in SettingsBackup.shared.backupClipboard() }
         }
     }
-
+    
     func backupClipboard() {
         guard !clipboardBackupRunning, cloudEnabled,
-            transferDecision(for: .clipboard).shouldExport,
-            FileManager.default.fileExists(atPath: localClipboardDir.path)
+              transferDecision(for: .clipboard).shouldExport,
+              FileManager.default.fileExists(atPath: localClipboardDir.path)
         else { return }
         clipboardBackupRunning = true
         try? FileManager.default.createDirectory(
@@ -807,7 +870,7 @@ final class SettingsBackup: ObservableObject {
                 self.clipboardBackupRunning = false
                 if process.terminationStatus == 0 {
                     SharedDefaults.store.set(
-                        Date().timeIntervalSince1970, forKey: "lastClipboardBackupAt")
+                        Date().timeIntervalSince1970, forKey: AppStorageKeys.Clipboard.lastBackupAt)
                 }
             }
         }
@@ -817,7 +880,7 @@ final class SettingsBackup: ObservableObject {
             clipboardBackupRunning = false
         }
     }
-
+    
     @discardableResult
     private func restoreClipboard(
         decision: SettingsBackupTransferDecision
@@ -830,14 +893,14 @@ final class SettingsBackup: ObservableObject {
         beginProgressiveRestore(items, for: .clipboard)
         return !items.isEmpty
     }
-
+    
     func scheduleExport() {
         debounce?.invalidate()
         debounce = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
             Task { @MainActor in SettingsBackup.shared.export() }
         }
     }
-
+    
     private func snapshot() -> Data? {
         var dict: [String: Any] = [:]
         for key in Self.backedKeys {
@@ -846,7 +909,7 @@ final class SettingsBackup: ObservableObject {
         return try? JSONSerialization.data(
             withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
     }
-
+    
     func export() {
         guard !settingsRestorePending else { return }
         guard let data = snapshot() else { return }
@@ -858,27 +921,28 @@ final class SettingsBackup: ObservableObject {
             at: AppData.cloudDir, withIntermediateDirectories: true)
         if (try? Data(contentsOf: cloudFile)) != data {
             try? data.write(to: cloudFile)
-            SharedDefaults.store.set(Date().timeIntervalSince1970, forKey: "lastBackupAt")
+            SharedDefaults.store.set(
+                Date().timeIntervalSince1970, forKey: AppStorageKeys.Backup.lastBackupAt)
         }
     }
-
+    
     func syncData() {
         syncLimits()
         syncUsage()
     }
-
+    
     func syncLimits() {
         transferLimits(
             decision: transferDecision(for: .limits), restore: true, export: true,
             requireApplicationSupportRestore: false)
     }
-
+    
     private func exportLimits() {
         transferLimits(
             decision: transferDecision(for: .limits), restore: false, export: true,
             requireApplicationSupportRestore: false)
     }
-
+    
     private func transferLimits(
         decision: SettingsBackupTransferDecision,
         restore: Bool,
@@ -887,8 +951,8 @@ final class SettingsBackup: ObservableObject {
     ) {
         guard cloudEnabled else { return }
         let shouldRestore =
-            restore && decision.shouldRestore
-            && (!requireApplicationSupportRestore || isApplicationSupportURL(localLimits))
+        restore && decision.shouldRestore
+        && (!requireApplicationSupportRestore || isApplicationSupportURL(localLimits))
         let shouldExport = export && decision.shouldExport
         guard shouldRestore || shouldExport else { return }
         let fm = FileManager.default
@@ -916,19 +980,19 @@ final class SettingsBackup: ObservableObject {
             try? data.write(to: cloudLimits)
         }
     }
-
+    
     func syncUsage() {
         transferUsage(
             decision: transferDecision(for: .usage), restore: true, export: true,
             requireApplicationSupportRestore: false)
     }
-
+    
     private func exportUsage() {
         transferUsage(
             decision: transferDecision(for: .usage), restore: false, export: true,
             requireApplicationSupportRestore: false)
     }
-
+    
     private func transferUsage(
         decision: SettingsBackupTransferDecision,
         restore: Bool,
@@ -937,8 +1001,8 @@ final class SettingsBackup: ObservableObject {
     ) {
         guard cloudEnabled else { return }
         let shouldRestore =
-            restore && decision.shouldRestore
-            && (!requireApplicationSupportRestore || isApplicationSupportURL(localUsage))
+        restore && decision.shouldRestore
+        && (!requireApplicationSupportRestore || isApplicationSupportURL(localUsage))
         let shouldExport = export && decision.shouldExport
         guard shouldRestore || shouldExport else { return }
         let fm = FileManager.default
@@ -963,7 +1027,7 @@ final class SettingsBackup: ObservableObject {
             if (try? Data(contentsOf: cloudUsage)) != merged { try? merged.write(to: cloudUsage) }
         }
     }
-
+    
     private func importFromCloudIfNewer(decision: SettingsBackupTransferDecision) {
         guard decision.shouldRestore else {
             finishSettingsRestore()
@@ -982,8 +1046,8 @@ final class SettingsBackup: ObservableObject {
             return
         }
         let localDate =
-            (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
-            ?? .distantPast
+        (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
+        ?? .distantPast
         guard
             settingsBackupShouldImport(
                 localFileExists: fm.fileExists(atPath: localFile.path),
@@ -994,7 +1058,7 @@ final class SettingsBackup: ObservableObject {
             return
         }
         guard let data = try? Data(contentsOf: cloudFile),
-            let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             awaitSettingsDownload()
             return
@@ -1024,11 +1088,11 @@ final class SettingsBackup: ObservableObject {
         IPC.post(IPC.Name.settingsChanged)
         finishSettingsRestore()
     }
-
+    
     private var localSettingsAreEmpty: Bool {
         SharedDefaults.store.bool(forKey: ExtensionDefaultsMigration.freshInstallKey)
     }
-
+    
     private func beginSettingsRestore() {
         guard cloudEnabled, cloudFileExists(at: cloudFile) else {
             finishSettingsRestore()
@@ -1037,7 +1101,7 @@ final class SettingsBackup: ObservableObject {
         settingsRestorePending = true
         settingsRestoreDeadline = Date().addingTimeInterval(Self.settingsRestoreDeadlineInterval)
     }
-
+    
     private func awaitSettingsDownload() {
         try? FileManager.default.startDownloadingUbiquitousItem(at: cloudFile)
         guard settingsRestorePending else { return }
@@ -1054,12 +1118,12 @@ final class SettingsBackup: ObservableObject {
             }
         }
     }
-
+    
     private func retrySettingsRestore() {
         guard settingsRestorePending else { return }
         importFromCloudIfNewer(decision: transferDecision(for: .settings))
     }
-
+    
     private func finishSettingsRestore() {
         settingsRestoreRetry?.invalidate()
         settingsRestoreRetry = nil
@@ -1068,10 +1132,10 @@ final class SettingsBackup: ObservableObject {
         settingsRestorePending = false
         export()
     }
-
+    
     func scheduleMusicBackup() {
         guard cloudEnabled, transferDecision(for: .music).shouldExport,
-            pendingRestoreStates[.music] == nil
+              pendingRestoreStates[.music] == nil
         else {
             musicDebounce?.invalidate()
             musicDebounce = nil

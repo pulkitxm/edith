@@ -5,7 +5,7 @@ public struct CLIInstallResult: Equatable, Sendable {
     public var linked: [String]
     public var skipped: [String]
     public var message: String?
-
+    
     public init(
         directory: String, linked: [String] = [], skipped: [String] = [], message: String? = nil
     ) {
@@ -19,7 +19,7 @@ public struct CLIInstallResult: Equatable, Sendable {
 public enum CLIInstaller {
     public static let toolNames = ["ed", "edh", "edith"]
     public static let primaryTool = "ed"
-
+    
     public static func bundledToolsDirectory(
         from bundleURL: URL = Bundle.main.bundleURL,
         fileManager: FileManager = .default
@@ -42,7 +42,7 @@ public enum CLIInstaller {
         }
         return nil
     }
-
+    
     public static func preferredDirectory(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default
@@ -51,18 +51,18 @@ public enum CLIInstaller {
         if fileManager.isWritableFile(atPath: system.path) { return system }
         return home.appendingPathComponent(".local/bin")
     }
-
+    
     public static func pathEntries(
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String] {
         (environment["PATH"] ?? "").split(separator: ":").map(String.init)
     }
-
+    
     public static func isOnPath(_ directory: URL, entries: [String]) -> Bool {
         let target = directory.standardizedFileURL.path
         return entries.contains { URL(fileURLWithPath: $0).standardizedFileURL.path == target }
     }
-
+    
     @discardableResult
     public static func install(
         toolsDirectory: URL? = nil,
@@ -101,7 +101,7 @@ public enum CLIInstaller {
         }
         return result
     }
-
+    
     @discardableResult
     public static func uninstall(
         from directory: URL? = nil, fileManager: FileManager = .default
@@ -118,7 +118,7 @@ public enum CLIInstaller {
         }
         return result
     }
-
+    
     public static func installIfNeeded(fileManager: FileManager = .default) {
         guard let tools = bundledToolsDirectory(fileManager: fileManager) else { return }
         let target = preferredDirectory(fileManager: fileManager)
@@ -133,11 +133,11 @@ public enum CLIInstaller {
         guard SharedDefaults.store.bool(forKey: CompletionScripts.autoRefreshKey) else { return }
         CompletionScripts.refreshInstalled(fileManager: fileManager)
     }
-
+    
     static func sourceName(for name: String) -> String {
         name == "edh" ? "edh" : primaryTool
     }
-
+    
     static func isOurs(_ link: URL, fileManager: FileManager) -> Bool {
         guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: link.path)
         else { return false }

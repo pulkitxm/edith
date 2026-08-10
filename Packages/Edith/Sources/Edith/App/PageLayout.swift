@@ -9,11 +9,11 @@ enum PageMetrics {
     static let bottom = 28.0
     static let titleSize = 34.0
     static let compactTitleSize = 28.0
-
+    
     static func gutter(_ compact: Bool) -> CGFloat {
         UIScale.pt(compact ? compactGutter : gutter)
     }
-
+    
     static func titleFont(_ compact: Bool) -> Font {
         DashSkin.serif(compact ? compactTitleSize : titleSize)
     }
@@ -23,7 +23,7 @@ extension View {
     func pageGutter(_ compact: Bool) -> some View {
         padding(.horizontal, PageMetrics.gutter(compact))
     }
-
+    
     func pageContent(_ compact: Bool) -> some View {
         pageGutter(compact).padding(.bottom, UIScale.pt(PageMetrics.bottom))
     }
@@ -32,11 +32,11 @@ extension View {
 struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
-
+    
     private let title: () -> Title
     private let trailing: () -> Trailing
     private let accessory: () -> Accessory
-
+    
     init(
         @ViewBuilder title: @escaping () -> Title,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
@@ -46,7 +46,7 @@ struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
         self.trailing = trailing
         self.accessory = accessory
     }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {

@@ -5,9 +5,9 @@ struct CenteredNotchShape: Shape {
     var height: CGFloat
     var topRadius: CGFloat
     var bottomRadius: CGFloat
-
+    
     var animatableData:
-        AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>
+    AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>
     {
         get {
             AnimatablePair(AnimatablePair(width, height), AnimatablePair(topRadius, bottomRadius))
@@ -19,7 +19,7 @@ struct CenteredNotchShape: Shape {
             bottomRadius = newValue.second.second
         }
     }
-
+    
     func path(in rect: CGRect) -> Path {
         let box = CGRect(
             x: rect.midX - width / 2, y: rect.minY, width: width, height: height)
@@ -30,7 +30,7 @@ struct CenteredNotchShape: Shape {
 struct NotchShape: Shape {
     var topRadius: CGFloat = NotchGeometry.topFlareRadius
     var bottomRadius: CGFloat = 14
-
+    
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(topRadius, bottomRadius) }
         set {
@@ -38,7 +38,7 @@ struct NotchShape: Shape {
             bottomRadius = newValue.second
         }
     }
-
+    
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))

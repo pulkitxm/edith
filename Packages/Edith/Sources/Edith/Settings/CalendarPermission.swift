@@ -6,7 +6,7 @@ enum CalendarPermission {
     static var isGranted: Bool {
         EKEventStore.authorizationStatus(for: .event) == .fullAccess
     }
-
+    
     @discardableResult
     static func mirror() -> Bool {
         let value = isGranted
@@ -17,7 +17,7 @@ enum CalendarPermission {
         }
         return value
     }
-
+    
     static func request() {
         Task { @MainActor in
             _ = try? await EKEventStore().requestFullAccessToEvents()

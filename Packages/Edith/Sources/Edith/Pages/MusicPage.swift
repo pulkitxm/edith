@@ -1,15 +1,16 @@
 import AppKit
 import Combine
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
 final class WindowVisibility: ObservableObject {
     static let shared = WindowVisibility()
-
+    
     @Published private(set) var visible = true
     private var observers: [NSObjectProtocol] = []
-
+    
     private init() {
         let names: [Notification.Name] = [
             NSWindow.didChangeOcclusionStateNotification,
@@ -23,49 +24,50 @@ final class WindowVisibility: ObservableObject {
             }
         }
     }
-
+    
     private func refresh() {
         let showing =
-            !NSApp.isHidden
-            && NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
+        !NSApp.isHidden
+        && NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
         if showing != visible { visible = showing }
     }
 }
 
 @MainActor
-final class MusicDetailPresenter: ObservableObject {
+@Observable
+final class MusicDetailPresenter {
     static let shared = MusicDetailPresenter()
 
-    @Published private(set) var track: Track?
-    @Published private(set) var beginRename = false
-    @Published private(set) var renameArmed = false
+    private(set) var track: Track?
+    private(set) var beginRename = false
+    private(set) var renameArmed = false
     private(set) var followsPlayback = false
-
+    
     func show(_ track: Track, renaming: Bool = false) {
         beginRename = renaming
         renameArmed = false
         followsPlayback = MusicRemote.shared.currentFile == track.relativePath
         self.track = track
     }
-
+    
     func armRename(_ value: Bool) {
         if renameArmed != value { renameArmed = value }
     }
-
+    
     func followPlayback(_ track: Track) {
         guard self.track == track else { return }
         followsPlayback = true
     }
-
+    
     func followCurrent() {
         guard followsPlayback, track != nil, let current = MusicRemote.shared.current,
-            current != track
+              current != track
         else { return }
         beginRename = false
         renameArmed = false
         track = current
     }
-
+    
     func dismiss() {
         track = nil
         beginRename = false
@@ -75,31 +77,33 @@ final class MusicDetailPresenter: ObservableObject {
 }
 
 @MainActor
-final class MusicRemote: ObservableObject {
+@Observable
+final class MusicRemote {
     static let shared = MusicRemote()
 
-    @Published private(set) var tracks: [Track] = []
-    @Published private(set) var folderPath = ""
-    @Published private(set) var folders: [MusicFolder] = []
-    @Published private(set) var folderTracks: [Track] = []
-    @Published private(set) var searchTracks: [Track] = []
-    @Published private(set) var searchFolders: [MusicFolder] = []
-    @Published private(set) var favourites: [Track] = []
-    @Published private(set) var favouritePaths: Set<String> = []
-    @Published private(set) var showingFavourites = false
-    @Published private(set) var currentFile: String?
-    @Published private(set) var isPlaying = false
-    @Published private(set) var volume = 0.7 {
+    private(set) var tracks: [Track] = []
+    private(set) var folderPath = ""
+    private(set) var folders: [MusicFolder] = []
+    private(set) var folderTracks: [Track] = []
+    private(set) var searchTracks: [Track] = []
+    private(set) var searchFolders: [MusicFolder] = []
+    private(set) var favourites: [Track] = []
+    private(set) var favouritePaths: Set<String> = []
+    private(set) var showingFavourites = false
+    private(set) var currentFile: String?
+    private(set) var isPlaying = false
+    private(set) var volume = 0.7 {
         didSet { videoSession?.applyVolume(volume) }
     }
-    @Published private(set) var looping = false
-    @Published private(set) var shuffling = false
-    @Published private(set) var duration: TimeInterval = 0
-    @Published private(set) var restorePending = SharedDefaults.store.integer(
+    private(set) var looping = false
+    private(set) var shuffling = false
+    private(set) var duration: TimeInterval = 0
+    private(set) var restorePending = SharedDefaults.store.integer(
         forKey: "restorePending.music")
-
+    
     private var elapsedBase: TimeInterval = 0
     private var elapsedTimestamp: TimeInterval = 0
+    private(set) var seekTick = 0
     private var stateObserver: NSObjectProtocol?
     private(set) var videoSession: VideoPreviewSession?
     private var videoResumesAudio = false
@@ -107,27 +111,28 @@ final class MusicRemote: ObservableObject {
     private var levelPing: Timer?
     private var visibilityObserver: AnyCancellable?
     private var windowVisible = true
-
+    
     var current: Track? {
         currentFile.map { Track(url: TrackMeta.url(for: $0), relativePath: $0) }
     }
-
+    
     var elapsed: TimeInterval {
+        _ = seekTick
         if let videoSession { return videoSession.elapsed }
         let raw =
-            isPlaying
-            ? elapsedBase + (Date().timeIntervalSince1970 - elapsedTimestamp) : elapsedBase
+        isPlaying
+        ? elapsedBase + (Date().timeIntervalSince1970 - elapsedTimestamp) : elapsedBase
         return duration > 0 ? min(max(raw, 0), duration) : max(raw, 0)
     }
-
+    
     var progress: Double { duration > 0 ? min(elapsed / duration, 1) : 0 }
-
+    
     private var folderObserver: NSObjectProtocol?
     private var folderIPCObserver: NSObjectProtocol?
     private var revealObserver: NSObjectProtocol?
     private var searchScopePath: String?
     private var folderCache: [String: [MusicFolder]] = [:]
-
+    
     func start() {
         if stateObserver != nil {
             rescan()
@@ -173,7 +178,7 @@ final class MusicRemote: ObservableObject {
         }
         rescan()
     }
-
+    
     private func refreshLevelPing() {
         let wanted = isPlaying && windowVisible && stateObserver != nil
         guard wanted != (levelPing != nil) else { return }
@@ -189,7 +194,7 @@ final class MusicRemote: ObservableObject {
         }
         levelPing?.tolerance = 0.2
     }
-
+    
     func stop() {
         if let stateObserver {
             IPC.stopObserving(stateObserver)
@@ -218,14 +223,14 @@ final class MusicRemote: ObservableObject {
         duration = 0
         refreshLevelPing()
     }
-
+    
     func rescan() {
         TrackMeta.invalidateCaches()
         folderCache.removeAll()
         invalidateSearchScope()
         refreshFavourites()
         if !folderPath.isEmpty,
-            !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
+           !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
         {
             folderPath = ""
         }
@@ -236,7 +241,7 @@ final class MusicRemote: ObservableObject {
             self?.tracks = scanned
         }
     }
-
+    
     private func refreshEntries() {
         let path = folderPath
         Task { [weak self] in
@@ -246,7 +251,7 @@ final class MusicRemote: ObservableObject {
             self.folderTracks = entries.tracks
         }
     }
-
+    
     func loadSearchScope() {
         let path = folderPath
         guard searchScopePath != path else { return }
@@ -260,60 +265,61 @@ final class MusicRemote: ObservableObject {
             self.searchFolders = found.1
         }
     }
-
+    
     private func invalidateSearchScope() {
         searchScopePath = nil
         searchTracks = []
         searchFolders = []
     }
-
+    
     func subfolders(of path: String) -> [MusicFolder] {
         if let hit = folderCache[path] { return hit }
         let list = TrackMeta.subfolders(in: path)
         folderCache[path] = list
         return list
     }
-
+    
     func open(_ folder: MusicFolder) { navigate(to: folder.relativePath) }
-
+    
     func navigate(to path: String) {
         showingFavourites = false
         folderPath = path
         refreshEntries()
     }
-
+    
     func reveal(_ track: Track) {
         navigate(to: (track.relativePath as NSString).deletingLastPathComponent)
-        SharedDefaults.store.set(MainDestination.music.rawValue, forKey: "mainWindowSection")
+        SharedDefaults.store.set(
+            MainDestination.music.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
     }
-
+    
     func openFavourites() {
         refreshFavourites()
         showingFavourites = true
     }
-
+    
     private func refreshFavourites() {
         favourites = Favourites.tracks()
         favouritePaths = Set(favourites.map(\.relativePath))
     }
-
+    
     func toggleFavourite(_ track: Track) {
         Favourites.toggle(track.relativePath)
         refreshFavourites()
     }
-
+    
     func playFavourites() {
         send("playSource", MusicSourceRequest.favourites.payload)
     }
-
+    
     func playFolder(_ folder: MusicFolder) { playAll(under: folder.relativePath) }
-
+    
     func playCurrentFolder() { playAll(under: folderPath) }
-
+    
     private func playAll(under relativePath: String) {
         send("playSource", MusicSourceRequest.folder(relativePath).payload)
     }
-
+    
     func apply(_ info: [AnyHashable: Any]) {
         let file = info["track"] as? String ?? ""
         let track = file.isEmpty ? nil : file
@@ -336,7 +342,7 @@ final class MusicRemote: ObservableObject {
             videoSession.toggle()
         }
     }
-
+    
     func attachVideo(_ session: VideoPreviewSession, resumesAudio: Bool) {
         videoSession = session
         videoResumesAudio = resumesAudio
@@ -346,7 +352,7 @@ final class MusicRemote: ObservableObject {
         isPlaying = session.isPlaying
         duration = session.duration
     }
-
+    
     func detachVideo(_ session: VideoPreviewSession) {
         guard videoSession === session else { return }
         let position = session.elapsed
@@ -360,14 +366,14 @@ final class MusicRemote: ObservableObject {
         if resumes { resumePlayback() }
         IPC.post(IPC.Name.requestMusicState)
     }
-
+    
     func videoPlaybackChanged() {
         guard let videoSession else { return }
         if isPlaying != videoSession.isPlaying { isPlaying = videoSession.isPlaying }
         if duration != videoSession.duration { duration = videoSession.duration }
-        objectWillChange.send()
+        seekTick += 1
     }
-
+    
     private func leaveVideo() {
         guard let videoSession else { return }
         videoResumesAudio = false
@@ -376,13 +382,13 @@ final class MusicRemote: ObservableObject {
             MusicDetailPresenter.shared.dismiss()
         }
     }
-
+    
     private func send(_ action: String, _ extra: [String: Any] = [:]) {
         var info: [String: Any] = ["action": action]
         info.merge(extra) { a, _ in a }
         IPC.post(IPC.Name.musicCommand, userInfo: info)
     }
-
+    
     func toggle(_ track: Track) {
         if showingFavourites, currentFile != track.relativePath {
             send(
@@ -414,13 +420,13 @@ final class MusicRemote: ObservableObject {
         let clamped = min(max(fraction, 0), 1)
         if let videoSession {
             videoSession.seek(toFraction: clamped)
-            objectWillChange.send()
+            seekTick += 1
             return
         }
         if duration > 0 {
             elapsedBase = clamped * duration
             elapsedTimestamp = Date().timeIntervalSince1970
-            objectWillChange.send()
+            seekTick += 1
         }
         send("seek", ["value": clamped])
     }
@@ -430,28 +436,28 @@ final class MusicRemote: ObservableObject {
     }
     func toggleLoop() { send("loop", ["value": !looping]) }
     func toggleShuffle() { send("shuffle", ["value": !shuffling]) }
-
+    
     func delete(_ track: Track) {
         guard (try? MusicLibrary.trash(track)) != nil else { return }
         rescan()
         broadcastFolderChanged()
     }
-
+    
     func rename(_ track: Track, to name: String) {
         guard let move = try? MusicLibrary.rename(track, to: name) else { return }
         send("renamed", ["from": move.from, "to": move.to])
         refreshAfterFileChange()
     }
-
+    
     private func sanitizedName(_ name: String) -> String {
         MusicLibrary.sanitized(name)
     }
-
+    
     private func refreshAfterFileChange() {
         rescan()
         broadcastFolderChanged()
     }
-
+    
     func createFolder(named name: String) {
         guard (try? MusicLibrary.createFolder(named: name, under: folderPath)) != nil else {
             return
@@ -459,11 +465,11 @@ final class MusicRemote: ObservableObject {
         refreshEntries()
         broadcastFolderChanged()
     }
-
+    
     func move(_ track: Track, toFolderPath folderRelativePath: String) {
         if moveTrack(track, toFolderPath: folderRelativePath) { refreshAfterFileChange() }
     }
-
+    
     func move(relativePaths: [String], toFolderPath folderRelativePath: String) {
         var moved = false
         for path in relativePaths {
@@ -472,7 +478,7 @@ final class MusicRemote: ObservableObject {
         }
         if moved { refreshAfterFileChange() }
     }
-
+    
     private func moveTrack(_ track: Track, toFolderPath folderRelativePath: String) -> Bool {
         guard let move = try? MusicLibrary.move(track, toFolder: folderRelativePath) else {
             return false
@@ -480,14 +486,14 @@ final class MusicRemote: ObservableObject {
         send("renamed", ["from": move.from, "to": move.to])
         return true
     }
-
+    
     func renameFolder(_ folder: MusicFolder, to name: String) {
         guard sanitizedName(name) != folder.name,
-            let renamed = try? MusicLibrary.renameFolder(folder, to: name)
+              let renamed = try? MusicLibrary.renameFolder(folder, to: name)
         else { return }
         let newPath = renamed.to
         if let playing = currentFile,
-            playing == folder.relativePath || playing.hasPrefix(folder.relativePath + "/")
+           playing == folder.relativePath || playing.hasPrefix(folder.relativePath + "/")
         {
             send(
                 "renamed",
@@ -497,14 +503,14 @@ final class MusicRemote: ObservableObject {
         rescan()
         broadcastFolderChanged()
     }
-
+    
     func deleteFolder(_ folder: MusicFolder) {
         guard (try? MusicLibrary.trashFolder(folder)) != nil else { return }
         repointFolderPath(from: folder.relativePath, to: nil)
         rescan()
         broadcastFolderChanged()
     }
-
+    
     private func repointFolderPath(from old: String, to new: String?) {
         guard folderPath == old || folderPath.hasPrefix(old + "/") else { return }
         if let new {
@@ -513,36 +519,40 @@ final class MusicRemote: ObservableObject {
             folderPath = (old as NSString).deletingLastPathComponent
         }
     }
-
+    
     private func broadcastFolderChanged() {
         TrackMeta.invalidateCaches()
         folderCache.removeAll()
         NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
         IPC.post(IPC.Name.musicFolderChanged)
     }
-
+    
     func nudgeSeek(_ seconds: TimeInterval) {
         guard duration > 0 else { return }
         let target = min(max(elapsed + seconds, 0), duration)
         seek(to: target / duration)
     }
-
+    
     func nudgeVolume(_ delta: Double) {
         setVolume(min(max(volume + delta, 0), 1))
     }
 }
 
 struct MusicPage: View {
-    @ObservedObject private var remote = MusicRemote.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var tabMusicEnabled = false
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
-        true
+    @State private var remote = MusicRemote.shared
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+    var tabMusicEnabled = false
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+    var presenterBlurMusic =
+    true
     @AppStorage(
         Repo.musicFolderStaleKey, store: SharedDefaults.store)
     private var musicFolderStale = false
-    @AppStorage("musicGridView", store: SharedDefaults.store) private var gridView = false
-    @StateObject private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Music.gridView, store: SharedDefaults.store) private var gridView =
+    false
+    private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -554,11 +564,11 @@ struct MusicPage: View {
     @State private var renameFolderTarget: MusicFolder?
     @State private var folderRenameText = ""
     @State private var deleteFolderTarget: MusicFolder?
-
+    
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
-
+    
     private var filteredTracks: [Track] {
         guard !search.isEmpty else {
             return remote.showingFavourites ? remote.favourites : remote.folderTracks
@@ -566,27 +576,27 @@ struct MusicPage: View {
         let source = remote.showingFavourites ? remote.favourites : remote.searchTracks
         return source.filter { $0.title.localizedCaseInsensitiveContains(search) }
     }
-
+    
     private var filteredFolders: [MusicFolder] {
         guard !remote.showingFavourites else { return [] }
         guard !search.isEmpty else { return remote.folders }
         return remote.searchFolders.filter { $0.name.localizedCaseInsensitiveContains(search) }
     }
-
+    
     private var contentKey: [String] {
         filteredFolders.map(\.relativePath) + filteredTracks.map(\.relativePath)
     }
-
+    
     private func location(of relativePath: String) -> String? {
         guard !search.isEmpty, !remote.showingFavourites else { return nil }
         let parent = (relativePath as NSString).deletingLastPathComponent
         guard parent != remote.folderPath else { return nil }
         let scoped =
-            remote.folderPath.isEmpty
-            ? parent : String(parent.dropFirst(remote.folderPath.count + 1))
+        remote.folderPath.isEmpty
+        ? parent : String(parent.dropFirst(remote.folderPath.count + 1))
         return scoped.replacingOccurrences(of: "/", with: " / ")
     }
-
+    
     private var moveTargets: [MoveTarget] {
         var targets: [MoveTarget] = []
         if !remote.folderPath.isEmpty {
@@ -597,7 +607,7 @@ struct MusicPage: View {
         targets += remote.folders.map { MoveTarget(name: $0.name, path: $0.relativePath) }
         return targets
     }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             pageHeader
@@ -657,23 +667,23 @@ struct MusicPage: View {
         .onChange(of: search) { if !search.isEmpty { remote.loadSearchScope() } }
         .onChange(of: remote.folderPath) { if !search.isEmpty { remote.loadSearchScope() } }
     }
-
+    
     private var deleteAlertBinding: Binding<Bool> {
         Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
     }
-
+    
     private var renameFolderBinding: Binding<Bool> {
         Binding(get: { renameFolderTarget != nil }, set: { if !$0 { renameFolderTarget = nil } })
     }
-
+    
     private var deleteFolderBinding: Binding<Bool> {
         Binding(get: { deleteFolderTarget != nil }, set: { if !$0 { deleteFolderTarget = nil } })
     }
-
+    
     private func openDetails(_ track: Track, renaming: Bool) {
         MusicDetailPresenter.shared.show(track, renaming: renaming)
     }
-
+    
     private var pageHeader: some View {
         PageHeader("Music") {
             headerActions
@@ -692,14 +702,13 @@ struct MusicPage: View {
                 breadcrumbBar
                 if tabMusicEnabled, remote.restorePending > 0 {
                     Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
     }
-
+    
     private var headerActions: some View {
         HStack(spacing: UIScale.pt(4)) {
             Button {
@@ -719,7 +728,7 @@ struct MusicPage: View {
                 Image(systemName: remote.showingFavourites ? "heart.fill" : "heart")
                     .foregroundStyle(
                         remote.showingFavourites
-                            ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
+                        ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
             }
             .buttonStyle(HoverButtonStyle())
             .help(remote.showingFavourites ? "Back to your folders" : "Show favourites")
@@ -756,11 +765,11 @@ struct MusicPage: View {
             .help("Download YouTube audio")
         }
     }
-
+    
     private var searchField: some View {
         SearchField(placeholder: "Search tracks", text: $search, typeAhead: true)
     }
-
+    
     private var crumbSegments: [(name: String, path: String)] {
         guard !remote.folderPath.isEmpty else { return [] }
         var cumulative = ""
@@ -769,7 +778,7 @@ struct MusicPage: View {
             return (String(part), cumulative)
         }
     }
-
+    
     private var breadcrumbBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             if remote.showingFavourites {
@@ -811,10 +820,10 @@ struct MusicPage: View {
             .pointerCursor()
             .help(
                 remote.showingFavourites
-                    ? "Play your favourites" : "Play everything in this folder")
+                ? "Play your favourites" : "Play everything in this folder")
         }
     }
-
+    
     private func crumb(_ name: String, path: String, systemImage: String?) -> some View {
         CrumbButton(
             name: name, path: path, systemImage: systemImage, theme: theme,
@@ -823,7 +832,7 @@ struct MusicPage: View {
             onDrop: { remote.move(relativePaths: $0, toFolderPath: path) }
         )
     }
-
+    
     @ViewBuilder
     private func chevronMenu(parentPath: String) -> some View {
         let folders = remote.subfolders(of: parentPath)
@@ -850,7 +859,7 @@ struct MusicPage: View {
             .help("Jump to a folder here")
         }
     }
-
+    
     @ViewBuilder private var trackList: some View {
         if filteredFolders.isEmpty && filteredTracks.isEmpty {
             VStack(spacing: UIScale.pt(8)) {
@@ -859,8 +868,8 @@ struct MusicPage: View {
                     .foregroundStyle(.secondary)
                 Text(
                     remote.showingFavourites
-                        ? "Tap the heart on a track to add it here"
-                        : TrackMeta.url(for: remote.folderPath).path
+                    ? "Tap the heart on a track to add it here"
+                    : TrackMeta.url(for: remote.folderPath).path
                 )
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.tertiary)
@@ -877,7 +886,7 @@ struct MusicPage: View {
             }
         }
     }
-
+    
     private var listContent: some View {
         LazyVStack(spacing: UIScale.pt(2)) {
             ForEach(filteredFolders) { folder in
@@ -910,7 +919,7 @@ struct MusicPage: View {
             }
         }
     }
-
+    
     private var gridContent: some View {
         LazyVGrid(
             columns: [
@@ -950,18 +959,18 @@ struct MusicPage: View {
             }
         }
     }
-
+    
     private var emptyMessage: String {
         if remote.showingFavourites { return "No favourites yet" }
         return remote.folderPath.isEmpty
-            ? "No playable files in your music folder" : "This folder is empty"
+        ? "No playable files in your music folder" : "This folder is empty"
     }
-
+    
     private func beginFolderRename(_ folder: MusicFolder) {
         folderRenameText = folder.name
         renameFolderTarget = folder
     }
-
+    
     private func chooseMusicFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -974,16 +983,16 @@ struct MusicPage: View {
         remote.rescan()
         IPC.post(IPC.Name.musicFolderChanged)
     }
-
+    
 }
 
 struct SeekBar: View {
-    @ObservedObject private var remote = MusicRemote.shared
+    @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
     let theme: Color
     var height: CGFloat = 5
     @State private var dragFraction: Double?
-
+    
     var body: some View {
         GeometryReader { geo in
             let knob = max(11, height + 7)
@@ -1010,7 +1019,7 @@ struct SeekBar: View {
         .frame(height: height)
         .pointerCursor()
     }
-
+    
     private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {
         let fraction = dragFraction ?? remote.progress
         return ZStack(alignment: .leading) {
@@ -1042,7 +1051,7 @@ private struct CrumbButton: View {
     let onTap: () -> Void
     let onDrop: ([String]) -> Void
     @State private var dropTargeted = false
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(3)) {
             if let systemImage {
@@ -1084,7 +1093,7 @@ private struct MusicFolderRow: View {
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button(action: onOpen) {
@@ -1116,7 +1125,7 @@ private struct MusicFolderRow: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-
+            
             Button(action: onPlay) {
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: UIScale.pt(22)))
@@ -1126,7 +1135,7 @@ private struct MusicFolderRow: View {
             .pointerCursor()
             .help("Play this folder")
             .opacity(hovering || trackCount == 0 ? 1 : 0.55)
-
+            
             Image(systemName: "chevron.right")
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(.tertiary)
@@ -1135,7 +1144,7 @@ private struct MusicFolderRow: View {
         .padding(.horizontal, UIScale.pt(8))
         .background(
             dropTargeted
-                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
+            ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .overlay(
@@ -1186,7 +1195,7 @@ private struct MusicPageRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var duration: String?
     @State private var hovering = false
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button(action: onOpenDetails) {
@@ -1227,7 +1236,7 @@ private struct MusicPageRow: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-
+            
             Button(action: onToggleFavourite) {
                 Image(systemName: isFavourite ? "heart.fill" : "heart")
                     .font(.system(size: UIScale.pt(12)))
@@ -1243,7 +1252,7 @@ private struct MusicPageRow: View {
         .padding(.horizontal, UIScale.pt(8))
         .background(
             isCurrent
-                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+            ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
@@ -1321,7 +1330,7 @@ private struct MusicFolderTile: View {
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             ZStack {
@@ -1348,7 +1357,7 @@ private struct MusicFolderTile: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
             .pointerCursor()
-
+            
             VStack(spacing: UIScale.pt(1)) {
                 Text(folder.name)
                     .font(.system(size: UIScale.pt(12), weight: .medium))
@@ -1364,7 +1373,7 @@ private struct MusicFolderTile: View {
         .padding(UIScale.pt(6))
         .background(
             dropTargeted
-                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
+            ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(10))
         )
         .overlay(
@@ -1409,14 +1418,14 @@ private struct MusicTrackTile: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var duration: String?
     @State private var hovering = false
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             PageArtworkThumb(track: track, size: MusicTile.artSize)
                 .overlay(alignment: .bottomTrailing) {
                     Image(
                         systemName: isCurrent && isPlaying
-                            ? "pause.circle.fill" : "play.circle.fill"
+                        ? "pause.circle.fill" : "play.circle.fill"
                     )
                     .font(.system(size: UIScale.pt(24)))
                     .symbolRenderingMode(.palette)
@@ -1441,7 +1450,7 @@ private struct MusicTrackTile: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onToggle)
                 .pointerCursor()
-
+            
             VStack(spacing: UIScale.pt(1)) {
                 Text(track.title)
                     .font(.system(size: UIScale.pt(12)))
@@ -1465,7 +1474,7 @@ private struct MusicTrackTile: View {
         .padding(UIScale.pt(6))
         .background(
             isCurrent
-                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+            ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(10))
         )
         .onHover { hovering = $0 }
@@ -1485,20 +1494,22 @@ private struct MusicTrackTile: View {
 }
 
 struct MusicDetailOverlay: View {
-    @ObservedObject private var presenter = MusicDetailPresenter.shared
-    @ObservedObject private var remote = MusicRemote.shared
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
-        MainDestination.home.rawValue
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @State private var presenter = MusicDetailPresenter.shared
+    @State private var remote = MusicRemote.shared
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+    var mainWindowSection =
+    MainDestination.home.rawValue
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var deleteTarget: Track?
-
+    
     private var theme: Color { themeColor(themeName) }
-
+    
     private var sheetShape: String? {
         presenter.track.map { $0.isVideo ? "video" : "audio" }
     }
-
+    
     var body: some View {
         ZStack {
             if let track = presenter.track {
@@ -1564,18 +1575,18 @@ private struct MusicDetailSheet: View {
     let onDelete: () -> Void
     let onOpenFolder: (String) -> Void
     let onClose: () -> Void
-    @ObservedObject private var remote = MusicRemote.shared
-    @ObservedObject private var presenter = MusicDetailPresenter.shared
+    @State private var remote = MusicRemote.shared
+    @State private var presenter = MusicDetailPresenter.shared
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
     @State private var namedTrack: URL?
     @FocusState private var nameFocused: Bool
     @State private var sourceURL: URL?
-
+    
     private var dark: Bool { scheme == .dark }
     private var isCurrent: Bool { remote.currentFile == track.relativePath }
     private var isPlaying: Bool { isCurrent && remote.isPlaying }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             header
@@ -1592,7 +1603,7 @@ private struct MusicDetailSheet: View {
             presenter.armRename(false)
         }
     }
-
+    
     private var sheetBackground: some View {
         LinearGradient(
             colors: [
@@ -1605,7 +1616,7 @@ private struct MusicDetailSheet: View {
         .overlay(DashSkin.paper(dark).opacity(dark ? 0.35 : 0.15))
         .ignoresSafeArea()
     }
-
+    
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             Spacer()
@@ -1615,7 +1626,7 @@ private struct MusicDetailSheet: View {
         .padding(.horizontal, UIScale.pt(16))
         .padding(.top, UIScale.pt(14))
     }
-
+    
     private func headerButton(
         _ symbol: String, tint: some ShapeStyle, help: String, action: @escaping () -> Void
     ) -> some View {
@@ -1631,7 +1642,7 @@ private struct MusicDetailSheet: View {
         .pointerCursor()
         .help(help)
     }
-
+    
     private var content: some View {
         VStack(spacing: UIScale.pt(0)) {
             VStack(spacing: UIScale.pt(20)) {
@@ -1652,7 +1663,7 @@ private struct MusicDetailSheet: View {
         .padding(.bottom, UIScale.pt(28))
         .padding(.top, UIScale.pt(6))
     }
-
+    
     @ViewBuilder private var stage: some View {
         if track.isVideo {
             VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0)
@@ -1663,7 +1674,7 @@ private struct MusicDetailSheet: View {
                 .transition(.opacity)
         }
     }
-
+    
     private var folderPath: some View {
         let parent = (track.relativePath as NSString).deletingLastPathComponent
         return Button {
@@ -1689,7 +1700,7 @@ private struct MusicDetailSheet: View {
         .pointerCursor()
         .help("Show this folder in Music")
     }
-
+    
     private var artwork: some View {
         PageArtworkThumb(track: track, size: 196)
             .shadow(color: .black.opacity(0.3), radius: UIScale.pt(16), y: UIScale.pt(8))
@@ -1711,7 +1722,7 @@ private struct MusicDetailSheet: View {
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
             }
     }
-
+    
     private var titleField: some View {
         TextField("Track name", text: nameBinding)
             .textFieldStyle(.plain)
@@ -1732,7 +1743,7 @@ private struct MusicDetailSheet: View {
             )
             .onSubmit(commitRename)
     }
-
+    
     private var playerBlock: some View {
         VStack(spacing: UIScale.pt(8)) {
             SeekBar(theme: theme, height: UIScale.pt(5))
@@ -1752,7 +1763,7 @@ private struct MusicDetailSheet: View {
             .foregroundStyle(.secondary)
         }
     }
-
+    
     @ViewBuilder
     private func ticker<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View
     {
@@ -1762,7 +1773,7 @@ private struct MusicDetailSheet: View {
             content()
         }
     }
-
+    
     private func youtubeLink(_ url: URL) -> some View {
         Link(destination: url) {
             HStack(spacing: UIScale.pt(6)) {
@@ -1782,7 +1793,7 @@ private struct MusicDetailSheet: View {
         .buttonStyle(.plain)
         .pointerCursor()
     }
-
+    
     private var renameReveal: some View {
         Button(action: commitRename) {
             Label("Rename", systemImage: "checkmark")
@@ -1799,11 +1810,11 @@ private struct MusicDetailSheet: View {
         .clipped()
         .allowsHitTesting(canRename)
     }
-
+    
     private static let renameButtonHeight = 40.0
     private static let renameButtonGap = 20.0
     private static var renameRowHeight: Double { renameButtonHeight + renameButtonGap }
-
+    
     private var nameBinding: Binding<String> {
         Binding(
             get: { name },
@@ -1812,14 +1823,14 @@ private struct MusicDetailSheet: View {
                 presenter.armRename(isRenameable(value))
             })
     }
-
+    
     private var canRename: Bool { presenter.renameArmed && namedTrack == track.id }
-
+    
     private func isRenameable(_ value: String) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && trimmed != track.url.deletingPathExtension().lastPathComponent
     }
-
+    
     private func commitRename() {
         if isRenameable(name) { onRename(name) }
         onClose()
@@ -1853,20 +1864,23 @@ extension View {
 }
 
 struct MusicFooter: View {
-    @ObservedObject private var remote = MusicRemote.shared
+    @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
-        MainDestination.home.rawValue
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
-        true
-    @StateObject private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+    var mainWindowSection =
+    MainDestination.home.rawValue
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+    var presenterBlurMusic =
+    true
+    private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
-
+    
     private var theme: Color { themeColor(themeName) }
     private var blur: Bool { presenterState.active && presenterBlurMusic }
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         Group {
             if let track = remote.current {
@@ -1884,7 +1898,7 @@ struct MusicFooter: View {
                 .frame(height: UIScale.pt(1))
         }
     }
-
+    
     private func playing(_ track: Track) -> some View {
         HStack(spacing: UIScale.pt(14)) {
             trackInfo(track)
@@ -1897,7 +1911,7 @@ struct MusicFooter: View {
         }
         .padding(.horizontal, UIScale.pt(22))
     }
-
+    
     private func trackInfo(_ track: Track) -> some View {
         HStack(spacing: UIScale.pt(11)) {
             Button {
@@ -1927,7 +1941,7 @@ struct MusicFooter: View {
         .pointerCursor()
         .help("Show this track in Music")
     }
-
+    
     private var transport: some View {
         HStack(spacing: UIScale.pt(8)) {
             glassButton("backward.fill", diameter: 34, iconSize: 12, tint: nil) {
@@ -1947,7 +1961,7 @@ struct MusicFooter: View {
             .help("Next track")
         }
     }
-
+    
     private func glassButton(
         _ symbol: String, diameter: CGFloat, iconSize: CGFloat, iconColor: Color? = nil,
         tint: Color?, action: @escaping () -> Void
@@ -1963,7 +1977,7 @@ struct MusicFooter: View {
         .pointerCursor()
         .liquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
-
+    
     private var scrubber: some View {
         HStack(spacing: UIScale.pt(10)) {
             timeTicker {
@@ -1980,10 +1994,10 @@ struct MusicFooter: View {
         .monospacedDigit()
         .foregroundStyle(.secondary)
     }
-
+    
     @ViewBuilder
     private func timeTicker<Content: View>(@ViewBuilder _ content: @escaping () -> Content)
-        -> some View
+    -> some View
     {
         if remote.isPlaying, visibility.visible {
             TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in content() }
@@ -1991,7 +2005,7 @@ struct MusicFooter: View {
             content()
         }
     }
-
+    
     private var rightControls: some View {
         HStack(spacing: UIScale.pt(10)) {
             if let track = remote.current {
@@ -2023,8 +2037,7 @@ struct MusicFooter: View {
             .help(remote.looping ? "Repeating this track" : "Play through the queue")
             HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "speaker.wave.1")
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                 Slider(
                     value: Binding(get: { remote.volume }, set: { remote.setVolume($0) }),
                     in: 0...1
@@ -2039,7 +2052,7 @@ struct MusicFooter: View {
             .liquidGlass(in: Capsule(), dark: dark)
         }
     }
-
+    
     private var idle: some View {
         HStack(spacing: UIScale.pt(12)) {
             Image(systemName: "music.note")
@@ -2066,13 +2079,13 @@ private struct PageArtworkThumb: View {
     let track: Track
     let size: CGFloat
     @State private var artwork: NSImage?
-
+    
     init(track: Track, size: CGFloat = 36) {
         self.track = track
         self.size = size
         _artwork = State(initialValue: TrackMeta.artworkCached(for: track))
     }
-
+    
     var body: some View {
         Group {
             if let artwork {

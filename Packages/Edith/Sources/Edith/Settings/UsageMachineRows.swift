@@ -3,27 +3,25 @@ import SwiftUI
 
 struct UsageMachineRows: View {
     let extensionEnabled: Bool
-
+    
     @State private var machines: [Machine] = []
     @State private var counted: Set<UUID> = []
     @State private var summaries: [UUID: MachineUsageSummary] = [:]
     @State private var collecting: Task<Void, Never>?
     @State private var status = ""
-
+    
     var body: some View {
         Section {
             if machines.isEmpty {
                 Text("No machines are configured yet. Add one under Machines.")
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             } else {
                 ForEach(machines) { machine in
                     row(machine)
                 }
                 HStack(spacing: UIScale.pt(8)) {
                     Text(status.isEmpty ? footnote : status)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 0)
@@ -42,7 +40,7 @@ struct UsageMachineRows: View {
         } footer: {
             Text(
                 "Edith runs its collector on a ticked machine over SSH and installs what it "
-                    + "is missing there. Each agent it finds arrives as its own usage source."
+                + "is missing there. Each agent it finds arrives as its own usage source."
             )
             .font(.system(size: UIScale.pt(10)))
         }
@@ -50,13 +48,13 @@ struct UsageMachineRows: View {
         .opacity(extensionEnabled ? 1 : 0.5)
         .onAppear(perform: reload)
     }
-
+    
     private var footnote: String {
         let n = counted.count
         if n == 0 { return "No machines counted" }
         return n == 1 ? "1 machine counted" : "\(n) machines counted"
     }
-
+    
     private func row(_ machine: Machine) -> some View {
         let on = counted.contains(machine.id)
         let summary = summaries[machine.id]
@@ -65,8 +63,7 @@ struct UsageMachineRows: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(machine.name)
                     Text(detail(machine, summary))
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
             }
             .pointerCursor()
@@ -83,13 +80,13 @@ struct UsageMachineRows: View {
             }
         }
     }
-
+    
     private func detail(_ machine: Machine, _ summary: MachineUsageSummary?) -> String {
         guard let summary else { return machine.subtitle }
         let when = summary.collectedAt.formatted(date: .abbreviated, time: .shortened)
         return "\(DashFmt.usdFull(summary.cost)) · \(summary.days) days · \(when)"
     }
-
+    
     private func reload() {
         machines = MachineRegistry.machines()
         counted = MachineUsageSelection.machineIDs()
@@ -97,7 +94,7 @@ struct UsageMachineRows: View {
         for summary in MachineUsageStore.summaries() { found[summary.machineID] = summary }
         summaries = found
     }
-
+    
     private func toggle(_ machine: Machine) {
         if counted.contains(machine.id) {
             MachineUsageSelection.exclude(machine.id)
@@ -106,14 +103,14 @@ struct UsageMachineRows: View {
         }
         reload()
     }
-
+    
     private func forget(_ machine: Machine) {
         let dropped = MachineUsageStore.forget(machineID: machine.id)
         MachineUsageSelection.exclude(machine.id)
         if dropped { IPC.post(IPC.Name.requestUsageRefresh) }
         reload()
     }
-
+    
     private func collect() {
         guard collecting == nil else { return }
         let targets = MachineUsageSelection.included(in: machines)
@@ -133,7 +130,7 @@ struct UsageMachineRows: View {
             IPC.post(IPC.Name.requestUsageRefresh)
         }
     }
-
+    
     private func stop() {
         collecting?.cancel()
         collecting = nil
@@ -149,7 +146,7 @@ enum MachineUsageRows {
         default: return nil
         }
     }
-
+    
     static func outcome(_ round: MachineUsageRoundResult) -> String {
         if round.skippedBecauseBusy { return "another collection is already running" }
         if let failure = round.failures.first, round.collected.isEmpty {

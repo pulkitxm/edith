@@ -3,14 +3,16 @@ import Foundation
 
 enum NotchTab: String, CaseIterable, Equatable {
     case home, files, clipboard, audio, camera
-
+    
     static var allCases: [NotchTab] {
         var tabs: [NotchTab] = [.home, .files]
-        if SharedDefaults.store.bool(forKey: "clipboardEnabled") { tabs.append(.clipboard) }
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled) {
+            tabs.append(.clipboard)
+        }
         tabs.append(contentsOf: [.audio, .camera])
         return tabs
     }
-
+    
     var title: String {
         switch self {
         case .home: "Home"
@@ -20,7 +22,7 @@ enum NotchTab: String, CaseIterable, Equatable {
         case .camera: "Camera"
         }
     }
-
+    
     var icon: String {
         switch self {
         case .home: "house.fill"
@@ -37,7 +39,7 @@ struct NotchNowPlaying: Equatable {
         case local
         case external(ExternalApp)
     }
-
+    
     var source: Source
     var title: String
     var artist: String
@@ -67,9 +69,9 @@ enum NotchMusicResolver {
             }
         case .local:
             return hasLocal
-                ? NotchNowPlaying(
-                    source: .local, title: localTitle!, artist: "", isPlaying: false)
-                : nil
+            ? NotchNowPlaying(
+                source: .local, title: localTitle!, artist: "", isPlaying: false)
+            : nil
         case .none:
             return nil
         }

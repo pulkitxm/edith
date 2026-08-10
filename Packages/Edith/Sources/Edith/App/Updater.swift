@@ -1,23 +1,25 @@
 import EdithKit
+import Observation
 import Sparkle
 import SwiftUI
 
 @MainActor
-final class UpdaterModel: NSObject, ObservableObject,
-    @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate
+@Observable
+final class UpdaterModel: NSObject,
+                          @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate
 {
-    @Published private(set) var updateReady: String?
-    @Published private(set) var updaterAvailable = false
-    @Published private(set) var canCheckForUpdates = false
-    @Published private(set) var lastUpdateCheckDate: Date?
-    @Published private(set) var checkHistory: [UpdateCheckRecord] = []
-    @Published var checkInterval: TimeInterval = UpdateCheckInterval.fallback.seconds {
+    private(set) var updateReady: String?
+    private(set) var updaterAvailable = false
+    private(set) var canCheckForUpdates = false
+    private(set) var lastUpdateCheckDate: Date?
+    private(set) var checkHistory: [UpdateCheckRecord] = []
+    var checkInterval: TimeInterval = UpdateCheckInterval.fallback.seconds {
         didSet {
             guard let updater, updater.updateCheckInterval != checkInterval else { return }
             updater.updateCheckInterval = checkInterval
         }
     }
-    @Published var automaticallyChecksForUpdates = true {
+    var automaticallyChecksForUpdates = true {
         didSet {
             guard
                 let updater,
@@ -26,7 +28,7 @@ final class UpdaterModel: NSObject, ObservableObject,
             updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
     }
-    @Published var automaticallyDownloadsUpdates = true {
+    var automaticallyDownloadsUpdates = true {
         didSet {
             guard
                 let updater,
@@ -35,7 +37,7 @@ final class UpdaterModel: NSObject, ObservableObject,
             updater.automaticallyDownloadsUpdates = automaticallyDownloadsUpdates
         }
     }
-
+    
     private var updaterController: SPUStandardUpdaterController?
     private var canCheckObservation: NSKeyValueObservation?
     private var automaticChecksObservation: NSKeyValueObservation?
@@ -44,7 +46,7 @@ final class UpdaterModel: NSObject, ObservableObject,
     private var pendingUpdateVersion: String?
     private var updateCheckObserver: NSObjectProtocol?
     private let logURL: URL
-
+    
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
@@ -57,14 +59,14 @@ final class UpdaterModel: NSObject, ObservableObject,
             await self?.startUpdater()
         }
     }
-
+    
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
-
+    
     func clearCheckHistory() {
         UpdateCheckLog.clear(at: logURL)
         checkHistory = []
     }
-
+    
     func recordCheck(
         kind: UpdateCheckRecord.Kind, outcome: UpdateCheckRecord.Outcome,
         version: String? = nil, detail: String? = nil, date: Date = Date()
@@ -77,14 +79,14 @@ final class UpdaterModel: NSObject, ObservableObject,
         if let detail { payload["detail"] = detail }
         IPC.post(IPC.Name.updateCheckFinished, userInfo: payload)
     }
-
+    
     private func observeUpdateCheckRequests() {
         guard updateCheckObserver == nil else { return }
         updateCheckObserver = IPC.observe(IPC.Name.requestUpdateCheck) { [weak self] in
             MainActor.assumeIsolated { self?.checkForUpdatesInBackground() }
         }
     }
-
+    
     private func startUpdater() async {
         guard let updater else { return }
         do {
@@ -129,19 +131,19 @@ final class UpdaterModel: NSObject, ObservableObject,
             }
         }
     }
-
+    
     var supportsGentleScheduledUpdateReminders: Bool { true }
-
+    
     func checkForUpdates() {
         guard updaterAvailable else { return }
         updaterController?.checkForUpdates(nil)
     }
-
+    
     func checkForUpdatesInBackground() {
         guard updaterAvailable, let updater, !updater.sessionInProgress else { return }
         updater.checkForUpdatesInBackground()
     }
-
+    
     func standardUserDriverWillHandleShowingUpdate(
         _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
         state: SPUUserUpdateState
@@ -152,20 +154,20 @@ final class UpdaterModel: NSObject, ObservableObject,
         updateReady = version
         IPC.post(IPC.Name.updateReadyToInstall, userInfo: ["version": version])
     }
-
+    
     func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
         updateReady = nil
     }
-
+    
     func standardUserDriverWillFinishUpdateSession() {
         updateReady = nil
         lastUpdateCheckDate = updater?.lastUpdateCheckDate
     }
-
+    
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         pendingUpdateVersion = item.displayVersionString
     }
-
+    
     func updater(
         _ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck,
         error: (any Error)?
@@ -174,7 +176,7 @@ final class UpdaterModel: NSObject, ObservableObject,
         pendingUpdateVersion = nil
         lastUpdateCheckDate = updater.lastUpdateCheckDate
         let kind: UpdateCheckRecord.Kind =
-            updateCheck == .updatesInBackground ? .automatic : .manual
+        updateCheck == .updatesInBackground ? .automatic : .manual
         if let error {
             let code = (error as NSError).code
             guard code != Int(Sparkle.SUError.noUpdateError.rawValue) else {

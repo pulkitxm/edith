@@ -8,7 +8,7 @@ import Testing
         #expect(PermissionPromptTracker.shouldHint(count: 2, alreadyShown: false))
         #expect(PermissionPromptTracker.shouldHint(count: 7, alreadyShown: false))
     }
-
+    
     @Test func hintShowsOnlyOnce() {
         #expect(!PermissionPromptTracker.shouldHint(count: 2, alreadyShown: true))
         #expect(!PermissionPromptTracker.shouldHint(count: 9, alreadyShown: true))

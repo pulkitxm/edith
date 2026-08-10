@@ -1,7 +1,7 @@
 struct PresenterDebouncer: Equatable {
     private(set) var active = false
     private var misses = 0
-
+    
     mutating func record(hit: Bool) -> Bool {
         if hit {
             active = true

@@ -3,24 +3,35 @@ import EdithKit
 import SwiftUI
 
 struct ICloudPane: View {
-    @AppStorage("icloudBackup", store: SharedDefaults.store) private var icloudBackup = true
-    @AppStorage("lastBackupAt", store: SharedDefaults.store) private var lastBackupAt = 0.0
-    @AppStorage("backupSettings", store: SharedDefaults.store) private var backupSettings = true
-    @AppStorage("backupUsage", store: SharedDefaults.store) private var backupUsage = true
-    @AppStorage("backupLimits", store: SharedDefaults.store) private var backupLimits = true
-    @AppStorage("musicBackup", store: SharedDefaults.store) private var musicBackup = false
-    @AppStorage("lastMusicBackupAt", store: SharedDefaults.store) private var lastMusicBackupAt =
-        0.0
-    @AppStorage("clipboardBackup", store: SharedDefaults.store) private var clipboardBackup = false
-    @AppStorage("lastClipboardBackupAt", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Backup.icloud, store: SharedDefaults.store) private
+    var icloudBackup = true
+    @AppStorage(AppStorageKeys.Backup.lastBackupAt, store: SharedDefaults.store) private
+    var lastBackupAt = 0.0
+    @AppStorage(AppStorageKeys.Backup.settings, store: SharedDefaults.store) private
+    var backupSettings = true
+    @AppStorage(AppStorageKeys.Backup.usage, store: SharedDefaults.store) private var backupUsage =
+    true
+    @AppStorage(AppStorageKeys.Backup.limits, store: SharedDefaults.store) private
+    var backupLimits = true
+    @AppStorage(AppStorageKeys.Music.backup, store: SharedDefaults.store) private var musicBackup =
+    false
+    @AppStorage(AppStorageKeys.Music.lastBackupAt, store: SharedDefaults.store) private
+    var lastMusicBackupAt =
+    0.0
+    @AppStorage(AppStorageKeys.Clipboard.backup, store: SharedDefaults.store) private
+    var clipboardBackup = false
+    @AppStorage(AppStorageKeys.Clipboard.lastBackupAt, store: SharedDefaults.store)
     private var lastClipboardBackupAt = 0.0
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("clipboardEnabled", store: SharedDefaults.store) private var clipboardEnabled =
-        false
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+    var musicEnabled = false
+    @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
+    var clipboardEnabled =
+    false
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+    var usageEnabled = false
+    
     private var cloudAvailable: Bool { icloudBackup && AppData.cloudAvailable }
-
+    
     var body: some View {
         Form {
             Section {
@@ -33,7 +44,7 @@ struct ICloudPane: View {
                     }
                 }
                 .pointerCursor()
-                Text(backupSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                Text(backupSubtitle).settingsCaption()
             } header: {
                 Text("iCloud backup")
             } footer: {
@@ -41,24 +52,24 @@ struct ICloudPane: View {
                     Text("iCloud Drive is not available on this Mac.")
                 }
             }
-
+            
             Section {
                 Toggle("Settings", isOn: $backupSettings)
                     .pointerCursor()
                     .disabled(!icloudBackup)
                 Text("Every preference in this app: toggles, colors, shortcuts, and layouts.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
                 if usageEnabled {
                     Toggle("Usage data", isOn: $backupUsage)
                         .pointerCursor()
                         .disabled(!icloudBackup)
                     Text("The token and cost history behind the Agent Usage charts.")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                        .settingsCaption()
                     Toggle("Session history", isOn: $backupLimits)
                         .pointerCursor()
                         .disabled(!icloudBackup)
                     Text("Rate-limit snapshots that draw the session and weekly limit charts.")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
             } header: {
                 Text("App data")
@@ -68,7 +79,7 @@ struct ICloudPane: View {
                 )
                 .font(.system(size: UIScale.pt(10)))
             }
-
+            
             if musicEnabled || clipboardEnabled {
                 Section {
                     if musicEnabled {
@@ -96,7 +107,7 @@ struct ICloudPane: View {
                     Text("Extensions")
                 }
             }
-
+            
             Section {
                 LabeledContent("App data folder") {
                     Button("Open") {
@@ -121,7 +132,7 @@ struct ICloudPane: View {
         .formStyle(.grouped)
         .navigationTitle("iCloud")
     }
-
+    
     private var backupSubtitle: String {
         if !icloudBackup { return "Syncs via iCloud Drive; newest copy wins across Macs" }
         if !cloudAvailable { return "iCloud Drive is not available on this Mac" }
@@ -131,7 +142,7 @@ struct ICloudPane: View {
         }
         return "Waiting for first backup…"
     }
-
+    
     private var musicSubtitle: String {
         if !icloudBackup { return "Turn on iCloud backup to back up your music folder" }
         if !cloudAvailable { return "iCloud Drive is not available on this Mac" }
@@ -141,7 +152,7 @@ struct ICloudPane: View {
         }
         return "Backs up your local music folder"
     }
-
+    
     private var clipboardSubtitle: String {
         if !icloudBackup { return "Turn on iCloud backup to back up clipboard history" }
         if !cloudAvailable { return "iCloud Drive is not available on this Mac" }

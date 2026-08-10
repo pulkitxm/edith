@@ -11,18 +11,18 @@ import Testing
         defaults.removePersistentDomain(forName: name)
         return defaults
     }
-
+    
     @Test func everyCatalogKeyIsOneTheAppActuallyBacksUp() {
         let covered = Set(SettingsBackup.backedKeys).union(SettingsBackup.deviceLocalKeys)
         let unknown = Set(ConfigCatalog.keys).subtracting(covered)
         #expect(unknown.isEmpty, "catalog names settings the app does not persist: \(unknown)")
     }
-
+    
     @Test func catalogScopeMatchesTheSuiteTheAppReads() {
         for definition in ConfigCatalog.settings where definition.scope == .shared {
             #expect(
                 SettingsBackup.sharedKeys.contains(definition.key)
-                    || SettingsBackup.deviceLocalKeys.contains(definition.key),
+                || SettingsBackup.deviceLocalKeys.contains(definition.key),
                 "\(definition.key) is marked shared but the app does not read it there")
         }
         for definition in ConfigCatalog.settings where definition.scope == .standard {
@@ -31,7 +31,7 @@ import Testing
                 "\(definition.key) is marked standard but the app reads the shared suite")
         }
     }
-
+    
     @Test func everyExtensionCanBeToggledFromTheCommandLine() {
         for entry in ExtensionRegistry.entries {
             #expect(
@@ -39,7 +39,7 @@ import Testing
                 "\(entry.id) has no catalog entry, so ed config cannot reach it")
         }
     }
-
+    
     @Test func groupsAreDeclaredForEverySetting() {
         for definition in ConfigCatalog.settings {
             #expect(
@@ -47,11 +47,11 @@ import Testing
                 "\(definition.key) is in undeclared group \(definition.group)")
         }
     }
-
+    
     @Test func keysAreUnique() {
         #expect(Set(ConfigCatalog.keys).count == ConfigCatalog.keys.count)
     }
-
+    
     @Test func booleanParsingAcceptsTheUsualSpellings() throws {
         for text in ["true", "yes", "on", "1", "enabled"] {
             let parsed = try ConfigValueParser.boolean(text)
@@ -63,7 +63,7 @@ import Testing
         }
         #expect(throws: CLIFailure.self) { try ConfigValueParser.boolean("maybe") }
     }
-
+    
     @Test func settingAnEnumeratedValueRejectsAnythingOutsideTheAllowedSet() throws {
         #expect(throws: CLIFailure.self) {
             try ConfigValueParser.parse("elsewhere", as: .string, allowed: ["claude", "codex"])
@@ -72,7 +72,7 @@ import Testing
             "codex", as: .string, allowed: ["claude", "codex"])
         #expect(accepted == .string("codex"))
     }
-
+    
     @Test func numbersMustParse() throws {
         #expect(throws: CLIFailure.self) {
             try ConfigValueParser.parse("soon", as: .int, allowed: [])
@@ -82,7 +82,7 @@ import Testing
         #expect(whole == .int(70))
         #expect(fractional == .double(0.9))
     }
-
+    
     @Test func valuesRoundTripThroughTheStore() throws {
         let defaults = Self.scratch("test.cli.roundtrip")
         let store = ConfigStore(shared: defaults, standard: defaults)
@@ -94,17 +94,17 @@ import Testing
         try store.unset(boolean)
         #expect(store.value(for: boolean) == .bool(false))
         #expect(!store.isSet(boolean))
-
+        
         let number = ConfigCatalog.definition(for: "warnPercent")!
         try store.set(.int(72), for: number)
         #expect(store.value(for: number) == .int(72))
-
+        
         let list = ConfigCatalog.definition(for: "cleanerSelectedDrives")!
         try store.set(.strings(["/", "/Volumes/Data"]), for: list)
         #expect(store.value(for: list) == .strings(["/", "/Volumes/Data"]))
         defaults.removePersistentDomain(forName: "test.cli.roundtrip")
     }
-
+    
     @Test func readOnlySettingsRefuseWrites() {
         let defaults = Self.scratch("test.cli.readonly")
         let store = ConfigStore(shared: defaults, standard: defaults)
@@ -113,7 +113,7 @@ import Testing
         #expect(throws: CLIFailure.self) { try store.set(.bool(true), for: granted) }
         defaults.removePersistentDomain(forName: "test.cli.readonly")
     }
-
+    
     @Test func scopeRoutesWritesToTheRightSuite() throws {
         let shared = Self.scratch("test.cli.shared")
         let standard = Self.scratch("test.cli.standard")
@@ -126,7 +126,7 @@ import Testing
         shared.removePersistentDomain(forName: "test.cli.shared")
         standard.removePersistentDomain(forName: "test.cli.standard")
     }
-
+    
     @Test func describeCarriesEnoughForAnAgentToActOnIt() {
         let defaults = Self.scratch("test.cli.describe")
         let store = ConfigStore(shared: defaults, standard: defaults)
@@ -141,10 +141,10 @@ import Testing
         #expect(fields["isSet"] == .bool(false))
         defaults.removePersistentDomain(forName: "test.cli.describe")
     }
-
+    
     @Test func schemaDescribesEveryWritableSettingAndNothingElse() {
         guard case let .object(document) = ConfigSchema.document(),
-            case let .object(properties)? = document["properties"]
+              case let .object(properties)? = document["properties"]
         else {
             Issue.record("schema should be an object with properties")
             return
@@ -157,7 +157,7 @@ import Testing
         #expect(document["additionalProperties"] == .bool(false))
         #expect(document["type"] == .string("object"))
     }
-
+    
     @Test func schemaTypesFollowTheCatalog() {
         let property = ConfigSchema.property(ConfigCatalog.definition(for: "warnPercent")!)
         guard case let .object(fields) = property else {
@@ -184,7 +184,7 @@ import Testing
             #expect((dry.object?["unchanged"] as? [Any])?.isEmpty == false)
         }
     }
-
+    
     @Test func aSettingThatReallyDiffersIsStillReported() async throws {
         try await CLIProbe.inWorld { world in
             world.shared.set(60, forKey: "warnPercent")
@@ -205,14 +205,14 @@ import Testing
             sha256: "abc", types: types, ext: ext, sourceApp: nil, sourceBundleID: nil,
             size: 3, preview: "hi")
     }
-
+    
     @Test func aTextExtensionIsTextWhateverUTIWasStoredWithIt() {
         for uti in ["public.url", "org.chromium.source-url", "dyn.ah62d4rv4gu81y3", "public.text"] {
             let row = entry(ext: "txt", types: [uti])
             #expect(row.isTextual, "txt with \(uti) reported as \(row.kind)")
         }
     }
-
+    
     @Test func theFlagAgreesWithWhetherTheTextCanBeRead() {
         let data = Data("hello".utf8)
         for ext in ["txt", "json", "xml", "sql", "csv", "yaml"] {
@@ -226,7 +226,7 @@ import Testing
             #expect(ClipboardRepository.plainText(for: row, data: data) == nil)
         }
     }
-
+    
     @Test func anUnknownExtensionIsNotDecodedAsTextByAccident() {
         let row = entry(ext: "sqlite3", types: ["public.data"])
         #expect(!row.isTextual)

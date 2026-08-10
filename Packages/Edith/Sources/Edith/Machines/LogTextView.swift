@@ -29,9 +29,9 @@ final class LogTextViewController: NSViewController {
     private var renderedIDs: [Int] = []
     private var renderedLengths: [Int] = []
     private var renderedPresentation: LogPresentation?
-
+    
     var onScrolledAwayFromBottom: ((Bool) -> Void)?
-
+    
     override func loadView() {
         textView.isEditable = false
         textView.isSelectable = true
@@ -43,35 +43,35 @@ final class LogTextViewController: NSViewController {
         textView.autoresizingMask = [.width]
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
-
+        
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = false
         scrollView.drawsBackground = true
         view = scrollView
-
+        
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(
             self, selector: #selector(didScroll),
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView)
     }
-
+    
     @objc private func didScroll() {
         onScrolledAwayFromBottom?(!isPinnedToBottom)
     }
-
+    
     private var isPinnedToBottom: Bool {
         let visible = scrollView.contentView.bounds
         return visible.maxY >= textView.bounds.height - 24
     }
-
+    
     func apply(_ document: LogDocument, palette: LogPalette, follow: Bool) {
         let presentation = LogPresentation(
             showTimestamps: document.showTimestamps, wraps: document.wraps,
             fontSize: document.fontSize, palette: palette)
         let wasPinned = isPinnedToBottom
-
+        
         if presentation != renderedPresentation {
             renderedPresentation = presentation
             configureWrapping(document.wraps)
@@ -86,16 +86,16 @@ final class LogTextViewController: NSViewController {
         } else {
             rebuild(document, palette: palette)
         }
-
+        
         if follow, wasPinned { textView.scrollToEndOfDocument(nil) }
     }
-
+    
     private func appendedSuffix(
         of lines: [DockerLogLine]
     ) -> (dropped: [Int], added: ArraySlice<DockerLogLine>)? {
         guard let firstIncoming = lines.first else {
             return renderedIDs.isEmpty
-                ? nil : (Array(0..<renderedIDs.count), lines[lines.startIndex..<lines.startIndex])
+            ? nil : (Array(0..<renderedIDs.count), lines[lines.startIndex..<lines.startIndex])
         }
         guard !renderedIDs.isEmpty else { return ([], lines[...]) }
         guard let pivot = renderedIDs.firstIndex(of: firstIncoming.id) else { return nil }
@@ -104,7 +104,7 @@ final class LogTextViewController: NSViewController {
         for offset in 0..<kept where renderedIDs[pivot + offset] != lines[offset].id { return nil }
         return (Array(0..<pivot), lines[kept...])
     }
-
+    
     private func attributed(
         _ line: DockerLogLine, palette: LogPalette, font: NSFont, showTimestamps: Bool
     ) -> NSAttributedString {
@@ -124,11 +124,11 @@ final class LogTextViewController: NSViewController {
                 ]))
         return body
     }
-
+    
     private func font(_ size: Double) -> NSFont {
         NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
-
+    
     private func rebuild(_ document: LogDocument, palette: LogPalette) {
         let typeface = font(document.fontSize)
         let body = NSMutableAttributedString()
@@ -148,7 +148,7 @@ final class LogTextViewController: NSViewController {
         renderedIDs = ids
         renderedLengths = lengths
     }
-
+    
     private func mutate(
         dropping dropped: [Int], adding added: ArraySlice<DockerLogLine>, palette: LogPalette,
         document: LogDocument
@@ -173,7 +173,7 @@ final class LogTextViewController: NSViewController {
         }
         storage.endEditing()
     }
-
+    
     private func configureWrapping(_ wraps: Bool) {
         guard let container = textView.textContainer else { return }
         if wraps {
@@ -192,9 +192,9 @@ final class LogTextViewController: NSViewController {
             scrollView.hasHorizontalScroller = true
         }
     }
-
+    
     var renderedText: String { textView.string }
-
+    
     func scrollToEnd() {
         textView.scrollToEndOfDocument(nil)
     }
@@ -205,13 +205,13 @@ struct LogTextView: NSViewControllerRepresentable {
     let palette: LogPalette
     let follow: Bool
     var onScrolledAwayFromBottom: (Bool) -> Void = { _ in }
-
+    
     func makeNSViewController(context: Context) -> LogTextViewController {
         let controller = LogTextViewController()
         controller.onScrolledAwayFromBottom = onScrolledAwayFromBottom
         return controller
     }
-
+    
     func updateNSViewController(_ controller: LogTextViewController, context: Context) {
         controller.onScrolledAwayFromBottom = onScrolledAwayFromBottom
         controller.apply(document, palette: palette, follow: follow)

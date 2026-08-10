@@ -7,7 +7,7 @@ public struct PermissionUsage: Identifiable, Equatable, Sendable {
     public let enabledRequiredBy: [ExtensionRegistryEntry]
     public let enabledOptionalFor: [ExtensionRegistryEntry]
     public let isGranted: Bool
-
+    
     public var id: String { permission.rawValue }
     public var grantsOnFirstUse: Bool { permission.grantRequest == nil }
     public var users: [ExtensionRegistryEntry] { requiredBy + optionalFor }
@@ -40,7 +40,7 @@ public enum PermissionCatalog {
                 isGranted: granted[permission] ?? false)
         }
     }
-
+    
     public static func filter(
         _ usages: [PermissionUsage], by filter: PermissionFilter
     ) -> [PermissionUsage] {
@@ -52,15 +52,15 @@ public enum PermissionCatalog {
             }
         }
     }
-
+    
     public static func needsAttention(_ usages: [PermissionUsage]) -> Bool {
         usages.contains { $0.blocksEnabledExtension }
     }
-
+    
     public static func grantable(_ usages: [PermissionUsage]) -> [PermissionUsage] {
         usages.filter { !$0.isGranted && !$0.grantsOnFirstUse && $0.isUsedByEnabledExtension }
     }
-
+    
     public static func grantedCount(_ usages: [PermissionUsage]) -> Int {
         usages.filter(\.isGranted).count
     }

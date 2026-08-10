@@ -4,19 +4,19 @@ import SwiftUI
 
 struct EdithFieldSurface: ViewModifier {
     @Environment(\.colorScheme) private var scheme
-
+    
     let focused: Bool
     var compact = false
     var invalid = false
-
+    
     private var dark: Bool { scheme == .dark }
     private var radius: CGFloat { UIScale.pt(compact ? 7 : 9) }
-
+    
     private var border: Color {
         if invalid { return DashSkin.danger }
         return focused ? DashSkin.accent(dark) : DashSkin.line(dark)
     }
-
+    
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, UIScale.pt(compact ? 8 : 10))
@@ -40,7 +40,7 @@ extension View {
 struct EdithTextField: View {
     @Environment(\.colorScheme) private var scheme
     @FocusState private var localFocus: Bool
-
+    
     let placeholder: String
     @Binding var text: String
     var icon: String?
@@ -52,11 +52,11 @@ struct EdithTextField: View {
     var invalid = false
     var focus: FocusState<Bool>.Binding?
     var onSubmit: (() -> Void)?
-
+    
     private var dark: Bool { scheme == .dark }
     private var fontSize: CGFloat { compact ? 11 : 12.5 }
     private var focused: Bool { focus?.wrappedValue ?? localFocus }
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             if let icon {
@@ -81,7 +81,7 @@ struct EdithTextField: View {
         .edithFieldSurface(focused: focused, compact: compact, invalid: invalid)
         .background(typeAheadAnchor)
     }
-
+    
     private var field: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
@@ -93,7 +93,7 @@ struct EdithTextField: View {
             .onExitCommand { (focus ?? $localFocus).wrappedValue = false }
             .onSubmit { onSubmit?() }
     }
-
+    
     @ViewBuilder
     private var typeAheadAnchor: some View {
         if typeAhead {
@@ -108,7 +108,7 @@ struct SearchField: View {
     var compact = false
     var typeAhead = false
     var focus: FocusState<Bool>.Binding?
-
+    
     var body: some View {
         EdithTextField(
             placeholder: placeholder, text: $text, icon: "magnifyingglass", compact: compact,
@@ -118,10 +118,10 @@ struct SearchField: View {
 
 struct EdithNumberField: View {
     @FocusState private var focused: Bool
-
+    
     @Binding var value: Int
     var width: CGFloat
-
+    
     var body: some View {
         TextField("", value: $value, format: .number)
             .textFieldStyle(.plain)
@@ -142,7 +142,7 @@ private struct TypeAheadAnchor: NSViewRepresentable {
         TypeAhead.shared.register(anchor: anchor)
         return anchor
     }
-
+    
     func updateNSView(_ nsView: NSView, context: Context) {
         TypeAhead.shared.register(anchor: nsView)
     }

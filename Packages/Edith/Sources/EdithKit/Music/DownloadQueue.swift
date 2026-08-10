@@ -6,7 +6,7 @@ public struct DownloadRecord: Codable, Equatable {
     public var outputFilename: String?
     public var createdAt: Date
     public var kind: DownloadKind?
-
+    
     public init(
         url: URL, status: DownloadStatus, outputFilename: String?, createdAt: Date,
         kind: DownloadKind?
@@ -17,7 +17,7 @@ public struct DownloadRecord: Codable, Equatable {
         self.createdAt = createdAt
         self.kind = kind
     }
-
+    
     public var state: String {
         switch status {
         case .queued: return "queued"
@@ -28,7 +28,7 @@ public struct DownloadRecord: Codable, Equatable {
         case .interrupted: return "interrupted"
         }
     }
-
+    
     public var detail: String {
         switch status {
         case let .downloading(progress, index, count):
@@ -39,21 +39,21 @@ public struct DownloadRecord: Codable, Equatable {
         case .queued, .resolving: return ""
         }
     }
-
+    
     public var isFinished: Bool {
         switch status {
         case .done, .error, .interrupted: return true
         case .queued, .resolving, .downloading: return false
         }
     }
-
+    
     public var canRetry: Bool {
         switch status {
         case .error, .interrupted: return true
         default: return false
         }
     }
-
+    
     public var title: String {
         if case let .done(output) = status {
             let first = output.components(separatedBy: ", ").first ?? output
@@ -66,25 +66,25 @@ public struct DownloadRecord: Codable, Equatable {
 
 public enum DownloadQueue {
     public static var file: URL { Repo.dataDir.appendingPathComponent("downloads.json") }
-
+    
     public static func load() -> [DownloadRecord] {
         guard let data = try? Data(contentsOf: file) else { return [] }
         return ((try? JSONDecoder().decode([DownloadRecord].self, from: data)) ?? [])
             .sorted { $0.createdAt > $1.createdAt }
     }
-
+    
     public static func save(_ records: [DownloadRecord]) throws {
         try FileManager.default.createDirectory(
             at: Repo.dataDir, withIntermediateDirectories: true)
         try JSONEncoder().encode(records).write(to: file, options: .atomic)
     }
-
+    
     public static func outputTemplate(prefix: String) -> String {
         let directory = Repo.musicDir
         let name = prefix.isEmpty ? "%(title)s.%(ext)s" : "\(prefix)%(title)s.%(ext)s"
         return directory.appendingPathComponent(name).path
     }
-
+    
     @discardableResult
     public static func enqueue(
         urls: [URL], prefix: String = "", kind: DownloadKind = .audio, now: Date = Date()
@@ -97,7 +97,7 @@ public enum DownloadQueue {
         try save(added + load())
         return added
     }
-
+    
     @discardableResult
     public static func retry(_ matching: (DownloadRecord) -> Bool) throws -> Int {
         var records = load()
@@ -111,7 +111,7 @@ public enum DownloadQueue {
         try save(records)
         return changed
     }
-
+    
     @discardableResult
     public static func remove(_ matching: (DownloadRecord) -> Bool) throws -> Int {
         let records = load()
@@ -120,7 +120,7 @@ public enum DownloadQueue {
         try save(kept)
         return records.count - kept.count
     }
-
+    
     @discardableResult
     public static func clearFinished() throws -> Int {
         try remove { $0.isFinished }

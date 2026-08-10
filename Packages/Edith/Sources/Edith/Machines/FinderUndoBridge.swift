@@ -6,23 +6,23 @@ import Foundation
 enum FinderUndoBridge {
     private static var models: [UUID: [ObjectIdentifier: FinderModel]] = [:]
     private static var observer: NSObjectProtocol?
-
+    
     static func register(_ model: FinderModel) {
         models[model.session.machine.id, default: [:]][ObjectIdentifier(model)] = model
         start()
     }
-
+    
     static func forget(_ model: FinderModel) {
         models[model.session.machine.id]?.removeValue(forKey: ObjectIdentifier(model))
         if models[model.session.machine.id]?.isEmpty == true {
             models.removeValue(forKey: model.session.machine.id)
         }
     }
-
+    
     static func undoable(machineID: UUID) -> FinderModel? {
         models[machineID]?.values.first { $0.canUndo }
     }
-
+    
     static func start() {
         guard observer == nil else { return }
         observer = IPC.observe(

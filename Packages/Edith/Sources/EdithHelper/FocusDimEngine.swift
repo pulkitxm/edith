@@ -5,7 +5,7 @@ import EdithKit
 final class FocusDimOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
-
+    
     init(screen: NSScreen) {
         super.init(
             contentRect: screen.frame, styleMask: [.borderless],
@@ -37,7 +37,7 @@ final class FocusDimEngine: FeatureModule {
     private var activationObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
-
+    
     init() {
         FocusDimHotKey.register()
         loadSettings()
@@ -63,7 +63,7 @@ final class FocusDimEngine: FeatureModule {
             }
         }
     }
-
+    
     func shutdown() {
         FocusDimHotKey.unregister()
         let workspaceCenter = NSWorkspace.shared.notificationCenter
@@ -73,7 +73,7 @@ final class FocusDimEngine: FeatureModule {
         activationObserver = nil
         spaceObserver = nil
         screenObserver = nil
-
+        
         let windows = Array(overlays.values)
         overlays.removeAll()
         NSAnimationContext.runAnimationGroup(
@@ -85,7 +85,7 @@ final class FocusDimEngine: FeatureModule {
                 windows.forEach { $0.orderOut(nil) }
             })
     }
-
+    
     func applySettings() {
         FocusDimHotKey.register()
         let previousMode = displayMode
@@ -106,17 +106,19 @@ final class FocusDimEngine: FeatureModule {
             }
         }
     }
-
+    
     private func loadSettings() {
         let d = SharedDefaults.store
         intensity = FocusDimMath.clampIntensity(
-            d.object(forKey: "focusDimIntensity") as? Double ?? FocusDimMath.defaultIntensity)
+            d.object(forKey: AppStorageKeys.FocusDim.intensity) as? Double
+            ?? FocusDimMath.defaultIntensity)
         animationDuration = FocusDimMath.clampAnimationDuration(
-            d.object(forKey: "focusDimAnimationDuration") as? Double
-                ?? FocusDimMath.defaultAnimationDuration)
-        displayMode = FocusDimDisplayMode.from(d.string(forKey: "focusDimOtherDisplaysMode"))
+            d.object(forKey: AppStorageKeys.FocusDim.animationDuration) as? Double
+            ?? FocusDimMath.defaultAnimationDuration)
+        displayMode = FocusDimDisplayMode.from(
+            d.string(forKey: AppStorageKeys.FocusDim.otherDisplaysMode))
     }
-
+    
     private func rebuildOverlays() {
         var next: [CGDirectDisplayID: FocusDimOverlayWindow] = [:]
         for screen in NSScreen.screens {
@@ -133,7 +135,7 @@ final class FocusDimEngine: FeatureModule {
         }
         overlays = next
     }
-
+    
     private func reposition(animateIn: Bool) {
         guard CGPreflightScreenCaptureAccess(), FocusDimState.isActive() else {
             overlays.values.forEach { $0.alphaValue = 0 }
@@ -149,7 +151,7 @@ final class FocusDimEngine: FeatureModule {
                 windowsFrontToBack: windows, mode: displayMode)
             targets.append((overlay, reference?.windowNumber))
         }
-
+        
         if animateIn {
             for (overlay, windowNumber) in targets {
                 applyOrder(overlay, below: windowNumber)
@@ -161,7 +163,7 @@ final class FocusDimEngine: FeatureModule {
             }
             return
         }
-
+        
         let halfDuration = animationDuration / 2
         NSAnimationContext.runAnimationGroup(
             { ctx in
@@ -183,7 +185,7 @@ final class FocusDimEngine: FeatureModule {
                 }
             })
     }
-
+    
     private func applyOrder(_ overlay: NSWindow, below windowNumber: Int?) {
         if let windowNumber {
             overlay.order(.below, relativeTo: windowNumber)
@@ -191,7 +193,7 @@ final class FocusDimEngine: FeatureModule {
             overlay.orderFront(nil)
         }
     }
-
+    
     private static func onScreenWindows() -> [FocusDimWindowInfo] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]

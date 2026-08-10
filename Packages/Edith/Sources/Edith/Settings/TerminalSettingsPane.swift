@@ -12,7 +12,7 @@ struct TerminalSettingsPane: View {
     @State private var running: TerminalAction?
     @State private var outcome: ActionOutcome?
     @State private var outcomeStamp = 0
-
+    
     var body: some View {
         Form {
             toolsSection
@@ -29,7 +29,7 @@ struct TerminalSettingsPane: View {
             Task { await refresh() }
         }
     }
-
+    
     private var toolsSection: some View {
         Section {
             LabeledContent("Tools") {
@@ -69,7 +69,7 @@ struct TerminalSettingsPane: View {
                 help: toolsHelp, outcome: footerOutcome(for: [.installTools, .removeTools]))
         }
     }
-
+    
     private var completionSection: some View {
         Section {
             if !loaded {
@@ -95,7 +95,7 @@ struct TerminalSettingsPane: View {
                 outcome: footerOutcome(for: [.installCompletions]))
         }
     }
-
+    
     private var fallbackSection: some View {
         Section {
             if loaded {
@@ -112,8 +112,7 @@ struct TerminalSettingsPane: View {
             ) { run(.copySourceLine) }
             if let hint = completions.compactMap(\.hint).first {
                 Text(hint)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                     .textSelection(.enabled)
             }
         } header: {
@@ -125,7 +124,7 @@ struct TerminalSettingsPane: View {
                 outcome: footerOutcome(for: [.copySourceLine]))
         }
     }
-
+    
     private var launchSection: some View {
         Section {
             Toggle(isOn: $autoRefresh) {
@@ -141,7 +140,7 @@ struct TerminalSettingsPane: View {
             Text("On launch")
         }
     }
-
+    
     private func completionRow(_ status: CompletionStatus) -> some View {
         LabeledContent(status.shell.rawValue) {
             VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
@@ -158,7 +157,7 @@ struct TerminalSettingsPane: View {
             }
         }
     }
-
+    
     private func label(for state: CompletionInstallState) -> String {
         switch state {
         case .current: return "up to date"
@@ -167,7 +166,7 @@ struct TerminalSettingsPane: View {
         case .foreign: return "not ours, left alone"
         }
     }
-
+    
     private func color(for state: CompletionInstallState) -> Color {
         switch state {
         case .current: return .green
@@ -176,43 +175,43 @@ struct TerminalSettingsPane: View {
         case .foreign: return .yellow
         }
     }
-
+    
     private var idle: Bool { running == nil }
-
+    
     private func phase(of action: TerminalAction) -> ActionPhase {
         if running == action { return .running }
         guard let outcome, outcome.action == action else { return .idle }
         return outcome.succeeded ? .done : .failed
     }
-
+    
     private func footerOutcome(for actions: [TerminalAction]) -> ActionOutcome? {
         guard let outcome, actions.contains(outcome.action) else { return nil }
         return outcome
     }
-
+    
     private var toolsHelp: String {
         if !loaded { return "ed, edh and edith are the same tool under three names." }
         if !tools.bundled { return "This build does not carry the ed binary." }
         if !tools.onPath, !tools.directory.isEmpty {
             return
-                "\(abbreviate(tools.directory)) is not on your PATH, so the shell cannot find ed yet."
+            "\(abbreviate(tools.directory)) is not on your PATH, so the shell cannot find ed yet."
         }
         return "ed, edh and edith are the same tool under three names."
     }
-
+    
     private var toolSummary: String {
         guard tools.bundled else { return "not in this build" }
         guard !tools.linked.isEmpty else { return "not installed" }
         return tools.missing.isEmpty
-            ? tools.linked.joined(separator: ", ")
-            : "\(tools.linked.joined(separator: ", ")) (missing \(tools.missing.joined(separator: ", ")))"
+        ? tools.linked.joined(separator: ", ")
+        : "\(tools.linked.joined(separator: ", ")) (missing \(tools.missing.joined(separator: ", ")))"
     }
-
+    
     private func abbreviate(_ path: String) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
-
+    
     private func refresh() async {
         let found = await Task.detached(priority: .userInitiated) {
             (
@@ -225,7 +224,7 @@ struct TerminalSettingsPane: View {
         sourceLine = found.2
         loaded = true
     }
-
+    
     private func run(_ action: TerminalAction) {
         Task {
             if action.reloadsStatus { running = action }
@@ -235,7 +234,7 @@ struct TerminalSettingsPane: View {
             show(result, for: action)
         }
     }
-
+    
     private func perform(_ action: TerminalAction) async -> (succeeded: Bool, message: String) {
         switch action {
         case .installTools:
@@ -275,7 +274,7 @@ struct TerminalSettingsPane: View {
             return (true, "Copied the line to the clipboard.")
         }
     }
-
+    
     private func show(_ result: (succeeded: Bool, message: String), for action: TerminalAction) {
         outcomeStamp += 1
         let stamp = outcomeStamp
@@ -293,7 +292,7 @@ private enum TerminalAction: Equatable {
     case removeTools
     case installCompletions
     case copySourceLine
-
+    
     var reloadsStatus: Bool { self != .copySourceLine }
 }
 
@@ -313,11 +312,11 @@ private struct ActionOutcome: Equatable {
 
 private struct CheckingLabel: View {
     let text: String
-
+    
     init(_ text: String) {
         self.text = text
     }
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             ProgressView().controlSize(.mini)
@@ -333,7 +332,7 @@ private struct ActionButton: View {
     let phase: ActionPhase
     let enabled: Bool
     let action: () -> Void
-
+    
     var body: some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(5)) {
@@ -345,7 +344,7 @@ private struct ActionButton: View {
         .disabled(!enabled || phase == .running)
         .animation(.easeInOut(duration: 0.18), value: phase)
     }
-
+    
     @ViewBuilder private var marker: some View {
         switch phase {
         case .running:
@@ -358,7 +357,7 @@ private struct ActionButton: View {
             EmptyView()
         }
     }
-
+    
     private var title: String {
         switch phase {
         case .running: return running
@@ -371,7 +370,7 @@ private struct ActionButton: View {
 private struct SectionFooter: View {
     let help: String
     let outcome: ActionOutcome?
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(help)
@@ -379,7 +378,7 @@ private struct SectionFooter: View {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(5)) {
                     Image(
                         systemName: outcome.succeeded
-                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                        ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(outcome.succeeded ? Color.green : Color.orange)
                     Text(outcome.message)

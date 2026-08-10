@@ -1,32 +1,32 @@
-import EdithKit
 import AppKit
-import Combine
+import EdithKit
+import Observation
 
 enum ExternalApp: String, Equatable, CaseIterable, Sendable {
     case spotify
     case music
-
+    
     var displayName: String {
         switch self {
         case .spotify: "Spotify"
         case .music: "Apple Music"
         }
     }
-
+    
     var bundleID: String {
         switch self {
         case .spotify: "com.spotify.client"
         case .music: "com.apple.Music"
         }
     }
-
+    
     var notificationName: String {
         switch self {
         case .spotify: "com.spotify.client.PlaybackStateChanged"
         case .music: "com.apple.Music.playerInfo"
         }
     }
-
+    
     var processName: String {
         switch self {
         case .spotify: "Spotify"
@@ -58,21 +58,22 @@ enum ExternalNowPlaying {
             app: app, title: title, artist: artist, isPlaying: state == "playing",
             duration: durationMS > 0 ? durationMS / 1000 : 0)
     }
-
+    
     private static func number(_ value: Any?) -> Double {
         (value as? NSNumber)?.doubleValue ?? 0
     }
 }
 
 @MainActor
-final class ExternalMusic: ObservableObject {
-    @Published private(set) var current: ExternalTrack?
-
+@Observable
+final class ExternalMusic {
+    private(set) var current: ExternalTrack?
+    
     private var observers: [(ExternalApp, NSObjectProtocol)] = []
-
+    
     private var commandObserver: NSObjectProtocol?
     private var stateObserver: NSObjectProtocol?
-
+    
     func start() {
         guard observers.isEmpty else { return }
         commandObserver = IPC.observe(
@@ -95,14 +96,14 @@ final class ExternalMusic: ObservableObject {
             observers.append((app, observer))
         }
     }
-
+    
     func stop() {
         let center = DistributedNotificationCenter.default()
         for (_, observer) in observers { center.removeObserver(observer) }
         observers.removeAll()
         current = nil
     }
-
+    
     func handle(command info: [AnyHashable: Any]) {
         switch info["action"] as? String ?? "" {
         case "playpause": playPause()
@@ -114,7 +115,7 @@ final class ExternalMusic: ObservableObject {
         }
         broadcast()
     }
-
+    
     func broadcast() {
         var payload: [String: Any] = ["present": current != nil]
         if let track = current {
@@ -126,11 +127,11 @@ final class ExternalMusic: ObservableObject {
         }
         IPC.post(IPC.Name.nowPlayingState, userInfo: payload)
     }
-
+    
     func playPause() { control("playpause") }
     func next() { control("next track") }
     func previous() { control("previous track") }
-
+    
     func setVolume(_ value: Float) {
         guard let app = current?.app else { return }
         let level = Int(max(0, min(1, value)) * 100)
@@ -145,7 +146,7 @@ final class ExternalMusic: ObservableObject {
             NSAppleScript(source: source)?.executeAndReturnError(&error)
         }
     }
-
+    
     private func control(_ command: String) {
         guard let app = current?.app else { return }
         let source = """
@@ -159,7 +160,7 @@ final class ExternalMusic: ObservableObject {
             NSAppleScript(source: source)?.executeAndReturnError(&error)
         }
     }
-
+    
     private func handle(app: ExternalApp, userInfo: [AnyHashable: Any]) {
         guard let track = ExternalNowPlaying.parse(app: app, userInfo: userInfo) else {
             if current?.app == app { current = nil }

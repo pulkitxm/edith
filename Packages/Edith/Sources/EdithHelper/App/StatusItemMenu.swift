@@ -3,14 +3,14 @@ import EdithKit
 
 enum StatusItemMenu {
     private static let handler = StatusMenuHandler()
-
+    
     @MainActor
     static func attach(to item: NSStatusItem, target: AnyObject, action: Selector) {
         item.button?.target = target
         item.button?.action = action
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
-
+    
     @MainActor
     static func handleClick(on item: NSStatusItem, primary: () -> Void) {
         if NSApp.currentEvent?.type == .rightMouseUp {
@@ -19,7 +19,7 @@ enum StatusItemMenu {
             primary()
         }
     }
-
+    
     @MainActor
     static func show(from item: NSStatusItem) {
         let menu = NSMenu()
@@ -42,7 +42,7 @@ private final class StatusMenuHandler: NSObject {
     @objc func open() {
         MainActor.assumeIsolated { MainApp.openDashboard() }
     }
-
+    
     @objc func quit() {
         MainActor.assumeIsolated {
             IPC.post(IPC.Name.quitMainApp)

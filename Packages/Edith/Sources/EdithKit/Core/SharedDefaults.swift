@@ -3,7 +3,7 @@ import Foundation
 public enum SharedDefaults {
     public static let suiteName = "com.pulkit.edith.shared"
     public static let registeredDefaults: [String: Any] = [
-        "icloudBackup": true,
+        AppStorageKeys.Backup.icloud: true,
         CompletionScripts.autoRefreshKey: true,
         MusicFade.enabledKey: true,
         MusicFade.secondsKey: MusicFade.defaultSeconds,
@@ -13,7 +13,7 @@ public enum SharedDefaults {
         store.register(defaults: registeredDefaults)
         return store
     }()
-
+    
     public static func migrate(
         from source: UserDefaults = .standard,
         to destination: UserDefaults = SharedDefaults.store,

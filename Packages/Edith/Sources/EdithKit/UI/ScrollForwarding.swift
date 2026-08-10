@@ -3,15 +3,15 @@ import AppKit
 @MainActor
 public enum ScrollForwarding {
     private static var monitor: Any?
-
+    
     private static var gestureTarget: NSScrollView?
-
+    
     public static func install() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard let window = event.window,
-                let hit = window.contentView?.hitTest(event.locationInWindow),
-                hit.enclosingScrollView == nil
+                  let hit = window.contentView?.hitTest(event.locationInWindow),
+                  hit.enclosingScrollView == nil
             else {
                 gestureTarget = nil
                 return event
@@ -21,20 +21,20 @@ public enum ScrollForwarding {
             return nil
         }
     }
-
+    
     public static func startsGesture(phase: NSEvent.Phase, momentum: NSEvent.Phase) -> Bool {
         phase.contains(.began) || phase.contains(.mayBegin) || momentum.contains(.began)
-            || (phase.isEmpty && momentum.isEmpty)
+        || (phase.isEmpty && momentum.isEmpty)
     }
-
+    
     public static func carriesVerticalScroll(deltaX: CGFloat, deltaY: CGFloat) -> Bool {
         abs(deltaY) >= abs(deltaX)
     }
-
+    
     public static func scrollsVertically(content: CGFloat, visible: CGFloat) -> Bool {
         content - visible > 1
     }
-
+    
     private static func target(for event: NSEvent, in hit: NSView) -> NSScrollView? {
         if startsGesture(phase: event.phase, momentum: event.momentumPhase) {
             guard
@@ -49,7 +49,7 @@ public enum ScrollForwarding {
         guard let target = gestureTarget, target.window != nil else { return nil }
         return target
     }
-
+    
     private static func nearestScrollView(from view: NSView) -> NSScrollView? {
         var branch: NSView? = view
         var visited: NSView?
@@ -60,7 +60,7 @@ public enum ScrollForwarding {
         }
         return nil
     }
-
+    
     private static func widestScrollView(in view: NSView, skipping: NSView?) -> NSScrollView? {
         var best: NSScrollView?
         for subview in view.subviews where subview !== skipping && !subview.isHidden {
@@ -77,7 +77,7 @@ public enum ScrollForwarding {
         }
         return best
     }
-
+    
     private static func scrollable(_ scroll: NSScrollView) -> Bool {
         guard let document = scroll.documentView else { return false }
         return scrollsVertically(

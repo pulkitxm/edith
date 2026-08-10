@@ -5,11 +5,11 @@ import SwiftUI
 struct ZoomableRoot<Content: View>: View {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
     @ViewBuilder let content: Content
-
+    
     var body: some View {
         UIScale.apply(zoom)
         return
-            content
+        content
             .font(.system(size: UIScale.pt(13)))
             .controlSize(UIScale.controlSize)
             .id(UIScale.current)
@@ -20,10 +20,10 @@ struct ZoomableRoot<Content: View>: View {
 enum MainWindow {
     private static var window: NSWindow?
     private static let updater = UpdaterModel(startingUpdater: true)
-
-    #if DEBUG
+    
+#if DEBUG
     private static var snapshotObserver: NSObjectProtocol?
-
+    
     private static func installSnapshotHook() {
         guard snapshotObserver == nil else { return }
         snapshotObserver = DistributedNotificationCenter.default().addObserver(
@@ -33,10 +33,10 @@ enum MainWindow {
             MainActor.assumeIsolated { snapshot() }
         }
     }
-
+    
     private static func snapshot() {
         guard let window, let frameView = window.contentView?.superview,
-            let layer = frameView.layer
+              let layer = frameView.layer
         else { return }
         let scale = window.backingScaleFactor
         let size = frameView.bounds.size
@@ -61,12 +61,12 @@ enum MainWindow {
         try? info.write(
             toFile: "/tmp/edith-debug.txt", atomically: true, encoding: .utf8)
     }
-    #endif
-
+#endif
+    
     static func open() {
-        #if DEBUG
+#if DEBUG
         installSnapshotHook()
-        #endif
+#endif
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -97,15 +97,13 @@ enum MainWindow {
         window = w
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if UserDefaults.standard.bool(forKey: fullScreenDefaultsKey),
-            !w.styleMask.contains(.fullScreen)
+        if UserDefaults.standard.bool(forKey: AppStorageKeys.General.editMainWindowFullScreen),
+           !w.styleMask.contains(.fullScreen)
         {
             w.toggleFullScreen(nil)
         }
     }
-
-    fileprivate static let fullScreenDefaultsKey = "EdithMainWindowFullScreen"
-
+    
     static func forget() { window = nil }
 }
 
@@ -120,9 +118,9 @@ final class MainWindowDelegate: NSObject, NSWindowDelegate {
         MainWindow.forget()
     }
     func windowDidEnterFullScreen(_ notification: Notification) {
-        UserDefaults.standard.set(true, forKey: MainWindow.fullScreenDefaultsKey)
+        UserDefaults.standard.set(true, forKey: AppStorageKeys.General.editMainWindowFullScreen)
     }
     func windowDidExitFullScreen(_ notification: Notification) {
-        UserDefaults.standard.set(false, forKey: MainWindow.fullScreenDefaultsKey)
+        UserDefaults.standard.set(false, forKey: AppStorageKeys.General.editMainWindowFullScreen)
     }
 }

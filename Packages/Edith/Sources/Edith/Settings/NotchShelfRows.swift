@@ -4,40 +4,53 @@ import EdithKit
 import SwiftUI
 
 struct NotchShelfRows: View {
-    @AppStorage("notchShelfEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("notchShelfOpenOnDrag", store: SharedDefaults.store) private var openOnDrag = true
-    @AppStorage("notchShelfOpenOnHover", store: SharedDefaults.store) private var openOnHover = true
-    @AppStorage("notchShelfRequireOption", store: SharedDefaults.store) private var requireOption =
-        false
-    @AppStorage("notchShelfKeepDuration", store: SharedDefaults.store) private var keepDuration =
-        "forever"
-    @AppStorage("notchShelfRemoveAfterDragOut", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Notch.shelfEnabled, store: SharedDefaults.store) private
+    var enabled = false
+    @AppStorage(AppStorageKeys.Notch.shelfOpenOnDrag, store: SharedDefaults.store) private
+    var openOnDrag = true
+    @AppStorage(AppStorageKeys.Notch.shelfOpenOnHover, store: SharedDefaults.store) private
+    var openOnHover = true
+    @AppStorage(AppStorageKeys.Notch.shelfRequireOption, store: SharedDefaults.store) private
+    var requireOption =
+    false
+    @AppStorage(AppStorageKeys.Notch.shelfKeepDuration, store: SharedDefaults.store) private
+    var keepDuration =
+    "forever"
+    @AppStorage(AppStorageKeys.Notch.shelfRemoveAfterDragOut, store: SharedDefaults.store)
     private var removeAfterDragOut = true
-    @AppStorage("notchShelfShowOnExternal", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Notch.shelfShowOnExternal, store: SharedDefaults.store)
     private var showOnExternal = true
-    @AppStorage("notchShelfHaptics", store: SharedDefaults.store) private var haptics = true
-    @AppStorage("notchShelfShowMusic", store: SharedDefaults.store) private var showMusic = true
-    @AppStorage("notchAlertsEnabled", store: SharedDefaults.store) private var showAlerts = true
-    @AppStorage("notchAlertAudio", store: SharedDefaults.store) private var alertAudio = true
-    @AppStorage("notchAlertPower", store: SharedDefaults.store) private var alertPower = true
-    @AppStorage("notchAlertBattery", store: SharedDefaults.store) private var alertBattery = true
-    @AppStorage("notchAlertBluetooth", store: SharedDefaults.store) private var alertBluetooth =
-        false
-    @AppStorage("notchAudioMixerEnabled", store: SharedDefaults.store) private var audioMixer =
-        false
+    @AppStorage(AppStorageKeys.Notch.shelfHaptics, store: SharedDefaults.store) private
+    var haptics = true
+    @AppStorage(AppStorageKeys.Notch.shelfShowMusic, store: SharedDefaults.store) private
+    var showMusic = true
+    @AppStorage(AppStorageKeys.Notch.alertsEnabled, store: SharedDefaults.store) private
+    var showAlerts = true
+    @AppStorage(AppStorageKeys.Notch.alertAudio, store: SharedDefaults.store) private
+    var alertAudio = true
+    @AppStorage(AppStorageKeys.Notch.alertPower, store: SharedDefaults.store) private
+    var alertPower = true
+    @AppStorage(AppStorageKeys.Notch.alertBattery, store: SharedDefaults.store) private
+    var alertBattery = true
+    @AppStorage(AppStorageKeys.Notch.alertBluetooth, store: SharedDefaults.store) private
+    var alertBluetooth =
+    false
+    @AppStorage(AppStorageKeys.Notch.audioMixerEnabled, store: SharedDefaults.store) private
+    var audioMixer =
+    false
     @State private var bluetoothAuthorization = CBManager.authorization
-
+    
     var body: some View {
         Group {
             Section {
                 Toggle("Open when dragging near the notch", isOn: $openOnDrag)
                     .pointerCursor()
                 Text("The island slides out mid-drag so you can drop without clicking first.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
                 Toggle("Open on hover", isOn: $openOnHover)
                     .pointerCursor()
                 Text("Expand when the mouse rests on the notch, without a drag.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
                 Toggle(isOn: $requireOption) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Require \u{2325} to trigger")
@@ -50,7 +63,7 @@ struct NotchShelfRows: View {
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
-
+            
             Section {
                 Picker(selection: $keepDuration) {
                     Text("Forever").tag("forever")
@@ -70,24 +83,24 @@ struct NotchShelfRows: View {
                 Toggle("Remove after dragging out", isOn: $removeAfterDragOut)
                     .pointerCursor()
                 Text("Treats the shelf as a hand-off tray rather than storage.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
-
+            
             Section {
                 Toggle("Show what's playing", isOn: $showMusic)
                     .pointerCursor()
                 Text(
                     "Album art and a live equalizer hug the notch while music plays in the library, Spotify, or Apple Music."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
                 Toggle("Notch alerts", isOn: $showAlerts)
                     .pointerCursor()
                 Text(
                     "Drops a brief card from the notch. Alerts that arrive while the notch is open queue up and show after it closes."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
                 if showAlerts {
                     Toggle("Audio output changes", isOn: $alertAudio)
                         .pointerCursor()
@@ -98,8 +111,8 @@ struct NotchShelfRows: View {
                     Toggle("Bluetooth connect / disconnect", isOn: $alertBluetooth)
                         .pointerCursor()
                     if alertBluetooth,
-                        bluetoothAuthorization == .denied
-                            || bluetoothAuthorization == .restricted
+                       bluetoothAuthorization == .denied
+                        || bluetoothAuthorization == .restricted
                     {
                         Button("Open Bluetooth Privacy Settings...") {
                             NSWorkspace.shared.open(
@@ -116,15 +129,15 @@ struct NotchShelfRows: View {
                 Text(
                     "Adds an Audio tab to set each app's volume. macOS 14.4+; asks for audio-recording permission the first time. Off by default."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
                 Toggle("Show on external displays", isOn: $showOnExternal)
                     .pointerCursor()
                 Text("Draws a small pill at the top of screens without a notch.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
                 Toggle("Haptic feedback", isOn: $haptics)
                     .pointerCursor()
                 Text("A small trackpad tap when the shelf reacts.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)

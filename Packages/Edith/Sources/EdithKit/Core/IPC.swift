@@ -84,20 +84,20 @@ public enum IPC {
             "com.pulkit.edith.requestCalendarEvents")
         public static let calendarEvents = Notification.Name("com.pulkit.edith.calendarEvents")
     }
-
+    
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {
         DistributedNotificationCenter.default().postNotificationName(
             name, object: nil, userInfo: userInfo, deliverImmediately: true)
     }
-
+    
     public static func observe(_ name: Notification.Name, using block: @escaping () -> Void)
-        -> NSObjectProtocol
+    -> NSObjectProtocol
     {
         DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
         ) { _ in block() }
     }
-
+    
     public static func observe(
         _ name: Notification.Name, info block: @escaping ([AnyHashable: Any]) -> Void
     ) -> NSObjectProtocol {
@@ -105,7 +105,7 @@ public enum IPC {
             forName: name, object: nil, queue: .main
         ) { note in block(note.userInfo ?? [:]) }
     }
-
+    
     public static func stopObserving(_ token: NSObjectProtocol) {
         DistributedNotificationCenter.default().removeObserver(token)
     }

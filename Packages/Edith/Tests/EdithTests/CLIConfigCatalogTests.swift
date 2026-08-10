@@ -8,7 +8,7 @@ enum CatalogSamples {
     static func writable() -> [SettingDefinition] {
         ConfigCatalog.settings.filter { !$0.readOnly && $0.type != .map }
     }
-
+    
     static func allowedChoice(_ definition: SettingDefinition) -> String? {
         guard !definition.allowed.isEmpty else { return nil }
         guard case let .string(fallback) = definition.fallback else {
@@ -16,7 +16,7 @@ enum CatalogSamples {
         }
         return definition.allowed.first { $0 != fallback } ?? definition.allowed.first
     }
-
+    
     static func sample(for definition: SettingDefinition) -> String {
         if let choice = allowedChoice(definition) { return choice }
         switch definition.type {
@@ -29,7 +29,7 @@ enum CatalogSamples {
         case .map: return ""
         }
     }
-
+    
     static func expected(for definition: SettingDefinition) -> JSONValue {
         if let choice = allowedChoice(definition) { return .string(choice) }
         switch definition.type {
@@ -42,7 +42,7 @@ enum CatalogSamples {
         case .map: return .null
         }
     }
-
+    
     static func rejected(for definition: SettingDefinition) -> String? {
         if !definition.allowed.isEmpty { return "definitely-not-allowed" }
         switch definition.type {
@@ -61,15 +61,15 @@ enum CatalogSamples {
         defaults.removePersistentDomain(forName: name)
         return (defaults, name)
     }
-
+    
     static func stored(_ suite: (defaults: UserDefaults, name: String), _ key: String) -> Any? {
         suite.defaults.persistentDomain(forName: suite.name)?[key]
     }
-
+    
     @Test func theCatalogIsBigEnoughToBeTheWholeUI() {
         #expect(ConfigCatalog.settings.count > 150)
     }
-
+    
     @Test func everySettingParsesSetsReadsBackAndUnsets() throws {
         let suite = Self.scratch()
         let store = ConfigStore(shared: suite.defaults, standard: suite.defaults)
@@ -93,7 +93,7 @@ enum CatalogSamples {
                 "\(definition.key) did not fall back to \(definition.fallback)")
         }
     }
-
+    
     @Test func everySettingRejectsAValueOfTheWrongShape() {
         for definition in CatalogSamples.writable() {
             guard let bad = CatalogSamples.rejected(for: definition) else { continue }
@@ -106,7 +106,7 @@ enum CatalogSamples {
             }
         }
     }
-
+    
     @Test func everyDefaultIsOfTheTypeItsSettingDeclares() {
         for definition in ConfigCatalog.settings {
             switch (definition.type, definition.fallback) {
@@ -120,7 +120,7 @@ enum CatalogSamples {
             }
         }
     }
-
+    
     @Test func everyEnumeratedSettingDefaultsToOneOfItsOwnValues() {
         for definition in ConfigCatalog.settings where !definition.allowed.isEmpty {
             guard case let .string(fallback) = definition.fallback else { continue }
@@ -129,7 +129,7 @@ enum CatalogSamples {
                 "\(definition.key) defaults to \(fallback), which it does not allow")
         }
     }
-
+    
     @Test func onlyStringLikeSettingsEnumerateValues() {
         for definition in ConfigCatalog.settings where !definition.allowed.isEmpty {
             #expect(
@@ -137,14 +137,14 @@ enum CatalogSamples {
                 "\(definition.key) is \(definition.type.rawValue) but lists allowed values")
         }
     }
-
+    
     @Test func everySettingHasASummaryAndAGroup() {
         for definition in ConfigCatalog.settings {
             #expect(!definition.summary.isEmpty, "\(definition.key) has no summary")
             #expect(!definition.group.isEmpty, "\(definition.key) has no group")
         }
     }
-
+    
     @Test func everyDescribedSettingCarriesTheSameFields() {
         let suite = Self.scratch()
         let store = ConfigStore(shared: suite.defaults, standard: suite.defaults)
@@ -162,7 +162,7 @@ enum CatalogSamples {
             #expect(fields["type"] == .string(definition.type.rawValue))
         }
     }
-
+    
     @Test func readOnlySettingsRefuseBothWritesAndUnsets() {
         let suite = Self.scratch()
         let store = ConfigStore(shared: suite.defaults, standard: suite.defaults)
@@ -173,7 +173,7 @@ enum CatalogSamples {
             #expect(throws: CLIFailure.self) { try store.unset(definition) }
         }
     }
-
+    
     @Test func mapSettingsCannotBeWrittenFromTheCommandLine() {
         for definition in ConfigCatalog.settings where definition.type == .map {
             #expect(throws: CLIFailure.self) {
@@ -181,7 +181,7 @@ enum CatalogSamples {
             }
         }
     }
-
+    
     @Test func theSchemaTypeMatchesTheCatalogTypeForEverySetting() {
         let byType: [SettingDefinition.ValueType: String] = [
             .bool: "boolean", .int: "integer", .number: "number", .string: "string",
@@ -200,7 +200,7 @@ enum CatalogSamples {
             }
         }
     }
-
+    
     @Test func exportingThenImportingRestoresEveryValue() throws {
         let suite = Self.scratch()
         let store = ConfigStore(shared: suite.defaults, standard: suite.defaults)
@@ -220,7 +220,7 @@ enum CatalogSamples {
                 "\(definition.key) exported as \(fields[definition.key] ?? .null)")
         }
     }
-
+    
     @Test func scopeDecidesWhichSuiteEverySettingLandsIn() throws {
         let shared = Self.scratch()
         let standard = Self.scratch()
@@ -262,7 +262,7 @@ enum CatalogSamples {
             }
         }
     }
-
+    
     @Test func everySettingRejectsABadValueThroughTheRealCommand() async {
         await CLIProbe.inWorld { _ in
             for definition in CatalogSamples.writable() {
@@ -275,27 +275,27 @@ enum CatalogSamples {
             }
         }
     }
-
+    
     @Test func setAnnouncesTheChangeSoTheAppPicksItUp() async {
         await CLIProbe.inWorld { world in
             _ = await CLIProbe.capture(["config", "set", "preventSleep", "true"])
             #expect(world.postedNames().contains(IPC.Name.settingsChanged.rawValue))
         }
     }
-
+    
     @Test func listingReportsEverySettingAsOneJSONArray() async {
         let result = await CLIProbe.run(["config", "ls", "--json"])
         #expect(result.code == 0)
         let array = try? #require(result.array)
         #expect(array?.count == ConfigCatalog.settings.count)
     }
-
+    
     @Test func listingByPrefixNarrowsTheSameWayTheCatalogDoes() async {
         let result = await CLIProbe.run(["config", "ls", "presenter", "--json"])
         #expect(result.code == 0)
         #expect(result.array?.count == ConfigCatalog.matching(prefix: "presenter").count)
     }
-
+    
     @Test func listingByGroupOnlyShowsThatGroup() async {
         for group in ConfigCatalog.groups {
             let result = await CLIProbe.run(["config", "ls", "--group", group, "--json"])
@@ -305,7 +305,7 @@ enum CatalogSamples {
             #expect(rows.allSatisfy { $0["group"] as? String == group })
         }
     }
-
+    
     @Test func changedOnlyListsWhatWasActuallyWritten() async {
         await CLIProbe.inWorld { _ in
             let before = await CLIProbe.capture(["config", "ls", "--changed", "--json"])
@@ -315,7 +315,7 @@ enum CatalogSamples {
             #expect(after.array?.count == 1)
         }
     }
-
+    
     @Test func exportOnlyCarriesTheSettingsThatWereChanged() async {
         await CLIProbe.inWorld { _ in
             let empty = await CLIProbe.capture(["config", "export"])
@@ -326,13 +326,13 @@ enum CatalogSamples {
             #expect(one.object?["warnPercent"] as? Int == 72)
         }
     }
-
+    
     @Test func exportWithDefaultsCarriesEveryWritableSetting() async {
         let result = await CLIProbe.run(["config", "export", "--defaults"])
         #expect(result.code == 0)
         #expect(result.object?.count == CatalogSamples.writable().count)
     }
-
+    
     @Test func exportedDocumentsImportBackCleanly() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-roundtrip-\(UUID().uuidString).json")
@@ -349,7 +349,7 @@ enum CatalogSamples {
         }
         try? FileManager.default.removeItem(at: url)
     }
-
+    
     @Test func aDryRunImportChangesNothing() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-dryrun-\(UUID().uuidString).json")
@@ -364,7 +364,7 @@ enum CatalogSamples {
         }
         try? FileManager.default.removeItem(at: url)
     }
-
+    
     @Test func importSkipsKeysItDoesNotOwnRatherThanFailing() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-skip-\(UUID().uuidString).json")
@@ -377,7 +377,7 @@ enum CatalogSamples {
         }
         try? FileManager.default.removeItem(at: url)
     }
-
+    
     @Test func importRefusesAValueOfTheWrongType() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-wrongtype-\(UUID().uuidString).json")
@@ -389,7 +389,7 @@ enum CatalogSamples {
         }
         try? FileManager.default.removeItem(at: url)
     }
-
+    
     @Test func describeAndGetAgreeOnTheFacts() async {
         await CLIProbe.inWorld { _ in
             _ = await CLIProbe.capture(["config", "set", "limitsProvider", "codex"])
@@ -402,7 +402,7 @@ enum CatalogSamples {
             #expect(human.stdout == "codex\n")
         }
     }
-
+    
     @Test func theSchemaIsOneJSONDocumentCoveringEveryWritableSetting() async {
         let result = await CLIProbe.run(["schema"])
         #expect(result.code == 0)

@@ -1,27 +1,29 @@
 import AVFoundation
 import EdithKit
+import Observation
 import Speech
 import SwiftUI
 
 @MainActor
-final class CompanionCaptureModel: ObservableObject {
+@Observable
+final class CompanionCaptureModel {
     enum Phase {
         case idle
         case recording
         case preview
     }
 
-    @Published private(set) var phase = Phase.idle
-    @Published private(set) var transcript = ""
-    @Published private(set) var level: Double = 0
-    @Published private(set) var duration: TimeInterval = 0
-    @Published private(set) var remembering = false
-    @Published private(set) var outcome: String?
-    @Published private(set) var error: String?
-    @Published var note = ""
-    @Published private(set) var noteOutcome: String?
-    @Published private(set) var savingNote = false
-
+    private(set) var phase = Phase.idle
+    private(set) var transcript = ""
+    private(set) var level: Double = 0
+    private(set) var duration: TimeInterval = 0
+    private(set) var remembering = false
+    private(set) var outcome: String?
+    private(set) var error: String?
+    var note = ""
+    private(set) var noteOutcome: String?
+    private(set) var savingNote = false
+    
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
     private var fileURL: URL?
@@ -30,18 +32,18 @@ final class CompanionCaptureModel: ObservableObject {
     private var speechTask: SFSpeechRecognitionTask?
     private var startedAt: Date?
     private var ticker: Timer?
-
+    
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
-
+    
     func toggleRecording() async {
         switch phase {
         case .recording: stopRecording()
         case .idle, .preview: await startRecording()
         }
     }
-
+    
     private func startRecording() async {
         outcome = nil
         error = nil
@@ -59,7 +61,7 @@ final class CompanionCaptureModel: ObservableObject {
                 continuation.resume(returning: status)
             }
         }
-
+        
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else {
@@ -90,10 +92,10 @@ final class CompanionCaptureModel: ObservableObject {
             self.error = "Could not start a recording file: \(error.localizedDescription)"
             return
         }
-
+        
         transcript = ""
         if speechStatus == .authorized, let recognizer = SFSpeechRecognizer(),
-            recognizer.isAvailable
+           recognizer.isAvailable
         {
             speech = recognizer
             let request = SFSpeechAudioBufferRecognitionRequest()
@@ -111,7 +113,7 @@ final class CompanionCaptureModel: ObservableObject {
         } else {
             transcript = ""
         }
-
+        
         let mono = AVAudioFormat(
             commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1,
             interleaved: false)
@@ -124,7 +126,7 @@ final class CompanionCaptureModel: ObservableObject {
                 self.level = rms
             }
         }
-
+        
         do {
             engine.prepare()
             try engine.start()
@@ -143,7 +145,7 @@ final class CompanionCaptureModel: ObservableObject {
             }
         }
     }
-
+    
     private func stopRecording() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
@@ -154,7 +156,7 @@ final class CompanionCaptureModel: ObservableObject {
         file = nil
         phase = .preview
     }
-
+    
     func discard() {
         if let fileURL {
             try? FileManager.default.removeItem(at: fileURL)
@@ -164,7 +166,7 @@ final class CompanionCaptureModel: ObservableObject {
         duration = 0
         phase = .idle
     }
-
+    
     func remember() async {
         guard let fileURL, !remembering else { return }
         remembering = true
@@ -174,9 +176,9 @@ final class CompanionCaptureModel: ObservableObject {
             let outcome = try await client.ingestAudio(
                 name: fileURL.lastPathComponent, data: data, mtime: Self.isoNow())
             self.outcome =
-                outcome.status == "ingested"
-                ? "Remembered as \(outcome.name)"
-                : "Already remembered; the companion knew this one"
+            outcome.status == "ingested"
+            ? "Remembered as \(outcome.name)"
+            : "Already remembered; the companion knew this one"
             try? FileManager.default.removeItem(at: fileURL)
             self.fileURL = nil
             transcript = ""
@@ -187,7 +189,7 @@ final class CompanionCaptureModel: ObservableObject {
             self.error = error.localizedDescription
         }
     }
-
+    
     func rememberNote() async {
         let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !savingNote else { return }
@@ -199,25 +201,25 @@ final class CompanionCaptureModel: ObservableObject {
                     name: "note-\(Self.stamp()).md", text: text, mtime: Self.isoNow())
             ])
             noteOutcome =
-                outcomes.first?.status == "ingested"
-                ? "Remembered" : "Already remembered; nothing new in it"
+            outcomes.first?.status == "ingested"
+            ? "Remembered" : "Already remembered; nothing new in it"
             note = ""
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
-
+    
     private static func stamp() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter.string(from: Date())
     }
-
+    
     private static func isoNow() -> String {
         ISO8601DateFormatter().string(from: Date())
     }
-
+    
     private static func rms(_ buffer: AVAudioPCMBuffer) -> Double {
         guard let samples = buffer.floatChannelData?[0] else { return 0 }
         let count = Int(buffer.frameLength)
@@ -231,15 +233,15 @@ final class CompanionCaptureModel: ObservableObject {
 }
 
 struct CompanionCaptureScreen: View {
-    @ObservedObject var model: CompanionCaptureModel
-    @ObservedObject var home: CompanionHomeModel
+    @Bindable var model: CompanionCaptureModel
+    let home: CompanionHomeModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulsing = false
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         HStack(alignment: .top, spacing: UIScale.pt(12)) {
             speakCard
@@ -248,7 +250,7 @@ struct CompanionCaptureScreen: View {
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
-
+    
     private var speakCard: some View {
         SkinCard(title: "Speak", note: speakNote, dark: dark, fill: true) {
             VStack(spacing: UIScale.pt(14)) {
@@ -290,7 +292,7 @@ struct CompanionCaptureScreen: View {
             .frame(maxWidth: .infinity)
         }
     }
-
+    
     private var speakNote: String {
         switch model.phase {
         case .idle: return "talk for as long as you like"
@@ -298,7 +300,7 @@ struct CompanionCaptureScreen: View {
         case .preview: return "keep it or let it go"
         }
     }
-
+    
     private var recordButton: some View {
         Button {
             Task { await model.toggleRecording() }
@@ -323,7 +325,7 @@ struct CompanionCaptureScreen: View {
                     .overlay {
                         Circle().strokeBorder(
                             model.phase == .recording
-                                ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
+                            ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
                     }
                 Image(systemName: model.phase == .recording ? "stop.fill" : "mic.fill")
                     .font(.system(size: UIScale.pt(24)))
@@ -336,12 +338,12 @@ struct CompanionCaptureScreen: View {
         .pointerCursor()
         .help(model.phase == .recording ? "Stop recording" : "Start recording")
     }
-
+    
     private var timeLabel: String {
         let total = Int(model.duration.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
     }
-
+    
     private var levelMeter: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
@@ -354,7 +356,7 @@ struct CompanionCaptureScreen: View {
         .frame(width: UIScale.pt(220), height: UIScale.pt(5))
         .opacity(model.phase == .recording ? 1 : 0.35)
     }
-
+    
     @ViewBuilder
     private var transcriptView: some View {
         ScrollViewReader { proxy in
@@ -386,7 +388,7 @@ struct CompanionCaptureScreen: View {
             RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
         }
     }
-
+    
     private var transcriptHint: String {
         switch model.phase {
         case .idle: return "A live transcription appears here while you talk."
@@ -394,7 +396,7 @@ struct CompanionCaptureScreen: View {
         case .preview: return "Nothing was transcribed live; whisper still hears it on save."
         }
     }
-
+    
     private var writeCard: some View {
         SkinCard(title: "Write", note: "a quick note straight to memory", dark: dark, fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -420,7 +422,7 @@ struct CompanionCaptureScreen: View {
                     }
                     .disabled(
                         model.savingNote
-                            || model.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        || model.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if let outcome = model.noteOutcome {
                         Text(outcome)
                             .font(.system(size: UIScale.pt(11.5)))

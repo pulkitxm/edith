@@ -4,7 +4,7 @@ import SwiftUI
 
 final class CleaningOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { true }
-
+    
     init(screen: NSScreen, rootView: some View) {
         super.init(
             contentRect: screen.frame, styleMask: [.borderless],
@@ -21,9 +21,10 @@ final class CleaningOverlayWindow: NSWindow {
 }
 
 struct CleaningOverlayView: View {
-    @ObservedObject var store: SystemStore
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-
+    let store: SystemStore
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    
     var body: some View {
         ZStack {
             Color.black.opacity(0.6).ignoresSafeArea()

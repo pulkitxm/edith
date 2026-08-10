@@ -7,7 +7,7 @@ final class ShelfStore {
     private let root: URL
     private var changeObserver: NSObjectProtocol?
     var onExternalChange: (@MainActor () -> Void)?
-
+    
     init(root: URL = ShelfIndex.root) {
         self.root = root
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -25,15 +25,15 @@ final class ShelfStore {
                 }
             })
     }
-
+    
     deinit {
         if let changeObserver { IPC.stopObserving(changeObserver) }
     }
-
+    
     private static let senderID = "shelfStore-\(ProcessInfo.processInfo.processIdentifier)"
-
+    
     private var indexURL: URL { ShelfIndex.indexFile(in: root) }
-
+    
     private func migrateLegacyIndex() {
         let legacy = root.appendingPathComponent("index.json")
         let fm = FileManager.default
@@ -42,7 +42,7 @@ final class ShelfStore {
         }
         try? fm.moveItem(at: legacy, to: indexURL)
     }
-
+    
     private func migrateLegacyFolders() {
         let fm = FileManager.default
         var changed = false
@@ -60,18 +60,18 @@ final class ShelfStore {
         }
         if changed { save() }
     }
-
+    
     private func load() {
         items = ShelfIndex.load(from: root)
     }
-
+    
     private func save() {
         ShelfIndex.save(items, to: root)
         IPC.post(IPC.Name.shelfChanged, userInfo: ["sender": Self.senderID])
     }
-
+    
     func fileURL(for item: ShelfItem) -> URL { root.appendingPathComponent(item.name) }
-
+    
     private func uniqueName(_ proposed: String) -> String {
         let fm = FileManager.default
         var name = proposed
@@ -84,7 +84,7 @@ final class ShelfStore {
         }
         return name
     }
-
+    
     @discardableResult
     func addCopy(of source: URL) -> ShelfItem? {
         let name = uniqueName(source.lastPathComponent)
@@ -98,7 +98,7 @@ final class ShelfStore {
         save()
         return item
     }
-
+    
     @discardableResult
     func addText(_ text: String) -> ShelfItem? {
         let name = uniqueName("Dropped Text.txt")
@@ -113,7 +113,7 @@ final class ShelfStore {
         save()
         return item
     }
-
+    
     @discardableResult
     func adopt(fileAt url: URL, id: UUID) -> ShelfItem? {
         let name = uniqueName(url.lastPathComponent)
@@ -129,35 +129,35 @@ final class ShelfStore {
         save()
         return item
     }
-
+    
     func promiseDestination(id: UUID) -> URL {
         let dir = root.appendingPathComponent(".incoming-\(id.uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
-
+    
     func discardPromiseDestination(id: UUID) {
         try? FileManager.default.removeItem(
             at: root.appendingPathComponent(".incoming-\(id.uuidString)"))
     }
-
+    
     func item(forFileURL url: URL) -> ShelfItem? {
         let path = url.standardizedFileURL.path
         return items.first { fileURL(for: $0).standardizedFileURL.path == path }
     }
-
+    
     func setPosition(_ position: CGPoint, for item: ShelfItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[index].position = position
         save()
     }
-
+    
     func remove(_ item: ShelfItem) {
         try? FileManager.default.removeItem(at: fileURL(for: item))
         items.removeAll { $0.id == item.id }
         save()
     }
-
+    
     func purgeExpired(keep: ShelfKeepDuration, now: Date = Date()) {
         let expired = items.filter {
             ShelfExpiry.isExpired(addedAt: $0.addedAt, keep: keep, now: now)

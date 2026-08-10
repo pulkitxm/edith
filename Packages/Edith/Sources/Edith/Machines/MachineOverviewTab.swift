@@ -3,9 +3,9 @@ import SwiftUI
 
 struct SparkSamples: VectorArithmetic {
     var values: [Double]
-
+    
     static var zero: SparkSamples { SparkSamples(values: []) }
-
+    
     private static func merge(
         _ lhs: [Double], _ rhs: [Double], _ combine: (Double, Double) -> Double
     ) -> [Double] {
@@ -19,19 +19,19 @@ struct SparkSamples: VectorArithmetic {
                 right >= 0 ? rhs[right] : (rhs.first ?? 0))
         }
     }
-
+    
     static func + (lhs: SparkSamples, rhs: SparkSamples) -> SparkSamples {
         SparkSamples(values: merge(lhs.values, rhs.values, +))
     }
-
+    
     static func - (lhs: SparkSamples, rhs: SparkSamples) -> SparkSamples {
         SparkSamples(values: merge(lhs.values, rhs.values, -))
     }
-
+    
     mutating func scale(by rhs: Double) {
         values = values.map { $0 * rhs }
     }
-
+    
     var magnitudeSquared: Double {
         values.reduce(0) { $0 + $1 * $1 }
     }
@@ -42,12 +42,12 @@ struct SparkShape: Shape {
     let maximum: Double
     let capacity: Int
     let filled: Bool
-
+    
     var animatableData: SparkSamples {
         get { samples }
         set { samples = newValue }
     }
-
+    
     func path(in rect: CGRect) -> Path {
         let values = samples.values
         guard values.count > 1 else { return Path() }
@@ -82,7 +82,7 @@ struct Sparkline: View {
     let color: Color
     var cadence = MetricsCadence.sampleInterval
     var capacity = MachineSession.historyLength
-
+    
     var body: some View {
         let samples = SparkSamples(values: values)
         ZStack {
@@ -102,7 +102,7 @@ struct MeterBar: View {
     let fraction: Double
     let color: Color
     let track: Color
-
+    
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
@@ -126,7 +126,7 @@ struct MetricCard: View {
     let color: Color
     let footnote: String
     let dark: Bool
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .firstTextBaseline) {
@@ -163,12 +163,12 @@ struct MetricCard: View {
 }
 
 struct MachineOverviewTab: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -184,7 +184,7 @@ struct MachineOverviewTab: View {
             .pageContent(compact)
         }
     }
-
+    
     @ViewBuilder
     private var loaded: some View {
         identityCard
@@ -203,7 +203,7 @@ struct MachineOverviewTab: View {
             SkinCard(title: "Host", dark: dark) { hostFacts }
         }
     }
-
+    
     private var connectionNotice: some View {
         HStack(spacing: UIScale.pt(10)) {
             if session.state.isBusy {
@@ -226,7 +226,7 @@ struct MachineOverviewTab: View {
         .padding(UIScale.pt(14))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
-
+    
     private var identityCard: some View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "clock.arrow.circlepath")
@@ -250,12 +250,12 @@ struct MachineOverviewTab: View {
             RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark))
         }
     }
-
+    
     private var uptimeText: String {
         guard let sample = session.sample else { return "Waiting for the first sample" }
         return "Up \(ByteFormatter.duration(sample.uptime))"
     }
-
+    
     private var metricsGrid: some View {
         LazyVGrid(
             columns: [
@@ -269,8 +269,8 @@ struct MachineOverviewTab: View {
                 maximum: 100, color: DashSkin.accent(dark),
                 footnote: session.sample.map { sample in
                     sample.cpu.steal > 1
-                        ? String(format: "steal %.0f%%", sample.cpu.steal)
-                        : "\(sample.cpu.cores.count) cores"
+                    ? String(format: "steal %.0f%%", sample.cpu.steal)
+                    : "\(sample.cpu.cores.count) cores"
                 } ?? "")
             metricCard(
                 "Memory",
@@ -279,11 +279,11 @@ struct MachineOverviewTab: View {
                 maximum: 100, color: DashSkin.sage,
                 footnote: session.sample.map {
                     "\(ByteFormatter.string($0.mem.usedKB * 1024)) of "
-                        + ByteFormatter.string($0.mem.totalKB * 1024)
+                    + ByteFormatter.string($0.mem.totalKB * 1024)
                 } ?? "")
         }
     }
-
+    
     private func metricCard(
         _ title: String, value: String, fraction: Double?, history: [Double], maximum: Double,
         color: Color, footnote: String
@@ -292,7 +292,7 @@ struct MachineOverviewTab: View {
             title: title, value: value, fraction: fraction, history: history, maximum: maximum,
             color: color, footnote: footnote, dark: dark)
     }
-
+    
     private func storage(_ slow: MachineSlow) -> some View {
         VStack(spacing: UIScale.pt(10)) {
             ForEach(slow.disks) { disk in
@@ -305,7 +305,7 @@ struct MachineOverviewTab: View {
                         Spacer()
                         Text(
                             "\(ByteFormatter.string(disk.usedKB * 1024)) of "
-                                + ByteFormatter.string(disk.totalKB * 1024)
+                            + ByteFormatter.string(disk.totalKB * 1024)
                         )
                         .font(DashSkin.mono(10.5))
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -313,14 +313,14 @@ struct MachineOverviewTab: View {
                     MeterBar(
                         fraction: disk.usedPercent / 100,
                         color: disk.usedPercent > 90
-                            ? DashSkin.danger
-                            : (disk.usedPercent > 75 ? DashSkin.warn : DashSkin.accent(dark)),
+                        ? DashSkin.danger
+                        : (disk.usedPercent > 75 ? DashSkin.warn : DashSkin.accent(dark)),
                         track: DashSkin.line(dark))
                 }
             }
         }
     }
-
+    
     private func network(_ sample: MachineSample) -> some View {
         VStack(spacing: UIScale.pt(6)) {
             ForEach(sample.net.ifaces.filter { !$0.virtual }, id: \.n) { iface in
@@ -339,7 +339,7 @@ struct MachineOverviewTab: View {
             }
         }
     }
-
+    
     private func hardware(_ slow: MachineSlow) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             if let gpu = slow.gpu {
@@ -388,7 +388,7 @@ struct MachineOverviewTab: View {
             }
         }
     }
-
+    
     private var hostFacts: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if let updates = session.facts.updatesAvailable, updates > 0 {

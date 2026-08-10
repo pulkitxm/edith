@@ -10,14 +10,14 @@ import Testing
         let name = "DashboardSourceSelectionTests.\(UUID().uuidString)"
         return (UserDefaults(suiteName: name)!, name)
     }
-
+    
     private let period: String = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: Date())
     }()
-
+    
     private func usage() throws -> DashUsage {
         let json = """
             {
@@ -45,29 +45,29 @@ import Testing
             """
         return try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8))
     }
-
+    
     @Test func migrationPersistsAllSourcesAcrossRelaunch() throws {
         let (defaults, name) = preferences()
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.set("cli", forKey: "dashSources")
         defaults.set("cli,codex", forKey: "dashKnownSources")
-
+        
         let firstLaunch = DashboardModel(preferences: defaults)
         firstLaunch.ingest(try usage())
-
+        
         #expect(firstLaunch.selectedSources == ["cli", "codex"])
         #expect(defaults.string(forKey: "dashSources") == "cli,codex")
         #expect(
             defaults.integer(forKey: "dashSourceSelectionVersion")
-                == UsageSourceSelection.currentVersion)
-
+            == UsageSourceSelection.currentVersion)
+        
         let secondLaunch = DashboardModel(preferences: defaults)
         secondLaunch.ingest(try usage())
-
+        
         #expect(secondLaunch.selectedSources == ["cli", "codex"])
         #expect(secondLaunch.series.first { $0.id == period }?.tokens == 31_403_000)
     }
-
+    
     @Test func versionedIntentionalDeselectionSurvivesRelaunch() throws {
         let (defaults, name) = preferences()
         defer { defaults.removePersistentDomain(forName: name) }
@@ -75,10 +75,10 @@ import Testing
         defaults.set("cli,codex", forKey: "dashKnownSources")
         defaults.set(
             UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
-
+        
         let model = DashboardModel(preferences: defaults)
         model.ingest(try usage())
-
+        
         #expect(model.selectedSources == ["cli"])
         #expect(model.series.first { $0.id == period }?.tokens == 403_000)
     }

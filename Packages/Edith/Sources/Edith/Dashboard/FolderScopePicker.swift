@@ -3,21 +3,21 @@ import EdithKit
 import SwiftUI
 
 struct FolderScopePicker: View {
-    @ObservedObject var model: DashboardModel
+    let model: DashboardModel
     let dark: Bool
     let dismiss: () -> Void
-
+    
     @State private var query = ""
-
+    
     private var matches: [ProjectPath] {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return model.allProjectPaths }
         return model.allProjectPaths.filter {
             $0.name.localizedCaseInsensitiveContains(q)
-                || $0.path.localizedCaseInsensitiveContains(q)
+            || $0.path.localizedCaseInsensitiveContains(q)
         }
     }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             SearchField(placeholder: "Search folders…", text: $query, compact: true)
@@ -70,13 +70,13 @@ struct FolderScopePicker: View {
         .padding(UIScale.pt(12))
         .frame(width: UIScale.pt(380))
     }
-
+    
     private var scopeSummary: String {
         let n = model.selectedPaths.count
         if n == 0 { return "All folders" }
         return n == 1 ? "1 folder selected" : "\(n) folders selected"
     }
-
+    
     private func toggle(_ path: String) {
         if model.selectedPaths.contains(path) {
             model.selectedPaths.remove(path)
@@ -84,7 +84,7 @@ struct FolderScopePicker: View {
             model.selectedPaths.insert(path)
         }
     }
-
+    
     private func row(
         label: String, detail: String?, selected: Bool, tint: Bool = false,
         action: @escaping () -> Void
@@ -119,7 +119,7 @@ struct FolderScopePicker: View {
         .buttonStyle(HoverRowStyle(dark: dark))
         .pointerCursor()
     }
-
+    
     private func chooseFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -135,7 +135,7 @@ struct FolderScopePicker: View {
 private struct HoverRowStyle: ButtonStyle {
     let dark: Bool
     @State private var hovering = false
-
+    
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(

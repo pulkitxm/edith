@@ -9,7 +9,7 @@ struct JSONCase {
     let label: String
     let arguments: [String]
     let mutatesTheMachine: Bool
-
+    
     init(_ label: String, _ arguments: [String], mutatesTheMachine: Bool = false) {
         self.label = label
         self.arguments = arguments
@@ -444,7 +444,7 @@ enum JSONContract {
         }
         #expect(uncovered.isEmpty, "no JSON contract case for: \(uncovered)")
     }
-
+    
     @Test func stdoutIsEitherOneJSONDocumentOrNothingAtAll() async {
         for probe in JSONContract.cases where !probe.mutatesTheMachine {
             let result = await CLIProbe.run(probe.arguments)
@@ -461,7 +461,7 @@ enum JSONContract {
             #expect(!trailing.contains("\n\n"), "\(probe.label) printed more than one document")
         }
     }
-
+    
     @Test func diagnosticsNeverLandOnStdout() async {
         for probe in JSONContract.cases where !probe.mutatesTheMachine {
             let result = await CLIProbe.run(probe.arguments)
@@ -470,7 +470,7 @@ enum JSONContract {
             #expect(!result.stdout.contains("hint:"), "\(probe.label) put a hint on stdout")
         }
     }
-
+    
     @Test func anyFailureLeavesStdoutEmptyAndUsesADocumentedCode() async {
         let documented: Set<Int32> = [0, 1, 2, 3, 4]
         for probe in JSONContract.cases where !probe.mutatesTheMachine {
@@ -482,7 +482,7 @@ enum JSONContract {
             #expect(result.stdout.isEmpty, "\(probe.label) failed but still printed stdout")
         }
     }
-
+    
     @Test func versionReportsItselfAndWhetherTheAppIsUp() async {
         let result = await CLIProbe.run(["version", "--json"])
         #expect(result.code == 0)
@@ -491,14 +491,14 @@ enum JSONContract {
         #expect(object?["version"] as? String == edithCLIVersion)
         #expect(object?["appRunning"] as? Bool == false)
     }
-
+    
     @Test func theHumanVersionAndTheJSONVersionAgree() async {
         let human = await CLIProbe.run(["version"])
         let json = await CLIProbe.run(["version", "--json"])
         #expect(human.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == edithCLIVersion)
         #expect(json.object?["version"] as? String == edithCLIVersion)
     }
-
+    
     @Test func everyExtensionRowCarriesTheSameFields() async {
         let result = await CLIProbe.run(["extensions", "ls", "--json"])
         #expect(result.code == 0)
@@ -513,7 +513,7 @@ enum JSONContract {
             #expect(Set(row.keys) == expected, "\(row["id"] ?? "?") has the wrong fields")
         }
     }
-
+    
     @Test func theExtensionListAndTheHumanTableAgreeOnWhatIsOn() async {
         await CLIProbe.inWorld { _ in
             _ = await CLIProbe.capture(["extensions", "enable", "clipboard"])
@@ -529,7 +529,7 @@ enum JSONContract {
             #expect(onRows.first?.hasPrefix("clipboard") == true)
         }
     }
-
+    
     @Test func enablingAnExtensionWritesTheKeyTheAppReads() async throws {
         try await CLIProbe.inWorld { world in
             let entry = try #require(ExtensionRegistry.entries.first)
@@ -539,7 +539,7 @@ enum JSONContract {
             #expect(!world.shared.bool(forKey: entry.defaultsKey))
         }
     }
-
+    
     @Test func anExtensionCanBeNamedByItsDefaultsKeyToo() async throws {
         try await CLIProbe.inWorld { _ in
             let entry = try #require(ExtensionRegistry.entries.first)
@@ -550,7 +550,7 @@ enum JSONContract {
             #expect(result.object?["id"] as? String == entry.id)
         }
     }
-
+    
     @Test func permissionRowsCarryTheSameFields() async {
         let result = await CLIProbe.run(["permissions", "ls", "--json"])
         #expect(result.code == 0)
@@ -563,7 +563,7 @@ enum JSONContract {
         ]
         for row in rows { #expect(Set(row.keys) == expected) }
     }
-
+    
     @Test func machineRowsCarryTheSameFields() {
         let machine = Machine(name: "Builder", host: "10.0.0.9", port: 2222, username: "root")
         guard case let .object(fields) = MachineDirectory.summary(machine) else {
@@ -576,14 +576,14 @@ enum JSONContract {
                 "sshTarget", "wakeMACAddress", "createdAt", "controlSocket", "connected",
             ])
     }
-
+    
     @Test func diskRowsCarryTheSameFields() async {
         let result = await CLIProbe.run(["system", "disks", "--json"])
         #expect(result.code == 0)
         let object = try? #require(result.object)
         #expect(
             Set(object?.keys ?? [:].keys)
-                == ["filesystems", "temperatures", "battery", "gpu"])
+            == ["filesystems", "temperatures", "battery", "gpu"])
         let disks = object?["filesystems"] as? [[String: Any]] ?? []
         #expect(!disks.isEmpty)
         for disk in disks {
@@ -593,7 +593,7 @@ enum JSONContract {
                 ])
         }
     }
-
+    
     @Test func theDiskTableAndTheDiskJSONAgreeOnHowManyVolumes() async {
         let json = await CLIProbe.run(["system", "disks", "--json"])
         let table = await CLIProbe.run(["system", "disks"])
@@ -612,23 +612,23 @@ enum JSONContract {
                 longer  3
                 """)
     }
-
+    
     @Test func anEmptyResultStillPrintsItsHeadings() {
         #expect(TextTable.render(headers: ["A", "B"], rows: []) == "A  B")
         #expect(TextTable.render(headers: [], rows: []).isEmpty)
     }
-
+    
     @Test func aRowShorterThanTheHeadingsIsPaddedNotDropped() {
         let table = TextTable.render(headers: ["A", "B", "C"], rows: [["1"]])
         #expect(table.split(separator: "\n").count == 2)
         #expect(table.hasSuffix("1"))
     }
-
+    
     @Test func aRowLongerThanTheHeadingsDoesNotCrash() {
         let table = TextTable.render(headers: ["A"], rows: [["1", "2", "3"]])
         #expect(table.contains("1"))
     }
-
+    
     @Test func aVeryLongValueWidensItsColumnForEveryRow() {
         let long = String(repeating: "x", count: 400)
         let table = TextTable.render(headers: ["A", "B"], rows: [[long, "1"], ["y", "2"]])
@@ -636,27 +636,27 @@ enum JSONContract {
         #expect(lines.count == 3)
         #expect(lines[2].hasPrefix("y" + String(repeating: " ", count: 399)))
     }
-
+    
     @Test func newlinesAndTabsInsideAValueNeverBreakTheLayout() {
         let table = TextTable.render(
             headers: ["A", "B"], rows: [["one\ntwo", "x"], ["tab\there", "y"]])
         #expect(table.split(separator: "\n").count == 3)
         #expect(!table.contains("\t"))
     }
-
+    
     @Test func otherControlCharactersAreDroppedRatherThanPrinted() {
         let table = TextTable.render(headers: ["A"], rows: [["bell\u{7}here"]])
         #expect(!table.contains("\u{7}"))
         #expect(table.contains("bellhere"))
     }
-
+    
     @Test func widthIsCountedInCharactersSoEmojiStayAligned() {
         let table = TextTable.render(headers: ["A", "B"], rows: [["ab", "1"], ["cd", "2"]])
         let lines = table.split(separator: "\n").map(String.init)
         #expect(lines[1] == "ab  1")
         #expect(lines[2] == "cd  2")
     }
-
+    
     @Test func anEmojiCellDoesNotTruncateTheRestOfTheRow() {
         let table = TextTable.render(
             headers: ["A", "B"], rows: [["👍", "kept"], ["xxxx", "also"]])
@@ -664,7 +664,7 @@ enum JSONContract {
         #expect(table.contains("also"))
         #expect(table.contains("👍"))
     }
-
+    
     @Test func trailingBlanksAreTrimmedSoRowsCopyCleanly() {
         let table = TextTable.render(headers: ["A", "B"], rows: [["1", ""]])
         #expect(table.split(separator: "\n").last == "1")
@@ -692,7 +692,7 @@ enum JSONContract {
         return AppBridge.silence(
             "the calendar", extensionKey: "tabCalendarEnabled", permission: "calendar")
     }
-
+    
     @Test func aClosedAppIsBlamedFirst() async {
         await CLIProbe.inWorld { _ in
             let failure = Self.silence(helperRunning: false, extensionOn: true)
@@ -700,7 +700,7 @@ enum JSONContract {
             #expect(failure.message.contains("Edith is not running"))
         }
     }
-
+    
     @Test func anExtensionThatIsOffIsBlamedNext() async {
         await CLIProbe.inWorld { _ in
             let failure = Self.silence(helperRunning: true, extensionOn: false)
@@ -709,7 +709,7 @@ enum JSONContract {
             #expect(failure.hint?.contains("ed extensions ls") == true)
         }
     }
-
+    
     @Test func aMissingGrantIsBlamedAfterThat() async {
         await CLIProbe.inWorld { _ in
             let failure = Self.silence(
@@ -719,7 +719,7 @@ enum JSONContract {
             #expect(failure.hint?.contains("ed permissions request calendar") == true)
         }
     }
-
+    
     @Test func aHealthyAppThatStaysQuietIsBlamedLast() async {
         await CLIProbe.inWorld { _ in
             let failure = Self.silence(
@@ -729,7 +729,7 @@ enum JSONContract {
             #expect(failure.hint?.contains("rebuild") == true)
         }
     }
-
+    
     @Test func everyDiagnosisIsUnavailableSoTheExitCodeIsStable() async {
         await CLIProbe.inWorld { _ in
             for running in [true, false] {
@@ -740,16 +740,16 @@ enum JSONContract {
             }
         }
     }
-
+    
     static let silenceIsNotAnError: Set<String> = []
-
+    
     @Test func everyPlaceThatWaitsOnTheAppDiagnosesItsSilence() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/EdithCLI")
         let names =
-            FileManager.default.enumerator(atPath: root.path)?
+        FileManager.default.enumerator(atPath: root.path)?
             .compactMap { $0 as? String }.filter { $0.hasSuffix(".swift") } ?? []
         var waiting: [String] = []
         var offenders: [String] = []

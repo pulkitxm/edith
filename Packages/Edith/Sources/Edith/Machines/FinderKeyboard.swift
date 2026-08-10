@@ -31,7 +31,7 @@ enum FinderKey: Equatable {
     case focusSearch
     case cancel
     case type(String)
-
+    
     static func resolve(event: NSEvent) -> FinderKey? {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let command = flags.contains(.command)
@@ -82,7 +82,7 @@ enum FinderKey: Equatable {
             }
         }
         guard !option, !flags.contains(.control), let scalar = characters.unicodeScalars.first,
-            CharacterSet.alphanumerics.contains(scalar) || characters == "."
+              CharacterSet.alphanumerics.contains(scalar) || characters == "."
         else { return nil }
         return .type(characters)
     }
@@ -91,34 +91,34 @@ enum FinderKey: Equatable {
 final class FinderKeyView: NSView {
     var onKey: ((FinderKey) -> Bool)?
     var isEditing: () -> Bool = { false }
-
+    
     override var acceptsFirstResponder: Bool { true }
-
+    
     static func isTextEditing(in window: NSWindow?) -> Bool {
         window?.firstResponder is NSText
     }
-
+    
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, window?.firstResponder !== self,
-                !FinderKeyView.isTextEditing(in: window)
+                  !FinderKeyView.isTextEditing(in: window)
             else { return }
             window?.makeFirstResponder(self)
         }
     }
-
+    
     override func keyDown(with event: NSEvent) {
         guard !isEditing(), !FinderKeyView.isTextEditing(in: window),
-            let key = FinderKey.resolve(event: event),
-            onKey?(key) == true
+              let key = FinderKey.resolve(event: event),
+              onKey?(key) == true
         else {
             super.keyDown(with: event)
             return
         }
     }
-
+    
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
@@ -128,19 +128,19 @@ final class FinderKeyView: NSView {
 struct FinderKeyCatcher: NSViewRepresentable {
     let isEditing: Bool
     let onKey: (FinderKey) -> Bool
-
+    
     func makeNSView(context: Context) -> FinderKeyView {
         let view = FinderKeyView()
         view.onKey = onKey
         view.isEditing = { context.coordinator.editing }
         return view
     }
-
+    
     func updateNSView(_ view: FinderKeyView, context: Context) {
         context.coordinator.editing = isEditing
         view.onKey = onKey
         if !isEditing, view.window?.firstResponder !== view,
-            !FinderKeyView.isTextEditing(in: view.window)
+           !FinderKeyView.isTextEditing(in: view.window)
         {
             DispatchQueue.main.async {
                 guard !FinderKeyView.isTextEditing(in: view.window) else { return }
@@ -148,12 +148,12 @@ struct FinderKeyCatcher: NSViewRepresentable {
             }
         }
     }
-
+    
     func makeCoordinator() -> Coordinator { Coordinator(editing: isEditing) }
-
+    
     final class Coordinator {
         var editing: Bool
-
+        
         init(editing: Bool) {
             self.editing = editing
         }

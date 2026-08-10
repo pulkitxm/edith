@@ -12,7 +12,7 @@ public struct CompletionStatus: Equatable, Sendable {
     public var state: CompletionInstallState
     public var path: URL
     public var hint: String?
-
+    
     public init(
         shell: CompletionScripts.Shell, state: CompletionInstallState, path: URL,
         hint: String? = nil
@@ -30,7 +30,7 @@ public struct CLIToolStatus: Equatable, Sendable {
     public var missing: [String]
     public var onPath: Bool
     public var bundled: Bool
-
+    
     public init(
         directory: String, linked: [String] = [], missing: [String] = [], onPath: Bool = false,
         bundled: Bool = false
@@ -41,7 +41,7 @@ public struct CLIToolStatus: Equatable, Sendable {
         self.onPath = onPath
         self.bundled = bundled
     }
-
+    
     public var isComplete: Bool { missing.isEmpty && !linked.isEmpty }
 }
 
@@ -84,7 +84,7 @@ extension CompletionScripts {
             installDirectory(for: shell, home: home).appendingPathComponent(shell.scriptName))
         return candidates.first { fileManager.fileExists(atPath: $0.path) }
     }
-
+    
     public static func status(
         for shell: Shell, home: URL = FileManager.default.homeDirectoryForCurrentUser,
         store: UserDefaults = SharedDefaults.store, fileManager: FileManager = .default
@@ -102,12 +102,12 @@ extension CompletionScripts {
         let text = String(
             decoding: fileManager.contents(atPath: file.path) ?? Data(), as: UTF8.self)
         let state: CompletionInstallState =
-            !isOurs(text) ? .foreign : (text == contents(for: shell) ? .current : .outdated)
+        !isOurs(text) ? .foreign : (text == contents(for: shell) ? .current : .outdated)
         return CompletionStatus(
             shell: shell, state: state, path: file,
             hint: rcHint(for: shell, directory: file.deletingLastPathComponent()))
     }
-
+    
     public static func statuses(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         store: UserDefaults = SharedDefaults.store, fileManager: FileManager = .default

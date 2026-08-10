@@ -7,7 +7,7 @@ struct NotchCameraTab: View {
     @State private var status = AVCaptureDevice.authorizationStatus(for: .video)
     @State private var devices: [AVCaptureDevice] = []
     @State private var selectedID: String?
-
+    
     var body: some View {
         Group {
             switch status {
@@ -41,7 +41,7 @@ struct NotchCameraTab: View {
             IPC.post(IPC.Name.requestPermissionsRefresh)
         }
     }
-
+    
     private var switchButton: some View {
         Button(action: cycleCamera) {
             Image(systemName: "arrow.triangle.2.circlepath.camera")
@@ -55,7 +55,7 @@ struct NotchCameraTab: View {
         .padding(14)
         .help("Switch camera")
     }
-
+    
     private func refreshDevices() {
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInWideAngleCamera, .continuityCamera, .external],
@@ -63,14 +63,14 @@ struct NotchCameraTab: View {
         devices = discovery.devices
         if selectedID == nil { selectedID = devices.first?.uniqueID }
     }
-
+    
     private func cycleCamera() {
         guard devices.count > 1 else { return }
         let ids = devices.map(\.uniqueID)
         let index = ids.firstIndex(of: selectedID ?? "") ?? 0
         selectedID = ids[(index + 1) % ids.count]
     }
-
+    
     private func prompt(action: @escaping () -> Void) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "camera.fill").font(.system(size: 20))
@@ -100,7 +100,7 @@ struct NotchCameraTab: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-
+    
     private var denied: some View {
         Button {
             if let url = URL(
@@ -125,17 +125,17 @@ struct NotchCameraTab: View {
 
 private struct CameraPreview: NSViewRepresentable {
     var deviceID: String?
-
+    
     func makeNSView(context: Context) -> CameraPreviewView {
         let view = CameraPreviewView()
         view.setDevice(deviceID)
         return view
     }
-
+    
     func updateNSView(_ nsView: CameraPreviewView, context: Context) {
         nsView.setDevice(deviceID)
     }
-
+    
     static func dismantleNSView(_ nsView: CameraPreviewView, coordinator: ()) { nsView.stop() }
 }
 
@@ -144,16 +144,16 @@ final class CameraPreviewView: NSView {
     private let queue = DispatchQueue(label: "com.pulkit.edith.notch.camera")
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var currentDeviceID: String?
-
+    
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         configure()
     }
-
+    
     required init?(coder: NSCoder) { nil }
-
+    
     private func configure() {
         let preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = .resizeAspectFill
@@ -161,7 +161,7 @@ final class CameraPreviewView: NSView {
         preview.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         layer?.addSublayer(preview)
         previewLayer = preview
-
+        
         queue.async { [weak self] in
             guard let self else { return }
             self.session.beginConfiguration()
@@ -170,7 +170,7 @@ final class CameraPreviewView: NSView {
             self.session.startRunning()
         }
     }
-
+    
     func setDevice(_ id: String?) {
         guard id != currentDeviceID || session.inputs.isEmpty else { return }
         currentDeviceID = id
@@ -180,11 +180,11 @@ final class CameraPreviewView: NSView {
             self.session.beginConfiguration()
             for input in self.session.inputs { self.session.removeInput(input) }
             let device =
-                id.flatMap { AVCaptureDevice(uniqueID: $0) }
-                ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
-                ?? AVCaptureDevice.default(for: .video)
+            id.flatMap { AVCaptureDevice(uniqueID: $0) }
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+            ?? AVCaptureDevice.default(for: .video)
             if let device, let input = try? AVCaptureDeviceInput(device: device),
-                self.session.canAddInput(input)
+               self.session.canAddInput(input)
             {
                 self.session.addInput(input)
             }
@@ -197,13 +197,13 @@ final class CameraPreviewView: NSView {
             }
         }
     }
-
+    
     func stop() {
         queue.async { [weak self] in
             self?.session.stopRunning()
         }
     }
-
+    
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil { stop() }

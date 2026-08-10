@@ -10,12 +10,12 @@ public final class LocalMachineSampler: @unchecked Sendable {
     private var cachedProcesses: [MachineProcess] = []
     private let processSampleStride: Int
     private let processReader: @Sendable () async -> [MachineProcess]
-
+    
     public init() {
         processSampleStride = MachineResourcePolicy.localProcessSampleStride
         processReader = { await Self.readProcesses() }
     }
-
+    
     init(
         processSampleStride: Int,
         processReader: @escaping @Sendable () async -> [MachineProcess]
@@ -23,7 +23,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
         self.processSampleStride = max(1, processSampleStride)
         self.processReader = processReader
     }
-
+    
     public func hello() -> MachineHello {
         MachineHello(
             os: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
@@ -36,12 +36,12 @@ public final class LocalMachineSampler: @unchecked Sendable {
             memTotalKB: Int64(ProcessInfo.processInfo.physicalMemory / 1024),
             virtual: false)
     }
-
+    
     public func sample() async -> MachineSample {
         let now = Date()
         let dt = prevSampleAt.map { now.timeIntervalSince($0) } ?? 0
         prevSampleAt = now
-
+        
         let cores = coreLoads()
         let aggregate = SystemStatsReader.readCPUTicks()
         var totalPercent = 0.0
@@ -49,10 +49,10 @@ public final class LocalMachineSampler: @unchecked Sendable {
             totalPercent = SystemStatsReader.cpuUsage(previous: previous, current: current)
         }
         prevAggregate = aggregate
-
+        
         var loads = [Double](repeating: 0, count: 3)
         getloadavg(&loads, 3)
-
+        
         if MachineResourcePolicy.shouldRefreshProcesses(
             sampleIndex: processSampleIndex, stride: processSampleStride)
         {
@@ -71,7 +71,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
             net: network(dt: dt),
             procs: Array(processes.prefix(30)))
     }
-
+    
     public func slow() -> MachineSlow {
         var disks: [MachineFilesystem] = []
         let keys: [URLResourceKey] = [
@@ -79,12 +79,12 @@ public final class LocalMachineSampler: @unchecked Sendable {
             .volumeNameKey, .volumeIsBrowsableKey,
         ]
         let urls =
-            FileManager.default.mountedVolumeURLs(
-                includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+        FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
         for url in urls {
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
-                values.volumeIsBrowsable == true,
-                let total = values.volumeTotalCapacity, total > 0
+                  values.volumeIsBrowsable == true,
+                  let total = values.volumeTotalCapacity, total > 0
             else { continue }
             let available = values.volumeAvailableCapacityForImportantUsage ?? 0
             let totalKB = Int64(total) / 1024
@@ -96,7 +96,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
         }
         return MachineSlow(disks: disks, temps: [], battery: Self.battery(), gpu: nil)
     }
-
+    
     private func memory() -> MachineMemory {
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(
@@ -112,8 +112,8 @@ public final class LocalMachineSampler: @unchecked Sendable {
         }
         let pageKB = Int64(vm_page_size) / 1024
         let usedKB =
-            (Int64(stats.active_count) + Int64(stats.wire_count)
-                + Int64(stats.compressor_page_count)) * pageKB
+        (Int64(stats.active_count) + Int64(stats.wire_count)
+         + Int64(stats.compressor_page_count)) * pageKB
         let cacheKB = (Int64(stats.external_page_count) + Int64(stats.purgeable_count)) * pageKB
         var swap = xsw_usage()
         var swapSize = MemoryLayout<xsw_usage>.size
@@ -123,7 +123,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
             buffcacheKB: cacheKB, swapTotalKB: Int64(swap.xsu_total) / 1024,
             swapUsedKB: Int64(swap.xsu_used) / 1024)
     }
-
+    
     private func coreLoads() -> [Double] {
         var cpuCount: natural_t = 0
         var info: processor_info_array_t?
@@ -156,7 +156,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
             return min(100, max(0, usedDelta / totalDelta * 100))
         }
     }
-
+    
     private func network(dt: Double) -> MachineNetwork {
         var addresses: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&addresses) == 0, let first = addresses else {
@@ -168,8 +168,8 @@ public final class LocalMachineSampler: @unchecked Sendable {
         while let entry = pointer {
             defer { pointer = entry.pointee.ifa_next }
             guard let addr = entry.pointee.ifa_addr,
-                addr.pointee.sa_family == UInt8(AF_LINK),
-                let dataPointer = entry.pointee.ifa_data
+                  addr.pointee.sa_family == UInt8(AF_LINK),
+                  let dataPointer = entry.pointee.ifa_data
             else { continue }
             let name = String(cString: entry.pointee.ifa_name)
             guard name != "lo0" else { continue }
@@ -201,7 +201,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
         }
         return MachineNetwork(ifaces: interfaces, rxBps: rxTotal, txBps: txTotal)
     }
-
+    
     private nonisolated static func readProcesses() async -> [MachineProcess] {
         await Task.detached(priority: .utility) {
             let process = Process()
@@ -219,8 +219,8 @@ public final class LocalMachineSampler: @unchecked Sendable {
                 let columns = line.split(
                     separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
                 guard columns.count == 6, let pid = Int(columns[0]),
-                    let cpu = Double(columns[2]), let mem = Double(columns[3]),
-                    let rss = Int64(columns[4])
+                      let cpu = Double(columns[2]), let mem = Double(columns[3]),
+                      let rss = Int64(columns[4])
                 else { continue }
                 let command = String(columns[5])
                 let name = (command as NSString).lastPathComponent
@@ -232,7 +232,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
             return rows.sorted { $0.cpu > $1.cpu }
         }.value
     }
-
+    
     private nonisolated static func battery() -> MachineBattery? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
@@ -252,7 +252,7 @@ public final class LocalMachineSampler: @unchecked Sendable {
         let status = parts[1].trimmingCharacters(in: .whitespaces)
         return MachineBattery(percent: percent, status: status.capitalized)
     }
-
+    
     private func sysctlString(_ name: String) -> String {
         var size = 0
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return "" }

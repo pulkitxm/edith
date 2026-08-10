@@ -6,12 +6,12 @@ public enum FocusDimMath {
     public static let defaultIntensity = 0.45
     public static let animationDurationRange: ClosedRange<Double> = 0.05...1.0
     public static let defaultAnimationDuration = 0.25
-
+    
     public static func clampIntensity(_ value: Double) -> Double {
         guard !value.isNaN else { return defaultIntensity }
         return min(max(value, intensityRange.lowerBound), intensityRange.upperBound)
     }
-
+    
     public static func clampAnimationDuration(_ value: Double) -> Double {
         guard !value.isNaN else { return defaultAnimationDuration }
         return min(
@@ -22,7 +22,7 @@ public enum FocusDimMath {
 public enum FocusDimDisplayMode: String, CaseIterable {
     case perScreenFront
     case dimUnfocused
-
+    
     public static func from(_ raw: String?) -> FocusDimDisplayMode {
         raw.flatMap(FocusDimDisplayMode.init(rawValue:)) ?? .perScreenFront
     }
@@ -32,7 +32,7 @@ public struct FocusDimWindowInfo: Equatable {
     public let windowNumber: Int
     public let ownerPID: pid_t
     public let frame: CGRect
-
+    
     public init(windowNumber: Int, ownerPID: pid_t, frame: CGRect) {
         self.windowNumber = windowNumber
         self.ownerPID = ownerPID

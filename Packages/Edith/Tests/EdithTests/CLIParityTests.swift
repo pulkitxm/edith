@@ -9,13 +9,13 @@ struct UICapability {
     let surface: String
     let action: String
     let cli: [String]
-
+    
     init(_ surface: String, _ action: String, _ cli: [String]) {
         self.surface = surface
         self.action = action
         self.cli = cli
     }
-
+    
     var label: String { (["ed"] + cli).joined(separator: " ") }
 }
 
@@ -28,7 +28,7 @@ enum UIParity {
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
         "check-updates", "collect", "forget", "mount", "unmount",
     ]
-
+    
     static let notReachableFromTheUI: [String: String] = [
         "ed install": "the app links the CLI itself on launch; there is no button for it",
         "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
@@ -43,7 +43,7 @@ enum UIParity {
         "ed machines docker compose pull":
             "the Docker window never pulls images, for a project or otherwise",
     ]
-
+    
     static let capabilities: [UICapability] = [
         UICapability(
             "Settings", "change any preference the panes write", ["config", "set", "theme", "dim"]),
@@ -58,7 +58,7 @@ enum UIParity {
             ["permissions", "request", "calendar"]),
         UICapability(
             "Permissions pane", "re-read the real permission state", ["permissions", "refresh"]),
-
+        
         UICapability("Clipboard panel", "click an entry to copy it", ["clipboard", "copy", "1"]),
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),
         UICapability("Clipboard panel", "unpin an entry", ["clipboard", "unpin", "1"]),
@@ -68,13 +68,13 @@ enum UIParity {
             "Clipboard panel", "search the history", ["clipboard", "ls", "--search", "x"]),
         UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
-
+        
         UICapability("Colour picker", "forget the picked colours", ["color", "clear"]),
-
+        
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
         UICapability("Notch shelf", "take an item off the shelf", ["shelf", "rm", "1"]),
         UICapability("Notch shelf", "empty the shelf", ["shelf", "clear"]),
-
+        
         UICapability("Cleaner card", "reclaim the scanned caches", ["cleaner", "clean"]),
         UICapability(
             "Cleaner drive picker", "sweep a folder for project junk",
@@ -82,7 +82,7 @@ enum UIParity {
         UICapability(
             "Cleaner card", "clean one category",
             ["cleaner", "clean", "--category", "npm", "--yes"]),
-
+        
         UICapability("Companion", "sync github activity", ["companion", "sync", "github"]),
         UICapability("Companion", "ask about your life", ["companion", "ask", "how is warden"]),
         UICapability(
@@ -241,7 +241,7 @@ enum UIParity {
             "Machine tools", "mount the machine's disk on this Mac", ["machines", "mount", "box"]),
         UICapability(
             "Machine tools", "unmount the machine's disk", ["machines", "unmount", "box"]),
-
+        
         UICapability("Music player", "play", ["music", "play"]),
         UICapability("Music player", "pause", ["music", "pause"]),
         UICapability("Music player", "stop", ["music", "stop"]),
@@ -268,14 +268,14 @@ enum UIParity {
             ["music", "rm", "--folder", "Chill", "--yes"]),
         UICapability("Music footer", "toggle shuffle", ["music", "shuffle", "on"]),
         UICapability("Music footer", "toggle repeat", ["music", "repeat", "on"]),
-
+        
         UICapability(
             "Machine finder", "download a remote file",
             ["machines", "files", "get", "box", "/etc/hosts"]),
         UICapability(
             "Machine finder", "upload a local file",
             ["machines", "files", "put", "box", "./x", "/tmp/x"]),
-
+        
         UICapability(
             "Machine finder", "copy files", ["machines", "files", "cp", "box", "/a", "/b"]),
         UICapability(
@@ -301,7 +301,7 @@ enum UIParity {
         UICapability(
             "Add machine sheet", "forget the stored sudo password",
             ["machines", "edit", "box", "--forget-sudo-password"]),
-
+        
         UICapability(
             "Docker window", "start a container", ["machines", "docker", "start", "box", "api"]),
         UICapability(
@@ -325,13 +325,13 @@ enum UIParity {
         UICapability(
             "Docker window", "prune unused objects",
             ["machines", "docker", "prune", "box", "images"]),
-
+        
         UICapability("Download sheet", "start a download", ["download", "add", "https://x/y"]),
         UICapability("Download sheet", "retry a failed item", ["download", "retry", "--all"]),
         UICapability("Download sheet", "clear the history", ["download", "clear"]),
         UICapability("Download sheet", "remove one item", ["download", "rm", "1"]),
         UICapability("Download sheet", "update yt-dlp", ["download", "tool", "--update"]),
-
+        
         UICapability(
             "Extension sheet", "install a required CLI tool", ["tools", "install", "yt-dlp"]),
         UICapability(
@@ -339,10 +339,10 @@ enum UIParity {
             ["machines", "broadcast", "--", "uptime"]),
         UICapability(
             "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
-
+        
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
-
+        
         UICapability("Menu bar", "open the panel", ["app", "open"]),
         UICapability("Menu bar", "quit Edith", ["app", "quit"]),
         UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
@@ -375,7 +375,7 @@ enum UIParity {
         $0.type.configuration.subcommands.isEmpty
     }
     static let labels = Set(CommandCrawler.every().map(\.label))
-
+    
     static func commandPath(_ cli: [String]) -> String {
         var current = "ed"
         for word in cli where !word.hasPrefix("-") {
@@ -385,17 +385,17 @@ enum UIParity {
         }
         return current
     }
-
+    
     @Test func everyUIActionNamesACommandTheCLIActuallyHas() {
         for capability in UIParity.capabilities {
             let resolved = Self.commandPath(capability.cli)
             let complaint =
-                "\(capability.surface) can \(capability.action) but `\(capability.label)` "
-                + "is not a command"
+            "\(capability.surface) can \(capability.action) but `\(capability.label)` "
+            + "is not a command"
             #expect(resolved != "ed", "\(complaint)")
         }
     }
-
+    
     @Test func everyUIActionParsesWithTheArgumentsItClaims() throws {
         for capability in UIParity.capabilities {
             #expect(
@@ -406,7 +406,7 @@ enum UIParity {
             }
         }
     }
-
+    
     @Test func everyMappedCommandIsAlsoInTheCompletionTree() {
         for capability in UIParity.capabilities {
             var node = CommandTree.root
@@ -421,7 +421,7 @@ enum UIParity {
                 "`\(capability.label)` is missing from CommandTree, so it will not complete")
         }
     }
-
+    
     @Test func everyMutatingCommandIsClaimedByAUIAction() {
         let claimed = Set(UIParity.capabilities.map { Self.commandPath($0.cli) })
         var orphans: [String] = []
@@ -433,17 +433,17 @@ enum UIParity {
             orphans.append(walk.label)
         }
         let complaint =
-            "these change something but no UI action claims them, so the two surfaces have "
-            + "drifted: \(orphans)"
+        "these change something but no UI action claims them, so the two surfaces have "
+        + "drifted: \(orphans)"
         #expect(orphans.isEmpty, "\(complaint)")
     }
-
+    
     @Test func nothingIsExemptedThatNoLongerExists() {
         for label in UIParity.notReachableFromTheUI.keys {
             #expect(Self.labels.contains(label), "\(label) is exempted but no longer exists")
         }
     }
-
+    
     @Test func everyExemptionSaysWhyItIsOneAndIsStillNeeded() {
         for (label, reason) in UIParity.notReachableFromTheUI {
             #expect(
@@ -460,7 +460,7 @@ enum UIParity {
                 "\(label) is exempted but nothing would have flagged it, so the row is dead")
         }
     }
-
+    
     @Test func everyUIActionRowNamesARealSurfaceAndAction() {
         for capability in UIParity.capabilities {
             #expect(!capability.surface.isEmpty, "a capability row has no surface")

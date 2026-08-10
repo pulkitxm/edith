@@ -3,14 +3,14 @@ import EdithKit
 import SwiftUI
 
 struct MachineDetailView: View {
-    @ObservedObject var session: MachineSession
-    @ObservedObject var model: MachinesModel
+    let session: MachineSession
+    let model: MachinesModel
     @Binding var tab: MachineTab
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             tabBar
@@ -19,7 +19,7 @@ struct MachineDetailView: View {
                 .padding(.top, UIScale.pt(6))
         }
     }
-
+    
     private var tabBar: some View {
         HStack(spacing: UIScale.pt(4)) {
             let items = MachineTab.tabs(
@@ -74,7 +74,7 @@ struct MachineDetailView: View {
             .buttonStyle(.plain)
             .pointerCursor()
             .help("Browse files in their own window")
-
+            
             Spacer(minLength: 0)
             ConnectionPill(session: session, dark: dark)
             if !session.isLocal {
@@ -84,7 +84,7 @@ struct MachineDetailView: View {
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(12))
     }
-
+    
     private func detach(_ item: MachineTab) {
         switch item {
         case .docker: DockerWindow.open(session: session)
@@ -92,7 +92,7 @@ struct MachineDetailView: View {
         default: MachineWindow.open(machineID: session.id, title: session.machine.name)
         }
     }
-
+    
     @ViewBuilder
     private var detail: some View {
         ZStack {
@@ -105,7 +105,7 @@ struct MachineDetailView: View {
         }
         .id(session.id)
     }
-
+    
     @ViewBuilder
     private func screen(_ item: MachineTab) -> some View {
         switch item {
@@ -119,9 +119,9 @@ struct MachineDetailView: View {
 }
 
 struct ConnectionPill: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let dark: Bool
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             if session.state.isBusy {
@@ -149,12 +149,12 @@ struct ConnectionPill: View {
 
 struct MachineWindowView: View {
     let machineID: UUID
-    @StateObject private var model = MachinesModel.shared
+    @State private var model = MachinesModel.shared
     @State private var tab = MachineTab.overview
     @Environment(\.colorScheme) private var scheme
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         let session = model.session(for: machineID)
         VStack(spacing: UIScale.pt(0)) {
@@ -178,7 +178,7 @@ struct MachineWindowView: View {
 @MainActor
 enum MachineWindow {
     private static var windows: [UUID: NSWindow] = [:]
-
+    
     static func open(machineID: UUID, title: String) {
         if let existing = windows[machineID] {
             existing.makeKeyAndOrderFront(nil)
@@ -206,24 +206,24 @@ enum MachineWindow {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-
+    
     static func forget(_ window: NSWindow) {
         guard let key = windows.first(where: { $0.value === window })?.key else { return }
         windows.removeValue(forKey: key)
     }
-
+    
     static func close(machineID: UUID) {
         windows[machineID]?.close()
         windows.removeValue(forKey: machineID)
     }
-
+    
     static var openCount: Int { windows.count }
 }
 
 @MainActor
 final class MachineWindowDelegate: NSObject, NSWindowDelegate {
     static let shared = MachineWindowDelegate()
-
+    
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         MachineWindow.forget(window)

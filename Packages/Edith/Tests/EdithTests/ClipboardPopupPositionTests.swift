@@ -6,15 +6,15 @@ import Testing
 @MainActor
 @Suite struct ClipboardPopupPositionTests {
     private let positionKeys = ["clipboardWindowPositionX", "clipboardWindowPositionY"]
-
+    
     private func selectedScreen(_ point: NSPoint, _ size: NSSize) -> NSScreen? {
         NSScreen.screens.first {
             $0.frame.contains(NSPoint(x: point.x, y: point.y + size.height))
         }
-            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
-            ?? NSScreen.main
+        ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+        ?? NSScreen.main
     }
-
+    
     private func snapshotPositionKeys() -> [String: Any] {
         var snapshot: [String: Any] = [:]
         for key in positionKeys {
@@ -22,7 +22,7 @@ import Testing
         }
         return snapshot
     }
-
+    
     private func restorePositionKeys(_ snapshot: [String: Any]) {
         for key in positionKeys {
             if let value = snapshot[key] {
@@ -32,14 +32,14 @@ import Testing
             }
         }
     }
-
+    
     @Test func inBoundsPointIsUnchanged() throws {
         let size = NSSize(width: 100, height: 100)
         let visible = try #require(NSScreen.main).visibleFrame
         let point = NSPoint(x: visible.midX - 50, y: visible.midY - 50)
         #expect(ClipboardPopupPosition.clampedToScreen(point, size) == point)
     }
-
+    
     @Test func pointPastLeftEdgeClampsToVisibleMinX() throws {
         let size = NSSize(width: 200, height: 50)
         let globalMinX = try #require(NSScreen.screens.map(\.frame.minX).min())
@@ -50,7 +50,7 @@ import Testing
         #expect(result.y >= visible.minY)
         #expect(result.y <= max(visible.minY, visible.maxY - size.height))
     }
-
+    
     @Test func pointPastRightEdgeClampsToVisibleMaxXMinusWidth() throws {
         let size = NSSize(width: 200, height: 50)
         let globalMaxX = try #require(NSScreen.screens.map(\.frame.maxX).max())
@@ -60,7 +60,7 @@ import Testing
         #expect(result.x == max(visible.minX, visible.maxX - size.width))
         #expect(result.x < point.x)
     }
-
+    
     @Test func pointPastBottomEdgeClampsToVisibleMinY() throws {
         let size = NSSize(width: 200, height: 50)
         let globalMinY = try #require(NSScreen.screens.map(\.frame.minY).min())
@@ -69,7 +69,7 @@ import Testing
         let result = ClipboardPopupPosition.clampedToScreen(point, size)
         #expect(result.y == visible.minY)
     }
-
+    
     @Test func pointPastTopEdgeClampsToVisibleMaxYMinusHeight() throws {
         let size = NSSize(width: 200, height: 50)
         let globalMaxY = try #require(NSScreen.screens.map(\.frame.maxY).max())
@@ -79,7 +79,7 @@ import Testing
         #expect(result.y == max(visible.minY, visible.maxY - size.height))
         #expect(result.y < point.y)
     }
-
+    
     @Test func popupLargerThanScreenAnchorsAtVisibleOrigin() throws {
         let frames = NSScreen.screens.map(\.frame)
         let totalWidth = try #require(frames.map(\.width).max())
@@ -91,7 +91,7 @@ import Testing
         #expect(result.x == visible.minX)
         #expect(result.y == visible.minY)
     }
-
+    
     @Test func saveLastPositionStoresNormalizedRelativeCoordinates() throws {
         let snapshot = snapshotPositionKeys()
         defer { restorePositionKeys(snapshot) }
@@ -109,7 +109,7 @@ import Testing
         #expect(relX >= 0 && relX <= 1)
         #expect(relY >= 0 && relY <= 1)
     }
-
+    
     @Test func savedFrameRoundTripsThroughLastPositionOrigin() throws {
         let snapshot = snapshotPositionKeys()
         defer { restorePositionKeys(snapshot) }
@@ -126,7 +126,7 @@ import Testing
         #expect(abs(origin.x - frame.minX) < 0.5)
         #expect(abs(origin.y - frame.minY) < 0.5)
     }
-
+    
     @Test func saveLastPositionWithoutScreenWritesNothing() {
         let snapshot = snapshotPositionKeys()
         defer { restorePositionKeys(snapshot) }
@@ -149,7 +149,7 @@ import Testing
         else { return nil }
         return representation.representation(using: .png, properties: [:])
     }
-
+    
     private func imageEntry(width: Int, height: Int) throws -> (ClipboardEntry, URL) {
         let data = try #require(pngData(width: width, height: height))
         let sha = "thumbtest-\(UUID().uuidString.lowercased())"
@@ -159,7 +159,7 @@ import Testing
             sourceApp: nil, sourceBundleID: nil, size: data.count, preview: nil)
         return (entry, ClipboardPaths.blobFile(sha256: sha, ext: "png"))
     }
-
+    
     @Test func largeImageIsDownscaledToFitPreservingAspectRatio() async throws {
         try await CLIProbe.exclusive {
             let (entry, blob) = try imageEntry(width: 800, height: 600)
@@ -170,7 +170,7 @@ import Testing
             #expect(abs(result.size.width / result.size.height - 800.0 / 600.0) < 0.05)
         }
     }
-
+    
     @Test func smallImageIsNotUpscaled() async throws {
         try await CLIProbe.exclusive {
             let (entry, blob) = try imageEntry(width: 100, height: 20)
@@ -180,7 +180,7 @@ import Testing
             #expect(result.size.height == 20)
         }
     }
-
+    
     @Test func wideImageConstrainsOnWidth() async throws {
         try await CLIProbe.exclusive {
             let (entry, blob) = try imageEntry(width: 3400, height: 40)
@@ -190,7 +190,7 @@ import Testing
             #expect(result.size.height < ClipboardThumbnail.maxSize.height)
         }
     }
-
+    
     @Test func tallImageConstrainsOnHeight() async throws {
         try await CLIProbe.exclusive {
             let (entry, blob) = try imageEntry(width: 34, height: 400)

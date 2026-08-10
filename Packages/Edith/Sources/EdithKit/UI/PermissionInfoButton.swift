@@ -5,7 +5,7 @@ public struct PermissionInfoButton: View {
     private let label: String?
     private let color: Color
     @State private var showing = false
-
+    
     public init(
         permissions: [ExtensionPermission], label: String? = nil, color: Color = .secondary
     ) {
@@ -13,13 +13,13 @@ public struct PermissionInfoButton: View {
         self.label = label
         self.color = color
     }
-
+    
     public init(_ permission: ExtensionPermission) {
         permissions = [permission]
         label = nil
         color = .secondary
     }
-
+    
     public var body: some View {
         Button {
             showing.toggle()

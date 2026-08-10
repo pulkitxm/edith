@@ -3,7 +3,7 @@ import Foundation
 public enum CLIToolRequirement: Equatable, Sendable {
     case always
     case whenPreferenceEnabled(key: String, defaultValue: Bool)
-
+    
     @MainActor public func isActive(defaults: UserDefaults = SharedDefaults.store) -> Bool {
         switch self {
         case .always:
@@ -24,7 +24,7 @@ public enum CLIToolInstallStrategy: Equatable, Sendable {
     case packageManagers(
         homebrewArguments: [String], npmPackage: String, instruction: String
     )
-
+    
     public var instruction: String {
         switch self {
         case let .standaloneBinary(_, _, instruction):
@@ -42,7 +42,7 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
     public let requirement: CLIToolRequirement
     public let presenceStrategy: CLIToolPresenceStrategy
     public let installStrategy: CLIToolInstallStrategy
-
+    
     public init(
         id: String, displayName: String, why: String,
         requirement: CLIToolRequirement = .always,
@@ -56,7 +56,7 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
         self.presenceStrategy = presenceStrategy
         self.installStrategy = installStrategy
     }
-
+    
     public static let youtubeDownloader = CLIToolSpec(
         id: "yt-dlp", displayName: "yt-dlp",
         why: "Downloads YouTube audio into your Music library.",
@@ -70,7 +70,7 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             instruction:
                 "Download yt-dlp_macos from the official yt-dlp release and place it in a folder on PATH."
         ))
-
+    
     public static let claudeCode = CLIToolSpec(
         id: "claude", displayName: "Claude Code",
         why: "Includes Claude Code cloud sessions in Agent Usage.",
@@ -81,11 +81,12 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             instruction:
                 "Install with `brew install --cask claude-code` or `npm install -g @anthropic-ai/claude-code`."
         ))
-
+    
     public static let codex = CLIToolSpec(
         id: "codex", displayName: "Codex",
         why: "Reads Codex session and weekly limits when that provider is enabled.",
-        requirement: .whenPreferenceEnabled(key: "codexLimitsEnabled", defaultValue: true),
+        requirement: .whenPreferenceEnabled(
+            key: AppStorageKeys.Limits.codexEnabled, defaultValue: true),
         presenceStrategy: .executable(name: "codex", versionArguments: ["--version"]),
         installStrategy: .packageManagers(
             homebrewArguments: ["install", "--cask", "codex"],
@@ -108,7 +109,7 @@ public enum CLIToolEnvironment {
             separator: ":")
         return environment
     }
-
+    
     public static func executable(
         named name: String,
         processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
@@ -123,7 +124,7 @@ public enum CLIToolEnvironment {
         }
         return nil
     }
-
+    
     private static func commonDirectories(
         processEnvironment: [String: String], fileManager: FileManager
     ) -> [String] {
@@ -149,13 +150,13 @@ public enum CLIToolEnvironment {
         }
         return directories
     }
-
+    
     private static func uniqueAllowedDirectories(_ directories: [String]) -> [String] {
         var seen = Set<String>()
         return directories.compactMap { directory in
             let standardized = URL(fileURLWithPath: directory).standardizedFileURL.path
             guard RestoredPathValidation.verdict(for: standardized) == .keep,
-                seen.insert(standardized).inserted
+                  seen.insert(standardized).inserted
             else { return nil }
             return standardized
         }

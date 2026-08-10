@@ -9,7 +9,7 @@ import Testing
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
-
+    
     @Test func smallFileReturnsFullContent() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -18,7 +18,7 @@ import Testing
         try content.write(to: url, atomically: true, encoding: .utf8)
         #expect(FileTail.read(url, maxBytes: 1024) == content)
     }
-
+    
     @Test func largeFileDropsPartialLeadingLine() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -27,7 +27,7 @@ import Testing
         try content.write(to: url, atomically: true, encoding: .utf8)
         #expect(FileTail.read(url, maxBytes: 25) == "0123456789\n0123456789\n")
     }
-
+    
     @Test func truncationOnNewlineKeepsFollowingCompleteLines() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -35,7 +35,7 @@ import Testing
         try "aaa\nbbb\nccc\n".write(to: url, atomically: true, encoding: .utf8)
         #expect(FileTail.read(url, maxBytes: 9) == "bbb\nccc\n")
     }
-
+    
     @Test func emptyFileReturnsEmptyString() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -43,7 +43,7 @@ import Testing
         try Data().write(to: url)
         #expect(FileTail.read(url, maxBytes: 1024) == "")
     }
-
+    
     @Test func missingFileReturnsEmptyString() {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -61,7 +61,7 @@ import Testing
         try content.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
-
+    
     @Test func initLoadsLogTail() throws {
         let url = try tempLog("first line\nsecond line\n")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -69,7 +69,7 @@ import Testing
         #expect(bridge.log == "first line\nsecond line\n")
         #expect(!bridge.updating)
     }
-
+    
     @Test func initTailsOversizedLogToCompleteLines() throws {
         let filler = String(repeating: "x", count: 70 * 1024)
         let url = try tempLog(filler + "\ntail line\n")

@@ -4,7 +4,7 @@ import SwiftUI
 struct ToolProvisioningSheet: View {
     let entry: ExtensionRegistryEntry
     @Environment(\.dismiss) private var dismiss
-
+    
     var body: some View {
         ToolProvisioningPanel(
             title: "Setting up \(entry.title)", tools: activeTools,
@@ -12,7 +12,7 @@ struct ToolProvisioningSheet: View {
         )
         .frame(width: UIScale.pt(520))
     }
-
+    
     private var activeTools: [CLIToolSpec] {
         entry.requiredTools.filter { $0.requirement.isActive() }
     }
@@ -22,9 +22,9 @@ struct ToolProvisioningPanel: View {
     let title: String
     let tools: [CLIToolSpec]
     let continueAction: (() -> Void)?
-    @ObservedObject private var provisioner = ToolProvisioner.shared
+    @State private var provisioner = ToolProvisioner.shared
     @State private var logExpanded = false
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -65,7 +65,7 @@ struct ToolProvisioningPanel: View {
         .padding(UIScale.pt(22))
         .onAppear { provisioner.provision(tools) }
     }
-
+    
     private var logText: String {
         let sections = tools.compactMap { tool -> String? in
             guard let lines = provisioner.logs[tool.id], !lines.isEmpty else { return nil }
@@ -78,7 +78,7 @@ struct ToolProvisioningPanel: View {
 private struct ProvisioningToolRow: View {
     let tool: CLIToolSpec
     let state: CLIToolProvisionState
-
+    
     var body: some View {
         HStack(alignment: .top, spacing: UIScale.pt(11)) {
             ToolStateIcon(state: state)
@@ -94,12 +94,10 @@ private struct ProvisioningToolRow: View {
                         .lineLimit(1)
                 }
                 Text(tool.why)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                 if case let .failed(_, instruction) = state {
                     Text(instruction)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .textSelection(.enabled)
                 }
             }
@@ -109,7 +107,7 @@ private struct ProvisioningToolRow: View {
             Color(nsColor: .controlBackgroundColor),
             in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
-
+    
     private var statusText: String {
         switch state {
         case .idle: "Waiting"
@@ -120,7 +118,7 @@ private struct ProvisioningToolRow: View {
         case let .failed(message, _): message
         }
     }
-
+    
     private var statusColor: Color {
         switch state {
         case .failed: .red
@@ -132,7 +130,7 @@ private struct ProvisioningToolRow: View {
 
 private struct ToolStateIcon: View {
     let state: CLIToolProvisionState
-
+    
     var body: some View {
         switch state {
         case .checking, .installing:
@@ -154,8 +152,8 @@ private struct ToolStateIcon: View {
 struct CLIToolStatusSection: View {
     let tools: [CLIToolSpec]
     let extensionEnabled: Bool
-    @ObservedObject private var provisioner = ToolProvisioner.shared
-
+    @State private var provisioner = ToolProvisioner.shared
+    
     var body: some View {
         Section {
             ForEach(tools) { tool in
@@ -166,8 +164,7 @@ struct CLIToolStatusSection: View {
                         Text(tool.displayName)
                             .fontWeight(.medium)
                         Text(detail(for: tool))
-                            .font(.system(size: UIScale.pt(10)))
-                            .foregroundStyle(.secondary)
+                            .settingsCaption()
                             .textSelection(.enabled)
                     }
                     Spacer(minLength: 12)
@@ -183,15 +180,15 @@ struct CLIToolStatusSection: View {
         } footer: {
             Text(
                 extensionEnabled
-                    ? "Tools stay installed when the extension is disabled."
-                    : "Enable the extension before installing its tools."
+                ? "Tools stay installed when the extension is disabled."
+                : "Enable the extension before installing its tools."
             )
         }
         .onAppear {
             for tool in tools { provisioner.check(tool) }
         }
     }
-
+    
     private func detail(for tool: CLIToolSpec) -> String {
         switch provisioner.state(for: tool) {
         case .idle: tool.why
@@ -202,7 +199,7 @@ struct CLIToolStatusSection: View {
         case let .failed(message, instruction): "\(message). \(instruction)"
         }
     }
-
+    
     private func canInstall(_ tool: CLIToolSpec) -> Bool {
         guard extensionEnabled else { return false }
         return switch provisioner.state(for: tool) {
@@ -210,7 +207,7 @@ struct CLIToolStatusSection: View {
         case .idle, .failed: true
         }
     }
-
+    
     private func buttonTitle(for tool: CLIToolSpec) -> String {
         if case .failed = provisioner.state(for: tool) { return "Retry" }
         return "Install"

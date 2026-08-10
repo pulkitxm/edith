@@ -3,14 +3,17 @@ import EdithKit
 import SwiftUI
 
 struct DashboardView: View {
-    @StateObject private var refresh = DashboardRefreshBridge()
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
-        true
-    @AppStorage("presenterBlurUsage", store: SharedDefaults.store) private var presenterBlurUsage =
-        false
+    @State private var refresh = DashboardRefreshBridge()
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+    var presenterBlurMoney =
+    true
+    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
+    var presenterBlurUsage =
+    false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compactLayout
@@ -21,14 +24,14 @@ struct DashboardView: View {
     @State private var machinePickerOpen = false
     @State private var customFrom = Date()
     @State private var customTo = Date()
-
+    
     private var appTheme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
     private var acc: Color { DashSkin.accent(dark) }
     private var gold: Color { DashSkin.gold }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
-
+    
     var body: some View {
         GeometryReader { geo in
             let compact = geo.size.width < UIScale.pt(640)
@@ -87,7 +90,7 @@ struct DashboardView: View {
             }
         }
     }
-
+    
     private var background: some View {
         DashSkin.paper(dark)
             .overlay(alignment: .topTrailing) {
@@ -106,12 +109,12 @@ struct DashboardView: View {
             }
             .ignoresSafeArea(edges: .vertical)
     }
-
+    
     private var masthead: some View {
         PageHeader {
             (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                + Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
-                + Text(".").foregroundStyle(DashSkin.ink(dark)))
+             + Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
+             + Text(".").foregroundStyle(DashSkin.ink(dark)))
         } trailing: {
             mastheadButtons
         } accessory: {
@@ -124,7 +127,7 @@ struct DashboardView: View {
             .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
-
+    
     private var mastheadButtons: some View {
         HStack(spacing: UIScale.pt(6)) {
             Button {
@@ -152,14 +155,14 @@ struct DashboardView: View {
             .help("Show collector log")
         }
     }
-
+    
     private struct MetaSegment: Identifiable {
         let id: Int
         let text: String
         let sensitive: Bool
         var usage = false
     }
-
+    
     private var metaSegments: [MetaSegment] {
         guard model.loaded else { return [MetaSegment(id: 0, text: "Loading…", sensitive: false)] }
         let m = model.meta
@@ -177,11 +180,11 @@ struct DashboardView: View {
                 usage: part.2)
         }
     }
-
+    
     private var kpiColumns: [GridItem] {
         [GridItem(.adaptive(minimum: UIScale.pt(158)), spacing: UIScale.pt(12))]
     }
-
+    
     private var kpiGrid: some View {
         LazyVGrid(columns: kpiColumns, spacing: UIScale.pt(12)) {
             ForEach(model.kpis) { kpi in
@@ -233,7 +236,7 @@ struct DashboardView: View {
             }
         }
     }
-
+    
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
             VStack(spacing: UIScale.pt(16)) {
@@ -248,7 +251,7 @@ struct DashboardView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
     }
-
+    
     private var activityHeatmap: some View {
         ActivityHeatmap(
             days: model.calendarDays, cuts: model.chartData.heatCuts,
@@ -256,7 +259,7 @@ struct DashboardView: View {
         )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-
+    
     private var controlsBar: some View {
         WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
             rangeButton("Today", .today)
@@ -309,7 +312,7 @@ struct DashboardView: View {
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
         }
     }
-
+    
     private var customRange: some View {
         HStack(spacing: UIScale.pt(4)) {
             DatePicker(
@@ -337,12 +340,12 @@ struct DashboardView: View {
             .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
         }
     }
-
+    
     private func syncCustomDates() {
         guard model.loaded else { return }
         if case let .custom(from, to) = model.range,
-            let f = DashboardModel.ymd.date(from: from),
-            let t = DashboardModel.ymd.date(from: to)
+           let f = DashboardModel.ymd.date(from: from),
+           let t = DashboardModel.ymd.date(from: to)
         {
             customFrom = f
             customTo = t
@@ -351,7 +354,7 @@ struct DashboardView: View {
             customTo = b.upperBound
         }
     }
-
+    
     private func rangeButton(_ title: String, _ r: DashRange) -> some View {
         let active = isActive(r)
         return Button(title) { model.range = r }
@@ -370,7 +373,7 @@ struct DashboardView: View {
             )
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
     }
-
+    
     private func isActive(_ r: DashRange) -> Bool {
         switch (model.range, r) {
         case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
@@ -379,7 +382,7 @@ struct DashboardView: View {
         default: return false
         }
     }
-
+    
     private var projectMenu: some View {
         Button {
             folderPickerOpen = true
@@ -394,7 +397,7 @@ struct DashboardView: View {
             FolderScopePicker(model: model, dark: dark) { folderPickerOpen = false }
         }
     }
-
+    
     private var folderScopeLabel: String {
         let paths = model.selectedPaths
         if paths.isEmpty { return "All folders" }
@@ -404,7 +407,7 @@ struct DashboardView: View {
         }
         return "\(paths.count) folders"
     }
-
+    
     private var sourceMenu: some View {
         Button {
             sourcePickerOpen = true
@@ -421,7 +424,7 @@ struct DashboardView: View {
             ) { sourcePickerOpen = false }
         }
     }
-
+    
     private var sourceSummary: String {
         if model.selectedSources.count == model.allSources.count { return "All sources" }
         if model.selectedSources.count == 1, let id = model.selectedSources.first {
@@ -429,7 +432,7 @@ struct DashboardView: View {
         }
         return "\(model.selectedSources.count) sources"
     }
-
+    
     private var machineMenu: some View {
         Button {
             machinePickerOpen = true
@@ -443,7 +446,7 @@ struct DashboardView: View {
             UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
         }
     }
-
+    
     private var machineSummary: String {
         let groups = model.machineGroups
         guard !groups.isEmpty else { return "Machines" }
@@ -452,7 +455,7 @@ struct DashboardView: View {
         if shown.count == 1, let only = shown.first { return only.name }
         return "\(shown.count) of \(groups.count) machines"
     }
-
+    
     private var modelMenu: some View {
         Button {
             modelPickerOpen = true
@@ -471,11 +474,11 @@ struct DashboardView: View {
             ) { modelPickerOpen = false }
         }
     }
-
+    
     private var logView: some View {
         TerminalLogView(log: refresh.log, theme: appTheme, height: UIScale.pt(150))
     }
-
+    
     @ViewBuilder private func charts(compact: Bool) -> some View {
         SkinCard(title: "Daily usage", dark: dark) {
             ComboChart(
@@ -531,7 +534,7 @@ struct DashboardView: View {
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
     }
-
+    
     private var dowCard: some View {
         SkinCard(title: "By day of week", dark: dark) {
             ComboChart(
@@ -539,13 +542,13 @@ struct DashboardView: View {
                 height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
         }
     }
-
+    
     private var shareByModelCard: some View {
         SkinCard(title: "Share by model", dark: dark) {
             DonutChart(slices: donutSlices, blurTokens: blurUsage)
         }
     }
-
+    
     private var modelsTable: some View {
         VStack(spacing: UIScale.pt(0)) {
             HStack(spacing: UIScale.pt(8)) {
@@ -585,7 +588,7 @@ struct DashboardView: View {
             }
         }
     }
-
+    
     private func tableHeader(_ title: String, _ col: TableColumn, width: CGFloat?) -> some View {
         Button {
             if model.sortColumn == col {
@@ -608,7 +611,7 @@ struct DashboardView: View {
         .buttonStyle(.plain)
         .pointerCursor()
     }
-
+    
     private var tokenMixDomain: [String] { ["input", "output", "cache write", "cache read"] }
     private var tokenMixRange: [Color] {
         [
@@ -633,7 +636,7 @@ struct DashboardView: View {
 
 private struct FilterChip: ViewModifier {
     let dark: Bool
-
+    
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, UIScale.pt(10))
@@ -656,7 +659,7 @@ struct ActivityHeatmap: View {
     var blur = false
     var blurTokens = false
     @State private var hoveredDay: String?
-
+    
     var body: some View {
         let weeks = stride(from: 0, to: days.count, by: 7).map {
             Array(days[$0..<min($0 + 7, days.count)])
@@ -694,7 +697,7 @@ struct ActivityHeatmap: View {
                                     .onHover { inside in
                                         if inside {
                                             hoveredDay =
-                                                model.heatDetail[day.id] != nil ? day.id : nil
+                                            model.heatDetail[day.id] != nil ? day.id : nil
                                         } else if hoveredDay == day.id {
                                             hoveredDay = nil
                                         }
@@ -720,18 +723,18 @@ struct ActivityHeatmap: View {
         }
         .frame(height: UIScale.pt(137))
     }
-
+    
     private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {
         guard let first = weeks[index].first?.date else { return "" }
         let month = Calendar.current.component(.month, from: first)
         if index > 0, let prev = weeks[index - 1].first?.date,
-            Calendar.current.component(.month, from: prev) == month
+           Calendar.current.component(.month, from: prev) == month
         {
             return ""
         }
         return first.formatted(.dateTime.month(.abbreviated))
     }
-
+    
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
         if cost <= 0 { return DashSkin.grid(dark) }
         if cost <= cuts[0] { return DashPalette.color("#f6d9bf") }

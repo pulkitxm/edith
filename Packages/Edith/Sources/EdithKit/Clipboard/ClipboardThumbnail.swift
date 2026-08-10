@@ -4,42 +4,42 @@ import SwiftUI
 
 public enum ClipboardThumbnail {
     public static let maxSize = NSSize(width: 340, height: 40)
-
+    
     private static let cache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = 300
         return cache
     }()
-
+    
     public static func cached(for entry: ClipboardEntry) -> NSImage? {
         cache.object(forKey: entry.sha256 as NSString)
     }
-
+    
     public static func thumbnail(for entry: ClipboardEntry) async -> NSImage? {
         if let hit = cached(for: entry) { return hit }
         let image: NSImage? =
-            switch entry.kind {
-            case .image: await renderImage(entry)
-            case .file: await renderFile(entry)
-            default: nil
-            }
+        switch entry.kind {
+        case .image: await renderImage(entry)
+        case .file: await renderFile(entry)
+        default: nil
+        }
         if let image { cache.setObject(image, forKey: entry.sha256 as NSString) }
         return image
     }
-
+    
     private static func renderImage(_ entry: ClipboardEntry) async -> NSImage? {
         await Task.detached(priority: .utility) {
             guard let data = ClipboardRepository.blobData(for: entry),
-                let image = NSImage(data: data)
+                  let image = NSImage(data: data)
             else { return nil }
             return downscale(image, toFit: maxSize)
         }.value
     }
-
+    
     private static func renderFile(_ entry: ClipboardEntry) async -> NSImage? {
         guard let data = ClipboardRepository.blobData(for: entry),
-            let string = String(data: data, encoding: .utf8),
-            let url = URL(string: string), url.isFileURL
+              let string = String(data: data, encoding: .utf8),
+              let url = URL(string: string), url.isFileURL
         else { return nil }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
@@ -57,7 +57,7 @@ public enum ClipboardThumbnail {
         }
         return NSWorkspace.shared.icon(forFile: url.path)
     }
-
+    
     private static func downscale(_ image: NSImage, toFit bounds: NSSize) -> NSImage {
         guard image.size.width > 0, image.size.height > 0 else { return image }
         let ratio = min(bounds.width / image.size.width, bounds.height / image.size.height)
@@ -88,9 +88,9 @@ public struct ClipboardThumbnailView<Placeholder: View>: View {
     private let entry: ClipboardEntry
     private let maxHeight: CGFloat
     private let placeholder: Placeholder
-
+    
     @State private var image: NSImage?
-
+    
     public init(
         entry: ClipboardEntry, maxHeight: CGFloat,
         @ViewBuilder placeholder: () -> Placeholder
@@ -100,7 +100,7 @@ public struct ClipboardThumbnailView<Placeholder: View>: View {
         self.placeholder = placeholder()
         _image = State(initialValue: ClipboardThumbnail.cached(for: entry))
     }
-
+    
     public var body: some View {
         Group {
             if let image {

@@ -3,12 +3,13 @@ import SwiftUI
 
 @available(macOS 14.4, *)
 @MainActor
-final class MixerEngine: ObservableObject {
-    @Published private(set) var apps: [MixerApp] = []
-
+@Observable
+final class MixerEngine {
+    private(set) var apps: [MixerApp] = []
+    
     private var taps: [pid_t: AppVolumeTap] = [:]
     private var savedGain: [String: Float] = [:]
-
+    
     func refresh() {
         let processes = AudioProcessRegistry.audioProcesses()
         apps = processes.compactMap { process in
@@ -19,7 +20,7 @@ final class MixerEngine: ObservableObject {
                 volume: savedGain[process.bundleID] ?? 1)
         }
     }
-
+    
     func setVolume(_ app: MixerApp, _ value: Float) {
         savedGain[app.bundleID] = value
         if value >= 0.99 {
@@ -33,7 +34,7 @@ final class MixerEngine: ObservableObject {
         }
         refresh()
     }
-
+    
     func shutdown() {
         for tap in taps.values { tap.destroy() }
         taps.removeAll()
@@ -54,8 +55,8 @@ struct NotchAudioTab: View {
 
 @available(macOS 14.4, *)
 private struct AudioMixerView: View {
-    @StateObject private var engine = MixerEngine()
-
+    private var engine = MixerEngine()
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
@@ -73,7 +74,7 @@ private struct AudioMixerView: View {
         }
         .onAppear { engine.refresh() }
     }
-
+    
     private func row(_ app: MixerApp) -> some View {
         HStack(spacing: 10) {
             if let icon = app.icon {

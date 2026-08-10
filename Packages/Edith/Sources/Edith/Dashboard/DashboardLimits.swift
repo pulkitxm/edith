@@ -26,7 +26,7 @@ enum DashLimits {
         let sr: String?
         let wr: String?
     }
-
+    
     static func loadAll(provider: LimitProvider = .claude) -> [DashLimitPoint] {
         guard let text = try? String(contentsOf: LimitsHistory.url, encoding: .utf8) else {
             return []
@@ -35,7 +35,7 @@ enum DashLimits {
         var out: [DashLimitPoint] = []
         for line in text.split(separator: "\n") {
             guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
+                  let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
             else { continue }
             out.append(
                 DashLimitPoint(
@@ -44,13 +44,13 @@ enum DashLimits {
         }
         return out.sorted { $0.t < $1.t }
     }
-
+    
     static func loadLatest(provider: LimitProvider = .claude) -> DashLimitPoint? {
         let text = FileTail.read(LimitsHistory.url, maxBytes: 8192)
         let dec = JSONDecoder()
         for line in text.split(separator: "\n").reversed() {
             guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
+                  let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
             else { continue }
             return DashLimitPoint(
                 t: t, s: r.s, w: r.w,
@@ -58,7 +58,7 @@ enum DashLimits {
         }
         return nil
     }
-
+    
     static func availableProviders() -> [LimitProvider] {
         let text = FileTail.read(LimitsHistory.url, maxBytes: 65_536)
         let decoder = JSONDecoder()
@@ -68,9 +68,9 @@ enum DashLimits {
             })
         return LimitProvider.allCases.filter(found.contains)
     }
-
+    
     static func downsample(_ rows: [DashLimitPoint], now: Date, rawWindow: TimeInterval = 7 * 86400)
-        -> [DashLimitPoint]
+    -> [DashLimitPoint]
     {
         let cutoff = now.addingTimeInterval(-rawWindow)
         var buckets: [TimeInterval: DashLimitPoint] = [:]
@@ -94,7 +94,7 @@ enum DashLimits {
         }
         return (Array(buckets.values) + raw).sorted { $0.t < $1.t }
     }
-
+    
     static func markers(_ pts: [DashLimitPoint], minGap: TimeInterval = 20 * 60) -> [ResetMarker] {
         guard pts.count > 1 else { return [] }
         var out: [ResetMarker] = []
@@ -104,13 +104,13 @@ enum DashLimits {
             let p = pts[i - 1]
             let q = pts[i]
             if let a = p.sr, let b = q.sr, a != b,
-                lastSession.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
+               lastSession.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
             {
                 out.append(ResetMarker(t: q.t, session: true))
                 lastSession = q.t
             }
             if let a = p.wr, let b = q.wr, a != b,
-                lastWeekly.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
+               lastWeekly.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
             {
                 out.append(ResetMarker(t: q.t, session: false))
                 lastWeekly = q.t
@@ -124,17 +124,18 @@ struct RateLimitsDialsView: View {
     let dark: Bool
     var fill = false
     var showsJumpLink = false
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
-        LimitRing.defaultWarnPercent
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
-        LimitRing.defaultCriticalPercent
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
+    LimitRing.defaultWarnPercent
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
+    LimitRing.defaultCriticalPercent
     @State private var point: DashLimitPoint?
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
-        LimitProvider.claude.rawValue
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+    var selectedRaw =
+    LimitProvider.claude.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+    
     @State private var providers: [LimitProvider] = []
-
+    
     private var selected: LimitProvider {
         get {
             let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
@@ -142,7 +143,7 @@ struct RateLimitsDialsView: View {
         }
         nonmutating set { selectedRaw = newValue.rawValue }
     }
-
+    
     private func reload() {
         let found = DashLimits.availableProviders()
         providers = found
@@ -150,7 +151,7 @@ struct RateLimitsDialsView: View {
         point = DashLimits.loadLatest(
             provider: found.contains(saved) ? saved : found.first ?? saved)
     }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
@@ -202,7 +203,7 @@ struct RateLimitsDialsView: View {
             reload()
         }
     }
-
+    
     private func dial(_ label: String, pct: Double?, reset: Date?) -> some View {
         let p = pct ?? 0
         return VStack(spacing: UIScale.pt(8)) {
@@ -231,18 +232,18 @@ struct RateLimitsDialsView: View {
                 .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
         }
     }
-
+    
     private static let resetFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .full
         return f
     }()
-
+    
     private func resetText(_ d: Date?) -> String {
         guard let d else { return " " }
         return "Resets " + Self.resetFormatter.localizedString(for: d, relativeTo: Date())
     }
-
+    
     private func color(for percent: Double) -> Color {
         LimitRing.color(percent: percent, warn: warn, critical: crit)
     }
@@ -252,7 +253,7 @@ struct LimitsRefreshButton: View {
     let dark: Bool
     var onRefreshed: () -> Void
     @State private var refreshing = false
-
+    
     var body: some View {
         Button {
             refreshing = true
@@ -288,10 +289,10 @@ struct LimitsRefreshButton: View {
 struct LimitsCardView: View {
     let theme: Color
     let dark: Bool
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
-        LimitRing.defaultWarnPercent
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
-        LimitRing.defaultCriticalPercent
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
+    LimitRing.defaultWarnPercent
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
+    LimitRing.defaultCriticalPercent
     @State private var all: [DashLimitPoint] = []
     @State private var downsampled: [DashLimitPoint] = []
     @State private var visible: [DashLimitPoint] = []
@@ -299,12 +300,13 @@ struct LimitsCardView: View {
     @State private var marks: [ResetMarker] = []
     @State private var range = "24h"
     @State private var selected: Date?
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedProviderRaw =
-        LimitProvider.claude.rawValue
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+    var selectedProviderRaw =
+    LimitProvider.claude.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+    
     @State private var providers: [LimitProvider] = []
-
+    
     private var selectedProvider: LimitProvider {
         get {
             let saved = LimitProvider(rawValue: selectedProviderRaw) ?? .claude
@@ -312,20 +314,20 @@ struct LimitsCardView: View {
         }
         nonmutating set { selectedProviderRaw = newValue.rawValue }
     }
-
+    
     private var sessionC: Color { DashSkin.accent(dark) }
     private let weeklyC = DashPalette.color("#c89b3c")
     private let ranges: [(String, TimeInterval?)] = [
         ("24h", 86400), ("7d", 7 * 86400), ("30d", 30 * 86400), ("All", nil),
     ]
-
+    
     struct Sample: Identifiable {
         let t: Date
         let v: Double
         let series: String
         var id: String { "\(series)-\(t.timeIntervalSince1970)" }
     }
-
+    
     var body: some View {
         SkinCard(title: "Rate limits - session & weekly", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -362,7 +364,7 @@ struct LimitsCardView: View {
         }
         .onChange(of: selectedProviderRaw) { reloadAll() }
     }
-
+    
     private func reloadAll() {
         providers = DashLimits.availableProviders()
         all = DashLimits.loadAll(provider: selectedProvider)
@@ -370,13 +372,13 @@ struct LimitsCardView: View {
         downsampled = DashLimits.downsample(all, now: now)
         rebuildVisible()
     }
-
+    
     private func rebuildVisible() {
         let now = all.last?.t ?? Date()
         let ms = ranges.first { $0.0 == range }?.1 ?? nil
         let pts =
-            ms.map { m in downsampled.filter { $0.t >= now.addingTimeInterval(-m) } }
-            ?? downsampled
+        ms.map { m in downsampled.filter { $0.t >= now.addingTimeInterval(-m) } }
+        ?? downsampled
         visible = pts
         let start = pts.first?.t ?? now
         let spanDays = now.timeIntervalSince(start) / 86400
@@ -388,7 +390,7 @@ struct LimitsCardView: View {
             ].compactMap { $0 }
         }
     }
-
+    
     private var segmented: some View {
         HStack(spacing: UIScale.pt(6)) {
             ForEach(ranges, id: \.0) { name, _ in
@@ -401,8 +403,8 @@ struct LimitsCardView: View {
                     .padding(.horizontal, UIScale.pt(10)).padding(.vertical, UIScale.pt(4))
                     .background(
                         range == name
-                            ? AnyShapeStyle(theme.opacity(0.9))
-                            : AnyShapeStyle(.primary.opacity(0.06)),
+                        ? AnyShapeStyle(theme.opacity(0.9))
+                        : AnyShapeStyle(.primary.opacity(0.06)),
                         in: Capsule()
                     )
                     .foregroundStyle(
@@ -410,7 +412,7 @@ struct LimitsCardView: View {
             }
         }
     }
-
+    
     private var readout: some View {
         let point = selected.flatMap { d in
             visible.min(by: { abs($0.t.timeIntervalSince(d)) < abs($1.t.timeIntervalSince(d)) })
@@ -443,7 +445,7 @@ struct LimitsCardView: View {
         }
         .font(.system(size: UIScale.pt(10.5), weight: .medium, design: .monospaced))
     }
-
+    
     private var chart: some View {
         let now = all.last?.t ?? Date()
         let start = visible.first?.t ?? now
@@ -499,7 +501,7 @@ struct LimitsCardView: View {
         .chartLegend(position: .top, alignment: .trailing, spacing: UIScale.pt(6))
         .frame(height: UIScale.pt(220))
     }
-
+    
     private func tick(_ d: Date, spanDays: Double) -> String {
         let cal = Calendar.current
         if spanDays < 2 {

@@ -8,7 +8,7 @@ public struct PaneTarget: Codable, Hashable, Sendable {
     public var machineID: UUID
     public var screen: PaneScreen
     public var argument: String?
-
+    
     public init(machineID: UUID, screen: PaneScreen, argument: String? = nil) {
         self.machineID = machineID
         self.screen = screen
@@ -20,7 +20,7 @@ public struct PaneTab: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID = UUID()
     public var target: PaneTarget
     public var titleOverride: String?
-
+    
     public init(id: UUID = UUID(), target: PaneTarget, titleOverride: String? = nil) {
         self.id = id
         self.target = target
@@ -32,7 +32,7 @@ public struct PaneNode: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID = UUID()
     public var tabs: [PaneTab]
     public var selected: UUID
-
+    
     public init(id: UUID = UUID(), tabs: [PaneTab], selected: UUID) {
         self.id = id
         self.tabs = tabs
@@ -43,7 +43,7 @@ public struct PaneNode: Codable, Identifiable, Hashable, Sendable {
 public indirect enum LayoutNode: Codable, Identifiable, Hashable, Sendable {
     case pane(PaneNode)
     case split(SplitNode)
-
+    
     public var id: UUID {
         switch self {
         case let .pane(pane): return pane.id
@@ -57,7 +57,7 @@ public struct SplitNode: Codable, Identifiable, Hashable, Sendable {
     public var axis: SplitAxis
     public var children: [LayoutNode]
     public var ratios: [Double]
-
+    
     public init(id: UUID = UUID(), axis: SplitAxis, children: [LayoutNode], ratios: [Double]) {
         self.id = id
         self.axis = axis
@@ -73,7 +73,7 @@ public enum SplitAxis: String, Codable, Sendable {
 
 public enum InsertSide: String, Codable, Sendable {
     case left, right, top, bottom
-
+    
     public var axis: SplitAxis { self == .left || self == .right ? .horizontal : .vertical }
     public var isBefore: Bool { self == .left || self == .top }
 }
@@ -84,7 +84,7 @@ public struct WorkspaceLayout: Codable, Identifiable, Hashable, Sendable {
     public var root: LayoutNode
     public var focused: UUID
     public var maximized: UUID?
-
+    
     public init(
         id: UUID = UUID(), name: String, root: LayoutNode, focused: UUID, maximized: UUID? = nil
     ) {
@@ -103,11 +103,11 @@ extension LayoutNode {
         case let .split(split): return split.children.flatMap(\.panes)
         }
     }
-
+    
     public func pane(_ id: UUID) -> PaneNode? {
         panes.first { $0.id == id }
     }
-
+    
     public mutating func updatePane(_ id: UUID, _ body: (inout PaneNode) -> Void) {
         switch self {
         case var .pane(pane):
@@ -121,7 +121,7 @@ extension LayoutNode {
             self = .split(split)
         }
     }
-
+    
     public mutating func insert(_ node: LayoutNode, near targetID: UUID, side: InsertSide) {
         if id == targetID {
             if case var .split(split) = self, split.axis == side.axis {
@@ -160,7 +160,7 @@ extension LayoutNode {
         self = .split(split)
         normalize()
     }
-
+    
     @discardableResult
     public mutating func remove(_ targetID: UUID) -> Bool {
         guard case var .split(split) = self else { return false }
@@ -179,7 +179,7 @@ extension LayoutNode {
         if removed { normalize() }
         return removed
     }
-
+    
     public mutating func normalize() {
         guard case var .split(split) = self else { return }
         var index = 0
@@ -223,7 +223,7 @@ extension LayoutNode {
             self = .split(split)
         }
     }
-
+    
     public mutating func equalize() {
         guard case var .split(split) = self else { return }
         for index in split.children.indices { split.children[index].equalize() }
@@ -248,9 +248,9 @@ public enum WorkspaceGeometry {
             for (index, child) in split.children.enumerated() {
                 let length = available * CGFloat(split.ratios[index])
                 let childRect =
-                    horizontal
-                    ? CGRect(x: offset, y: rect.minY, width: length, height: rect.height)
-                    : CGRect(x: rect.minX, y: offset, width: rect.width, height: length)
+                horizontal
+                ? CGRect(x: offset, y: rect.minY, width: length, height: rect.height)
+                : CGRect(x: rect.minX, y: offset, width: rect.width, height: length)
                 frames(node: child, in: childRect, gap: gap, into: &result)
                 offset += length + gap
             }
@@ -269,7 +269,7 @@ extension PaneScreen {
         case .tools: return "Tools"
         }
     }
-
+    
     public var icon: String {
         switch self {
         case .overview: return "gauge.with.needle"
@@ -280,7 +280,7 @@ extension PaneScreen {
         case .tools: return "wrench.and.screwdriver"
         }
     }
-
+    
     public static func available(isLocal: Bool, hasDocker: Bool) -> [PaneScreen] {
         if isLocal { return [.overview, .processes, .files, .terminal] }
         return PaneScreen.allCases.filter { $0 != .docker || hasDocker }
@@ -293,7 +293,7 @@ extension WorkspaceLayout {
         let pane = PaneNode(tabs: [tab], selected: tab.id)
         return WorkspaceLayout(name: "Workspace", root: .pane(pane), focused: pane.id)
     }
-
+    
     public static func tiled(
         machineIDs: [UUID], screen: PaneScreen, name: String
     ) -> WorkspaceLayout? {
@@ -313,41 +313,41 @@ extension WorkspaceLayout {
                 ratios: Array(repeating: ratio, count: panes.count)))
         return WorkspaceLayout(name: name, root: root, focused: panes[0].id)
     }
-
+    
     public static func comparison(machineIDs: [UUID]) -> WorkspaceLayout? {
         tiled(machineIDs: Array(machineIDs.prefix(2)), screen: .overview, name: "Compare")
     }
-
+    
     public var paneCount: Int { root.panes.count }
-
+    
     public var allTargets: [PaneTarget] {
         root.panes.flatMap { $0.tabs.map(\.target) }
     }
-
+    
     public func subscribedMachines() -> Set<UUID> {
         Set(allTargets.map(\.machineID))
     }
-
+    
     public mutating func retarget(from oldMachine: UUID, to newMachine: UUID) {
         for pane in root.panes {
             root.updatePane(pane.id) { node in
                 for index in node.tabs.indices
                 where node.tabs[index].target.machineID
-                    == oldMachine
+                == oldMachine
                 {
                     node.tabs[index].target.machineID = newMachine
                 }
             }
         }
     }
-
+    
     public mutating func closePane(_ paneID: UUID) {
         guard paneCount > 1 else { return }
         root.remove(paneID)
         if focused == paneID { focused = root.panes.first?.id ?? focused }
         if maximized == paneID { maximized = nil }
     }
-
+    
     public mutating func split(paneID: UUID, side: InsertSide, target: PaneTarget) {
         let tab = PaneTab(target: target)
         let pane = PaneNode(tabs: [tab], selected: tab.id)
@@ -359,17 +359,17 @@ extension WorkspaceLayout {
 public struct WorkspaceStore: Codable, Sendable {
     public var layouts: [WorkspaceLayout]
     public var currentID: UUID?
-
+    
     public init(layouts: [WorkspaceLayout] = [], currentID: UUID? = nil) {
         self.layouts = layouts
         self.currentID = currentID
     }
-
+    
     public var current: WorkspaceLayout? {
         guard let currentID else { return layouts.first }
         return layouts.first { $0.id == currentID } ?? layouts.first
     }
-
+    
     public mutating func upsert(_ layout: WorkspaceLayout) {
         if let index = layouts.firstIndex(where: { $0.id == layout.id }) {
             layouts[index] = layout
@@ -378,7 +378,7 @@ public struct WorkspaceStore: Codable, Sendable {
         }
         currentID = layout.id
     }
-
+    
     public mutating func remove(_ id: UUID) {
         layouts.removeAll { $0.id == id }
         if currentID == id { currentID = layouts.first?.id }
@@ -409,13 +409,13 @@ extension LayoutNode {
 extension WorkspaceStore {
     public static func load(from file: URL = MachinePaths.workspacesFile) -> WorkspaceStore {
         guard let data = try? Data(contentsOf: file),
-            let store = try? JSONDecoder().decode(WorkspaceStore.self, from: data)
+              let store = try? JSONDecoder().decode(WorkspaceStore.self, from: data)
         else { return WorkspaceStore() }
         return store
     }
-
+    
     public static func save(_ store: WorkspaceStore, to file: URL = MachinePaths.workspacesFile)
-        throws
+    throws
     {
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)

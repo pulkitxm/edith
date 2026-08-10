@@ -5,18 +5,20 @@ import SwiftUI
 struct LimitsChartView: View {
     let points: [LimitPoint]
     let theme: Color
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn = 60
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit = 85
-
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
+    60
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
+    85
+    
     struct Sample: Identifiable {
         let date: Date
         let value: Double
         let series: String
         var id: String { "\(series)-\(date.timeIntervalSince1970)" }
     }
-
+    
     private var samples: [Sample] { Self.samples(from: points) }
-
+    
     static func samples(from points: [LimitPoint], now: Date = Date()) -> [Sample] {
         var out: [Sample] = []
         for (key, name) in [(\LimitPoint.s, "Session"), (\LimitPoint.w, "Weekly")] {
@@ -28,7 +30,7 @@ struct LimitsChartView: View {
         }
         return out
     }
-
+    
     var body: some View {
         Chart {
             ForEach(samples) { s in

@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct FleetHomeView: View {
-    @ObservedObject var model: MachinesModel
+    let model: MachinesModel
     let onSelect: (UUID) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -10,9 +10,9 @@ struct FleetHomeView: View {
     @State private var cpuHistory: [Double] = []
     @State private var memHistory: [Double] = []
     @State private var loaded = false
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -41,7 +41,7 @@ struct FleetHomeView: View {
             }
         }
     }
-
+    
     private var fleetBanner: some View {
         let fleet = model.fleet
         return HStack(spacing: UIScale.pt(10)) {
@@ -64,7 +64,7 @@ struct FleetHomeView: View {
             RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark))
         }
     }
-
+    
     private func bannerDetail(_ fleet: FleetSummary) -> String {
         var parts = ["\(fleet.totalCores) cores"]
         if fleet.containersTotal > 0 {
@@ -75,7 +75,7 @@ struct FleetHomeView: View {
         }
         return parts.joined(separator: "  ·  ")
     }
-
+    
     private var metricsGrid: some View {
         let fleet = model.fleet
         return LazyVGrid(
@@ -95,11 +95,11 @@ struct FleetHomeView: View {
                 fraction: fleet.memoryPercent / 100, history: memHistory, maximum: 100,
                 color: DashSkin.sage,
                 footnote: "\(ByteFormatter.string(fleet.memoryUsedKB * 1024)) of "
-                    + ByteFormatter.string(fleet.memoryTotalKB * 1024),
+                + ByteFormatter.string(fleet.memoryTotalKB * 1024),
                 dark: dark)
         }
     }
-
+    
     @ViewBuilder
     private var storageCard: some View {
         let rows = model.snapshots.filter { $0.diskTotalKB > 0 }
@@ -116,7 +116,7 @@ struct FleetHomeView: View {
                                 Spacer()
                                 Text(
                                     "\(ByteFormatter.string(row.diskUsedKB * 1024)) of "
-                                        + ByteFormatter.string(row.diskTotalKB * 1024)
+                                    + ByteFormatter.string(row.diskTotalKB * 1024)
                                 )
                                 .font(DashSkin.mono(10.5))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
@@ -125,8 +125,8 @@ struct FleetHomeView: View {
                             MeterBar(
                                 fraction: percent,
                                 color: percent > 0.9
-                                    ? DashSkin.danger
-                                    : (percent > 0.75 ? DashSkin.warn : DashSkin.accent(dark)),
+                                ? DashSkin.danger
+                                : (percent > 0.75 ? DashSkin.warn : DashSkin.accent(dark)),
                                 track: DashSkin.line(dark))
                         }
                     }
@@ -134,7 +134,7 @@ struct FleetHomeView: View {
             }
         }
     }
-
+    
     private var alertsCard: some View {
         SkinCard(title: "Needs attention", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(7)) {
@@ -158,7 +158,7 @@ struct FleetHomeView: View {
             }
         }
     }
-
+    
     private var machinesCard: some View {
         SkinCard(title: "Machines", dark: dark) {
             VStack(spacing: UIScale.pt(0)) {
@@ -180,7 +180,7 @@ private struct FleetMachineRow: View {
     let dark: Bool
     let onOpen: () -> Void
     @State private var hovering = false
-
+    
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: UIScale.pt(12)) {
@@ -230,7 +230,7 @@ private struct FleetMachineRow: View {
         .pointerCursor()
         .onHover { hovering = $0 }
     }
-
+    
     private func meter(_ label: String, percent: Double, color: Color) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             HStack(spacing: UIScale.pt(4)) {
@@ -260,39 +260,11 @@ struct FleetChip: View {
     let selected: Bool
     let dark: Bool
     let onSelect: () -> Void
-    @State private var hovering = false
-
+    
     var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(title)
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                        .foregroundStyle(DashSkin.ink(dark))
-                    Text(subtitle)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            }
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(8))
-            .background(
-                selected ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(11))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(11))
-                    .strokeBorder(
-                        selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                        lineWidth: UIScale.pt(selected ? 1.4 : 1))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .pointerCursor()
-        .onHover { hovering = $0 }
+        SelectableChipRow(
+            icon: symbol, title: title, subtitle: subtitle, selected: selected, dark: dark,
+            onSelect: onSelect
+        ) { EmptyView() }
     }
 }

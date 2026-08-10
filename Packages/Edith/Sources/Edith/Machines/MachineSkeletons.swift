@@ -8,14 +8,14 @@ struct SkeletonBlock: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shimmering = false
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     private var scaledWidth: CGFloat? {
         guard let width else { return nil }
         return CGFloat(UIScale.pt(width))
     }
-
+    
     var body: some View {
         RoundedRectangle(cornerRadius: UIScale.pt(corner))
             .fill(DashSkin.line(dark).opacity(0.55))
@@ -46,7 +46,7 @@ struct SkeletonBlock: View {
 private struct SkeletonCard<Content: View>: View {
     let dark: Bool
     @ViewBuilder var content: Content
-
+    
     var body: some View {
         content
             .padding(UIScale.pt(14))
@@ -60,7 +60,7 @@ private struct SkeletonCard<Content: View>: View {
 
 struct MetricCardSkeleton: View {
     let dark: Bool
-
+    
     var body: some View {
         SkeletonCard(dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -79,7 +79,7 @@ struct MetricCardSkeleton: View {
 
 struct BannerSkeleton: View {
     let dark: Bool
-
+    
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             SkeletonBlock(width: 13, height: 13, corner: 6.5)
@@ -100,7 +100,7 @@ struct MeterRowsSkeleton: View {
     let title: String
     let rows: Int
     let dark: Bool
-
+    
     var body: some View {
         SkinCard(title: title, dark: dark) {
             VStack(spacing: UIScale.pt(10)) {
@@ -121,7 +121,7 @@ struct MeterRowsSkeleton: View {
 
 struct MachineOverviewSkeleton: View {
     let dark: Bool
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             BannerSkeleton(dark: dark)
@@ -147,7 +147,7 @@ struct MachineOverviewSkeleton: View {
 
 struct FleetHomeSkeleton: View {
     let dark: Bool
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             BannerSkeleton(dark: dark)
@@ -191,7 +191,7 @@ struct FleetHomeSkeleton: View {
 struct FinderSkeleton: View {
     let mode: FileViewMode
     let dark: Bool
-
+    
     var body: some View {
         if mode == .icon {
             ScrollView {
@@ -239,7 +239,7 @@ struct ListRowsSkeleton: View {
     var rows: Int = 6
     var showsLeadingDot = true
     let dark: Bool
-
+    
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<rows, id: \.self) { index in

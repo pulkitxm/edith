@@ -6,9 +6,9 @@ struct AddMachineSheet: View {
     enum Mode: String, CaseIterable, Identifiable {
         case sshConfig
         case manual
-
+        
         var id: String { rawValue }
-
+        
         var title: String {
             switch self {
             case .sshConfig: return "From SSH config"
@@ -16,23 +16,23 @@ struct AddMachineSheet: View {
             }
         }
     }
-
+    
     enum TestState: Equatable {
         case idle
         case testing
         case success(String)
         case failure(String)
     }
-
+    
     struct Secrets {
         var login: String?
         var sudo: String?
         var forgetSudo = false
     }
-
+    
     var editing: Machine?
     let onSave: (Machine, Secrets) -> Void
-
+    
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @State private var mode = Mode.sshConfig
@@ -50,16 +50,16 @@ struct AddMachineSheet: View {
     @State private var forgetSudoPassword = false
     @State private var testState = TestState.idle
     @State private var testTask: Task<Void, Never>?
-
+    
     private var dark: Bool { scheme == .dark }
-
+    
     enum AuthKind: String, CaseIterable, Identifiable {
         case agent
         case key
         case password
-
+        
         var id: String { rawValue }
-
+        
         var title: String {
             switch self {
             case .agent: return "SSH agent or default key"
@@ -68,7 +68,7 @@ struct AddMachineSheet: View {
             }
         }
     }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             headerBar
@@ -101,7 +101,7 @@ struct AddMachineSheet: View {
         .onAppear(perform: load)
         .onDisappear { testTask?.cancel() }
     }
-
+    
     private var headerBar: some View {
         HStack {
             Text(editing == nil ? "Add a machine" : "Edit machine")
@@ -112,7 +112,7 @@ struct AddMachineSheet: View {
         .padding(.horizontal, UIScale.pt(20))
         .padding(.vertical, UIScale.pt(14))
     }
-
+    
     private var configSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             eyebrow("HOSTS IN ~/.SSH/CONFIG")
@@ -129,11 +129,11 @@ struct AddMachineSheet: View {
                         HStack(spacing: UIScale.pt(10)) {
                             Image(
                                 systemName: selectedAlias == configHost.alias
-                                    ? "largecircle.fill.circle" : "circle"
+                                ? "largecircle.fill.circle" : "circle"
                             )
                             .foregroundStyle(
                                 selectedAlias == configHost.alias
-                                    ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(configHost.alias)
                                     .font(.system(size: UIScale.pt(12.5), weight: .medium))
@@ -161,7 +161,7 @@ struct AddMachineSheet: View {
             labelledField("Display name", text: $name, placeholder: "Linux laptop")
         }
     }
-
+    
     private var manualSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             eyebrow("CONNECTION")
@@ -174,7 +174,7 @@ struct AddMachineSheet: View {
             }
         }
     }
-
+    
     private var authSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             eyebrow("AUTHENTICATION")
@@ -204,7 +204,7 @@ struct AddMachineSheet: View {
             }
         }
     }
-
+    
     private var sudoSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             eyebrow("PRIVILEGED ACTIONS")
@@ -220,14 +220,14 @@ struct AddMachineSheet: View {
             secureField("Sudo password (optional)", text: $sudoPassword)
             Text(
                 "Shut down, restart and unit actions need root. Without this, Edith can only try "
-                    + "passwordless sudo. Stored in your Mac's Keychain and sent on the command's "
-                    + "standard input, never on a command line."
+                + "passwordless sudo. Stored in your Mac's Keychain and sent on the command's "
+                + "standard input, never on a command line."
             )
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
-
+    
     private var testSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -257,7 +257,7 @@ struct AddMachineSheet: View {
             }
         }
     }
-
+    
     private func statusLine(_ message: String, symbol: String, color: Color) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(7)) {
             Image(systemName: symbol).foregroundStyle(color)
@@ -270,7 +270,7 @@ struct AddMachineSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
     }
-
+    
     private var footerBar: some View {
         HStack {
             Button("Cancel") { dismiss() }
@@ -284,7 +284,7 @@ struct AddMachineSheet: View {
         }
         .padding(UIScale.pt(16))
     }
-
+    
     private func labelledField(
         _ title: String, text: Binding<String>, placeholder: String
     ) -> some View {
@@ -296,7 +296,7 @@ struct AddMachineSheet: View {
                 .textFieldStyle(.roundedBorder)
         }
     }
-
+    
     private func secureField(_ title: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title)
@@ -306,13 +306,13 @@ struct AddMachineSheet: View {
                 .textFieldStyle(.roundedBorder)
         }
     }
-
+    
     private var isValid: Bool {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         if mode == .sshConfig, editing == nil { return selectedAlias != nil }
         return !host.trimmingCharacters(in: .whitespaces).isEmpty
     }
-
+    
     private func load() {
         configHosts = SSHConfigFile.concreteHosts()
         guard let editing else {
@@ -336,7 +336,7 @@ struct AddMachineSheet: View {
         case .password: authKind = .password
         }
     }
-
+    
     private func select(_ configHost: SSHConfigHost) {
         selectedAlias = configHost.alias
         host = configHost.hostName ?? configHost.alias
@@ -348,7 +348,7 @@ struct AddMachineSheet: View {
         }
         testState = .idle
     }
-
+    
     private func chooseKey() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -360,7 +360,7 @@ struct AddMachineSheet: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         keyPath = url.path
     }
-
+    
     private func makeMachine() -> Machine {
         let auth: MachineAuth
         switch authKind {
@@ -385,7 +385,7 @@ struct AddMachineSheet: View {
             username: username.trimmingCharacters(in: .whitespaces), auth: auth, source: source,
             wakeMACAddress: editing?.wakeMACAddress, createdAt: editing?.createdAt ?? Date())
     }
-
+    
     private func runTest() {
         testTask?.cancel()
         testState = .testing
@@ -417,7 +417,7 @@ struct AddMachineSheet: View {
             }
         }
     }
-
+    
     private func save() {
         let machine = makeMachine()
         onSave(

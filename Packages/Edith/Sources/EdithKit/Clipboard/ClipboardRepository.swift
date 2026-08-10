@@ -13,7 +13,7 @@ public enum ClipboardRepository {
         defer { _ = flock(descriptor, LOCK_UN) }
         return try body()
     }
-
+    
     public static func blobBytesOnDisk() -> Int {
         let fm = FileManager.default
         guard
@@ -24,38 +24,38 @@ public enum ClipboardRepository {
             total + ((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
         }
     }
-
+    
     public static func loadEntries() -> [ClipboardEntry] {
         guard let data = try? Data(contentsOf: ClipboardPaths.indexFile),
-            let text = String(data: data, encoding: .utf8)
+              let text = String(data: data, encoding: .utf8)
         else { return [] }
         return ClipboardIndex.decode(text)
     }
-
+    
     public static func saveEntries(_ entries: [ClipboardEntry]) throws {
         try FileManager.default.createDirectory(
             at: ClipboardPaths.dir, withIntermediateDirectories: true)
         let text = ClipboardIndex.encode(entries)
         try Data(text.utf8).write(to: ClipboardPaths.indexFile, options: .atomic)
     }
-
+    
     @discardableResult
     public static func appendEntry(_ entry: ClipboardEntry) -> Bool {
         guard FileManager.default.fileExists(atPath: ClipboardPaths.indexFile.path),
-            let line = ClipboardIndex.encodeLine(entry),
-            let handle = try? FileHandle(forWritingTo: ClipboardPaths.indexFile)
+              let line = ClipboardIndex.encodeLine(entry),
+              let handle = try? FileHandle(forWritingTo: ClipboardPaths.indexFile)
         else { return false }
         defer { try? handle.close() }
         guard (try? handle.seekToEnd()) != nil,
-            (try? handle.write(contentsOf: Data(line.utf8))) != nil
+              (try? handle.write(contentsOf: Data(line.utf8))) != nil
         else { return false }
         return true
     }
-
+    
     public static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
-
+    
     public static func writeBlob(_ data: Data, sha256: String, ext: String) throws {
         try FileManager.default.createDirectory(
             at: ClipboardPaths.blobsDir, withIntermediateDirectories: true)
@@ -63,11 +63,11 @@ public enum ClipboardRepository {
         guard !FileManager.default.fileExists(atPath: url.path) else { return }
         try data.write(to: url)
     }
-
+    
     public static func blobData(for entry: ClipboardEntry) -> Data? {
         try? Data(contentsOf: ClipboardPaths.blobFile(sha256: entry.sha256, ext: entry.ext))
     }
-
+    
     public static func pruneEntriesMissingBlobs() {
         let entries = loadEntries()
         let kept = entries.filter {
@@ -77,7 +77,7 @@ public enum ClipboardRepository {
         guard kept.count != entries.count else { return }
         try? saveEntries(kept)
     }
-
+    
     public static func pruneOrphanBlobs(keeping entries: [ClipboardEntry]) {
         let referenced = Set(entries.map { "\($0.sha256).\($0.ext)" })
         let fm = FileManager.default
@@ -87,7 +87,7 @@ public enum ClipboardRepository {
             try? fm.removeItem(at: ClipboardPaths.blobsDir.appendingPathComponent(file))
         }
     }
-
+    
     public static func plainText(for entry: ClipboardEntry, data: Data) -> String? {
         switch entry.ext {
         case "rtf": return NSAttributedString(rtf: data, documentAttributes: nil)?.string
@@ -101,10 +101,10 @@ public enum ClipboardRepository {
         default:
             guard ClipboardTextKinds.isText(entry.ext) else { return nil }
             return String(data: data, encoding: .utf8)
-                ?? String(data: data, encoding: .utf16)
+            ?? String(data: data, encoding: .utf16)
         }
     }
-
+    
     @discardableResult
     public static func copyToPasteboard(
         _ entry: ClipboardEntry, asPlainText: Bool, pasteboard: NSPasteboard = .general
@@ -121,7 +121,7 @@ public enum ClipboardRepository {
             Data(), forType: NSPasteboard.PasteboardType(ClipboardPasteboardFilter.edithOwnTag))
         return true
     }
-
+    
     private static func write(data: Data, entry: ClipboardEntry, to pasteboard: NSPasteboard) {
         switch entry.ext {
         case "png":
@@ -133,8 +133,8 @@ public enum ClipboardRepository {
             "mp4", "mov", "m4v", "avi", "webm", "zip", "gz", "bz2", "xz", "tar", "7z",
             "rar", "data", "color":
             let type =
-                entry.types.first.map { NSPasteboard.PasteboardType($0) }
-                ?? NSPasteboard.PasteboardType("public.data")
+            entry.types.first.map { NSPasteboard.PasteboardType($0) }
+            ?? NSPasteboard.PasteboardType("public.data")
             pasteboard.setData(data, forType: type)
         case "rtf":
             pasteboard.setData(data, forType: .rtf)
@@ -143,8 +143,8 @@ public enum ClipboardRepository {
             }
         case "rtfd":
             let type =
-                entry.types.first.map { NSPasteboard.PasteboardType($0) }
-                ?? NSPasteboard.PasteboardType("com.apple.flat-rtfd")
+            entry.types.first.map { NSPasteboard.PasteboardType($0) }
+            ?? NSPasteboard.PasteboardType("com.apple.flat-rtfd")
             pasteboard.setData(data, forType: type)
             if let text = plainText(for: entry, data: data) {
                 pasteboard.setString(text, forType: .string)

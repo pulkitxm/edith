@@ -8,7 +8,7 @@ public enum CalendarDayEvents {
         let endDate: Date
         let isAllDay: Bool
     }
-
+    
     public static func deduplicated(_ events: [EKEvent]) -> [EKEvent] {
         var identities = Set<EventIdentity>()
         return events.filter { event in
@@ -22,14 +22,14 @@ public enum CalendarDayEvents {
             ).inserted
         }
     }
-
+    
     public static func sorted(_ events: [EKEvent]) -> [EKEvent] {
         events.sorted { a, b in
             if a.isAllDay != b.isAllDay { return a.isAllDay }
             return a.startDate < b.startDate
         }
     }
-
+    
     public static func groupedByDay(
         _ events: [EKEvent], calendar: Calendar = .current
     ) -> [(day: Date, events: [EKEvent])] {
@@ -46,16 +46,16 @@ public enum MeetingLink {
         "webex.com", "whereby.com", "meet.jit.si", "chime.aws",
         "gotomeeting.com", "bluejeans.com", "8x8.vc",
     ]
-
+    
     public static func url(for event: EKEvent) -> URL? {
         if let url = event.url, isMeeting(url) { return url }
         let text = [event.location, event.notes].compactMap { $0 }.joined(separator: "\n")
         return find(in: text)
     }
-
+    
     public static func find(in text: String) -> URL? {
         guard !text.isEmpty,
-            let detector = try? NSDataDetector(
+              let detector = try? NSDataDetector(
                 types: NSTextCheckingResult.CheckingType.link.rawValue)
         else { return nil }
         let range = NSRange(text.startIndex..., in: text)
@@ -64,7 +64,7 @@ public enum MeetingLink {
         }
         return nil
     }
-
+    
     private static func isMeeting(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         return hosts.contains { host == $0 || host.hasSuffix(".\($0)") }

@@ -3,7 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct DockerContainerList: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let query: String
     let dark: Bool
     let busyIDs: Set<String>
@@ -12,21 +12,21 @@ struct DockerContainerList: View {
     let onShell: (DockerContainer) -> Void
     let onRemove: (DockerContainer) -> Void
     let onGroupAction: (String, [DockerContainer], String) -> Void
-
+    
     static let groupKeyPrefix = "group:"
-
+    
     static func groupKey(_ project: String?) -> String { "\(groupKeyPrefix)\(project ?? "")" }
-
+    
     private var filtered: [DockerContainer] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return session.containers }
         return session.containers.filter {
             $0.displayName.localizedCaseInsensitiveContains(trimmed)
-                || $0.image.localizedCaseInsensitiveContains(trimmed)
-                || ($0.composeProject ?? "").localizedCaseInsensitiveContains(trimmed)
+            || $0.image.localizedCaseInsensitiveContains(trimmed)
+            || ($0.composeProject ?? "").localizedCaseInsensitiveContains(trimmed)
         }
     }
-
+    
     private var groups: [(project: String?, containers: [DockerContainer])] {
         let grouped = Dictionary(grouping: filtered) { $0.composeProject }
         let projects = grouped.keys.compactMap { $0 }.sorted()
@@ -38,7 +38,7 @@ struct DockerContainerList: View {
         }
         return result
     }
-
+    
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -83,11 +83,11 @@ struct DockerContainerList: View {
             }
         }
     }
-
+    
     private static func groupHelp(_ verb: String, _ count: Int, _ noun: String) -> String {
         "\(verb) the \(count) \(noun) container" + (count == 1 ? "" : "s") + " in this group"
     }
-
+    
     @ViewBuilder
     private func groupSwitch(_ project: String?, _ containers: [DockerContainer]) -> some View {
         let key = Self.groupKey(project)
@@ -130,7 +130,7 @@ private struct DockerContainerRow: View {
     let onShell: () -> Void
     let onRemove: () -> Void
     @State private var hovering = false
-
+    
     private var stateColor: Color {
         switch container.state {
         case .running: return container.health == .unhealthy ? DashSkin.warn : DashSkin.ok
@@ -138,7 +138,7 @@ private struct DockerContainerRow: View {
         default: return DashSkin.inkFaint(dark)
         }
     }
-
+    
     var body: some View {
         ViewThatFits(in: .horizontal) {
             row(density: .full)
@@ -170,12 +170,12 @@ private struct DockerContainerRow: View {
             Button("Remove", role: .destructive, action: onRemove)
         }
     }
-
+    
     private enum RowDensity {
         case full
         case medium
         case compact
-
+        
         var nameWidth: Double {
             return switch self {
             case .full: 230
@@ -183,12 +183,12 @@ private struct DockerContainerRow: View {
             case .compact: 150
             }
         }
-
+        
         var showsStatus: Bool { self != .compact }
         var showsPorts: Bool { self == .full }
         var showsMemory: Bool { self != .compact }
     }
-
+    
     private func row(density: RowDensity) -> some View {
         HStack(spacing: UIScale.pt(12)) {
             Circle().fill(stateColor).frame(width: UIScale.pt(8), height: UIScale.pt(8))
@@ -227,7 +227,7 @@ private struct DockerContainerRow: View {
             actions
         }
     }
-
+    
     @ViewBuilder
     private var portsView: some View {
         HStack(spacing: UIScale.pt(4)) {
@@ -256,7 +256,7 @@ private struct DockerContainerRow: View {
             }
         }
     }
-
+    
     private var actions: some View {
         HStack(spacing: UIScale.pt(2)) {
             if busy {
@@ -284,7 +284,7 @@ struct DockerSimpleList: View {
     let rows: [DockerRow]
     let dark: Bool
     let onDelete: ((String) -> Void)?
-
+    
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -341,9 +341,9 @@ struct DockerSimpleList: View {
 }
 
 struct DockerUsageView: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let dark: Bool
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -360,12 +360,12 @@ struct DockerUsageView: View {
                         }
                         MeterBar(
                             fraction: usage.sizeBytes > 0
-                                ? Double(usage.sizeBytes - usage.reclaimableBytes)
-                                    / Double(usage.sizeBytes) : 0,
+                            ? Double(usage.sizeBytes - usage.reclaimableBytes)
+                            / Double(usage.sizeBytes) : 0,
                             color: DashSkin.accent(dark), track: DashSkin.line(dark))
                         Text(
                             "\(usage.active) active of \(usage.totalCount)  ·  "
-                                + "\(ByteFormatter.string(usage.reclaimableBytes)) reclaimable"
+                            + "\(ByteFormatter.string(usage.reclaimableBytes)) reclaimable"
                         )
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))

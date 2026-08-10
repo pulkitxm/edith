@@ -25,11 +25,11 @@ struct ComboChart: View {
     var blur = false
     var blurTokens = false
     @State private var selected: String?
-
+    
     private var selectedPoint: ComboPoint? {
         selected.flatMap { sel in points.first { $0.label == sel } }
     }
-
+    
     var body: some View {
         let scale = costScale(points)
         let chart = Chart {
@@ -66,38 +66,38 @@ struct ComboChart: View {
                     }
             }
         }
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(.primary.opacity(0.06))
-                AxisValueLabel {
-                    if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
-                            DashSkin.inkSoft(dark)
-                        ).presenterBlur(blurTokens)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine().foregroundStyle(.primary.opacity(0.06))
+                    AxisValueLabel {
+                        if let d = value.as(Double.self) {
+                            Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                                DashSkin.inkSoft(dark)
+                            ).presenterBlur(blurTokens)
+                        }
+                    }
+                }
+                AxisMarks(position: .trailing) { value in
+                    AxisValueLabel {
+                        if let d = value.as(Double.self) {
+                            Text(DashFmt.usd(d / scale)).font(.system(size: UIScale.pt(9)))
+                                .foregroundStyle(
+                                    lineColor
+                                ).presenterBlur(blur)
+                        }
                     }
                 }
             }
-            AxisMarks(position: .trailing) { value in
-                AxisValueLabel {
-                    if let d = value.as(Double.self) {
-                        Text(DashFmt.usd(d / scale)).font(.system(size: UIScale.pt(9)))
-                            .foregroundStyle(
-                                lineColor
-                            ).presenterBlur(blur)
-                    }
+            .chartXAxis {
+                AxisMarks(preset: .aligned) { _ in
+                    AxisValueLabel(orientation: .verticalReversed)
+                        .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
                 }
             }
-        }
-        .chartXAxis {
-            AxisMarks(preset: .aligned) { _ in
-                AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
-            }
-        }
-        .chartXSelection(value: $selected)
-        .frame(height: height)
-        .padding(.top, UIScale.pt(22))
-
+            .chartXSelection(value: $selected)
+            .frame(height: height)
+            .padding(.top, UIScale.pt(22))
+        
         if scroll, points.count > 30 {
             chart
                 .chartScrollableAxes(.horizontal)
@@ -159,11 +159,11 @@ struct StackedChart: View {
     var blur = false
     var blurTokens = false
     @State private var selected: String?
-
+    
     private var selectedPoint: ComboPoint? {
         selected.flatMap { sel in costLine.first { $0.label == sel } }
     }
-
+    
     var body: some View {
         let scale = costScale(costLine)
         let chart = Chart {
@@ -198,30 +198,30 @@ struct StackedChart: View {
                     }
             }
         }
-        .chartXSelection(value: $selected)
-        .chartForegroundStyleScale(domain: domain, range: range)
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(.primary.opacity(0.06))
-                AxisValueLabel {
-                    if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
-                            DashSkin.inkSoft(dark)
-                        ).presenterBlur(blurTokens)
+            .chartXSelection(value: $selected)
+            .chartForegroundStyleScale(domain: domain, range: range)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine().foregroundStyle(.primary.opacity(0.06))
+                    AxisValueLabel {
+                        if let d = value.as(Double.self) {
+                            Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                                DashSkin.inkSoft(dark)
+                            ).presenterBlur(blurTokens)
+                        }
                     }
                 }
             }
-        }
-        .chartXAxis {
-            AxisMarks(preset: .aligned) { _ in
-                AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
+            .chartXAxis {
+                AxisMarks(preset: .aligned) { _ in
+                    AxisValueLabel(orientation: .verticalReversed)
+                        .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
+                }
             }
-        }
-        .chartLegend(position: .bottom, alignment: .center, spacing: UIScale.pt(6))
-        .frame(height: height)
-        .padding(.top, UIScale.pt(22))
-
+            .chartLegend(position: .bottom, alignment: .center, spacing: UIScale.pt(6))
+            .frame(height: height)
+            .padding(.top, UIScale.pt(22))
+        
         if scroll, costLine.count > 30 {
             chart
                 .chartScrollableAxes(.horizontal)
@@ -253,11 +253,11 @@ struct DonutChart: View {
     var height: CGFloat = 220
     var blurTokens = false
     @State private var angle: Double?
-
+    
     private var selected: DonutSlice? {
         angle.flatMap { donutSlice(at: $0, in: slices) }
     }
-
+    
     var body: some View {
         let total = max(slices.reduce(0) { $0 + $1.value }, 1)
         Chart(slices) { s in
@@ -311,7 +311,7 @@ struct HeatCard: View {
     let dark: Bool
     var blur = false
     var blurTokens = false
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(DashboardModel.ymd.string(from: detail.date))
@@ -343,7 +343,7 @@ struct HeatCard: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(.primary.opacity(0.1)))
     }
-
+    
     private func chip(_ text: String) -> some View {
         Text(text)
             .font(.system(size: UIScale.pt(9), weight: .medium))
@@ -351,7 +351,7 @@ struct HeatCard: View {
             .background(.primary.opacity(0.08), in: Capsule())
             .foregroundStyle(.secondary)
     }
-
+    
     private var tokenRows: some View {
         VStack(spacing: UIScale.pt(2)) {
             row("Input", detail.input)
@@ -360,18 +360,18 @@ struct HeatCard: View {
             row("Cache read", detail.cacheRead)
         }
     }
-
+    
     private func row(_ label: String, _ value: Double) -> some View {
         HStack {
-            Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+            Text(label).settingsCaption()
             Spacer()
             Text(DashFmt.tokens(value)).font(.system(size: UIScale.pt(10))).monospacedDigit()
                 .presenterBlur(blurTokens)
         }
     }
-
+    
     private func tags(_ title: String, _ items: [NamedValue], color: @escaping (String) -> Color)
-        -> some View
+    -> some View
     {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title).font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
@@ -381,7 +381,7 @@ struct HeatCard: View {
             FlowTags(items: items, color: color, blurTokens: blurTokens)
         }
     }
-
+    
     private var projectList: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text("TOP PROJECTS").font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
@@ -409,7 +409,7 @@ struct FlowTags: View {
     let items: [NamedValue]
     let color: (String) -> Color
     var blurTokens = false
-
+    
     var body: some View {
         WrapHStack(spacing: UIScale.pt(4), lineSpacing: 4) {
             ForEach(items.prefix(6)) { item in
@@ -430,7 +430,7 @@ struct WrapHStack<Content: View>: View {
     var spacing: CGFloat = 6
     var lineSpacing: CGFloat = 6
     @ViewBuilder var content: () -> Content
-
+    
     var body: some View {
         _WrapLayout(spacing: spacing, lineSpacing: lineSpacing) { content() }
     }
@@ -439,13 +439,13 @@ struct WrapHStack<Content: View>: View {
 struct _WrapLayout: Layout {
     var spacing: CGFloat
     var lineSpacing: CGFloat
-
+    
     func makeCache(subviews: Subviews) -> [CGSize] {
         subviews.map { $0.sizeThatFits(.unspecified) }
     }
-
+    
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize])
-        -> CGSize
+    -> CGSize
     {
         let maxWidth = proposal.width ?? 300
         var x: CGFloat = 0
@@ -462,7 +462,7 @@ struct _WrapLayout: Layout {
         }
         return CGSize(width: maxWidth, height: y + lineHeight)
     }
-
+    
     func placeSubviews(
         in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize]
     ) {
@@ -470,7 +470,7 @@ struct _WrapLayout: Layout {
         var line: [(view: LayoutSubviews.Element, size: CGSize)] = []
         var lineWidth: CGFloat = 0
         var lineHeight: CGFloat = 0
-
+        
         func flushLine() {
             var x = bounds.minX
             for entry in line {
@@ -484,10 +484,10 @@ struct _WrapLayout: Layout {
             lineWidth = 0
             lineHeight = 0
         }
-
+        
         for (index, view) in subviews.enumerated() {
             let size =
-                cache.indices.contains(index) ? cache[index] : view.sizeThatFits(.unspecified)
+            cache.indices.contains(index) ? cache[index] : view.sizeThatFits(.unspecified)
             if lineWidth + size.width > bounds.width, !line.isEmpty {
                 flushLine()
             }
@@ -503,7 +503,7 @@ struct DashCard<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     @ViewBuilder var content: () -> Content
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 
 extension Notification.Name {
     public static let musicFolderChanged = Notification.Name("musicFolderChanged")
@@ -12,11 +13,11 @@ public enum DownloadStatus: Equatable, Codable {
     case done(String)
     case error(String)
     case interrupted(String?)
-
+    
     enum CodingKeys: String, CodingKey {
         case kind, value, a, b, c
     }
-
+    
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let kind = try c.decode(String.self, forKey: .kind)
@@ -37,7 +38,7 @@ public enum DownloadStatus: Equatable, Codable {
         default: self = .interrupted(nil)
         }
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
@@ -64,14 +65,14 @@ public enum DownloadStatus: Equatable, Codable {
 public enum DownloadKind: String, Codable, Sendable, CaseIterable {
     case audio
     case video
-
+    
     public var title: String {
         switch self {
         case .audio: "Audio"
         case .video: "Video"
         }
     }
-
+    
     public var fileExtension: String {
         switch self {
         case .audio: "m4a"
@@ -84,27 +85,27 @@ public struct DownloadEstimate: Equatable, Sendable {
     public let audioBytes: Int64?
     public let videoBytes: Int64?
     public let approximate: Bool
-
+    
     public init(audioBytes: Int64?, videoBytes: Int64?, approximate: Bool) {
         self.audioBytes = audioBytes
         self.videoBytes = videoBytes
         self.approximate = approximate
     }
-
+    
     public func bytes(for kind: DownloadKind) -> Int64? {
         switch kind {
         case .audio: audioBytes
         case .video: videoBytes
         }
     }
-
+    
     public static func + (lhs: DownloadEstimate, rhs: DownloadEstimate) -> DownloadEstimate {
         DownloadEstimate(
             audioBytes: sum(lhs.audioBytes, rhs.audioBytes),
             videoBytes: sum(lhs.videoBytes, rhs.videoBytes),
             approximate: lhs.approximate || rhs.approximate)
     }
-
+    
     private static func sum(_ a: Int64?, _ b: Int64?) -> Int64? {
         guard let a else { return b }
         guard let b else { return a }
@@ -115,13 +116,13 @@ public struct DownloadEstimate: Equatable, Sendable {
 public enum DownloadSizeParser {
     public static func estimate(fromJSON data: Data) -> DownloadEstimate? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let formats = root["formats"] as? [[String: Any]]
+              let formats = root["formats"] as? [[String: Any]]
         else { return nil }
         var missing = false
         let audio = best(of: formats.filter { isAudioOnly($0) }, by: "abr")
         let video = best(of: formats.filter { isVideoOnly($0) }, by: "height")
         let combined = best(of: formats.filter { isCombined($0) }, by: "height")
-
+        
         let audioBytes = size(of: audio, missing: &missing)
         var videoBytes = size(of: video, missing: &missing)
         if let bytes = videoBytes, let audioBytes {
@@ -133,31 +134,31 @@ public enum DownloadSizeParser {
         return DownloadEstimate(
             audioBytes: audioBytes, videoBytes: videoBytes, approximate: true)
     }
-
+    
     private static func isAudioOnly(_ format: [String: Any]) -> Bool {
         codec(format, "vcodec") == "none" && codec(format, "acodec") != "none"
     }
-
+    
     private static func isVideoOnly(_ format: [String: Any]) -> Bool {
         codec(format, "acodec") == "none" && codec(format, "vcodec") != "none"
     }
-
+    
     private static func isCombined(_ format: [String: Any]) -> Bool {
         codec(format, "acodec") != "none" && codec(format, "vcodec") != "none"
     }
-
+    
     private static func codec(_ format: [String: Any], _ key: String) -> String {
         (format[key] as? String) ?? "none"
     }
-
+    
     private static func best(of formats: [[String: Any]], by key: String) -> [String: Any]? {
         formats.max { rank($0, key) < rank($1, key) }
     }
-
+    
     private static func rank(_ format: [String: Any], _ key: String) -> Double {
         (format[key] as? Double) ?? Double(format[key] as? Int ?? 0)
     }
-
+    
     private static func size(of format: [String: Any]?, missing: inout Bool) -> Int64? {
         guard let format else { return nil }
         for key in ["filesize", "filesize_approx"] {
@@ -179,25 +180,26 @@ private struct SavedItem: Codable {
 }
 
 @MainActor
-public final class YoutubeDownloader: ObservableObject {
+@Observable
+public final class YoutubeDownloader {
     public static let shared = YoutubeDownloader()
 
-    @Published public private(set) var items: [DownloadItem] = []
-    @Published public private(set) var isRunning = false
-    @Published public private(set) var unavailableReason: String?
-    @Published public private(set) var ytdlpVersion: String?
-    @Published public private(set) var isUpdatingYTDLP = false
-    @Published public private(set) var ytdlpUpdateMessage: String?
-    @Published public private(set) var updateResult: Result<String, Error>? = nil
-    @Published public private(set) var estimates: [URL: DownloadEstimate] = [:]
-
+    public private(set) var items: [DownloadItem] = []
+    public private(set) var isRunning = false
+    public private(set) var unavailableReason: String?
+    public private(set) var ytdlpVersion: String?
+    public private(set) var isUpdatingYTDLP = false
+    public private(set) var ytdlpUpdateMessage: String?
+    public private(set) var updateResult: Result<String, Error>? = nil
+    public private(set) var estimates: [URL: DownloadEstimate] = [:]
+    
     private var currentProcess: Process?
     private var currentItemID: UUID?
     private var ytdlpExecutableCache: (url: URL, prefix: [String])?
     private var provisioningObserver: NSObjectProtocol?
     private var queueObserver: NSObjectProtocol?
     private var cancelObserver: NSObjectProtocol?
-
+    
     public struct DownloadItem: Identifiable, Equatable {
         public let id = UUID()
         public let url: URL
@@ -206,11 +208,11 @@ public final class YoutubeDownloader: ObservableObject {
         public let createdAt: Date
         public var kind: DownloadKind = .audio
         public var logs: String = ""
-
+        
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
             lhs.id == rhs.id
         }
-
+        
         public var resolvedTitle: String? {
             if case let .done(output) = status {
                 let first = output.components(separatedBy: ", ").first ?? output
@@ -225,10 +227,10 @@ public final class YoutubeDownloader: ObservableObject {
             }
             return nil
         }
-
+        
         public var thumbnailURL: URL? { YoutubeDownloader.thumbnailURL(for: url) }
     }
-
+    
     nonisolated public static func videoID(from url: URL) -> String? {
         let host = url.host?.lowercased() ?? ""
         if host.contains("youtu.be") {
@@ -243,22 +245,22 @@ public final class YoutubeDownloader: ObservableObject {
         }
         let parts = url.pathComponents.filter { $0 != "/" }
         if let idx = parts.firstIndex(where: { $0 == "shorts" || $0 == "embed" }),
-            idx + 1 < parts.count
+           idx + 1 < parts.count
         {
             return parts[idx + 1]
         }
         return nil
     }
-
+    
     nonisolated public static func thumbnailURL(for url: URL) -> URL? {
         guard let id = videoID(from: url) else { return nil }
         return URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")
     }
-
+    
     private var persistenceURL: URL {
         Repo.dataDir.appendingPathComponent("downloads.json")
     }
-
+    
     private init() {
         checkAvailability()
         load()
@@ -291,7 +293,7 @@ public final class YoutubeDownloader: ObservableObject {
             Task { @MainActor in self?.checkAvailability() }
         }
     }
-
+    
     private func save() {
         let saved = items.map {
             SavedItem(
@@ -304,10 +306,10 @@ public final class YoutubeDownloader: ObservableObject {
             try? data.write(to: persistenceURL, options: .atomic)
         }
     }
-
+    
     private func load() {
         guard let data = try? Data(contentsOf: persistenceURL),
-            let saved = try? JSONDecoder().decode([SavedItem].self, from: data)
+              let saved = try? JSONDecoder().decode([SavedItem].self, from: data)
         else { return }
         items = saved.map {
             DownloadItem(
@@ -316,12 +318,12 @@ public final class YoutubeDownloader: ObservableObject {
         }
         .sorted { $0.createdAt > $1.createdAt }
     }
-
+    
     private func adoptQueueFromDisk() {
         load()
         if !isRunning { processNext() }
     }
-
+    
     public func checkAvailability() {
         ytdlpExecutableCache = nil
         let (exe, prefix) = ytdlpExecutable()
@@ -343,18 +345,18 @@ public final class YoutubeDownloader: ObservableObject {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             } else {
                 unavailableReason =
-                    "yt-dlp is not installed. Open Music extension settings to install it."
+                "yt-dlp is not installed. Open Music extension settings to install it."
                 ytdlpVersion = nil
                 ytdlpExecutableCache = nil
             }
         } catch {
             unavailableReason =
-                "yt-dlp is not installed. Open Music extension settings to install it."
+            "yt-dlp is not installed. Open Music extension settings to install it."
             ytdlpVersion = nil
             ytdlpExecutableCache = nil
         }
     }
-
+    
     public func updateYTDLP(completion: ((Result<String, Error>) -> Void)? = nil) {
         isUpdatingYTDLP = true
         updateResult = nil
@@ -368,14 +370,14 @@ public final class YoutubeDownloader: ObservableObject {
         let errPipe = Pipe()
         p.standardOutput = outPipe
         p.standardError = errPipe
-
+        
         p.terminationHandler = { [weak self] proc in
             let out =
-                String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? ""
+            String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+            ?? ""
             let err =
-                String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? ""
+            String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+            ?? ""
             Task { @MainActor in
                 guard let self else { return }
                 self.isUpdatingYTDLP = false
@@ -400,7 +402,7 @@ public final class YoutubeDownloader: ObservableObject {
                 completion?(self.updateResult!)
             }
         }
-
+        
         do {
             try p.run()
         } catch {
@@ -412,7 +414,7 @@ public final class YoutubeDownloader: ObservableObject {
             completion?(updateResult!)
         }
     }
-
+    
     nonisolated public static func parseURLs(from text: String) -> [URL] {
         text
             .components(separatedBy: CharacterSet([",", "\n", "\r"]))
@@ -421,16 +423,16 @@ public final class YoutubeDownloader: ObservableObject {
             .compactMap { URL(string: $0) }
             .filter { isYouTubeURL($0) }
     }
-
+    
     nonisolated private static func isYouTubeURL(_ url: URL) -> Bool {
         let host = url.host?.lowercased() ?? ""
         return host.contains("youtube.com") || host.contains("youtu.be")
     }
-
+    
     public func enqueue(urls: [URL], prefix: String, kind: DownloadKind = .audio) {
         let outputDir = Repo.musicDir
         try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-
+        
         let items = urls.map { url -> DownloadItem in
             let template: String
             if prefix.isEmpty {
@@ -448,7 +450,7 @@ public final class YoutubeDownloader: ObservableObject {
             processNext()
         }
     }
-
+    
     public func estimate(for url: URL) async -> DownloadEstimate? {
         if let cached = estimates[url] { return cached }
         let (exe, prefix) = ytdlpExecutable()
@@ -458,14 +460,14 @@ public final class YoutubeDownloader: ObservableObject {
         if let value { estimates[url] = value }
         return value
     }
-
+    
     nonisolated private static func runEstimate(
         executable: URL, prefix: [String], url: URL
     ) -> DownloadEstimate? {
         let process = Process()
         process.executableURL = executable
         process.arguments =
-            prefix + ["--no-update", "--no-playlist", "--skip-download", "-J", url.absoluteString]
+        prefix + ["--no-update", "--no-playlist", "--skip-download", "-J", url.absoluteString]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
@@ -475,7 +477,7 @@ public final class YoutubeDownloader: ObservableObject {
         guard process.terminationStatus == 0 else { return nil }
         return DownloadSizeParser.estimate(fromJSON: data)
     }
-
+    
     public func sourceURL(forFileNamed name: String) -> URL? {
         for item in items {
             guard case let .done(output) = item.status else { continue }
@@ -483,7 +485,7 @@ public final class YoutubeDownloader: ObservableObject {
         }
         return nil
     }
-
+    
     public func retry(_ item: DownloadItem) {
         guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[idx].status = .queued
@@ -492,7 +494,7 @@ public final class YoutubeDownloader: ObservableObject {
             processNext()
         }
     }
-
+    
     public func retryAll() {
         for i in items.indices {
             switch items[i].status {
@@ -507,13 +509,13 @@ public final class YoutubeDownloader: ObservableObject {
             processNext()
         }
     }
-
+    
     public func clearHistory() {
         cancelAll()
         items.removeAll()
         save()
     }
-
+    
     private func processNext() {
         guard let index = items.firstIndex(where: { $0.status == .queued }) else {
             isRunning = false
@@ -527,33 +529,33 @@ public final class YoutubeDownloader: ObservableObject {
         currentItemID = itemID
         items[index].status = .resolving
         save()
-
+        
         let (exe, prefix) = ytdlpExecutable()
         let p = Process()
         p.executableURL = exe
         let formatArguments: [String] =
-            switch item.kind {
-            case .audio: ["-x", "--audio-format", "m4a"]
-            case .video: ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
-            }
+        switch item.kind {
+        case .audio: ["-x", "--audio-format", "m4a"]
+        case .video: ["-f", "bv*+ba/b", "--merge-output-format", "mp4"]
+        }
         p.arguments =
-            prefix + [
-                "--no-update",
-                "--no-playlist",
-                "--no-quiet",
-            ] + formatArguments + [
-                "--embed-thumbnail", "--convert-thumbnails", "jpg",
-                "--progress", "--newline",
-                "-o", item.outputFilename ?? "%(title)s.%(ext)s",
-                "--print", "after_move:filepath",
-                item.url.absoluteString,
-            ]
-
+        prefix + [
+            "--no-update",
+            "--no-playlist",
+            "--no-quiet",
+        ] + formatArguments + [
+            "--embed-thumbnail", "--convert-thumbnails", "jpg",
+            "--progress", "--newline",
+            "-o", item.outputFilename ?? "%(title)s.%(ext)s",
+            "--print", "after_move:filepath",
+            item.url.absoluteString,
+        ]
+        
         let outPipe = Pipe()
         let errPipe = Pipe()
         p.standardOutput = outPipe
         p.standardError = errPipe
-
+        
         let stream: @Sendable (FileHandle) -> Void = { [weak self] handle in
             PipeReading.consume(handle) { data in
                 guard let text = String(data: data, encoding: .utf8) else { return }
@@ -570,16 +572,16 @@ public final class YoutubeDownloader: ObservableObject {
         }
         outPipe.fileHandleForReading.readabilityHandler = stream
         errPipe.fileHandleForReading.readabilityHandler = stream
-
+        
         p.terminationHandler = { [weak self] proc in
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
             let tail =
-                (String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                    ?? "")
-                + (String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                    ?? "")
-
+            (String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+             ?? "")
+            + (String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+               ?? "")
+            
             Task { @MainActor in
                 guard let self else { return }
                 defer {
@@ -595,7 +597,7 @@ public final class YoutubeDownloader: ObservableObject {
                     self.items[index].logs += tail
                 }
                 let producedPaths =
-                    self.items[index].logs
+                self.items[index].logs
                     .components(separatedBy: .newlines)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty && FileManager.default.fileExists(atPath: $0) }
@@ -615,7 +617,7 @@ public final class YoutubeDownloader: ObservableObject {
                 }
             }
         }
-
+        
         p.environment = CLIToolEnvironment.sanitized()
         currentProcess = p
         do {
@@ -632,14 +634,14 @@ public final class YoutubeDownloader: ObservableObject {
             processNext()
         }
     }
-
+    
     private func indexOfItem(with id: UUID) -> Int? {
         items.firstIndex(where: { $0.id == id })
     }
-
+    
     nonisolated static let intermediateExtensions: Set<String> =
-        ["webm", "mkv", "opus", "ogg", "part", "ytdl", "temp"]
-
+    ["webm", "mkv", "opus", "ogg", "part", "ytdl", "temp"]
+    
     nonisolated static func cleanupIntermediates(for producedPaths: [String]) {
         let fm = FileManager.default
         for path in producedPaths {
@@ -647,17 +649,17 @@ public final class YoutubeDownloader: ObservableObject {
             let stem = produced.deletingPathExtension().lastPathComponent
             let directory = produced.deletingLastPathComponent()
             let siblings =
-                (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+            (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
             for sibling in siblings
             where sibling != produced
-                && sibling.deletingPathExtension().lastPathComponent == stem
-                && intermediateExtensions.contains(sibling.pathExtension.lowercased())
+            && sibling.deletingPathExtension().lastPathComponent == stem
+            && intermediateExtensions.contains(sibling.pathExtension.lowercased())
             {
                 try? fm.removeItem(at: sibling)
             }
         }
     }
-
+    
     private func ytdlpExecutable() -> (url: URL, prefix: [String]) {
         if let cached = ytdlpExecutableCache { return cached }
         if let executable = CLIToolEnvironment.executable(named: "yt-dlp") {
@@ -669,7 +671,7 @@ public final class YoutubeDownloader: ObservableObject {
         ytdlpExecutableCache = result
         return result
     }
-
+    
     public func cancelAll() {
         currentProcess?.terminate()
         currentProcess = nil
@@ -685,7 +687,7 @@ public final class YoutubeDownloader: ObservableObject {
         currentItemID = nil
         save()
     }
-
+    
     nonisolated static func parseProgress(from text: String) -> (
         progress: String, videoIndex: Int, videoCount: Int
     ) {
@@ -700,17 +702,17 @@ public final class YoutubeDownloader: ObservableObject {
                 return ("...", vi.first ?? 1, vi.last ?? 1)
             }
         }
-
+        
         if let range = text.range(of: #"(\d+\.\d+)%\s*of"#, options: .regularExpression) {
             let match = String(text[range])
             if let pct = match.components(separatedBy: "%").first?.trimmingCharacters(
                 in: .whitespaces
             )
-            .components(separatedBy: " ").last {
+                .components(separatedBy: " ").last {
                 return ("\(pct)%", 0, 0)
             }
         }
-
+        
         if let range = text.range(of: #"\[download\]\s+(\d+\.\d+)%"#, options: .regularExpression) {
             let match = String(text[range])
             let pct = match.components(separatedBy: CharacterSet.whitespaces).compactMap {
@@ -722,7 +724,7 @@ public final class YoutubeDownloader: ObservableObject {
                 return (pct, 0, 0)
             }
         }
-
+        
         if text.contains("[ExtractAudio]") { return ("Converting...", 0, 0) }
         if text.contains("[Metadata]") { return ("Metadata...", 0, 0) }
         if text.contains("[Merger]") { return ("Merging...", 0, 0) }

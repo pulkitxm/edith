@@ -2,15 +2,15 @@ import Foundation
 
 public enum Favourites {
     public static let key = "musicFavourites"
-
+    
     public static var paths: [String] {
         SharedDefaults.store.stringArray(forKey: key) ?? []
     }
-
+    
     public static func contains(_ relativePath: String) -> Bool {
         paths.contains(relativePath)
     }
-
+    
     @discardableResult
     public static func toggle(_ relativePath: String) -> Bool {
         var list = paths
@@ -23,7 +23,7 @@ public enum Favourites {
         save(list)
         return true
     }
-
+    
     public static func repoint(from old: String, to new: String) {
         var list = paths
         var changed = false
@@ -38,7 +38,7 @@ public enum Favourites {
         }
         if changed { save(list) }
     }
-
+    
     public static func tracks() -> [Track] {
         paths.compactMap { path in
             let url = TrackMeta.url(for: path)
@@ -46,7 +46,7 @@ public enum Favourites {
             return Track(url: url, relativePath: path)
         }
     }
-
+    
     private static func save(_ list: [String]) {
         SharedDefaults.store.set(list, forKey: key)
         IPC.post(IPC.Name.musicFavouritesChanged)

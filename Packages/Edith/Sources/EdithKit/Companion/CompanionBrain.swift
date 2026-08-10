@@ -252,9 +252,9 @@ public struct CompanionMachine: Codable, Equatable, Sendable, Identifiable {
     public let profile: String?
     public let profileOverride: String?
     public let status: String
-
+    
     public var effectiveProfile: String { profileOverride ?? profile ?? "unknown" }
-
+    
     public var plainEnglish: String {
         var parts: [String] = []
         if let os, let arch { parts.append("\(os) \(arch)") }

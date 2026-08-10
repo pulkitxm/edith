@@ -20,7 +20,7 @@ import Testing
             #expect(world.postedNames().isEmpty)
         }
     }
-
+    
     @Test func toolsInstallReportsTheManualInstructionWhenItFails() async throws {
         try await CLIProbe.inWorld { _ in
             CLIEnvironment.executableNamed = { _ in nil }
@@ -34,7 +34,7 @@ import Testing
             #expect(result.stdout.isEmpty)
         }
     }
-
+    
     @Test func downloadCancelSaysWhenNothingStoppedTheRunningTransfer() async throws {
         try await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
@@ -44,7 +44,7 @@ import Testing
             #expect(result.object?["stoppedRunning"] as? Bool == false)
         }
     }
-
+    
     @Test func toolVersionsAreRememberedUntilTheBinaryChanges() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-toolcache-\(UUID().uuidString)")
@@ -53,31 +53,31 @@ import Testing
         let previous = ToolVersionCache.storeURL
         ToolVersionCache.storeURL = dir.appendingPathComponent("versions.json")
         defer { ToolVersionCache.storeURL = previous }
-
+        
         let binary = dir.appendingPathComponent("fake-tool")
         try "one".write(to: binary, atomically: true, encoding: .utf8)
         #expect(ToolVersionCache.cached(for: binary) == nil)
         ToolVersionCache.remember("1.0.0", for: binary)
         #expect(ToolVersionCache.cached(for: binary) == "1.0.0")
-
+        
         try "a longer body that changes the size".write(
             to: binary, atomically: true, encoding: .utf8)
         #expect(ToolVersionCache.cached(for: binary) == nil)
     }
-
+    
     @Test func aToolThatIsNotThereHasNoRememberedVersion() {
         let missing = URL(fileURLWithPath: "/nope/not/a/tool")
         #expect(ToolVersionCache.stamp(for: missing) == nil)
         #expect(ToolVersionCache.cached(for: missing) == nil)
     }
-
+    
     @Test func theCLIAndTheUIAgreeOnHowAPlaySourceIsSpelled() {
         #expect(
             MusicSourceRequest.folder("Albums/Live").payload as? [String: String]
-                == ["sourceKind": "folder", "sourcePath": "Albums/Live"])
+            == ["sourceKind": "folder", "sourcePath": "Albums/Live"])
         #expect(
             MusicSourceRequest.favourites.payload as? [String: String]
-                == ["sourceKind": "favourites"])
+            == ["sourceKind": "favourites"])
         for request: MusicSourceRequest in [
             .folder("a/b"), .directory("c"), .favourites, .all,
         ] {
@@ -85,7 +85,7 @@ import Testing
         }
         #expect(MusicSourceRequest.decode(["kind": "folder", "path": "a"]) == nil)
     }
-
+    
     @Test func limitsRefreshThatGoesUnansweredIsAnErrorRatherThanStaleNumbers() async throws {
         try await CLIProbe.inWorld { world in
             world.helperRunning(true)

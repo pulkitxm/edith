@@ -4,16 +4,17 @@ import SwiftUI
 
 struct ClipboardHistoryView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    "accent"
     @State private var entries: [ClipboardEntry] = []
     @State private var filterText = ""
     @State private var refreshObserver: NSObjectProtocol?
     @State private var copiedID: String?
-
+    
     private var filtered: [ClipboardEntry] {
         ClipboardActions.arrange(entries, query: filterText)
     }
-
+    
     private var summary: String {
         let stats = ClipboardActions.stats(entries)
         var parts = [stats.count == 1 ? "1 item" : "\(stats.count) items"]
@@ -23,7 +24,7 @@ struct ClipboardHistoryView: View {
         if shown != stats.count { parts.append("\(shown) shown") }
         return parts.joined(separator: " · ")
     }
-
+    
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             HStack(alignment: .firstTextBaseline) {
@@ -31,8 +32,7 @@ struct ClipboardHistoryView: View {
                     Text("Clipboard History")
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                     Text(summary)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
                 Spacer()
                 Button("Done") { dismiss() }
@@ -57,11 +57,11 @@ struct ClipboardHistoryView: View {
             refreshObserver = nil
         }
     }
-
+    
     private func reload() {
         entries = ClipboardActions.arrange(ClipboardRepository.loadEntries())
     }
-
+    
     private func row(_ entry: ClipboardEntry) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
             ClipboardThumbnailView(entry: entry, maxHeight: entry.kind == .text ? 18 : 40) {
@@ -81,11 +81,11 @@ struct ClipboardHistoryView: View {
                     Text("·")
                     Text(Self.byteCountFormatter.string(fromByteCount: Int64(entry.size)))
                 }
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
             }
             Spacer()
             if copiedID == entry.id {
-                Text("Copied").font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                Text("Copied").settingsCaption()
             }
             Button {
                 copy(entry)
@@ -109,7 +109,7 @@ struct ClipboardHistoryView: View {
         }
         .padding(.vertical, UIScale.pt(4))
     }
-
+    
     private func icon(for kind: ClipboardEntry.Kind) -> String {
         switch kind {
         case .image: return "photo"
@@ -121,30 +121,30 @@ struct ClipboardHistoryView: View {
         case .data: return "externaldrive"
         }
     }
-
+    
     private func copy(_ entry: ClipboardEntry) {
-        let plain = SharedDefaults.store.bool(forKey: "clipboardPastePlainText")
+        let plain = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
         apply { try ClipboardActions.copy(entry, asPlainText: plain) }
         copiedID = entry.id
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             if copiedID == entry.id { copiedID = nil }
         }
     }
-
+    
     private func togglePin(_ entry: ClipboardEntry) {
         apply { try ClipboardActions.togglePin(ids: [entry.id]) }
     }
-
+    
     private func delete(_ entry: ClipboardEntry) {
         apply { try ClipboardActions.delete(ids: [entry.id]) }
     }
-
+    
     private func apply(_ action: () throws -> ClipboardActions.Outcome) {
         guard let outcome = try? action(), outcome.changed > 0 else { return }
         entries = ClipboardActions.arrange(outcome.entries)
         IPC.post(IPC.Name.clipboardChanged)
     }
-
+    
     private static let byteCountFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file

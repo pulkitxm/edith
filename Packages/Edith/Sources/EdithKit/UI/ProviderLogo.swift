@@ -6,7 +6,7 @@ public enum ProviderLogo {
         .compactMap { $0?.appendingPathComponent("Edith_EdithKit.bundle") }
         .compactMap(Bundle.init(url:))
         .first
-
+    
     public static func image(_ provider: LimitProvider) -> NSImage? {
         guard
             let url = resources?.url(forResource: provider.rawValue, withExtension: "svg"),
@@ -15,7 +15,7 @@ public enum ProviderLogo {
         image.isTemplate = true
         return image
     }
-
+    
     public static func tintedImage(
         _ provider: LimitProvider, color: NSColor, size: NSSize = NSSize(width: 13, height: 13)
     ) -> NSImage? {
@@ -33,11 +33,11 @@ public enum ProviderLogo {
 
 public struct ProviderLogoView: View {
     private let provider: LimitProvider
-
+    
     public init(_ provider: LimitProvider) {
         self.provider = provider
     }
-
+    
     public var body: some View {
         if let image = ProviderLogo.image(provider) {
             Image(nsImage: image)
@@ -54,7 +54,7 @@ public struct ProviderSwitchButton: View {
     private let color: Color
     private let size: CGFloat
     @State private var showingProviders = false
-
+    
     public init(
         selection: Binding<LimitProvider>, providers: [LimitProvider], color: Color,
         size: CGFloat = 15
@@ -64,7 +64,7 @@ public struct ProviderSwitchButton: View {
         self.color = color
         self.size = size
     }
-
+    
     public var body: some View {
         Button {
             guard providers.count > 1 else { return }
@@ -83,7 +83,7 @@ public struct ProviderSwitchButton: View {
         .pointerCursor()
         .help(
             providers.count > 1
-                ? "Choose provider, or Command-click to switch" : selection.label
+            ? "Choose provider, or Command-click to switch" : selection.label
         )
         .popover(isPresented: $showingProviders, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -115,7 +115,7 @@ public struct ProviderSwitchButton: View {
             .frame(width: UIScale.pt(132))
         }
     }
-
+    
     private func switchProvider() {
         guard let index = providers.firstIndex(of: selection) else {
             selection = providers[0]
