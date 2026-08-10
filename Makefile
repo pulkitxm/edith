@@ -12,7 +12,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check verify-bundle site-dev cli icon wiki wiki-push
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
 
 ci:
 	bun install --frozen-lockfile
@@ -76,12 +76,18 @@ ci-site:
 ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
-ci-swift-check:
+ci-swift-lint:
+	cd $(PKG) && swift format lint --strict --parallel --recursive Sources Tests Package.swift
+
+ci-swift-build:
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
-	cd $(PKG) && swift format lint --strict --parallel --recursive Sources Tests Package.swift
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
+
+ci-swift-test:
 	cd $(PKG) && ./test.sh
+
+ci-swift-check: ci-swift-lint ci-swift-build ci-swift-test
 
 ci-swift: ci-swift-check
 	./build.sh --no-open
