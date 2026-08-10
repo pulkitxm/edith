@@ -7,14 +7,14 @@ import Testing
 private final class CommandRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var requests: [CLICommandRequest] = []
-    
+
     func record(_ request: CLICommandRequest) -> Int {
         lock.lock()
         defer { lock.unlock() }
         requests.append(request)
         return requests.filter { $0.arguments == request.arguments }.count
     }
-    
+
     func count(where predicate: (CLICommandRequest) -> Bool) -> Int {
         lock.lock()
         defer { lock.unlock() }
@@ -30,7 +30,7 @@ private final class CommandRecorder: @unchecked Sendable {
         installStrategy: .packageManagers(
             homebrewArguments: ["install", "--cask", "test-tool"],
             npmPackage: "@example/test-tool", instruction: "Install Test Tool manually."))
-    
+
     @Test func presenceCheckShortCircuitsInstallation() async {
         let recorder = CommandRecorder()
         let provisioner = ToolProvisioner { request, onLine in
@@ -38,14 +38,14 @@ private final class CommandRecorder: @unchecked Sendable {
             onLine("1.2.3")
             return CLICommandResult(terminationStatus: 0, output: "1.2.3\n")
         }
-        
+
         await provisioner.provision(tool).value
-        
+
         #expect(provisioner.state(for: tool) == .present(version: "1.2.3"))
         #expect(recorder.count { $0.arguments == ["test-tool", "--version"] } == 1)
         #expect(recorder.count { $0.arguments.contains("install") } == 0)
     }
-    
+
     @Test func successfulInstallTransitionsThroughExpectedStates() async {
         let recorder = CommandRecorder()
         let provisioner = ToolProvisioner { request, onLine in
@@ -86,10 +86,10 @@ private final class CommandRecorder: @unchecked Sendable {
             }
         }
         observeStates()
-        
+
         await provisioner.provision(tool).value
         for _ in 0..<10 { await Task.yield() }
-        
+
         let checking = transitions.firstIndex(of: .checking)
         let installing = transitions.firstIndex {
             if case .installing = $0 { return true }
@@ -102,14 +102,14 @@ private final class CommandRecorder: @unchecked Sendable {
         #expect(checking! < installing!)
         #expect(installing! < installed!)
     }
-    
+
     @Test func failureCarriesManualInstruction() async {
         let provisioner = ToolProvisioner { _, _ in
             CLICommandResult(terminationStatus: 127, output: "")
         }
-        
+
         await provisioner.provision(tool).value
-        
+
         guard case let .failed(message, instruction) = provisioner.state(for: tool) else {
             Issue.record("Expected failed state")
             return
@@ -117,7 +117,7 @@ private final class CommandRecorder: @unchecked Sendable {
         #expect(message.contains("Neither Homebrew nor npm"))
         #expect(instruction == "Install Test Tool manually.")
     }
-    
+
     @Test func onlyOneInstallRunsPerToolAtATime() async {
         let recorder = CommandRecorder()
         let provisioner = ToolProvisioner { request, _ in
@@ -133,12 +133,12 @@ private final class CommandRecorder: @unchecked Sendable {
             await Task.yield()
             return CLICommandResult(terminationStatus: 0, output: "installed\n")
         }
-        
+
         let first = provisioner.provision(tool)
         let second = provisioner.provision(tool)
         await first.value
         await second.value
-        
+
         #expect(
             recorder.count {
                 $0.arguments == ["brew", "install", "--cask", "test-tool"]
