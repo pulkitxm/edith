@@ -16,5 +16,5 @@ pre-push:
       glob: "apps/promo-video/**"
       run: make ci-promo
     swift:
-      glob: "{Packages/**,Resources/**,edth.xcodeproj/**,build.sh}"
+      glob: "{Packages/**,Resources/**,edth.xcodeproj/**,docs/**,build.sh}"
       run: make ci-swift-check
