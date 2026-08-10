@@ -1,7 +1,8 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 PKG := Packages/Edith
-SCHEMES := EdithMain EdithHelper EdithFiles ed edh
 SIGN_OVERRIDES := CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+XCODEBUILD := xcodebuild -project edth.xcodeproj -derivedDataPath build -quiet \
+  -onlyUsePackageVersionsFromResolvedFile COMPILER_INDEX_STORE_ENABLE=NO
 
 SELECTED_DEV_DIR := $(shell xcode-select -p 2>/dev/null)
 ifneq ($(wildcard $(SELECTED_DEV_DIR)/usr/bin/xcodebuild),)
@@ -11,7 +12,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check site-dev cli icon wiki wiki-push
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check verify-bundle site-dev cli icon wiki wiki-push
 
 ci:
 	bun install --frozen-lockfile
@@ -21,8 +22,8 @@ site-dev:
 	cd apps/site && python3 -m http.server 8000
 
 cli:
-	xcodebuild -project edth.xcodeproj -scheme ed -configuration Release -derivedDataPath build build
-	xcodebuild -project edth.xcodeproj -scheme edh -configuration Release -derivedDataPath build build
+	$(XCODEBUILD) -scheme ed -configuration Release build
+	$(XCODEBUILD) -scheme edh -configuration Release build
 	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
 	build/Build/Products/Release/ed completions install
 
@@ -79,14 +80,14 @@ ci-swift-check:
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
 	cd $(PKG) && swift format lint --strict --parallel --recursive Sources Tests Package.swift
-	@set -eu; for scheme in $(SCHEMES); do \
-	  xcodebuild -project edth.xcodeproj -scheme "$$scheme" -configuration Debug -derivedDataPath build \
-	    $(SIGN_OVERRIDES) build || exit 1; \
-	done
+	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
 	cd $(PKG) && ./test.sh
 
 ci-swift: ci-swift-check
 	./build.sh --no-open
+	$(MAKE) verify-bundle
+
+verify-bundle:
 	test -f dist/Edith.app/Contents/MacOS/Edith
 	test -x dist/Edith.app/Contents/MacOS/ed
 	test -x dist/Edith.app/Contents/MacOS/edh

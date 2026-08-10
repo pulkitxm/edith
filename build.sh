@@ -124,6 +124,9 @@ TEAM_ID=""
 DERIVED=build
 xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" \
+  -quiet \
+  -onlyUsePackageVersionsFromResolvedFile \
+  COMPILER_INDEX_STORE_ENABLE=NO \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
