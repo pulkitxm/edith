@@ -34,13 +34,35 @@ enum MachineAlert: Equatable, Sendable {
     }
 }
 
-struct MachineHealth: Equatable, Sendable {
+struct MachineHealth: Equatable, Sendable, Codable {
     var reachable: Bool
     var fullMounts: Set<String>
 
     init(reachable: Bool = true, fullMounts: Set<String> = []) {
         self.reachable = reachable
         self.fullMounts = fullMounts
+    }
+}
+
+enum MachineHealthStore {
+    static let defaultsKey = "machinesHealth"
+
+    static func load() -> [UUID: MachineHealth] {
+        guard let data = SharedDefaults.store.data(forKey: defaultsKey),
+            let stored = try? JSONDecoder().decode([String: MachineHealth].self, from: data)
+        else { return [:] }
+        return stored.reduce(into: [:]) { result, entry in
+            guard let id = UUID(uuidString: entry.key) else { return }
+            result[id] = entry.value
+        }
+    }
+
+    static func save(_ health: [UUID: MachineHealth]) {
+        let stored = health.reduce(into: [String: MachineHealth]()) { result, entry in
+            result[entry.key.uuidString] = entry.value
+        }
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        SharedDefaults.store.set(data, forKey: defaultsKey)
     }
 }
 
@@ -72,7 +94,7 @@ enum MachineMonitorLogic {
 @MainActor
 final class MachineMonitor: FeatureModule {
     private var timer: Timer?
-    private var health: [UUID: MachineHealth] = [:]
+    private var health: [UUID: MachineHealth] = MachineHealthStore.load()
     private var probing = false
     private let store = MachineStore()
 
@@ -108,6 +130,8 @@ final class MachineMonitor: FeatureModule {
         guard notifyDown || notifyDisk else { return }
         let threshold =
             SharedDefaults.store.object(forKey: "machinesDiskThreshold") as? Double ?? 90
+        let known = Set(machines.map(\.id))
+        health = health.filter { known.contains($0.key) }
         probing = true
         Task { @MainActor in
             defer { probing = false }
@@ -141,6 +165,7 @@ final class MachineMonitor: FeatureModule {
             machineName: machine.name, previous: previous, current: current, disks: disks,
             threshold: threshold, notifyDown: notifyDown, notifyDisk: notifyDisk)
         health[machine.id] = current
+        MachineHealthStore.save(health)
         for alert in alerts { MachineMonitor.notify(alert) }
     }
 
