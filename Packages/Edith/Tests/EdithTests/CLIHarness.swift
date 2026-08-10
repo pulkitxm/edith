@@ -69,6 +69,7 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.standardDefaults = standard
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }
+        CLIEnvironment.executableNamed = { _ in nil }
         CLIEnvironment.answer = { _ in nil }
         CLIEnvironment.permissionUsages = { [] }
         CLIEnvironment.deliver = { [weak self] name, info in

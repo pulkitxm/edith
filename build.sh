@@ -124,6 +124,9 @@ TEAM_ID=""
 DERIVED=build
 xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" \
+  -quiet \
+  -onlyUsePackageVersionsFromResolvedFile \
+  COMPILER_INDEX_STORE_ENABLE=NO \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
@@ -137,6 +140,17 @@ HELPER="$APP/Contents/Library/LoginItems/Edith.app"
 FILES_APP="$APP/Contents/Library/Applications/Edith Files.app"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
+
+rm -rf "$FILES_APP/Contents/Frameworks"
+
+if [ "$RELEASE" = 1 ]; then
+  find "$APP" -type f -perm -u+x -print0 \
+    | while IFS= read -r -d '' binary; do
+        case "$(file -b "$binary")" in
+          *Mach-O*) strip -rSTx "$binary" 2>/dev/null || true ;;
+        esac
+      done
+fi
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2

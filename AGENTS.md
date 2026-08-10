@@ -27,11 +27,13 @@ copy of a source tree; there is one.
 ## Checks
 
 - `bun run check-comments` - no disallowed comments (all tracked source).
-- Swift checks: `make ci-swift-check` runs all of it. Individually, from `Packages/Edith`:
-  `swift format lint --strict --recursive Sources Tests Package.swift` (format + lint),
-  `./test.sh` (tests); and from the root
-  `xcodebuild -project edth.xcodeproj -scheme <EdithMain|EdithHelper|EdithFiles|ed|edh>
-  -configuration Debug build` (type-check per target).
+- Swift checks: `make ci-swift-check` runs all of it. The three halves are separate
+  targets, and nothing makes you wait for the others: `make ci-swift-lint`
+  (`swift format lint --strict`), `make ci-swift-build` (one `xcodebuild`), and
+  `make ci-swift-test` (`./test.sh`). The build and the tests use different build
+  systems and different build trees, so they run in parallel.
+- Build the `EdithMain` scheme alone to type-check everything: it lists `EdithHelper`,
+  `EdithFiles`, `ed` and `edh` as target dependencies, so all five targets compile.
 - `bun run lint` - Biome format + lint for the dashboard.
 - `bun test apps/dashboard/tests scripts` - JS tests.
 - `cd apps/promo-video && npm ci && npx tsc --noEmit` - promo-video (Remotion) type-check.

@@ -10,72 +10,88 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  comments:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.areas.outputs.swift }}
+      promo: ${{ steps.areas.outputs.promo }}
+      site: ${{ steps.areas.outputs.site }}
+      scripts: ${{ steps.areas.outputs.scripts }}
+      source: ${{ steps.areas.outputs.source }}
     steps:
       - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - name: Comment-stripper self-test
-        run: bun scripts/strip-comments.mjs --selftest
-      - name: No disallowed comments
-        run: bun scripts/strip-comments.mjs --check
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - id: areas
+        name: Work out which areas changed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+            && git merge-base --is-ancestor "$BEFORE" HEAD 2>/dev/null; then
+            base="$BEFORE"
+          elif [ -n "$BASE_REF" ]; then
+            base="$(git merge-base "origin/$BASE_REF" HEAD)"
+          else
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            changed="$(git diff --name-only "$base" HEAD)"
+            printf 'changed since %s:\n%s\n\n' "$base" "$changed"
+          else
+            changed=""
+            echo "no comparable base commit, running every area"
+          fi
+          area() {
+            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -qE "$2"; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+              echo "$1: run"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+              echo "$1: skip"
+            fi
+          }
+          area swift '^(Packages/Edith/|Resources/|docs/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area promo '^apps/promo-video/'
+          area site '^apps/site/'
+          area scripts '^(scripts/|package\.json$|bun\.lock$|biome\.json$)'
+          area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
 
-  secrets:
+  checks:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: No committed secrets
-        run: bun run check-secrets
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+        run: make ci-secrets
+      - name: No disallowed comments
+        if: needs.changes.outputs.source == 'true'
+        run: make ci-comments
       - name: Lint (Biome)
-        run: bun run lint
-
-  scripts:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - name: Tests
-        run: bun test ./scripts
-
-  site:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
+        run: make ci-lint
+      - name: Script tests
+        if: needs.changes.outputs.scripts == 'true'
+        run: make ci-scripts
       - name: Site is self-contained
-        run: |
-          test -f apps/site/index.html
-          test -f apps/site/CNAME
-          grep -qx edith.pulkit.page apps/site/CNAME
-          ! grep -rhoE '(src|href)="https?://[^"]+' apps/site/*.html \
-            | grep -vE 'https://(github\.com|www\.gnu\.org|docs\.github\.com|edith\.pulkit\.page)' \
-            || { echo "site references an unexpected external origin" >&2; exit 1; }
-      - name: No dead internal links
-        run: |
-          cd apps/site
-          rc=0
-          for ref in $(grep -rhoE '(src|href)="/[^"#]*' ./*.html | cut -d'"' -f2); do
-            test -e ".${ref}" || { echo "missing: ${ref}" >&2; rc=1; }
-          done
-          exit $rc
+        if: needs.changes.outputs.site == 'true'
+        run: make ci-site
 
   promo-video:
+    needs: changes
+    if: needs.changes.outputs.promo == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: apps/promo-video/package-lock.json
       - name: Install
         run: npm ci
         working-directory: apps/promo-video
@@ -83,45 +99,41 @@ jobs:
         run: npx tsc --noEmit
         working-directory: apps/promo-video
 
-  swift:
+  swift-build:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
         working-directory: Packages/Edith
-      - name: Build every target
-        run: |
-          SIGN=(CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=)
-          for scheme in EdithMain EdithHelper EdithFiles ed edh; do
-            xcodebuild -project edth.xcodeproj -scheme "$scheme" -configuration Debug -derivedDataPath build "${SIGN[@]}" build
-          done
+      - name: Cache resolved packages
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-xcode-${{ runner.os }}-${{ hashFiles('edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/Edith/Package.resolved') }}
+          restore-keys: spm-xcode-${{ runner.os }}-
+      - name: Build the .app bundle
+        run: ./build.sh --no-open
+      - name: Verify nested bundles and signing
+        run: make verify-bundle
+
+  swift-test:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cache resolved packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            Packages/Edith/.build/checkouts
+            Packages/Edith/.build/artifacts
+            Packages/Edith/.build/repositories
+          key: spm-swiftpm-${{ runner.os }}-${{ hashFiles('Packages/Edith/Package.resolved') }}
+          restore-keys: spm-swiftpm-${{ runner.os }}-
       - name: Tests
         run: ./test.sh
         working-directory: Packages/Edith
-      - name: Build .app bundle (smoke test)
-        run: ./build.sh --no-open
-      - name: Verify nested bundles and signing
-        run: |
-          test -f dist/Edith.app/Contents/MacOS/Edith
-          test -x dist/Edith.app/Contents/MacOS/ed
-          test -x dist/Edith.app/Contents/MacOS/edh
-          test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
-          test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/MenuBar.png
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-          test -x "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/MacOS/EdithFiles"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/Info.plist" | grep -qx com.pulkit.edith.files
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx Edith
-          test -z "$(find dist/Edith.app -print | grep Helper)"
-          for plist in dist/Edith.app/Contents/Info.plist dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist; do
-            for field in CFBundleName CFBundleDisplayName; do
-              ! /usr/libexec/PlistBuddy -c "Print :$field" "$plist" | grep -q Helper
-            done
-          done
-          codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
-          codesign --verify "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
-          codesign --verify --deep --strict dist/Edith.app

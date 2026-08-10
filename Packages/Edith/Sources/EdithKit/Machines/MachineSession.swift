@@ -55,6 +55,9 @@ public final class MachineSession {
     private var latencyTask: Task<Void, Never>?
     private var localTask: Task<Void, Never>?
     private var metricsRestartTask: Task<Void, Never>?
+    private var metricsWatchdog: Task<Void, Never>?
+    private var lastMetricAt: Date?
+    private var metricsFailures = 0
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
     private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
@@ -130,6 +133,8 @@ public final class MachineSession {
         localTask = nil
         metricsRestartTask?.cancel()
         metricsRestartTask = nil
+        metricsWatchdog?.cancel()
+        metricsWatchdog = nil
         probeTask?.cancel()
         probeTask = nil
         mountTask?.cancel()
@@ -242,6 +247,31 @@ public final class MachineSession {
         }
     }
 
+    public static let metricsSilenceLimit: TimeInterval = 30
+
+    nonisolated static func metricsRestartDelay(failures: Int) -> TimeInterval {
+        let steps = min(max(0, failures), 8)
+        return min(3 * pow(2, Double(steps)), 60)
+    }
+
+    private func startMetricsWatchdog() {
+        metricsWatchdog?.cancel()
+        metricsWatchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, !Task.isCancelled else { return }
+                guard state.isConnected, metricsStream != nil, let last = lastMetricAt else {
+                    continue
+                }
+                guard Date().timeIntervalSince(last) > Self.metricsSilenceLimit else { continue }
+                metricsStream?.cancel()
+                metricsStream = nil
+                handleMetricsStreamEnded()
+                return
+            }
+        }
+    }
+
     private func startMetricsStream() {
         guard let connection, let script = MachineCollector.script() else { return }
         let process = connection.streamProcess(command: MachineCollector.streamCommand)
@@ -259,6 +289,8 @@ public final class MachineSession {
         do {
             try stream.start()
             metricsStream = stream
+            lastMetricAt = Date()
+            startMetricsWatchdog()
         } catch {
             handleMetricsStreamEnded()
         }
@@ -267,20 +299,26 @@ public final class MachineSession {
     private func handleMetricsStreamEnded() {
         guard state.isConnected else { return }
         metricsStream = nil
+        metricsWatchdog?.cancel()
+        metricsWatchdog = nil
         metricsRestartTask?.cancel()
+        let delay = Self.metricsRestartDelay(failures: metricsFailures)
+        metricsFailures += 1
         metricsRestartTask = Task { [weak self] in
             guard let self, let connection else { return }
             guard await connection.masterIsAlive() else {
                 handleDrop()
                 return
             }
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(delay))
             guard state.isConnected, metricsStream == nil else { return }
             startMetricsStream()
         }
     }
 
     private func apply(record: MachineMetricRecord) {
+        lastMetricAt = Date()
+        metricsFailures = 0
         switch record {
         case let .hello(value): hello = value
         case let .sample(value): apply(sample: value)

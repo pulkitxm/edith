@@ -107,7 +107,7 @@ function readnet(  line, idx, name, rest, parts) {
   }
   close("/proc/net/dev")
 }
-function readpid(pid,  line, rest, n, parts, ticks, start, rss, uid, pname) {
+function readpid(pid,  line, rest, n, parts, ticks, start, rss, uid, pname, open) {
   if (pid == selfPid) return
   line = firstline("/proc/" pid "/stat")
   if (line == "") return
@@ -339,13 +339,23 @@ function readBlockDevices(  cmd, line) {
 function readProcessList(  cmd, line, pid) {
   delete pidList; delete pidCommand
   nPids = 0
-  cmd = "ps -ww -eo pid=,args= 2>/dev/null"
+  cmd = "ls -1 /proc 2>/dev/null"
   while ((cmd | getline line) > 0) {
+    if (line !~ /^[0-9]+$/) continue
+    pidList[++nPids] = line
+  }
+  close(cmd)
+  if (nPids == 0) return
+  if (commandsRetryIn > 0) { commandsRetryIn--; return }
+  cmd = "F=/tmp/.edith-ps.$$; ps -ww -eo pid=,args= >$F 2>/dev/null & P=$!;"
+  cmd = cmd " N=0; while kill -0 $P 2>/dev/null && [ $N -lt 3 ]; do sleep 1; N=$((N+1)); done;"
+  cmd = cmd " if kill -0 $P 2>/dev/null; then echo " psStalledMarker "; else cat $F; fi; rm -f $F"
+  while ((cmd | getline line) > 0) {
+    if (line == psStalledMarker) { commandsRetryIn = commandsRetryEvery; continue }
     sub(/^[ \t]+/, "", line)
     pid = line
     sub(/[ \t].*$/, "", pid)
     if (pid !~ /^[0-9]+$/) continue
-    pidList[++nPids] = pid
     sub(/^[^ \t]+[ \t]*/, "", line)
     pidCommand[pid] = line
   }
@@ -406,6 +416,9 @@ function collect(  line, lparts, rparts, uparts, i) {
   for (i = 1; i <= nPids; i++) readpid(pidList[i])
 }
 BEGIN {
+  psStalledMarker = "@@EDITH-PS-STALLED@@"
+  commandsRetryEvery = 150
+  commandsRetryIn = 0
   selfPid = shellLine("echo $PPID") + 0
   hello["kernel"] = shellLine("uname -r 2>/dev/null")
   hello["arch"] = shellLine("uname -m 2>/dev/null")
