@@ -106,7 +106,8 @@ import Testing
               {"modelName":"gpt-small","inputTokens":100,"cost":0},
               {"modelName":"gpt-large","cacheReadTokens":300,"cost":0},
               {"modelName":"unattributed-cost","cost":8},
-              {"modelName":"unknown","cost":4}]},
+              {"modelName":"unknown","cost":4},
+              {"modelName":"gpt-accounting","cost":2}]},
              "projects":[],"hours":[]}
             """
         let dashboard = try model(daily, sources: "\"codex\"")
@@ -118,13 +119,13 @@ import Testing
             dashboard.modelTotals.first { $0.model == DashboardModel.unattributedCostModel })
         #expect(dashboard.modelTotals.count == 3)
         #expect(accounting.tokens == 0)
-        #expect(accounting.cost == 12)
+        #expect(accounting.cost == 14)
         #expect(dashboard.modelLabel(accounting.model) == "Unattributed cost")
         let top = try #require(dashboard.kpis.first { $0.label == "Top model" })
         #expect(top.value == "gpt-large")
         #expect(top.sub.contains("300"))
         #expect(top.sub.contains("75.0% of tokens"))
-        #expect(abs(dashboard.series.reduce(0) { $0 + $1.cost } - 12) < 0.0001)
+        #expect(abs(dashboard.series.reduce(0) { $0 + $1.cost } - 14) < 0.0001)
     }
 
     @Test func genuineUnknownTokenModelRemainsSelectable() throws {

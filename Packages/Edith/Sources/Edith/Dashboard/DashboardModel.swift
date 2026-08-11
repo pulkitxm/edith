@@ -881,7 +881,7 @@ final class DashboardModel: ObservableObject {
     private static func isUnattributedCost(_ row: DashUsage.Model) -> Bool {
         let name = row.modelName ?? "unknown"
         return name == unattributedCostModel
-            || (name == "unknown" && row.tokens == 0 && (row.cost ?? 0) > 0)
+            || (row.tokens == 0 && (row.cost ?? 0) > 0)
     }
 
     var tokenBearingModelTotals: [ModelTotal] {
