@@ -259,6 +259,18 @@ function endWithNewline(text) {
   return `${text.replace(/\s*$/, "")}\n`;
 }
 
+function sectionTree(label) {
+  const inSection = docs.filter((d) => d.section === label);
+  return sectionDocs(label)
+    .filter((d) => !d.depth)
+    .map((doc) => ({
+      doc,
+      children: inSection
+        .filter((d) => d.parent === doc.slug)
+        .sort((a, b) => a.childOrder - b.childOrder),
+    }));
+}
+
 function buildHome() {
   const lines = [
     "Reference documentation for the **Edith** command line, auto-generated from the `docs/` directory of the main repository. Edit the docs in the repo, these pages are overwritten on every push to `main`.",
@@ -268,8 +280,12 @@ function buildHome() {
   ];
   for (const section of SECTIONS) {
     lines.push(`## ${section.label}`, "");
-    for (const doc of sectionDocs(section.label))
-      lines.push(`${doc.depth ? "  " : ""}- [${doc.title}](${doc.slug})`);
+    for (const { doc, children } of sectionTree(section.label)) {
+      const commands = children.length
+        ? `: ${children.map((c) => `[${c.title}](${c.slug})`).join(", ")}`
+        : "";
+      lines.push(`- [${doc.title}](${doc.slug})${commands}`);
+    }
     lines.push("");
   }
   return endWithNewline(lines.join("\n"));
@@ -279,8 +295,21 @@ function buildSidebar() {
   const lines = ["- [Home](Home)", ""];
   for (const section of SECTIONS) {
     lines.push(`**${section.label}**`, "");
-    for (const doc of sectionDocs(section.label))
-      lines.push(`${doc.depth ? "  " : ""}- [${doc.title}](${doc.slug})`);
+    for (const { doc, children } of sectionTree(section.label)) {
+      if (!children.length) {
+        lines.push(`- [${doc.title}](${doc.slug})`, "");
+        continue;
+      }
+      lines.push(
+        "<details>",
+        `<summary><a href="${doc.slug}">${doc.title}</a></summary>`,
+        "",
+        ...children.map((child) => `- [${child.title}](${child.slug})`),
+        "",
+        "</details>",
+        "",
+      );
+    }
     lines.push("");
   }
   return endWithNewline(lines.join("\n"));

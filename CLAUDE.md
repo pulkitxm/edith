@@ -94,8 +94,11 @@ Four tests hold that shape: `everyGroupIsListedInTheIndex`,
 
 `scripts/sync-wiki.mjs` mirrors `docs/` into this repo's GitHub wiki, one wiki page
 per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. A group becomes
-`CLI-<Group>` and its commands `CLI-<Group>-<Command>`, nested one level under the
-group in the sidebar and ordered the way the group `README.md` links them. Relative
+`CLI-<Group>` and its commands `CLI-<Group>-<Command>`, ordered the way the group
+`README.md` links them. The sidebar is one row per group: each group is a collapsed
+`<details>` whose summary links the group page and whose body lists its commands, so
+the sidebar stays the length of the group list however many commands exist. `Home`
+lists each group on one line with its commands after it. Relative
 links between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
 on every push to `main` that touches `docs/`. Preview the output locally with
 `make wiki` (writes `.wiki-build/`, never pushes); `make wiki-push` publishes.
