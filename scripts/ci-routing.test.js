@@ -2,10 +2,6 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
-const mergeWorkflow = readFileSync(
-  ".github/workflows/release-on-merge.yml",
-  "utf8",
-);
 const linuxOutput = ["$", "{{ steps.areas.outputs.linux }}"].join("");
 
 test("Linux validation uses the shared changed-area router", () => {
@@ -33,5 +29,7 @@ test("Linux inputs and workflow changes select Ubuntu validation", () => {
   ]) {
     expect(ciWorkflow).toContain(path);
   }
-  expect(mergeWorkflow).toContain('".github/workflows/ci.yml"');
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
 });
