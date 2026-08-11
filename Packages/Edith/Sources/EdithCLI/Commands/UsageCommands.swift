@@ -252,7 +252,7 @@ struct UsageProjectsCommand: AsyncParsableCommand {
     @Option(help: "today, week, month or all.")
     var range: String = "all"
 
-    @Option(help: "Show at most this many projects.")
+    @Option(help: "Show at most this many repositories.")
     var limit: Int = 25
 
     func run() async throws {

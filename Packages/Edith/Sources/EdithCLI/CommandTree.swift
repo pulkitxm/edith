@@ -165,7 +165,7 @@ public enum CommandTree {
                         options: ["--json", "--range", "--source", "--machine"]),
                     CommandNode(
                         "projects", "Cost and tokens per GitHub repository.",
-                        options: ["--json", "--range"]),
+                        options: ["--json", "--range", "--limit"]),
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),

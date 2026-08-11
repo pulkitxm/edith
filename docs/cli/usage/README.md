@@ -1,11 +1,12 @@
 # `ed usage`
 
 `ed usage` reports what your coding agents cost and how close you are to a
-provider's rate limit. Every number is read back out of the two files behind the
-app's dashboard, `usage.json` and `limits-history.jsonl`, so the reporting verbs
-never recompute anything and the CLI and the UI cannot disagree. Reach for it
-when you want a spend figure in a script, a per-project breakdown without
-opening the window, or a gate on how much session budget is left.
+provider's rate limit. It reads the two files behind the app's dashboard,
+`usage.json` and `limits-history.jsonl`. Headline reports use the same canonical
+daily provider totals as the UI, while the repository report reconciles folder
+detail to those totals. Reach for it when you want a spend figure in a script,
+a repository breakdown without opening the window, or a gate on how much
+session budget is left.
 
 Both files live in `Repo.dataDir`, which is
 `~/Library/Application Support/Edith/data` unless the `repoPath` setting names a
@@ -26,7 +27,7 @@ closed.
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |
 | `ed usage models` | Cost and tokens per model, most expensive first |
-| `ed usage projects` | Cost and tokens per project, most expensive first |
+| `ed usage projects` | Cost and tokens per GitHub repository, most expensive first |
 | `ed usage sources` | The agents that produced the history, with their ids |
 | `ed usage machines` | Runs `ed usage machines ls`, the default subcommand |
 | `ed usage machines ls` | Every configured machine, whether it is counted, and what it adds up to |
@@ -35,8 +36,6 @@ closed.
 | `ed usage machines disable` | Stops collecting from a machine, keeping what it already gave |
 | `ed usage machines forget` | Drops what a machine gave and stops counting it |
 | `ed usage refresh` | Re-collects usage data from every agent on this Mac |
-
-## Commands
 
 ## Commands
 
@@ -68,10 +67,9 @@ closed.
   `limits-history.jsonl` and works with no `usage.json` at all; every other verb
   reads only `usage.json` and works with no limit history. Neither absence
   affects the other.
-- `--range week` means the last 7 days and `--range month` the last 30, both
-  counted back from midnight today and both including today. The comparison is
-  made on the `YYYY-MM-DD` string, so it is your local calendar day, and there
-  is no upper bound: a day stamped in the future is always included.
+- `--range week` means Monday through today. `--range month` means today and the
+  preceding 29 days. Both use your local calendar day and exclude future-dated
+  rows.
 - Cost and token figures are doubles all the way through, and the serialiser
   prints an integral double as an integer. `"percent": 30` is 30.0 and
   `"cost": 0` is a genuine zero, not a missing field.
