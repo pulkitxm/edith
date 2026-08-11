@@ -150,6 +150,7 @@ struct GeneralPane: View {
     @AppStorage("settingsTab", store: SharedDefaults.store) private var settingsTab =
         SettingsPane.Tab.general.rawValue
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
         Form {
@@ -242,19 +243,21 @@ struct GeneralPane: View {
         .formStyle(.grouped)
         .navigationTitle("General")
         .onAppear {
-            refreshPermissionState()
+            if automaticActionsEnabled { refreshPermissionState() }
         }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification)
         ) { _ in
-            refreshPermissionState()
+            if automaticActionsEnabled { refreshPermissionState() }
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)
         ) { _ in
-            grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+            if automaticActionsEnabled {
+                grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+            }
         }
     }
 
