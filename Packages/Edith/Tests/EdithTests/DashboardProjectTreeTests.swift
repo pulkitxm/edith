@@ -603,6 +603,24 @@ import Testing
         #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
     }
 
+    @Test func filteredLegacyMultiSourceTotalsRemainUnattributed() throws {
+        let json = usage(
+            daily: """
+                {"period":"2026-06-01",
+                 "bySource":{
+                   "cli":[{"modelName":"a","inputTokens":100,"cost":1}],
+                   "codex":[{"modelName":"b","inputTokens":200,"cost":2}]},
+                 "projects":[
+                   {"projectName":"unknown","path":"/unknown","tokens":300,"cost":3}
+                 ]}
+                """)
+        let m = try model(json)
+        m.selectedSources = ["cli"]
+
+        #expect(m.projectTree.map(\.name) == ["Unattributed"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
     @Test func invalidRestoredModelAndPathFiltersAreCleared() throws {
         let suite = "DashboardProjectTreeTests.restore.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: suite))

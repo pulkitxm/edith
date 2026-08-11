@@ -173,6 +173,32 @@ import Testing
         #expect(abs(dashboard.hourlyUnattributedTokens) < 0.0001)
     }
 
+    @Test func pathFilterUsesProviderSpecificProjectShare() throws {
+        let daily = """
+            {"period":"2026-06-01","bySource":{
+              "cli":[{"modelName":"a","inputTokens":100,"cost":10}],
+              "codex":[{"modelName":"b","inputTokens":100,"cost":20}]},
+             "projects":[
+              {"projectName":"alpha","repositoryID":"github:acme/alpha",
+               "repositoryName":"alpha","path":"/work/alpha","tokens":100,"cost":10,
+               "bySource":{"cli":{"tokens":100,"cost":10,
+                 "byModel":{"a":{"tokens":100,"cost":10}}}}},
+              {"projectName":"beta","repositoryID":"github:acme/beta",
+               "repositoryName":"beta","path":"/work/beta","tokens":100,"cost":20,
+               "bySource":{"codex":{"tokens":100,"cost":20,
+                 "byModel":{"b":{"tokens":100,"cost":20}}}}}],
+             "hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"cli\",\"codex\"")
+        dashboard.selectedPaths = ["/work/alpha"]
+
+        #expect(abs(dashboard.series.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
+        #expect(abs(dashboard.series.reduce(0) { $0 + $1.cost } - 10) < 0.0001)
+        #expect(dashboard.series[0].bySource == ["cli": 100])
+        #expect(dashboard.projectTree.map(\.name) == ["alpha"])
+        #expect(abs(dashboard.projectTree[0].tokens - 100) < 0.0001)
+    }
+
     @Test func pathFilterWithoutPathDetailRemainsUnattributed() throws {
         let daily = """
             {"period":"2026-06-01",

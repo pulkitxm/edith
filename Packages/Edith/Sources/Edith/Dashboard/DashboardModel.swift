@@ -985,16 +985,19 @@ final class DashboardModel: ObservableObject {
             let key = ymdStr(cursor)
             var datum = DayDatum(id: key, date: cursor, label: String(key.dropFirst(5)))
             if let day = byDate[key] {
-                let projShare = projectShare(day)
-                let dayInScope = projShare.tokens > 0 || projShare.cost > 0
+                let useProjectTotal = canonicalSourceCount(day) == 1
                 var canonicalProjects: [ProjectAttributionKey: UsageAmount] = [:]
                 for (src, models) in day.bySource ?? [:]
-                where dayInScope && selectedSources.contains(src) {
+                where selectedSources.contains(src) {
                     for m in models {
                         let name = m.modelName ?? "unknown"
                         guard selectedModels.contains(name) else { continue }
+                        let attributionKey = ProjectAttributionKey(source: src, model: name)
+                        let projShare = projectShare(
+                            day, key: attributionKey, useProjectTotal: useProjectTotal)
                         let tokens = m.tokens * projShare.tokens
                         let cost = (m.cost ?? 0) * projShare.cost
+                        guard tokens > 0 || cost > 0 else { continue }
                         datum.input += (m.inputTokens ?? 0) * projShare.tokens
                         datum.output += (m.outputTokens ?? 0) * projShare.tokens
                         datum.cacheCreate += (m.cacheCreationTokens ?? 0) * projShare.tokens
@@ -1010,7 +1013,6 @@ final class DashboardModel: ObservableObject {
                         agg.cacheRead += (m.cacheReadTokens ?? 0) * projShare.tokens
                         agg.days.insert(key)
                         modelAgg[name] = agg
-                        let attributionKey = ProjectAttributionKey(source: src, model: name)
                         canonicalProjects[attributionKey, default: UsageAmount()].tokens += tokens
                         canonicalProjects[attributionKey, default: UsageAmount()].cost += cost
                     }
@@ -1143,21 +1145,32 @@ final class DashboardModel: ObservableObject {
         }
     }
 
-    private func projectShare(_ day: DashUsage.Day) -> (tokens: Double, cost: Double) {
-        guard !selectedPaths.isEmpty else { return (1, 1) }
-        var all = (tokens: 0.0, cost: 0.0)
-        var mine = (tokens: 0.0, cost: 0.0)
+    private func projectShare(
+        _ day: DashUsage.Day, key: ProjectAttributionKey, useProjectTotal: Bool
+    ) -> UsageAmount {
+        guard !selectedPaths.isEmpty else { return UsageAmount(tokens: 1, cost: 1) }
+        let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
+        var all = UsageAmount()
+        var mine = UsageAmount()
         for p in day.projects ?? [] {
-            let raw = rawUsage(p, scoped: false)
-            let scoped = rawUsage(p, scoped: true)
+            let raw = rawProjectAmount(
+                p, key: key, useSourceTotal: useSourceTotal,
+                useProjectTotal: useProjectTotal, scoped: false)
+            let scoped = rawProjectAmount(
+                p, key: key, useSourceTotal: useSourceTotal,
+                useProjectTotal: useProjectTotal, scoped: true)
             all.tokens += raw.tokens
             all.cost += raw.cost
             mine.tokens += scoped.tokens
             mine.cost += scoped.cost
         }
-        return (
-            all.tokens > 0 ? mine.tokens / all.tokens : 0,
-            all.cost > 0 ? mine.cost / all.cost : 0
+        return UsageAmount(
+            tokens: normalizedPart(
+                mine.tokens, alternate: mine.cost, rawTotal: all.tokens,
+                rawAlternateTotal: all.cost, target: 1),
+            cost: normalizedPart(
+                mine.cost, alternate: mine.tokens, rawTotal: all.cost,
+                rawAlternateTotal: all.tokens, target: 1)
         )
     }
 
@@ -1182,13 +1195,13 @@ final class DashboardModel: ObservableObject {
         let projects = day.projects ?? []
         var amounts = projects.map { ProjectAllocation(project: $0) }
         var unattributed = UsageAmount()
-        let useProjectTotal = Set(canonical.keys.map(\.source)).count == 1
+        let useProjectTotal = canonicalSourceCount(day) == 1
         for (key, target) in canonical {
             let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
             let raw = projects.map {
                 rawProjectAmount(
                     $0, key: key, useSourceTotal: useSourceTotal,
-                    useProjectTotal: useProjectTotal)
+                    useProjectTotal: useProjectTotal, scoped: true)
             }
             let rawTokens = raw.reduce(0) { $0 + $1.tokens }
             let rawCost = raw.reduce(0) { $0 + $1.cost }
@@ -1213,14 +1226,15 @@ final class DashboardModel: ObservableObject {
 
     private func rawProjectAmount(
         _ project: DashUsage.Project, key: ProjectAttributionKey, useSourceTotal: Bool,
-        useProjectTotal: Bool
+        useProjectTotal: Bool, scoped: Bool
     ) -> UsageAmount {
         if let breakdown = project.bySource?[key.source] {
             guard
                 let amount = sourceAmount(
                     breakdown, model: key.model, useSourceTotal: useSourceTotal)
             else { return UsageAmount() }
-            let scope = projectScope(project)
+            let scope = projectScope(
+                project, source: key.source, allowChatScope: useSourceTotal, scoped: scoped)
             return UsageAmount(
                 tokens: amount.tokens * scope.tokens,
                 cost: amount.cost * scope.cost)
@@ -1232,18 +1246,24 @@ final class DashboardModel: ObservableObject {
         let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
         let sourceChats = chats.filter { $0.source == key.source }
         if !sourceChats.isEmpty {
-            let scopedChats = sourceChats.filter {
-                selectedPaths.isEmpty || pathInScope($0.path ?? knownPath(project))
-            }
+            let scopedChats =
+                scoped
+                ? sourceChats.filter { pathInScope($0.path ?? knownPath(project)) }
+                : sourceChats
             return scopedChats.reduce(into: UsageAmount()) {
                 $0.tokens += $1.tokens ?? 0
                 $0.cost += $1.cost ?? 0
             }
         }
 
-        guard !ProjAccum.hasTokenedChat(project), useProjectTotal, pathInScope(knownPath(project))
+        guard !ProjAccum.hasTokenedChat(project), useProjectTotal,
+            !scoped || pathInScope(knownPath(project))
         else { return UsageAmount() }
         return UsageAmount(tokens: project.tokens ?? 0, cost: project.cost ?? 0)
+    }
+
+    private func canonicalSourceCount(_ day: DashUsage.Day) -> Int {
+        (day.bySource ?? [:]).values.filter { !$0.isEmpty }.count
     }
 
     private func sourceHasSingleCanonicalModel(
@@ -1266,13 +1286,30 @@ final class DashboardModel: ObservableObject {
         return UsageAmount(tokens: usage.tokens ?? 0, cost: usage.cost ?? 0)
     }
 
-    private func projectScope(_ project: DashUsage.Project) -> UsageAmount {
-        guard !selectedPaths.isEmpty else { return UsageAmount(tokens: 1, cost: 1) }
-        let all = rawUsage(project, scoped: false)
-        let scoped = rawUsage(project, scoped: true)
+    private func projectScope(
+        _ project: DashUsage.Project, source: String, allowChatScope: Bool, scoped: Bool
+    ) -> UsageAmount {
+        guard scoped, !selectedPaths.isEmpty else { return UsageAmount(tokens: 1, cost: 1) }
+        if pathInScope(knownPath(project)) { return UsageAmount(tokens: 1, cost: 1) }
+        guard allowChatScope else { return UsageAmount() }
+        let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        let sourceChats = chats.filter { $0.source == source }
+        let all = sourceChats.reduce(into: UsageAmount()) {
+            $0.tokens += $1.tokens ?? 0
+            $0.cost += $1.cost ?? 0
+        }
+        let matching = sourceChats.filter { pathInScope($0.path ?? knownPath(project)) }
+        let mine = matching.reduce(into: UsageAmount()) {
+            $0.tokens += $1.tokens ?? 0
+            $0.cost += $1.cost ?? 0
+        }
         return UsageAmount(
-            tokens: all.tokens > 0 ? scoped.tokens / all.tokens : 0,
-            cost: all.cost > 0 ? scoped.cost / all.cost : 0)
+            tokens: normalizedPart(
+                mine.tokens, alternate: mine.cost, rawTotal: all.tokens,
+                rawAlternateTotal: all.cost, target: 1),
+            cost: normalizedPart(
+                mine.cost, alternate: mine.tokens, rawTotal: all.cost,
+                rawAlternateTotal: all.tokens, target: 1))
     }
 
     private struct HourlyAllocation {
