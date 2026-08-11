@@ -85,15 +85,22 @@ public enum UsageHistory {
         let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
         let aliases = machineSourceAliases(sourceMeta)
         guard !aliases.isEmpty else { return obj }
+        let preferred = preferredMachineSources(in: obj, sourceMeta: sourceMeta, aliases: aliases)
         var out = obj
         out["sources"] = canonicalizedSourceList(strings(obj["sources"]), aliases: aliases)
         out["defaultSources"] = canonicalizedSourceList(
             strings(obj["defaultSources"]), aliases: aliases)
-        out["sourceMeta"] = canonicalizedSourceMeta(sourceMeta, aliases: aliases)
+        out["sourceMeta"] = canonicalizedSourceMeta(
+            sourceMeta, aliases: aliases, preferred: preferred)
         if let sessions = obj["sessions"] as? [[String: Any]] {
-            out["sessions"] = sessions.map { canonicalizedSourceRecord($0, aliases: aliases) }
+            out["sessions"] = canonicalizedSessions(
+                sessions, aliases: aliases, preferred: preferred)
         }
-        out["daily"] = daily(obj).map { canonicalizedMachineDay($0, aliases: aliases) }
+        let normalizedDaily = daily(obj).map {
+            canonicalizedMachineDay($0, aliases: aliases, preferred: preferred)
+        }
+        out["daily"] = normalizedDaily
+        out["totals"] = totals(of: normalizedDaily)
         return out
     }
 
@@ -108,6 +115,58 @@ public enum UsageHistory {
         }
     }
 
+    private static func scopedPreferredSources(
+        _ value: Any?, aliases: [String: String], preferred: [String: String]
+    ) -> [String: String] {
+        guard let sourceMap = value as? [String: Any] else { return [:] }
+        let grouped = Dictionary(grouping: sourceMap.keys, by: { aliases[$0] ?? $0 })
+        return grouped.reduce(into: [:]) { result, entry in
+            let canonical = entry.key
+            let candidates = entry.value.sorted()
+            if candidates.contains(canonical) {
+                result[canonical] = canonical
+            } else if let selected = preferred[canonical], candidates.contains(selected) {
+                result[canonical] = selected
+            } else {
+                result[canonical] = candidates.first
+            }
+        }
+    }
+
+    private static func preferredMachineSources(
+        in obj: [String: Any], sourceMeta: [String: Any], aliases: [String: String]
+    ) -> [String: String] {
+        let machineSlugs = (obj["machines"] as? [[String: Any]] ?? []).reduce(
+            into: [String: String]()
+        ) { slugs, machine in
+            guard let id = machine["id"] as? String,
+                let slug = machine["slug"] as? String
+            else { return }
+            slugs[id.lowercased()] = slug.lowercased()
+        }
+        let grouped = Dictionary(grouping: aliases.keys, by: { aliases[$0] ?? $0 })
+        return grouped.reduce(into: [:]) { result, entry in
+            let canonical = entry.key
+            let candidates = entry.value.sorted()
+            if candidates.contains(canonical) {
+                result[canonical] = canonical
+                return
+            }
+            let machineID = candidates.compactMap {
+                (sourceMeta[$0] as? [String: Any])?["machineID"] as? String
+            }.first?.lowercased()
+            if let machineID, let slug = machineSlugs[machineID],
+                let current = candidates.first(where: { source in
+                    source.lowercased().hasPrefix("\(slug):")
+                })
+            {
+                result[canonical] = current
+            } else {
+                result[canonical] = candidates.first
+            }
+        }
+    }
+
     private static func canonicalizedSourceList(
         _ sources: [String], aliases: [String: String]
     ) -> [String] {
@@ -119,61 +178,109 @@ public enum UsageHistory {
     }
 
     private static func canonicalizedSourceMeta(
-        _ sourceMeta: [String: Any], aliases: [String: String]
+        _ sourceMeta: [String: Any], aliases: [String: String], preferred: [String: String]
     ) -> [String: Any] {
         sourceMeta.keys.sorted().reduce(into: [:]) { meta, source in
             let canonical = aliases[source] ?? source
-            if meta[canonical] == nil || source == canonical {
+            if preferred[canonical] == nil || preferred[canonical] == source {
                 meta[canonical] = sourceMeta[source]
             }
         }
     }
 
     private static func canonicalizedSourceMap(
-        _ value: Any?, aliases: [String: String]
+        _ value: Any?, aliases: [String: String], preferred: [String: String]
     ) -> [String: Any]? {
         guard let sourceMap = value as? [String: Any] else { return nil }
         return sourceMap.keys.sorted().reduce(into: [:]) { result, source in
             let canonical = aliases[source] ?? source
-            if result[canonical] == nil || source == canonical {
+            if preferred[canonical] == nil || preferred[canonical] == source {
                 result[canonical] = sourceMap[source]
             }
         }
     }
 
-    private static func canonicalizedSourceRecord(
-        _ record: [String: Any], aliases: [String: String]
-    ) -> [String: Any] {
-        guard let source = record["source"] as? String, let canonical = aliases[source] else {
-            return record
+    private static func canonicalizedSessions(
+        _ sessions: [[String: Any]], aliases: [String: String], preferred: [String: String]
+    ) -> [[String: Any]] {
+        var order: [String] = []
+        var records: [String: [String: Any]] = [:]
+        var priorities: [String: Int] = [:]
+        for (index, session) in sessions.enumerated() {
+            guard let source = session["source"] as? String else {
+                let key = "unqualified:\(index)"
+                order.append(key)
+                records[key] = session
+                continue
+            }
+            let canonical = aliases[source] ?? source
+            var normalized = session
+            normalized["source"] = canonical
+            let id = session["id"] as? String ?? ""
+            let key = id.isEmpty ? "unidentified:\(index)" : "\(canonical)\u{1F}\(id)"
+            let priority =
+                source == canonical ? 2 : (preferred[canonical] == source ? 1 : 0)
+            if records[key] == nil {
+                order.append(key)
+                records[key] = normalized
+                priorities[key] = priority
+            } else if priority > (priorities[key] ?? -1)
+                || (priority == priorities[key] && normalized.count >= (records[key]?.count ?? 0))
+            {
+                records[key] = normalized
+                priorities[key] = priority
+            }
         }
+        return order.compactMap { records[$0] }
+    }
+
+    private static func canonicalizedSourceRecord(
+        _ record: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
+        guard let source = record["source"] as? String else { return record }
+        let canonical = aliases[source] ?? source
+        guard preferred[canonical] == nil || preferred[canonical] == source else {
+            return nil
+        }
+        guard canonical != source else { return record }
         var out = record
         out["source"] = canonical
         return out
     }
 
     private static func canonicalizedMachineDay(
-        _ day: [String: Any], aliases: [String: String]
+        _ day: [String: Any], aliases: [String: String], preferred: [String: String]
     ) -> [String: Any] {
         var out = day
-        if let bySource = canonicalizedSourceMap(day["bySource"], aliases: aliases) {
+        let scopedPreferred = scopedPreferredSources(
+            day["bySource"], aliases: aliases, preferred: preferred)
+        if let bySource = canonicalizedSourceMap(
+            day["bySource"], aliases: aliases, preferred: scopedPreferred)
+        {
             out["bySource"] = bySource
         }
         if let hours = day["hours"] as? [[String: Any]] {
-            out["hours"] = hours.map { canonicalizedHour($0, aliases: aliases) }
+            out["hours"] = hours.map {
+                canonicalizedHour($0, aliases: aliases, preferred: scopedPreferred)
+            }
         }
         if let projects = day["projects"] as? [[String: Any]] {
-            out["projects"] = projects.map { canonicalizedMachineProject($0, aliases: aliases) }
+            out["projects"] = projects.compactMap {
+                canonicalizedMachineProject($0, aliases: aliases, preferred: scopedPreferred)
+            }
         }
         return out
     }
 
     private static func canonicalizedHour(
-        _ hour: [String: Any], aliases: [String: String]
+        _ hour: [String: Any], aliases: [String: String], preferred: [String: String]
     ) -> [String: Any] {
         var out = hour
-        if let bySource = canonicalizedSourceMap(hour["bySource"], aliases: aliases) {
+        if let bySource = canonicalizedSourceMap(
+            hour["bySource"], aliases: aliases, preferred: preferred)
+        {
             out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
         }
         if let paths = hour["byPath"] as? [String: Any] {
             out["byPath"] = paths.reduce(into: [String: Any]()) { result, entry in
@@ -181,8 +288,12 @@ public enum UsageHistory {
                     result[entry.key] = entry.value
                     return
                 }
-                if let bySource = canonicalizedSourceMap(path["bySource"], aliases: aliases) {
+                if let bySource = canonicalizedSourceMap(
+                    path["bySource"], aliases: aliases, preferred: preferred)
+                {
+                    guard !bySource.isEmpty else { return }
                     path["bySource"] = bySource
+                    setDetailTotals(&path, bySource: bySource)
                 }
                 result[entry.key] = path
             }
@@ -191,29 +302,62 @@ public enum UsageHistory {
     }
 
     private static func canonicalizedMachineProject(
-        _ project: [String: Any], aliases: [String: String]
-    ) -> [String: Any] {
+        _ project: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
         var out = project
-        if let bySource = canonicalizedSourceMap(project["bySource"], aliases: aliases) {
+        let originalChats = project["chats"] as? [[String: Any]] ?? []
+        let originalWorktrees = project["worktrees"] as? [[String: Any]] ?? []
+        if let bySource = canonicalizedSourceMap(
+            project["bySource"], aliases: aliases, preferred: preferred)
+        {
+            guard !bySource.isEmpty else { return nil }
             out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
         }
-        if let chats = project["chats"] as? [[String: Any]] {
-            out["chats"] = chats.map { canonicalizedSourceRecord($0, aliases: aliases) }
+        let chats = originalChats.compactMap {
+            canonicalizedSourceRecord($0, aliases: aliases, preferred: preferred)
         }
-        if let worktrees = project["worktrees"] as? [[String: Any]] {
-            out["worktrees"] = worktrees.map { worktree in
-                var next = worktree
-                if let bySource = canonicalizedSourceMap(
-                    worktree["bySource"], aliases: aliases)
-                {
-                    next["bySource"] = bySource
-                }
-                if let chats = worktree["chats"] as? [[String: Any]] {
-                    next["chats"] = chats.map {
-                        canonicalizedSourceRecord($0, aliases: aliases)
-                    }
-                }
-                return next
+        if project["chats"] != nil {
+            out["chats"] = chats
+        }
+        let worktrees = originalWorktrees.compactMap {
+            canonicalizedMachineWorktree($0, aliases: aliases, preferred: preferred)
+        }
+        if project["worktrees"] != nil {
+            out["worktrees"] = worktrees
+        }
+        if project["bySource"] == nil && (!originalChats.isEmpty || !originalWorktrees.isEmpty) {
+            guard !chats.isEmpty || !worktrees.isEmpty else { return nil }
+            out["tokens"] =
+                chats.reduce(0) { $0 + num($1["tokens"]) }
+                + worktrees.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] =
+                chats.reduce(0) { $0 + num($1["cost"]) }
+                + worktrees.reduce(0) { $0 + num($1["cost"]) }
+        }
+        return out
+    }
+
+    private static func canonicalizedMachineWorktree(
+        _ worktree: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
+        var out = worktree
+        if let bySource = canonicalizedSourceMap(
+            worktree["bySource"], aliases: aliases, preferred: preferred)
+        {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        }
+        if let chats = worktree["chats"] as? [[String: Any]] {
+            let retained = chats.compactMap {
+                canonicalizedSourceRecord($0, aliases: aliases, preferred: preferred)
+            }
+            guard !retained.isEmpty || chats.isEmpty else { return nil }
+            out["chats"] = retained
+            if worktree["bySource"] == nil {
+                out["tokens"] = retained.reduce(0) { $0 + num($1["tokens"]) }
+                out["cost"] = retained.reduce(0) { $0 + num($1["cost"]) }
             }
         }
         return out

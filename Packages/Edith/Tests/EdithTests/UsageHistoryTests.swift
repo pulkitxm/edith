@@ -5,6 +5,16 @@ import Testing
 @testable import EdithKit
 
 @Suite struct UsageHistoryTests {
+    private struct MachineAliasEntry {
+        let source: String
+        let period: String
+        let tokens: Double
+        let cost: Double
+        let path: String
+        let sessionID: String
+        let sourceMappedProject: Bool
+    }
+
     private func usage(
         days: [(period: String, tokens: Double, cost: Double)],
         source: String = "cli",
@@ -147,6 +157,105 @@ import Testing
                     "cost": cost,
                 ]
             ],
+        ]
+        return try! JSONSerialization.data(withJSONObject: obj)
+    }
+
+    private func machineAliasDocument(
+        machineID: String, currentSlug: String, entries: [MachineAliasEntry]
+    ) -> Data {
+        let sources = Array(Set(entries.map(\.source))).sorted()
+        let sourceMeta = Dictionary(
+            uniqueKeysWithValues: sources.map { source in
+                (
+                    source,
+                    [
+                        "label": source, "tool": "cli", "machine": currentSlug,
+                        "machineID": machineID,
+                    ] as [String: Any]
+                )
+            })
+        let grouped = Dictionary(grouping: entries, by: \.period)
+        let days = grouped.keys.sorted().map { period -> [String: Any] in
+            let periodEntries = grouped[period] ?? []
+            var bySource: [String: [[String: Any]]] = [:]
+            var hourBySource: [String: Any] = [:]
+            var byPath: [String: Any] = [:]
+            var projects: [[String: Any]] = []
+            for entry in periodEntries {
+                bySource[entry.source] = [
+                    model("m", input: entry.tokens, cost: entry.cost)
+                ]
+                let detail: [String: Any] = [
+                    "tokens": entry.tokens, "cost": entry.cost,
+                    "byModel": ["m": ["tokens": entry.tokens, "cost": entry.cost]],
+                ]
+                hourBySource[entry.source] = detail
+                byPath[entry.path] = [
+                    "tokens": entry.tokens, "cost": entry.cost,
+                    "bySource": [entry.source: detail],
+                ]
+                var project: [String: Any] = [
+                    "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+                    "repositoryName": "edith", "folderName": "edith", "path": entry.path,
+                    "machineName": currentSlug, "machineID": machineID,
+                    "tokens": entry.tokens, "cost": entry.cost,
+                    "chats": [
+                        [
+                            "id": "\(entry.sessionID)-main", "path": entry.path,
+                            "source": entry.source, "tokens": entry.tokens / 2,
+                            "cost": entry.cost / 2,
+                        ]
+                    ],
+                    "worktrees": [
+                        [
+                            "name": "feature", "path": "\(entry.path)/feature",
+                            "tokens": entry.tokens / 2, "cost": entry.cost / 2,
+                            "chats": [
+                                [
+                                    "id": "\(entry.sessionID)-worktree",
+                                    "path": "\(entry.path)/feature", "source": entry.source,
+                                    "tokens": entry.tokens / 2, "cost": entry.cost / 2,
+                                ]
+                            ],
+                        ]
+                    ],
+                ]
+                if entry.sourceMappedProject {
+                    project["bySource"] = [entry.source: detail]
+                }
+                projects.append(project)
+            }
+            let tokens = periodEntries.reduce(0) { $0 + $1.tokens }
+            let cost = periodEntries.reduce(0) { $0 + $1.cost }
+            return day(
+                period, bySource: bySource,
+                hours: [
+                    [
+                        "tokens": tokens, "cost": cost, "bySource": hourBySource,
+                        "byPath": byPath,
+                    ]
+                ], projects: projects)
+        }
+        let totalTokens = entries.reduce(0) { $0 + $1.tokens }
+        let totalCost = entries.reduce(0) { $0 + $1.cost }
+        let obj: [String: Any] = [
+            "schemaVersion": 7,
+            "generatedAt": "2026-08-11T00:00:00Z",
+            "sources": sources,
+            "defaultSources": sources,
+            "sourceMeta": sourceMeta,
+            "machines": [
+                ["id": machineID, "name": currentSlug, "slug": currentSlug]
+            ],
+            "totals": ["cost": totalCost, "tokens": totalTokens],
+            "daily": days,
+            "sessions": entries.map {
+                [
+                    "id": $0.sessionID, "source": $0.source,
+                    "totalTokens": $0.tokens, "cost": $0.cost,
+                ]
+            },
         ]
         return try! JSONSerialization.data(withJSONObject: obj)
     }
@@ -569,6 +678,136 @@ import Testing
         #expect(dashboard.projectTree.count == 1)
         #expect(dashboard.projectTree.first?.id != "repo:unattributed")
         #expect(dashboard.projectTree.first?.tokens == 40)
+    }
+
+    @Test func oneSidedMachineAliasCollisionKeepsCurrentDetail() throws {
+        let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        let document = machineAliasDocument(
+            machineID: machineID, currentSlug: "gaming",
+            entries: [
+                MachineAliasEntry(
+                    source: "tuf:cli", period: "2026-08-11", tokens: 900, cost: 90,
+                    path: "tuf:/work/edith", sessionID: "shared", sourceMappedProject: false),
+                MachineAliasEntry(
+                    source: "gaming:cli", period: "2026-08-11", tokens: 40, cost: 4,
+                    path: "gaming:/work/edith", sessionID: "shared",
+                    sourceMappedProject: true),
+            ])
+        let merged = decode(UsageHistory.merge(local: nil, cloud: document))
+        let stable = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
+
+        #expect(merged["sources"] as? [String] == [stable])
+        #expect(merged["defaultSources"] as? [String] == [stable])
+        let sourceMeta = merged["sourceMeta"] as! [String: [String: Any]]
+        #expect(Set(sourceMeta.keys) == [stable])
+
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let canonical = mergedDay["bySource"] as! [String: [[String: Any]]]
+        #expect(canonical[stable]?.first?["inputTokens"] as? Double == 40)
+        let hour = (mergedDay["hours"] as! [[String: Any]]).first!
+        #expect(hour["tokens"] as? Double == 40)
+        let paths = hour["byPath"] as! [String: [String: Any]]
+        #expect(Set(paths.keys) == ["gaming:/work/edith"])
+
+        let projects = mergedDay["projects"] as! [[String: Any]]
+        #expect(projects.count == 1)
+        #expect(projects.first?["path"] as? String == "gaming:/work/edith")
+        #expect(projects.first?["tokens"] as? Double == 40)
+        let chats = projects.first?["chats"] as! [[String: Any]]
+        #expect(chats.map { $0["source"] as? String } == [stable])
+        let worktrees = projects.first?["worktrees"] as! [[String: Any]]
+        #expect(worktrees.count == 1)
+        let worktreeChats = worktrees.first?["chats"] as! [[String: Any]]
+        #expect(worktreeChats.map { $0["source"] as? String } == [stable])
+
+        let sessions = merged["sessions"] as! [[String: Any]]
+        #expect(sessions.count == 1)
+        #expect(sessions.first?["source"] as? String == stable)
+        #expect(sessions.first?["totalTokens"] as? Double == 40)
+        let totals = merged["totals"] as! [String: Any]
+        #expect(totals["tokens"] as? Double == 40)
+        #expect(totals["cost"] as? Double == 4)
+    }
+
+    @Test func historicalMachineAliasesSurviveOnSeparateDays() throws {
+        let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        let document = machineAliasDocument(
+            machineID: machineID, currentSlug: "gaming",
+            entries: [
+                MachineAliasEntry(
+                    source: "tuf:cli", period: "2026-05-01", tokens: 900, cost: 90,
+                    path: "tuf:/work/edith", sessionID: "old", sourceMappedProject: false),
+                MachineAliasEntry(
+                    source: "gaming:cli", period: "2026-08-11", tokens: 40, cost: 4,
+                    path: "gaming:/work/edith", sessionID: "current",
+                    sourceMappedProject: false),
+            ])
+        let merged = decode(UsageHistory.merge(local: nil, cloud: document))
+        let stable = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
+        let days = merged["daily"] as! [[String: Any]]
+
+        #expect(days.count == 2)
+        #expect(days.map { UsageHistory.dayTokens($0) } == [900, 40])
+        for day in days {
+            let canonical = day["bySource"] as! [String: [[String: Any]]]
+            #expect(Set(canonical.keys) == [stable])
+            let projects = day["projects"] as! [[String: Any]]
+            #expect(projects.count == 1)
+            let chats = projects.first?["chats"] as! [[String: Any]]
+            #expect(chats.map { $0["source"] as? String } == [stable])
+            let worktrees = projects.first?["worktrees"] as! [[String: Any]]
+            #expect(worktrees.count == 1)
+        }
+        let firstPaths =
+            (days[0]["hours"] as! [[String: Any]])[0]["byPath"]
+            as! [String: Any]
+        let secondPaths =
+            (days[1]["hours"] as! [[String: Any]])[0]["byPath"]
+            as! [String: Any]
+        #expect(Set(firstPaths.keys) == ["tuf:/work/edith"])
+        #expect(Set(secondPaths.keys) == ["gaming:/work/edith"])
+        let sessions = merged["sessions"] as! [[String: Any]]
+        #expect(sessions.count == 2)
+        #expect(Set(sessions.compactMap { $0["source"] as? String }) == [stable])
+        let totals = merged["totals"] as! [String: Any]
+        #expect(totals["tokens"] as? Double == 940)
+        #expect(totals["cost"] as? Double == 94)
+    }
+
+    @Test func canonicalMachineSourceWinsAliasCollisions() throws {
+        let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        let stable = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
+        let document = machineAliasDocument(
+            machineID: machineID, currentSlug: "gaming",
+            entries: [
+                MachineAliasEntry(
+                    source: "tuf:cli", period: "2026-08-11", tokens: 900, cost: 90,
+                    path: "tuf:/work/edith", sessionID: "shared", sourceMappedProject: true),
+                MachineAliasEntry(
+                    source: "gaming:cli", period: "2026-08-11", tokens: 40, cost: 4,
+                    path: "gaming:/work/edith", sessionID: "shared",
+                    sourceMappedProject: true),
+                MachineAliasEntry(
+                    source: stable, period: "2026-08-11", tokens: 12, cost: 1.2,
+                    path: "stable:/work/edith", sessionID: "shared",
+                    sourceMappedProject: true),
+            ])
+        let merged = decode(UsageHistory.merge(local: nil, cloud: document))
+        let day = (merged["daily"] as! [[String: Any]]).first!
+        let canonical = day["bySource"] as! [String: [[String: Any]]]
+
+        #expect(canonical[stable]?.first?["inputTokens"] as? Double == 12)
+        let paths = ((day["hours"] as! [[String: Any]])[0]["byPath"] as! [String: Any])
+        #expect(Set(paths.keys) == ["stable:/work/edith"])
+        let projects = day["projects"] as! [[String: Any]]
+        #expect(projects.map { $0["path"] as? String } == ["stable:/work/edith"])
+        let sessions = merged["sessions"] as! [[String: Any]]
+        #expect(sessions.count == 1)
+        #expect(sessions.first?["totalTokens"] as? Double == 12)
+        #expect((merged["totals"] as! [String: Any])["tokens"] as? Double == 12)
     }
 
     @Test func oneSidedHistoryRemovesUnsafeCodexDetail() {
