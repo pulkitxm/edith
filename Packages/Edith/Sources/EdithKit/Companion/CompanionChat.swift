@@ -266,7 +266,7 @@ extension CompanionClient {
         var request = URLRequest(url: url(for: "settings/reason/test"))
         request.httpMethod = "POST"
         request.httpBody = Data()
-        return try await self.request(request, timeout: 300)
+        return try await self.request(request, timeout: CompanionClient.longRequestTimeout)
     }
 
     public func nightlyRun() async throws -> CompanionNightlyStart {

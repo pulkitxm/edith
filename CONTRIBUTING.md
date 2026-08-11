@@ -86,6 +86,7 @@ Run `make ci` before pushing; the pre-push hook runs the same gates.
 | `make ci` | All macOS, script, site, and policy checks below, after `bun install --frozen-lockfile`. |
 | `make ci-comments` | Fails on any disallowed comment in tracked source. |
 | `make ci-secrets` | Scans every tracked file for leaked secrets. |
+| `make ci-duplicate-keys` | Fails when a `UserDefaults`/`SharedDefaults` key is spelled out as a raw string literal in more than one Swift file instead of going through one shared constant. |
 | `make ci-lint` | Biome format and lint for `scripts/` and `apps/site`. |
 | `make ci-scripts` | The `bun test` suite for `scripts/`. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |

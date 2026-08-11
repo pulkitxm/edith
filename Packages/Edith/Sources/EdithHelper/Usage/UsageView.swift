@@ -15,9 +15,9 @@ struct UsageView: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
-        60
+        LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
-        85
+        LimitRing.defaultCriticalPercent
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var selectedRaw =
         LimitProvider.claude.rawValue

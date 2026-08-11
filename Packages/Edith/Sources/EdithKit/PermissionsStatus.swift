@@ -5,7 +5,7 @@ public enum PermissionsStatus {
         let defaults = SharedDefaults.store
         if defaults.bool(forKey: AppStorageKeys.Tabs.usageEnabled),
             defaults.bool(forKey: AppStorageKeys.Notify.master),
-            !defaults.bool(forKey: "permNotificationsGranted")
+            !defaults.bool(forKey: AppStorageKeys.Permissions.notificationsGranted)
         {
             return true
         }

@@ -261,7 +261,7 @@ struct InstallCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let target = directory.map {
-                URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath)
+                URL(fileURLWithPath: $0.expandingTilde())
             }
             let result = CLIInstaller.install(into: target)
             let onPath = CLIInstaller.isOnPath(

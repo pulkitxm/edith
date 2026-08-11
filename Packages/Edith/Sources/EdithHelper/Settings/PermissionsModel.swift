@@ -77,12 +77,12 @@ final class PermissionsModel {
                 changed = true
             }
         }
-        setIfChanged(notifications, "permNotificationsGranted")
+        setIfChanged(notifications, AppStorageKeys.Permissions.notificationsGranted)
         setIfChanged(accessibility, AppStorageKeys.Permissions.accessibilityGranted)
-        setIfChanged(inputMonitoring, "permInputMonitoringGranted")
-        setIfChanged(fullDisk, "permFullDiskGranted")
-        setIfChanged(screenRecording, "permScreenRecordingGranted")
-        setIfChanged(camera, "permCameraGranted")
+        setIfChanged(inputMonitoring, AppStorageKeys.Permissions.inputMonitoringGranted)
+        setIfChanged(fullDisk, AppStorageKeys.Permissions.fullDiskGranted)
+        setIfChanged(screenRecording, AppStorageKeys.Permissions.screenRecordingGranted)
+        setIfChanged(camera, AppStorageKeys.Permissions.cameraGranted)
         if changed { IPC.post(IPC.Name.permissionsRefreshed) }
     }
 

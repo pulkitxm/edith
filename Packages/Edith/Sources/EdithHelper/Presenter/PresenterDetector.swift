@@ -39,9 +39,9 @@ final class PresenterDetector: FeatureModule {
     private var publishedReason: String?
 
     init() {
-        paused = SharedDefaults.store.bool(forKey: "presenterAutoPaused")
-        publishedActive = SharedDefaults.store.bool(forKey: "presenterAutoActive")
-        publishedReason = SharedDefaults.store.string(forKey: "presenterAutoReason")
+        paused = SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.autoPaused)
+        publishedActive = SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.autoActive)
+        publishedReason = SharedDefaults.store.string(forKey: AppStorageKeys.Presenter.autoReason)
         gateApps = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
             .intersection(Self.watchedBundleIDs)
 
@@ -93,7 +93,7 @@ final class PresenterDetector: FeatureModule {
 
     func pauseUntilShareEnds() {
         paused = true
-        SharedDefaults.store.set(true, forKey: "presenterAutoPaused")
+        SharedDefaults.store.set(true, forKey: AppStorageKeys.Presenter.autoPaused)
         evaluate()
     }
 
@@ -195,7 +195,7 @@ final class PresenterDetector: FeatureModule {
                 return
             }
             paused = false
-            SharedDefaults.store.set(false, forKey: "presenterAutoPaused")
+            SharedDefaults.store.set(false, forKey: AppStorageKeys.Presenter.autoPaused)
         }
         let reason =
             windowReason
@@ -212,11 +212,11 @@ final class PresenterDetector: FeatureModule {
         publishedActive = active
         publishedReason = reason
         let d = SharedDefaults.store
-        d.set(active, forKey: "presenterAutoActive")
+        d.set(active, forKey: AppStorageKeys.Presenter.autoActive)
         if let reason {
-            d.set(reason, forKey: "presenterAutoReason")
+            d.set(reason, forKey: AppStorageKeys.Presenter.autoReason)
         } else {
-            d.removeObject(forKey: "presenterAutoReason")
+            d.removeObject(forKey: AppStorageKeys.Presenter.autoReason)
         }
         IPC.post(IPC.Name.presenterAutoActiveChanged)
     }

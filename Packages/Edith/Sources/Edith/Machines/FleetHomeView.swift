@@ -203,7 +203,8 @@ private struct FleetMachineRow: View {
                     meter("MEM", percent: snapshot.memoryPercent, color: DashSkin.sage)
                     meter(
                         "DISK", percent: snapshot.diskPercent,
-                        color: snapshot.diskPercent > 90 ? DashSkin.danger : DashSkin.gold)
+                        color: snapshot.diskPercent > FleetMath.diskWarningPercent
+                            ? DashSkin.danger : DashSkin.gold)
                     Text("\(snapshot.cores) cores")
                         .font(DashSkin.mono(10))
                         .foregroundStyle(DashSkin.inkFaint(dark))

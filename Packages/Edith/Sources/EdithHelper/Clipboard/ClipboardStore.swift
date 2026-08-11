@@ -79,7 +79,7 @@ final class ClipboardStore: FeatureModule {
 
     private var interval: Double {
         SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.checkInterval) as? Double
-            ?? 1.0
+            ?? ClipboardIndex.defaultCheckInterval
     }
 
     private func startTimer() {
@@ -131,7 +131,7 @@ final class ClipboardStore: FeatureModule {
 
         let maxBytes =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItemBytes) as? Int
-            ?? 10_000_000
+            ?? ClipboardIndex.defaultMaxItemBytes
         guard captured.data.count <= maxBytes else {
             skippedOversizeAt = Date()
             return
@@ -170,7 +170,8 @@ final class ClipboardStore: FeatureModule {
     private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
         let beforeRetention = entries.count
         let maxItems =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int ?? 200
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int
+            ?? ClipboardIndex.defaultMaxItems
         let maxAgeDays =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil

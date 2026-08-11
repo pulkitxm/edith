@@ -171,7 +171,7 @@ struct CompanionSettingsScreen: View {
     @Bindable var model: CompanionSettingsModel
     let home: CompanionHomeModel
     @AppStorage(AppStorageKeys.Companion.endpoint, store: SharedDefaults.store)
-    private var endpoint = "http://127.0.0.1:4820"
+    private var endpoint = CompanionClient.defaultEndpointString
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @FocusState private var keyFocused: Bool
@@ -424,7 +424,7 @@ struct CompanionSettingsScreen: View {
         SkinCard(title: "Connection", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 fieldLabel("Companion endpoint")
-                EdithTextField(placeholder: "http://127.0.0.1:4820", text: $endpoint)
+                EdithTextField(placeholder: CompanionClient.defaultEndpointString, text: $endpoint)
                 if let result = model.syncResult {
                     Text(result)
                         .font(.system(size: UIScale.pt(11)))

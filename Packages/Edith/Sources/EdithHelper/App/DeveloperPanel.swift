@@ -31,7 +31,7 @@ enum EnergyStats {
 
 struct DeveloperPanel: View {
     let services: AppServices
-    @State private var repoPath = SharedDefaults.store.string(forKey: "repoPath") ?? ""
+    @State private var repoPath = SharedDefaults.store.string(forKey: Repo.pathKey) ?? ""
     @State private var idleWakeups = EnergyStats.idleWakeups()
     @State private var refreshing = false
 

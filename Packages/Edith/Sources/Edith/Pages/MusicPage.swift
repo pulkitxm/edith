@@ -145,7 +145,7 @@ final class MusicRemote {
             })
         IPC.post(IPC.Name.requestMusicState)
         folderObserver = NotificationCenter.default.addObserver(
-            forName: .musicFolderChanged, object: nil, queue: .main
+            forName: .musicFolderChangedLocally, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rescan() }
         }
@@ -523,7 +523,7 @@ final class MusicRemote {
     private func broadcastFolderChanged() {
         TrackMeta.invalidateCaches()
         folderCache.removeAll()
-        NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+        NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
         IPC.post(IPC.Name.musicFolderChanged)
     }
 

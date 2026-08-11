@@ -12,19 +12,19 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     var volume: Double {
         didSet {
             player?.setVolume(Float(volume), fadeDuration: 0.1)
-            UserDefaults.standard.set(volume, forKey: "musicVolume")
+            UserDefaults.standard.set(volume, forKey: AppStorageKeys.Music.volume)
             broadcastState()
         }
     }
     var isLooping: Bool {
         didSet {
-            UserDefaults.standard.set(isLooping, forKey: "musicLooping")
+            UserDefaults.standard.set(isLooping, forKey: AppStorageKeys.Music.looping)
             broadcastState()
         }
     }
     var isShuffling: Bool {
         didSet {
-            UserDefaults.standard.set(isShuffling, forKey: "musicShuffling")
+            UserDefaults.standard.set(isShuffling, forKey: AppStorageKeys.Music.shuffling)
             if case .directory = queueSource { queueCache = nil }
             shuffledCache = nil
             broadcastState()
@@ -72,16 +72,16 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     private var stateRequestObserver: NSObjectProtocol?
 
     override init() {
-        let saved = UserDefaults.standard.object(forKey: "musicVolume") as? Double
+        let saved = UserDefaults.standard.object(forKey: AppStorageKeys.Music.volume) as? Double
         volume = saved ?? 0.7
-        isLooping = UserDefaults.standard.bool(forKey: "musicLooping")
-        isShuffling = UserDefaults.standard.bool(forKey: "musicShuffling")
+        isLooping = UserDefaults.standard.bool(forKey: AppStorageKeys.Music.looping)
+        isShuffling = UserDefaults.standard.bool(forKey: AppStorageKeys.Music.shuffling)
         super.init()
         rescan()
         restoreLastPlayback()
         setupRemoteCommands()
         folderChangedObserver = NotificationCenter.default.addObserver(
-            forName: .musicFolderChanged, object: nil, queue: .main
+            forName: .musicFolderChangedLocally, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rescan() }
         }

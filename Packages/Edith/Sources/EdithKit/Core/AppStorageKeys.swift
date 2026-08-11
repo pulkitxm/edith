@@ -14,6 +14,10 @@ public enum AppStorageKeys {
         public static let lastPaletteTheme = "lastPaletteTheme"
         public static let creditHidden = "creditHidden"
         public static let homeClockZones = "homeClockZones"
+        public static let hotKeyCode = "hotKeyCode"
+        public static let hotKeyLabel = "hotKeyLabel"
+        public static let hotKeyMods = "hotKeyMods"
+        public static let panelTab = "tab"
         public static let preventSleep = "preventSleep"
     }
 
@@ -66,6 +70,9 @@ public enum AppStorageKeys {
 
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
+        public static let hotKeyCode = "focusDimHotKeyCode"
+        public static let hotKeyLabel = "focusDimHotKeyLabel"
+        public static let hotKeyMods = "focusDimHotKeyMods"
         public static let intensity = "focusDimIntensity"
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
@@ -110,6 +117,9 @@ public enum AppStorageKeys {
         public static let backup = "musicBackup"
         public static let downloadKind = "musicDownloadKind"
         public static let gridView = "musicGridView"
+        public static let volume = "musicVolume"
+        public static let looping = "musicLooping"
+        public static let shuffling = "musicShuffling"
     }
 
     public enum Notch {
@@ -146,11 +156,20 @@ public enum AppStorageKeys {
 
     public enum Permissions {
         public static let accessibilityGranted = "permAccessibilityGranted"
+        public static let calendarGranted = "permCalendarGranted"
+        public static let cameraGranted = "permCameraGranted"
         public static let filter = "permissionsFilter"
+        public static let fullDiskGranted = "permFullDiskGranted"
+        public static let inputMonitoringGranted = "permInputMonitoringGranted"
+        public static let notificationsGranted = "permNotificationsGranted"
+        public static let screenRecordingGranted = "permScreenRecordingGranted"
     }
 
     public enum Presenter {
+        public static let autoActive = "presenterAutoActive"
         public static let autoEnabled = "presenterAutoEnabled"
+        public static let autoPaused = "presenterAutoPaused"
+        public static let autoReason = "presenterAutoReason"
         public static let blurCalendar = "presenterBlurCalendar"
         public static let blurMoney = "presenterBlurMoney"
         public static let blurMusic = "presenterBlurMusic"
