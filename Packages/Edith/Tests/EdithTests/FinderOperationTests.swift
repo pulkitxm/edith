@@ -294,10 +294,9 @@ private func exists(_ name: String, in root: URL) -> Bool {
         await model.load()
 
         model.searchQuery = "needle"
-        model.searchQueryChanged()
+        await model.runSearch()
 
-        #expect(
-            await eventually { model.searchResults?.contains { $0.name == "needle.txt" } == true })
+        #expect(model.searchResults?.contains { $0.name == "needle.txt" } == true)
     }
 
     @Test func clearingTheSearchRestoresTheListing() async throws {

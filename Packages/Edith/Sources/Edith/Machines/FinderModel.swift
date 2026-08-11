@@ -61,6 +61,7 @@ final class FinderModel: ObservableObject {
     private var loadToken = 0
     private var flashToken = 0
     private var searchToken = 0
+    private var searchTask: Task<Void, Never>?
     private var folderSizes: [String: Int64] = [:]
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
@@ -666,16 +667,18 @@ final class FinderModel: ObservableObject {
     }
 
     func searchQueryChanged() {
+        searchTask?.cancel()
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
             searchResults = nil
             searchToken += 1
+            searchTask = nil
             return
         }
         searchResults = entries.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
         searchToken += 1
         let token = searchToken
-        Task { [weak self] in
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
             guard let self, token == searchToken, searchQuery == trimmed || !searchQuery.isEmpty
             else { return }
@@ -715,6 +718,7 @@ final class FinderModel: ObservableObject {
 
     func runSearch() async {
         searchQueryChanged()
+        await searchTask?.value
     }
 
     private func run(_ command: String, reload: Bool) async {
