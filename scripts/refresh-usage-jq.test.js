@@ -23,11 +23,14 @@ function extractBlock(name) {
 }
 
 const NORM = extractBlock("NORM");
+const GITHUB = extractBlock("GITHUB");
 const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
 const WALKCC = extractBlock("WALKCC");
+const DEDUP = extractBlock("DEDUP");
+const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
 const FLEET = extractBlock("FLEET");
 
@@ -90,6 +93,49 @@ describe("WALK", () => {
     expect(rec.src).toBe("cli");
     expect(rec.sid).toBe("sess-1");
     expect(rec.wt).toBeNull();
+  });
+
+  test("nested cache creation tiers win when the top-level total is zero", () => {
+    const value = assistant();
+    value.message.usage.cache_creation_input_tokens = 0;
+    value.message.usage.cache_creation = {
+      ephemeral_5m_input_tokens: 31,
+      ephemeral_1h_input_tokens: 47,
+    };
+    const [rec] = walk([value]);
+    expect(rec.cc).toBe(78);
+    expect(rec.tok).toBe(148);
+  });
+
+  test("the final streaming usage record wins during deduplication", () => {
+    const first = assistant({ timestamp: "2026-06-10T12:30:00.000Z" });
+    first.message.usage.output_tokens = 5;
+    const final = assistant({ timestamp: "2026-06-10T12:30:02.000Z" });
+    final.message.usage.output_tokens = 207;
+    const records = walk([first, final]);
+    const [deduped] = jq(
+      DEDUP,
+      records.map((record) => JSON.stringify(record)).join("\n"),
+      ["-s"],
+    );
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].out).toBe(207);
+    expect(deduped[0].tok).toBe(287);
+  });
+
+  test("a later lower-token streaming duplicate cannot replace the complete record", () => {
+    const complete = assistant({ timestamp: "2026-06-10T12:30:00.000Z" });
+    complete.message.usage.output_tokens = 207;
+    const partial = assistant({ timestamp: "2026-06-10T12:30:02.000Z" });
+    partial.message.usage.output_tokens = 5;
+    const records = walk([complete, partial]);
+    const [deduped] = jq(
+      DEDUP,
+      records.map((record) => JSON.stringify(record)).join("\n"),
+      ["-s"],
+    );
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].out).toBe(207);
   });
 
   test("timezone offset shifts date and hour", () => {
@@ -466,7 +512,7 @@ describe("NORM", () => {
     expect(byName.b.cost).toBeCloseTo(2.5);
   });
 
-  test("opencode shape splits row evenly across modelsUsed", () => {
+  test("aggregate multi-model shape keeps exact totals under unknown", () => {
     const [day] = norm([
       {
         date: "2026-06-10",
@@ -476,9 +522,30 @@ describe("NORM", () => {
         modelsUsed: ["a", "b"],
       },
     ]);
-    expect(day.breakdowns.length).toBe(2);
-    expect(day.breakdowns[0].inputTokens).toBe(50);
-    expect(day.breakdowns[0].cost).toBe(4);
+    expect(day.breakdowns).toEqual([
+      {
+        modelName: "unknown",
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 8,
+      },
+    ]);
+  });
+
+  test("aggregate single-model shape retains the available model name", () => {
+    const [day] = norm([
+      {
+        date: "2026-06-10",
+        totalCost: 8,
+        inputTokens: 100,
+        outputTokens: 20,
+        modelsUsed: ["one-model"],
+      },
+    ]);
+    expect(day.breakdowns[0].modelName).toBe("one-model");
+    expect(day.breakdowns[0].inputTokens).toBe(100);
   });
 
   test("zero-token zero-cost synthetic rows dropped, tokened ones kept", () => {
@@ -641,7 +708,7 @@ describe("usage pipeline", () => {
 });
 
 const localDoc = (over = {}) => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
   generatedAt: "2026-08-08T10:00:00Z",
   sources: ["cli"],
   defaultSources: ["cli"],
@@ -670,14 +737,45 @@ const localDoc = (over = {}) => ({
           },
         ],
       },
-      hours: [{ tokens: 100, cost: 1 }],
+      hours: [
+        {
+          tokens: 100,
+          cost: 1,
+          bySource: {
+            cli: {
+              tokens: 100,
+              cost: 1,
+              byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+        },
+      ],
       projects: [
         {
           projectName: "edith",
+          repositoryID: "github.com/pulkitxm/edith",
+          repositoryName: "edith",
+          repositoryURL: "https://github.com/pulkitxm/edith",
+          folderName: "edith-local",
           path: "/Users/p/edith",
           tokens: 100,
           cost: 1,
-          chats: [{ id: "c1", source: "cli", tokens: 100, cost: 1 }],
+          bySource: {
+            cli: {
+              tokens: 100,
+              cost: 1,
+              byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+          chats: [
+            {
+              id: "c1",
+              path: "/Users/p/edith",
+              source: "cli",
+              tokens: 100,
+              cost: 1,
+            },
+          ],
           worktrees: [],
         },
       ],
@@ -687,7 +785,7 @@ const localDoc = (over = {}) => ({
 });
 
 const machineDoc = (over = {}) => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
   generatedAt: "2026-08-08T09:00:00Z",
   sources: ["cli", "codex"],
   defaultSources: ["cli", "codex"],
@@ -718,14 +816,45 @@ const machineDoc = (over = {}) => ({
           },
         ],
       },
-      hours: [{ tokens: 3, cost: 2 }],
+      hours: [
+        {
+          tokens: 3,
+          cost: 2,
+          bySource: {
+            cli: {
+              tokens: 3,
+              cost: 2,
+              byModel: { opus: { tokens: 3, cost: 2 } },
+            },
+          },
+        },
+      ],
       projects: [
         {
           projectName: "edith",
+          repositoryID: "github.com/pulkitxm/edith",
+          repositoryName: "edith",
+          repositoryURL: "https://github.com/pulkitxm/edith",
+          folderName: "edith-tuf",
           path: "/home/p/edith",
           tokens: 3,
           cost: 2,
-          chats: [{ id: "c9", source: "cli", tokens: 3, cost: 2 }],
+          bySource: {
+            cli: {
+              tokens: 3,
+              cost: 2,
+              byModel: { opus: { tokens: 3, cost: 2 } },
+            },
+          },
+          chats: [
+            {
+              id: "c9",
+              path: "/home/p/edith",
+              source: "cli",
+              tokens: 3,
+              cost: 2,
+            },
+          ],
           worktrees: [
             {
               name: "wt",
@@ -737,6 +866,135 @@ const machineDoc = (over = {}) => ({
     },
   ],
   ...over,
+});
+
+describe("repository and detail attribution", () => {
+  test("normalizes common GitHub remote forms to one stable ID", () => {
+    const [ids] = jq(
+      `${GITHUB} map(githubRepositoryID)`,
+      JSON.stringify([
+        "git@github.com:PulkitXM/Edith.git",
+        "ssh://git@github.com/PulkitXM/Edith.git",
+        "https://github.com/PulkitXM/Edith.git",
+        "https://token@github.com/PulkitXM/Edith.git",
+        "git://github.com/PulkitXM/Edith.git",
+        "https://gitlab.com/PulkitXM/Edith.git",
+      ]),
+    );
+    expect(ids).toEqual([
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "",
+    ]);
+  });
+
+  test("keeps same-repository folders flat with exact source and model detail", () => {
+    const usage = localDoc({
+      sources: ["cli", "codex", "amp"],
+      defaultSources: ["cli", "codex", "amp"],
+      daily: [
+        {
+          period: "2026-08-07",
+          bySource: { cli: [], codex: [], amp: [] },
+        },
+      ],
+    });
+    const mappings = {
+      "/laptop/edith": {
+        cwd: "/laptop/edith",
+        root: "/laptop/edith",
+        repositoryID: "github.com/pulkitxm/edith",
+        repositoryName: "edith",
+        repositoryURL: "https://github.com/pulkitxm/edith",
+        folderName: "laptop-clone",
+      },
+      "/tuf/edith": {
+        cwd: "/tuf/edith",
+        root: "/tuf/edith",
+        repositoryID: "github.com/pulkitxm/edith",
+        repositoryName: "edith",
+        repositoryURL: "https://github.com/pulkitxm/edith",
+        folderName: "tuf-clone",
+      },
+    };
+    const record = (over) => ({
+      id: over.sid,
+      date: "2026-08-07",
+      hour: 9,
+      ts: 1,
+      model: "opus",
+      cwd: "/laptop/edith",
+      wt: null,
+      sid: "s1",
+      src: "cli",
+      inp: 0,
+      out: 0,
+      cc: 0,
+      cr: 0,
+      tok: 10,
+      cost: 1,
+      ...over,
+    });
+    const records = [
+      record({ sid: "s1" }),
+      record({
+        sid: "s2",
+        src: "codex",
+        model: "gpt",
+        tok: 20,
+        cost: 2,
+      }),
+      record({
+        sid: "s3",
+        cwd: "/tuf/edith",
+        hour: 10,
+        model: "sonnet",
+        tok: 30,
+        cost: 3,
+      }),
+    ];
+    const [out] = jq(DETAILS, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+      "--argjson",
+      "titles",
+      JSON.stringify([{}]),
+      "--argjson",
+      "cm",
+      JSON.stringify([mappings]),
+    ]);
+    expect(out.schemaVersion).toBe(7);
+    expect(out.daily[0].projects).toHaveLength(2);
+    expect(
+      out.daily[0].projects.map((project) => project.repositoryID),
+    ).toEqual(["github.com/pulkitxm/edith", "github.com/pulkitxm/edith"]);
+    const laptop = out.daily[0].projects.find(
+      (project) => project.folderName === "laptop-clone",
+    );
+    expect(laptop.bySource.cli).toEqual({
+      tokens: 10,
+      cost: 1,
+      byModel: { opus: { tokens: 10, cost: 1 } },
+    });
+    expect(laptop.bySource.codex.byModel.gpt).toEqual({ tokens: 20, cost: 2 });
+    expect(out.daily[0].hours).toHaveLength(24);
+    expect(out.daily[0].hours[9].tokens).toBe(30);
+    expect(out.daily[0].hours[9].bySource.cli.byModel.opus).toEqual({
+      tokens: 10,
+      cost: 1,
+    });
+    expect(out.daily[0].hours[9].bySource.codex.byModel.gpt).toEqual({
+      tokens: 20,
+      cost: 2,
+    });
+    expect(
+      out.daily[0].hours.some((hour) => Object.hasOwn(hour.bySource, "amp")),
+    ).toBeFalse();
+  });
 });
 
 const fleet = (docs) =>
@@ -760,19 +1018,51 @@ describe("FLEET", () => {
       "tuf:cli",
     ]);
     expect(out.daily[0].hours).toHaveLength(24);
-    expect(out.daily[0].hours[0]).toEqual({ tokens: 103, cost: 3 });
+    expect(out.daily[0].hours[0]).toEqual({
+      tokens: 103,
+      cost: 3,
+      bySource: {
+        cli: {
+          tokens: 100,
+          cost: 1,
+          byModel: { opus: { tokens: 100, cost: 1 } },
+        },
+        "tuf:cli": {
+          tokens: 3,
+          cost: 2,
+          byModel: { opus: { tokens: 3, cost: 2 } },
+        },
+      },
+    });
   });
 
   test("machine projects and chats stay separable from the local ones", () => {
     const out = fleet([localDoc(), machineDoc()]);
     const projects = out.daily[0].projects;
-    expect(projects.map((p) => p.projectName)).toEqual([
-      "edith",
-      "edith · tuf",
+    expect(projects.map((p) => p.projectName)).toEqual(["edith", "edith"]);
+    expect(projects.map((p) => p.repositoryID)).toEqual([
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
     ]);
+    expect(projects[1].folderName).toBe("edith-tuf");
     expect(projects[1].path).toBe("tuf:/home/p/edith");
+    expect(projects[1].machineName).toBe("tuf");
+    expect(projects[1].machineID).toBe("11111111-1111-1111-1111-111111111111");
+    expect(projects[1].chats[0].path).toBe("tuf:/home/p/edith");
     expect(projects[1].chats[0].source).toBe("tuf:cli");
     expect(projects[1].worktrees[0].chats[0].source).toBe("tuf:codex");
+    expect(Object.keys(projects[1].bySource)).toEqual(["tuf:cli"]);
+  });
+
+  test("machine-qualifies fallback folder repository IDs", () => {
+    const doc = machineDoc();
+    delete doc.daily[0].projects[0].repositoryID;
+    delete doc.daily[0].projects[0].repositoryName;
+    delete doc.daily[0].projects[0].repositoryURL;
+    const out = fleet([localDoc(), doc]);
+    expect(out.daily[0].projects[1].repositoryID).toBe(
+      "tuf:folder:/home/p/edith",
+    );
   });
 
   test("totals are recomputed over the merged rows and pass validation", () => {
@@ -841,5 +1131,59 @@ describe("FLEET", () => {
     expect(out.totals.tokens).toBe(100);
     expect(out.machines[0].sources).toEqual([]);
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+});
+
+describe("collector configuration", () => {
+  test("uses one pinned ccusage version for bun and npx", () => {
+    expect(script).toContain('CCUSAGE_VERSION="20.0.19"');
+    expect(script).toContain('bun add --exact "ccusage@$CCUSAGE_VERSION"');
+    expect(script).toContain('npx -y "ccusage@$CCUSAGE_VERSION"');
+  });
+
+  test("limits Codex discovery to sessions and archived sessions", () => {
+    expect(script).toContain('CODEX_CFG="$TMP/codex-home"');
+    expect(script).toContain("for dir in sessions archived_sessions; do");
+    expect(script).toContain(
+      'CODEX_HOME="$CODEX_CFG" ccu codex daily --json --offline',
+    );
+    expect(script).not.toContain(
+      "for agent in codex opencode amp droid codebuff hermes pi goose kilo",
+    );
+  });
+
+  test("resolves repository remotes and physical worktree roots deterministically", () => {
+    expect(script).toContain(
+      "for remote in upstream origin $(printf '%s\\n' \"$remaining_remotes\" | LC_ALL=C sort); do",
+    );
+    expect(script).toContain(
+      'git_root=$(git_quick -C "$cwd" rev-parse --path-format=absolute --show-toplevel',
+    );
+    expect(script).not.toContain("--git-common-dir");
+  });
+
+  test("provides readable labels for every discovered provider", () => {
+    const labels = {
+      cli: "Claude Code",
+      cowork: "Cowork",
+      codex: "Codex",
+      opencode: "OpenCode",
+      commandcode: "Command Code",
+      amp: "Amp",
+      droid: "Droid",
+      codebuff: "Codebuff",
+      hermes: "Hermes",
+      pi: "pi-agent",
+      goose: "Goose",
+      kilo: "Kilo",
+      copilot: "GitHub Copilot",
+      gemini: "Gemini",
+      kimi: "Kimi",
+      qwen: "Qwen",
+      openclaw: "OpenClaw",
+    };
+    for (const [source, label] of Object.entries(labels)) {
+      expect(script).toContain(`${source}) echo "${label}" ;;`);
+    }
   });
 });
