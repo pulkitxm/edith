@@ -179,14 +179,17 @@ jobs:
         working-directory: Packages/Edith
 
   release:
-    needs: [changes, checks, ubuntu, promo-video, swift-build, swift-test]
+    needs: [changes, checks, ubuntu, swift-build, swift-test]
     if: >-
-      github.event_name == 'push'
+      always()
+      && github.event_name == 'push'
       && github.ref == 'refs/heads/main'
       && needs.changes.result == 'success'
-      && !contains(needs.*.result, 'failure')
-      && !contains(needs.*.result, 'cancelled')
+      && needs.checks.result == 'success'
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true')
+      && (needs.changes.outputs.linux != 'true' || needs.ubuntu.result == 'success')
+      && (needs.changes.outputs.swift != 'true'
+      || (needs.swift-build.result == 'success' && needs.swift-test.result == 'success'))
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml

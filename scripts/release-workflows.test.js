@@ -7,16 +7,24 @@ const makefile = readFileSync("Makefile", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
+const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
 
-test("CI gates the reusable release on every required check", () => {
+test("CI gates the reusable release only on relevant checks", () => {
   expect(ciWorkflow).toContain(
-    "needs: [changes, checks, ubuntu, promo-video, swift-build, swift-test]",
+    "needs: [changes, checks, ubuntu, swift-build, swift-test]",
   );
-  expect(ciWorkflow).toContain("github.event_name == 'push'");
-  expect(ciWorkflow).toContain("github.ref == 'refs/heads/main'");
-  expect(ciWorkflow).toContain("!contains(needs.*.result, 'failure')");
-  expect(ciWorkflow).toContain("!contains(needs.*.result, 'cancelled')");
-  expect(ciWorkflow).toContain("uses: ./.github/workflows/release.yml");
+  expect(releaseJob).not.toContain("promo-video");
+  expect(releaseJob).toContain("always()");
+  expect(releaseJob).toContain("github.event_name == 'push'");
+  expect(releaseJob).toContain("github.ref == 'refs/heads/main'");
+  expect(releaseJob).toContain("needs.checks.result == 'success'");
+  expect(releaseJob).toContain(
+    "needs.changes.outputs.linux != 'true' || needs.ubuntu.result == 'success'",
+  );
+  expect(releaseJob).toContain(
+    "needs.swift-build.result == 'success' && needs.swift-test.result == 'success'",
+  );
+  expect(releaseJob).toContain("uses: ./.github/workflows/release.yml");
 });
 
 test("the release is reusable and supports manual rebuilds", () => {
