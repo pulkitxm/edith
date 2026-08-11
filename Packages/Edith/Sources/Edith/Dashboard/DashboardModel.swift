@@ -1518,10 +1518,7 @@ extension DateFormatter {
 
 enum DashFmt {
     static func tokens(_ v: Double) -> String {
-        if v >= 1_000_000_000 { return String(format: "%.2fB", v / 1_000_000_000) }
-        if v >= 1_000_000 { return String(format: "%.1fM", v / 1_000_000) }
-        if v >= 1000 { return String(format: "%.1fk", v / 1000) }
-        return String(format: "%.0f", v)
+        TokenFormatter.compact(v)
     }
     private static let tokensFullFmt: NumberFormatter = {
         let f = NumberFormatter()
