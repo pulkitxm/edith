@@ -208,7 +208,6 @@ jobs:
     needs: [changes, checks, ubuntu, swift-build, swift-test]
     if: >-
       always()
-      && github.event_name == 'push'
       && github.ref == 'refs/heads/main'
       && needs.changes.result == 'success'
       && needs.checks.result == 'success'

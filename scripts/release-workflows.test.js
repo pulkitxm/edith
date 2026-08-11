@@ -19,6 +19,9 @@ test("CI gates the reusable release only on relevant checks", () => {
   );
   expect(releaseJob).not.toContain("promo-video");
   expect(releaseJob).toContain("always()");
+  expect(releaseJob).toContain(
+    "always()\n      && github.ref == 'refs/heads/main'",
+  );
   expect(releaseJob).toContain("github.event_name == 'push'");
   expect(releaseJob).toContain("github.ref == 'refs/heads/main'");
   expect(releaseJob).toContain("needs.checks.result == 'success'");
