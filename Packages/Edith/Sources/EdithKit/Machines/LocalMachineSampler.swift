@@ -110,11 +110,14 @@ public final class LocalMachineSampler: @unchecked Sendable {
         guard result == KERN_SUCCESS else {
             return MachineMemory(totalKB: totalKB, availKB: 0, usedKB: 0)
         }
-        let pageKB = Int64(vm_page_size) / 1024
-        let usedKB =
-            (Int64(stats.active_count) + Int64(stats.wire_count)
-                + Int64(stats.compressor_page_count)) * pageKB
-        let cacheKB = (Int64(stats.external_page_count) + Int64(stats.purgeable_count)) * pageKB
+        let pageSize = UInt64(vm_page_size)
+        let usedKB = Int64(
+            SystemStatsReader.memoryUsedBytes(
+                anonymousPages: UInt64(stats.internal_page_count),
+                wiredPages: UInt64(stats.wire_count),
+                compressedPages: UInt64(stats.compressor_page_count),
+                pageSize: pageSize) / 1024)
+        let cacheKB = Int64(UInt64(stats.external_page_count) * pageSize / 1024)
         var swap = xsw_usage()
         var swapSize = MemoryLayout<xsw_usage>.size
         sysctlbyname("vm.swapusage", &swap, &swapSize, nil, 0)
