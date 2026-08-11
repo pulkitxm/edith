@@ -919,23 +919,58 @@ import Testing
             MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
         let stableCodex = try #require(
             MachineUsageSourceIdentity.canonical(machineID: machineID, source: "codex"))
-        obj["sources"] = ["gaming:cli", stableCodex]
-        obj["defaultSources"] = ["gaming:cli", stableCodex]
+        obj["sources"] = ["gaming:cli", stableCodex, "cowork"]
+        obj["defaultSources"] = ["gaming:cli", stableCodex, "cowork"]
         var sourceMeta = obj["sourceMeta"] as! [String: Any]
         sourceMeta[stableCodex] = ["tool": "Codex", "machineID": machineID]
+        sourceMeta["cowork"] = ["tool": "Claude Code"]
         obj["sourceMeta"] = sourceMeta
         var sessions = obj["sessions"] as! [[String: Any]]
         sessions.append(["id": "stale", "source": stableCodex])
+        sessions.append(["id": "generic", "source": "cowork"])
         obj["sessions"] = sessions
         let encoded = try JSONSerialization.data(withJSONObject: obj)
         let merged = decode(UsageHistory.merge(local: nil, cloud: encoded))
 
-        #expect(merged["sources"] as? [String] == [stableCLI])
-        #expect(merged["defaultSources"] as? [String] == [stableCLI])
+        #expect(merged["sources"] as? [String] == [stableCLI, "cowork"])
+        #expect(merged["defaultSources"] as? [String] == [stableCLI, "cowork"])
         let mergedSourceMeta = merged["sourceMeta"] as! [String: Any]
-        #expect(Set(mergedSourceMeta.keys) == [stableCLI])
+        #expect(Set(mergedSourceMeta.keys) == [stableCLI, "cowork"])
         let mergedSessions = merged["sessions"] as! [[String: Any]]
-        #expect(mergedSessions.map { $0["id"] as? String } == ["kept"])
+        #expect(
+            mergedSessions.map { $0["id"] as? String } == ["kept", "stale", "generic"])
+    }
+
+    @Test func twoSidedMergeRetainsSessionOnlyMachineHistory() throws {
+        let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        let local = machineAliasDocument(
+            machineID: machineID, currentSlug: "gaming",
+            entries: [
+                MachineAliasEntry(
+                    source: "gaming:cli", period: "2026-06-10", tokens: 10, cost: 1,
+                    path: "gaming:/work/edith", sessionID: "current",
+                    sourceMappedProject: true)
+            ])
+        var cloud = decode(
+            machineAliasDocument(
+                machineID: machineID, currentSlug: "gaming",
+                entries: [
+                    MachineAliasEntry(
+                        source: "tuf:cli", period: "2026-05-01", tokens: 8, cost: 0.8,
+                        path: "tuf:/work/edith", sessionID: "historical",
+                        sourceMappedProject: true)
+                ]))
+        cloud["daily"] = []
+        cloud["totals"] = ["tokens": 0, "cost": 0]
+        let cloudData = try JSONSerialization.data(withJSONObject: cloud)
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloudData))
+        let stable = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
+
+        #expect(merged["sources"] as? [String] == [stable])
+        let sessions = merged["sessions"] as! [[String: Any]]
+        #expect(Set(sessions.compactMap { $0["id"] as? String }) == ["current", "historical"])
+        #expect(Set(sessions.compactMap { $0["source"] as? String }) == [stable])
     }
 
     @Test func garbageSideFallsBackToValidSide() {

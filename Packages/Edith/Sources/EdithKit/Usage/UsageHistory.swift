@@ -74,12 +74,6 @@ public enum UsageHistory {
             !unusedMachines.contains($0)
         }
         out["sourceMeta"] = sourceMeta.filter { !unusedMachines.contains($0.key) }
-        if let sessions = obj["sessions"] as? [[String: Any]] {
-            out["sessions"] = sessions.filter { session in
-                guard let source = session["source"] as? String else { return true }
-                return !unusedMachines.contains(source)
-            }
-        }
         return out
     }
 
