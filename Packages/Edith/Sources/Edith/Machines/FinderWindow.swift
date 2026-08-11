@@ -5,11 +5,16 @@ import UniformTypeIdentifiers
 
 struct FinderPane: View {
     @ObservedObject var model: FinderModel
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     var body: some View {
         FinderBody(model: model)
-            .onAppear { FinderUndoBridge.register(model) }
-            .onDisappear { FinderUndoBridge.forget(model) }
+            .onAppear {
+                if connectionsEnabled { FinderUndoBridge.register(model) }
+            }
+            .onDisappear {
+                if connectionsEnabled { FinderUndoBridge.forget(model) }
+            }
     }
 }
 
