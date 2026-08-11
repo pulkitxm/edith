@@ -5,6 +5,7 @@ import SwiftUI
 struct AboutPane: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
+    @State private var contributors: [Contributor] = []
 
     private var theme: Color { themeColor(themeName) }
 
