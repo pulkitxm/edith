@@ -10,6 +10,7 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     let host = NSHostingView(
         rootView:
             view
+            .environment(\.companionRequestsEnabled, false)
             .environment(\.machineConnectionsEnabled, false)
             .environment(\.terminalLaunchEnabled, false))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)

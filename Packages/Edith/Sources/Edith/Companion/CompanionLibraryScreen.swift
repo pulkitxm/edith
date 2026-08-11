@@ -212,6 +212,7 @@ struct CompanionLibraryScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -233,7 +234,7 @@ struct CompanionLibraryScreen: View {
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
-            await model.refresh()
+            if requestsEnabled { await model.refresh() }
         }
         .onChange(of: model.query) {
             model.searchChanged()
