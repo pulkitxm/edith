@@ -6,8 +6,8 @@ public enum UsageHistory {
         guard let cloud else { return local }
         guard let rawLocal = decode(local) else { return cloud }
         guard let rawCloud = decode(cloud) else { return local }
-        let l = foldLegacyCloudSource(rawLocal)
-        let c = foldLegacyCloudSource(rawCloud)
+        let l = canonicalizedMachineSources(foldLegacyCloudSource(rawLocal))
+        let c = canonicalizedMachineSources(foldLegacyCloudSource(rawCloud))
 
         var mergedByPeriod: [String: [String: Any]] = [:]
         for day in daily(c) {
@@ -55,6 +55,144 @@ public enum UsageHistory {
             out["sessions"] = sessions.map(relabeledSession)
         }
         out["daily"] = daily(obj).map(foldedDay)
+        return out
+    }
+
+    static func canonicalizedMachineSources(_ obj: [String: Any]) -> [String: Any] {
+        let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
+        let aliases = machineSourceAliases(sourceMeta)
+        guard !aliases.isEmpty else { return obj }
+        var out = obj
+        out["sources"] = canonicalizedSourceList(strings(obj["sources"]), aliases: aliases)
+        out["defaultSources"] = canonicalizedSourceList(
+            strings(obj["defaultSources"]), aliases: aliases)
+        out["sourceMeta"] = canonicalizedSourceMeta(sourceMeta, aliases: aliases)
+        if let sessions = obj["sessions"] as? [[String: Any]] {
+            out["sessions"] = sessions.map { canonicalizedSourceRecord($0, aliases: aliases) }
+        }
+        out["daily"] = daily(obj).map { canonicalizedMachineDay($0, aliases: aliases) }
+        return out
+    }
+
+    private static func machineSourceAliases(_ sourceMeta: [String: Any]) -> [String: String] {
+        sourceMeta.reduce(into: [:]) { aliases, entry in
+            guard let meta = entry.value as? [String: Any],
+                let machineID = meta["machineID"] as? String,
+                let canonical = MachineUsageSourceIdentity.canonical(
+                    machineID: machineID, source: entry.key)
+            else { return }
+            aliases[entry.key] = canonical
+        }
+    }
+
+    private static func canonicalizedSourceList(
+        _ sources: [String], aliases: [String: String]
+    ) -> [String] {
+        var seen = Set<String>()
+        return sources.compactMap { source in
+            let canonical = aliases[source] ?? source
+            return seen.insert(canonical).inserted ? canonical : nil
+        }
+    }
+
+    private static func canonicalizedSourceMeta(
+        _ sourceMeta: [String: Any], aliases: [String: String]
+    ) -> [String: Any] {
+        sourceMeta.keys.sorted().reduce(into: [:]) { meta, source in
+            let canonical = aliases[source] ?? source
+            if meta[canonical] == nil || source == canonical {
+                meta[canonical] = sourceMeta[source]
+            }
+        }
+    }
+
+    private static func canonicalizedSourceMap(
+        _ value: Any?, aliases: [String: String]
+    ) -> [String: Any]? {
+        guard let sourceMap = value as? [String: Any] else { return nil }
+        return sourceMap.keys.sorted().reduce(into: [:]) { result, source in
+            let canonical = aliases[source] ?? source
+            if result[canonical] == nil || source == canonical {
+                result[canonical] = sourceMap[source]
+            }
+        }
+    }
+
+    private static func canonicalizedSourceRecord(
+        _ record: [String: Any], aliases: [String: String]
+    ) -> [String: Any] {
+        guard let source = record["source"] as? String, let canonical = aliases[source] else {
+            return record
+        }
+        var out = record
+        out["source"] = canonical
+        return out
+    }
+
+    private static func canonicalizedMachineDay(
+        _ day: [String: Any], aliases: [String: String]
+    ) -> [String: Any] {
+        var out = day
+        if let bySource = canonicalizedSourceMap(day["bySource"], aliases: aliases) {
+            out["bySource"] = bySource
+        }
+        if let hours = day["hours"] as? [[String: Any]] {
+            out["hours"] = hours.map { canonicalizedHour($0, aliases: aliases) }
+        }
+        if let projects = day["projects"] as? [[String: Any]] {
+            out["projects"] = projects.map { canonicalizedMachineProject($0, aliases: aliases) }
+        }
+        return out
+    }
+
+    private static func canonicalizedHour(
+        _ hour: [String: Any], aliases: [String: String]
+    ) -> [String: Any] {
+        var out = hour
+        if let bySource = canonicalizedSourceMap(hour["bySource"], aliases: aliases) {
+            out["bySource"] = bySource
+        }
+        if let paths = hour["byPath"] as? [String: Any] {
+            out["byPath"] = paths.reduce(into: [String: Any]()) { result, entry in
+                guard var path = entry.value as? [String: Any] else {
+                    result[entry.key] = entry.value
+                    return
+                }
+                if let bySource = canonicalizedSourceMap(path["bySource"], aliases: aliases) {
+                    path["bySource"] = bySource
+                }
+                result[entry.key] = path
+            }
+        }
+        return out
+    }
+
+    private static func canonicalizedMachineProject(
+        _ project: [String: Any], aliases: [String: String]
+    ) -> [String: Any] {
+        var out = project
+        if let bySource = canonicalizedSourceMap(project["bySource"], aliases: aliases) {
+            out["bySource"] = bySource
+        }
+        if let chats = project["chats"] as? [[String: Any]] {
+            out["chats"] = chats.map { canonicalizedSourceRecord($0, aliases: aliases) }
+        }
+        if let worktrees = project["worktrees"] as? [[String: Any]] {
+            out["worktrees"] = worktrees.map { worktree in
+                var next = worktree
+                if let bySource = canonicalizedSourceMap(
+                    worktree["bySource"], aliases: aliases)
+                {
+                    next["bySource"] = bySource
+                }
+                if let chats = worktree["chats"] as? [[String: Any]] {
+                    next["chats"] = chats.map {
+                        canonicalizedSourceRecord($0, aliases: aliases)
+                    }
+                }
+                return next
+            }
+        }
         return out
     }
 

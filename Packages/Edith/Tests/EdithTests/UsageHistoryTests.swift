@@ -80,6 +80,76 @@ import Testing
         return try! JSONSerialization.data(withJSONObject: obj)
     }
 
+    private func machineDocument(
+        source: String, machineID: String, machineName: String, tokens: Double, cost: Double
+    ) -> Data {
+        let detail: [String: Any] = [
+            "tokens": tokens, "cost": cost,
+            "byModel": ["gpt": ["tokens": tokens, "cost": cost]],
+        ]
+        let slug = source.split(separator: ":").first.map(String.init) ?? "machine"
+        let project: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "repositoryName": "edith", "repositoryURL": "https://github.com/pulkitxm/edith",
+            "folderName": "edith", "path": "/work/edith", "machineName": machineName,
+            "machineID": machineID, "tokens": tokens, "cost": cost,
+            "bySource": [source: detail],
+            "chats": [
+                [
+                    "id": "\(slug)-main", "path": "/work/edith", "source": source,
+                    "tokens": tokens / 2, "cost": cost / 2,
+                ]
+            ],
+            "worktrees": [
+                [
+                    "name": "feature", "path": "/work/edith/feature", "tokens": tokens / 2,
+                    "cost": cost / 2,
+                    "chats": [
+                        [
+                            "id": "\(slug)-worktree", "path": "/work/edith/feature",
+                            "source": source, "tokens": tokens / 2, "cost": cost / 2,
+                        ]
+                    ],
+                ]
+            ],
+        ]
+        let obj: [String: Any] = [
+            "schemaVersion": 7,
+            "generatedAt": "2026-07-06T00:00:00Z",
+            "sources": [source],
+            "defaultSources": [source],
+            "sourceMeta": [
+                source: [
+                    "label": "Codex · \(machineName)", "tool": "codex",
+                    "machine": machineName, "machineID": machineID,
+                ]
+            ],
+            "totals": ["cost": cost, "tokens": tokens],
+            "daily": [
+                day(
+                    "2026-06-10", bySource: [source: [model("gpt", input: tokens, cost: cost)]],
+                    hours: [
+                        [
+                            "tokens": tokens, "cost": cost, "bySource": [source: detail],
+                            "byPath": [
+                                "\(slug):/work/edith": [
+                                    "tokens": tokens, "cost": cost,
+                                    "bySource": [source: detail],
+                                ]
+                            ],
+                        ]
+                    ], projects: [project])
+            ],
+            "sessions": [
+                [
+                    "id": "shared-session", "source": source, "totalTokens": tokens,
+                    "cost": cost,
+                ]
+            ],
+        ]
+        return try! JSONSerialization.data(withJSONObject: obj)
+    }
+
     private func decode(_ data: Data?) -> [String: Any] {
         try! JSONSerialization.jsonObject(with: data!) as! [String: Any]
     }
@@ -426,6 +496,75 @@ import Testing
         #expect(totalsBySource["tof:cli"]?["tokens"] == 8)
         #expect(totalsBySource["tof:codex"]?["tokens"] == 20)
         #expect(totalsBySource["laptop:cli"]?["tokens"] == 5)
+    }
+
+    @MainActor
+    @Test func renamedMachineSourceUsesStableIdentityWithoutDoubleCounting() throws {
+        let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        let local = machineDocument(
+            source: "gaming:codex", machineID: machineID, machineName: "Gaming", tokens: 40,
+            cost: 4)
+        let cloud = machineDocument(
+            source: "tuf:codex", machineID: machineID, machineName: "TUF", tokens: 900,
+            cost: 90)
+        let mergedData = try #require(UsageHistory.merge(local: local, cloud: cloud))
+        let merged = decode(mergedData)
+        let stable = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "codex"))
+
+        #expect(merged["sources"] as? [String] == [stable])
+        #expect(merged["defaultSources"] as? [String] == [stable])
+        let sourceMeta = merged["sourceMeta"] as! [String: [String: Any]]
+        #expect(Set(sourceMeta.keys) == [stable])
+        #expect(sourceMeta[stable]?["machine"] as? String == "Gaming")
+
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let bySource = mergedDay["bySource"] as! [String: [[String: Any]]]
+        #expect(Set(bySource.keys) == [stable])
+        #expect(bySource[stable]?.first?["inputTokens"] as? Double == 40)
+        let totals = merged["totals"] as! [String: Any]
+        #expect(totals["tokens"] as? Double == 40)
+        #expect(totals["cost"] as? Double == 4)
+        let totalsBySource = totals["bySource"] as! [String: [String: Double]]
+        #expect(totalsBySource[stable]?["tokens"] == 40)
+
+        let hour = (mergedDay["hours"] as! [[String: Any]]).first!
+        let hourSources = hour["bySource"] as! [String: [String: Any]]
+        #expect(Set(hourSources.keys) == [stable])
+        #expect(hour["tokens"] as? Double == 40)
+        let paths = hour["byPath"] as! [String: [String: Any]]
+        #expect(Set(paths.keys) == ["gaming:/work/edith"])
+        let pathSources = paths["gaming:/work/edith"]?["bySource"] as! [String: [String: Any]]
+        #expect(Set(pathSources.keys) == [stable])
+
+        let project = (mergedDay["projects"] as! [[String: Any]]).first!
+        let projectSources = project["bySource"] as! [String: [String: Any]]
+        #expect(Set(projectSources.keys) == [stable])
+        #expect(project["tokens"] as? Double == 40)
+        #expect(project["cost"] as? Double == 4)
+        let chats = project["chats"] as! [[String: Any]]
+        #expect(chats.map { $0["source"] as? String } == [stable])
+        #expect(chats.map { $0["id"] as? String } == ["gaming-main"])
+        let worktree = (project["worktrees"] as! [[String: Any]]).first!
+        let worktreeChats = worktree["chats"] as! [[String: Any]]
+        #expect(worktreeChats.map { $0["source"] as? String } == [stable])
+        #expect(worktreeChats.map { $0["id"] as? String } == ["gaming-worktree"])
+
+        let sessions = merged["sessions"] as! [[String: Any]]
+        #expect(sessions.count == 1)
+        #expect(sessions.first?["source"] as? String == stable)
+        #expect(sessions.first?["totalTokens"] as? Double == 40)
+
+        let dashboardUsage = try JSONDecoder().decode(DashUsage.self, from: mergedData)
+        let suite = "UsageHistoryTests.machineRename.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        preferences.removePersistentDomain(forName: suite)
+        let dashboard = DashboardModel(preferences: preferences)
+        dashboard.ingest(dashboardUsage)
+        dashboard.range = .all
+        #expect(dashboard.projectTree.count == 1)
+        #expect(dashboard.projectTree.first?.id != "repo:unattributed")
+        #expect(dashboard.projectTree.first?.tokens == 40)
     }
 
     @Test func missingSideReturnsOtherVerbatim() {
