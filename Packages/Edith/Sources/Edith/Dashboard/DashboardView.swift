@@ -224,7 +224,8 @@ struct DashboardView: View {
                     stroke: DashSkin.line(dark),
                     shadow: .black.opacity(dark ? 0.3 : 0.05),
                     shadowRadius: 8,
-                    shadowY: 4
+                    shadowY: 4,
+                    clipsContent: true
                 )
             }
         }

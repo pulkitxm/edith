@@ -96,18 +96,19 @@ extension View {
         strokeWidth: CGFloat = 1,
         shadow: Color? = nil,
         shadowRadius: CGFloat = 12,
-        shadowY: CGFloat = 8
+        shadowY: CGFloat = 8,
+        clipsContent: Bool = false
     ) -> some View {
         let shape = RoundedRectangle(cornerRadius: UIScale.pt(cornerRadius))
         return
             self
+            .background(fill, in: shape)
+            .clipped(clipsContent, to: shape)
             .background {
                 if let shadow {
                     shape.fill(fill)
                         .shadow(
                             color: shadow, radius: UIScale.pt(shadowRadius), y: UIScale.pt(shadowY))
-                } else {
-                    shape.fill(fill)
                 }
             }
             .overlay {
@@ -115,6 +116,15 @@ extension View {
                     shape.strokeBorder(stroke, lineWidth: UIScale.pt(strokeWidth))
                 }
             }
+    }
+
+    @ViewBuilder
+    private func clipped<S: Shape>(_ clip: Bool, to shape: S) -> some View {
+        if clip {
+            clipShape(shape)
+        } else {
+            self
+        }
     }
 
     @available(macOS 26.0, *)

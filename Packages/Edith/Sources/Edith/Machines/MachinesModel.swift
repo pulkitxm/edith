@@ -7,7 +7,7 @@ final class MachinesModel: ObservableObject {
     static let shared = MachinesModel()
 
     @Published private(set) var store = MachineStore()
-    @Published private(set) var sessions: [UUID: MachineSession] = [:]
+    private(set) var sessions: [UUID: MachineSession] = [:]
     @Published var selection: UUID?
 
     static let localMachineID = UUID(uuidString: "00000000-0000-0000-0000-0000000000ED")!
