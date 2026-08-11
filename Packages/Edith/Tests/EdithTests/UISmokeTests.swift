@@ -7,7 +7,7 @@ import Testing
 
 @MainActor
 private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 700) -> Bool {
-    let host = NSHostingView(rootView: view)
+    let host = NSHostingView(rootView: view.environment(\.terminalLaunchEnabled, false))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
     let window = NSWindow(
         contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -87,6 +87,14 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
 
     @Test func terminalPaneRenders() {
         #expect(renders(TerminalSettingsPane()))
+    }
+
+    @Test func terminalSmokeRenderDoesNotStartShell() {
+        let session = MachineSession(
+            machine: Machine(name: "This Mac", host: "localhost"), local: true)
+        let holder = TerminalSessionHolder()
+        #expect(renders(MachineTerminalTab(session: session, holder: holder)))
+        #expect(!holder.started)
     }
 
     @Test func terminalSettingsTabRenders() {

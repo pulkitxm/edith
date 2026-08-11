@@ -3,6 +3,17 @@ import EdithKit
 import SwiftTerm
 import SwiftUI
 
+private struct TerminalLaunchEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var terminalLaunchEnabled: Bool {
+        get { self[TerminalLaunchEnabledKey.self] }
+        set { self[TerminalLaunchEnabledKey.self] = newValue }
+    }
+}
+
 @MainActor
 final class TerminalSessionHolder: ObservableObject {
     let terminalView = LocalProcessTerminalView(frame: .zero)
@@ -98,6 +109,7 @@ struct MachineTerminalTab: View {
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -135,7 +147,7 @@ struct MachineTerminalTab: View {
     }
 
     private func startIfPossible() {
-        guard !holder.started else { return }
+        guard launchEnabled, !holder.started else { return }
         if session.isLocal {
             holder.start(
                 executable: "/bin/zsh", arguments: ["-l"],
