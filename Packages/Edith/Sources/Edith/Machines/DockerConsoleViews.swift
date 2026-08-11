@@ -371,8 +371,7 @@ struct DockerUsageView: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     .padding(UIScale.pt(14))
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                    .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark))
                 }
             }
             .padding(UIScale.pt(16))

@@ -153,11 +153,7 @@ struct AddMachineSheet: View {
                     if configHost.id != configHosts.last?.id { Divider().opacity(0.3) }
                 }
             }
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(10))
-                    .strokeBorder(DashSkin.line(dark))
-            }
+            .widgetBar(cornerRadius: 10, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
             labelledField("Display name", text: $name, placeholder: "Linux laptop")
         }
     }

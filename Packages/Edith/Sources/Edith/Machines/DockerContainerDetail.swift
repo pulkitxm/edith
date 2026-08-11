@@ -555,7 +555,7 @@ struct DockerContainerDetail: View {
             .frame(height: UIScale.pt(54))
         }
         .padding(UIScale.pt(14))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark))
     }
 
     private func statItem(_ label: String, _ value: String) -> some View {

@@ -59,10 +59,7 @@ struct FleetHomeView: View {
         }
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(10))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark))
-        }
+        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
     }
 
     private func bannerDetail(_ fleet: FleetSummary) -> String {
@@ -279,16 +276,12 @@ struct FleetChip: View {
             }
             .padding(.horizontal, UIScale.pt(11))
             .padding(.vertical, UIScale.pt(8))
-            .background(
-                selected ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(11))
+            .widgetBar(
+                cornerRadius: 11,
+                fill: selected ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
+                stroke: selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
+                strokeWidth: selected ? 1.4 : 1
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(11))
-                    .strokeBorder(
-                        selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                        lineWidth: UIScale.pt(selected ? 1.4 : 1))
-            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -95,14 +95,11 @@ struct SkinCard<Content: View>: View {
                 bottom: UIScale.pt(14), trailing: UIScale.pt(16))
         )
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .background {
-            RoundedRectangle(cornerRadius: UIScale.pt(16))
-                .fill(DashSkin.paper2(dark))
-                .shadow(color: .black.opacity(dark ? 0.32 : 0.05), radius: UIScale.pt(12), y: 8)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(16)).strokeBorder(
-                DashSkin.line(dark), lineWidth: UIScale.pt(1))
+        .widgetBar(
+            cornerRadius: 16,
+            fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark),
+            shadow: .black.opacity(dark ? 0.32 : 0.05)
         )
     }
 }

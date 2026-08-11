@@ -517,6 +517,6 @@ struct DashCard<Content: View>: View {
         }
         .padding(UIScale.pt(14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
+        .widgetBar(cornerRadius: 14, fill: .primary.opacity(0.05))
     }
 }

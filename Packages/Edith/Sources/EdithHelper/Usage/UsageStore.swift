@@ -936,7 +936,7 @@ final class UsageStore: ObservableObject, FeatureModule {
                     for line in lines { self?.noteMachine(line) }
                 }
             }
-            await self?.finishedCollecting(changed: result.changedAnything)
+            self?.finishedCollecting(changed: result.changedAnything)
         }
     }
 

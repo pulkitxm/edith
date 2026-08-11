@@ -100,10 +100,9 @@ struct MachinePowerControls: View {
             }
         }
         .padding(UIScale.pt(2))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(9))
-                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(0.5)))
+        .widgetBar(
+            cornerRadius: 9, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark),
+            strokeWidth: 0.5)
     }
 
     private func toast(_ text: String) -> some View {

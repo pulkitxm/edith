@@ -89,6 +89,34 @@ extension View {
         }
     }
 
+    public func widgetBar<F: ShapeStyle>(
+        cornerRadius: CGFloat,
+        fill: F,
+        stroke: Color? = nil,
+        strokeWidth: CGFloat = 1,
+        shadow: Color? = nil,
+        shadowRadius: CGFloat = 12,
+        shadowY: CGFloat = 8
+    ) -> some View {
+        let shape = RoundedRectangle(cornerRadius: UIScale.pt(cornerRadius))
+        return
+            self
+            .background {
+                if let shadow {
+                    shape.fill(fill)
+                        .shadow(
+                            color: shadow, radius: UIScale.pt(shadowRadius), y: UIScale.pt(shadowY))
+                } else {
+                    shape.fill(fill)
+                }
+            }
+            .overlay {
+                if let stroke {
+                    shape.strokeBorder(stroke, lineWidth: UIScale.pt(strokeWidth))
+                }
+            }
+    }
+
     @available(macOS 26.0, *)
     private func edithGlassStyle(_ tint: Color?, interactive: Bool) -> Glass {
         var glass = Glass.regular

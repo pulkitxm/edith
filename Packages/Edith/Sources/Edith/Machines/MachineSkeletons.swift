@@ -51,10 +51,7 @@ private struct SkeletonCard<Content: View>: View {
         content
             .padding(UIScale.pt(14))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.line(dark))
-            }
+            .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
     }
 }
 
@@ -89,10 +86,7 @@ struct BannerSkeleton: View {
         }
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(10))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark))
-        }
+        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
     }
 }
 
