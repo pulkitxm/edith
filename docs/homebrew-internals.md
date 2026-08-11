@@ -916,7 +916,7 @@ every user who installs it is the sort of thing reviewers push back on. The like
 outcome is dropping that line upstream while keeping it in the tap.
 
 There is a second cost to upstreaming that is easy to miss: version bumps stop being
-yours. Instead of the `cask` job pushing a commit, each release becomes a pull
+yours. Instead of the `publish` job mirroring the cask, each release becomes a pull
 request into a queue reviewed by other people. For a project releasing patch
 versions frequently, that is a real change in release latency.
 
@@ -963,8 +963,10 @@ the docs guard the cask.
 
 ### Cut a release
 
-Nothing Homebrew-specific to do. Merge to `main`, or run `make release V=X.Y.Z`.
-The `cask` job bumps this repository and the tap.
+Nothing Homebrew-specific to do. Merge to `main` and let CI call the release
+workflow after every required check passes. To rebuild an existing release, run
+the Release workflow manually with `rebuild` set to its tag. The `publish` job
+updates this repository and mirrors the cask to the tap.
 
 Confirm afterwards:
 
@@ -976,7 +978,7 @@ The `version` line should be the release you just cut.
 
 ### Set up the two push tokens
 
-Both are required once, before the first release that runs the `cask` job.
+Both are required once, before the first release that mirrors the cask.
 
 `RELEASE_PUSH_TOKEN` lets the release jobs push to a protected `main`: a fine
 grained token scoped to `pulkitxm/edith` with read and write access to Contents,
@@ -1044,7 +1046,7 @@ question worth asking after a failed release run.
 | `Cask 'edith' is unavailable` on a new machine | Bare token with no tap installed | Use `brew install --cask pulkitxm/tap/edith` |
 | Error naming `pulkitxm/edith` | Two-segment name, does not match the tap regex | Three segments: `pulkitxm/tap/edith` |
 | `SHA256 mismatch` | Cask version and checksum are out of step, or the release asset was replaced | Recompute from the published DMG, fix both repositories |
-| Release green, tap still on the old version | `cask` job's mirror step failed, usually a missing or expired `TAP_PUSH_TOKEN` | Fix the secret, re-run the job |
+| Release green, tap still on the old version | `publish` job's mirror step failed, usually an expired `TAP_PUSH_TOKEN` | Fix the secret, re-run the job |
 | `GH013: Repository rule violations found for refs/heads/main` | A job pushed to `main` with `GITHUB_TOKEN`, which no ruleset bypass covers | Check out with `RELEASE_PUSH_TOKEN` |
 | `brew upgrade` never updates Edith | `auto_updates true`, working as designed | `brew upgrade --cask --greedy edith` |
 | `brew info` shows an older version than the running app | Sparkle updated in place | Cosmetic; a greedy upgrade re-syncs it |
@@ -1141,5 +1143,5 @@ In this repository:
 
 - [docs/homebrew.md](homebrew.md), the command reference.
 - `Casks/edith.rb`, the cask.
-- `.github/workflows/release.yml`, the `cask` job.
+- `.github/workflows/release.yml`, the release publisher and cask mirror.
 - `scripts/homebrew-cask.test.js`, the tests.

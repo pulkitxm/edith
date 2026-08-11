@@ -42,6 +42,30 @@ import Testing
     }
 }
 
+@Suite struct MachineUsageSourceIdentityTests {
+    private let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+
+    @Test func aMachineRenameKeepsTheSameSourceIdentity() {
+        let before = MachineUsageSourceIdentity.canonical(
+            machineID: machineID, source: "tuf:codex")
+        let after = MachineUsageSourceIdentity.canonical(
+            machineID: machineID.lowercased(), source: "gaming:codex")
+        #expect(before == "machine:\(machineID.lowercased()):codex")
+        #expect(after == before)
+    }
+
+    @Test func anAlreadyCanonicalSourceStaysCanonical() {
+        let source = "machine:\(machineID.lowercased()):cli"
+        #expect(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: source) == source)
+    }
+
+    @Test func anAmbiguousSourceCannotGetAStableIdentity() {
+        #expect(MachineUsageSourceIdentity.canonical(machineID: "", source: "tuf:codex") == nil)
+        #expect(MachineUsageSourceIdentity.canonical(machineID: machineID, source: "") == nil)
+    }
+}
+
 @Suite struct MachineUsageSelectionTests {
     private func store() -> UserDefaults {
         let suite = UserDefaults(suiteName: "machine-usage-\(UUID().uuidString)")!

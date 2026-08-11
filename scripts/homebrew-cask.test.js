@@ -53,12 +53,21 @@ test("the release mirrors the bumped cask to the tap repository", () => {
   );
 });
 
-test("the release bumps the cask after the assets are published", () => {
-  expect(releaseWorkflow).toContain("needs: publish");
+test("the unified publisher updates and mirrors the cask", () => {
+  const commitStep = releaseWorkflow.indexOf(
+    "- name: Commit and tag the release",
+  );
+  const publishStep = releaseWorkflow.indexOf("- name: Publish the release");
+  const mirrorStep = releaseWorkflow.indexOf(
+    "- name: Mirror the cask to the tap repository",
+  );
+  expect(commitStep).toBeGreaterThan(-1);
+  expect(publishStep).toBeGreaterThan(commitStep);
+  expect(mirrorStep).toBeGreaterThan(publishStep);
   expect(releaseWorkflow).toContain("sha256sum release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("Casks/edith.rb");
   expect(releaseWorkflow).toContain(
-    `git commit -m "Update the Homebrew cask to ${releaseTagRef}"`,
+    `git commit -m "Update the Edith cask to ${releaseTagRef}"`,
   );
   expect(releaseWorkflow).toContain("git push origin HEAD:main");
 });

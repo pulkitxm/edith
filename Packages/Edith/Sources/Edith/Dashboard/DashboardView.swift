@@ -558,23 +558,74 @@ struct DashboardView: View {
                 shareByModelCard
             }
         }
-        if !model.projects.isEmpty {
+        if !model.projects.isEmpty || !pathUnattributedText.isEmpty {
             SkinCard(title: "By project", dark: dark) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    ComboChart(
-                        points: model.chartData.project, barColor: acc, lineColor: gold,
-                        dark: dark, height: UIScale.pt(280), blur: blurMoney, blurTokens: blurUsage)
-                    ProjectDrilldownView(
-                        model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+                    if !model.projects.isEmpty {
+                        ComboChart(
+                            points: model.chartData.project, barColor: acc, lineColor: gold,
+                            dark: dark, height: UIScale.pt(280), blur: blurMoney,
+                            blurTokens: blurUsage)
+                        ProjectDrilldownView(
+                            model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+                    }
+                    if !pathUnattributedText.isEmpty {
+                        Text(pathUnattributedText)
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .presenterBlur(blurMoney || blurUsage)
+                    }
                 }
             }
         }
         SkinCard(title: "Hourly usage", dark: dark) {
-            ComboChart(
-                points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
-                height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                ComboChart(
+                    points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
+                    height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+                if !hourlyUnattributedText.isEmpty {
+                    Text(hourlyUnattributedText)
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .presenterBlur(blurMoney || blurUsage)
+                }
+            }
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
+    }
+
+    private var hourlyUnattributedText: String {
+        let tokens = model.hourlyUnattributedTokens
+        let cost = model.hourlyUnattributedCost
+        if tokens > 0.000_001, cost > 0.000_001 {
+            let tokenText = DashFmt.tokens(tokens)
+            return "Hourly detail is unavailable for \(tokenText) tokens and \(DashFmt.usd(cost))."
+        }
+        if tokens > 0.000_001 {
+            return "Hourly detail is unavailable for \(DashFmt.tokens(tokens)) tokens."
+        }
+        if cost > 0.000_001 {
+            return "Hourly detail is unavailable for \(DashFmt.usd(cost))."
+        }
+        return ""
+    }
+
+    private var pathUnattributedText: String {
+        let tokens = model.pathUnattributedTokens
+        let cost = model.pathUnattributedCost
+        if tokens > 0.000_001, cost > 0.000_001 {
+            return
+                "Folder detail is unavailable for \(DashFmt.tokens(tokens)) tokens and \(DashFmt.usd(cost)), so it is excluded from this folder view."
+        }
+        if tokens > 0.000_001 {
+            return
+                "Folder detail is unavailable for \(DashFmt.tokens(tokens)) tokens, so it is excluded from this folder view."
+        }
+        if cost > 0.000_001 {
+            return
+                "Folder detail is unavailable for \(DashFmt.usd(cost)), so it is excluded from this folder view."
+        }
+        return ""
     }
 
     private var dowCard: some View {

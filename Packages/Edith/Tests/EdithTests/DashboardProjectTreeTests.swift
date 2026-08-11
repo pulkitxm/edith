@@ -7,11 +7,11 @@ import Testing
 @MainActor
 @Suite struct DashboardProjectTreeTests {
     private func model(_ json: String) throws -> DashboardModel {
-        for key in ["projSort", "projSortAsc", "dashSort", "dashSortAsc", "dashPaths"] {
-            SharedDefaults.store.removeObject(forKey: key)
-        }
+        let suite = "DashboardProjectTreeTests.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        preferences.removePersistentDomain(forName: suite)
         let parsed = try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8))
-        let m = DashboardModel()
+        let m = DashboardModel(preferences: preferences)
         m.ingest(parsed)
         m.range = .all
         return m
@@ -41,11 +41,25 @@ import Testing
     }
 
     private func day(_ period: String, projects: String, bySource: String? = nil) -> String {
-        let objects =
+        var objects =
             (try? JSONSerialization.jsonObject(with: Data("[\(projects)]".utf8)))
             as? [[String: Any]] ?? []
+        for index in objects.indices where objects[index]["bySource"] == nil {
+            let tokens = (objects[index]["tokens"] as? NSNumber)?.doubleValue ?? 0
+            let cost = (objects[index]["cost"] as? NSNumber)?.doubleValue ?? 0
+            objects[index]["bySource"] = [
+                "cli": [
+                    "tokens": tokens,
+                    "cost": cost,
+                    "byModel": ["m": ["tokens": tokens, "cost": cost]],
+                ]
+            ]
+        }
         let tokens = objects.reduce(0.0) { $0 + (($1["tokens"] as? NSNumber)?.doubleValue ?? 0) }
         let cost = objects.reduce(0.0) { $0 + (($1["cost"] as? NSNumber)?.doubleValue ?? 0) }
+        let encodedProjects =
+            (try? JSONSerialization.data(withJSONObject: objects, options: [.sortedKeys]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         let sources =
             bySource
                 ?? """
@@ -55,7 +69,7 @@ import Testing
         return """
             {"period":"\(period)",
              "bySource":{\(sources)},
-             "projects":[\(projects)]}
+             "projects":\(encodedProjects)}
             """
     }
 
@@ -94,7 +108,7 @@ import Testing
                 """)
         let m = try model(usage(daily: d))
         let proj = try #require(m.projectTree.first)
-        #expect(proj.nestedCount == 4)
+        #expect(proj.nestedCount == 5)
         #expect(proj.worktrees.count == 1)
         #expect(proj.worktrees[0].tokens == 200)
         #expect(proj.worktrees[0].chats.count == 2)
@@ -125,7 +139,8 @@ import Testing
         let m = try model(usage(daily: d))
         let proj = try #require(m.projectTree.first)
         #expect(proj.tokens == 700)
-        #expect(proj.expandable == false)
+        #expect(proj.expandable)
+        #expect(proj.folders.first?.expandable == false)
     }
 
     @Test func emptyChatIdTitledUntitled() throws {
@@ -265,7 +280,7 @@ import Testing
         #expect(m.projExpanded.isEmpty)
     }
 
-    @Test func projectAndHourlyTotalsMatchCanonicalFilteredUsage() throws {
+    @Test func missingHourlyDetailRemainsUnattributed() throws {
         let d = day(
             "2026-06-01",
             projects: """
@@ -278,11 +293,12 @@ import Testing
         let m = try model(usage(daily: d))
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.cost } - 10) < 0.0001)
-        #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
-        #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.cost } - 10) < 0.0001)
+        #expect(m.hourlyAll.allSatisfy { $0.tokens == 0 && $0.cost == 0 })
+        #expect(abs(m.hourlyUnattributedTokens - 100) < 0.0001)
+        #expect(abs(m.hourlyUnattributedCost - 10) < 0.0001)
     }
 
-    @Test func todayRangeKeepsFullActivityCalendar() throws {
+    @Test func todayRangeRestrictsActivityToOnePaddedWeek() throws {
         let first = day(
             "2026-06-01",
             projects: """
@@ -297,8 +313,8 @@ import Testing
                 """)
         let m = try model(usage(daily: "\(first),\(latest)"))
         m.range = .today
-        #expect(Set(m.heatDetail.keys) == ["2026-06-01", todayStr])
-        #expect(m.calendarDays.count > 7)
+        #expect(Set(m.heatDetail.keys) == [todayStr])
+        #expect(m.calendarDays.count == 7)
         #expect(m.projectTree.map(\.name) == ["new"])
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
         let detail = try #require(m.heatDetail[todayStr])
@@ -390,14 +406,17 @@ import Testing
                 """)
         let m = try model(usage(daily: "\(legacy),\(current)"))
         m.selectedPaths = ["/drive/orbit"]
-        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
     }
 
-    @Test func modelFilterLeavesActivityUnfiltered() throws {
+    @Test func modelFilterUpdatesActivityAndUnattributedHours() throws {
         let d = day(
             "2026-06-01",
             projects: """
                 {"projectName":"mixed","tokens":1000,"cost":100,
+                 "bySource":{"cli":{"tokens":400,"cost":40,
+                   "byModel":{"a":{"tokens":100,"cost":10},
+                              "b":{"tokens":300,"cost":30}}}},
                  "chats":[\(chat("x", tokens: 1000, cost: 100, source: "cli"))]}
                 """,
             bySource: """
@@ -410,10 +429,242 @@ import Testing
         m.selectedModels = ["a"]
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
-        #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
+        #expect(m.hourlyAll.allSatisfy { $0.tokens == 0 })
+        #expect(abs(m.hourlyUnattributedTokens - 100) < 0.0001)
         let detail = try #require(m.heatDetail["2026-06-01"])
-        #expect(abs(detail.tokens - 400) < 0.0001)
-        #expect(abs(detail.projects.reduce(0) { $0 + $1.value } - 400) < 0.0001)
+        #expect(abs(detail.tokens - 100) < 0.0001)
+        #expect(detail.models.map(\.id) == ["a"])
+        #expect(abs(detail.projects.reduce(0) { $0 + $1.value } - 100) < 0.0001)
+        #expect(detail.chatCount == 0)
+    }
+
+    @Test func sameRepositoryAcrossMachinesHasSeparateFolders() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"local checkout","repositoryID":"github:acme/orbit",
+                 "repositoryName":"orbit","repositoryURL":"https://github.com/acme/orbit",
+                 "folderName":"orbit","path":"/Users/me/orbit","machineName":"Laptop",
+                 "machineID":"local","tokens":100,"cost":1},
+                {"projectName":"remote checkout","repositoryID":"github:acme/orbit",
+                 "repositoryName":"orbit","repositoryURL":"https://github.com/acme/orbit",
+                 "folderName":"orbit","path":"/home/me/orbit","machineName":"TUF",
+                 "machineID":"tuf","tokens":200,"cost":2}
+                """)
+        let m = try model(usage(daily: d))
+        let repository = try #require(m.projectTree.first)
+        #expect(m.projectTree.count == 1)
+        #expect(repository.name == "orbit")
+        #expect(repository.repositoryURL == "https://github.com/acme/orbit")
+        #expect(repository.folders.count == 2)
+        #expect(Set(repository.folders.map(\.machineName)) == ["Laptop", "TUF"])
+        #expect(abs(repository.folders.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
+    }
+
+    @Test func remoteFolderPathsPreserveCase() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"Edith","repositoryID":"github.com/acme/edith",
+                 "repositoryName":"edith","path":"machine:tuf:/work/Edith",
+                 "machineName":"TUF","machineID":"tuf","tokens":100,"cost":1},
+                {"projectName":"edith","repositoryID":"github.com/acme/edith",
+                 "repositoryName":"edith","path":"machine:tuf:/work/edith",
+                 "machineName":"TUF","machineID":"tuf","tokens":200,"cost":2}
+                """)
+        let m = try model(usage(daily: d))
+        let repository = try #require(m.projectTree.first)
+        #expect(repository.folders.count == 2)
+        #expect(
+            Set(repository.folders.map(\.path)) == [
+                "machine:tuf:/work/Edith", "machine:tuf:/work/edith",
+            ])
+
+        m.selectedPaths = ["machine:tuf:/work/Edith"]
+        #expect(m.projectTree.count == 1)
+        #expect(m.projectTree[0].folders.map(\.path) == ["machine:tuf:/work/Edith"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
+    @Test func repositoriesWithSameNameAndDifferentIDsStaySeparate() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"one","repositoryID":"github:acme/orbit",
+                 "repositoryName":"orbit","folderName":"one","path":"/one",
+                 "tokens":100,"cost":1},
+                {"projectName":"two","repositoryID":"github:other/orbit",
+                 "repositoryName":"orbit","folderName":"two","path":"/two",
+                 "tokens":200,"cost":2}
+                """)
+        let m = try model(usage(daily: d))
+        #expect(m.projectTree.count == 2)
+        #expect(m.projectTree.map(\.name) == ["orbit", "orbit"])
+        #expect(Set(m.projectTree.map(\.id)).count == 2)
+    }
+
+    @Test func sourceFilterRemovesOnlyItsRepositoryFolders() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"local","repositoryID":"github:acme/orbit",
+                 "repositoryName":"orbit","folderName":"local","path":"/local/orbit",
+                 "machineName":"Laptop","tokens":100,"cost":1,
+                 "bySource":{"cli":{"tokens":100,"cost":1,
+                   "byModel":{"m":{"tokens":100,"cost":1}}}},
+                 "chats":[\(chat("local", tokens: 100, source: "cli"))]},
+                {"projectName":"remote","repositoryID":"github:acme/orbit",
+                 "repositoryName":"orbit","folderName":"remote","path":"/remote/orbit",
+                 "machineName":"TUF","tokens":200,"cost":2,
+                 "bySource":{"codex":{"tokens":200,"cost":2,
+                   "byModel":{"m":{"tokens":200,"cost":2}}}},
+                 "chats":[\(chat("remote", tokens: 200, cost: 2, source: "codex"))]}
+                """,
+            bySource: """
+                "cli":[{"modelName":"m","inputTokens":100,"cost":1}],
+                "codex":[{"modelName":"m","inputTokens":200,"cost":2}]
+                """)
+        let m = try model(usage(daily: d))
+        #expect(m.projectTree.first?.folders.count == 2)
+        m.selectedSources = ["cli"]
+        #expect(m.projectTree.count == 1)
+        #expect(m.projectTree[0].folders.map(\.machineName) == ["Laptop"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
+    @Test func repositorySearchMatchesEveryHierarchyLevel() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"checkout","repositoryID":"github:acme/orbit",
+                 "repositoryName":"orbit","repositoryURL":"https://github.com/acme/orbit",
+                 "folderName":"backend","path":"/srv/orbit-backend","machineName":"TUF",
+                 "machineID":"tuf","tokens":300,"cost":3,
+                 "chats":[\(chat("main", tokens: 100, title: "Database repair"))],
+                 "worktrees":[{"name":"billing-rewrite","tokens":200,"cost":2,
+                   "chats":[\(chat("work", tokens: 200, title: "Invoice flow"))]}]}
+                """)
+        let repository = try #require(model(usage(daily: d)).projectTree.first)
+        for query in ["orbit", "github.com", "backend", "/srv/orbit", "TUF", "tuf"] {
+            #expect(repository.matches(query))
+        }
+        #expect(repository.matches("billing-rewrite"))
+        #expect(repository.matches("Invoice flow"))
+        #expect(repository.matches("Database repair"))
+        #expect(repository.matches("main"))
+        #expect(!repository.matches("frontend"))
+    }
+
+    @Test func modelAttributionDoesNotSpreadAcrossRepositories() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"alpha","repositoryID":"github:acme/alpha",
+                 "repositoryName":"alpha","path":"/alpha","tokens":100,"cost":10,
+                 "bySource":{"cli":{"tokens":100,"cost":10,
+                   "byModel":{"a":{"tokens":100,"cost":10}}}},
+                 "chats":[\(chat("a", tokens: 100, cost: 10, source: "cli"))]},
+                {"projectName":"beta","repositoryID":"github:acme/beta",
+                 "repositoryName":"beta","path":"/beta","tokens":300,"cost":30,
+                 "bySource":{"cli":{"tokens":300,"cost":30,
+                   "byModel":{"b":{"tokens":300,"cost":30}}}},
+                 "chats":[\(chat("b", tokens: 300, cost: 30, source: "cli"))]}
+                """,
+            bySource: """
+                "cli":[
+                  {"modelName":"a","inputTokens":100,"cost":10},
+                  {"modelName":"b","inputTokens":300,"cost":30},
+                  {"modelName":"c","inputTokens":50,"cost":5}
+                ]
+                """)
+        let m = try model(usage(daily: d))
+        #expect(abs((m.projectTree.first { $0.name == "alpha" }?.tokens ?? 0) - 100) < 0.0001)
+        #expect(abs((m.projectTree.first { $0.name == "beta" }?.tokens ?? 0) - 300) < 0.0001)
+        #expect(
+            abs((m.projectTree.first { $0.id == "repo:unattributed" }?.tokens ?? 0) - 50)
+                < 0.0001)
+
+        m.selectedModels = ["a"]
+        #expect(m.projectTree.map(\.name) == ["alpha"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
+    @Test func legacySingleSourceProjectsRetainFolderAttribution() throws {
+        let json = usage(
+            daily: """
+                {"period":"2026-06-01",
+                 "bySource":{"cli":[{"modelName":"m","inputTokens":100,"cost":1}]},
+                 "projects":[
+                   {"projectName":"a","path":"/a","tokens":40,"cost":0.4},
+                   {"projectName":"b","path":"/b","tokens":60,"cost":0.6}
+                 ]}
+                """)
+        let m = try model(json)
+        #expect(m.projectTree.map(\.name) == ["b", "a"])
+        #expect(abs(m.projectTree[0].tokens - 60) < 0.0001)
+        #expect(abs(m.projectTree[1].tokens - 40) < 0.0001)
+        #expect(m.projectTree.allSatisfy { $0.id != "repo:unattributed" })
+    }
+
+    @Test func legacySourceChatsRetainProviderAttribution() throws {
+        let json = usage(
+            daily: """
+                {"period":"2026-06-01",
+                 "bySource":{
+                   "cli":[{"modelName":"a","inputTokens":100,"cost":1}],
+                   "codex":[{"modelName":"b","inputTokens":200,"cost":2}]},
+                 "projects":[
+                   {"projectName":"app","path":"/app","tokens":100,"cost":1,
+                    "chats":[{"id":"a","source":"cli","tokens":100,"cost":1}]},
+                   {"projectName":"remote","path":"/remote","tokens":200,"cost":2,
+                    "chats":[{"id":"b","source":"codex","tokens":200,"cost":2}]}
+                 ]}
+                """)
+        let m = try model(json)
+        #expect(m.projectTree.map(\.name) == ["remote", "app"])
+
+        m.selectedSources = ["cli"]
+        #expect(m.projectTree.map(\.name) == ["app"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
+    @Test func filteredLegacyMultiSourceTotalsRemainUnattributed() throws {
+        let json = usage(
+            daily: """
+                {"period":"2026-06-01",
+                 "bySource":{
+                   "cli":[{"modelName":"a","inputTokens":100,"cost":1}],
+                   "codex":[{"modelName":"b","inputTokens":200,"cost":2}]},
+                 "projects":[
+                   {"projectName":"unknown","path":"/unknown","tokens":300,"cost":3}
+                 ]}
+                """)
+        let m = try model(json)
+        m.selectedSources = ["cli"]
+
+        #expect(m.projectTree.map(\.name) == ["Unattributed"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
+    @Test func invalidRestoredModelAndPathFiltersAreCleared() throws {
+        let suite = "DashboardProjectTreeTests.restore.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        preferences.removePersistentDomain(forName: suite)
+        preferences.set("removed-model", forKey: "dashModels")
+        preferences.set("/removed/folder", forKey: "dashPaths")
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"orbit","path":"/valid/orbit","tokens":100,"cost":1}
+                """)
+        let parsed = try JSONDecoder().decode(
+            DashUsage.self, from: Data(usage(daily: d).utf8))
+        let m = DashboardModel(preferences: preferences)
+        m.ingest(parsed)
+        m.range = .all
+        #expect(m.selectedModels == ["m"])
+        #expect(m.selectedPaths.isEmpty)
+        #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
     }
 }
 

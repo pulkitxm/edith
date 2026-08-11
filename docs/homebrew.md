@@ -85,13 +85,13 @@ brew untap pulkitxm/tap
 
 ## Releasing
 
-Nothing about the cask is hand-edited. The `cask` job in
-`.github/workflows/release.yml` runs after the release is published, hashes the
-`Edith.dmg` it built, rewrites the `version` and `sha256` lines, commits the result
-to `main`, and pushes the same file to the tap repository. That commit touches only
-`Casks/`, which is outside the paths that trigger a release, so it cannot loop.
+Nothing about the cask is hand-edited. The `publish` job in
+`.github/workflows/release.yml` hashes the built `Edith.dmg`, rewrites the
+`version` and `sha256` lines, and commits the cask together with the versioned
+plists and release tag. It then publishes the assets and pushes the same cask to
+the tap repository. CI ignores that release commit, so it cannot loop.
 
 Pushing to the tap needs a `TAP_PUSH_TOKEN` secret on this repository: a fine
 grained personal access token scoped to `pulkitxm/homebrew-tap` with read and
-write access to contents. Without it the job fails loudly rather than releasing a
-version the tap does not know about.
+write access to contents. Without it the release is blocked before a version is
+cut.

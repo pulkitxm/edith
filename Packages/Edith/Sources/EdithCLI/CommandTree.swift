@@ -164,8 +164,8 @@ public enum CommandTree {
                         "models", "Cost and tokens per model.",
                         options: ["--json", "--range", "--source", "--machine"]),
                     CommandNode(
-                        "projects", "Cost and tokens per project.",
-                        options: ["--json", "--range"]),
+                        "projects", "Cost and tokens per GitHub repository.",
+                        options: ["--json", "--range", "--limit"]),
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),

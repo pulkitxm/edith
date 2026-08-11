@@ -31,17 +31,103 @@ public struct UsageProjectWorktree: Decodable, Sendable {
     public let name: String?
     public let cost: Double?
     public let tokens: Double?
+    public let chats: [UsageProjectChat]?
+}
+
+public struct UsageProjectMeasure: Decodable, Sendable {
+    public let cost: Double?
+    public let tokens: Double?
+}
+
+public struct UsageProjectSourceBreakdown: Decodable, Sendable {
+    public let cost: Double?
+    public let tokens: Double?
+    public let byModel: [String: UsageProjectMeasure]?
 }
 
 public struct UsageProject: Decodable, Sendable {
     public let projectName: String?
+    public let repositoryID: String?
+    public let repositoryName: String?
+    public let repositoryURL: String?
+    public let folderName: String?
     public let path: String?
+    public let machineName: String?
+    public let machineID: String?
     public let cost: Double?
     public let tokens: Double?
+    public let bySource: [String: UsageProjectSourceBreakdown]?
     public let chats: [UsageProjectChat]?
     public let worktrees: [UsageProjectWorktree]?
 
-    public var name: String { projectName ?? path ?? "unknown" }
+    public var name: String {
+        repositoryName ?? projectName ?? folderName ?? path.map {
+            URL(fileURLWithPath: $0).lastPathComponent
+        }
+            ?? "unknown"
+    }
+
+    public var stableRepositoryID: String {
+        if let repositoryID, !repositoryID.isEmpty { return repositoryID }
+        if let repositoryURL, !repositoryURL.isEmpty {
+            return "url:\(repositoryURL.lowercased())"
+        }
+        if let path, !path.isEmpty { return "path:\(path)" }
+        return "name:\(name.lowercased())"
+    }
+
+    public var resolvedFolderName: String {
+        folderName ?? path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? projectName ?? name
+    }
+}
+
+public struct UsageProjectFolderSummary: Equatable, Sendable {
+    public let folderName: String
+    public let path: String?
+    public let machineName: String?
+    public let machineID: String?
+    public var cost: Double
+    public var tokens: Double
+
+    public var json: JSONValue {
+        .object([
+            "folderName": .string(folderName),
+            "path": .optional(path),
+            "machineName": .optional(machineName),
+            "machineID": .optional(machineID),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+        ])
+    }
+}
+
+public struct UsageProjectSummary: Equatable, Sendable {
+    public let repositoryID: String
+    public let repositoryName: String
+    public let repositoryURL: String?
+    public var cost: Double
+    public var tokens: Double
+    public var folders: [UsageProjectFolderSummary]
+
+    public var json: JSONValue {
+        .object([
+            "repositoryID": .string(repositoryID),
+            "repositoryName": .string(repositoryName),
+            "repositoryURL": .optional(repositoryURL),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "folders": .array(folders.map(\.json)),
+        ])
+    }
+}
+
+private struct UsageRepositoryAccumulator {
+    var repositoryID: String
+    var repositoryName: String
+    var repositoryURL: String?
+    var cost = 0.0
+    var tokens = 0.0
+    var folders: [String: UsageProjectFolderSummary] = [:]
 }
 
 public struct UsageDay: Decodable, Sendable {
@@ -157,13 +243,16 @@ public enum UsageRange: String, CaseIterable, Sendable {
     {
         guard let start = start(today: today, calendar: calendar) else { return true }
         return period >= UsageRange.stamp(start, calendar: calendar)
+            && period <= UsageRange.stamp(today, calendar: calendar)
     }
 
     public func start(today: Date, calendar: Calendar) -> Date? {
         let midnight = calendar.startOfDay(for: today)
         switch self {
         case .today: return midnight
-        case .week: return calendar.date(byAdding: .day, value: -6, to: midnight)
+        case .week:
+            let daysSinceMonday = (calendar.component(.weekday, from: midnight) + 5) % 7
+            return calendar.date(byAdding: .day, value: -daysSinceMonday, to: midnight)
         case .month: return calendar.date(byAdding: .day, value: -29, to: midnight)
         case .all: return nil
         }
@@ -220,18 +309,152 @@ public enum UsageAnalysis {
         .sorted { $0.0 < $1.0 }
     }
 
-    public static func byProject(_ days: [UsageDay]) -> [(String, Double, Double)] {
-        var costs: [String: (Double, Double)] = [:]
+    public static func byProject(_ days: [UsageDay]) -> [UsageProjectSummary] {
+        var repositories: [String: UsageRepositoryAccumulator] = [:]
         for day in days {
-            for project in day.projects ?? [] {
-                var entry = costs[project.name] ?? (0, 0)
-                entry.0 += project.cost ?? 0
-                entry.1 += project.tokens ?? 0
-                costs[project.name] = entry
+            let projects = day.projects ?? []
+            addProjectsBySource(projects, day: day, to: &repositories)
+        }
+        return repositories.values.map { repository in
+            UsageProjectSummary(
+                repositoryID: repository.repositoryID,
+                repositoryName: repository.repositoryName,
+                repositoryURL: repository.repositoryURL,
+                cost: repository.cost,
+                tokens: repository.tokens,
+                folders: repository.folders.values.sorted {
+                    if $0.cost != $1.cost { return $0.cost > $1.cost }
+                    if $0.folderName != $1.folderName { return $0.folderName < $1.folderName }
+                    return ($0.path ?? "") < ($1.path ?? "")
+                })
+        }
+        .sorted {
+            if $0.cost != $1.cost { return $0.cost > $1.cost }
+            return $0.repositoryID < $1.repositoryID
+        }
+    }
+
+    private static func addProjectsBySource(
+        _ projects: [UsageProject], day: UsageDay,
+        to repositories: inout [String: UsageRepositoryAccumulator]
+    ) {
+        for (source, rows) in day.bySource ?? [:] {
+            let targetCost = rows.reduce(0) { $0 + ($1.cost ?? 0) }
+            let targetTokens = rows.reduce(0) { $0 + $1.tokens }
+            let measured = projects.compactMap { project -> (UsageProject, Double, Double)? in
+                guard let measure = sourceMeasure(project, source: source) else { return nil }
+                return (project, measure.cost, measure.tokens)
+            }
+            let rawCost = measured.reduce(0) { $0 + $1.1 }
+            let rawTokens = measured.reduce(0) { $0 + $1.2 }
+            guard rawCost > 0 || rawTokens > 0 else {
+                for row in rows {
+                    addUnattributed(
+                        source: source, model: row.name, cost: row.cost ?? 0,
+                        tokens: row.tokens, to: &repositories)
+                }
+                continue
+            }
+            for (project, cost, tokens) in measured {
+                add(
+                    project,
+                    cost: normalized(
+                        cost, alternate: tokens, rawTotal: rawCost,
+                        rawAlternateTotal: rawTokens, target: targetCost),
+                    tokens: normalized(
+                        tokens, alternate: cost, rawTotal: rawTokens,
+                        rawAlternateTotal: rawCost, target: targetTokens),
+                    to: &repositories)
             }
         }
-        return costs.map { ($0.key, $0.value.0, $0.value.1) }
-            .sorted { $0.1 > $1.1 }
+    }
+
+    private static func sourceMeasure(_ project: UsageProject, source: String) -> (
+        cost: Double, tokens: Double
+    )? {
+        if let breakdown = project.bySource?[source] {
+            let models = Array((breakdown.byModel ?? [:]).values)
+            return (
+                breakdown.cost ?? models.reduce(0) { $0 + ($1.cost ?? 0) },
+                breakdown.tokens ?? models.reduce(0) { $0 + ($1.tokens ?? 0) }
+            )
+        }
+        let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        let matched = chats.filter { $0.source == source }
+        guard !matched.isEmpty else { return nil }
+        return (
+            matched.reduce(0) { $0 + ($1.cost ?? 0) },
+            matched.reduce(0) { $0 + ($1.tokens ?? 0) }
+        )
+    }
+
+    private static func add(
+        _ project: UsageProject, cost: Double, tokens: Double,
+        to repositories: inout [String: UsageRepositoryAccumulator]
+    ) {
+        guard cost != 0 || tokens != 0 else { return }
+        let repositoryKey = project.stableRepositoryID.lowercased()
+        var repository =
+            repositories[repositoryKey]
+            ?? UsageRepositoryAccumulator(
+                repositoryID: project.stableRepositoryID,
+                repositoryName: project.name,
+                repositoryURL: project.repositoryURL)
+        repository.cost += cost
+        repository.tokens += tokens
+        if repository.repositoryURL == nil { repository.repositoryURL = project.repositoryURL }
+
+        let machineKey = (project.machineID ?? project.machineName ?? "").lowercased()
+        let folderKey = [machineKey, project.path ?? project.resolvedFolderName]
+            .joined(separator: "\u{1F}")
+        var folder =
+            repository.folders[folderKey]
+            ?? UsageProjectFolderSummary(
+                folderName: project.resolvedFolderName,
+                path: project.path,
+                machineName: project.machineName,
+                machineID: project.machineID,
+                cost: 0,
+                tokens: 0)
+        folder.cost += cost
+        folder.tokens += tokens
+        repository.folders[folderKey] = folder
+        repositories[repositoryKey] = repository
+    }
+
+    private static func addUnattributed(
+        source: String, model: String, cost: Double, tokens: Double,
+        to repositories: inout [String: UsageRepositoryAccumulator]
+    ) {
+        guard cost != 0 || tokens != 0 else { return }
+        let repositoryID = "unattributed"
+        let repositoryKey = repositoryID
+        var repository =
+            repositories[repositoryKey]
+            ?? UsageRepositoryAccumulator(
+                repositoryID: repositoryID, repositoryName: "Unattributed",
+                repositoryURL: nil)
+        repository.cost += cost
+        repository.tokens += tokens
+        let folderName = "\(source) / \(model)"
+        var folder =
+            repository.folders[folderName]
+            ?? UsageProjectFolderSummary(
+                folderName: folderName, path: nil, machineName: nil, machineID: nil,
+                cost: 0, tokens: 0)
+        folder.cost += cost
+        folder.tokens += tokens
+        repository.folders[folderName] = folder
+        repositories[repositoryKey] = repository
+    }
+
+    private static func normalized(
+        _ value: Double, alternate: Double, rawTotal: Double, rawAlternateTotal: Double,
+        target: Double
+    ) -> Double {
+        if rawTotal > 0 { return target * value / rawTotal }
+        if rawAlternateTotal > 0 { return target * alternate / rawAlternateTotal }
+        return 0
     }
 }
 

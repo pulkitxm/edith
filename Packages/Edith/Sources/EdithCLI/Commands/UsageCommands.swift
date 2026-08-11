@@ -245,7 +245,7 @@ struct UsageModelsCommand: AsyncParsableCommand {
 
 struct UsageProjectsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "projects", abstract: "Cost and tokens per project.")
+        commandName: "projects", abstract: "Cost and tokens per GitHub repository.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -253,7 +253,7 @@ struct UsageProjectsCommand: AsyncParsableCommand {
     @Option(help: "today, week, month or all.")
     var range: String = "all"
 
-    @Option(help: "Show at most this many projects.")
+    @Option(help: "Show at most this many repositories.")
     var limit: Int = 25
 
     func run() async throws {
@@ -269,20 +269,16 @@ struct UsageProjectsCommand: AsyncParsableCommand {
             let projects = UsageAnalysis.byProject(UsageAnalysis.days(document, range: value))
                 .prefix(limit)
             guard !json else {
-                CLIOut.json(
-                    .array(
-                        projects.map { name, cost, tokens in
-                            .object([
-                                "project": .string(name), "cost": .double(cost),
-                                "tokens": .double(tokens),
-                            ])
-                        }))
+                CLIOut.json(.array(projects.map(\.json)))
                 return
             }
-            let rows = projects.map { name, cost, tokens in
-                [name, String(format: "%.2f", cost), String(Int(tokens))]
+            let rows = projects.map { project in
+                [
+                    project.repositoryName, String(format: "%.2f", project.cost),
+                    String(Int(project.tokens)),
+                ]
             }
-            CLIOut.out(TextTable.render(headers: ["PROJECT", "COST", "TOKENS"], rows: rows))
+            CLIOut.out(TextTable.render(headers: ["REPOSITORY", "COST", "TOKENS"], rows: rows))
         }
     }
 }

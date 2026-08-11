@@ -38,7 +38,7 @@ jobs:
       HAS_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
       HAS_TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.rebuild || github.sha }}
           fetch-depth: 0
@@ -113,7 +113,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.sha }}
 
@@ -212,14 +212,14 @@ jobs:
           cp Edith.dmg release-macos/
           cp dist/appcast/appcast.xml release-macos/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-macos
           path: release-macos/*
           if-no-files-found: error
           retention-days: 1
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-plists
           path: Resources/*Info.plist
@@ -229,11 +229,11 @@ jobs:
   deb:
     needs: version
     runs-on: ubuntu-24.04
-    container: swift:6.3.2-noble
+    container: swift:6.3.3-noble
     env:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.sha }}
 
@@ -262,7 +262,7 @@ jobs:
           mkdir release-linux
           cp "$DEB" release-linux/Edith.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: release-linux/Edith.deb
@@ -277,24 +277,24 @@ jobs:
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PUSH_TOKEN }}
           persist-credentials: true
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: release-macos
           path: release-assets
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: release-linux
           path: release-assets
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: release-plists
           path: release-plists
@@ -340,7 +340,7 @@ jobs:
               echo "released ${RELEASE_TAG} as $(git rev-parse HEAD)"
               exit 0
             fi
-            echo "main moved while releasing, retrying"
+            echo "main moved while releasing after attempt $attempt, retrying"
             git tag -d "$RELEASE_TAG"
           done
           echo "release blocked: could not push the release commit to main" >&2

@@ -29,7 +29,7 @@ jobs:
       scripts: ${{ steps.areas.outputs.scripts }}
       source: ${{ steps.areas.outputs.source }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -66,7 +66,7 @@ jobs:
           area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$)'
           area docs '^docs/'
           area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$)'
-          area workflows '^\.github/workflows/(ci|release)\.yml$'
+          area workflows '^\.github/workflows/'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
           area scripts '^(scripts/|Casks/|package\.json$|bun\.lock$|biome\.json$)'
@@ -76,7 +76,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: No committed secrets
@@ -91,7 +91,7 @@ jobs:
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
         run: make ci-lint
       - name: Script tests
-        if: needs.changes.outputs.scripts == 'true'
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-scripts
       - name: Site is self-contained
         if: needs.changes.outputs.site == 'true'
@@ -101,9 +101,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-24.04
-    container: swift:6.3.2-noble
+    container: swift:6.3.3-noble
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Install native dependencies
         run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
       - name: Test portable core
@@ -118,7 +118,7 @@ jobs:
           dpkg-deb --contents dist/linux/*.deb
           apt-get install -y ./dist/linux/*.deb
           edith-linux --diagnose
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: edith-ubuntu-amd64
           path: dist/linux/*.deb
@@ -129,8 +129,8 @@ jobs:
     if: needs.changes.outputs.promo == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -147,12 +147,12 @@ jobs:
     if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
         working-directory: Packages/Edith
       - name: Cache resolved packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/SourcePackages
           key: spm-xcode-${{ runner.os }}-${{ hashFiles('edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/Edith/Package.resolved') }}
@@ -167,9 +167,9 @@ jobs:
     if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.docs == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Cache resolved packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             Packages/Edith/.build/checkouts

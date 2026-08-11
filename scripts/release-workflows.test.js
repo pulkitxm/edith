@@ -1,66 +1,78 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-const mergeWorkflow = readFileSync(
-  ".github/workflows/release-on-merge.yml",
-  "utf8",
-);
-const tagWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
-const makefile = readFileSync("Makefile", "utf8");
+const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
-const releaseRef = ["$", "{{ github.ref_name }}"].join("");
+const makefile = readFileSync("Makefile", "utf8");
+const contributing = readFileSync("CONTRIBUTING.md", "utf8");
+const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
+const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
 
-test("merge workflow only bumps and tags", () => {
-  expect(mergeWorkflow).toContain('git tag "v${NEXT}"');
-  expect(mergeWorkflow).toContain('git push origin "v${NEXT}"');
-  expect(mergeWorkflow).not.toContain("uses: ./.github/workflows/release.yml");
-  expect(mergeWorkflow).not.toContain("gh release create");
-  expect(mergeWorkflow).not.toContain("HAS_NOTARY");
+test("CI gates the reusable release on every required check", () => {
+  expect(ciWorkflow).toContain(
+    "needs: [changes, checks, ubuntu, promo-video, swift-build, swift-test]",
+  );
+  expect(ciWorkflow).toContain("github.event_name == 'push'");
+  expect(ciWorkflow).toContain("github.ref == 'refs/heads/main'");
+  expect(ciWorkflow).toContain("!contains(needs.*.result, 'failure')");
+  expect(ciWorkflow).toContain("!contains(needs.*.result, 'cancelled')");
+  expect(ciWorkflow).toContain("uses: ./.github/workflows/release.yml");
 });
 
-test("one release run per tag, triggered by the tag alone", () => {
-  expect(tagWorkflow).not.toContain("workflow_call:");
-  expect(tagWorkflow).not.toContain("inputs.release_tag");
-  expect(tagWorkflow).toContain('tags: ["v*"]');
-  expect(tagWorkflow).toContain(`ref: ${releaseRef}`);
+test("the release is reusable and supports manual rebuilds", () => {
+  expect(releaseWorkflow).toContain("workflow_call:");
+  expect(releaseWorkflow).toContain("workflow_dispatch:");
+  expect(releaseWorkflow).toContain("inputs.rebuild");
+  expect(releaseWorkflow).not.toContain('tags: ["v*"]');
 });
 
 test("automated commits do not re-run CI", () => {
-  expect(ciWorkflow).toContain("'Bump version to '");
-  expect(ciWorkflow).toContain("'Update the Homebrew cask to '");
+  expect(ciWorkflow).toContain("'Release v'");
+  expect(ciWorkflow).toContain("'Refresh the contributor list'");
   expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
 
 test("release waits for and publishes every platform asset", () => {
-  expect(tagWorkflow).toContain("needs: [dmg, deb]");
-  expect(tagWorkflow).toContain("release-assets/Edith.dmg");
-  expect(tagWorkflow).toContain("release-assets/Edith.deb");
-  expect(tagWorkflow).toContain("release-assets/appcast.xml");
-  expect(tagWorkflow).toContain("-name 'edith_*.deb'");
-  expect(tagWorkflow).toContain("gh release create");
-  expect(tagWorkflow).toContain("gh release upload");
-  expect(tagWorkflow).toContain('apt-get install -y "./$DEB"');
+  expect(releaseWorkflow).toContain("needs: [version, dmg, deb]");
+  expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
+  expect(releaseWorkflow).toContain("release-assets/Edith.deb");
+  expect(releaseWorkflow).toContain("release-assets/appcast.xml");
+  expect(releaseWorkflow).toContain("-name 'edith_*.deb'");
+  expect(releaseWorkflow).toContain("gh release create");
+  expect(releaseWorkflow).toContain("gh release upload");
+  expect(releaseWorkflow).toContain('apt-get install -y "./$DEB"');
 });
 
 test("macOS notarization is conditional on its optional credentials", () => {
-  expect(tagWorkflow).toContain("HAS_NOTARY:");
-  expect(tagWorkflow).toContain("if: env.HAS_NOTARY == 'true'");
-  expect(tagWorkflow).not.toContain("env.HAS_NOTARY != 'true'");
+  expect(releaseWorkflow).toContain("HAS_NOTARY:");
+  expect(releaseWorkflow).toContain("if: env.HAS_NOTARY == 'true'");
+  expect(releaseWorkflow).not.toContain("env.HAS_NOTARY != 'true'");
 });
 
 test("macOS release accepts the configured development certificate", () => {
-  expect(tagWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
+  expect(releaseWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
 });
 
-test("jobs that push to main use a token that clears the ruleset", () => {
+test("the publisher uses a token that clears the ruleset", () => {
   const pushToken = ["$", "{{ secrets.RELEASE_PUSH_TOKEN }}"].join("");
-  expect(mergeWorkflow).toContain(`token: ${pushToken}`);
-  expect(mergeWorkflow).toContain("RELEASE_PUSH_TOKEN is required");
-  expect(tagWorkflow).toContain(`token: ${pushToken}`);
+  expect(releaseWorkflow).toContain(`token: ${pushToken}`);
+  expect(releaseWorkflow).toContain("RELEASE_PUSH_TOKEN is required");
 });
 
-test("manual release delegates asset publication to the tag workflow", () => {
-  expect(makefile).toContain('git push --atomic origin HEAD:main "v$(V)"');
-  expect(makefile).not.toContain("gh release create");
-  expect(makefile).not.toContain("generate_appcast");
+test("the release commit carries every versioned file and its tag atomically", () => {
+  expect(releaseWorkflow).toContain(
+    "git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
+  );
+  expect(releaseWorkflow).toContain(`git commit -m "Release ${releaseTagRef}"`);
+  expect(releaseWorkflow).toContain('git tag "$RELEASE_TAG"');
+  expect(releaseWorkflow).toContain(
+    'git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"',
+  );
+});
+
+test("the obsolete tag-only manual release path is retired", () => {
+  expect(makefile).not.toMatch(/^release:/m);
+  expect(makefile).not.toContain("make release");
+  expect(contributing).not.toContain("make release");
+  expect(homebrewInternals).not.toContain("make release");
 });
