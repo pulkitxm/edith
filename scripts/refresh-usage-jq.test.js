@@ -24,12 +24,14 @@ function extractBlock(name) {
 
 const NORM = extractBlock("NORM");
 const GITHUB = extractBlock("GITHUB");
+const CWD_CACHE = extractBlock("CWD_CACHE");
 const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
 const WALKCC = extractBlock("WALKCC");
 const DEDUP = extractBlock("DEDUP");
+const RECONCILE = extractBlock("RECONCILE");
 const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
 const FLEET = extractBlock("FLEET");
@@ -232,24 +234,35 @@ const sessionMeta = (over = {}) => ({
   payload: { id: "cx-1", cwd: "/repo/app", ...over },
 });
 
-const tokenCount = (usage = {}, over = {}) => ({
-  timestamp: "2026-06-10T12:30:00.123Z",
-  type: "event_msg",
-  payload: {
-    type: "token_count",
-    info: {
-      last_token_usage: {
-        input_tokens: 100,
-        cached_input_tokens: 60,
-        output_tokens: 20,
-        reasoning_output_tokens: 5,
-        total_tokens: 120,
-        ...usage,
+const tokenCount = (usage = {}, over = {}, totalUsage = usage) => {
+  const defaults = {
+    input_tokens: 100,
+    cached_input_tokens: 60,
+    output_tokens: 20,
+    reasoning_output_tokens: 5,
+    total_tokens: 120,
+  };
+  return {
+    timestamp: "2026-06-10T12:30:00.123Z",
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        last_token_usage: { ...defaults, ...usage },
+        total_token_usage: { ...defaults, ...totalUsage },
       },
     },
-  },
-  ...over,
-});
+    ...over,
+  };
+};
+
+const secondCumulativeUsage = {
+  input_tokens: 200,
+  cached_input_tokens: 120,
+  output_tokens: 40,
+  reasoning_output_tokens: 10,
+  total_tokens: 240,
+};
 
 describe("WALKC", () => {
   test("token_count becomes a rec carrying session meta, model, and source", () => {
@@ -257,7 +270,11 @@ describe("WALKC", () => {
       sessionMeta(),
       { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
       tokenCount(),
-      tokenCount({}, { timestamp: "2026-06-10T13:30:00.123Z" }),
+      tokenCount(
+        {},
+        { timestamp: "2026-06-10T13:30:00.123Z" },
+        secondCumulativeUsage,
+      ),
     ]);
     expect(out.length).toBe(2);
     const [a, b] = out;
@@ -275,6 +292,52 @@ describe("WALKC", () => {
     expect(a.ts).toBe(Date.parse("2026-06-10T12:30:00Z"));
     expect(a.wt).toBeNull();
     expect(a.id).not.toBe(b.id);
+    expect(b.tok).toBe(120);
+    expect(b.inp).toBe(40);
+    expect(b.cr).toBe(60);
+    expect(b.out).toBe(20);
+  });
+
+  test("token counts use the most recent preceding turn model", () => {
+    const out = walkc([
+      sessionMeta(),
+      { type: "turn_context", payload: { model: "gpt-first" } },
+      tokenCount({}, { timestamp: "2026-06-10T12:30:00.123Z" }),
+      { type: "turn_context", payload: { model: "gpt-second" } },
+      tokenCount(
+        {},
+        { timestamp: "2026-06-10T13:30:00.123Z" },
+        secondCumulativeUsage,
+      ),
+    ]);
+    expect(out.map((record) => record.model)).toEqual([
+      "gpt-first",
+      "gpt-second",
+    ]);
+  });
+
+  test("repeated cumulative snapshots are skipped and later usage is a delta", () => {
+    const out = walkc([
+      sessionMeta(),
+      { type: "turn_context", payload: { model: "gpt" } },
+      tokenCount(),
+      tokenCount({}, { timestamp: "2026-06-10T12:31:00.123Z" }),
+      tokenCount(
+        {},
+        { timestamp: "2026-06-10T12:32:00.123Z" },
+        secondCumulativeUsage,
+      ),
+      tokenCount(
+        {},
+        { timestamp: "2026-06-10T12:33:00.123Z" },
+        secondCumulativeUsage,
+      ),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.map((record) => record.tok)).toEqual([120, 120]);
+    expect(out.map((record) => record.inp)).toEqual([40, 40]);
+    expect(out.map((record) => record.cr)).toEqual([60, 60]);
+    expect(out.map((record) => record.out)).toEqual([20, 20]);
   });
 
   test("user_message becomes a text record, tag-prefixed and empty skipped", () => {
@@ -302,6 +365,64 @@ describe("WALKC", () => {
   test("zero-token counts and files without session_meta emit nothing", () => {
     expect(walkc([sessionMeta(), tokenCount({ total_tokens: 0 })])).toEqual([]);
     expect(walkc([tokenCount()])).toEqual([]);
+  });
+});
+
+describe("RECONCILE", () => {
+  test("normalizes advancing Codex rows to the canonical session amount", () => {
+    const sid = "019fbd68-386c-7b83-83c8-94b0355cc8c9";
+    const records = [
+      { id: "a", sid, ts: 1, tok: 100, cost: 10, model: "gpt", cwd: "/a" },
+      { id: "b", sid, ts: 2, tok: 80, cost: 8, model: "gpt", cwd: "/b" },
+      { id: "c", sid, ts: 3, tok: 30, cost: 3, model: "gpt", cwd: "/c" },
+    ];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "canonical",
+      JSON.stringify([
+        {
+          sessions: [
+            {
+              sessionFile: `/tmp/rollout-2026-08-01T18-29-11-${sid}.jsonl`,
+              totalTokens: 90,
+              costUSD: 9,
+            },
+          ],
+        },
+      ]),
+    ]);
+    expect(out.map((record) => record.tok)).toEqual([42, 34, 14]);
+    expect(out.reduce((sum, record) => sum + record.tok, 0)).toBe(90);
+    expect(out.reduce((sum, record) => sum + record.cost, 0)).toBeCloseTo(9);
+    expect(out.map((record) => record.cwd)).toEqual(["/a", "/b", "/c"]);
+    expect(out.map((record) => record.ts)).toEqual([1, 2, 3]);
+  });
+
+  test("prefers canonical sessionId over a mismatched sessionFile", () => {
+    const sid = "019fbd68-386c-7b83-83c8-94b0355cc8c9";
+    const wrong = "11111111-2222-3333-4444-555555555555";
+    const [out] = jq(
+      RECONCILE,
+      JSON.stringify([{ id: "a", sid, ts: 1, tok: 10, cost: 1 }]),
+      [
+        "--argjson",
+        "canonical",
+        JSON.stringify([
+          {
+            sessions: [
+              {
+                sessionId: `2026/08/01/rollout-${sid}`,
+                sessionFile: `rollout-${wrong}.jsonl`,
+                totalTokens: 4,
+                costUSD: 0.4,
+              },
+            ],
+          },
+        ]),
+      ],
+    );
+    expect(out[0].tok).toBe(4);
+    expect(out[0].cost).toBeCloseTo(0.4);
   });
 });
 
@@ -666,7 +787,7 @@ describe("usage pipeline", () => {
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 
-  test("validation rejects every inconsistent token invariant", () => {
+  test("validation rejects inconsistent token and cost invariants", () => {
     const valid = assemble([
       {
         source: "codex",
@@ -690,6 +811,7 @@ describe("usage pipeline", () => {
     ]);
     const corruptions = [
       (value) => value.totals.tokens++,
+      (value) => (value.totals.cost += 1),
       (value) => value.totals.inputTokens++,
       (value) => value.totals.outputTokens++,
       (value) => value.totals.cacheCreationTokens++,
@@ -704,6 +826,9 @@ describe("usage pipeline", () => {
       corrupt(value);
       expect(jqExit(VALIDATE, JSON.stringify(value))).toBe(1);
     }
+    const withinTolerance = structuredClone(valid);
+    withinTolerance.totals.cost += 0.0000005;
+    expect(jqExit(VALIDATE, JSON.stringify(withinTolerance))).toBe(0);
   });
 });
 
@@ -746,6 +871,19 @@ const localDoc = (over = {}) => ({
               tokens: 100,
               cost: 1,
               byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+          byPath: {
+            "/Users/p/edith": {
+              tokens: 100,
+              cost: 1,
+              bySource: {
+                cli: {
+                  tokens: 100,
+                  cost: 1,
+                  byModel: { opus: { tokens: 100, cost: 1 } },
+                },
+              },
             },
           },
         },
@@ -827,6 +965,19 @@ const machineDoc = (over = {}) => ({
               byModel: { opus: { tokens: 3, cost: 2 } },
             },
           },
+          byPath: {
+            "/home/p/edith/.claude/worktrees/wt/sub": {
+              tokens: 3,
+              cost: 2,
+              bySource: {
+                cli: {
+                  tokens: 3,
+                  cost: 2,
+                  byModel: { opus: { tokens: 3, cost: 2 } },
+                },
+              },
+            },
+          },
         },
       ],
       projects: [
@@ -869,6 +1020,23 @@ const machineDoc = (over = {}) => ({
 });
 
 describe("repository and detail attribution", () => {
+  test("cached fallback identities are revalidated for GitHub promotion", () => {
+    const kept = jq(
+      CWD_CACHE,
+      [
+        { cwd: "/repo/fallback", repositoryID: "folder:/repo/fallback" },
+        { cwd: "/repo/stable", repositoryID: "github.com/owner/stable" },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n"),
+      ["--arg", "want", "/repo/fallback\n/repo/stable\n"],
+    );
+    expect(kept).toEqual([
+      { cwd: "/repo/stable", repositoryID: "github.com/owner/stable" },
+    ]);
+    expect(script).toContain('cp "$TMP/cwdmap.jsonl" "$CWDMAP_CACHE"');
+  });
+
   test("normalizes common GitHub remote forms to one stable ID", () => {
     const [ids] = jq(
       `${GITHUB} map(githubRepositoryID)`,
@@ -919,6 +1087,14 @@ describe("repository and detail attribution", () => {
         repositoryURL: "https://github.com/pulkitxm/edith",
         folderName: "tuf-clone",
       },
+      "/laptop/edith/.claude/worktrees/feature/src": {
+        cwd: "/laptop/edith/.claude/worktrees/feature/src",
+        root: "/laptop/edith",
+        repositoryID: "github.com/pulkitxm/edith",
+        repositoryName: "edith",
+        repositoryURL: "https://github.com/pulkitxm/edith",
+        folderName: "laptop-clone",
+      },
     };
     const record = (over) => ({
       id: over.sid,
@@ -955,6 +1131,15 @@ describe("repository and detail attribution", () => {
         tok: 30,
         cost: 3,
       }),
+      record({
+        sid: "s4",
+        cwd: "/laptop/edith/.claude/worktrees/feature/src",
+        wt: "feature",
+        hour: 11,
+        model: "haiku",
+        tok: 5,
+        cost: 0.5,
+      }),
     ];
     const [out] = jq(DETAILS, JSON.stringify(records), [
       "--argjson",
@@ -976,9 +1161,12 @@ describe("repository and detail attribution", () => {
       (project) => project.folderName === "laptop-clone",
     );
     expect(laptop.bySource.cli).toEqual({
-      tokens: 10,
-      cost: 1,
-      byModel: { opus: { tokens: 10, cost: 1 } },
+      tokens: 15,
+      cost: 1.5,
+      byModel: {
+        haiku: { tokens: 5, cost: 0.5 },
+        opus: { tokens: 10, cost: 1 },
+      },
     });
     expect(laptop.bySource.codex.byModel.gpt).toEqual({ tokens: 20, cost: 2 });
     expect(out.daily[0].hours).toHaveLength(24);
@@ -990,6 +1178,35 @@ describe("repository and detail attribution", () => {
     expect(out.daily[0].hours[9].bySource.codex.byModel.gpt).toEqual({
       tokens: 20,
       cost: 2,
+    });
+    expect(out.daily[0].hours[9].byPath["/laptop/edith"]).toEqual({
+      tokens: 30,
+      cost: 3,
+      bySource: {
+        cli: {
+          tokens: 10,
+          cost: 1,
+          byModel: { opus: { tokens: 10, cost: 1 } },
+        },
+        codex: {
+          tokens: 20,
+          cost: 2,
+          byModel: { gpt: { tokens: 20, cost: 2 } },
+        },
+      },
+    });
+    expect(out.daily[0].hours[10].byPath["/tuf/edith"].tokens).toBe(30);
+    const nestedPath = "/laptop/edith/.claude/worktrees/feature/src";
+    expect(out.daily[0].hours[11].byPath[nestedPath]).toEqual({
+      tokens: 5,
+      cost: 0.5,
+      bySource: {
+        cli: {
+          tokens: 5,
+          cost: 0.5,
+          byModel: { haiku: { tokens: 5, cost: 0.5 } },
+        },
+      },
     });
     expect(
       out.daily[0].hours.some((hour) => Object.hasOwn(hour.bySource, "amp")),
@@ -1033,7 +1250,39 @@ describe("FLEET", () => {
           byModel: { opus: { tokens: 3, cost: 2 } },
         },
       },
+      byPath: {
+        "/Users/p/edith": {
+          tokens: 100,
+          cost: 1,
+          bySource: {
+            cli: {
+              tokens: 100,
+              cost: 1,
+              byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+        },
+        "tuf:/home/p/edith/.claude/worktrees/wt/sub": {
+          tokens: 3,
+          cost: 2,
+          bySource: {
+            "tuf:cli": {
+              tokens: 3,
+              cost: 2,
+              byModel: { opus: { tokens: 3, cost: 2 } },
+            },
+          },
+        },
+      },
     });
+    expect(Object.keys(out.daily[0].hours[0].byPath).sort()).toEqual([
+      "/Users/p/edith",
+      "tuf:/home/p/edith/.claude/worktrees/wt/sub",
+    ]);
+    expect(
+      out.daily[0].hours[0].byPath["tuf:/home/p/edith/.claude/worktrees/wt/sub"]
+        .bySource["tuf:cli"].byModel.opus.tokens,
+    ).toBe(3);
   });
 
   test("machine projects and chats stay separable from the local ones", () => {
@@ -1154,6 +1403,9 @@ describe("collector configuration", () => {
 
   test("resolves repository remotes and physical worktree roots deterministically", () => {
     expect(script).toContain(
+      "for remote in origin upstream $(printf '%s\\n' \"$remaining_remotes\" | LC_ALL=C sort); do",
+    );
+    expect(script).not.toContain(
       "for remote in upstream origin $(printf '%s\\n' \"$remaining_remotes\" | LC_ALL=C sort); do",
     );
     expect(script).toContain(

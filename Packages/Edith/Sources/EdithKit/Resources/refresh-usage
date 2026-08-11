@@ -152,6 +152,13 @@ def githubRepositoryID:
   | if length == 2 and all(.[]; . != "") then "github.com/" + join("/") else "" end;
 '
 
+CWD_CACHE='
+  ($want | split("\n") | map(select(. != ""))
+    | map({(.): true}) | add // {}) as $W
+  | select($W[.cwd]
+      and ((.repositoryID // "") | startswith("github.com/")))
+'
+
 NORM='
 def dropSynthetic:
   map(select(.modelName != "<synthetic>"
@@ -228,6 +235,10 @@ FLEET='
     | def sid($s): $slug + ":" + $s;
       def qsourceMap:
         reduce (to_entries[]) as $e ({}; .[sid($e.key)] = $e.value);
+      def qpathMap:
+        reduce (to_entries[]) as $e ({};
+          .[$slug + ":" + $e.key] = ($e.value
+            | .bySource = ((.bySource // {}) | qsourceMap)));
       def rechat:
         .source = sid(.source // "")
         | if ((.path // "") != "") then .path = ($slug + ":" + .path) else . end;
@@ -253,7 +264,8 @@ FLEET='
             bySource: ( reduce ((.bySource // {}) | to_entries[]) as $e ({};
               .[$slug + ":" + $e.key] = $e.value) ),
             hours: [ (.hours // [])[]
-              | .bySource = ((.bySource // {}) | qsourceMap) ],
+              | .bySource = ((.bySource // {}) | qsourceMap)
+              | .byPath = ((.byPath // {}) | qpathMap) ],
             projects: [ (.projects // [])[]
               | . as $project
               | ($project.repositoryID // ("folder:" + ($project.path // ""))) as $rid
@@ -295,7 +307,9 @@ FLEET='
                 tokens: ([ $g[] | (.hours // [])[$h].tokens // 0 ] | add // 0),
                 cost: ([ $g[] | (.hours // [])[$h].cost // 0 ] | add // 0),
                 bySource: (reduce $g[] as $d ({};
-                  . + (($d.hours // [])[$h].bySource // {})))
+                  . + (($d.hours // [])[$h].bySource // {}))),
+                byPath: (reduce $g[] as $d ({};
+                  . + (($d.hours // [])[$h].byPath // {})))
               } ],
             projects: ( reduce $g[] as $d ([]; . + ($d.projects // [])) )
           })
@@ -324,6 +338,9 @@ EMPTY='
 
 VALIDATE='
   def tokenSum($rows; $field): [ $rows[] | (.[$field] // 0) ] | add // 0;
+  def near($actual; $expected):
+    (($actual - $expected) | if . < 0 then -. else . end)
+    <= 0.000001;
   [ .daily[].bySource[][] ] as $rows
   | ([ .daily[].period ] | length) as $dayCount
   | ([ .daily[].period ] | unique | length) as $uniqueDayCount
@@ -338,6 +355,7 @@ VALIDATE='
     and ((.totals.outputTokens // -1) == tokenSum($rows; "outputTokens"))
     and ((.totals.cacheCreationTokens // -1) == tokenSum($rows; "cacheCreationTokens"))
     and ((.totals.cacheReadTokens // -1) == tokenSum($rows; "cacheReadTokens"))
+    and near((.totals.cost // -1); ([ $rows[].cost ] | add // 0))
     and ((.totals.tokens // -1) ==
       (tokenSum($rows; "inputTokens") + tokenSum($rows; "outputTokens")
         + tokenSum($rows; "cacheCreationTokens") + tokenSum($rows; "cacheReadTokens")))
@@ -540,29 +558,66 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     | (($meta.id // "") | tostring) as $sid
     | if $sid == "" then empty else
         ($meta.cwd // "") as $cwd
-        | ([ $L[] | select(.type == "turn_context") | .payload.model | select(. != null) ] | .[0] // "unknown") as $model
-        | ( $L | to_entries[] | .key as $i | .value
-            | if .type == "event_msg" and (.payload.type == "user_message") then
-                ((.payload.message // "") | tostring | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $x
-                | if $x != "" and ($x | startswith("<") | not)
-                  then {t: "text", sid: $sid, tms: (.timestamp // ""), text: $x[0:80]}
-                  else empty end
-              elif .type == "event_msg" and (.payload.type == "token_count")
-                   and (.payload.info.last_token_usage != null) and (.timestamp != null) then
-                (.payload.info.last_token_usage) as $u
-                | ($u.total_tokens // 0) as $tok
-                | if $tok == 0 then empty else
-                    (.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $ep
-                    | ($ep + $off) as $loc
-                    | { t: "rec", id: ($sid + ":" + ($i | tostring)),
-                        date: ($loc | strftime("%Y-%m-%d")), hour: (($loc / 3600 | floor) % 24),
-                        ts: ($ep * 1000), model: $model, cwd: $cwd, wt: null,
-                        sid: $sid, src: $src,
-                        inp: (($u.input_tokens // 0) - ($u.cached_input_tokens // 0)),
-                        out: ($u.output_tokens // 0), cc: 0, cr: ($u.cached_input_tokens // 0),
-                        tok: $tok }
+        | reduce ($L | to_entries[]) as $entry (
+            {model: "unknown", total: null, records: []};
+            ($entry.value) as $line
+            | if $line.type == "turn_context" and ($line.payload.model != null) then
+                .model = $line.payload.model
+              elif $line.type == "event_msg" and ($line.payload.type == "user_message") then
+                (($line.payload.message // "") | tostring
+                  | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $x
+                | if $x != "" and ($x | startswith("<") | not) then
+                    .records += [{t: "text", sid: $sid,
+                      tms: ($line.timestamp // ""), text: $x[0:80]}]
+                  else . end
+              elif $line.type == "event_msg" and ($line.payload.type == "token_count")
+                   and (($line.payload.info.total_token_usage != null)
+                     or ($line.payload.info.last_token_usage != null))
+                   and ($line.timestamp != null) then
+                .model as $model
+                | ($line.payload.info) as $info
+                | ($line.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $ep
+                | ($ep + $off) as $loc
+                | if $info.total_token_usage != null then
+                    ($info.total_token_usage) as $total
+                    | ($total.total_tokens // 0) as $currentTokens
+                    | ((.total.total_tokens // 0)) as $previousTokens
+                    | if $currentTokens <= $previousTokens then . else
+                        (.total // {}) as $previous
+                        | (($total.input_tokens // 0) - ($previous.input_tokens // 0)) as $input
+                        | (($total.cached_input_tokens // 0)
+                          - ($previous.cached_input_tokens // 0)) as $cached
+                        | (($total.output_tokens // 0) - ($previous.output_tokens // 0)) as $output
+                        | .total = $total
+                        | .records += [{
+                            t: "rec", id: ($sid + ":" + ($entry.key | tostring)),
+                            date: ($loc | strftime("%Y-%m-%d")),
+                            hour: (($loc / 3600 | floor) % 24),
+                            ts: ($ep * 1000), model: $model, cwd: $cwd, wt: null,
+                            sid: $sid, src: $src,
+                            inp: ($input - $cached), out: $output, cc: 0, cr: $cached,
+                            tok: ($currentTokens - $previousTokens)
+                          }]
+                      end
+                  else
+                    ($info.last_token_usage) as $u
+                    | ($u.total_tokens // 0) as $tok
+                    | if $tok == 0 then . else
+                        .records += [{
+                            t: "rec", id: ($sid + ":" + ($entry.key | tostring)),
+                            date: ($loc | strftime("%Y-%m-%d")),
+                            hour: (($loc / 3600 | floor) % 24),
+                            ts: ($ep * 1000), model: $model, cwd: $cwd, wt: null,
+                            sid: $sid, src: $src,
+                            inp: (($u.input_tokens // 0) - ($u.cached_input_tokens // 0)),
+                            out: ($u.output_tokens // 0), cc: 0,
+                            cr: ($u.cached_input_tokens // 0), tok: $tok
+                          }]
+                      end
                   end
-              else empty end )
+              else . end
+          )
+        | .records[]
       end
   '
 
@@ -606,6 +661,41 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     | map(max_by([.tok, .ts]))
   '
 
+  RECONCILE='
+    (($canonical[0].sessions // [])
+      | map(. as $session
+          | (if (($session.sessionId // "") != "") then $session.sessionId
+             else ($session.sessionFile // "") end
+            | sub("\\.jsonl$"; "") | .[-36:]) as $sid
+          | select(($sid | length) == 36)
+          | {
+              key: $sid,
+              value: {tokens: ($session.totalTokens // 0), cost: ($session.costUSD // 0)}
+            })
+      | from_entries) as $sessions
+    | group_by(.sid)
+    | map(sort_by(.ts, .id) as $records
+        | ($sessions[$records[0].sid] // null) as $session
+        | ([ $records[].tok ] | add // 0) as $rawTokens
+        | if $session == null or $rawTokens <= 0 then $records else
+            reduce range(0; $records | length) as $i (
+              {tokens: $session.tokens, cost: $session.cost, rows: []};
+              ($records[$i]) as $record
+              | if $i == ($records | length) - 1 then
+                  .rows += [$record + {tok: .tokens, cost: .cost}]
+                  | .tokens = 0 | .cost = 0
+                else
+                  (($session.tokens * $record.tok / $rawTokens) | floor) as $tokens
+                  | ($session.cost * $record.tok / $rawTokens) as $cost
+                  | .rows += [$record + {tok: $tokens, cost: $cost}]
+                  | .tokens -= $tokens | .cost -= $cost
+                end
+            )
+            | .rows
+          end)
+    | add // []
+  '
+
   DETAILS='
     def sourceBreakdown:
       group_by(.src)
@@ -628,13 +718,25 @@ if [ -s "$TMP/manifest.jsonl" ]; then
               }
             })
       | from_entries;
+    def pathBreakdown:
+      group_by(.cwd)
+      | map(. as $pathRecords | {
+          key: ($pathRecords[0].cwd // ""),
+          value: {
+            tokens: ([ $pathRecords[].tok ] | add // 0),
+            cost: ([ $pathRecords[].cost ] | add // 0),
+            bySource: ($pathRecords | sourceBreakdown)
+          }
+        })
+      | from_entries;
     def sourceHours:
       group_by(.hour)
       | map(. as $hourRecords | {
           hour: $hourRecords[0].hour,
           tokens: ([ $hourRecords[].tok ] | add // 0),
           cost: ([ $hourRecords[].cost ] | add // 0),
-          bySource: ($hourRecords | sourceBreakdown)
+          bySource: ($hourRecords | sourceBreakdown),
+          byPath: ($hourRecords | pathBreakdown)
         });
     . as $R
     | $usage[0] as $usage
@@ -705,7 +807,8 @@ if [ -s "$TMP/manifest.jsonl" ]; then
             | {
                 tokens: ($x.tokens // 0),
                 cost: ($x.cost // 0),
-                bySource: ($x.bySource // {})
+                bySource: ($x.bySource // {}),
+                byPath: ($x.byPath // {})
               }))
         | .projects = ($b.projects // [])
       ]
@@ -835,14 +938,14 @@ if [ -s "$TMP/manifest.jsonl" ]; then
          (if .src == "codex" then (($cr[0][.date]) // 0)
           else (($r[0][.date][.model]) // 0) end)
        end)})' \
-    "$TMP/records.jsonl" >"$TMP/recs.json"
+    "$TMP/records.jsonl" >"$TMP/recs.raw.json"
+  jq --slurpfile canonical "$TMP/codex.session.json" "$RECONCILE" \
+    "$TMP/recs.raw.json" >"$TMP/recs.json"
 
   CWDMAP_CACHE="$EDCACHE/.cwdmap.v4.jsonl"
   touch "$CWDMAP_CACHE"
   jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | sort >"$TMP/cwds.txt"
-  jq -c --rawfile want "$TMP/cwds.txt" \
-    '($want | split("\n") | map(select(. != "")) | map({(.): true}) | add // {}) as $W
-     | select($W[.cwd])' \
+  jq -c --rawfile want "$TMP/cwds.txt" "$CWD_CACHE" \
     "$CWDMAP_CACHE" >"$TMP/cwdmap.jsonl" 2>/dev/null || : >"$TMP/cwdmap.jsonl"
   jq -r '.cwd' "$TMP/cwdmap.jsonl" | sort -u >"$TMP/cwds-have.txt"
   comm -23 "$TMP/cwds.txt" "$TMP/cwds-have.txt" | while IFS= read -r cwd; do
@@ -873,7 +976,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     if [ -n "$git_root" ]; then
       seen="|"
       remaining_remotes=$(git_quick -C "$cwd" remote || true)
-      for remote in upstream origin $(printf '%s\n' "$remaining_remotes" | LC_ALL=C sort); do
+      for remote in origin upstream $(printf '%s\n' "$remaining_remotes" | LC_ALL=C sort); do
         [ -n "$remote" ] || continue
         [ "$remote" != "." ] || continue
         case "$seen" in
@@ -898,10 +1001,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
         repositoryURL: (if $url == "" then null else $url end), folderName: $folder}' \
       >>"$TMP/cwdmap.jsonl"
   done
-  jq -c --rawfile have "$TMP/cwds-have.txt" \
-    '($have | split("\n") | map(select(. != "")) | map({(.): true}) | add // {}) as $H
-     | select($H[.cwd] | not)' \
-    "$TMP/cwdmap.jsonl" >>"$CWDMAP_CACHE" 2>/dev/null || true
+  cp "$TMP/cwdmap.jsonl" "$CWDMAP_CACHE"
   _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
 
   jq \
