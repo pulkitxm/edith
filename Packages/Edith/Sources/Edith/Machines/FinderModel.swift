@@ -62,13 +62,23 @@ final class FinderModel: ObservableObject {
     private var flashToken = 0
     private var searchToken = 0
     private var searchTask: Task<Void, Never>?
+    private let localSearch: @Sendable (String, String) async -> [RemoteFileEntry]
     private var folderSizes: [String: Int64] = [:]
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
 
-    init(session: MachineSession, path: String? = nil) {
+    init(
+        session: MachineSession, path: String? = nil,
+        localSearch: @escaping @Sendable (String, String) async -> [RemoteFileEntry] = {
+            root, query in
+            await Task.detached(priority: .userInitiated) {
+                MachineSession.searchLocalFiles(root: root, query: query)
+            }.value
+        }
+    ) {
         self.session = session
+        self.localSearch = localSearch
         self.path =
             path
             ?? (session.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
@@ -246,6 +256,7 @@ final class FinderModel: ObservableObject {
     func navigate(to newPath: String, recordHistory: Bool = true) {
         let target = expandingHome(newPath)
         guard target != path else { return }
+        invalidateSearch()
         if recordHistory {
             history.append(path)
             future.removeAll()
@@ -667,16 +678,13 @@ final class FinderModel: ObservableObject {
     }
 
     func searchQueryChanged() {
-        searchTask?.cancel()
+        invalidateSearch()
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
             searchResults = nil
-            searchToken += 1
-            searchTask = nil
             return
         }
         searchResults = entries.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
-        searchToken += 1
         let token = searchToken
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
@@ -690,9 +698,7 @@ final class FinderModel: ObservableObject {
         let shallow = entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
         guard !session.isLocal else {
             let root = path
-            let deep = await Task.detached(priority: .userInitiated) {
-                MachineSession.searchLocalFiles(root: root, query: query)
-            }.value
+            let deep = await localSearch(root, query)
             guard token == searchToken else { return }
             var seen = Set(shallow.map { FilePathKey.canonical($0.path) })
             searchResults =
@@ -714,6 +720,12 @@ final class FinderModel: ObservableObject {
                     kind: isDirectory ? .directory : .file, sizeBytes: 0))
         }
         searchResults = combined
+    }
+
+    private func invalidateSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        searchToken += 1
     }
 
     func runSearch() async {
