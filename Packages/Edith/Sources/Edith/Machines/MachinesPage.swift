@@ -116,21 +116,23 @@ struct MachinesPage: View {
                     title: "Workspace", subtitle: "Split panes",
                     symbol: "rectangle.split.2x1", selected: mode == .workspace, dark: dark
                 ) { modeRaw = MachinesMode.workspace.rawValue }
-                ForEach(model.allMachines) { machine in
-                    MachineChip(
-                        machine: machine,
-                        session: model.session(for: machine.id),
-                        selected: mode == .machine && model.selection == machine.id,
-                        isLocal: model.isLocal(machine.id), dark: dark,
-                        onSelect: {
-                            modeRaw = MachinesMode.machine.rawValue
-                            model.selection = machine.id
-                        },
-                        onDetach: {
-                            MachineWindow.open(machineID: machine.id, title: machine.name)
-                        },
-                        onEdit: { editingMachine = machine },
-                        onRemove: { confirmRemoval = machine })
+                if connectionsEnabled {
+                    ForEach(model.allMachines) { machine in
+                        MachineChip(
+                            machine: machine,
+                            session: model.session(for: machine.id),
+                            selected: mode == .machine && model.selection == machine.id,
+                            isLocal: model.isLocal(machine.id), dark: dark,
+                            onSelect: {
+                                modeRaw = MachinesMode.machine.rawValue
+                                model.selection = machine.id
+                            },
+                            onDetach: {
+                                MachineWindow.open(machineID: machine.id, title: machine.name)
+                            },
+                            onEdit: { editingMachine = machine },
+                            onRemove: { confirmRemoval = machine })
+                    }
                 }
             }
             .padding(.vertical, UIScale.pt(2))
@@ -143,7 +145,9 @@ struct MachinesPage: View {
 
     @ViewBuilder
     private var content: some View {
-        if mode == .fleet {
+        if !connectionsEnabled {
+            Color.clear
+        } else if mode == .fleet {
             FleetHomeView(model: model) { id in
                 modeRaw = MachinesMode.machine.rawValue
                 model.selection = id
