@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 
 const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const makefile = readFileSync("Makefile", "utf8");
+const contributing = readFileSync("CONTRIBUTING.md", "utf8");
+const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
 
 test("CI gates the reusable release on every required check", () => {
@@ -65,4 +68,11 @@ test("the release commit carries every versioned file and its tag atomically", (
   expect(releaseWorkflow).toContain(
     'git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"',
   );
+});
+
+test("the obsolete tag-only manual release path is retired", () => {
+  expect(makefile).not.toMatch(/^release:/m);
+  expect(makefile).not.toContain("make release");
+  expect(contributing).not.toContain("make release");
+  expect(homebrewInternals).not.toContain("make release");
 });

@@ -12,7 +12,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push linux-test linux-build linux-run linux-diagnose linux-metadata linux-package linux-check
+.PHONY: build install reset reinstall loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push linux-test linux-build linux-run linux-diagnose linux-metadata linux-package linux-check
 
 ci:
 	bun install --frozen-lockfile
@@ -153,29 +153,6 @@ reset:
 
 reinstall: reset
 	./build.sh --install $(FLAGS)
-
-release:
-	@set -eu; \
-	test -n "$(V)" || { echo "release blocked: set V, for example make release V=1.8.0" >&2; exit 1; }; \
-	printf '%s\n' "$(V)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' \
-	  || { echo "release blocked: version must be major.minor.patch" >&2; exit 1; }; \
-	test "$$(git branch --show-current)" = main \
-	  || { echo "release blocked: manual releases must be cut from main" >&2; exit 1; }; \
-	test -z "$$(git status --porcelain)" \
-	  || { echo "release blocked: working tree is not clean" >&2; exit 1; }; \
-	git fetch origin main --tags; \
-	test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" \
-	  || { echo "release blocked: local main does not match origin/main" >&2; exit 1; }; \
-	! git rev-parse "v$(V)" >/dev/null 2>&1 \
-	  || { echo "release blocked: tag v$(V) already exists" >&2; exit 1; }; \
-	BUILD=$$(( $$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist) + 1 )); \
-	for p in Resources/Info.plist Resources/HelperInfo.plist; do \
-	  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(V)" $$p; \
-	  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $$BUILD" $$p; \
-	done; \
-	git commit -m "Bump version to $(V)" Resources/Info.plist Resources/HelperInfo.plist; \
-	git tag "v$(V)"; \
-	git push --atomic origin HEAD:main "v$(V)"
 
 loc:
 	cloc --vcs=git

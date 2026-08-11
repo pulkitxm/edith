@@ -106,17 +106,14 @@ if one slips in. Write names and structure that do not need prose.
 
 ## Releases
 
-Merging application, packaging, or release workflow changes into `main` publishes
-a new patch version automatically. The `Release on merge` workflow validates the
-release secrets, bumps the last version component (`0.0.1` becomes `0.0.2`, never
-`0.1.1`), commits the bump, and creates the tag. The tag workflow builds the signed
-DMG and the Ubuntu package in parallel, notarizes the DMG when Apple credentials are
-available, generates the signed Sparkle appcast, installs and diagnoses the Debian
-package, then publishes all three assets to one GitHub Release.
-
-`make release V=1.8.0` validates a clean, current `main`, commits the requested
-version, and pushes the tag atomically. The tag workflow builds and publishes the
-three release assets.
+Merging application or packaging changes into `main` publishes
+a new patch version after the required CI jobs pass. CI calls the reusable release
+workflow, which builds the signed DMG and Ubuntu package in parallel, notarizes the
+DMG when Apple credentials are available, generates the signed Sparkle appcast,
+installs and diagnoses the Debian package, then publishes all three assets to one
+GitHub Release. The versioned plists and cask land together in one release commit
+and tag, and the cask is mirrored to the tap. To rebuild an existing release, run
+the Release workflow manually with `rebuild` set to its tag.
 
 ### Required secrets
 
@@ -125,7 +122,7 @@ three release assets.
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
 | `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
-| `RELEASE_PUSH_TOKEN` | Pushes the version bump and the cask bump to a protected `main`. |
+| `RELEASE_PUSH_TOKEN` | Pushes the release commit and tag to a protected `main`. |
 | `TAP_PUSH_TOKEN` | Pushes the updated cask to `pulkitxm/homebrew-tap`. |
 
 `main` is protected by a ruleset that requires pull requests and status checks. The
