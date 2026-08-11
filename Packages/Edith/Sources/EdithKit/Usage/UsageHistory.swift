@@ -17,7 +17,10 @@ public enum UsageHistory {
         for day in daily(l) {
             guard let p = day["period"] as? String else { continue }
             if let cloudDay = mergedByPeriod[p] {
-                mergedByPeriod[p] = mergeDay(local: day, cloud: cloudDay)
+                mergedByPeriod[p] = mergeDay(
+                    local: day, cloud: cloudDay,
+                    mergeSourceDetail: intOf(l["schemaVersion"]) >= 7
+                        && intOf(c["schemaVersion"]) >= 7)
             } else {
                 mergedByPeriod[p] = day
             }
@@ -157,16 +160,150 @@ public enum UsageHistory {
     }
 
     private static func mergeDay(
-        local: [String: Any], cloud: [String: Any]
+        local: [String: Any], cloud: [String: Any], mergeSourceDetail: Bool
     ) -> [String: Any] {
         var out = cloud
         for (key, value) in local { out[key] = value }
         var bySource = cloud["bySource"] as? [String: Any] ?? [:]
-        for (source, value) in local["bySource"] as? [String: Any] ?? [:] {
+        let localBySource = local["bySource"] as? [String: Any] ?? [:]
+        for (source, value) in localBySource {
             bySource[source] = value
         }
         out["bySource"] = bySource
+        guard mergeSourceDetail else { return out }
+        let replacingSources = Set(localBySource.keys)
+        out["hours"] = mergeHours(
+            local["hours"], cloud["hours"], replacingSources: replacingSources)
+        out["projects"] = mergeProjects(
+            local["projects"], cloud["projects"], replacingSources: replacingSources)
         return out
+    }
+
+    private static func mergeHours(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        guard hasSourceDetail(local), hasSourceDetail(cloud) else {
+            return localValue != nil ? local : cloud
+        }
+        return (0..<max(local.count, cloud.count)).map { index in
+            let localHour = index < local.count ? local[index] : [:]
+            let cloudHour = index < cloud.count ? cloud[index] : [:]
+            var merged = cloudHour
+            for (key, value) in localHour { merged[key] = value }
+            let bySource = mergedSourceMap(
+                localHour["bySource"], cloudHour["bySource"],
+                replacingSources: replacingSources)
+            merged["bySource"] = bySource
+            merged["byPath"] = mergedPathMap(
+                localHour["byPath"], cloudHour["byPath"],
+                replacingSources: replacingSources)
+            setDetailTotals(&merged, bySource: bySource)
+            return merged
+        }
+    }
+
+    private static func mergeProjects(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        guard hasSourceDetail(local), hasSourceDetail(cloud) else {
+            return localValue != nil ? local : cloud
+        }
+        var localByKey: [String: [String: Any]] = [:]
+        var cloudByKey: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for project in cloud {
+            let key = projectKey(project)
+            if cloudByKey[key] == nil { order.append(key) }
+            cloudByKey[key] = project
+        }
+        for project in local {
+            let key = projectKey(project)
+            if localByKey[key] == nil, cloudByKey[key] == nil { order.append(key) }
+            localByKey[key] = project
+        }
+        return order.compactMap { key in
+            let localProject = localByKey[key] ?? [:]
+            let cloudProject = cloudByKey[key] ?? [:]
+            var merged = cloudProject
+            for (field, value) in localProject { merged[field] = value }
+            let bySource = mergedSourceMap(
+                localProject["bySource"], cloudProject["bySource"],
+                replacingSources: replacingSources)
+            guard !bySource.isEmpty else { return nil }
+            merged["bySource"] = bySource
+            setDetailTotals(&merged, bySource: bySource)
+            return merged
+        }
+    }
+
+    private static func hasSourceDetail(_ rows: [[String: Any]]) -> Bool {
+        rows.allSatisfy { $0["bySource"] is [String: Any] }
+    }
+
+    private static func mergedSourceMap(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [String: Any] {
+        var merged = cloudValue as? [String: Any] ?? [:]
+        for source in replacingSources { merged[source] = nil }
+        for (source, value) in localValue as? [String: Any] ?? [:] {
+            merged[source] = value
+        }
+        return merged
+    }
+
+    private static func mergedPathMap(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [String: Any] {
+        let local = localValue as? [String: Any] ?? [:]
+        let cloud = cloudValue as? [String: Any] ?? [:]
+        var keys = Array(cloud.keys)
+        for key in local.keys where !keys.contains(key) { keys.append(key) }
+        return keys.reduce(into: [String: Any]()) { paths, path in
+            let localPath = local[path] as? [String: Any] ?? [:]
+            let cloudPath = cloud[path] as? [String: Any] ?? [:]
+            var merged = cloudPath
+            for (key, value) in localPath { merged[key] = value }
+            let bySource = mergedSourceMap(
+                localPath["bySource"], cloudPath["bySource"],
+                replacingSources: replacingSources)
+            guard !bySource.isEmpty else { return }
+            merged["bySource"] = bySource
+            setDetailTotals(&merged, bySource: bySource)
+            paths[path] = merged
+        }
+    }
+
+    private static func setDetailTotals(
+        _ detail: inout [String: Any], bySource: [String: Any]
+    ) {
+        detail["tokens"] = bySource.values.reduce(0) { $0 + detailTokens($1) }
+        detail["cost"] = bySource.values.reduce(0) { $0 + detailCost($1) }
+    }
+
+    private static func detailTokens(_ value: Any) -> Double {
+        guard let detail = value as? [String: Any] else { return 0 }
+        if detail["tokens"] != nil { return num(detail["tokens"]) }
+        let models = detail["byModel"] as? [String: Any] ?? [:]
+        return models.values.reduce(0) { $0 + detailTokens($1) }
+    }
+
+    private static func detailCost(_ value: Any) -> Double {
+        guard let detail = value as? [String: Any] else { return 0 }
+        if detail["cost"] != nil { return num(detail["cost"]) }
+        let models = detail["byModel"] as? [String: Any] ?? [:]
+        return models.values.reduce(0) { $0 + detailCost($1) }
+    }
+
+    private static func projectKey(_ project: [String: Any]) -> String {
+        [
+            project["repositoryID"] as? String ?? project["projectName"] as? String ?? "unknown",
+            project["machineID"] as? String ?? project["machineName"] as? String ?? "",
+            project["path"] as? String ?? project["folderName"] as? String ?? "",
+        ].joined(separator: "\u{1F}")
     }
 
     private static func rows(_ day: [String: Any]) -> [(source: String, row: [String: Any])] {

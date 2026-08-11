@@ -61,12 +61,13 @@ import Testing
     }
 
     private func document(
-        days: [[String: Any]], sources: [String], sessions: [[String: Any]] = []
+        days: [[String: Any]], sources: [String], sessions: [[String: Any]] = [],
+        schemaVersion: Int = 6
     ) -> Data {
         let sourceMeta = Dictionary(
             uniqueKeysWithValues: sources.map { ($0, ["label": $0, "tool": $0]) })
         let obj: [String: Any] = [
-            "schemaVersion": 6,
+            "schemaVersion": schemaVersion,
             "generatedAt": "2026-07-06T00:00:00Z",
             "sources": sources,
             "defaultSources": sources,
@@ -108,7 +109,7 @@ import Testing
                     "2026-06-10", bySource: ["cli": [model(input: 40, cost: 1)]],
                     hours: [["tokens": 40.0, "cost": 1.0]],
                     projects: [["projectName": "local", "tokens": 40.0, "cost": 1.0]])
-            ], sources: ["cli"])
+            ], sources: ["cli"], schemaVersion: 7)
         let cloud = document(
             days: [
                 day(
@@ -119,7 +120,7 @@ import Testing
                     ],
                     hours: [["tokens": 1_400.0, "cost": 14.0]],
                     projects: [["projectName": "cloud", "tokens": 1_400.0, "cost": 14.0]])
-            ], sources: ["cli", "codex"])
+            ], sources: ["cli", "codex"], schemaVersion: 7)
         let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
         let mergedDay = (merged["daily"] as! [[String: Any]]).first!
         let bySource = mergedDay["bySource"] as! [String: [[String: Any]]]
@@ -149,6 +150,100 @@ import Testing
         let projects = mergedDay["projects"] as! [[String: Any]]
         #expect(hours.first?["tokens"] as? Double == 10)
         #expect(projects.first?["projectName"] as? String == "kept")
+    }
+
+    @Test func schemaSevenMergesSourceAwareHoursAndProjects() {
+        let localSource: [String: Any] = [
+            "tokens": 10.0,
+            "cost": 1.0,
+            "byModel": ["opus": ["tokens": 10.0, "cost": 1.0]],
+        ]
+        let staleLocalSource: [String: Any] = [
+            "tokens": 100.0,
+            "cost": 10.0,
+            "byModel": ["opus": ["tokens": 100.0, "cost": 10.0]],
+        ]
+        let tufSource: [String: Any] = [
+            "tokens": 20.0,
+            "cost": 2.0,
+            "byModel": ["gpt": ["tokens": 20.0, "cost": 2.0]],
+        ]
+        let localProject: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "path": "/local/edith", "machineName": "Laptop", "machineID": "laptop",
+            "tokens": 999.0, "cost": 99.0, "bySource": ["cli": localSource],
+        ]
+        let staleLocalProject: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "path": "/local/edith", "machineName": "Laptop", "machineID": "laptop",
+            "tokens": 100.0, "cost": 10.0, "bySource": ["cli": staleLocalSource],
+        ]
+        let tufProject: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "path": "tuf:/home/me/edith", "machineName": "TUF", "machineID": "tuf",
+            "tokens": 20.0, "cost": 2.0, "bySource": ["tuf:codex": tufSource],
+        ]
+        let local = document(
+            days: [
+                day(
+                    "2026-06-10", bySource: ["cli": [model(input: 10, cost: 1)]],
+                    hours: [
+                        [
+                            "tokens": 999.0, "cost": 99.0, "bySource": ["cli": localSource],
+                            "byPath": [
+                                "/local/edith": [
+                                    "tokens": 10.0, "cost": 1.0,
+                                    "bySource": ["cli": localSource],
+                                ]
+                            ],
+                        ]
+                    ], projects: [localProject])
+            ], sources: ["cli"], schemaVersion: 7)
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "cli": [model(input: 100, cost: 10)],
+                        "tuf:codex": [model("gpt", input: 20, cost: 2)],
+                    ],
+                    hours: [
+                        [
+                            "tokens": 120.0, "cost": 12.0,
+                            "bySource": ["cli": staleLocalSource, "tuf:codex": tufSource],
+                            "byPath": [
+                                "/local/edith": [
+                                    "tokens": 100.0, "cost": 10.0,
+                                    "bySource": ["cli": staleLocalSource],
+                                ],
+                                "tuf:/home/me/edith": [
+                                    "tokens": 20.0, "cost": 2.0,
+                                    "bySource": ["tuf:codex": tufSource],
+                                ],
+                            ],
+                        ]
+                    ], projects: [staleLocalProject, tufProject])
+            ], sources: ["cli", "tuf:codex"], schemaVersion: 7)
+
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let hour = (mergedDay["hours"] as! [[String: Any]]).first!
+        let hourSources = hour["bySource"] as! [String: [String: Any]]
+        #expect(Set(hourSources.keys) == ["cli", "tuf:codex"])
+        #expect((hourSources["cli"]?["tokens"] as? Double) == 10)
+        #expect((hourSources["tuf:codex"]?["tokens"] as? Double) == 20)
+        #expect(hour["tokens"] as? Double == 30)
+        #expect(hour["cost"] as? Double == 3)
+        let paths = hour["byPath"] as! [String: [String: Any]]
+        #expect(Set(paths.keys) == ["/local/edith", "tuf:/home/me/edith"])
+        #expect(paths["/local/edith"]?["tokens"] as? Double == 10)
+        #expect(paths["tuf:/home/me/edith"]?["tokens"] as? Double == 20)
+        let projects = mergedDay["projects"] as! [[String: Any]]
+        #expect(projects.count == 2)
+        #expect(projects.reduce(0) { $0 + ($1["tokens"] as? Double ?? 0) } == 30)
+        let mergedTUF = projects.first { $0["machineID"] as? String == "tuf" }
+        #expect(mergedTUF?["tokens"] as? Double == 20)
+        #expect(mergedTUF?["cost"] as? Double == 2)
     }
 
     @Test func localWinsTies() {
