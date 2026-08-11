@@ -1,10 +1,22 @@
 import EdithKit
 import SwiftUI
 
+private struct MachineConnectionsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var machineConnectionsEnabled: Bool {
+        get { self[MachineConnectionsEnabledKey.self] }
+        set { self[MachineConnectionsEnabledKey.self] = newValue }
+    }
+}
+
 struct MachinesPage: View {
     @StateObject private var model = MachinesModel.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @AppStorage("machinesTab", store: SharedDefaults.store) private var storedTab =
         MachineTab.overview.rawValue
     @AppStorage("machinesSelection", store: SharedDefaults.store) private var storedSelection = ""
@@ -51,14 +63,14 @@ struct MachinesPage: View {
             )
         }
         .onAppear {
-            model.connectAll()
+            if connectionsEnabled { model.connectAll() }
             model.restoreSelection(storedSelection)
-            model.startSelected()
+            if connectionsEnabled { model.startSelected() }
             reconcileTab()
         }
         .onChange(of: model.selection) { _, selection in
             storedSelection = selection?.uuidString ?? ""
-            model.startSelected()
+            if connectionsEnabled { model.startSelected() }
             reconcileTab()
         }
     }

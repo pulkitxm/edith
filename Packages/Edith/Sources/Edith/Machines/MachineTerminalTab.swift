@@ -174,6 +174,7 @@ struct ContainerTerminalSheet: View {
     @StateObject private var holder = TerminalSessionHolder()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -203,6 +204,7 @@ struct ContainerTerminalSheet: View {
     }
 
     private func start() {
+        guard launchEnabled else { return }
         guard let connection = session.connectionRef else { return }
         let command = DockerCommands.execShell(containerID: container.id)
         holder.start(

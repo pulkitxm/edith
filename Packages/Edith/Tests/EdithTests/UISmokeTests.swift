@@ -7,7 +7,11 @@ import Testing
 
 @MainActor
 private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 700) -> Bool {
-    let host = NSHostingView(rootView: view.environment(\.terminalLaunchEnabled, false))
+    let host = NSHostingView(
+        rootView:
+            view
+            .environment(\.machineConnectionsEnabled, false)
+            .environment(\.terminalLaunchEnabled, false))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
     let window = NSWindow(
         contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
