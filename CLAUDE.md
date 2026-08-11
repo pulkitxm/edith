@@ -92,10 +92,15 @@ Four tests hold that shape: `everyGroupIsListedInTheIndex`,
 `everyCommandPageIsListedByItsGroup`, `everyPageLinksBackToItsIndex` and
 `everyRelativeLinkResolves`.
 
+Markdown files sitting directly in `docs/` are the long-form guides, one topic per
+file. They are not part of the CLI reference and are not indexed by `docs/cli/README.md`.
+
 `scripts/sync-wiki.mjs` mirrors `docs/` into this repo's GitHub wiki, one wiki page
 per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. A group becomes
 `CLI-<Group>` and its commands `CLI-<Group>-<Command>`, nested one level under the
-group in the sidebar and ordered the way the group `README.md` links them. Relative
+group in the sidebar and ordered the way the group `README.md` links them. A top level
+guide becomes `Guides-<Topic>` under a `Guides` heading after the CLI reference, so
+adding a page to `docs/` is all it takes to publish it. Relative
 links between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
 on every push to `main` that touches `docs/`. Preview the output locally with
 `make wiki` (writes `.wiki-build/`, never pushes); `make wiki-push` publishes.
