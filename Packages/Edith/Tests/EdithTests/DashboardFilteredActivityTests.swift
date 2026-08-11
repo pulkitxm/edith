@@ -199,6 +199,27 @@ import Testing
         #expect(abs(dashboard.projectTree[0].tokens - 100) < 0.0001)
     }
 
+    @Test func pathFilterPublishesUnavailableProviderDetail() throws {
+        let daily = """
+            {"period":"2026-06-01","bySource":{
+              "cli":[{"modelName":"a","inputTokens":100,"cost":10}],
+              "codex":[{"modelName":"b","inputTokens":200,"cost":20}]},
+             "projects":[
+              {"projectName":"alpha","repositoryID":"github:acme/alpha",
+               "repositoryName":"alpha","path":"/work/alpha","tokens":100,"cost":10,
+               "bySource":{"cli":{"tokens":100,"cost":10,
+                 "byModel":{"a":{"tokens":100,"cost":10}}}}}],
+             "hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"cli\",\"codex\"")
+        dashboard.selectedPaths = ["/work/alpha"]
+
+        #expect(abs(dashboard.series.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
+        #expect(abs(dashboard.pathUnattributedTokens - 200) < 0.0001)
+        #expect(abs(dashboard.pathUnattributedCost - 20) < 0.0001)
+        #expect(dashboard.projectTree.map(\.name) == ["alpha"])
+    }
+
     @Test func pathFilterWithoutPathDetailRemainsUnattributed() throws {
         let daily = """
             {"period":"2026-06-01",

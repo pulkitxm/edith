@@ -443,6 +443,8 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var hourlyAll: [HourDatum] = []
     @Published private(set) var hourlyUnattributedTokens = 0.0
     @Published private(set) var hourlyUnattributedCost = 0.0
+    @Published private(set) var pathUnattributedTokens = 0.0
+    @Published private(set) var pathUnattributedCost = 0.0
     @Published private(set) var projects: [ProjectAgg] = []
     @Published private(set) var projectTree: [ProjTreeRow] = []
     @Published private(set) var meta = MetaLine()
@@ -977,6 +979,7 @@ final class DashboardModel: ObservableObject {
         var hourTok = [Double](repeating: 0, count: 24)
         var hourCost = [Double](repeating: 0, count: 24)
         var hourlyUnattributed = UsageAmount()
+        var pathUnattributed = UsageAmount()
         var filteredHeatDetail: [String: HeatDay] = [:]
         var projAgg: [String: RepoAccum] = [:]
 
@@ -993,8 +996,14 @@ final class DashboardModel: ObservableObject {
                         let name = m.modelName ?? "unknown"
                         guard selectedModels.contains(name) else { continue }
                         let attributionKey = ProjectAttributionKey(source: src, model: name)
-                        let projShare = projectShare(
-                            day, key: attributionKey, useProjectTotal: useProjectTotal)
+                        guard
+                            let projShare = projectShare(
+                                day, key: attributionKey, useProjectTotal: useProjectTotal)
+                        else {
+                            pathUnattributed.tokens += m.tokens
+                            pathUnattributed.cost += m.cost ?? 0
+                            continue
+                        }
                         let tokens = m.tokens * projShare.tokens
                         let cost = (m.cost ?? 0) * projShare.cost
                         guard tokens > 0 || cost > 0 else { continue }
@@ -1094,6 +1103,8 @@ final class DashboardModel: ObservableObject {
         }
         hourlyUnattributedTokens = hourlyUnattributed.tokens
         hourlyUnattributedCost = hourlyUnattributed.cost
+        pathUnattributedTokens = pathUnattributed.tokens
+        pathUnattributedCost = pathUnattributed.cost
 
         let totalTokens = rows.reduce(0) { $0 + $1.tokens }
         let activeDays = Set(rows.filter { $0.tokens > 0 || $0.cost > 0 }.map(\.id))
@@ -1147,7 +1158,7 @@ final class DashboardModel: ObservableObject {
 
     private func projectShare(
         _ day: DashUsage.Day, key: ProjectAttributionKey, useProjectTotal: Bool
-    ) -> UsageAmount {
+    ) -> UsageAmount? {
         guard !selectedPaths.isEmpty else { return UsageAmount(tokens: 1, cost: 1) }
         let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
         var all = UsageAmount()
@@ -1164,6 +1175,7 @@ final class DashboardModel: ObservableObject {
             mine.tokens += scoped.tokens
             mine.cost += scoped.cost
         }
+        guard all.tokens > 0 || all.cost > 0 else { return nil }
         return UsageAmount(
             tokens: normalizedPart(
                 mine.tokens, alternate: mine.cost, rawTotal: all.tokens,
