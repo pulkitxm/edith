@@ -8,8 +8,12 @@ public enum ProviderLogo {
         .first
 
     public static func image(_ provider: LimitProvider) -> NSImage? {
+        image(named: provider.rawValue)
+    }
+
+    public static func image(named name: String) -> NSImage? {
         guard
-            let url = resources?.url(forResource: provider.rawValue, withExtension: "svg"),
+            let url = resources?.url(forResource: name, withExtension: "svg"),
             let image = NSImage(contentsOf: url)
         else { return nil }
         image.isTemplate = true

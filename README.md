@@ -7,6 +7,17 @@ Free and open source under the [GPL-3.0](LICENSE). Every feature is in the one
 app. No licence key, no account, no paid tier.
 
 **[Download for macOS](https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg)**
+or install it with Homebrew:
+
+```
+brew install --cask pulkitxm/tap/edith
+```
+
+That taps, installs the app and puts `ed` and `edh` on your `PATH`. Edith updates itself
+through Sparkle, so `brew upgrade --cask --greedy edith` is the way to force
+Homebrew to fetch a newer release. Full command list:
+[docs/homebrew.md](docs/homebrew.md), and
+[how it all works](docs/homebrew-internals.md).
 
 **[Download the Ubuntu preview](https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb)**
 · [edith.pulkit.page](https://edith.pulkit.page)
@@ -85,6 +96,21 @@ share of one core:
 Disabling a tab tears down its timers and background jobs entirely, per-frame UI
 only redraws while the panel is open, and the usage collector caches parses so a
 refresh only touches files that changed.
+
+## Contributors
+
+Thank you to everyone who has shipped a change in Edith.
+
+<!-- contributors:start -->
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/pulkitxm"><img src="https://avatars.githubusercontent.com/u/65671483?v=4&s=64" width="64" height="64" alt="pulkitxm" /><br /><sub>pulkitxm</sub></a></td>
+    <td align="center"><a href="https://github.com/Vivek09Chahal"><img src="https://avatars.githubusercontent.com/u/103368320?v=4&s=64" width="64" height="64" alt="Vivek09Chahal" /><br /><sub>Vivek09Chahal</sub></a></td>
+  </tr>
+</table>
+
+<!-- contributors:end -->
 
 ## Contributing
 

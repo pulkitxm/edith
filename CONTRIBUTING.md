@@ -126,6 +126,22 @@ three release assets.
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
 | `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
+| `RELEASE_PUSH_TOKEN` | Pushes the version bump and the cask bump to a protected `main`. |
+| `TAP_PUSH_TOKEN` | Pushes the updated cask to `pulkitxm/homebrew-tap`. |
+
+`main` is protected by a ruleset that requires pull requests and status checks. The
+`GITHUB_TOKEN` an Actions run is given cannot bypass it, and the GitHub Actions app
+cannot be added to a bypass list on a personal repository. The release jobs
+therefore check out with `RELEASE_PUSH_TOKEN`, a fine grained personal access token
+scoped to this repository with read and write access to contents. It acts as its
+owner, and the ruleset already grants the repository admin role an unconditional
+bypass, so pushes made with it are accepted. Without the secret the release fails
+immediately with a message naming it, rather than building for ten minutes and
+failing at the push.
+
+`TAP_PUSH_TOKEN` is the equivalent for the Homebrew tap, scoped to
+`pulkitxm/homebrew-tap`, and is documented in
+[docs/homebrew-internals.md](docs/homebrew-internals.md).
 
 ### Optional notarization secrets
 

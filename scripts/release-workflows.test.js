@@ -7,24 +7,28 @@ const mergeWorkflow = readFileSync(
 );
 const tagWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
 const makefile = readFileSync("Makefile", "utf8");
-const stepTagOutput = ["$", "{{ steps.version.outputs.tag }}"].join("");
-const jobTagOutput = ["$", "{{ needs.version.outputs.release_tag }}"].join("");
-const releaseRef = ["$", "{{ inputs.release_tag || github.ref_name }}"].join(
-  "",
-);
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const releaseRef = ["$", "{{ github.ref_name }}"].join("");
 
-test("merge workflow invokes the reusable release after tagging", () => {
-  expect(mergeWorkflow).toContain(`release_tag: ${stepTagOutput}`);
-  expect(mergeWorkflow).toContain("uses: ./.github/workflows/release.yml");
-  expect(mergeWorkflow).toContain(`release_tag: ${jobTagOutput}`);
+test("merge workflow only bumps and tags", () => {
+  expect(mergeWorkflow).toContain('git tag "v${NEXT}"');
+  expect(mergeWorkflow).toContain('git push origin "v${NEXT}"');
+  expect(mergeWorkflow).not.toContain("uses: ./.github/workflows/release.yml");
   expect(mergeWorkflow).not.toContain("gh release create");
   expect(mergeWorkflow).not.toContain("HAS_NOTARY");
 });
 
-test("tag workflow supports direct and reusable releases", () => {
-  expect(tagWorkflow).toContain("workflow_call:");
+test("one release run per tag, triggered by the tag alone", () => {
+  expect(tagWorkflow).not.toContain("workflow_call:");
+  expect(tagWorkflow).not.toContain("inputs.release_tag");
   expect(tagWorkflow).toContain('tags: ["v*"]');
   expect(tagWorkflow).toContain(`ref: ${releaseRef}`);
+});
+
+test("automated commits do not re-run CI", () => {
+  expect(ciWorkflow).toContain("'Bump version to '");
+  expect(ciWorkflow).toContain("'Update the Homebrew cask to '");
+  expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
 
 test("release waits for and publishes every platform asset", () => {
@@ -46,6 +50,13 @@ test("macOS notarization is conditional on its optional credentials", () => {
 
 test("macOS release accepts the configured development certificate", () => {
   expect(tagWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
+});
+
+test("jobs that push to main use a token that clears the ruleset", () => {
+  const pushToken = ["$", "{{ secrets.RELEASE_PUSH_TOKEN }}"].join("");
+  expect(mergeWorkflow).toContain(`token: ${pushToken}`);
+  expect(mergeWorkflow).toContain("RELEASE_PUSH_TOKEN is required");
+  expect(tagWorkflow).toContain(`token: ${pushToken}`);
 });
 
 test("manual release delegates asset publication to the tag workflow", () => {

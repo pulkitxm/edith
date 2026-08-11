@@ -16,6 +16,13 @@ test("Linux validation uses the shared changed-area router", () => {
   expect(existsSync(".github/workflows/linux.yml")).toBeFalse();
 });
 
+test("a pull request is compared against its base, not its last push", () => {
+  const baseFirst = ciWorkflow.indexOf('if [ -n "$BASE_REF" ]');
+  const beforeFallback = ciWorkflow.indexOf('elif [ -n "$BEFORE" ]');
+  expect(baseFirst).toBeGreaterThan(-1);
+  expect(beforeFallback).toBeGreaterThan(baseFirst);
+});
+
 test("Linux inputs and workflow changes select Ubuntu validation", () => {
   for (const path of [
     "Packages/Edith/",
