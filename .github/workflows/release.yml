@@ -334,8 +334,10 @@ jobs:
         if: env.REBUILD == ''
         working-directory: release-source
         run: |
-          test -n "$RELEASE_VERSION" && test -n "$RELEASE_TAG" \
-            || { echo "release blocked: the version job produced no version" >&2; exit 1; }
+          if [ -z "$RELEASE_VERSION" ] || [ -z "$RELEASE_TAG" ]; then
+            echo "release blocked: the version job produced no version" >&2
+            exit 1
+          fi
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
           export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
