@@ -88,6 +88,7 @@ import Testing
             "byModel": ["gpt": ["tokens": tokens, "cost": cost]],
         ]
         let slug = source.split(separator: ":").first.map(String.init) ?? "machine"
+        let tool = source.split(separator: ":").last.map(String.init) ?? source
         let project: [String: Any] = [
             "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
             "repositoryName": "edith", "repositoryURL": "https://github.com/pulkitxm/edith",
@@ -120,7 +121,7 @@ import Testing
             "defaultSources": [source],
             "sourceMeta": [
                 source: [
-                    "label": "Codex · \(machineName)", "tool": "codex",
+                    "label": "\(tool) · \(machineName)", "tool": tool,
                     "machine": machineName, "machineID": machineID,
                 ]
             ],
@@ -211,10 +212,10 @@ import Testing
         let cloud = document(
             days: [
                 day(
-                    "2026-06-10", bySource: ["codex": [model(input: 10, cost: 2)]],
+                    "2026-06-10", bySource: ["commandcode": [model(input: 10, cost: 2)]],
                     hours: [["tokens": 10.0, "cost": 2.0]],
                     projects: [["projectName": "kept", "tokens": 10.0, "cost": 2.0]])
-            ], sources: ["codex"])
+            ], sources: ["commandcode"])
         let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
         let mergedDay = (merged["daily"] as! [[String: Any]]).first!
         let hours = mergedDay["hours"] as! [[String: Any]]
@@ -252,7 +253,7 @@ import Testing
         let tufProject: [String: Any] = [
             "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
             "path": "tuf:/home/me/edith", "machineName": "TUF", "machineID": "tuf",
-            "tokens": 20.0, "cost": 2.0, "bySource": ["tuf:codex": tufSource],
+            "tokens": 20.0, "cost": 2.0, "bySource": ["tuf:commandcode": tufSource],
         ]
         let local = document(
             days: [
@@ -276,12 +277,12 @@ import Testing
                     "2026-06-10",
                     bySource: [
                         "cli": [model(input: 100, cost: 10)],
-                        "tuf:codex": [model("gpt", input: 20, cost: 2)],
+                        "tuf:commandcode": [model("gpt", input: 20, cost: 2)],
                     ],
                     hours: [
                         [
                             "tokens": 120.0, "cost": 12.0,
-                            "bySource": ["cli": staleLocalSource, "tuf:codex": tufSource],
+                            "bySource": ["cli": staleLocalSource, "tuf:commandcode": tufSource],
                             "byPath": [
                                 "/local/edith": [
                                     "tokens": 100.0, "cost": 10.0,
@@ -289,20 +290,20 @@ import Testing
                                 ],
                                 "tuf:/home/me/edith": [
                                     "tokens": 20.0, "cost": 2.0,
-                                    "bySource": ["tuf:codex": tufSource],
+                                    "bySource": ["tuf:commandcode": tufSource],
                                 ],
                             ],
                         ]
                     ], projects: [staleLocalProject, tufProject])
-            ], sources: ["cli", "tuf:codex"], schemaVersion: 7)
+            ], sources: ["cli", "tuf:commandcode"], schemaVersion: 7)
 
         let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
         let mergedDay = (merged["daily"] as! [[String: Any]]).first!
         let hour = (mergedDay["hours"] as! [[String: Any]]).first!
         let hourSources = hour["bySource"] as! [String: [String: Any]]
-        #expect(Set(hourSources.keys) == ["cli", "tuf:codex"])
+        #expect(Set(hourSources.keys) == ["cli", "tuf:commandcode"])
         #expect((hourSources["cli"]?["tokens"] as? Double) == 10)
-        #expect((hourSources["tuf:codex"]?["tokens"] as? Double) == 20)
+        #expect((hourSources["tuf:commandcode"]?["tokens"] as? Double) == 20)
         #expect(hour["tokens"] as? Double == 30)
         #expect(hour["cost"] as? Double == 3)
         let paths = hour["byPath"] as! [String: [String: Any]]
@@ -327,7 +328,7 @@ import Testing
             "tokens": 100.0, "cost": 10.0,
             "byModel": ["opus": ["tokens": 100.0, "cost": 10.0]],
         ]
-        let codexSource: [String: Any] = [
+        let remoteSource: [String: Any] = [
             "tokens": 20.0, "cost": 2.0,
             "byModel": ["gpt": ["tokens": 20.0, "cost": 2.0]],
         ]
@@ -360,14 +361,14 @@ import Testing
         var cloudProject = identity
         cloudProject["tokens"] = 120.0
         cloudProject["cost"] = 12.0
-        cloudProject["bySource"] = ["cli": staleCLI, "codex": codexSource]
+        cloudProject["bySource"] = ["cli": staleCLI, "commandcode": remoteSource]
         cloudProject["chats"] = [
             [
                 "id": "stale-main", "path": "/work/edith", "source": "cli",
                 "tokens": 60.0, "cost": 6.0,
             ],
             [
-                "id": "codex-main", "path": "/work/edith", "source": "codex",
+                "id": "remote-main", "path": "/work/edith", "source": "commandcode",
                 "tokens": 8.0, "cost": 0.8,
             ],
         ]
@@ -380,8 +381,8 @@ import Testing
                         "source": "cli", "tokens": 40.0, "cost": 4.0,
                     ],
                     [
-                        "id": "codex-worktree", "path": "/work/edith/feature",
-                        "source": "codex", "tokens": 12.0, "cost": 1.2,
+                        "id": "remote-worktree", "path": "/work/edith/feature",
+                        "source": "commandcode", "tokens": 12.0, "cost": 1.2,
                     ],
                 ],
             ]
@@ -398,20 +399,23 @@ import Testing
                     "2026-06-10",
                     bySource: [
                         "cli": [model("opus", input: 100, cost: 10)],
-                        "codex": [model("gpt", input: 20, cost: 2)],
+                        "commandcode": [model("gpt", input: 20, cost: 2)],
                     ], hours: [], projects: [cloudProject])
-            ], sources: ["cli", "codex"], schemaVersion: 7)
+            ], sources: ["cli", "commandcode"], schemaVersion: 7)
 
         let mergedData = try #require(UsageHistory.merge(local: local, cloud: cloud))
         let merged = decode(mergedData)
         let mergedDay = (merged["daily"] as! [[String: Any]]).first!
         let project = (mergedDay["projects"] as! [[String: Any]]).first!
         let directChats = project["chats"] as! [[String: Any]]
-        #expect(Set(directChats.compactMap { $0["source"] as? String }) == ["cli", "codex"])
+        #expect(
+            Set(directChats.compactMap { $0["source"] as? String }) == ["cli", "commandcode"])
         #expect(!directChats.contains { $0["id"] as? String == "stale-main" })
         let worktree = (project["worktrees"] as! [[String: Any]]).first!
         let worktreeChats = worktree["chats"] as! [[String: Any]]
-        #expect(Set(worktreeChats.compactMap { $0["source"] as? String }) == ["cli", "codex"])
+        #expect(
+            Set(worktreeChats.compactMap { $0["source"] as? String })
+                == ["cli", "commandcode"])
         #expect(!worktreeChats.contains { $0["id"] as? String == "stale-worktree" })
         #expect(worktree["tokens"] as? Double == 17)
         #expect(worktree["cost"] as? Double == 1.7)
@@ -502,15 +506,15 @@ import Testing
     @Test func renamedMachineSourceUsesStableIdentityWithoutDoubleCounting() throws {
         let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
         let local = machineDocument(
-            source: "gaming:codex", machineID: machineID, machineName: "Gaming", tokens: 40,
+            source: "gaming:cli", machineID: machineID, machineName: "Gaming", tokens: 40,
             cost: 4)
         let cloud = machineDocument(
-            source: "tuf:codex", machineID: machineID, machineName: "TUF", tokens: 900,
+            source: "tuf:cli", machineID: machineID, machineName: "TUF", tokens: 900,
             cost: 90)
         let mergedData = try #require(UsageHistory.merge(local: local, cloud: cloud))
         let merged = decode(mergedData)
         let stable = try #require(
-            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "codex"))
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
 
         #expect(merged["sources"] as? [String] == [stable])
         #expect(merged["defaultSources"] as? [String] == [stable])
@@ -565,6 +569,93 @@ import Testing
         #expect(dashboard.projectTree.count == 1)
         #expect(dashboard.projectTree.first?.id != "repo:unattributed")
         #expect(dashboard.projectTree.first?.tokens == 40)
+    }
+
+    @Test func oneSidedHistoryRemovesUnsafeCodexDetail() {
+        let cliDetail: [String: Any] = [
+            "tokens": 10.0, "cost": 1.0,
+            "byModel": ["opus": ["tokens": 10.0, "cost": 1.0]],
+        ]
+        let codexDetail: [String: Any] = [
+            "tokens": 20.0, "cost": 2.0,
+            "byModel": ["gpt": ["tokens": 20.0, "cost": 2.0]],
+        ]
+        let sharedProject: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "path": "/work/edith", "tokens": 30.0, "cost": 3.0,
+            "bySource": ["cli": cliDetail, "codex": codexDetail],
+            "chats": [
+                ["id": "cli", "source": "cli", "tokens": 10.0, "cost": 1.0],
+                ["id": "codex", "source": "codex", "tokens": 20.0, "cost": 2.0],
+            ],
+            "worktrees": [
+                [
+                    "name": "replay", "tokens": 20.0, "cost": 2.0,
+                    "chats": [
+                        [
+                            "id": "codex-worktree", "source": "codex", "tokens": 20.0,
+                            "cost": 2.0,
+                        ]
+                    ],
+                ]
+            ],
+        ]
+        let codexProject: [String: Any] = [
+            "projectName": "codex-only", "path": "/work/codex", "tokens": 20.0,
+            "cost": 2.0, "bySource": ["codex": codexDetail],
+            "chats": [
+                ["id": "codex-only", "source": "codex", "tokens": 20.0, "cost": 2.0]
+            ],
+        ]
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "cli": [model("opus", input: 10, cost: 1)],
+                        "codex": [model("gpt", input: 20, cost: 2)],
+                    ],
+                    hours: [
+                        [
+                            "tokens": 30.0, "cost": 3.0,
+                            "bySource": ["cli": cliDetail, "codex": codexDetail],
+                            "byPath": [
+                                "/work/edith": [
+                                    "tokens": 30.0, "cost": 3.0,
+                                    "bySource": ["cli": cliDetail, "codex": codexDetail],
+                                ],
+                                "/work/codex": [
+                                    "tokens": 20.0, "cost": 2.0,
+                                    "bySource": ["codex": codexDetail],
+                                ],
+                            ],
+                        ],
+                        ["tokens": 30.0, "cost": 3.0],
+                    ], projects: [sharedProject, codexProject])
+            ], sources: ["cli", "codex"], schemaVersion: 7)
+
+        let merged = decode(UsageHistory.merge(local: nil, cloud: cloud))
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let canonical = mergedDay["bySource"] as! [String: [[String: Any]]]
+        #expect(canonical["codex"]?.first?["inputTokens"] as? Double == 20)
+        #expect((merged["totals"] as! [String: Any])["tokens"] as? Double == 30)
+
+        let hours = mergedDay["hours"] as! [[String: Any]]
+        let firstHourSources = hours[0]["bySource"] as! [String: [String: Any]]
+        #expect(Set(firstHourSources.keys) == ["cli"])
+        #expect(hours[0]["tokens"] as? Double == 10)
+        let paths = hours[0]["byPath"] as! [String: [String: Any]]
+        #expect(Set(paths.keys) == ["/work/edith"])
+        #expect(hours[1]["tokens"] as? Double == 0)
+
+        let projects = mergedDay["projects"] as! [[String: Any]]
+        #expect(projects.count == 1)
+        #expect(projects[0]["tokens"] as? Double == 10)
+        let projectSources = projects[0]["bySource"] as! [String: [String: Any]]
+        #expect(Set(projectSources.keys) == ["cli"])
+        let chats = projects[0]["chats"] as! [[String: Any]]
+        #expect(chats.map { $0["source"] as? String } == ["cli"])
+        #expect((projects[0]["worktrees"] as! [[String: Any]]).isEmpty)
     }
 
     @Test func missingSideReturnsOtherVerbatim() {

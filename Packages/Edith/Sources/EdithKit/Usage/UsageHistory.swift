@@ -2,12 +2,17 @@ import Foundation
 
 public enum UsageHistory {
     public static func merge(local: Data?, cloud: Data?) -> Data? {
-        guard let local else { return cloud }
-        guard let cloud else { return local }
-        guard let rawLocal = decode(local) else { return cloud }
-        guard let rawCloud = decode(cloud) else { return local }
-        let l = canonicalizedMachineSources(foldLegacyCloudSource(rawLocal))
-        let c = canonicalizedMachineSources(foldLegacyCloudSource(rawCloud))
+        let rawLocal = local.flatMap(decode)
+        let rawCloud = cloud.flatMap(decode)
+        let normalizedLocal = rawLocal.map(normalized)
+        let normalizedCloud = rawCloud.map(normalized)
+        guard let l = normalizedLocal else {
+            guard let c = normalizedCloud else { return nil }
+            return oneSided(original: cloud, raw: rawCloud, normalized: c)
+        }
+        guard let c = normalizedCloud else {
+            return oneSided(original: local, raw: rawLocal, normalized: l)
+        }
 
         var mergedByPeriod: [String: [String: Any]] = [:]
         for day in daily(c) {
@@ -38,10 +43,28 @@ public enum UsageHistory {
         out["sessions"] = mergeSessions(l["sessions"], c["sessions"])
         out["totals"] = totals(of: mergedDaily)
 
-        return try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys])
+        return encoded(out)
     }
 
     private static let legacyCloudSource = "cc-cloud"
+
+    private static func normalized(_ decoded: [String: Any]) -> [String: Any] {
+        return removingUnsafeCodexDetail(
+            canonicalizedMachineSources(foldLegacyCloudSource(decoded)))
+    }
+
+    private static func oneSided(
+        original: Data?, raw: [String: Any]?, normalized: [String: Any]
+    ) -> Data? {
+        guard let original, let raw, encoded(raw) == encoded(normalized) else {
+            return encoded(normalized)
+        }
+        return original
+    }
+
+    private static func encoded(_ value: [String: Any]) -> Data? {
+        try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+    }
 
     static func foldLegacyCloudSource(_ obj: [String: Any]) -> [String: Any] {
         var out = obj
@@ -194,6 +217,127 @@ public enum UsageHistory {
             }
         }
         return out
+    }
+
+    private static func removingUnsafeCodexDetail(_ obj: [String: Any]) -> [String: Any] {
+        var out = obj
+        let originalDays = daily(obj)
+        let normalizedDays = originalDays.map(removingUnsafeCodexDay)
+        guard serialized(originalDays) != serialized(normalizedDays) else { return obj }
+        out["daily"] = normalizedDays
+        out["totals"] = totals(of: normalizedDays)
+        return out
+    }
+
+    private static func serialized(_ value: Any) -> Data? {
+        try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+    }
+
+    private static func removingUnsafeCodexDay(_ day: [String: Any]) -> [String: Any] {
+        var out = day
+        let canonicalSources = day["bySource"] as? [String: Any] ?? [:]
+        let hasCodex = canonicalSources.keys.contains(where: isCodexSource)
+        if let hours = day["hours"] as? [[String: Any]] {
+            out["hours"] = hours.map {
+                removingUnsafeCodexDetail($0, canonicalDayHasCodex: hasCodex)
+            }
+        }
+        if let projects = day["projects"] as? [[String: Any]] {
+            out["projects"] = projects.compactMap(removingUnsafeCodexProject)
+        }
+        return out
+    }
+
+    private static func removingUnsafeCodexDetail(
+        _ hour: [String: Any], canonicalDayHasCodex: Bool
+    ) -> [String: Any] {
+        var out = hour
+        if let bySource = withoutCodexSources(hour["bySource"]) {
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+            out["byPath"] = withoutCodexPaths(hour["byPath"])
+        } else if canonicalDayHasCodex {
+            out["tokens"] = 0.0
+            out["cost"] = 0.0
+            out["bySource"] = [String: Any]()
+            out["byPath"] = [String: Any]()
+        }
+        return out
+    }
+
+    private static func withoutCodexPaths(_ value: Any?) -> [String: Any] {
+        let paths = value as? [String: Any] ?? [:]
+        return paths.reduce(into: [:]) { result, entry in
+            guard var path = entry.value as? [String: Any],
+                let bySource = withoutCodexSources(path["bySource"]), !bySource.isEmpty
+            else { return }
+            path["bySource"] = bySource
+            setDetailTotals(&path, bySource: bySource)
+            result[entry.key] = path
+        }
+    }
+
+    private static func removingUnsafeCodexProject(
+        _ project: [String: Any]
+    ) -> [String: Any]? {
+        var out = project
+        let originalBySource = project["bySource"] as? [String: Any]
+        let bySource = withoutCodexSources(project["bySource"])
+        let originalChats = project["chats"] as? [[String: Any]] ?? []
+        let chats = originalChats.filter { !isCodexSource($0["source"] as? String ?? "") }
+        let originalWorktrees = project["worktrees"] as? [[String: Any]] ?? []
+        let worktrees = originalWorktrees.compactMap(removingUnsafeCodexWorktree)
+        out["chats"] = chats
+        out["worktrees"] = worktrees
+        if let bySource {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        } else if !originalChats.isEmpty || !originalWorktrees.isEmpty {
+            guard !chats.isEmpty || !worktrees.isEmpty else { return nil }
+            out["tokens"] =
+                chats.reduce(0) { $0 + num($1["tokens"]) }
+                + worktrees.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] =
+                chats.reduce(0) { $0 + num($1["cost"]) }
+                + worktrees.reduce(0) { $0 + num($1["cost"]) }
+        } else if originalBySource != nil {
+            return nil
+        }
+        return out
+    }
+
+    private static func removingUnsafeCodexWorktree(
+        _ worktree: [String: Any]
+    ) -> [String: Any]? {
+        var out = worktree
+        let originalBySource = worktree["bySource"] as? [String: Any]
+        let bySource = withoutCodexSources(worktree["bySource"])
+        let originalChats = worktree["chats"] as? [[String: Any]] ?? []
+        let chats = originalChats.filter { !isCodexSource($0["source"] as? String ?? "") }
+        out["chats"] = chats
+        if let bySource {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        } else if !originalChats.isEmpty {
+            guard !chats.isEmpty else { return nil }
+            out["tokens"] = chats.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] = chats.reduce(0) { $0 + num($1["cost"]) }
+        } else if originalBySource != nil {
+            return nil
+        }
+        return out
+    }
+
+    private static func withoutCodexSources(_ value: Any?) -> [String: Any]? {
+        guard let sources = value as? [String: Any] else { return nil }
+        return sources.filter { !isCodexSource($0.key) }
+    }
+
+    private static func isCodexSource(_ source: String) -> Bool {
+        source.split(separator: ":", omittingEmptySubsequences: false).last?
+            .lowercased() == "codex"
     }
 
     private static func foldedSourceList(_ sources: [String]) -> [String] {
