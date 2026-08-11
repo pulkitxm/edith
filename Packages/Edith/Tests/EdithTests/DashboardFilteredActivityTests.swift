@@ -119,9 +119,19 @@ import Testing
                "repositoryName":"other","path":"/work/other","tokens":300,"cost":30,
                "bySource":{"cli":{"tokens":300,"cost":30,
                  "byModel":{"m":{"tokens":300,"cost":30}}}}}],
-             "hours":[{"tokens":400,"cost":40,
-               "bySource":{"cli":{"tokens":400,"cost":40,
-                 "byModel":{"m":{"tokens":400,"cost":40}}}}}]}
+             "hours":[
+              {"tokens":300,"cost":30,
+               "bySource":{"cli":{"tokens":300,"cost":30,
+                 "byModel":{"m":{"tokens":300,"cost":30}}}},
+               "byPath":{"/work/other":{"tokens":300,"cost":30,
+                 "bySource":{"cli":{"tokens":300,"cost":30,
+                   "byModel":{"m":{"tokens":300,"cost":30}}}}}}},
+              {"tokens":100,"cost":10,
+               "bySource":{"cli":{"tokens":100,"cost":10,
+                 "byModel":{"m":{"tokens":100,"cost":10}}}},
+               "byPath":{"/work/orbit":{"tokens":100,"cost":10,
+                 "bySource":{"cli":{"tokens":100,"cost":10,
+                   "byModel":{"m":{"tokens":100,"cost":10}}}}}}}]}
             """
         let dashboard = try model("\(old),\(current)", sources: "\"cli\"")
         dashboard.range = .today
@@ -134,7 +144,31 @@ import Testing
         let detail = try #require(dashboard.heatDetail[today])
         #expect(abs(detail.tokens - 100) < 0.0001)
         #expect(detail.projects.map(\.name) == ["orbit"])
-        #expect(abs(dashboard.hourlyAll[0].tokens - 100) < 0.0001)
+        #expect(abs(dashboard.hourlyAll[0].tokens) < 0.0001)
+        #expect(abs(dashboard.hourlyAll[1].tokens - 100) < 0.0001)
+        #expect(detail.peakHour == 1)
+        #expect(abs(dashboard.hourlyUnattributedTokens) < 0.0001)
+    }
+
+    @Test func pathFilterWithoutPathDetailRemainsUnattributed() throws {
+        let daily = """
+            {"period":"2026-06-01",
+             "bySource":{"cli":[{"modelName":"m","inputTokens":100,"cost":10}]},
+             "projects":[{"projectName":"orbit","path":"/work/orbit",
+               "tokens":100,"cost":10,
+               "bySource":{"cli":{"tokens":100,"cost":10,
+                 "byModel":{"m":{"tokens":100,"cost":10}}}}}],
+             "hours":[{"tokens":100,"cost":10,
+               "bySource":{"cli":{"tokens":100,"cost":10,
+                 "byModel":{"m":{"tokens":100,"cost":10}}}}}]}
+            """
+        let dashboard = try model(daily, sources: "\"cli\"")
+        dashboard.selectedPaths = ["/work/orbit"]
+
+        #expect(dashboard.hourlyAll.allSatisfy { $0.tokens == 0 && $0.cost == 0 })
+        #expect(abs(dashboard.hourlyUnattributedTokens - 100) < 0.0001)
+        #expect(abs(dashboard.hourlyUnattributedCost - 10) < 0.0001)
+        #expect(dashboard.heatDetail["2026-06-01"]?.peakHour == nil)
     }
 
     @Test func legacyHoursApplyOnlyWithoutFilters() throws {

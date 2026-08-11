@@ -139,6 +139,12 @@ struct DashUsage: Decodable {
         let tokens: Double?
         let cost: Double?
         let bySource: [String: SourceBreakdown]?
+        let byPath: [String: PathBreakdown]?
+    }
+    struct PathBreakdown: Decodable {
+        let tokens: Double?
+        let cost: Double?
+        let bySource: [String: SourceBreakdown]?
     }
 }
 
@@ -1261,6 +1267,28 @@ final class DashboardModel: ObservableObject {
                     rawCost[index], alternate: rawTokens[index], rawTotal: rawCostTotal,
                     rawAlternateTotal: rawTokenTotal, target: target.cost)
             }
+        }
+
+        if !selectedPaths.isEmpty {
+            guard hours.contains(where: { $0.byPath != nil }) else {
+                result.unattributed = total
+                return result
+            }
+            for (key, target) in targets {
+                var rawTokens = [Double](repeating: 0, count: 24)
+                var rawCost = [Double](repeating: 0, count: 24)
+                for (index, hour) in hours.enumerated() {
+                    for (path, breakdown) in hour.byPath ?? [:] where pathInScope(path) {
+                        let usage = breakdown.bySource?[key.source]?.byModel?[key.model]
+                        rawTokens[index] += usage?.tokens ?? 0
+                        rawCost[index] += usage?.cost ?? 0
+                    }
+                }
+                add(
+                    target: target, rawTokens: rawTokens, rawCost: rawCost,
+                    to: &result)
+            }
+            return result
         }
 
         if hours.contains(where: { $0.bySource != nil }) {
