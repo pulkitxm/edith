@@ -4,7 +4,7 @@ import SwiftUI
 
 struct ProjNode: Identifiable {
     enum Kind {
-        case project, worktree, chat, more
+        case repository, folder, worktree, chat, more
     }
     let id: String
     let kind: Kind
@@ -16,6 +16,7 @@ struct ProjNode: Identifiable {
     let dur: Double
     let lastActive: String
     let chatId: String?
+    let repositoryURL: String?
     let badge: Int
     var children: [ProjNode]?
 }
@@ -47,8 +48,8 @@ struct ProjectDrilldownView: View {
                 toggleButton
                 if model.projListOpen {
                     SearchField(
-                        placeholder: "Filter projects, worktrees, chats…", text: $model.projQuery,
-                        compact: true
+                        placeholder: "Filter repositories, folders, worktrees, chats…",
+                        text: $model.projQuery, compact: true
                     )
                     .frame(maxWidth: UIScale.pt(260))
                 }
@@ -91,7 +92,7 @@ struct ProjectDrilldownView: View {
                 Image(systemName: model.projListOpen ? "chevron.down" : "chevron.right")
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
                 Text(
-                    "\(model.projListOpen ? "Hide" : "Show") projects (\(model.projectTree.count))"
+                    "\(model.projListOpen ? "Hide" : "Show") repositories (\(model.projectTree.count))"
                 )
                 .font(DashSkin.mono(11))
             }
@@ -103,7 +104,7 @@ struct ProjectDrilldownView: View {
 
     private var headerRow: some View {
         HStack(spacing: UIScale.pt(0)) {
-            headerCell("Project", .name, width: ProjColumns.project)
+            headerCell("Repository", .name, width: ProjColumns.project)
             headerCell("Tokens", .tokens, width: ProjColumns.tokens)
             headerCell("Cost", .cost, width: ProjColumns.cost)
             headerCell("% share", .share, width: ProjColumns.share)
@@ -175,28 +176,39 @@ struct ProjectDrilldownView: View {
     private var matchedTree: [ProjTreeRow] {
         let q = model.projQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return model.projectTree }
-        func hit(_ s: String) -> Bool { s.localizedCaseInsensitiveContains(q) }
-        return model.projectTree.filter { p in
-            hit(p.name) || p.chats.contains { hit($0.title) }
-                || p.worktrees.contains { hit($0.name) || $0.chats.contains { hit($0.title) } }
-        }
+        return model.projectTree.filter { $0.matches(q) }
     }
 
     private var nodes: [ProjNode] {
-        matchedTree.map { p in
-            var kids = chatNodes(p.chats, parent: p.id)
-            kids += p.worktrees.map { wt in
-                let wtChats = chatNodes(wt.chats, parent: wt.id)
-                return ProjNode(
-                    id: wt.id, kind: .worktree, label: wt.name, tokens: wt.tokens, cost: wt.cost,
-                    share: wt.share, days: wt.days, dur: wt.dur, lastActive: wt.lastActive,
-                    chatId: nil, badge: wt.chats.count, children: wtChats.isEmpty ? nil : wtChats)
-            }
+        matchedTree.map { repository in
+            let folders = repository.folders.map(folderNode)
             return ProjNode(
-                id: p.id, kind: .project, label: p.name, tokens: p.tokens, cost: p.cost,
-                share: p.share, days: p.days, dur: p.dur, lastActive: p.lastActive,
-                chatId: nil, badge: p.nestedCount, children: kids.isEmpty ? nil : kids)
+                id: repository.id, kind: .repository, label: repository.name,
+                tokens: repository.tokens, cost: repository.cost, share: repository.share,
+                days: repository.days, dur: repository.dur,
+                lastActive: repository.lastActive, chatId: nil,
+                repositoryURL: repository.repositoryURL, badge: repository.nestedCount,
+                children: folders.isEmpty ? nil : folders)
         }
+    }
+
+    private func folderNode(_ folder: ProjFolder) -> ProjNode {
+        var children = chatNodes(folder.chats, parent: folder.id)
+        children += folder.worktrees.map { worktree in
+            let chats = chatNodes(worktree.chats, parent: worktree.id)
+            return ProjNode(
+                id: worktree.id, kind: .worktree, label: worktree.name,
+                tokens: worktree.tokens, cost: worktree.cost, share: worktree.share,
+                days: worktree.days, dur: worktree.dur, lastActive: worktree.lastActive,
+                chatId: nil, repositoryURL: nil, badge: worktree.chats.count,
+                children: chats.isEmpty ? nil : chats)
+        }
+        return ProjNode(
+            id: folder.id, kind: .folder, label: folder.displayName, tokens: folder.tokens,
+            cost: folder.cost, share: folder.share, days: folder.days, dur: folder.dur,
+            lastActive: folder.lastActive, chatId: nil, repositoryURL: nil,
+            badge: folder.nestedCount,
+            children: children.isEmpty ? nil : children)
     }
 
     private func chatNodes(_ chats: [ProjChat], parent: String) -> [ProjNode] {
@@ -204,7 +216,7 @@ struct ProjectDrilldownView: View {
             ProjNode(
                 id: "\(parent)|chat:\(c.id)", kind: .chat, label: c.title, tokens: c.tokens,
                 cost: c.cost, share: c.share, days: c.days, dur: c.dur, lastActive: c.lastActive,
-                chatId: c.id, badge: 0, children: nil)
+                chatId: c.id, repositoryURL: nil, badge: 0, children: nil)
         }
         let rest = chats.dropFirst(Self.chatsPerGroup)
         if !rest.isEmpty {
@@ -217,7 +229,7 @@ struct ProjectDrilldownView: View {
                     share: rest.reduce(0) { $0 + $1.share },
                     days: days.count,
                     dur: rest.reduce(0) { $0 + $1.dur },
-                    lastActive: "", chatId: nil, badge: 0, children: nil))
+                    lastActive: "", chatId: nil, repositoryURL: nil, badge: 0, children: nil))
         }
         return out
     }
@@ -266,6 +278,11 @@ private struct ProjectRow: View {
         }
         if let chatId = node.chatId, !chatId.isEmpty {
             row.contextMenu { Button("Copy chat ID") { onCopy(chatId) } }
+        } else if let repositoryURL {
+            row.contextMenu {
+                Button("Open repository") { NSWorkspace.shared.open(repositoryURL) }
+                Button("Copy repository link") { onCopy(repositoryURL.absoluteString) }
+            }
         } else {
             row
         }
@@ -281,13 +298,39 @@ private struct ProjectRow: View {
             } else {
                 Color.clear.frame(width: UIScale.pt(10))
             }
-            iconView
-            Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1).truncationMode(.tail)
+            nodeLabel
             Spacer(minLength: 0)
         }
         .padding(.leading, CGFloat(depth) * 16)
         .foregroundStyle(tint)
         .frame(width: ProjColumns.project, alignment: .leading)
+    }
+
+    @ViewBuilder private var nodeLabel: some View {
+        if let repositoryURL {
+            Button {
+                NSWorkspace.shared.open(repositoryURL)
+            } label: {
+                HStack(spacing: UIScale.pt(5)) {
+                    iconView
+                    rowLabel
+                }
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+        } else {
+            iconView
+            rowLabel
+        }
+    }
+
+    private var rowLabel: some View {
+        Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1).truncationMode(.tail)
+    }
+
+    private var repositoryURL: URL? {
+        guard let raw = node.repositoryURL, !raw.isEmpty else { return nil }
+        return URL(string: raw)
     }
 
     @ViewBuilder private var iconView: some View {
@@ -322,7 +365,7 @@ private struct ProjectRow: View {
 
     private var tint: Color {
         switch node.kind {
-        case .project, .worktree: return DashSkin.ink(dark)
+        case .repository, .folder, .worktree: return DashSkin.ink(dark)
         case .chat: return DashSkin.inkSoft(dark)
         case .more: return DashSkin.inkFaint(dark)
         }
@@ -330,7 +373,8 @@ private struct ProjectRow: View {
 
     private var icon: String {
         switch node.kind {
-        case .project: return "folder"
+        case .repository: return "shippingbox"
+        case .folder: return "folder"
         case .worktree: return "arrow.triangle.branch"
         case .chat, .more: return "message"
         }
