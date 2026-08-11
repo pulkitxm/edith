@@ -237,23 +237,31 @@ struct DashboardView: View {
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
             VStack(spacing: UIScale.pt(16)) {
-                SkinCard(title: "Activity", dark: dark) { activityHeatmap }
+                SkinCard(title: activityTitle, dark: dark) { activityHeatmap }
                 RateLimitsDialsView(dark: dark)
             }
         } else {
             HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                SkinCard(title: "Activity", dark: dark, fill: true) { activityHeatmap }
+                SkinCard(title: activityTitle, dark: dark, fill: true) { activityHeatmap }
                 RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
             .fixedSize(horizontal: false, vertical: true)
         }
     }
 
+    private var activityTitle: String { "Activity · \(model.activityRangeTitle)" }
+
     private var activityHeatmap: some View {
-        ActivityHeatmap(
-            days: model.calendarDays, cuts: model.chartData.heatCuts,
-            model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
-        )
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Label(model.activityRangeCue, systemImage: "calendar.badge.clock")
+                .font(.system(size: UIScale.pt(10)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+            ActivityHeatmap(
+                days: model.calendarDays, cuts: model.chartData.heatCuts,
+                model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
+            )
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -431,26 +439,48 @@ struct DashboardView: View {
     }
 
     private var machineMenu: some View {
-        Button {
-            machinePickerOpen = true
-        } label: {
-            Label(machineSummary, systemImage: "server.rack")
+        TimelineView(.periodic(from: .now, by: 60)) { timeline in
+            let stale = selectedStaleMachines(now: timeline.date)
+            Button {
+                machinePickerOpen = true
+            } label: {
+                Label(
+                    machineSummary(now: timeline.date),
+                    systemImage: stale.isEmpty ? "server.rack" : "exclamationmark.triangle.fill"
+                )
                 .font(.system(size: UIScale.pt(11)))
+            }
+            .buttonStyle(.plain).pointerCursor().fixedSize()
+            .modifier(FilterChip(dark: dark))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
             UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
         }
     }
 
-    private var machineSummary: String {
+    private func machineSummary(now: Date) -> String {
         let groups = model.machineGroups
         guard !groups.isEmpty else { return "Machines" }
+        let stale = selectedStaleMachines(now: now)
+        if stale.count == 1, let item = stale.first {
+            return "\(item.group.name) stale \(item.freshness.ageLabel)"
+        }
+        if stale.count > 1 { return "\(stale.count) stale machines" }
         let shown = groups.filter { model.machineIsShown($0) || model.machineIsPartlyShown($0) }
         if shown.count == groups.count { return "All machines" }
         if shown.count == 1, let only = shown.first { return only.name }
         return "\(shown.count) of \(groups.count) machines"
+    }
+
+    private func selectedStaleMachines(now: Date) -> [(
+        group: MachineGroup, freshness: MachineUsageFreshness
+    )] {
+        model.machineGroups.compactMap { group in
+            guard model.machineIsShown(group) || model.machineIsPartlyShown(group),
+                let freshness = model.machineFreshness(group, now: now), freshness.isStale
+            else { return nil }
+            return (group, freshness)
+        }
     }
 
     private var modelMenu: some View {
@@ -546,7 +576,19 @@ struct DashboardView: View {
                 }
             }
         }
-        SkinCard(title: "Models", dark: dark) { modelsTable }
+        SkinCard(title: "Models", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                if model.modelUnfilterableCost > 0.000_001 {
+                    Text(
+                        "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
+                    )
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .presenterBlur(blurMoney)
+                }
+                modelsTable
+            }
+        }
     }
 
     private var hourlyUnattributedText: String {
@@ -613,7 +655,7 @@ struct DashboardView: View {
                 HStack(spacing: UIScale.pt(8)) {
                     Circle().fill(model.modelColor(m.model, dark: dark)).frame(
                         width: UIScale.pt(8), height: UIScale.pt(8))
-                    Text(DashFmt.shortModel(m.model))
+                    Text(model.modelLabel(m.model))
                         .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
                         .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
                     Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
@@ -674,9 +716,9 @@ struct DashboardView: View {
         model.allSources.map { model.sourceColor($0.id, dark: dark) }
     }
     private var donutSlices: [DonutSlice] {
-        model.modelTotals.filter { $0.tokens > 0 }.map {
+        model.tokenBearingModelTotals.map {
             DonutSlice(
-                id: $0.model, label: DashFmt.shortModel($0.model), value: $0.tokens,
+                id: $0.model, label: model.modelLabel($0.model), value: $0.tokens,
                 color: model.modelColor($0.model, dark: dark))
         }
     }

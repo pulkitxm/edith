@@ -100,6 +100,75 @@ import Testing
         #expect(dashboard.heatDetail["2026-06-01"]?.peakHour == 2)
     }
 
+    @Test func costOnlyUnknownIsAccountingInsteadOfTopModel() throws {
+        let daily = """
+            {"period":"2026-06-01","bySource":{"codex":[
+              {"modelName":"gpt-small","inputTokens":100,"cost":0},
+              {"modelName":"gpt-large","cacheReadTokens":300,"cost":0},
+              {"modelName":"unattributed-cost","cost":8},
+              {"modelName":"unknown","cost":4}]},
+             "projects":[],"hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"codex\"")
+
+        #expect(dashboard.allModels == ["gpt-large", "gpt-small"])
+        #expect(dashboard.selectedModels == ["gpt-large", "gpt-small"])
+        #expect(Set(dashboard.tokenBearingModelTotals.map(\.model)) == ["gpt-large", "gpt-small"])
+        let accounting = try #require(
+            dashboard.modelTotals.first { $0.model == DashboardModel.unattributedCostModel })
+        #expect(dashboard.modelTotals.count == 3)
+        #expect(accounting.tokens == 0)
+        #expect(accounting.cost == 12)
+        #expect(dashboard.modelLabel(accounting.model) == "Unattributed cost")
+        let top = try #require(dashboard.kpis.first { $0.label == "Top model" })
+        #expect(top.value == "gpt-large")
+        #expect(top.sub.contains("300"))
+        #expect(top.sub.contains("75.0% of tokens"))
+        #expect(abs(dashboard.series.reduce(0) { $0 + $1.cost } - 12) < 0.0001)
+    }
+
+    @Test func genuineUnknownTokenModelRemainsSelectable() throws {
+        let daily = """
+            {"period":"2026-06-01","bySource":{"opencode":[
+              {"modelName":"unknown","inputTokens":80,"cost":8}]},
+             "projects":[],"hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"opencode\"")
+
+        #expect(dashboard.allModels == ["unknown"])
+        #expect(dashboard.selectedModels == ["unknown"])
+        #expect(dashboard.tokenBearingModelTotals.map(\.model) == ["unknown"])
+        #expect(dashboard.modelLabel("unknown") == "unknown")
+    }
+
+    @Test func partialModelFilterExcludesSharedProviderCost() throws {
+        let daily = """
+            {"period":"2026-06-01","bySource":{
+              "codex":[
+                {"modelName":"a","inputTokens":100,"cost":0},
+                {"modelName":"b","cacheReadTokens":300,"cost":0},
+                {"modelName":"unattributed-cost","cost":12}],
+              "cli":[{"modelName":"c","inputTokens":50,"cost":5}]},
+             "projects":[],"hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"codex\",\"cli\"")
+
+        dashboard.selectedModels = ["a"]
+        #expect(dashboard.series.reduce(0) { $0 + $1.tokens } == 100)
+        #expect(dashboard.series.reduce(0) { $0 + $1.cost } == 0)
+        #expect(dashboard.modelUnfilterableCost == 12)
+        #expect(
+            !dashboard.modelTotals.contains {
+                $0.model == DashboardModel.unattributedCostModel
+            })
+
+        dashboard.selectedModels = ["c"]
+        #expect(dashboard.series.reduce(0) { $0 + $1.tokens } == 50)
+        #expect(dashboard.series.reduce(0) { $0 + $1.cost } == 5)
+        #expect(dashboard.modelUnfilterableCost == 0)
+        #expect(dashboard.modelTotals.map(\.model) == ["c"])
+    }
+
     @Test func modelFilterUsesOnlyMatchingHourlyModel() throws {
         let daily = """
             {"period":"2026-06-01","bySource":{"cli":[
@@ -171,6 +240,23 @@ import Testing
         #expect(abs(dashboard.hourlyAll[1].tokens - 100) < 0.0001)
         #expect(detail.peakHour == 1)
         #expect(abs(dashboard.hourlyUnattributedTokens) < 0.0001)
+    }
+
+    @Test func todayActivityExplainsCalendarPadding() throws {
+        let daily = """
+            {"period":"\(today)",
+             "bySource":{"cli":[{"modelName":"m","inputTokens":50,"cost":5}]},
+             "projects":[],"hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"cli\"")
+        dashboard.range = .today
+
+        #expect(dashboard.activityRangeTitle == "Today")
+        #expect(dashboard.series.count == 1)
+        #expect(dashboard.calendarDays.count == 7)
+        #expect(dashboard.activityRangeCue.contains("One day selected"))
+        #expect(dashboard.activityRangeCue.contains("calendar padding"))
+        #expect(dashboard.activityRangeCue.contains("not missing history"))
     }
 
     @Test func pathFilterUsesProviderSpecificProjectShare() throws {

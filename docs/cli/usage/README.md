@@ -26,7 +26,7 @@ closed.
 | `ed usage limits` | Session and weekly rate limits per provider, newest observation per provider |
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |
-| `ed usage models` | Cost and tokens per model, most expensive first |
+| `ed usage models` | Tokens and attributable cost per model, with unassigned provider cost shown separately |
 | `ed usage projects` | Cost and tokens per GitHub repository, most expensive first |
 | `ed usage sources` | The agents that produced the history, with their ids |
 | `ed usage machines` | Runs `ed usage machines ls`, the default subcommand |
