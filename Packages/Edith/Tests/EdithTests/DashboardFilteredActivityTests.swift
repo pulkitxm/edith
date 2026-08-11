@@ -142,6 +142,34 @@ import Testing
         #expect(dashboard.modelLabel("unknown") == "unknown")
     }
 
+    @Test func genuineUnknownPathFilterDoesNotBorrowNamedModelShare() throws {
+        let daily = """
+            {"period":"2026-06-01","bySource":{"opencode":[
+              {"modelName":"unknown","inputTokens":100,"cost":10},
+              {"modelName":"qwen","inputTokens":900,"cost":90}]},
+             "projects":[
+              {"projectName":"named","path":"/work/named","tokens":900,"cost":90,
+               "bySource":{"opencode":{"tokens":900,"cost":90,
+                 "byModel":{"qwen":{"tokens":900,"cost":90}}}}},
+              {"projectName":"unknown","path":"/work/unknown","tokens":100,"cost":10,
+               "bySource":{"opencode":{"tokens":100,"cost":10,
+                 "byModel":{"unknown":{"tokens":100,"cost":10}}}}}],
+             "hours":[]}
+            """
+        let dashboard = try model(daily, sources: "\"opencode\"")
+        dashboard.selectedModels = ["unknown"]
+
+        dashboard.selectedPaths = ["/work/named"]
+        #expect(dashboard.series.reduce(0) { $0 + $1.tokens } == 0)
+        #expect(dashboard.series.reduce(0) { $0 + $1.cost } == 0)
+        #expect(dashboard.modelTotals.isEmpty)
+
+        dashboard.selectedPaths = ["/work/unknown"]
+        #expect(dashboard.series.reduce(0) { $0 + $1.tokens } == 100)
+        #expect(dashboard.series.reduce(0) { $0 + $1.cost } == 10)
+        #expect(dashboard.modelTotals.map(\.model) == ["unknown"])
+    }
+
     @Test func partialModelFilterExcludesSharedProviderCost() throws {
         let daily = """
             {"period":"2026-06-01","bySource":{

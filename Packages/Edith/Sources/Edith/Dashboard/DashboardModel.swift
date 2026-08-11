@@ -1346,9 +1346,13 @@ final class DashboardModel: ObservableObject {
     private func sourceHasSingleCanonicalModel(
         _ day: DashUsage.Day, key: ProjectAttributionKey
     ) -> Bool {
-        let models = Set((day.bySource?[key.source] ?? []).map { $0.modelName ?? "unknown" })
-        return key.model == Self.unattributedCostModel || key.model == "unknown"
-            || models.count == 1
+        let tokenModels = Set(
+            (day.bySource?[key.source] ?? []).compactMap { row -> String? in
+                guard !Self.isUnattributedCost(row), row.tokens > 0 else { return nil }
+                return row.modelName ?? "unknown"
+            })
+        return key.model == Self.unattributedCostModel
+            || (tokenModels.count == 1 && tokenModels.contains(key.model))
     }
 
     private func sourceAmount(
