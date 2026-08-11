@@ -759,14 +759,16 @@ final class DashboardModel: ObservableObject {
     }
 
     private static func path(_ path: String, isWithin scope: String) -> Bool {
-        let value = normalizedPath(path)
-        let parent = normalizedPath(scope)
+        let caseSensitive = !path.hasPrefix("/") || !scope.hasPrefix("/")
+        let value = normalizedPath(path, caseSensitive: caseSensitive)
+        let parent = normalizedPath(scope, caseSensitive: caseSensitive)
         guard !value.isEmpty, !parent.isEmpty else { return false }
         return value == parent || value.hasPrefix(parent + "/")
     }
 
-    private static func normalizedPath(_ path: String) -> String {
-        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    private static func normalizedPath(_ path: String, caseSensitive: Bool) -> String {
+        let raw = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = caseSensitive ? raw : raw.lowercased()
         return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
     }
 
@@ -1578,7 +1580,9 @@ final class DashboardModel: ObservableObject {
         let machine = nonempty(project.machineID) ?? nonempty(project.machineName) ?? ""
         let fallbackName = nonempty(project.projectName) ?? "unknown"
         let id =
-            explicitID?.lowercased()
+            explicitID.map {
+                $0.lowercased().hasPrefix("github.com/") ? $0.lowercased() : $0
+            }
             ?? (normalizedURL.isEmpty
                 ? "folder:\(machine.lowercased()):\(path.lowercased()):\(fallbackName.lowercased())"
                 : "url:\(normalizedURL)")
@@ -1600,7 +1604,8 @@ final class DashboardModel: ObservableObject {
             nonempty(project.folderName) ?? nonempty(last) ?? nonempty(project.projectName)
             ?? repository.name
         let machineKey = machineID.isEmpty ? machineName.lowercased() : machineID.lowercased()
-        let location = path.isEmpty ? name.lowercased() : path.lowercased()
+        let location =
+            path.isEmpty || machineID.isEmpty ? (path.isEmpty ? name : path).lowercased() : path
         return FolderIdentity(
             id: "\(repository.id)|folder:\(machineKey):\(location)", name: name, path: path,
             machineName: machineName, machineID: machineID)

@@ -461,6 +461,31 @@ import Testing
         #expect(abs(repository.folders.reduce(0) { $0 + $1.tokens } - 300) < 0.0001)
     }
 
+    @Test func remoteFolderPathsPreserveCase() throws {
+        let d = day(
+            "2026-06-01",
+            projects: """
+                {"projectName":"Edith","repositoryID":"github.com/acme/edith",
+                 "repositoryName":"edith","path":"machine:tuf:/work/Edith",
+                 "machineName":"TUF","machineID":"tuf","tokens":100,"cost":1},
+                {"projectName":"edith","repositoryID":"github.com/acme/edith",
+                 "repositoryName":"edith","path":"machine:tuf:/work/edith",
+                 "machineName":"TUF","machineID":"tuf","tokens":200,"cost":2}
+                """)
+        let m = try model(usage(daily: d))
+        let repository = try #require(m.projectTree.first)
+        #expect(repository.folders.count == 2)
+        #expect(
+            Set(repository.folders.map(\.path)) == [
+                "machine:tuf:/work/Edith", "machine:tuf:/work/edith",
+            ])
+
+        m.selectedPaths = ["machine:tuf:/work/Edith"]
+        #expect(m.projectTree.count == 1)
+        #expect(m.projectTree[0].folders.map(\.path) == ["machine:tuf:/work/Edith"])
+        #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
+    }
+
     @Test func repositoriesWithSameNameAndDifferentIDsStaySeparate() throws {
         let d = day(
             "2026-06-01",
