@@ -243,6 +243,7 @@ public enum UsageRange: String, CaseIterable, Sendable {
     {
         guard let start = start(today: today, calendar: calendar) else { return true }
         return period >= UsageRange.stamp(start, calendar: calendar)
+            && period <= UsageRange.stamp(today, calendar: calendar)
     }
 
     public func start(today: Date, calendar: Calendar) -> Date? {

@@ -302,6 +302,17 @@ import Testing
             !UsageRange.week.includes(period: "2026-08-09", today: today, calendar: calendar))
     }
 
+    @Test func boundedRangesExcludeFutureDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let today = calendar.date(from: DateComponents(year: 2026, month: 8, day: 12))!
+        let future = "2026-08-13"
+        for range in [UsageRange.today, .week, .month] {
+            #expect(!range.includes(period: future, today: today, calendar: calendar))
+        }
+        #expect(UsageRange.all.includes(period: future, today: today, calendar: calendar))
+    }
+
     @Test func totalsSerialiseWithStableFieldNames() {
         var totals = UsageTotals()
         totals.cost = 1.5
