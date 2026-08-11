@@ -305,9 +305,10 @@ function buildSidebar() {
     lines.push(`**${section.label}**`, "");
     for (const { doc, children } of sectionTree(section.label)) {
       if (!children.length) {
-        lines.push(`- [${doc.title}](${doc.slug})`, "");
+        lines.push(`- [${doc.title}](${doc.slug})`);
         continue;
       }
+      if (lines.at(-1) !== "") lines.push("");
       lines.push(
         "<details>",
         `<summary><a href="${doc.slug}">${doc.title}</a></summary>`,
