@@ -564,7 +564,7 @@ import Testing
         #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
     }
 
-    @Test func missingProjectDetailUsesSingleUnattributedRepository() throws {
+    @Test func legacySingleSourceProjectsRetainFolderAttribution() throws {
         let json = usage(
             daily: """
                 {"period":"2026-06-01",
@@ -575,9 +575,31 @@ import Testing
                  ]}
                 """)
         let m = try model(json)
-        #expect(m.projectTree.count == 1)
-        #expect(m.projectTree[0].id == "repo:unattributed")
-        #expect(m.projectTree[0].name == "Unattributed")
+        #expect(m.projectTree.map(\.name) == ["b", "a"])
+        #expect(abs(m.projectTree[0].tokens - 60) < 0.0001)
+        #expect(abs(m.projectTree[1].tokens - 40) < 0.0001)
+        #expect(m.projectTree.allSatisfy { $0.id != "repo:unattributed" })
+    }
+
+    @Test func legacySourceChatsRetainProviderAttribution() throws {
+        let json = usage(
+            daily: """
+                {"period":"2026-06-01",
+                 "bySource":{
+                   "cli":[{"modelName":"a","inputTokens":100,"cost":1}],
+                   "codex":[{"modelName":"b","inputTokens":200,"cost":2}]},
+                 "projects":[
+                   {"projectName":"app","path":"/app","tokens":100,"cost":1,
+                    "chats":[{"id":"a","source":"cli","tokens":100,"cost":1}]},
+                   {"projectName":"remote","path":"/remote","tokens":200,"cost":2,
+                    "chats":[{"id":"b","source":"codex","tokens":200,"cost":2}]}
+                 ]}
+                """)
+        let m = try model(json)
+        #expect(m.projectTree.map(\.name) == ["remote", "app"])
+
+        m.selectedSources = ["cli"]
+        #expect(m.projectTree.map(\.name) == ["app"])
         #expect(abs(m.projectTree[0].tokens - 100) < 0.0001)
     }
 

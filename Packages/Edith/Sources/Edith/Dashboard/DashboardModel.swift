@@ -1182,8 +1182,14 @@ final class DashboardModel: ObservableObject {
         let projects = day.projects ?? []
         var amounts = projects.map { ProjectAllocation(project: $0) }
         var unattributed = UsageAmount()
+        let useProjectTotal = Set(canonical.keys.map(\.source)).count == 1
         for (key, target) in canonical {
-            let raw = projects.map { rawProjectAmount($0, key: key) }
+            let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
+            let raw = projects.map {
+                rawProjectAmount(
+                    $0, key: key, useSourceTotal: useSourceTotal,
+                    useProjectTotal: useProjectTotal)
+            }
             let rawTokens = raw.reduce(0) { $0 + $1.tokens }
             let rawCost = raw.reduce(0) { $0 + $1.cost }
             guard rawTokens > 0 || rawCost > 0 else {
@@ -1206,15 +1212,58 @@ final class DashboardModel: ObservableObject {
     }
 
     private func rawProjectAmount(
-        _ project: DashUsage.Project, key: ProjectAttributionKey
+        _ project: DashUsage.Project, key: ProjectAttributionKey, useSourceTotal: Bool,
+        useProjectTotal: Bool
     ) -> UsageAmount {
-        guard let usage = project.bySource?[key.source]?.byModel?[key.model] else {
-            return UsageAmount()
+        if let breakdown = project.bySource?[key.source] {
+            guard
+                let amount = sourceAmount(
+                    breakdown, model: key.model, useSourceTotal: useSourceTotal)
+            else { return UsageAmount() }
+            let scope = projectScope(project)
+            return UsageAmount(
+                tokens: amount.tokens * scope.tokens,
+                cost: amount.cost * scope.cost)
         }
-        let scope = projectScope(project)
-        return UsageAmount(
-            tokens: (usage.tokens ?? 0) * scope.tokens,
-            cost: (usage.cost ?? 0) * scope.cost)
+        if let bySource = project.bySource, !bySource.isEmpty { return UsageAmount() }
+
+        let hasFullModelScope = selectedModels == Set(allModels)
+        guard hasFullModelScope || useSourceTotal else { return UsageAmount() }
+        let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        let sourceChats = chats.filter { $0.source == key.source }
+        if !sourceChats.isEmpty {
+            let scopedChats = sourceChats.filter {
+                selectedPaths.isEmpty || pathInScope($0.path ?? knownPath(project))
+            }
+            return scopedChats.reduce(into: UsageAmount()) {
+                $0.tokens += $1.tokens ?? 0
+                $0.cost += $1.cost ?? 0
+            }
+        }
+
+        guard !ProjAccum.hasTokenedChat(project), useProjectTotal, pathInScope(knownPath(project))
+        else { return UsageAmount() }
+        return UsageAmount(tokens: project.tokens ?? 0, cost: project.cost ?? 0)
+    }
+
+    private func sourceHasSingleCanonicalModel(
+        _ day: DashUsage.Day, key: ProjectAttributionKey
+    ) -> Bool {
+        let models = Set((day.bySource?[key.source] ?? []).map { $0.modelName ?? "unknown" })
+        return key.model == "unknown" || models.count == 1
+    }
+
+    private func sourceAmount(
+        _ breakdown: DashUsage.SourceBreakdown, model: String, useSourceTotal: Bool
+    ) -> UsageAmount? {
+        if useSourceTotal {
+            let models = Array((breakdown.byModel ?? [:]).values)
+            return UsageAmount(
+                tokens: breakdown.tokens ?? models.reduce(0) { $0 + ($1.tokens ?? 0) },
+                cost: breakdown.cost ?? models.reduce(0) { $0 + ($1.cost ?? 0) })
+        }
+        guard let usage = breakdown.byModel?[model] else { return nil }
+        return UsageAmount(tokens: usage.tokens ?? 0, cost: usage.cost ?? 0)
     }
 
     private func projectScope(_ project: DashUsage.Project) -> UsageAmount {
@@ -1275,13 +1324,17 @@ final class DashboardModel: ObservableObject {
                 return result
             }
             for (key, target) in targets {
+                let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
                 var rawTokens = [Double](repeating: 0, count: 24)
                 var rawCost = [Double](repeating: 0, count: 24)
                 for (index, hour) in hours.enumerated() {
                     for (path, breakdown) in hour.byPath ?? [:] where pathInScope(path) {
-                        let usage = breakdown.bySource?[key.source]?.byModel?[key.model]
-                        rawTokens[index] += usage?.tokens ?? 0
-                        rawCost[index] += usage?.cost ?? 0
+                        guard let source = breakdown.bySource?[key.source],
+                            let amount = sourceAmount(
+                                source, model: key.model, useSourceTotal: useSourceTotal)
+                        else { continue }
+                        rawTokens[index] += amount.tokens
+                        rawCost[index] += amount.cost
                     }
                 }
                 add(
@@ -1293,12 +1346,16 @@ final class DashboardModel: ObservableObject {
 
         if hours.contains(where: { $0.bySource != nil }) {
             for (key, target) in targets {
+                let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
                 var rawTokens = [Double](repeating: 0, count: 24)
                 var rawCost = [Double](repeating: 0, count: 24)
                 for (index, hour) in hours.enumerated() {
-                    let usage = hour.bySource?[key.source]?.byModel?[key.model]
-                    rawTokens[index] = usage?.tokens ?? 0
-                    rawCost[index] = usage?.cost ?? 0
+                    guard let source = hour.bySource?[key.source],
+                        let amount = sourceAmount(
+                            source, model: key.model, useSourceTotal: useSourceTotal)
+                    else { continue }
+                    rawTokens[index] = amount.tokens
+                    rawCost[index] = amount.cost
                 }
                 add(
                     target: target, rawTokens: rawTokens, rawCost: rawCost,

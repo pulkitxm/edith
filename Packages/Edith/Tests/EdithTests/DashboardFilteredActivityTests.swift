@@ -77,6 +77,29 @@ import Testing
         #expect(dashboard.heatDetail["2026-06-01"]?.peakHour == nil)
     }
 
+    @Test func aggregateUnknownModelUsesNamedDetailTotals() throws {
+        let daily = """
+            {"period":"2026-06-01",
+             "bySource":{"opencode":[{"modelName":"unknown","inputTokens":80,"cost":8}]},
+             "projects":[
+              {"projectName":"orbit","repositoryID":"github:acme/orbit",
+               "repositoryName":"orbit","tokens":80,"cost":8,
+               "bySource":{"opencode":{"tokens":80,"cost":8,
+                 "byModel":{"qwen":{"tokens":80,"cost":8}}}}}],
+             "hours":[{}, {},
+              {"tokens":80,"cost":8,
+               "bySource":{"opencode":{"tokens":80,"cost":8,
+                 "byModel":{"qwen":{"tokens":80,"cost":8}}}}}]}
+            """
+        let dashboard = try model(daily, sources: "\"opencode\"")
+
+        #expect(dashboard.projectTree.map(\.name) == ["orbit"])
+        #expect(abs(dashboard.projectTree[0].tokens - 80) < 0.0001)
+        #expect(abs(dashboard.hourlyAll[2].tokens - 80) < 0.0001)
+        #expect(abs(dashboard.hourlyUnattributedTokens) < 0.0001)
+        #expect(dashboard.heatDetail["2026-06-01"]?.peakHour == 2)
+    }
+
     @Test func modelFilterUsesOnlyMatchingHourlyModel() throws {
         let daily = """
             {"period":"2026-06-01","bySource":{"cli":[
