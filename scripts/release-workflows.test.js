@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 
 const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const releaseStateScript = readFileSync(
+  "scripts/publish-release-state.sh",
+  "utf8",
+);
 const makefile = readFileSync("Makefile", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
@@ -88,34 +92,38 @@ test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain(
     "publish:\n    needs: [version, dmg, deb]\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
   );
-  expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
+  expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(4);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);
 });
 
 test("the release commit carries every versioned file and its tag atomically", () => {
-  expect(releaseWorkflow).toContain(
+  expect(releaseStateScript).toContain(
     "git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
   );
-  expect(releaseWorkflow).toContain(`git commit -m "Release ${releaseTagRef}"`);
-  expect(releaseWorkflow).toContain('git tag "$RELEASE_TAG"');
-  expect(releaseWorkflow).toContain(
+  expect(releaseStateScript).toContain(
+    `git commit -m "Release ${releaseTagRef}"`,
+  );
+  expect(releaseStateScript).toContain('git tag "$RELEASE_TAG"');
+  expect(releaseStateScript).toContain(
     'git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"',
   );
-  expect(releaseWorkflow).toContain(
-    'test "$(git rev-parse HEAD)" = "$BUILT_SHA"',
+  expect(releaseStateScript).toContain(
+    '[[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]',
   );
-  expect(releaseWorkflow).toContain(
-    'test "$(git rev-parse origin/main)" = "$BUILT_SHA"',
+  expect(releaseStateScript).toContain(
+    '[[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]',
   );
-  expect(releaseWorkflow).not.toContain("git reset --hard origin/main");
-  expect(releaseWorkflow).not.toContain("for attempt in");
+  expect(releaseStateScript).not.toContain("git reset --hard origin/main");
+  expect(releaseStateScript).not.toContain("for attempt in");
 });
 
 test("release publication can recover after a partial failure", () => {
-  expect(releaseWorkflow).toContain("refs/tags/$RELEASE_TAG^{commit}");
+  expect(releaseStateScript).toContain("refs/tags/$RELEASE_TAG^{commit}");
   expect(releaseWorkflow).toContain("Update the rebuilt release checksum");
-  expect(releaseWorkflow).toContain("only the current release can be rebuilt");
-  expect(releaseWorkflow).toContain(
+  expect(releaseStateScript).toContain(
+    "only the current release can be rebuilt",
+  );
+  expect(releaseStateScript).toContain(
     `git commit -m "Refresh ${releaseTagRef} release checksum"`,
   );
   const mirror = releaseWorkflow.slice(

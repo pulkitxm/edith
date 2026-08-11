@@ -297,7 +297,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
           ref: ${{ needs.version.outputs.sha }}
+          path: release-source
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PUSH_TOKEN }}
           persist-credentials: true
@@ -327,63 +332,22 @@ jobs:
 
       - name: Commit and tag the release
         if: env.REBUILD == ''
+        working-directory: release-source
         run: |
           test -n "$RELEASE_VERSION" && test -n "$RELEASE_TAG" \
             || { echo "release blocked: the version job produced no version" >&2; exit 1; }
-          SHA256="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main --tags
-          if git rev-parse "refs/tags/$RELEASE_TAG^{commit}" >/dev/null 2>&1; then
-            TAG_SHA="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
-            test "$TAG_SHA" = "$(git rev-parse origin/main)" \
-              || { echo "release blocked: $RELEASE_TAG does not name current main" >&2; exit 1; }
-            git switch --detach "$TAG_SHA"
-            grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb
-            grep -qx "  sha256 \"$SHA256\"" Casks/edith.rb
-            exit 0
-          fi
-          test "$(git rev-parse HEAD)" = "$BUILT_SHA" \
-            || { echo "release blocked: checkout does not match the built commit" >&2; exit 1; }
-          test "$(git rev-parse origin/main)" = "$BUILT_SHA" \
-            || { echo "release blocked: main moved after the release build" >&2; exit 1; }
-
-          cp release-plists/Info.plist Resources/Info.plist
-          cp release-plists/HelperInfo.plist Resources/HelperInfo.plist
-
-          sed -i \
-            -e "s/^  version \".*\"$/  version \"$RELEASE_VERSION\"/" \
-            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" \
-            Casks/edith.rb
-          grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
-            || { echo "release blocked: the cask version was not rewritten" >&2; exit 1; }
-          grep -qx "  sha256 \"$SHA256\"" Casks/edith.rb \
-            || { echo "release blocked: the cask sha256 was not rewritten" >&2; exit 1; }
-
-          git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
-          git commit -m "Release ${RELEASE_TAG}"
-          git tag "$RELEASE_TAG"
-          git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
+          RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
+          export RELEASE_SHA256
+          export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
+          ../scripts/publish-release-state.sh cut
 
       - name: Update the rebuilt release checksum
         if: env.REBUILD != ''
+        working-directory: release-source
         run: |
-          SHA256="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main --tags
-          git switch --detach origin/main
-          grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
-            || { echo "release blocked: only the current release can be rebuilt" >&2; exit 1; }
-          sed -i -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" Casks/edith.rb
-          grep -qx "  sha256 \"$SHA256\"" Casks/edith.rb \
-            || { echo "release blocked: the rebuilt cask sha256 was not rewritten" >&2; exit 1; }
-          if git diff --quiet -- Casks/edith.rb; then
-            exit 0
-          fi
-          git add Casks/edith.rb
-          git commit -m "Refresh ${RELEASE_TAG} release checksum"
-          git push origin HEAD:main
+          RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
+          export RELEASE_SHA256
+          ../scripts/publish-release-state.sh rebuild
 
       - name: Publish the release
         env:
@@ -404,7 +368,7 @@ jobs:
         run: |
           git clone --depth 1 \
             "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
-          cp Casks/edith.rb tap/Casks/edith.rb
+          cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
             echo "the tap already carries $RELEASE_TAG"
