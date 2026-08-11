@@ -21,6 +21,7 @@ struct SettingsPane: View {
     @ObservedObject var updater: UpdaterModel
     @AppStorage("settingsTab", store: SharedDefaults.store) private var tabRaw =
         Tab.general.rawValue
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var tab: Binding<Tab> {
         Binding(
@@ -57,10 +58,12 @@ struct SettingsPane: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle("Settings")
         .onAppear {
-            tabRaw =
-                MainNavigationFallback.resolve(
-                    mainWindowSection: MainDestination.settings.rawValue, settingsTab: tabRaw
-                ).settingsTab
+            if automaticActionsEnabled {
+                tabRaw =
+                    MainNavigationFallback.resolve(
+                        mainWindowSection: MainDestination.settings.rawValue, settingsTab: tabRaw
+                    ).settingsTab
+            }
         }
     }
 }

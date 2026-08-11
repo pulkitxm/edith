@@ -12,6 +12,7 @@ struct TerminalSettingsPane: View {
     @State private var running: TerminalAction?
     @State private var outcome: ActionOutcome?
     @State private var outcomeStamp = 0
+    @Environment(\.terminalLaunchEnabled) private var terminalLaunchEnabled
 
     var body: some View {
         Form {
@@ -22,11 +23,13 @@ struct TerminalSettingsPane: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Terminal")
-        .task { await refresh() }
+        .task {
+            if terminalLaunchEnabled { await refresh() }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
-            Task { await refresh() }
+            if terminalLaunchEnabled { Task { await refresh() } }
         }
     }
 

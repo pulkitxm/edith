@@ -63,14 +63,16 @@ struct MachinesPage: View {
             )
         }
         .onAppear {
-            if connectionsEnabled { model.connectAll() }
+            guard connectionsEnabled else { return }
+            model.connectAll()
             model.restoreSelection(storedSelection)
-            if connectionsEnabled { model.startSelected() }
+            model.startSelected()
             reconcileTab()
         }
         .onChange(of: model.selection) { _, selection in
+            guard connectionsEnabled else { return }
             storedSelection = selection?.uuidString ?? ""
-            if connectionsEnabled { model.startSelected() }
+            model.startSelected()
             reconcileTab()
         }
     }

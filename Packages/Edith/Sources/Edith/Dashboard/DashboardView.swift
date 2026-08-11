@@ -14,6 +14,7 @@ struct DashboardView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compactLayout
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @State private var showLog = false
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
@@ -75,14 +76,15 @@ struct DashboardView: View {
         }
         .navigationTitle("Agent Usage")
         .task {
+            guard automaticActionsEnabled else { return }
             await model.load()
             syncCustomDates()
         }
         .onChange(of: model.loaded) { _, loaded in
-            if loaded { syncCustomDates() }
+            if automaticActionsEnabled, loaded { syncCustomDates() }
         }
         .onChange(of: refresh.updating) { _, updating in
-            if !updating {
+            if automaticActionsEnabled, !updating {
                 Task { await model.load() }
             }
         }

@@ -10,6 +10,7 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     let host = NSHostingView(
         rootView:
             view
+            .environment(\.automaticViewActionsEnabled, false)
             .environment(\.companionRequestsEnabled, false)
             .environment(\.machineConnectionsEnabled, false)
             .environment(\.terminalLaunchEnabled, false))
@@ -112,6 +113,14 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     }
 
     @Test func terminalSettingsTabRenders() {
+        let saved = SharedDefaults.store.string(forKey: "settingsTab")
+        defer {
+            if let saved {
+                SharedDefaults.store.set(saved, forKey: "settingsTab")
+            } else {
+                SharedDefaults.store.removeObject(forKey: "settingsTab")
+            }
+        }
         SharedDefaults.store.set("terminal", forKey: "settingsTab")
         #expect(renders(SettingsPane(updater: UpdaterModel())))
     }
