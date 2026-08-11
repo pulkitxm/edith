@@ -641,6 +641,7 @@ final class DashboardModel: ObservableObject {
             restore()
             restored = true
         }
+        rebuildActivity(parsed)
         loaded = true
         recompute()
     }
@@ -887,40 +888,6 @@ final class DashboardModel: ObservableObject {
         modelTotals.filter { $0.model != Self.unattributedCostModel && $0.tokens > 0 }
     }
 
-    var activityRangeTitle: String {
-        switch range {
-        case .today: return "Today"
-        case .yesterday: return "Yesterday"
-        case .thisWeek: return "This week"
-        case .lastWeek: return "Last week"
-        case .all: return "All time"
-        case .cycle(let id):
-            guard let id else { return "Current cycle" }
-            return cycleOptions.first { $0.id == id }?.label ?? "Cycle"
-        case .month(let month):
-            guard let date = DateFormatter.monthParser.date(from: month) else { return month }
-            return date.formatted(.dateTime.month(.wide).year())
-        case .custom(let from, let to):
-            guard let first = parseYMD(from), let last = parseYMD(to) else { return "Custom range" }
-            if from == to { return first.formatted(.dateTime.day().month(.abbreviated).year()) }
-            let left = first.formatted(.dateTime.day().month(.abbreviated).year())
-            let right = last.formatted(.dateTime.day().month(.abbreviated).year())
-            return "\(left) to \(right)"
-        }
-    }
-
-    var activityRangeCue: String {
-        let selectedDays = series.count
-        let padded = calendarDays.count > selectedDays
-        if selectedDays == 1, padded {
-            return "One day selected; surrounding squares are calendar padding, not missing history"
-        }
-        if padded {
-            return "\(selectedDays) days selected; surrounding squares are calendar padding"
-        }
-        return "\(selectedDays) selected days"
-    }
-
     var dataRange: ClosedRange<Date>? {
         guard let first = sortedPeriods.first, let last = sortedPeriods.last,
             let e = parseYMD(first), let l = parseYMD(last)
@@ -1060,7 +1027,6 @@ final class DashboardModel: ObservableObject {
         var hourlyUnattributed = UsageAmount()
         var pathUnattributed = UsageAmount()
         var unfilterableModelCost = 0.0
-        var filteredHeatDetail: [String: HeatDay] = [:]
         var projAgg: [String: RepoAccum] = [:]
         let fullModelScope = selectedModels == Set(allModels)
 
@@ -1174,9 +1140,6 @@ final class DashboardModel: ObservableObject {
                     repositoryAccum.folders["folder:unattributed"] = folderAccum
                     projAgg["unattributed"] = repositoryAccum
                 }
-                filteredHeatDetail[key] = heatDay(
-                    datum: datum, projects: attributed, hourlyTokens: hourly.tokens,
-                    hourlyCost: hourly.cost)
             }
             rows.append(datum)
             cursor = cal.date(byAdding: .day, value: 1, to: cursor) ?? win.to.addingTimeInterval(1)
@@ -1220,7 +1183,6 @@ final class DashboardModel: ObservableObject {
 
         buildKPIs(rows: rows, totalCost: totalCost)
         buildMeta(from: fromStr, to: toStr)
-        buildCalendar(detail: filteredHeatDetail, from: win.from, to: win.to)
         rebuildChartData()
     }
 
@@ -1531,68 +1493,121 @@ final class DashboardModel: ObservableObject {
         return result
     }
 
-    private func heatDay(
-        datum: DayDatum,
-        projects: (projects: [ProjectAllocation], unattributed: UsageAmount),
-        hourlyTokens: [Double], hourlyCost: [Double]
-    ) -> HeatDay {
-        var heat = HeatDay(date: datum.date)
-        heat.tokens = datum.tokens
-        heat.cost = datum.cost
-        heat.input = datum.input
-        heat.output = datum.output
-        heat.cacheCreate = datum.cacheCreate
-        heat.cacheRead = datum.cacheRead
-        heat.models = datum.byModel.sorted { $0.value > $1.value }.map {
-            NamedValue(id: $0.key, name: DashFmt.shortModel($0.key), value: $0.value)
+    private func rebuildActivity(_ parsed: DashUsage) {
+        var detail: [String: HeatDay] = [:]
+        var dates: [Date] = []
+        for day in parsed.daily {
+            guard let date = parseYMD(day.period) else { continue }
+            dates.append(date)
+            detail[day.period] = activityHeatDay(day, date: date)
         }
-        heat.sources = datum.bySource.sorted { $0.value > $1.value }.map {
-            NamedValue(id: $0.key, name: sourceLabel($0.key), value: $0.value)
+        guard let first = dates.min(), let last = dates.max() else {
+            heatDetail = [:]
+            calendarDays = []
+            return
         }
+        buildCalendar(detail: detail, from: first, to: last)
+    }
 
-        var repositoryTokens: [String: (name: String, tokens: Double)] = [:]
-        var chatCount = 0
-        let chatsHaveCompleteModelScope = selectedModels == Set(allModels)
-        for allocation in projects.projects {
-            let repository = repositoryIdentity(allocation.project)
-            let current = repositoryTokens[repository.id]?.tokens ?? 0
-            repositoryTokens[repository.id] = (
-                repository.name, current + allocation.amount.tokens
-            )
-            let fallback = knownPath(allocation.project)
-            let chats =
-                (allocation.project.chats ?? [])
-                + (allocation.project.worktrees ?? []).flatMap { $0.chats ?? [] }
-            if chatsHaveCompleteModelScope {
-                chatCount += chats.filter { chatInScope($0, fallback: fallback) }.count
+    private func activityHeatDay(_ day: DashUsage.Day, date: Date) -> HeatDay {
+        var heat = HeatDay(date: date)
+        var modelTokens: [String: Double] = [:]
+        var sourceTokens: [String: Double] = [:]
+        for (source, rows) in day.bySource ?? [:] {
+            for row in rows {
+                heat.input += row.inputTokens ?? 0
+                heat.output += row.outputTokens ?? 0
+                heat.cacheCreate += row.cacheCreationTokens ?? 0
+                heat.cacheRead += row.cacheReadTokens ?? 0
+                heat.cost += row.cost ?? 0
+                guard row.tokens > 0 else { continue }
+                let name = row.modelName ?? "unknown"
+                modelTokens[name, default: 0] += row.tokens
+                sourceTokens[source, default: 0] += row.tokens
             }
         }
-        if projects.unattributed.tokens > 0 || projects.unattributed.cost > 0 {
-            repositoryTokens["unattributed"] = (
-                "Unattributed", projects.unattributed.tokens
-            )
+        heat.tokens = heat.input + heat.output + heat.cacheCreate + heat.cacheRead
+        heat.models = modelTokens.sorted { $0.value > $1.value }.map {
+            NamedValue(id: $0.key, name: modelLabel($0.key), value: $0.value)
+        }
+        heat.sources = sourceTokens.sorted { $0.value > $1.value }.map {
+            NamedValue(id: $0.key, name: sourceLabel($0.key), value: $0.value)
+        }
+        activityProjects(day, heat: &heat)
+        activityPeak(day, heat: &heat)
+        return heat
+    }
+
+    private func activityProjects(_ day: DashUsage.Day, heat: inout HeatDay) {
+        let projects = day.projects ?? []
+        let raw = projects.map { project -> UsageAmount in
+            let sources = Array((project.bySource ?? [:]).values)
+            let sourceTokens = sources.reduce(0) {
+                $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.tokens ?? 0)
+            }
+            let sourceCost = sources.reduce(0) {
+                $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.cost ?? 0)
+            }
+            return UsageAmount(
+                tokens: project.tokens ?? sourceTokens,
+                cost: project.cost ?? sourceCost)
+        }
+        let rawTokens = raw.reduce(0) { $0 + $1.tokens }
+        let rawCost = raw.reduce(0) { $0 + $1.cost }
+        let attributableTokens = min(heat.tokens, rawTokens)
+        var repositoryTokens: [String: (name: String, tokens: Double)] = [:]
+        var attributedTokens = 0.0
+        for (index, project) in projects.enumerated() {
+            let amount = raw[index]
+            let tokens = normalizedPart(
+                amount.tokens, alternate: amount.cost, rawTotal: rawTokens,
+                rawAlternateTotal: rawCost, target: attributableTokens)
+            guard tokens > 0 else { continue }
+            attributedTokens += tokens
+            let repository = repositoryIdentity(project)
+            let current = repositoryTokens[repository.id]?.tokens ?? 0
+            repositoryTokens[repository.id] = (repository.name, current + tokens)
+            heat.chatCount += (project.chats ?? []).count
+            heat.chatCount += (project.worktrees ?? []).reduce(0) {
+                $0 + ($1.chats ?? []).count
+            }
+        }
+        let unattributedTokens = max(0, heat.tokens - attributedTokens)
+        if unattributedTokens > 0 {
+            repositoryTokens["unattributed"] = ("Unattributed", unattributedTokens)
         }
         heat.projects = repositoryTokens.sorted { $0.value.tokens > $1.value.tokens }.map {
             NamedValue(id: $0.key, name: $0.value.name, value: $0.value.tokens)
         }
         heat.projCount = heat.projects.count
-        heat.chatCount = chatCount
+    }
 
-        let totalHourlyTokens = hourlyTokens.reduce(0, +)
-        let totalHourlyCost = hourlyCost.reduce(0, +)
+    private func activityPeak(_ day: DashUsage.Day, heat: inout HeatDay) {
+        let hours = Array((day.hours ?? []).prefix(24))
+        let tokens = hours.map { hour in
+            hour.tokens
+                ?? (hour.bySource ?? [:]).values.reduce(0) {
+                    $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.tokens ?? 0)
+                }
+        }
+        let costs = hours.map { hour in
+            hour.cost
+                ?? (hour.bySource ?? [:]).values.reduce(0) {
+                    $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.cost ?? 0)
+                }
+        }
+        let totalTokens = tokens.reduce(0, +)
+        let totalCost = costs.reduce(0, +)
+        guard totalTokens > 0 || totalCost > 0 else { return }
         var peakValue = 0.0
-        for index in 0..<24 {
-            let value = totalHourlyTokens > 0 ? hourlyTokens[index] : hourlyCost[index]
+        for index in hours.indices {
+            let value = totalTokens > 0 ? tokens[index] : costs[index]
             if value > peakValue {
                 peakValue = value
-                heat.peakTokens = hourlyTokens[index]
+                heat.peakTokens = tokens[index]
                 heat.peakHour = index
             }
         }
-        if totalHourlyTokens == 0, totalHourlyCost == 0 {
-            heat.peakHour = nil
-        }
-        return heat
     }
 
     private func projectScale(

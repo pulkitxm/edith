@@ -237,31 +237,23 @@ struct DashboardView: View {
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
             VStack(spacing: UIScale.pt(16)) {
-                SkinCard(title: activityTitle, dark: dark) { activityHeatmap }
+                SkinCard(title: "Activity", dark: dark) { activityHeatmap }
                 RateLimitsDialsView(dark: dark)
             }
         } else {
             HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                SkinCard(title: activityTitle, dark: dark, fill: true) { activityHeatmap }
+                SkinCard(title: "Activity", dark: dark, fill: true) { activityHeatmap }
                 RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
             .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var activityTitle: String { "Activity · \(model.activityRangeTitle)" }
-
     private var activityHeatmap: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Label(model.activityRangeCue, systemImage: "calendar.badge.clock")
-                .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .fixedSize(horizontal: false, vertical: true)
-            ActivityHeatmap(
-                days: model.calendarDays, cuts: model.chartData.heatCuts,
-                model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
-            )
-        }
+        ActivityHeatmap(
+            days: model.calendarDays, cuts: model.chartData.heatCuts,
+            model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
+        )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
