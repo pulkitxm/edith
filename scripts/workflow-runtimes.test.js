@@ -8,6 +8,7 @@ const expectedActions = new Map([
   ["actions/deploy-pages", "v5"],
   ["actions/download-artifact", "v8"],
   ["actions/setup-node", "v7"],
+  ["actions/setup-go", "v7"],
   ["actions/upload-artifact", "v7"],
   ["actions/upload-pages-artifact", "v5"],
   ["oven-sh/setup-bun", "v2"],
@@ -44,6 +45,16 @@ test("workflow actions use current stable majors", () => {
 test("Linux workflows use the current stable Swift container", () => {
   const ci = workflows.find(({ name }) => name === "ci.yml")?.text;
   const release = workflows.find(({ name }) => name === "release.yml")?.text;
+  const ubuntuDevelopment = readFileSync("docs/ubuntu-development.md", "utf8");
   expect(ci).toContain("container: swift:6.3.3-noble");
   expect(release).toContain("container: swift:6.3.3-noble");
+  expect(ubuntuDevelopment).toContain("swiftly install 6.3.3");
+  expect(ubuntuDevelopment).toContain("swiftly use 6.3.3");
+  expect(ubuntuDevelopment).not.toContain("6.3.2");
+});
+
+test("workflow validation uses current stable tooling", () => {
+  const ci = workflows.find(({ name }) => name === "ci.yml")?.text;
+  expect(ci).toContain('go-version: "1.26.x"');
+  expect(ci).toContain("github.com/rhysd/actionlint/cmd/actionlint@v1.7.12");
 });

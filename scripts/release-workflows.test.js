@@ -18,12 +18,20 @@ test("CI gates the reusable release only on relevant checks", () => {
   expect(releaseJob).toContain("github.event_name == 'push'");
   expect(releaseJob).toContain("github.ref == 'refs/heads/main'");
   expect(releaseJob).toContain("needs.checks.result == 'success'");
+  expect(releaseJob).toContain("!contains(needs.*.result, 'failure')");
+  expect(releaseJob).toContain("!contains(needs.*.result, 'cancelled')");
   expect(releaseJob).toContain(
-    "needs.changes.outputs.linux != 'true' || needs.ubuntu.result == 'success'",
+    "needs.changes.outputs.workflows != 'true') || needs.ubuntu.result == 'success'",
   );
   expect(releaseJob).toContain(
-    "needs.swift-build.result == 'success' && needs.swift-test.result == 'success'",
+    "needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success'",
   );
+  expect(releaseJob).toContain("needs.changes.outputs.docs != 'true'");
+  expect(releaseJob).toContain("|| needs.swift-test.result == 'success'");
+  expect(releaseJob).toContain(
+    "github.event_name == 'workflow_dispatch' && inputs.release",
+  );
+  expect(releaseJob).toContain("cut_release: true");
   expect(releaseJob).toContain("uses: ./.github/workflows/release.yml");
 });
 
@@ -31,6 +39,14 @@ test("the release is reusable and supports manual rebuilds", () => {
   expect(releaseWorkflow).toContain("workflow_call:");
   expect(releaseWorkflow).toContain("workflow_dispatch:");
   expect(releaseWorkflow).toContain("inputs.rebuild");
+  expect(releaseWorkflow).toContain("cut_release:");
+  expect(releaseWorkflow).toContain("CUT_RELEASE:");
+  expect(releaseWorkflow).toContain("new releases must pass through CI");
+  expect(releaseWorkflow).toContain("run the workflow from main");
+  expect(releaseWorkflow).toContain(
+    "Current release tag to rebuild and re-upload.",
+  );
+  expect(releaseWorkflow).toContain("refs/tags/{0}");
   expect(releaseWorkflow).not.toContain('tags: ["v*"]');
 });
 
@@ -67,6 +83,15 @@ test("the publisher uses a token that clears the ruleset", () => {
   expect(releaseWorkflow).toContain("RELEASE_PUSH_TOKEN is required");
 });
 
+test("build jobs cannot retain write credentials", () => {
+  expect(releaseWorkflow).toContain("permissions:\n  contents: read");
+  expect(releaseWorkflow).toContain(
+    "publish:\n    needs: [version, dmg, deb]\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
+  );
+  expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
+  expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);
+});
+
 test("the release commit carries every versioned file and its tag atomically", () => {
   expect(releaseWorkflow).toContain(
     "git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
@@ -76,6 +101,27 @@ test("the release commit carries every versioned file and its tag atomically", (
   expect(releaseWorkflow).toContain(
     'git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"',
   );
+  expect(releaseWorkflow).toContain(
+    'test "$(git rev-parse HEAD)" = "$BUILT_SHA"',
+  );
+  expect(releaseWorkflow).toContain(
+    'test "$(git rev-parse origin/main)" = "$BUILT_SHA"',
+  );
+  expect(releaseWorkflow).not.toContain("git reset --hard origin/main");
+  expect(releaseWorkflow).not.toContain("for attempt in");
+});
+
+test("release publication can recover after a partial failure", () => {
+  expect(releaseWorkflow).toContain("refs/tags/$RELEASE_TAG^{commit}");
+  expect(releaseWorkflow).toContain("Update the rebuilt release checksum");
+  expect(releaseWorkflow).toContain("only the current release can be rebuilt");
+  expect(releaseWorkflow).toContain(
+    `git commit -m "Refresh ${releaseTagRef} release checksum"`,
+  );
+  const mirror = releaseWorkflow.slice(
+    releaseWorkflow.indexOf("- name: Mirror the cask to the tap repository"),
+  );
+  expect(mirror).not.toContain("if: env.REBUILD == ''");
 });
 
 test("the obsolete tag-only manual release path is retired", () => {

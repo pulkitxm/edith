@@ -113,7 +113,11 @@ DMG when Apple credentials are available, generates the signed Sparkle appcast,
 installs and diagnoses the Debian package, then publishes all three assets to one
 GitHub Release. The versioned plists and cask land together in one release commit
 and tag, and the cask is mirrored to the tap. To rebuild an existing release, run
-the Release workflow manually with `rebuild` set to its tag.
+the Release workflow manually from `main` with `rebuild` set to the current tag.
+The rebuild refreshes the release assets, repository cask checksum and tap copy
+together. To recover a skipped automatic release, run the CI workflow manually
+from `main` with `release` enabled. That path runs every product check before it
+calls the release workflow.
 
 ### Required secrets
 

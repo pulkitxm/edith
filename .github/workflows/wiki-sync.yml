@@ -21,6 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require main for manual sync
+        if: github.event_name == 'workflow_dispatch'
+        run: >-
+          test "$GITHUB_REF" = refs/heads/main
+          || { echo "sync blocked: select the main branch" >&2; exit 1; }
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun scripts/sync-wiki.mjs --push
