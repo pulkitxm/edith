@@ -8,19 +8,21 @@ public enum UsageHistory {
         guard let rawCloud = decode(cloud) else { return local }
         let l = foldLegacyCloudSource(rawLocal)
         let c = foldLegacyCloudSource(rawCloud)
-        let preferLocalDays = intOf(l["schemaVersion"]) > intOf(c["schemaVersion"])
 
-        var best: [String: [String: Any]] = [:]
+        var mergedByPeriod: [String: [String: Any]] = [:]
         for day in daily(c) {
             guard let p = day["period"] as? String else { continue }
-            best[p] = day
+            mergedByPeriod[p] = day
         }
         for day in daily(l) {
             guard let p = day["period"] as? String else { continue }
-            if !preferLocalDays, let cur = best[p], dayTokens(cur) > dayTokens(day) { continue }
-            best[p] = day
+            if let cloudDay = mergedByPeriod[p] {
+                mergedByPeriod[p] = mergeDay(local: day, cloud: cloudDay)
+            } else {
+                mergedByPeriod[p] = day
+            }
         }
-        let mergedDaily = best.keys.sorted().compactMap { best[$0] }
+        let mergedDaily = mergedByPeriod.keys.sorted().compactMap { mergedByPeriod[$0] }
 
         var out = l
         out["schemaVersion"] = max(intOf(l["schemaVersion"]), intOf(c["schemaVersion"]))
@@ -154,6 +156,19 @@ public enum UsageHistory {
         return out
     }
 
+    private static func mergeDay(
+        local: [String: Any], cloud: [String: Any]
+    ) -> [String: Any] {
+        var out = cloud
+        for (key, value) in local { out[key] = value }
+        var bySource = cloud["bySource"] as? [String: Any] ?? [:]
+        for (source, value) in local["bySource"] as? [String: Any] ?? [:] {
+            bySource[source] = value
+        }
+        out["bySource"] = bySource
+        return out
+    }
+
     private static func rows(_ day: [String: Any]) -> [(source: String, row: [String: Any])] {
         guard let by = day["bySource"] as? [String: Any] else { return [] }
         return by.flatMap { src, v in
@@ -177,7 +192,7 @@ public enum UsageHistory {
             for s in list {
                 guard let id = s["id"] as? String, !id.isEmpty else { continue }
                 let key = "\(id)|\(s["source"] as? String ?? "")"
-                if let cur = seen[key], cur.count >= s.count { continue }
+                if let cur = seen[key], cur.count > s.count { continue }
                 if seen[key] == nil { order.append(key) }
                 seen[key] = s
             }

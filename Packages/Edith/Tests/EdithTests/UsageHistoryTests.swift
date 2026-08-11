@@ -36,6 +36,48 @@ import Testing
         return try! JSONSerialization.data(withJSONObject: obj)
     }
 
+    private func model(
+        _ name: String = "m", input: Double, output: Double = 0,
+        cacheCreation: Double = 0, cacheRead: Double = 0, cost: Double
+    ) -> [String: Any] {
+        [
+            "modelName": name,
+            "inputTokens": input,
+            "outputTokens": output,
+            "cacheCreationTokens": cacheCreation,
+            "cacheReadTokens": cacheRead,
+            "cost": cost,
+        ]
+    }
+
+    private func day(
+        _ period: String, bySource: [String: [[String: Any]]],
+        hours: [[String: Any]]? = nil, projects: [[String: Any]]? = nil
+    ) -> [String: Any] {
+        var day: [String: Any] = ["period": period, "bySource": bySource]
+        if let hours { day["hours"] = hours }
+        if let projects { day["projects"] = projects }
+        return day
+    }
+
+    private func document(
+        days: [[String: Any]], sources: [String], sessions: [[String: Any]] = []
+    ) -> Data {
+        let sourceMeta = Dictionary(
+            uniqueKeysWithValues: sources.map { ($0, ["label": $0, "tool": $0]) })
+        let obj: [String: Any] = [
+            "schemaVersion": 6,
+            "generatedAt": "2026-07-06T00:00:00Z",
+            "sources": sources,
+            "defaultSources": sources,
+            "sourceMeta": sourceMeta,
+            "totals": ["cost": 0, "tokens": 0],
+            "daily": days,
+            "sessions": sessions,
+        ]
+        return try! JSONSerialization.data(withJSONObject: obj)
+    }
+
     private func decode(_ data: Data?) -> [String: Any] {
         try! JSONSerialization.jsonObject(with: data!) as! [String: Any]
     }
@@ -51,12 +93,62 @@ import Testing
         #expect(periods(merged) == ["2026-05-01", "2026-06-10"])
     }
 
-    @Test func maxTokensWinsPerDay() {
+    @Test func localSourceCorrectionMayDecreaseTokens() {
         let local = usage(days: [("2026-06-10", 40, 1)])
         let cloud = usage(days: [("2026-06-10", 900, 9)])
         let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
         let day = (merged["daily"] as! [[String: Any]]).first!
-        #expect(UsageHistory.dayTokens(day) == 900)
+        #expect(UsageHistory.dayTokens(day) == 40)
+    }
+
+    @Test func overlappingDayMergesProvidersIndependently() {
+        let local = document(
+            days: [
+                day(
+                    "2026-06-10", bySource: ["cli": [model(input: 40, cost: 1)]],
+                    hours: [["tokens": 40.0, "cost": 1.0]],
+                    projects: [["projectName": "local", "tokens": 40.0, "cost": 1.0]])
+            ], sources: ["cli"])
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "cli": [model(input: 900, cost: 9)],
+                        "codex": [model("gpt", input: 500, cost: 5)],
+                    ],
+                    hours: [["tokens": 1_400.0, "cost": 14.0]],
+                    projects: [["projectName": "cloud", "tokens": 1_400.0, "cost": 14.0]])
+            ], sources: ["cli", "codex"])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let bySource = mergedDay["bySource"] as! [String: [[String: Any]]]
+        #expect(bySource["cli"]?.first?["inputTokens"] as? Double == 40)
+        #expect(bySource["codex"]?.first?["inputTokens"] as? Double == 500)
+        #expect(UsageHistory.dayTokens(mergedDay) == 540)
+        let hours = mergedDay["hours"] as! [[String: Any]]
+        #expect(hours.first?["tokens"] as? Double == 40)
+        let projects = mergedDay["projects"] as! [[String: Any]]
+        #expect(projects.first?["projectName"] as? String == "local")
+    }
+
+    @Test func cloudAuxiliaryDetailsSurviveWhenLocalDayOmitsThem() {
+        let local = document(
+            days: [day("2026-06-10", bySource: ["cli": [model(input: 40, cost: 1)]])],
+            sources: ["cli"])
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10", bySource: ["codex": [model(input: 10, cost: 2)]],
+                    hours: [["tokens": 10.0, "cost": 2.0]],
+                    projects: [["projectName": "kept", "tokens": 10.0, "cost": 2.0]])
+            ], sources: ["codex"])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let hours = mergedDay["hours"] as! [[String: Any]]
+        let projects = mergedDay["projects"] as! [[String: Any]]
+        #expect(hours.first?["tokens"] as? Double == 10)
+        #expect(projects.first?["projectName"] as? String == "kept")
     }
 
     @Test func localWinsTies() {
@@ -91,6 +183,38 @@ import Testing
         #expect((merged["sessions"] as! [[String: Any]]).count == 2)
     }
 
+    @Test func machineQualifiedSourcesMergeIndependently() {
+        let local = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "tof:cli": [model(input: 8, cost: 1)],
+                        "laptop:cli": [model(input: 5, cost: 0.5)],
+                    ])
+            ], sources: ["tof:cli", "laptop:cli"])
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "tof:cli": [model(input: 80, cost: 8)],
+                        "tof:codex": [model("gpt", input: 20, cost: 2)],
+                    ])
+            ], sources: ["tof:cli", "tof:codex"])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let bySource = mergedDay["bySource"] as! [String: [[String: Any]]]
+        #expect(Set(bySource.keys) == ["tof:cli", "tof:codex", "laptop:cli"])
+        #expect(bySource["tof:cli"]?.first?["inputTokens"] as? Double == 8)
+        #expect(bySource["tof:codex"]?.first?["inputTokens"] as? Double == 20)
+        let totalsBySource =
+            (merged["totals"] as! [String: Any])["bySource"] as! [String: [String: Double]]
+        #expect(totalsBySource["tof:cli"]?["tokens"] == 8)
+        #expect(totalsBySource["tof:codex"]?["tokens"] == 20)
+        #expect(totalsBySource["laptop:cli"]?["tokens"] == 5)
+    }
+
     @Test func missingSideReturnsOtherVerbatim() {
         let local = usage(days: [("2026-06-10", 100, 1)])
         #expect(UsageHistory.merge(local: local, cloud: nil) == local)
@@ -112,12 +236,12 @@ import Testing
         #expect(periods(merged) == ["2026-05-01"])
     }
 
-    @Test func shrunkDayNeverRegresses() {
+    @Test func correctedHistoricalDayReplacesStaleHighVolumeSource() {
         let cloud = usage(days: [("2026-05-30", 374_969_194, 300)])
         let local = usage(days: [("2026-05-30", 4_759_508, 3)])
         let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
         let day = (merged["daily"] as! [[String: Any]]).first!
-        #expect(UsageHistory.dayTokens(day) == 374_969_194)
+        #expect(UsageHistory.dayTokens(day) == 4_759_508)
     }
 
     @Test func dayWithMissingBySourceCountsZero() {
@@ -136,6 +260,25 @@ import Testing
         let sessions = merged["sessions"] as! [[String: Any]]
         #expect(sessions.count == 1)
         #expect(sessions.first?["totalTokens"] as? Int == 5)
+    }
+
+    @Test func equallyRichLocalSessionCorrectsCloudValue() {
+        let localSessions: [[String: Any]] = [
+            ["id": "a", "source": "tof:cli", "totalTokens": 3]
+        ]
+        let cloudSessions: [[String: Any]] = [
+            ["id": "a", "source": "tof:cli", "totalTokens": 99],
+            ["id": "a", "source": "tuf:cli", "totalTokens": 50],
+        ]
+        let local = document(days: [], sources: ["tof:cli"], sessions: localSessions)
+        let cloud = document(days: [], sources: ["tof:cli", "tuf:cli"], sessions: cloudSessions)
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let sessions = merged["sessions"] as! [[String: Any]]
+        #expect(sessions.count == 2)
+        let tof = sessions.first { $0["source"] as? String == "tof:cli" }
+        let tuf = sessions.first { $0["source"] as? String == "tuf:cli" }
+        #expect(tof?["totalTokens"] as? Int == 3)
+        #expect(tuf?["totalTokens"] as? Int == 50)
     }
 
     @Test func sessionsWithoutIdDropped() {
@@ -177,6 +320,51 @@ import Testing
         #expect(by["cli"]?["tokens"] == 100)
         #expect(by["codex"]?["tokens"] == 500)
         #expect(by["codex"]?["cost"] == 5)
+    }
+
+    @Test func totalsRecomputeEveryBucketAfterSourceCorrections() {
+        let local = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "cli": [
+                            model(
+                                input: 4, output: 3, cacheCreation: 2, cacheRead: 1,
+                                cost: 1)
+                        ]
+                    ])
+            ], sources: ["cli"])
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "cli": [
+                            model(
+                                input: 100, output: 50, cacheCreation: 20, cacheRead: 30,
+                                cost: 10)
+                        ],
+                        "codex": [
+                            model(
+                                "gpt", input: 7, output: 6, cacheCreation: 5, cacheRead: 4,
+                                cost: 2)
+                        ],
+                    ])
+            ], sources: ["cli", "codex"])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let totals = merged["totals"] as! [String: Any]
+        #expect(totals["inputTokens"] as? Double == 11)
+        #expect(totals["outputTokens"] as? Double == 9)
+        #expect(totals["cacheCreationTokens"] as? Double == 7)
+        #expect(totals["cacheReadTokens"] as? Double == 5)
+        #expect(totals["tokens"] as? Double == 32)
+        #expect(totals["cost"] as? Double == 3)
+        let bySource = totals["bySource"] as! [String: [String: Double]]
+        #expect(bySource["cli"]?["tokens"] == 10)
+        #expect(bySource["cli"]?["cost"] == 1)
+        #expect(bySource["codex"]?["tokens"] == 22)
+        #expect(bySource["codex"]?["cost"] == 2)
     }
 
     @Test func foldsLegacyCloudSourceIntoCli() {
