@@ -97,6 +97,21 @@ Disabling a tab tears down its timers and background jobs entirely, per-frame UI
 only redraws while the panel is open, and the usage collector caches parses so a
 refresh only touches files that changed.
 
+## Contributors
+
+Thank you to everyone who has shipped a change in Edith.
+
+<!-- contributors:start -->
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/pulkitxm"><img src="https://avatars.githubusercontent.com/u/65671483?v=4&s=64" width="64" height="64" alt="pulkitxm" /><br /><sub>pulkitxm</sub></a></td>
+    <td align="center"><a href="https://github.com/Vivek09Chahal"><img src="https://avatars.githubusercontent.com/u/103368320?v=4&s=64" width="64" height="64" alt="Vivek09Chahal" /><br /><sub>Vivek09Chahal</sub></a></td>
+  </tr>
+</table>
+
+<!-- contributors:end -->
+
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for

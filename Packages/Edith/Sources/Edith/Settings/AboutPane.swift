@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AboutPane: View {
     @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @State private var contributors: [Contributor] = []
 
     private var theme: Color { themeColor(themeName) }
 
@@ -62,27 +63,87 @@ struct AboutPane: View {
                 .lineSpacing(3)
                 .frame(maxWidth: UIScale.pt(460))
             Button {
-                NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
+                NSWorkspace.shared.open(Self.repository)
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "link")
-                        .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    Text("pulkit.page")
+                    githubMark
+                    Text("pulkitxm/edith")
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(theme)
                 .padding(.horizontal, UIScale.pt(16))
                 .padding(.vertical, UIScale.pt(8))
-                .background(theme, in: Capsule())
+                .background(theme.opacity(0.16), in: Capsule())
+                .overlay(Capsule().strokeBorder(theme.opacity(0.38), lineWidth: 1))
             }
             .buttonStyle(.plain)
             .pointerCursor()
+            .help("Open the repository on GitHub")
             .padding(.top, UIScale.pt(2))
+            contributorWall
             Text("Made with ♥ by Pulkit")
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UIScale.pt(32))
+        .task {
+            contributors = Contributors.cached()
+            contributors = await Contributors.load()
+        }
+    }
+
+    private static let repository = URL(string: "https://github.com/pulkitxm/edith")!
+
+    @ViewBuilder private var githubMark: some View {
+        if let mark = ProviderLogo.image(named: "github") {
+            Image(nsImage: mark)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: UIScale.pt(12), height: UIScale.pt(12))
+        } else {
+            Image(systemName: "link")
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+        }
+    }
+
+    private var avatarColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: UIScale.pt(52)), spacing: UIScale.pt(10))]
+    }
+
+    @ViewBuilder private var contributorWall: some View {
+        if !contributors.isEmpty {
+            VStack(spacing: UIScale.pt(10)) {
+                Text("Contributors")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(.secondary)
+                LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
+                    ForEach(contributors) { person in
+                        Button {
+                            NSWorkspace.shared.open(person.profileURL)
+                        } label: {
+                            avatar(for: person)
+                        }
+                        .buttonStyle(.plain)
+                        .pointerCursor()
+                        .help(person.login)
+                    }
+                }
+                .frame(maxWidth: UIScale.pt(340))
+            }
+            .padding(.top, UIScale.pt(6))
+        }
+    }
+
+    private func avatar(for person: Contributor) -> some View {
+        AsyncImage(url: person.avatarURL) { image in
+            image.resizable().interpolation(.high)
+        } placeholder: {
+            Circle().fill(Color.secondary.opacity(0.18))
+        }
+        .frame(width: UIScale.pt(44), height: UIScale.pt(44))
+        .clipShape(Circle())
+        .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
     }
 }

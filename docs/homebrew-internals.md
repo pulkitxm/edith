@@ -23,7 +23,7 @@ Contents:
 10. [The cask DSL, stanza by stanza](#10-the-cask-dsl-stanza-by-stanza)
 11. [Edith's cask, annotated line by line](#11-ediths-cask-annotated-line-by-line)
 12. [The release pipeline this plugs into](#12-the-release-pipeline-this-plugs-into)
-13. [The cask job](#13-the-cask-job)
+13. [The cask bump](#13-the-cask-bump)
 14. [The tap repository](#14-the-tap-repository)
 15. [Decision log](#15-decision-log)
 16. [Runbook](#16-runbook)
@@ -660,89 +660,88 @@ macOS-side leftovers any Cocoa app accumulates.
 
 ## 12. The release pipeline this plugs into
 
-The cask is one job at the end of an existing pipeline. Understanding where it sits
+The cask bump is the last step of a single pipeline. Understanding where it sits
 requires knowing what runs before it.
 
 ### Trigger
 
-`.github/workflows/release-on-merge.yml` runs on pushes to `main` that touch the app
-or its packaging. It computes the next patch version from
-`Resources/Info.plist`, bumps both plists, commits as `Bump version to X.Y.Z`, tags
-`vX.Y.Z`, and pushes. That is all it does: pushing the tag is what starts the
-release, because `release.yml` triggers on `v*` tags.
+There is one entry point. `.github/workflows/ci.yml` runs on every pull request and
+every push to `main`. Its `changes` job works out which areas a commit touched, the
+check jobs run for the areas that moved, and a final `release` job calls
+`.github/workflows/release.yml` as a reusable workflow.
 
-The tag push starts a workflow only because it is made with `RELEASE_PUSH_TOKEN`.
-Pushes authenticated with the `GITHUB_TOKEN` an Actions run is given deliberately do
-not trigger further workflows, which is GitHub's loop protection. This is worth
-knowing before changing how the release pushes: swapping that token back would leave
-the tag on the remote with nothing building it.
+That `release` job is gated on four things at once: the event is a push to `main`,
+no needed job failed or was cancelled, and the commit touched the app or its Linux
+packaging. Checks and release are therefore the same run, and the release cannot
+start until every check that applies has gone green. There is no second workflow
+watching for a tag, and no tag trigger anywhere.
 
-The workflow also skips itself when the head commit message starts with
-`Bump version to `, which stops its own bump commit from starting a second run.
+`ci.yml` skips itself when the head commit message starts with `Release v` or
+`Refresh the contributor list`, which is what stops the pipeline's own commits from
+starting another run. Those pushes use `RELEASE_PUSH_TOKEN`, and unlike the
+`GITHUB_TOKEN` an Actions run is handed, a personal access token does trigger
+further workflows: the message guard is the loop protection, not the token.
+
+`ci.yml`'s concurrency group cancels in progress runs only for pull requests. On
+`main` runs queue instead, because a release pushes to `main` while its own checks
+are still finishing, and a cancelling group would kill the run that is mid-release.
 
 ### Build
 
-`.github/workflows/release.yml` has three jobs feeding a fourth.
+`release.yml` has three jobs feeding a fourth.
 
-**`dmg`** runs on macOS. It refuses to start without signing and Sparkle secrets,
-verifies the tag matches the plist version, imports the signing certificate into a
-temporary keychain, builds with `./build.sh --no-open --release`, packages a UDZO
-disk image with an `/Applications` symlink inside, notarizes and staples when the
-notary secrets exist, generates the Sparkle appcast signed with the Sparkle key,
-verifies the appcast points at the right disk image and carries a signature, and
-uploads `Edith.dmg` and `appcast.xml` as an artifact.
+**`version`** runs on Ubuntu, reads `Resources/Info.plist`, refuses to start without
+the signing, Sparkle, push, and tap secrets, and computes the next patch version and
+build number. It writes nothing and pushes nothing; it only decides what is being
+released and which commit is being built.
 
-**`deb`** runs in a Swift container on Ubuntu, runs the portable tests, validates
-the desktop metadata, builds the Debian package, checks its version, installs it,
-runs `edith-linux --diagnose`, and uploads `Edith.deb`.
+**`dmg`** runs on macOS. It checks out the commit `version` chose, stamps both plists
+with the release version, imports the signing certificate into a temporary keychain,
+builds with `./build.sh --no-open --release`, checks the built bundle carries the
+version it was told to build, packages a UDZO disk image with an `/Applications`
+symlink inside, notarizes and staples when the notary secrets exist, generates the
+Sparkle appcast signed with the Sparkle key, verifies the appcast points at the right
+disk image and carries a signature, and uploads `Edith.dmg` and `appcast.xml`. It
+also uploads the two stamped plists, so the bytes that go on to `main` are the exact
+bytes that produced the disk image rather than a second, independent edit.
 
-**`publish`** downloads both artifacts, asserts all three files exist, and either
-creates the GitHub release or uploads to it with `--clobber`.
+**`deb`** runs in a Swift container on Ubuntu, runs the portable tests, validates the
+desktop metadata, builds the Debian package at the release version, checks its
+version, installs it, runs `edith-linux --diagnose`, and uploads `Edith.deb`.
 
 ### Bump
 
-**`cask`** is the job added for Homebrew, described in the next section. It runs
-after `publish`, which is the ordering that matters: the checksum can only be
-computed from an artifact that exists, and the cask must never name a release that
-has not been published.
+**`publish`** is where every write happens, and it happens once. It downloads the
+artifacts, commits the stamped plists and the rewritten cask together as a single
+`Release vX.Y.Z` commit, tags it, pushes commit and tag atomically, creates the
+GitHub release, mirrors the cask to the tap, and reads the tap back to confirm it
+landed.
+
+Two properties fall out of doing it in that order. A release costs exactly one commit
+on `main`, where it used to cost two. And nothing is written until both builds have
+passed, so a failed build leaves no tag, no bumped version, and no cask pointing at a
+release that does not exist. The next merge simply tries the same version again.
+
+To rebuild a release that was published but whose assets need replacing, run the
+workflow by hand with `rebuild` set to the tag. That path builds from the tag and
+re-uploads the assets, and skips every step that writes to `main` or the tap.
 
 ---
 
-## 13. The cask job
+## 13. The cask bump
 
-The whole job, from `.github/workflows/release.yml`:
+The cask rewrite, from the `publish` job in `.github/workflows/release.yml`:
 
 ```yaml
-  cask:
-    needs: publish
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          persist-credentials: true
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: release-macos
-          path: release-assets
-
-      - name: Update the cask to the published disk image
-        run: |
-          VERSION="${RELEASE_TAG#v}"
-          SHA="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
+          SHA256="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
           sed -i \
-            -e "s/^  version \".*\"$/  version \"$VERSION\"/" \
-            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA\"/" \
+            -e "s/^  version \".*\"$/  version \"$RELEASE_VERSION\"/" \
+            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" \
             Casks/edith.rb
-          grep -qx "  version \"$VERSION\"" Casks/edith.rb \
-            || { echo "cask bump blocked: version was not rewritten" >&2; exit 1; }
-          grep -qx "  sha256 \"$SHA\"" Casks/edith.rb \
-            || { echo "cask bump blocked: sha256 was not rewritten" >&2; exit 1; }
+          grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
+            || { echo "release blocked: the cask version was not rewritten" >&2; exit 1; }
+          grep -qx "  sha256 \"$SHA256\"" Casks/edith.rb \
+            || { echo "release blocked: the cask sha256 was not rewritten" >&2; exit 1; }
 ```
 
 Design notes on the parts that are not obvious.
@@ -755,13 +754,13 @@ be part of the ruleset source or owner organization`. The ruleset does grant the
 repository admin role an unconditional bypass, and a fine grained personal access
 token acts as its owner, so checking out with one lets the push through. This is the
 standard arrangement for a personal repository that both protects its default branch
-and automates its releases; the same secret is what lets the version bump land in
-`release-on-merge.yml`.
+and automates its releases; the same secret carries the version bump in the same
+commit.
 
-**`ref: main`, not the tag.** The tag points at the commit that was built. The cask
-bump has to land on the branch people install from, so the checkout is `main` and
-the commit goes there. The tagged tree keeps whatever cask it had, which is correct:
-the tag is a record of what was built, not of what the tap currently offers.
+**`ref: main`, not the tag.** `publish` checks out `main` and creates the tag itself,
+at the release commit it has just written. The commit has to land on the branch
+people install from, and tagging it afterwards means the tag names a tree whose
+plists and cask both describe the release that exists.
 
 **The artifact, not the release.** The checksum comes from
 `actions/download-artifact`, the same bytes the `dmg` job produced and `publish`
@@ -780,35 +779,42 @@ without anyone noticing.
 The commit step:
 
 ```yaml
-      - name: Commit the cask bump to main
-        run: |
-          if git diff --quiet -- Casks/edith.rb; then
-            echo "cask already points at $RELEASE_TAG"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/edith.rb
-          git commit -m "Update the Homebrew cask to ${RELEASE_TAG}"
           for attempt in 1 2 3; do
-            git push origin HEAD:main && exit 0
-            git pull --rebase origin main
+            git fetch origin main --tags
+            git reset --hard origin/main
+
+            cp release-plists/Info.plist Resources/Info.plist
+            cp release-plists/HelperInfo.plist Resources/HelperInfo.plist
+            # ... rewrite Casks/edith.rb ...
+
+            git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+            git commit -m "Release ${RELEASE_TAG}"
+            git tag "$RELEASE_TAG"
+
+            if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
+              exit 0
+            fi
+            git tag -d "$RELEASE_TAG"
           done
-          echo "cask bump blocked: could not push to main" >&2
-          exit 1
 ```
 
-**Idempotent.** Re-running a release that already bumped the cask exits early rather
-than creating an empty commit.
+**One commit.** The plists and the cask move together, so a release is a single
+`Release vX.Y.Z` commit rather than a bump commit followed by a cask commit. The
+plists are copied from the `dmg` job's artifact, so they are the same bytes that were
+built rather than a re-derived edit that could drift.
 
-**Rebase and retry.** `main` can move between checkout and push, since a release
-takes minutes. Three attempts with a rebase in between covers the realistic race
-without an unbounded loop.
+**Reset and retry, not rebase.** `main` can move between checkout and push, since a
+release takes minutes. Each attempt resets to the current `origin/main` and reapplies
+the same files, which is deterministic in a way a rebase of an already made commit is
+not. Three attempts cover the realistic race without an unbounded loop.
 
-**No release loop.** The commit touches only `Casks/`, which is not in
-`release-on-merge.yml`'s path filter, so bumping the cask cannot trigger another
-release. This is load-bearing: a cask bump that triggered a release would produce an
-infinite chain of version bumps.
+**Atomic.** `git push --atomic` sends the branch and the tag as one update. Either
+both land or neither does, so there is no window in which `main` carries a version
+that no tag names, or a tag exists for a commit that was never pushed.
+
+**No release loop.** The commit message starts with `Release v`, which `ci.yml`'s
+`changes` job refuses to run on. This is load-bearing: a release commit that
+triggered a release would produce an infinite chain of version bumps.
 
 The mirror step:
 

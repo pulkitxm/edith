@@ -1,40 +1,128 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_call:
+    inputs:
+      rebuild:
+        description: "Existing tag to rebuild and re-upload. Empty cuts the next patch release."
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: "Existing tag to rebuild and re-upload. Empty cuts the next patch release."
+        type: string
+        required: false
+        default: ""
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  dmg:
-    runs-on: macos-26
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      build: ${{ steps.resolve.outputs.build }}
+      sha: ${{ steps.resolve.outputs.sha }}
     env:
+      REBUILD: ${{ inputs.rebuild }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
       HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
-      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
-      RELEASE_TAG: ${{ github.ref_name }}
+      HAS_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
+      HAS_TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ inputs.rebuild || github.sha }}
+          fetch-depth: 0
 
       - name: Require release secrets
-        if: env.HAS_SIGNING != 'true' || env.HAS_SPARKLE_KEY != 'true'
         run: |
-          echo "release blocked: signing and Sparkle secrets are required" >&2
-          exit 1
+          test "$HAS_SIGNING" = true \
+            || { echo "release blocked: MACOS_CERT_P12 is required" >&2; exit 1; }
+          test "$HAS_SPARKLE_KEY" = true \
+            || { echo "release blocked: SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
+          if [ -z "$REBUILD" ]; then
+            test "$HAS_PUSH_TOKEN" = true \
+              || { echo "release blocked: RELEASE_PUSH_TOKEN is required to push the release commit" >&2; exit 1; }
+            test "$HAS_TAP_TOKEN" = true \
+              || { echo "release blocked: TAP_PUSH_TOKEN is required to mirror the cask" >&2; exit 1; }
+          fi
 
-      - name: Verify tag matches app version
+      - name: Resolve the version to release
+        id: resolve
         run: |
-          PLIST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-          test "v$PLIST_VERSION" = "$RELEASE_TAG" \
-            || { echo "tag $RELEASE_TAG does not match app version $PLIST_VERSION" >&2; exit 1; }
+          read -r VERSION BUILD <<<"$(python3 - <<'PY'
+          import plistlib
+          with open("Resources/Info.plist", "rb") as plist:
+              info = plistlib.load(plist)
+          print(info["CFBundleShortVersionString"], info["CFBundleVersion"])
+          PY
+          )"
+
+          if [ -n "$REBUILD" ]; then
+            test "v$VERSION" = "$REBUILD" \
+              || { echo "release blocked: $REBUILD carries version $VERSION" >&2; exit 1; }
+            {
+              echo "tag=$REBUILD"
+              echo "version=$VERSION"
+              echo "build=$BUILD"
+              echo "sha=$(git rev-parse HEAD)"
+            } >> "$GITHUB_OUTPUT"
+            echo "Rebuilding $REBUILD"
+            exit 0
+          fi
+
+          case "$VERSION" in
+            *.*.*) ;;
+            *) echo "release blocked: version $VERSION is not major.minor.patch" >&2; exit 1 ;;
+          esac
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+          PATCH="${REST#*.}"
+          case "$MAJOR$MINOR$PATCH$BUILD" in
+            *[!0-9]*) echo "release blocked: version $VERSION build $BUILD is not numeric" >&2; exit 1 ;;
+          esac
+          NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+          if git rev-parse "refs/tags/v$NEXT" >/dev/null 2>&1; then
+            echo "release blocked: tag v$NEXT already exists" >&2
+            exit 1
+          fi
+          {
+            echo "tag=v$NEXT"
+            echo "version=$NEXT"
+            echo "build=$((BUILD + 1))"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION -> $NEXT (build $((BUILD + 1)))"
+
+  dmg:
+    needs: version
+    runs-on: macos-26
+    env:
+      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
+      RELEASE_TAG: ${{ needs.version.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_BUILD: ${{ needs.version.outputs.build }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - name: Stamp the release version
+        run: |
+          for plist in Resources/Info.plist Resources/HelperInfo.plist; do
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
+          done
 
       - name: Import signing certificate
         env:
@@ -60,6 +148,12 @@ jobs:
         env:
           EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
         run: ./build.sh --no-open --release
+
+      - name: Verify the bundle carries the release version
+        run: |
+          BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Edith.app/Contents/Info.plist)"
+          test "$BUILT" = "$RELEASE_VERSION" \
+            || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
       - name: Package the DMG
         run: |
@@ -125,24 +219,26 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plists
+          path: Resources/*Info.plist
+          if-no-files-found: error
+          retention-days: 1
+
   deb:
+    needs: version
     runs-on: ubuntu-24.04
     container: swift:6.3.2-noble
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.version.outputs.sha }}
 
       - name: Install native dependencies
         run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
-
-      - name: Verify tag matches app version
-        run: |
-          PLIST_VERSION="$(awk '/CFBundleShortVersionString/{getline; gsub(/.*<string>|<\/string>.*/, ""); print; exit}' Resources/Info.plist)"
-          test "v$PLIST_VERSION" = "$RELEASE_TAG" \
-            || { echo "tag $RELEASE_TAG does not match app version $PLIST_VERSION" >&2; exit 1; }
 
       - name: Test portable core
         run: make linux-test
@@ -151,13 +247,13 @@ jobs:
         run: make linux-metadata
 
       - name: Build Debian package
-        run: VERSION="${RELEASE_TAG#v}" make linux-package
+        run: VERSION="$RELEASE_VERSION" make linux-package
 
       - name: Verify and install Debian package
         run: |
           DEB="$(find dist/linux -maxdepth 1 -name 'edith_*.deb' -print -quit)"
           test -n "$DEB" || { echo "release blocked: Debian package is missing" >&2; exit 1; }
-          test "$(dpkg-deb -f "$DEB" Version)" = "${RELEASE_TAG#v}" \
+          test "$(dpkg-deb -f "$DEB" Version)" = "$RELEASE_VERSION" \
             || { echo "release blocked: Debian package has the wrong version" >&2; exit 1; }
           dpkg-deb --info "$DEB"
           dpkg-deb --contents "$DEB"
@@ -174,11 +270,20 @@ jobs:
           retention-days: 1
 
   publish:
-    needs: [dmg, deb]
+    needs: [version, dmg, deb]
     runs-on: ubuntu-latest
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      REBUILD: ${{ inputs.rebuild }}
+      RELEASE_TAG: ${{ needs.version.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          persist-credentials: true
+
       - uses: actions/download-artifact@v5
         with:
           name: release-macos
@@ -189,11 +294,57 @@ jobs:
           name: release-linux
           path: release-assets
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-plists
+          path: release-plists
+
       - name: Verify release assets
         run: |
           test -f release-assets/Edith.dmg
           test -f release-assets/Edith.deb
           test -f release-assets/appcast.xml
+          test -f release-plists/Info.plist
+          test -f release-plists/HelperInfo.plist
+
+      - name: Commit and tag the release
+        if: env.REBUILD == ''
+        run: |
+          test -n "$RELEASE_VERSION" && test -n "$RELEASE_TAG" \
+            || { echo "release blocked: the version job produced no version" >&2; exit 1; }
+          SHA256="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3; do
+            git fetch origin main --tags
+            git reset --hard origin/main
+
+            cp release-plists/Info.plist Resources/Info.plist
+            cp release-plists/HelperInfo.plist Resources/HelperInfo.plist
+
+            sed -i \
+              -e "s/^  version \".*\"$/  version \"$RELEASE_VERSION\"/" \
+              -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" \
+              Casks/edith.rb
+            grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
+              || { echo "release blocked: the cask version was not rewritten" >&2; exit 1; }
+            grep -qx "  sha256 \"$SHA256\"" Casks/edith.rb \
+              || { echo "release blocked: the cask sha256 was not rewritten" >&2; exit 1; }
+
+            git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+            git commit -m "Release ${RELEASE_TAG}"
+            git tag "$RELEASE_TAG"
+
+            if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
+              echo "released ${RELEASE_TAG} as $(git rev-parse HEAD)"
+              exit 0
+            fi
+            echo "main moved while releasing, retrying"
+            git tag -d "$RELEASE_TAG"
+          done
+          echo "release blocked: could not push the release commit to main" >&2
+          exit 1
 
       - name: Publish the release
         env:
@@ -208,60 +359,11 @@ jobs:
               release-assets/Edith.dmg release-assets/Edith.deb release-assets/appcast.xml
           fi
 
-  cask:
-    needs: publish
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          persist-credentials: true
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: release-macos
-          path: release-assets
-
-      - name: Update the cask to the published disk image
-        run: |
-          VERSION="${RELEASE_TAG#v}"
-          SHA="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
-          sed -i \
-            -e "s/^  version \".*\"$/  version \"$VERSION\"/" \
-            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA\"/" \
-            Casks/edith.rb
-          grep -qx "  version \"$VERSION\"" Casks/edith.rb \
-            || { echo "cask bump blocked: version was not rewritten" >&2; exit 1; }
-          grep -qx "  sha256 \"$SHA\"" Casks/edith.rb \
-            || { echo "cask bump blocked: sha256 was not rewritten" >&2; exit 1; }
-
-      - name: Commit the cask bump to main
-        run: |
-          if git diff --quiet -- Casks/edith.rb; then
-            echo "cask already points at $RELEASE_TAG"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/edith.rb
-          git commit -m "Update the Homebrew cask to ${RELEASE_TAG}"
-          for attempt in 1 2 3; do
-            git push origin HEAD:main && exit 0
-            git pull --rebase origin main
-          done
-          echo "cask bump blocked: could not push to main" >&2
-          exit 1
-
       - name: Mirror the cask to the tap repository
+        if: env.REBUILD == ''
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
-          test -n "$TAP_PUSH_TOKEN" \
-            || { echo "cask mirror blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
           git clone --depth 1 \
             "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
           cp Casks/edith.rb tap/Casks/edith.rb
@@ -275,3 +377,5 @@ jobs:
           git add Casks/edith.rb
           git commit -m "Update the Edith cask to ${RELEASE_TAG}"
           git push origin HEAD:main
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)" \
+            || { echo "release blocked: the tap did not take $RELEASE_TAG" >&2; exit 1; }

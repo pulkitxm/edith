@@ -6,19 +6,24 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   changes:
     if: >-
       github.event_name != 'push'
-      || (!startsWith(github.event.head_commit.message, 'Bump version to ')
-      && !startsWith(github.event.head_commit.message, 'Update the Homebrew cask to '))
+      || (!startsWith(github.event.head_commit.message, 'Release v')
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
+      docs: ${{ steps.areas.outputs.docs }}
       linux: ${{ steps.areas.outputs.linux }}
+      workflows: ${{ steps.areas.outputs.workflows }}
       promo: ${{ steps.areas.outputs.promo }}
       site: ${{ steps.areas.outputs.site }}
       scripts: ${{ steps.areas.outputs.scripts }}
@@ -34,11 +39,11 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
         run: |
-          if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+          if [ -n "$BASE_REF" ]; then
+            base="$(git merge-base "origin/$BASE_REF" HEAD)"
+          elif [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
             && git merge-base --is-ancestor "$BEFORE" HEAD 2>/dev/null; then
             base="$BEFORE"
-          elif [ -n "$BASE_REF" ]; then
-            base="$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             base=""
           fi
@@ -58,8 +63,10 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(Packages/Edith/|Resources/|docs/|edth\.xcodeproj/|build\.sh$|Makefile$)'
-          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$|\.github/workflows/(ci|release)\.yml$)'
+          area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area docs '^docs/'
+          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$)'
+          area workflows '^\.github/workflows/(ci|release)\.yml$'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
           area scripts '^(scripts/|Casks/|package\.json$|bun\.lock$|biome\.json$)'
@@ -89,7 +96,7 @@ jobs:
 
   ubuntu:
     needs: changes
-    if: needs.changes.outputs.linux == 'true'
+    if: needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-24.04
     container: swift:6.3.2-noble
     steps:
@@ -134,7 +141,7 @@ jobs:
 
   swift-build:
     needs: changes
-    if: needs.changes.outputs.swift == 'true'
+    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
@@ -154,7 +161,7 @@ jobs:
 
   swift-test:
     needs: changes
-    if: needs.changes.outputs.swift == 'true'
+    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.docs == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
@@ -170,3 +177,17 @@ jobs:
       - name: Tests
         run: ./test.sh
         working-directory: Packages/Edith
+
+  release:
+    needs: [changes, checks, ubuntu, promo-video, swift-build, swift-test]
+    if: >-
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && needs.changes.result == 'success'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
