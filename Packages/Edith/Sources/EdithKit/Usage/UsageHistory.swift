@@ -235,9 +235,86 @@ public enum UsageHistory {
                 replacingSources: replacingSources)
             guard !bySource.isEmpty else { return nil }
             merged["bySource"] = bySource
+            merged["chats"] = mergeChats(
+                localProject["chats"], cloudProject["chats"],
+                replacingSources: replacingSources)
+            merged["worktrees"] = mergeWorktrees(
+                localProject["worktrees"], cloudProject["worktrees"],
+                replacingSources: replacingSources)
             setDetailTotals(&merged, bySource: bySource)
             return merged
         }
+    }
+
+    private static func mergeChats(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        var merged: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for chat in cloud {
+            let source = chat["source"] as? String ?? ""
+            guard !replacingSources.contains(source) else { continue }
+            let key = chatKey(chat)
+            if merged[key] == nil { order.append(key) }
+            merged[key] = chat
+        }
+        for chat in local {
+            let key = chatKey(chat)
+            if merged[key] == nil { order.append(key) }
+            merged[key] = chat
+        }
+        return order.compactMap { merged[$0] }
+    }
+
+    private static func mergeWorktrees(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        var localByKey: [String: [String: Any]] = [:]
+        var cloudByKey: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for worktree in cloud {
+            let key = worktreeKey(worktree)
+            if cloudByKey[key] == nil { order.append(key) }
+            cloudByKey[key] = worktree
+        }
+        for worktree in local {
+            let key = worktreeKey(worktree)
+            if localByKey[key] == nil, cloudByKey[key] == nil { order.append(key) }
+            localByKey[key] = worktree
+        }
+        return order.compactMap { key in
+            let localWorktree = localByKey[key] ?? [:]
+            let cloudWorktree = cloudByKey[key] ?? [:]
+            var merged = cloudWorktree
+            for (field, value) in localWorktree { merged[field] = value }
+            let chats = mergeChats(
+                localWorktree["chats"], cloudWorktree["chats"],
+                replacingSources: replacingSources)
+            guard !chats.isEmpty || !localWorktree.isEmpty else { return nil }
+            merged["chats"] = chats
+            merged["tokens"] = chats.reduce(0) { $0 + num($1["tokens"]) }
+            merged["cost"] = chats.reduce(0) { $0 + num($1["cost"]) }
+            return merged
+        }
+    }
+
+    private static func chatKey(_ chat: [String: Any]) -> String {
+        let source = chat["source"] as? String ?? ""
+        let id = chat["id"] as? String ?? ""
+        let identity =
+            id.isEmpty
+            ? [chat["path"] as? String ?? "", chat["title"] as? String ?? ""]
+                .joined(separator: "\u{1F}") : id
+        return [source, identity].joined(separator: "\u{1F}")
+    }
+
+    private static func worktreeKey(_ worktree: [String: Any]) -> String {
+        [worktree["name"] as? String ?? "", worktree["path"] as? String ?? ""]
+            .joined(separator: "\u{1F}")
     }
 
     private static func hasSourceDetail(_ rows: [[String: Any]]) -> Bool {

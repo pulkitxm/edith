@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Edith
 @testable import EdithKit
 
 @Suite struct UsageHistoryTests {
@@ -244,6 +245,123 @@ import Testing
         let mergedTUF = projects.first { $0["machineID"] as? String == "tuf" }
         #expect(mergedTUF?["tokens"] as? Double == 20)
         #expect(mergedTUF?["cost"] as? Double == 2)
+    }
+
+    @MainActor
+    @Test func schemaSevenPreservesCloudOnlyChatsInMatchingProject() throws {
+        let cliSource: [String: Any] = [
+            "tokens": 10.0, "cost": 1.0,
+            "byModel": ["opus": ["tokens": 10.0, "cost": 1.0]],
+        ]
+        let staleCLI: [String: Any] = [
+            "tokens": 100.0, "cost": 10.0,
+            "byModel": ["opus": ["tokens": 100.0, "cost": 10.0]],
+        ]
+        let codexSource: [String: Any] = [
+            "tokens": 20.0, "cost": 2.0,
+            "byModel": ["gpt": ["tokens": 20.0, "cost": 2.0]],
+        ]
+        let identity: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "repositoryName": "edith", "path": "/work/edith", "machineName": "Laptop",
+            "machineID": "laptop",
+        ]
+        var localProject = identity
+        localProject["tokens"] = 10.0
+        localProject["cost"] = 1.0
+        localProject["bySource"] = ["cli": cliSource]
+        localProject["chats"] = [
+            [
+                "id": "local-main", "path": "/work/edith", "source": "cli",
+                "tokens": 5.0, "cost": 0.5,
+            ]
+        ]
+        localProject["worktrees"] = [
+            [
+                "name": "feature", "tokens": 5.0, "cost": 0.5,
+                "chats": [
+                    [
+                        "id": "local-worktree", "path": "/work/edith/feature", "source": "cli",
+                        "tokens": 5.0, "cost": 0.5,
+                    ]
+                ],
+            ]
+        ]
+        var cloudProject = identity
+        cloudProject["tokens"] = 120.0
+        cloudProject["cost"] = 12.0
+        cloudProject["bySource"] = ["cli": staleCLI, "codex": codexSource]
+        cloudProject["chats"] = [
+            [
+                "id": "stale-main", "path": "/work/edith", "source": "cli",
+                "tokens": 60.0, "cost": 6.0,
+            ],
+            [
+                "id": "codex-main", "path": "/work/edith", "source": "codex",
+                "tokens": 8.0, "cost": 0.8,
+            ],
+        ]
+        cloudProject["worktrees"] = [
+            [
+                "name": "feature", "tokens": 52.0, "cost": 5.2,
+                "chats": [
+                    [
+                        "id": "stale-worktree", "path": "/work/edith/feature",
+                        "source": "cli", "tokens": 40.0, "cost": 4.0,
+                    ],
+                    [
+                        "id": "codex-worktree", "path": "/work/edith/feature",
+                        "source": "codex", "tokens": 12.0, "cost": 1.2,
+                    ],
+                ],
+            ]
+        ]
+        let local = document(
+            days: [
+                day(
+                    "2026-06-10", bySource: ["cli": [model("opus", input: 10, cost: 1)]],
+                    hours: [], projects: [localProject])
+            ], sources: ["cli"], schemaVersion: 7)
+        let cloud = document(
+            days: [
+                day(
+                    "2026-06-10",
+                    bySource: [
+                        "cli": [model("opus", input: 100, cost: 10)],
+                        "codex": [model("gpt", input: 20, cost: 2)],
+                    ], hours: [], projects: [cloudProject])
+            ], sources: ["cli", "codex"], schemaVersion: 7)
+
+        let mergedData = try #require(UsageHistory.merge(local: local, cloud: cloud))
+        let merged = decode(mergedData)
+        let mergedDay = (merged["daily"] as! [[String: Any]]).first!
+        let project = (mergedDay["projects"] as! [[String: Any]]).first!
+        let directChats = project["chats"] as! [[String: Any]]
+        #expect(Set(directChats.compactMap { $0["source"] as? String }) == ["cli", "codex"])
+        #expect(!directChats.contains { $0["id"] as? String == "stale-main" })
+        let worktree = (project["worktrees"] as! [[String: Any]]).first!
+        let worktreeChats = worktree["chats"] as! [[String: Any]]
+        #expect(Set(worktreeChats.compactMap { $0["source"] as? String }) == ["cli", "codex"])
+        #expect(!worktreeChats.contains { $0["id"] as? String == "stale-worktree" })
+        #expect(worktree["tokens"] as? Double == 17)
+        #expect(worktree["cost"] as? Double == 1.7)
+        #expect(project["tokens"] as? Double == 30)
+        #expect(project["cost"] as? Double == 3)
+        let nestedTokens =
+            directChats.reduce(0) { $0 + ($1["tokens"] as? Double ?? 0) }
+            + worktreeChats.reduce(0) { $0 + ($1["tokens"] as? Double ?? 0) }
+        #expect(nestedTokens == 30)
+
+        let dashboardUsage = try JSONDecoder().decode(DashUsage.self, from: mergedData)
+        let suite = "UsageHistoryTests.dashboard.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        preferences.removePersistentDomain(forName: suite)
+        let dashboard = DashboardModel(preferences: preferences)
+        dashboard.ingest(dashboardUsage)
+        dashboard.range = .all
+        #expect(dashboard.projectTree.count == 1)
+        #expect(dashboard.projectTree.first?.id != "repo:unattributed")
+        #expect(dashboard.projectTree.first?.tokens == 30)
     }
 
     @Test func localWinsTies() {
