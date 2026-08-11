@@ -8,10 +8,12 @@ public enum UsageHistory {
         let normalizedCloud = rawCloud.map(normalized)
         guard let l = normalizedLocal else {
             guard let c = normalizedCloud else { return nil }
-            return oneSided(original: cloud, raw: rawCloud, normalized: c)
+            return oneSided(
+                original: cloud, raw: rawCloud, normalized: pruningUnusedMachineSources(c))
         }
         guard let c = normalizedCloud else {
-            return oneSided(original: local, raw: rawLocal, normalized: l)
+            return oneSided(
+                original: local, raw: rawLocal, normalized: pruningUnusedMachineSources(l))
         }
 
         var mergedByPeriod: [String: [String: Any]] = [:]
@@ -43,7 +45,7 @@ public enum UsageHistory {
         out["sessions"] = mergeSessions(l["sessions"], c["sessions"])
         out["totals"] = totals(of: mergedDaily)
 
-        return encoded(out)
+        return encoded(pruningUnusedMachineSources(out))
     }
 
     private static let legacyCloudSource = "cc-cloud"
@@ -51,6 +53,34 @@ public enum UsageHistory {
     private static func normalized(_ decoded: [String: Any]) -> [String: Any] {
         return removingUnsafeCodexDetail(
             canonicalizedMachineSources(foldLegacyCloudSource(decoded)))
+    }
+
+    private static func pruningUnusedMachineSources(_ obj: [String: Any]) -> [String: Any] {
+        let active = Set(
+            daily(obj).flatMap { day in
+                (day["bySource"] as? [String: Any] ?? [:]).keys
+            })
+        let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
+        let unusedMachines = Set(
+            sourceMeta.compactMap { source, value -> String? in
+                guard let meta = value as? [String: Any], meta["machineID"] is String,
+                    !active.contains(source)
+                else { return nil }
+                return source
+            })
+        var out = obj
+        out["sources"] = strings(obj["sources"]).filter { !unusedMachines.contains($0) }
+        out["defaultSources"] = strings(obj["defaultSources"]).filter {
+            !unusedMachines.contains($0)
+        }
+        out["sourceMeta"] = sourceMeta.filter { !unusedMachines.contains($0.key) }
+        if let sessions = obj["sessions"] as? [[String: Any]] {
+            out["sessions"] = sessions.filter { session in
+                guard let source = session["source"] as? String else { return true }
+                return !unusedMachines.contains(source)
+            }
+        }
+        return out
     }
 
     private static func oneSided(

@@ -904,6 +904,40 @@ import Testing
         #expect(UsageHistory.merge(local: nil, cloud: nil) == nil)
     }
 
+    @Test func oneSidedHistoryPrunesUnusedMachineSources() throws {
+        let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        var obj = decode(
+            machineAliasDocument(
+                machineID: machineID, currentSlug: "gaming",
+                entries: [
+                    MachineAliasEntry(
+                        source: "gaming:cli", period: "2026-06-10", tokens: 10, cost: 1,
+                        path: "gaming:/work/edith", sessionID: "kept",
+                        sourceMappedProject: true)
+                ]))
+        let stableCLI = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "cli"))
+        let stableCodex = try #require(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: "codex"))
+        obj["sources"] = ["gaming:cli", stableCodex]
+        obj["defaultSources"] = ["gaming:cli", stableCodex]
+        var sourceMeta = obj["sourceMeta"] as! [String: Any]
+        sourceMeta[stableCodex] = ["tool": "Codex", "machineID": machineID]
+        obj["sourceMeta"] = sourceMeta
+        var sessions = obj["sessions"] as! [[String: Any]]
+        sessions.append(["id": "stale", "source": stableCodex])
+        obj["sessions"] = sessions
+        let encoded = try JSONSerialization.data(withJSONObject: obj)
+        let merged = decode(UsageHistory.merge(local: nil, cloud: encoded))
+
+        #expect(merged["sources"] as? [String] == [stableCLI])
+        #expect(merged["defaultSources"] as? [String] == [stableCLI])
+        let mergedSourceMeta = merged["sourceMeta"] as! [String: Any]
+        #expect(Set(mergedSourceMeta.keys) == [stableCLI])
+        let mergedSessions = merged["sessions"] as! [[String: Any]]
+        #expect(mergedSessions.map { $0["id"] as? String } == ["kept"])
+    }
+
     @Test func garbageSideFallsBackToValidSide() {
         let valid = usage(days: [("2026-06-10", 100, 1)])
         let garbage = Data("not json".utf8)
