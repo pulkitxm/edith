@@ -280,7 +280,7 @@ import Testing
         #expect(m.projExpanded.isEmpty)
     }
 
-    @Test func projectAndHourlyTotalsMatchCanonicalFilteredUsage() throws {
+    @Test func missingHourlyDetailRemainsUnattributed() throws {
         let d = day(
             "2026-06-01",
             projects: """
@@ -293,11 +293,12 @@ import Testing
         let m = try model(usage(daily: d))
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.cost } - 10) < 0.0001)
-        #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
-        #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.cost } - 10) < 0.0001)
+        #expect(m.hourlyAll.allSatisfy { $0.tokens == 0 && $0.cost == 0 })
+        #expect(abs(m.hourlyUnattributedTokens - 100) < 0.0001)
+        #expect(abs(m.hourlyUnattributedCost - 10) < 0.0001)
     }
 
-    @Test func todayRangeKeepsFullActivityCalendar() throws {
+    @Test func todayRangeRestrictsActivityToOnePaddedWeek() throws {
         let first = day(
             "2026-06-01",
             projects: """
@@ -312,8 +313,8 @@ import Testing
                 """)
         let m = try model(usage(daily: "\(first),\(latest)"))
         m.range = .today
-        #expect(Set(m.heatDetail.keys) == ["2026-06-01", todayStr])
-        #expect(m.calendarDays.count > 7)
+        #expect(Set(m.heatDetail.keys) == [todayStr])
+        #expect(m.calendarDays.count == 7)
         #expect(m.projectTree.map(\.name) == ["new"])
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
         let detail = try #require(m.heatDetail[todayStr])
@@ -408,7 +409,7 @@ import Testing
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 200) < 0.0001)
     }
 
-    @Test func modelFilterLeavesActivityUnfiltered() throws {
+    @Test func modelFilterUpdatesActivityAndUnattributedHours() throws {
         let d = day(
             "2026-06-01",
             projects: """
@@ -428,10 +429,13 @@ import Testing
         m.selectedModels = ["a"]
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
         #expect(abs(m.projectTree.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
-        #expect(abs(m.hourlyAll.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)
+        #expect(m.hourlyAll.allSatisfy { $0.tokens == 0 })
+        #expect(abs(m.hourlyUnattributedTokens - 100) < 0.0001)
         let detail = try #require(m.heatDetail["2026-06-01"])
-        #expect(abs(detail.tokens - 400) < 0.0001)
-        #expect(abs(detail.projects.reduce(0) { $0 + $1.value } - 400) < 0.0001)
+        #expect(abs(detail.tokens - 100) < 0.0001)
+        #expect(detail.models.map(\.id) == ["a"])
+        #expect(abs(detail.projects.reduce(0) { $0 + $1.value } - 100) < 0.0001)
+        #expect(detail.chatCount == 0)
     }
 
     @Test func sameRepositoryAcrossMachinesHasSeparateFolders() throws {

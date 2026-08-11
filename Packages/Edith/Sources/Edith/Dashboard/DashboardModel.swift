@@ -138,6 +138,7 @@ struct DashUsage: Decodable {
     struct Hour: Decodable {
         let tokens: Double?
         let cost: Double?
+        let bySource: [String: SourceBreakdown]?
     }
 }
 
@@ -434,6 +435,8 @@ final class DashboardModel: ObservableObject {
     @Published private(set) var modelTotals: [ModelTotal] = []
     @Published private(set) var dow: [DOWDatum] = []
     @Published private(set) var hourlyAll: [HourDatum] = []
+    @Published private(set) var hourlyUnattributedTokens = 0.0
+    @Published private(set) var hourlyUnattributedCost = 0.0
     @Published private(set) var projects: [ProjectAgg] = []
     @Published private(set) var projectTree: [ProjTreeRow] = []
     @Published private(set) var meta = MetaLine()
@@ -455,8 +458,6 @@ final class DashboardModel: ObservableObject {
 
     private var data: DashUsage?
     private var sortedPeriods: [String] = []
-    private var ingestStamp = 0
-    private var calendarKey = ""
     private var mtime: Date?
     private var dataDirWatch: DispatchSourceFileSystemObject?
     private var reloadDebounce: Task<Void, Never>?
@@ -554,7 +555,6 @@ final class DashboardModel: ObservableObject {
     func ingest(_ parsed: DashUsage) {
         data = parsed
         sortedPeriods = parsed.daily.map(\.period).sorted()
-        ingestStamp += 1
         let srcIds = (parsed.sources ?? []).filter { id in
             parsed.daily.contains { ($0.bySource?[id]?.isEmpty == false) }
         }
@@ -970,6 +970,8 @@ final class DashboardModel: ObservableObject {
         var dowCost = [Double](repeating: 0, count: 7)
         var hourTok = [Double](repeating: 0, count: 24)
         var hourCost = [Double](repeating: 0, count: 24)
+        var hourlyUnattributed = UsageAmount()
+        var filteredHeatDetail: [String: HeatDay] = [:]
         var projAgg: [String: RepoAccum] = [:]
 
         var cursor = win.from
@@ -1010,21 +1012,13 @@ final class DashboardModel: ObservableObject {
                 let wd = (cal.component(.weekday, from: cursor) + 6) % 7
                 dowTokens[wd] += datum.tokens
                 dowCost[wd] += datum.cost
-                let hours = Array((day.hours ?? []).prefix(24))
-                let rawHourTokens = hours.reduce(0) { $0 + ($1.tokens ?? 0) }
-                let rawHourCost = hours.reduce(0) { $0 + ($1.cost ?? 0) }
-                for (i, h) in hours.enumerated() {
-                    hourTok[i] += normalizedPart(
-                        h.tokens ?? 0, alternate: h.cost ?? 0, rawTotal: rawHourTokens,
-                        rawAlternateTotal: rawHourCost, target: datum.tokens)
-                    hourCost[i] += normalizedPart(
-                        h.cost ?? 0, alternate: h.tokens ?? 0, rawTotal: rawHourCost,
-                        rawAlternateTotal: rawHourTokens, target: datum.cost)
+                let hourly = allocateHours(day, targets: canonicalProjects)
+                for index in 0..<24 {
+                    hourTok[index] += hourly.tokens[index]
+                    hourCost[index] += hourly.cost[index]
                 }
-                if rawHourTokens == 0, rawHourCost == 0 {
-                    hourTok[0] += datum.tokens
-                    hourCost[0] += datum.cost
-                }
+                hourlyUnattributed.tokens += hourly.unattributed.tokens
+                hourlyUnattributed.cost += hourly.unattributed.cost
                 let attributed = projectAllocations(day, canonical: canonicalProjects)
                 for allocation in attributed.projects {
                     let p = allocation.project
@@ -1063,6 +1057,9 @@ final class DashboardModel: ObservableObject {
                     repositoryAccum.folders["folder:unattributed"] = folderAccum
                     projAgg["unattributed"] = repositoryAccum
                 }
+                filteredHeatDetail[key] = heatDay(
+                    datum: datum, projects: attributed, hourlyTokens: hourly.tokens,
+                    hourlyCost: hourly.cost)
             }
             rows.append(datum)
             cursor = cal.date(byAdding: .day, value: 1, to: cursor) ?? win.to.addingTimeInterval(1)
@@ -1087,6 +1084,8 @@ final class DashboardModel: ObservableObject {
         hourlyAll = (0..<24).map {
             HourDatum(id: $0, hour: $0, tokens: hourTok[$0], cost: hourCost[$0])
         }
+        hourlyUnattributedTokens = hourlyUnattributed.tokens
+        hourlyUnattributedCost = hourlyUnattributed.cost
 
         let totalTokens = rows.reduce(0) { $0 + $1.tokens }
         let activeDays = Set(rows.filter { $0.tokens > 0 || $0.cost > 0 }.map(\.id))
@@ -1099,11 +1098,7 @@ final class DashboardModel: ObservableObject {
 
         buildKPIs(rows: rows, totalCost: totalCost)
         buildMeta(from: fromStr, to: toStr)
-        let key = String(ingestStamp)
-        if key != calendarKey {
-            calendarKey = key
-            buildCalendar(data: data)
-        }
+        buildCalendar(detail: filteredHeatDetail, from: win.from, to: win.to)
         rebuildChartData()
     }
 
@@ -1223,6 +1218,143 @@ final class DashboardModel: ObservableObject {
         return UsageAmount(
             tokens: all.tokens > 0 ? scoped.tokens / all.tokens : 0,
             cost: all.cost > 0 ? scoped.cost / all.cost : 0)
+    }
+
+    private struct HourlyAllocation {
+        var tokens = [Double](repeating: 0, count: 24)
+        var cost = [Double](repeating: 0, count: 24)
+        var unattributed = UsageAmount()
+    }
+
+    private var hourlyFiltersAreUnfiltered: Bool {
+        selectedSources == Set(allSources.map(\.id)) && selectedModels == Set(allModels)
+            && selectedPaths.isEmpty
+    }
+
+    private func allocateHours(
+        _ day: DashUsage.Day, targets: [ProjectAttributionKey: UsageAmount]
+    ) -> HourlyAllocation {
+        var result = HourlyAllocation()
+        let hours = Array((day.hours ?? []).prefix(24))
+        let total = targets.values.reduce(into: UsageAmount()) {
+            $0.tokens += $1.tokens
+            $0.cost += $1.cost
+        }
+        guard total.tokens > 0 || total.cost > 0 else { return result }
+
+        func add(
+            target: UsageAmount, rawTokens: [Double], rawCost: [Double],
+            to result: inout HourlyAllocation
+        ) {
+            let rawTokenTotal = rawTokens.reduce(0, +)
+            let rawCostTotal = rawCost.reduce(0, +)
+            guard rawTokenTotal > 0 || rawCostTotal > 0 else {
+                result.unattributed.tokens += target.tokens
+                result.unattributed.cost += target.cost
+                return
+            }
+            for index in 0..<24 {
+                result.tokens[index] += normalizedPart(
+                    rawTokens[index], alternate: rawCost[index], rawTotal: rawTokenTotal,
+                    rawAlternateTotal: rawCostTotal, target: target.tokens)
+                result.cost[index] += normalizedPart(
+                    rawCost[index], alternate: rawTokens[index], rawTotal: rawCostTotal,
+                    rawAlternateTotal: rawTokenTotal, target: target.cost)
+            }
+        }
+
+        if hours.contains(where: { $0.bySource != nil }) {
+            for (key, target) in targets {
+                var rawTokens = [Double](repeating: 0, count: 24)
+                var rawCost = [Double](repeating: 0, count: 24)
+                for (index, hour) in hours.enumerated() {
+                    let usage = hour.bySource?[key.source]?.byModel?[key.model]
+                    rawTokens[index] = usage?.tokens ?? 0
+                    rawCost[index] = usage?.cost ?? 0
+                }
+                add(
+                    target: target, rawTokens: rawTokens, rawCost: rawCost,
+                    to: &result)
+            }
+            return result
+        }
+
+        guard hourlyFiltersAreUnfiltered else {
+            result.unattributed = total
+            return result
+        }
+        var rawTokens = [Double](repeating: 0, count: 24)
+        var rawCost = [Double](repeating: 0, count: 24)
+        for (index, hour) in hours.enumerated() {
+            rawTokens[index] = hour.tokens ?? 0
+            rawCost[index] = hour.cost ?? 0
+        }
+        add(target: total, rawTokens: rawTokens, rawCost: rawCost, to: &result)
+        return result
+    }
+
+    private func heatDay(
+        datum: DayDatum,
+        projects: (projects: [ProjectAllocation], unattributed: UsageAmount),
+        hourlyTokens: [Double], hourlyCost: [Double]
+    ) -> HeatDay {
+        var heat = HeatDay(date: datum.date)
+        heat.tokens = datum.tokens
+        heat.cost = datum.cost
+        heat.input = datum.input
+        heat.output = datum.output
+        heat.cacheCreate = datum.cacheCreate
+        heat.cacheRead = datum.cacheRead
+        heat.models = datum.byModel.sorted { $0.value > $1.value }.map {
+            NamedValue(id: $0.key, name: DashFmt.shortModel($0.key), value: $0.value)
+        }
+        heat.sources = datum.bySource.sorted { $0.value > $1.value }.map {
+            NamedValue(id: $0.key, name: sourceLabel($0.key), value: $0.value)
+        }
+
+        var repositoryTokens: [String: (name: String, tokens: Double)] = [:]
+        var chatCount = 0
+        let chatsHaveCompleteModelScope = selectedModels == Set(allModels)
+        for allocation in projects.projects {
+            let repository = repositoryIdentity(allocation.project)
+            let current = repositoryTokens[repository.id]?.tokens ?? 0
+            repositoryTokens[repository.id] = (
+                repository.name, current + allocation.amount.tokens
+            )
+            let fallback = knownPath(allocation.project)
+            let chats =
+                (allocation.project.chats ?? [])
+                + (allocation.project.worktrees ?? []).flatMap { $0.chats ?? [] }
+            if chatsHaveCompleteModelScope {
+                chatCount += chats.filter { chatInScope($0, fallback: fallback) }.count
+            }
+        }
+        if projects.unattributed.tokens > 0 || projects.unattributed.cost > 0 {
+            repositoryTokens["unattributed"] = (
+                "Unattributed", projects.unattributed.tokens
+            )
+        }
+        heat.projects = repositoryTokens.sorted { $0.value.tokens > $1.value.tokens }.map {
+            NamedValue(id: $0.key, name: $0.value.name, value: $0.value.tokens)
+        }
+        heat.projCount = heat.projects.count
+        heat.chatCount = chatCount
+
+        let totalHourlyTokens = hourlyTokens.reduce(0, +)
+        let totalHourlyCost = hourlyCost.reduce(0, +)
+        var peakValue = 0.0
+        for index in 0..<24 {
+            let value = totalHourlyTokens > 0 ? hourlyTokens[index] : hourlyCost[index]
+            if value > peakValue {
+                peakValue = value
+                heat.peakTokens = hourlyTokens[index]
+                heat.peakHour = index
+            }
+        }
+        if totalHourlyTokens == 0, totalHourlyCost == 0 {
+            heat.peakHour = nil
+        }
+        return heat
     }
 
     private func projectScale(
@@ -1723,81 +1855,19 @@ final class DashboardModel: ObservableObject {
         meta = m
     }
 
-    private func buildCalendar(data: DashUsage) {
-        let today = cal.startOfDay(for: Date())
-        var detail: [String: HeatDay] = [:]
-        for dayRow in data.daily {
-            guard let d = parseYMD(dayRow.period) else { continue }
-            var h = HeatDay(date: d)
-            var modelTok: [String: Double] = [:]
-            var srcTok: [String: Double] = [:]
-            for (src, models) in dayRow.bySource ?? [:] {
-                for m in models {
-                    let name = m.modelName ?? "unknown"
-                    h.input += m.inputTokens ?? 0
-                    h.output += m.outputTokens ?? 0
-                    h.cacheCreate += m.cacheCreationTokens ?? 0
-                    h.cacheRead += m.cacheReadTokens ?? 0
-                    h.cost += m.cost ?? 0
-                    modelTok[name, default: 0] += m.tokens
-                    srcTok[src, default: 0] += m.tokens
-                }
-            }
-            h.tokens = h.input + h.output + h.cacheCreate + h.cacheRead
-            h.models = modelTok.sorted { $0.value > $1.value }.map {
-                NamedValue(id: $0.key, name: DashFmt.shortModel($0.key), value: $0.value)
-            }
-            h.sources = srcTok.sorted { $0.value > $1.value }.map {
-                NamedValue(id: $0.key, name: sourceLabel($0.key), value: $0.value)
-            }
-            var projTok: [String: Double] = [:]
-            var chats = 0
-            for p in dayRow.projects ?? [] {
-                let projectChats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
-                let rawTokens = projectChats.reduce(0) { $0 + ($1.tokens ?? 0) }
-                if rawTokens > 0 {
-                    projTok[p.projectName ?? "unknown", default: 0] += rawTokens
-                } else if projectChats.isEmpty {
-                    projTok[p.projectName ?? "unknown", default: 0] += p.tokens ?? 0
-                }
-                chats += projectChats.count
-            }
-            let rawProjectTokens = projTok.values.reduce(0, +)
-            if rawProjectTokens > 0 {
-                projTok = projTok.mapValues { h.tokens * $0 / rawProjectTokens }
-            } else if h.tokens > 0 {
-                projTok = ["Unattributed": h.tokens]
-            }
-            h.projects = projTok.sorted { $0.value > $1.value }.map {
-                NamedValue(id: $0.key, name: $0.key, value: $0.value)
-            }
-            h.projCount = projTok.count
-            h.chatCount = chats
-            let rawPeakTotal = (dayRow.hours ?? []).prefix(24).reduce(0) {
-                $0 + ($1.tokens ?? 0)
-            }
-            for (i, hr) in (dayRow.hours ?? []).enumerated() where i < 24 {
-                let t = rawPeakTotal > 0 ? h.tokens * (hr.tokens ?? 0) / rawPeakTotal : 0
-                if t > h.peakTokens {
-                    h.peakTokens = t
-                    h.peakHour = i
-                }
-            }
-            detail[dayRow.period] = h
-        }
+    private func buildCalendar(detail: [String: HeatDay], from: Date, to: Date) {
         heatDetail = detail
-
-        var day = today
-        if let first = sortedPeriods.first, let firstDate = parseYMD(first) {
-            let start = cal.startOfDay(for: firstDate)
-            let dow = (cal.component(.weekday, from: start) + 5) % 7
-            day = cal.date(byAdding: .day, value: -dow, to: start) ?? start
-        }
+        let first = cal.startOfDay(for: min(from, to))
+        let last = cal.startOfDay(for: max(from, to))
+        let firstWeekday = (cal.component(.weekday, from: first) + 5) % 7
+        let lastWeekday = (cal.component(.weekday, from: last) + 5) % 7
+        var day = cal.date(byAdding: .day, value: -firstWeekday, to: first) ?? first
+        let end = cal.date(byAdding: .day, value: 6 - lastWeekday, to: last) ?? last
         var points: [DayPoint] = []
-        while day <= today {
+        while day <= end {
             let key = ymdStr(day)
             points.append(DayPoint(id: key, date: day, cost: detail[key]?.cost ?? 0))
-            day = cal.date(byAdding: .day, value: 1, to: day) ?? today.addingTimeInterval(1)
+            day = cal.date(byAdding: .day, value: 1, to: day) ?? end.addingTimeInterval(1)
         }
         calendarDays = points
     }

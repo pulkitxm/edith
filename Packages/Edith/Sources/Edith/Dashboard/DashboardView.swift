@@ -525,11 +525,35 @@ struct DashboardView: View {
             }
         }
         SkinCard(title: "Hourly usage", dark: dark) {
-            ComboChart(
-                points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
-                height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                ComboChart(
+                    points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
+                    height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+                if !hourlyUnattributedText.isEmpty {
+                    Text(hourlyUnattributedText)
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .presenterBlur(blurMoney || blurUsage)
+                }
+            }
         }
         SkinCard(title: "Models", dark: dark) { modelsTable }
+    }
+
+    private var hourlyUnattributedText: String {
+        let tokens = model.hourlyUnattributedTokens
+        let cost = model.hourlyUnattributedCost
+        if tokens > 0.000_001, cost > 0.000_001 {
+            let tokenText = DashFmt.tokens(tokens)
+            return "Hourly detail is unavailable for \(tokenText) tokens and \(DashFmt.usd(cost))."
+        }
+        if tokens > 0.000_001 {
+            return "Hourly detail is unavailable for \(DashFmt.tokens(tokens)) tokens."
+        }
+        if cost > 0.000_001 {
+            return "Hourly detail is unavailable for \(DashFmt.usd(cost))."
+        }
+        return ""
     }
 
     private var dowCard: some View {
