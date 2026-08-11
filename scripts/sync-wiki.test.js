@@ -11,7 +11,10 @@ const repoRoot = path.resolve(
 
 const docs = collect();
 const slugMap = new Map(docs.map((d) => [d.src, d.slug]));
-const dirMap = new Map([["docs/cli", "CLI"]]);
+const dirMap = new Map([
+  ["docs/cli", "CLI"],
+  ["docs", "Guides"],
+]);
 for (const doc of docs) {
   if (doc.isGroup) dirMap.set(path.posix.dirname(doc.src), doc.slug);
 }
@@ -33,8 +36,22 @@ function markdownUnder(dir) {
   return count;
 }
 
-test("every markdown file under docs/cli becomes a page", () => {
-  expect(docs.length).toBe(markdownUnder("docs/cli"));
+test("every markdown file under docs becomes a page", () => {
+  expect(docs.length).toBe(markdownUnder("docs"));
+});
+
+test("a top level doc becomes a guide page", () => {
+  const internals = docs.find((d) => d.src === "docs/homebrew-internals.md");
+  expect(internals.slug).toBe("Guides-Homebrew-Internals");
+  expect(internals.section).toBe("Guides");
+  expect(internals.depth).toBe(0);
+});
+
+test("guides link to each other by slug", () => {
+  expect(mapTarget("homebrew-internals.md", "docs", options)).toBe(
+    "Guides-Homebrew-Internals",
+  );
+  expect(mapTarget("homebrew.md", "docs", options)).toBe("Guides-Homebrew");
 });
 
 test("a command page nests under its group", () => {
