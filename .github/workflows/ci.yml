@@ -4,9 +4,24 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Run every product check, then cut a release from main."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: >-
+    ci-${{ github.ref }}-${{
+      github.event_name == 'workflow_dispatch' && github.run_id
+      || (github.event_name == 'push'
+      && (startsWith(github.event.head_commit.message, 'Release v')
+      || startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      && github.sha)
+      || 'active'
+    }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -78,7 +93,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-go@v7
+        if: needs.changes.outputs.workflows == 'true'
+        with:
+          go-version: "1.26.x"
+          cache: false
       - run: bun install --frozen-lockfile
+      - name: Validate workflows
+        if: needs.changes.outputs.workflows == 'true'
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: No committed secrets
         run: make ci-secrets
       - name: No disallowed comments
@@ -94,7 +117,7 @@ jobs:
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-scripts
       - name: Site is self-contained
-        if: needs.changes.outputs.site == 'true'
+        if: needs.changes.outputs.site == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-site
 
   ubuntu:
@@ -126,7 +149,7 @@ jobs:
 
   promo-video:
     needs: changes
-    if: needs.changes.outputs.promo == 'true'
+    if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -164,7 +187,10 @@ jobs:
 
   swift-test:
     needs: changes
-    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.docs == 'true'
+    if: >-
+      needs.changes.outputs.swift == 'true'
+      || needs.changes.outputs.docs == 'true'
+      || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
@@ -182,15 +208,27 @@ jobs:
         working-directory: Packages/Edith
 
   release:
-    needs: [changes, checks, ubuntu, promo-video, swift-build, swift-test]
+    needs: [changes, checks, ubuntu, swift-build, swift-test]
     if: >-
-      github.event_name == 'push'
+      always()
       && github.ref == 'refs/heads/main'
       && needs.changes.result == 'success'
+      && needs.checks.result == 'success'
       && !contains(needs.*.result, 'failure')
       && !contains(needs.*.result, 'cancelled')
-      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true')
+      && ((needs.changes.outputs.linux != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.ubuntu.result == 'success')
+      && ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
+      && ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.docs != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
+      && ((github.event_name == 'push'
+      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true'))
+      || (github.event_name == 'workflow_dispatch' && inputs.release))
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml
+    with:
+      cut_release: true
     secrets: inherit

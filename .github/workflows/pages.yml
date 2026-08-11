@@ -24,6 +24,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Require main for manual deployment
+        if: github.event_name == 'workflow_dispatch'
+        run: >-
+          test "$GITHUB_REF" = refs/heads/main
+          || { echo "deploy blocked: select the main branch" >&2; exit 1; }
       - uses: actions/checkout@v7
       - name: Require site content
         run: |

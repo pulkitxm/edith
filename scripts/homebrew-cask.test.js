@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 
 const cask = readFileSync("Casks/edith.rb", "utf8");
 const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
+const releaseStateScript = readFileSync(
+  "scripts/publish-release-state.sh",
+  "utf8",
+);
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const doc = readFileSync("docs/homebrew.md", "utf8");
@@ -47,7 +51,9 @@ test("uninstalling quits every bundle and zapping clears Edith's own state", () 
 test("the release mirrors the bumped cask to the tap repository", () => {
   expect(releaseWorkflow).toContain("github.com/pulkitxm/homebrew-tap.git");
   expect(releaseWorkflow).toContain("TAP_PUSH_TOKEN");
-  expect(releaseWorkflow).toContain("cp Casks/edith.rb tap/Casks/edith.rb");
+  expect(releaseWorkflow).toContain(
+    "cp release-source/Casks/edith.rb tap/Casks/edith.rb",
+  );
   expect(releaseWorkflow).toContain(
     `git commit -m "Update the Edith cask to ${releaseTagRef}"`,
   );
@@ -64,8 +70,8 @@ test("the unified publisher updates and mirrors the cask", () => {
   expect(commitStep).toBeGreaterThan(-1);
   expect(publishStep).toBeGreaterThan(commitStep);
   expect(mirrorStep).toBeGreaterThan(publishStep);
-  expect(releaseWorkflow).toContain("sha256sum release-assets/Edith.dmg");
-  expect(releaseWorkflow).toContain("Casks/edith.rb");
+  expect(releaseWorkflow).toContain("sha256sum ../release-assets/Edith.dmg");
+  expect(releaseStateScript).toContain("Casks/edith.rb");
   expect(releaseWorkflow).toContain(
     `git commit -m "Update the Edith cask to ${releaseTagRef}"`,
   );

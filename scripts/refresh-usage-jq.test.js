@@ -10,6 +10,28 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const inheritedGitVariables = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_CONFIG",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_DIR",
+  "GIT_GRAFT_FILE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_PREFIX",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_SHALLOW_FILE",
+  "GIT_WORK_TREE",
+];
+const isolatedGitEnvironment = { ...process.env };
+for (const variable of inheritedGitVariables) {
+  delete isolatedGitEnvironment[variable];
+}
+
 const scriptPath = join(
   import.meta.dir,
   "..",
@@ -83,17 +105,24 @@ function runCollectorFixture({
   if (deletedWorktreeBaseRepository) {
     const baseRepository = join(root, "repository");
     mkdirSync(baseRepository, { recursive: true });
-    expect(Bun.spawnSync(["git", "init", baseRepository]).exitCode).toBe(0);
     expect(
-      Bun.spawnSync([
-        "git",
-        "-C",
-        baseRepository,
-        "remote",
-        "add",
-        "origin",
-        "git@github.com:owner/repository.git",
-      ]).exitCode,
+      Bun.spawnSync(["git", "init", baseRepository], {
+        env: isolatedGitEnvironment,
+      }).exitCode,
+    ).toBe(0);
+    expect(
+      Bun.spawnSync(
+        [
+          "git",
+          "-C",
+          baseRepository,
+          "remote",
+          "add",
+          "origin",
+          "git@github.com:owner/repository.git",
+        ],
+        { env: isolatedGitEnvironment },
+      ).exitCode,
     ).toBe(0);
     deletedCwd = join(
       baseRepository,
@@ -195,7 +224,7 @@ exec "$REAL_JQ" "$@"
   }
   const process = Bun.spawnSync(["bash", scriptPath, output], {
     env: {
-      ...Bun.env,
+      ...isolatedGitEnvironment,
       HOME: home,
       EDITH_CACHE_DIR: cache,
       FAKE_LOCAL_USAGE: hasLocalUsage ? "1" : "0",
