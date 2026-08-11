@@ -56,8 +56,8 @@ git_quick() {
   command git "$@" >"$output" 2>/dev/null &
   pid=$!
   n=0
-  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 20 ]; do
-    sleep 0.1
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 100 ]; do
+    sleep 0.02
     n=$((n + 1))
   done
   if kill -0 "$pid" 2>/dev/null; then
@@ -155,8 +155,14 @@ def githubRepositoryID:
 CWD_CACHE='
   ($want | split("\n") | map(select(. != ""))
     | map({(.): true}) | add // {}) as $W
+  | ($fingerprints[0] // {}) as $F
+  | ($F[.cwd] // {verified: false, fingerprint: ""}) as $current
   | select($W[.cwd]
-      and ((.repositoryID // "") | startswith("github.com/")))
+      and ((.repositoryID // "") | startswith("github.com/"))
+      and (if $current.verified then
+          ((.repositoryFingerprint // "") != "")
+          and .repositoryFingerprint == $current.fingerprint
+        else true end))
 '
 
 NORM='
@@ -175,16 +181,25 @@ def normDay:
       } ] }
   elif (.models | type) == "object" then
     (.costUSD // .totalCost // 0) as $cost
-    | [ .models | to_entries[] | . + { tok: ((.value.inputTokens // 0) + (.value.outputTokens // 0) + (.value.cacheCreationTokens // 0) + (.value.cacheReadTokens // 0)) } ] as $m
-    | ([ $m[].tok ] | add // 0) as $tot
-    | { period: .date, breakdowns: [ $m[] | {
+    | [ .models | to_entries[] ] as $models
+    | [ $models[] | {
         modelName: .key,
         inputTokens: (.value.inputTokens // 0),
         outputTokens: (.value.outputTokens // 0),
         cacheCreationTokens: (.value.cacheCreationTokens // 0),
         cacheReadTokens: (.value.cacheReadTokens // 0),
-        cost: (if $tot > 0 then $cost * (.tok / $tot) else 0 end)
-      } ] }
+        cost: (if ($models | length) == 1 then $cost else 0 end)
+      } ] as $breakdowns
+    | { period: .date,
+        breakdowns: ($breakdowns
+          + if ($models | length) != 1 and $cost != 0 then [{
+              modelName: "unknown",
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 0,
+              cost: $cost
+            }] else [] end) }
   else
     . as $d
     | (($d.modelsUsed // []) | if length == 1 then .[0] else "unknown" end) as $model
@@ -230,18 +245,37 @@ FLEET='
   def qualify:
     (.machine.slug // "machine") as $slug
     | (.machine.name // .machine.slug // "machine") as $name
-    | (.machine.id // "") as $mid
+    | (.machine.id // null) as $mid
+    | if ($mid | type) != "string" then error("machine.id must be a UUID string")
+      elif ($mid | test("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$") | not)
+        then error("machine.id must be a UUID string")
+      else . end
+    | ($mid | ascii_downcase) as $stableID
     | (.sourceMeta // {}) as $meta
-    | def sid($s): $slug + ":" + $s;
+    | def isCodexSource($s): (($s // "" | split(":") | .[-1]) == "codex");
+      def machinePrefix:
+        if $stableID == "" then error("machine.id is required for source identity")
+        else "machine:" + $stableID + ":" end;
+      def sid($s): machinePrefix + $s;
+      def qpath($path): machinePrefix + $path;
+      def detailTokens($map): ([ $map[].tokens // 0 ] | add // 0);
+      def detailCost($map): ([ $map[].cost // 0 ] | add // 0);
       def qsourceMap:
-        reduce (to_entries[]) as $e ({}; .[sid($e.key)] = $e.value);
+        reduce (to_entries[] | select(isCodexSource(.key) | not)) as $e
+          ({}; .[sid($e.key)] = $e.value);
       def qpathMap:
         reduce (to_entries[]) as $e ({};
-          .[$slug + ":" + $e.key] = ($e.value
-            | .bySource = ((.bySource // {}) | qsourceMap)));
+          (($e.value.bySource // {}) | qsourceMap) as $sources
+          | if ($sources | length) > 0 then
+              .[qpath($e.key)] = {
+                tokens: detailTokens($sources),
+                cost: detailCost($sources),
+                bySource: $sources
+              }
+            else . end);
       def rechat:
         .source = sid(.source // "")
-        | if ((.path // "") != "") then .path = ($slug + ":" + .path) else . end;
+        | if ((.path // "") != "") then .path = qpath(.path) else . end;
       {
         machine: {
           id: $mid, name: $name, slug: $slug,
@@ -252,7 +286,7 @@ FLEET='
         sources: [ (.sources // [])[] | sid(.) ],
         defaultSources: [ (.defaultSources // .sources // [])[] | sid(.) ],
         sourceMeta: ( reduce ((.sources // [])[]) as $s ({};
-            .[$slug + ":" + $s] = {
+            .[sid($s)] = {
               label: (($meta[$s].label // $s) + " · " + $name),
               tool: ($meta[$s].tool // $s),
               machine: $name,
@@ -262,29 +296,44 @@ FLEET='
         daily: [ (.daily // [])[] | {
             period: .period,
             bySource: ( reduce ((.bySource // {}) | to_entries[]) as $e ({};
-              .[$slug + ":" + $e.key] = $e.value) ),
+              .[sid($e.key)] = $e.value) ),
             hours: [ (.hours // [])[]
-              | .bySource = ((.bySource // {}) | qsourceMap)
+              | ((.bySource // {}) | qsourceMap) as $sources
+              | .tokens = detailTokens($sources)
+              | .cost = detailCost($sources)
+              | .bySource = $sources
               | .byPath = ((.byPath // {}) | qpathMap) ],
             projects: [ (.projects // [])[]
               | . as $project
+              | (($project.bySource // {}) | qsourceMap) as $sources
+              | select(($sources | length) > 0)
               | ($project.repositoryID // ("folder:" + ($project.path // ""))) as $rid
               | ($project.repositoryName // $project.projectName // $project.folderName // "unknown") as $rname
               | {
                   projectName: $rname,
-                  repositoryID: (if ($rid | startswith("github.com/")) then $rid else $slug + ":" + $rid end),
+                  repositoryID: (if ($rid | startswith("github.com/")) then $rid else qpath($rid) end),
                   repositoryName: $rname,
                   repositoryURL: ($project.repositoryURL // null),
                   folderName: ($project.folderName // $project.projectName // $rname),
-                  path: ($slug + ":" + ($project.path // "")),
+                  path: qpath($project.path // ""),
                   machineName: $name,
                   machineID: $mid,
-                  tokens: ($project.tokens // 0),
-                  cost: ($project.cost // 0),
-                  bySource: (($project.bySource // {}) | qsourceMap),
-                  chats: [ ($project.chats // [])[] | rechat ],
+                  tokens: detailTokens($sources),
+                  cost: detailCost($sources),
+                  bySource: $sources,
+                  chats: [ ($project.chats // [])[]
+                    | select(isCodexSource(.source) | not)
+                    | rechat ],
                   worktrees: [ ($project.worktrees // [])[]
-                    | .chats = [ (.chats // [])[] | rechat ] ]
+                    | . as $worktree
+                    | [ (.chats // [])[]
+                        | select(isCodexSource(.source) | not)
+                        | rechat ] as $chats
+                    | select(($chats | length) > 0)
+                    | $worktree
+                    | .tokens = ([ $chats[].tokens // 0 ] | add // 0)
+                    | .cost = ([ $chats[].cost // 0 ] | add // 0)
+                    | .chats = $chats ]
                 }
               ]
           } ]
@@ -341,16 +390,49 @@ VALIDATE='
   def near($actual; $expected):
     (($actual - $expected) | if . < 0 then -. else . end)
     <= 0.000001;
+  def nonnegativeNumber: type == "number" and isfinite and . >= 0;
+  def detailSource:
+    . as $source
+    | (.tokens | nonnegativeNumber) and (.cost | nonnegativeNumber)
+    and ((.byModel | type) == "object")
+    and all(.byModel[];
+      (.tokens | nonnegativeNumber) and (.cost | nonnegativeNumber))
+    and ($source.tokens == ([ $source.byModel[].tokens ] | add // 0))
+    and near($source.cost; ([ $source.byModel[].cost ] | add // 0));
+  def detailSources:
+    (type == "object") and all(.[]; detailSource);
+  def detailNode:
+    . as $node
+    | (.tokens | nonnegativeNumber) and (.cost | nonnegativeNumber)
+    and (.bySource | detailSources)
+    and ($node.tokens == ([ $node.bySource[].tokens ] | add // 0))
+    and near($node.cost; ([ $node.bySource[].cost ] | add // 0));
   [ .daily[].bySource[][] ] as $rows
   | ([ .daily[].period ] | length) as $dayCount
   | ([ .daily[].period ] | unique | length) as $uniqueDayCount
-  | (. as $root | all($root.defaultSources[]; . as $source | ($root.sources | index($source)) != null))
+  | (.schemaVersion == 7)
+    and (. as $root | all($root.defaultSources[]; . as $source | ($root.sources | index($source)) != null))
     and ($dayCount == $uniqueDayCount)
     and ([ .daily[].period ] == ([ .daily[].period ] | sort))
     and ((.sources | length) == (.sources | unique | length))
+    and all(.daily[];
+      ((.hours | type) == "array") and ((.hours | length) == 24)
+      and ((.projects | type) == "array")
+      and all(.hours[];
+        detailNode
+        and ((.byPath | type) == "object")
+        and all(.byPath[]; detailNode))
+      and all(.projects[];
+        ((.repositoryID | type) == "string")
+        and ((.repositoryName | type) == "string")
+        and ((.folderName | type) == "string")
+        and ((.path | type) == "string")
+        and detailNode
+        and ((.chats | type) == "array")
+        and ((.worktrees | type) == "array")))
     and all($rows[];
       all([.inputTokens, .outputTokens, .cacheCreationTokens, .cacheReadTokens, .cost][];
-        type == "number" and . >= 0))
+        nonnegativeNumber))
     and ((.totals.inputTokens // -1) == tokenSum($rows; "inputTokens"))
     and ((.totals.outputTokens // -1) == tokenSum($rows; "outputTokens"))
     and ((.totals.cacheCreationTokens // -1) == tokenSum($rows; "cacheCreationTokens"))
@@ -405,15 +487,38 @@ fi
 
 add_source() {
   local src="$1" daily="$2" session="$3"
-  local n
-  n=$(jq '.daily | length' "$daily" 2>/dev/null || echo 0)
-  if [ "${n:-0}" = "0" ] || [ -z "$n" ]; then return 1; fi
-  jq -c "$NORM"' { source: $src, label: $label, norm: [ .daily[] | normDay | .breakdowns |= dropSynthetic ] }' \
-    --arg src "$src" --arg label "$(label_for "$src")" "$daily" >>"$TMP/manifest.jsonl"
-  jq -c '{ source: $src, sessions: [ (.sessions // [])[] | { id: (.sessionId // ""), source: $src } ] }' \
-    --arg src "$src" "$session" >>"$TMP/sessions.jsonl"
+  local n manifest sessions
+  if ! jq -e '(.daily | type) == "array"' "$daily" >/dev/null 2>&1; then
+    _error "$src daily usage is malformed; previous data preserved"
+    return 2
+  fi
+  n=$(jq '.daily | length' "$daily")
+  if [ "$n" = "0" ]; then return 1; fi
+  if ! manifest=$(jq -c "$NORM"' { source: $src, label: $label, norm: [ .daily[] | normDay | .breakdowns |= dropSynthetic ] }' \
+    --arg src "$src" --arg label "$(label_for "$src")" "$daily"); then
+    _error "$src usage normalization failed; previous data preserved"
+    return 2
+  fi
+  if ! jq -e '(.sessions | type) == "array"' "$session" >/dev/null 2>&1; then
+    _error "$src session usage is malformed; previous data preserved"
+    return 2
+  fi
+  if ! sessions=$(jq -c '{ source: $src, sessions: [ .sessions[] | { id: (.sessionId // ""), source: $src } ] }' \
+    --arg src "$src" "$session"); then
+    _error "$src session usage is malformed; previous data preserved"
+    return 2
+  fi
+  printf '%s\n' "$manifest" >>"$TMP/manifest.jsonl"
+  printf '%s\n' "$sessions" >>"$TMP/sessions.jsonl"
   _phase "$src" "$n days"
   return 0
+}
+
+include_source() {
+  local status
+  if add_source "$@"; then return 0; else status=$?; fi
+  if [ "$status" = "1" ]; then return 0; fi
+  exit "$status"
 }
 
 CCDAILY='
@@ -442,15 +547,27 @@ OFF=$((10#${Z:1:2} * 3600 + 10#${Z:3:2} * 60))
 _note "discovering sources"
 
 CLI_CFG="$HOME/.claude"
-CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cli.daily.json" || echo '{"daily":[]}' >"$TMP/cli.daily.json"
-CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude session --json 2>/dev/null >"$TMP/cli.session.json" || echo '{"sessions":[]}' >"$TMP/cli.session.json"
-add_source cli "$TMP/cli.daily.json" "$TMP/cli.session.json" || true
+if ! CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude daily --json >"$TMP/cli.daily.json" 2>/dev/null; then
+  _error "cli daily collection failed; previous data preserved"
+  exit 1
+fi
+if ! CLAUDE_CONFIG_DIR="$CLI_CFG" ccu claude session --json >"$TMP/cli.session.json" 2>/dev/null; then
+  _error "cli session collection failed; previous data preserved"
+  exit 1
+fi
+include_source cli "$TMP/cli.daily.json" "$TMP/cli.session.json"
 
 COWORK_CFG="$(find "$HOME/Library/Application Support/Claude/local-agent-mode-sessions" -maxdepth 2 -name .claude -type d 2>/dev/null | paste -sd, - || true)"
 if [ -n "$COWORK_CFG" ]; then
-  CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude daily --json 2>/dev/null >"$TMP/cowork.daily.json" || echo '{"daily":[]}' >"$TMP/cowork.daily.json"
-  CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude session --json 2>/dev/null >"$TMP/cowork.session.json" || echo '{"sessions":[]}' >"$TMP/cowork.session.json"
-  add_source cowork "$TMP/cowork.daily.json" "$TMP/cowork.session.json" || true
+  if ! CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude daily --json >"$TMP/cowork.daily.json" 2>/dev/null; then
+    _error "cowork daily collection failed; previous data preserved"
+    exit 1
+  fi
+  if ! CLAUDE_CONFIG_DIR="$COWORK_CFG" ccu claude session --json >"$TMP/cowork.session.json" 2>/dev/null; then
+    _error "cowork session collection failed; previous data preserved"
+    exit 1
+  fi
+  include_source cowork "$TMP/cowork.daily.json" "$TMP/cowork.session.json"
 fi
 
 CODEX_CFG="$TMP/codex-home"
@@ -458,26 +575,42 @@ mkdir -p "$CODEX_CFG"
 for dir in sessions archived_sessions; do
   [ -d "$HOME/.codex/$dir" ] && ln -s "$HOME/.codex/$dir" "$CODEX_CFG/$dir"
 done
-CODEX_HOME="$CODEX_CFG" ccu codex daily --json --offline 2>/dev/null >"$TMP/codex.daily.json" || echo '{"daily":[]}' >"$TMP/codex.daily.json"
-CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline 2>/dev/null >"$TMP/codex.session.json" || echo '{"sessions":[]}' >"$TMP/codex.session.json"
-add_source codex "$TMP/codex.daily.json" "$TMP/codex.session.json" || true
+if ! CODEX_HOME="$CODEX_CFG" ccu codex daily --json --offline >"$TMP/codex.daily.json" 2>/dev/null; then
+  _error "codex daily collection failed; previous data preserved"
+  exit 1
+fi
+if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline >"$TMP/codex.session.json" 2>/dev/null; then
+  _error "codex session collection failed; previous data preserved"
+  exit 1
+fi
+include_source codex "$TMP/codex.daily.json" "$TMP/codex.session.json"
 
 for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw; do
-  ccu "$agent" daily --json --offline 2>/dev/null >"$TMP/$agent.daily.json" || continue
-  ccu "$agent" session --json --offline 2>/dev/null >"$TMP/$agent.session.json" || echo '{"sessions":[]}' >"$TMP/$agent.session.json"
-  add_source "$agent" "$TMP/$agent.daily.json" "$TMP/$agent.session.json" || true
+  if ! ccu "$agent" daily --json --offline >"$TMP/$agent.daily.json" 2>/dev/null; then
+    _error "$agent daily collection failed; previous data preserved"
+    exit 1
+  fi
+  if ! ccu "$agent" session --json --offline >"$TMP/$agent.session.json" 2>/dev/null; then
+    _error "$agent session collection failed; previous data preserved"
+    exit 1
+  fi
+  include_source "$agent" "$TMP/$agent.daily.json" "$TMP/$agent.session.json"
 done
 
 CCODE_DIR="$HOME/.commandcode/projects"
 if [ -d "$CCODE_DIR" ]; then
-  find "$CCODE_DIR" -name '*.jsonl' ! -name '*.checkpoints.jsonl' -exec cat {} + 2>/dev/null \
-    | jq -s --argjson off "$OFF" "$CCDAILY" >"$TMP/commandcode.daily.json" \
-    || echo '{"daily":[]}' >"$TMP/commandcode.daily.json"
-  find "$CCODE_DIR" -name '*.jsonl' ! -name '*.checkpoints.jsonl' -exec cat {} + 2>/dev/null \
+  if ! find "$CCODE_DIR" -name '*.jsonl' ! -name '*.checkpoints.jsonl' -exec cat {} + 2>/dev/null \
+    | jq -s --argjson off "$OFF" "$CCDAILY" >"$TMP/commandcode.daily.json"; then
+    _error "commandcode daily collection failed; previous data preserved"
+    exit 1
+  fi
+  if ! find "$CCODE_DIR" -name '*.jsonl' ! -name '*.checkpoints.jsonl' -exec cat {} + 2>/dev/null \
     | jq -s '{ sessions: [ .[] | select(.type == "session") | { sessionId: (.id // "") } ] }' \
-      >"$TMP/commandcode.session.json" \
-    || echo '{"sessions":[]}' >"$TMP/commandcode.session.json"
-  add_source commandcode "$TMP/commandcode.daily.json" "$TMP/commandcode.session.json" || true
+      >"$TMP/commandcode.session.json"; then
+    _error "commandcode session collection failed; previous data preserved"
+    exit 1
+  fi
+  include_source commandcode "$TMP/commandcode.daily.json" "$TMP/commandcode.session.json"
 fi
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -558,66 +691,15 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     | (($meta.id // "") | tostring) as $sid
     | if $sid == "" then empty else
         ($meta.cwd // "") as $cwd
-        | reduce ($L | to_entries[]) as $entry (
-            {model: "unknown", total: null, records: []};
-            ($entry.value) as $line
-            | if $line.type == "turn_context" and ($line.payload.model != null) then
-                .model = $line.payload.model
-              elif $line.type == "event_msg" and ($line.payload.type == "user_message") then
-                (($line.payload.message // "") | tostring
+        | ({t: "meta", sid: $sid, cwd: $cwd, src: $src},
+          ($L[]
+            | if .type == "event_msg" and (.payload.type == "user_message") then
+                ((.payload.message // "") | tostring
                   | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $x
                 | if $x != "" and ($x | startswith("<") | not) then
-                    .records += [{t: "text", sid: $sid,
-                      tms: ($line.timestamp // ""), text: $x[0:80]}]
-                  else . end
-              elif $line.type == "event_msg" and ($line.payload.type == "token_count")
-                   and (($line.payload.info.total_token_usage != null)
-                     or ($line.payload.info.last_token_usage != null))
-                   and ($line.timestamp != null) then
-                .model as $model
-                | ($line.payload.info) as $info
-                | ($line.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $ep
-                | ($ep + $off) as $loc
-                | if $info.total_token_usage != null then
-                    ($info.total_token_usage) as $total
-                    | ($total.total_tokens // 0) as $currentTokens
-                    | ((.total.total_tokens // 0)) as $previousTokens
-                    | if $currentTokens <= $previousTokens then . else
-                        (.total // {}) as $previous
-                        | (($total.input_tokens // 0) - ($previous.input_tokens // 0)) as $input
-                        | (($total.cached_input_tokens // 0)
-                          - ($previous.cached_input_tokens // 0)) as $cached
-                        | (($total.output_tokens // 0) - ($previous.output_tokens // 0)) as $output
-                        | .total = $total
-                        | .records += [{
-                            t: "rec", id: ($sid + ":" + ($entry.key | tostring)),
-                            date: ($loc | strftime("%Y-%m-%d")),
-                            hour: (($loc / 3600 | floor) % 24),
-                            ts: ($ep * 1000), model: $model, cwd: $cwd, wt: null,
-                            sid: $sid, src: $src,
-                            inp: ($input - $cached), out: $output, cc: 0, cr: $cached,
-                            tok: ($currentTokens - $previousTokens)
-                          }]
-                      end
-                  else
-                    ($info.last_token_usage) as $u
-                    | ($u.total_tokens // 0) as $tok
-                    | if $tok == 0 then . else
-                        .records += [{
-                            t: "rec", id: ($sid + ":" + ($entry.key | tostring)),
-                            date: ($loc | strftime("%Y-%m-%d")),
-                            hour: (($loc / 3600 | floor) % 24),
-                            ts: ($ep * 1000), model: $model, cwd: $cwd, wt: null,
-                            sid: $sid, src: $src,
-                            inp: (($u.input_tokens // 0) - ($u.cached_input_tokens // 0)),
-                            out: ($u.output_tokens // 0), cc: 0,
-                            cr: ($u.cached_input_tokens // 0), tok: $tok
-                          }]
-                      end
-                  end
-              else . end
-          )
-        | .records[]
+                    {t: "text", sid: $sid, tms: (.timestamp // ""), text: $x[0:80]}
+                  else empty end
+              else empty end))
       end
   '
 
@@ -659,41 +741,6 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   DEDUP='
     group_by(.id)
     | map(max_by([.tok, .ts]))
-  '
-
-  RECONCILE='
-    (($canonical[0].sessions // [])
-      | map(. as $session
-          | (if (($session.sessionId // "") != "") then $session.sessionId
-             else ($session.sessionFile // "") end
-            | sub("\\.jsonl$"; "") | .[-36:]) as $sid
-          | select(($sid | length) == 36)
-          | {
-              key: $sid,
-              value: {tokens: ($session.totalTokens // 0), cost: ($session.costUSD // 0)}
-            })
-      | from_entries) as $sessions
-    | group_by(.sid)
-    | map(sort_by(.ts, .id) as $records
-        | ($sessions[$records[0].sid] // null) as $session
-        | ([ $records[].tok ] | add // 0) as $rawTokens
-        | if $session == null or $rawTokens <= 0 then $records else
-            reduce range(0; $records | length) as $i (
-              {tokens: $session.tokens, cost: $session.cost, rows: []};
-              ($records[$i]) as $record
-              | if $i == ($records | length) - 1 then
-                  .rows += [$record + {tok: .tokens, cost: .cost}]
-                  | .tokens = 0 | .cost = 0
-                else
-                  (($session.tokens * $record.tok / $rawTokens) | floor) as $tokens
-                  | ($session.cost * $record.tok / $rawTokens) as $cost
-                  | .rows += [$record + {tok: $tokens, cost: $cost}]
-                  | .tokens -= $tokens | .cost -= $cost
-                end
-            )
-            | .rows
-          end)
-    | add // []
   '
 
   DETAILS='
@@ -938,14 +985,55 @@ if [ -s "$TMP/manifest.jsonl" ]; then
          (if .src == "codex" then (($cr[0][.date]) // 0)
           else (($r[0][.date][.model]) // 0) end)
        end)})' \
-    "$TMP/records.jsonl" >"$TMP/recs.raw.json"
-  jq --slurpfile canonical "$TMP/codex.session.json" "$RECONCILE" \
-    "$TMP/recs.raw.json" >"$TMP/recs.json"
+    "$TMP/records.jsonl" >"$TMP/recs.json"
 
-  CWDMAP_CACHE="$EDCACHE/.cwdmap.v4.jsonl"
-  touch "$CWDMAP_CACHE"
+  CWDMAP_CACHE="$EDCACHE/.cwdmap.v5.jsonl"
+  LEGACY_CWDMAP_CACHE="$EDCACHE/.cwdmap.v4.jsonl"
+  if [ ! -e "$CWDMAP_CACHE" ]; then
+    if [ -f "$LEGACY_CWDMAP_CACHE" ]; then
+      cp "$LEGACY_CWDMAP_CACHE" "$CWDMAP_CACHE"
+    else
+      : >"$CWDMAP_CACHE"
+    fi
+  fi
   jq -r '[.[].cwd] | unique | .[] | select(. != "")' "$TMP/recs.json" | sort >"$TMP/cwds.txt"
-  jq -c --rawfile want "$TMP/cwds.txt" "$CWD_CACHE" \
+  : >"$TMP/cwd-fingerprints.jsonl"
+  while IFS= read -r cwd; do
+    git_probe="$cwd"
+    git_root=""
+    remote_config=""
+    repository_fingerprint=""
+    repository_verified=false
+    if [ ! -d "$git_probe" ]; then
+      for marker in "/.claude/worktrees/" "/.cursor/worktrees/"; do
+        case "$cwd" in
+          *"$marker"*)
+            candidate_root="${cwd%%"$marker"*}"
+            if [ -d "$candidate_root" ]; then git_probe="$candidate_root"; fi
+            break
+            ;;
+        esac
+      done
+    fi
+    if [ -d "$git_probe" ]; then
+      repository_verified=true
+      git_root=$(git_quick -C "$git_probe" rev-parse --path-format=absolute --show-toplevel || true)
+      remote_config=$(git_quick -C "$git_probe" config --get-regexp '^remote\..*\.url$' \
+        | LC_ALL=C sort || true)
+    fi
+    if [ -n "$git_root" ]; then
+      repository_fingerprint=$(_hash "$git_root|$remote_config")
+    elif [ "$repository_verified" = "true" ]; then
+      repository_fingerprint=$(_hash "$cwd|not-git")
+    fi
+    jq -cn --arg cwd "$cwd" --arg fingerprint "$repository_fingerprint" \
+      --argjson verified "$repository_verified" \
+      '{cwd: $cwd, fingerprint: $fingerprint, verified: $verified}' \
+      >>"$TMP/cwd-fingerprints.jsonl"
+  done <"$TMP/cwds.txt"
+  jq -s 'map({(.cwd): {fingerprint: .fingerprint, verified: .verified}}) | add // {}' \
+    "$TMP/cwd-fingerprints.jsonl" >"$TMP/cwd-fingerprints.json"
+  jq -c --rawfile want "$TMP/cwds.txt" --slurpfile fingerprints "$TMP/cwd-fingerprints.json" "$CWD_CACHE" \
     "$CWDMAP_CACHE" >"$TMP/cwdmap.jsonl" 2>/dev/null || : >"$TMP/cwdmap.jsonl"
   jq -r '.cwd' "$TMP/cwdmap.jsonl" | sort -u >"$TMP/cwds-have.txt"
   comm -23 "$TMP/cwds.txt" "$TMP/cwds-have.txt" | while IFS= read -r cwd; do
@@ -954,6 +1042,8 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     git_root=""
     repository_id=""
     repository_url=""
+    repository_fingerprint=$(jq -r --arg cwd "$cwd" '.[$cwd].fingerprint // ""' "$TMP/cwd-fingerprints.json")
+    git_probe="$cwd"
     case "$cwd" in
       */local-agent-mode-sessions/*) name="Cowork" ;;
     esac
@@ -965,8 +1055,11 @@ if [ -s "$TMP/manifest.jsonl" ]; then
           ;;
       esac
     done
-    if [ -d "$cwd" ]; then
-      git_root=$(git_quick -C "$cwd" rev-parse --path-format=absolute --show-toplevel || true)
+    if [ ! -d "$git_probe" ] && [ -n "$root" ] && [ -d "$root" ]; then
+      git_probe="$root"
+    fi
+    if [ -d "$git_probe" ]; then
+      git_root=$(git_quick -C "$git_probe" rev-parse --path-format=absolute --show-toplevel || true)
     fi
     if [ -z "$root" ] && [ -z "$name" ]; then
       root="$git_root"
@@ -975,7 +1068,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     [ -n "$name" ] || name=$(basename "$root")
     if [ -n "$git_root" ]; then
       seen="|"
-      remaining_remotes=$(git_quick -C "$cwd" remote || true)
+      remaining_remotes=$(git_quick -C "$git_probe" remote || true)
       for remote in origin upstream $(printf '%s\n' "$remaining_remotes" | LC_ALL=C sort); do
         [ -n "$remote" ] || continue
         [ "$remote" != "." ] || continue
@@ -983,7 +1076,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
           *"|$remote|"*) continue ;;
         esac
         seen="$seen$remote|"
-        remote_url=$(git_quick -C "$cwd" remote get-url "$remote" || true)
+        remote_url=$(git_quick -C "$git_probe" remote get-url "$remote" || true)
         [ -n "$remote_url" ] || continue
         repository_id=$(jq -nr --arg remote "$remote_url" "$GITHUB"'$remote | githubRepositoryID')
         if [ -n "$repository_id" ]; then
@@ -997,24 +1090,33 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     [ -n "$repository_id" ] || repository_id="folder:$root"
     jq -cn --arg c "$cwd" --arg n "$name" --arg r "$root" --arg id "$repository_id" \
       --arg url "$repository_url" --arg folder "$folder_name" \
+      --arg fingerprint "$repository_fingerprint" \
       '{cwd: $c, name: $n, root: $r, repositoryID: $id, repositoryName: $n,
-        repositoryURL: (if $url == "" then null else $url end), folderName: $folder}' \
+        repositoryURL: (if $url == "" then null else $url end), folderName: $folder,
+        repositoryFingerprint: $fingerprint}' \
       >>"$TMP/cwdmap.jsonl"
   done
   cp "$TMP/cwdmap.jsonl" "$CWDMAP_CACHE"
   _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
 
-  jq \
+  if ! jq \
     --slurpfile usage "$TMP/usage.json" \
     --slurpfile titles "$TMP/titles.json" \
     --slurpfile cm <(jq -s 'map({(.cwd): .}) | add // {}' "$TMP/cwdmap.jsonl") \
-    "$DETAILS" "$TMP/recs.json" >"$TMP/merged.json" && mv "$TMP/merged.json" "$TMP/usage.json"
+    "$DETAILS" "$TMP/recs.json" >"$TMP/merged.json"; then
+    _error "detail assembly failed; previous data preserved"
+    exit 1
+  fi
+  mv "$TMP/merged.json" "$TMP/usage.json"
   _phase "merge" "hours + projects merged"
 fi
 
 if [ "$HAS_MACHINES" = "1" ]; then
-  jq -s "$FLEET" "$TMP/usage.json" "$MACHINES_DIR"/*.json >"$TMP/fleet.json" \
-    && mv "$TMP/fleet.json" "$TMP/usage.json"
+  if ! jq -s "$FLEET" "$TMP/usage.json" "$MACHINES_DIR"/*.json >"$TMP/fleet.json"; then
+    _error "machine snapshot assembly failed; previous data preserved"
+    exit 1
+  fi
+  mv "$TMP/fleet.json" "$TMP/usage.json"
   _phase "machines" "$(jq -r '.machines | length' "$TMP/usage.json") folded in"
 fi
 
