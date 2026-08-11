@@ -14,7 +14,7 @@ const expectedActions = new Map([
 ]);
 
 const workflows = readdirSync(".github/workflows")
-  .filter((name) => name.endsWith(".yml"))
+  .filter((name) => /\.ya?ml$/.test(name))
   .map((name) => ({
     name,
     text: readFileSync(`.github/workflows/${name}`, "utf8"),

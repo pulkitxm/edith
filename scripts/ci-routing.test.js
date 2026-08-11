@@ -25,11 +25,18 @@ test("Linux inputs and workflow changes select Ubuntu validation", () => {
     "Resources/",
     "packaging/",
     "Makefile$",
-    ".github/workflows/(ci|release)",
+    ".github/workflows/",
   ]) {
     expect(ciWorkflow).toContain(path);
   }
   expect(ciWorkflow).toContain(
     "needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
+});
+
+test("every workflow change runs the runtime guard", () => {
+  expect(ciWorkflow).toContain("area workflows '^\\.github/workflows/'");
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'",
   );
 });
