@@ -434,7 +434,7 @@ enum CompanionBridge {
     static func request<T>(
         endpoint: String?, operation: (CompanionClient) async throws -> T
     ) async throws -> T {
-        let resolved = CompanionClient.endpoint(override: endpoint)
+        let resolved = CLIEnvironment.resolveCompanionEndpoint(endpoint)
         do {
             return try await operation(CompanionClient(baseURL: resolved))
         } catch let error as CompanionClientError {
@@ -448,7 +448,7 @@ enum CompanionBridge {
     static func embeddingRequest<T>(
         endpoint: String?, operation: (CompanionClient) async throws -> T
     ) async throws -> T {
-        let resolved = CompanionClient.endpoint(override: endpoint)
+        let resolved = CLIEnvironment.resolveCompanionEndpoint(endpoint)
         do {
             return try await operation(CompanionClient(baseURL: resolved))
         } catch let CompanionClientError.badResponse(status, detail) where status == 502 {

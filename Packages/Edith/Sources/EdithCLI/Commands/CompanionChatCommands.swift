@@ -20,7 +20,7 @@ struct CompanionChatCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let resolved = CompanionClient.endpoint(override: endpoint)
+            let resolved = CLIEnvironment.resolveCompanionEndpoint(endpoint)
             let client = CompanionClient(baseURL: resolved)
             var conversationId = conversation
             var model: String?

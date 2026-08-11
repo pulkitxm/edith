@@ -55,6 +55,10 @@ public enum CLIEnvironment {
         CLIToolEnvironment.executable(named: $0)
     }
 
+    nonisolated(unsafe) public static var resolveCompanionEndpoint: @Sendable (String?) -> URL = {
+        CompanionClient.endpoint(override: $0)
+    }
+
     nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -98,5 +102,6 @@ public enum CLIEnvironment {
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
+        resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
     }
 }
