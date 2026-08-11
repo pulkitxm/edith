@@ -93,6 +93,35 @@ import Testing
         #expect(projects.count == 1)
         #expect(projects.first?.0 == "edith")
         #expect(projects.first?.1 == 4.0)
+        #expect(projects.first?.2 == 26.0)
+    }
+
+    @Test func projectsNormalizeToCanonicalDailyTotals() throws {
+        let document = """
+            {
+              "sources": ["cli"],
+              "daily": [{
+                "period": "2026-08-07",
+                "bySource": {"cli": [
+                  {"modelName": "opus", "inputTokens": 60, "outputTokens": 40,
+                   "cacheCreationTokens": 0, "cacheReadTokens": 0, "cost": 10}
+                ]},
+                "projects": [
+                  {"projectName": "one", "tokens": 300, "cost": 30},
+                  {"projectName": "two", "tokens": 100, "cost": 10}
+                ]
+              }]
+            }
+            """
+        let parsed = try JSONDecoder().decode(UsageDocument.self, from: Data(document.utf8))
+        let projects = UsageAnalysis.byProject(parsed.daily)
+        #expect(projects.count == 2)
+        #expect(projects[0].0 == "one")
+        #expect(projects[0].1 == 7.5)
+        #expect(projects[0].2 == 75)
+        #expect(projects[1].0 == "two")
+        #expect(projects[1].1 == 2.5)
+        #expect(projects[1].2 == 25)
     }
 
     @Test func rangesSliceOnTheDayStamp() {

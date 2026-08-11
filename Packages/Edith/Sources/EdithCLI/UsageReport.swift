@@ -223,15 +223,32 @@ public enum UsageAnalysis {
     public static func byProject(_ days: [UsageDay]) -> [(String, Double, Double)] {
         var costs: [String: (Double, Double)] = [:]
         for day in days {
-            for project in day.projects ?? [] {
+            let projects = day.projects ?? []
+            let rawTokens = projects.reduce(0) { $0 + ($1.tokens ?? 0) }
+            let rawCost = projects.reduce(0) { $0 + ($1.cost ?? 0) }
+            let canonical = totals([day], sources: nil)
+            for project in projects {
                 var entry = costs[project.name] ?? (0, 0)
-                entry.0 += project.cost ?? 0
-                entry.1 += project.tokens ?? 0
+                entry.0 += normalized(
+                    project.cost ?? 0, alternate: project.tokens ?? 0, rawTotal: rawCost,
+                    rawAlternateTotal: rawTokens, target: canonical.cost)
+                entry.1 += normalized(
+                    project.tokens ?? 0, alternate: project.cost ?? 0, rawTotal: rawTokens,
+                    rawAlternateTotal: rawCost, target: canonical.tokens)
                 costs[project.name] = entry
             }
         }
         return costs.map { ($0.key, $0.value.0, $0.value.1) }
             .sorted { $0.1 > $1.1 }
+    }
+
+    private static func normalized(
+        _ value: Double, alternate: Double, rawTotal: Double, rawAlternateTotal: Double,
+        target: Double
+    ) -> Double {
+        if rawTotal > 0 { return target * value / rawTotal }
+        if rawAlternateTotal > 0 { return target * alternate / rawAlternateTotal }
+        return 0
     }
 }
 
