@@ -102,6 +102,15 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
         #expect(!holder.started)
     }
 
+    @Test func finderSmokeRenderDoesNotStartConnection() async throws {
+        let session = MachineSession(
+            machine: Machine(name: "Remote", host: "203.0.113.1"), local: false)
+        let model = FinderModel(session: session)
+        #expect(renders(FinderPane(model: model)))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(session.state == .disconnected)
+    }
+
     @Test func terminalSettingsTabRenders() {
         SharedDefaults.store.set("terminal", forKey: "settingsTab")
         #expect(renders(SettingsPane(updater: UpdaterModel())))

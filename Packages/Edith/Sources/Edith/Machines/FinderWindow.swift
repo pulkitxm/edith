@@ -28,6 +28,7 @@ struct FinderWindowView: View {
 struct FinderBody: View {
     @ObservedObject var model: FinderModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
     @FocusState private var searchFocused: Bool
 
@@ -53,13 +54,14 @@ struct FinderBody: View {
         }
         .background(DashSkin.paper(dark))
         .task {
+            guard connectionsEnabled else { return }
             model.connectIfNeeded()
             await model.waitForConnection()
             await model.loadPlaces()
             await model.load()
         }
         .onChange(of: model.session.state.isConnected) { _, connected in
-            if connected { model.refresh() }
+            if connectionsEnabled, connected { model.refresh() }
         }
         .overlay {
             if model.quickLookPath != nil {
