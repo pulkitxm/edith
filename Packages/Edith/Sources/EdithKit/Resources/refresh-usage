@@ -703,6 +703,46 @@ if [ -s "$TMP/manifest.jsonl" ]; then
       end
   '
 
+  WALKPI='
+    def trimmedText:
+      if type == "string" then .
+      elif type == "array" then
+        ([ .[] | select(type == "object" and .type == "text" and (.text | type == "string")) | .text ] | .[0] // "")
+      else "" end
+      | gsub("^\\s+"; "") | gsub("\\s+$"; "");
+    [., inputs] as $L
+    | ([ $L[] | select(.type == "session") ] | .[0]) as $meta
+    | (($meta.id // "") | tostring) as $sid
+    | if $sid == "" then empty else
+        ($meta.cwd // "") as $cwd
+        | ($L[]
+          | if .type == "session_info" and ((.name // "") != "") then
+              {t: "title", sid: $sid, title: (.name | tostring | gsub("^\\s+"; "") | gsub("\\s+$"; ""))}
+            elif .type == "message" and .message.role == "user" then
+              (.message.content | trimmedText) as $x
+              | if $x != "" and ($x | startswith("<") | not) then
+                  {t: "text", sid: $sid, tms: (.timestamp // ""), text: $x[0:80]}
+                else empty end
+            elif ((.type == "message" and (.message.role == "assistant" or .message.role == "toolResult")
+                    and (.message.usage | type) == "object")
+                  or ((.type == "compaction" or .type == "branch_summary") and (.usage | type) == "object")) then
+              (if .type == "message" then .message.usage else .usage end) as $u
+              | ($u.input // 0) as $inp | ($u.output // 0) as $out
+              | ($u.cacheWrite // 0) as $cc | ($u.cacheRead // 0) as $cr
+              | if ($inp + $out + $cc + $cr) == 0 then empty else
+                  (.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $ep
+                  | ($ep + $off) as $loc
+                  | { t: "rec", id: ($src + ":" + $sid + ":" + (.id // ($ep | tostring))),
+                      date: ($loc | strftime("%Y-%m-%d")), hour: (($loc / 3600 | floor) % 24),
+                      ts: ($ep * 1000), model: (.message.model // .model // "unknown"), cwd: $cwd, wt: null,
+                      sid: $sid, src: $src, cost: ($u.cost.total // 0),
+                      inp: $inp, out: $out, cc: $cc, cr: $cr,
+                      tok: ($inp + $out + $cc + $cr) }
+                end
+            else empty end)
+      end
+  '
+
   WALKCC='
     [., inputs] as $L
     | ([ $L[] | select(.type == "session") ] | .[0]) as $meta
@@ -960,6 +1000,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   fi
   walk_dir "$HOME/.codex/sessions" codex "$WALKC"
   walk_dir "$HOME/.codex/archived_sessions" codex "$WALKC"
+  walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"
   walk_dir "$CCODE_DIR" commandcode "$WALKCC"
   walk_opencode
   jq -c 'select(.t == "rec") | del(.t)' "$TMP/walk.jsonl" >"$TMP/records.jsonl"

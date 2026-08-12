@@ -57,6 +57,7 @@ const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
+const WALKPI = extractBlock("WALKPI");
 const WALKCC = extractBlock("WALKCC");
 const DEDUP = extractBlock("DEDUP");
 const DETAILS = extractBlock("DETAILS");
@@ -529,6 +530,158 @@ describe("WALKC", () => {
 
   test("files without session_meta emit nothing", () => {
     expect(walkc([tokenCount()])).toEqual([]);
+  });
+});
+
+const walkpi = (lines, src = "pi", off = 0) =>
+  jq(WALKPI, lines.map((l) => JSON.stringify(l)).join("\n"), [
+    "--argjson",
+    "off",
+    String(off),
+    "--arg",
+    "src",
+    src,
+  ]);
+
+const piSession = (over = {}) => ({
+  type: "session",
+  version: 3,
+  id: "pi-session-1",
+  timestamp: "2026-06-10T12:00:00.000Z",
+  cwd: "/repo/pi-app",
+  ...over,
+});
+
+const piUsage = (over = {}) => ({
+  input: 100,
+  output: 20,
+  cacheRead: 60,
+  cacheWrite: 5,
+  totalTokens: 185,
+  cost: {
+    input: 0.1,
+    output: 0.1,
+    cacheRead: 0.02,
+    cacheWrite: 0.03,
+    total: 0.25,
+  },
+  ...over,
+});
+
+const piMessage = (role, over = {}) => ({
+  type: "message",
+  id: `${role}-1`,
+  parentId: null,
+  timestamp: "2026-06-10T12:30:00.123Z",
+  message: {
+    role,
+    model: role === "assistant" ? "claude-sonnet-4-5" : undefined,
+    usage: role === "user" ? undefined : piUsage(),
+    content: role === "user" ? [{ type: "text", text: "fix pi usage" }] : [],
+  },
+  ...over,
+});
+
+describe("WALKPI", () => {
+  test("assistant, tool, and summary usage become exact detail records", () => {
+    const out = walkpi([
+      piSession(),
+      piMessage("assistant"),
+      piMessage("toolResult", { id: "tool-1" }),
+      {
+        type: "compaction",
+        id: "compact-1",
+        timestamp: "2026-06-10T13:30:00.123Z",
+        usage: piUsage({ input: 10, output: 2, cacheRead: 0, cacheWrite: 0 }),
+      },
+      {
+        type: "branch_summary",
+        id: "summary-1",
+        timestamp: "2026-06-10T14:30:00.123Z",
+        usage: piUsage({ input: 8, output: 3, cacheRead: 0, cacheWrite: 0 }),
+      },
+    ]);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toMatchObject({
+      t: "rec",
+      id: "pi:pi-session-1:assistant-1",
+      sid: "pi-session-1",
+      cwd: "/repo/pi-app",
+      model: "claude-sonnet-4-5",
+      src: "pi",
+      inp: 100,
+      out: 20,
+      cr: 60,
+      cc: 5,
+      tok: 185,
+      cost: 0.25,
+      date: "2026-06-10",
+      hour: 12,
+      ts: Date.parse("2026-06-10T12:30:00Z"),
+      wt: null,
+    });
+    expect(out[1].model).toBe("unknown");
+    expect(out[2]).toMatchObject({
+      id: "pi:pi-session-1:compact-1",
+      inp: 10,
+      out: 2,
+    });
+    expect(out[3]).toMatchObject({
+      id: "pi:pi-session-1:summary-1",
+      inp: 8,
+      out: 3,
+    });
+  });
+
+  test("user text and explicit session names provide chat titles", () => {
+    const out = walkpi([
+      piSession(),
+      piMessage("user"),
+      { type: "session_info", id: "name-1", name: "  Pi coverage  " },
+    ]);
+    expect(out).toEqual([
+      {
+        t: "text",
+        sid: "pi-session-1",
+        tms: "2026-06-10T12:30:00.123Z",
+        text: "fix pi usage",
+      },
+      { t: "title", sid: "pi-session-1", title: "Pi coverage" },
+    ]);
+  });
+
+  test("zero-token usage and files without a session header emit nothing", () => {
+    expect(
+      walkpi([
+        piSession(),
+        piMessage("assistant", {
+          message: {
+            role: "assistant",
+            model: "model",
+            usage: piUsage({
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            }),
+          },
+        }),
+      ]),
+    ).toEqual([]);
+    expect(walkpi([piMessage("assistant")])).toEqual([]);
+  });
+
+  test("timezone offset shifts the local date and hour", () => {
+    const [rec] = walkpi(
+      [
+        piSession(),
+        piMessage("assistant", { timestamp: "2026-06-10T23:30:00.000Z" }),
+      ],
+      "pi",
+      3600 * 2,
+    );
+    expect(rec.date).toBe("2026-06-11");
+    expect(rec.hour).toBe(1);
   });
 });
 
@@ -1996,6 +2149,9 @@ describe("collector configuration", () => {
     );
     expect(script).not.toContain(
       "for agent in codex opencode amp droid codebuff hermes pi goose kilo",
+    );
+    expect(script).toContain(
+      'walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"',
     );
   });
 
