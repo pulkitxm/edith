@@ -172,6 +172,7 @@ struct CompanionSettingsScreen: View {
     private var endpoint = "http://127.0.0.1:4820"
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @FocusState private var keyFocused: Bool
 
     private var dark: Bool { scheme == .dark }
@@ -196,7 +197,7 @@ struct CompanionSettingsScreen: View {
             .pageContent(compact)
         }
         .task {
-            await model.load()
+            if requestsEnabled { await model.load() }
         }
     }
 

@@ -319,9 +319,27 @@ function startSystemActions() {
   }
 }
 
+function startCopyButtons() {
+  for (const button of document.querySelectorAll("[data-copy]")) {
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy);
+      } catch {
+        return;
+      }
+      const label = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = label;
+      }, 1500);
+    });
+  }
+}
+
 function start() {
   startPlatformDownload();
   startSystemActions();
+  startCopyButtons();
   buildHeatmaps();
   buildSparks();
   startNowPlaying();

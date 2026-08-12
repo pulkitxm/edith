@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct MachineMount: Codable, Equatable, Sendable {
@@ -209,7 +210,8 @@ public enum MachineMounts {
 
     public static func options(
         machine: Machine, readOnly: Bool, uid: uid_t = getuid(), gid: gid_t = getgid(),
-        minimal: Bool = false
+        minimal: Bool = false,
+        useFSKit: Bool = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
     ) -> [String] {
         var options = [
             "ControlPath=\"\(MachinePaths.socketFile(for: machine.id).path)\"",
@@ -220,8 +222,10 @@ public enum MachineMounts {
         ]
         if !machine.auth.usesAskpass { options.append("BatchMode=yes") }
         if !minimal {
+            if useFSKit { options.append("backend=fskit") }
             options += [
                 "volname=\(folderName(for: machine))",
+                "noatime",
                 "defer_permissions",
                 "noappledouble",
                 "noapplexattr",
@@ -236,10 +240,12 @@ public enum MachineMounts {
 
     public static func mountArguments(
         machine: Machine, remotePath: String, mountPoint: String, readOnly: Bool,
-        uid: uid_t = getuid(), gid: gid_t = getgid(), minimal: Bool = false
+        uid: uid_t = getuid(), gid: gid_t = getgid(), minimal: Bool = false,
+        useFSKit: Bool = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
     ) -> [String] {
         var options = options(
-            machine: machine, readOnly: readOnly, uid: uid, gid: gid, minimal: minimal)
+            machine: machine, readOnly: readOnly, uid: uid, gid: gid, minimal: minimal,
+            useFSKit: useFSKit)
         var arguments = ["\(machine.sshTarget):\(remotePath)", mountPoint]
         if case .manual = machine.source {
             arguments += ["-p", String(machine.port)]
@@ -264,6 +270,7 @@ public enum MachineMounts {
         }
         let destination = mountPoint ?? Self.mountPoint(for: machine)
         try prepare(destination)
+        await stopOrphanedFuseTHelpers(at: destination.path)
         var complaint = ""
         for minimal in [false, true] {
             let arguments = mountArguments(
@@ -295,6 +302,7 @@ public enum MachineMounts {
                     : complaint)
         }
         remember(records().filter { $0.mountPoint != existing.mountPoint })
+        await stopOrphanedFuseTHelpers(at: existing.mountPoint)
         discardEmptyFolder(at: existing.mountPoint)
         return existing
     }
@@ -380,13 +388,45 @@ public enum MachineMounts {
             landed = await settled(machine: machine, at: destination, remotePath: remotePath)
             if landed != nil { break }
             if !process.isRunning {
+                try? await Task.sleep(for: .milliseconds(300))
                 landed = await settled(machine: machine, at: destination, remotePath: remotePath)
                 break
             }
         }
         if landed == nil, process.isRunning { process.terminate() }
         pipe.fileHandleForReading.readabilityHandler = nil
+        if landed == nil { await stopOrphanedFuseTHelpers(at: destination.path) }
         return (landed, landed == nil ? explain(output.text()) : "")
+    }
+
+    static func fuseTHelperPIDs(in output: String, mountedAt mountPoint: String) -> [pid_t] {
+        output.split(whereSeparator: \.isNewline).compactMap { line in
+            let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+            guard fields.count == 2, let pid = pid_t(fields[0]) else { return nil }
+            let command = String(fields[1])
+            guard command.contains("go-nfsv4"), command.hasSuffix(" \(mountPoint)") else {
+                return nil
+            }
+            return pid
+        }
+    }
+
+    private static func fuseTHelperPIDs(at mountPoint: String) async -> [pid_t] {
+        let result = await run(
+            URL(fileURLWithPath: "/bin/ps"), ["-axo", "pid=,command="], timeout: 5)
+        guard result.status == 0 else { return [] }
+        return fuseTHelperPIDs(in: result.output, mountedAt: mountPoint)
+    }
+
+    private static func stopOrphanedFuseTHelpers(at mountPoint: String) async {
+        guard !(await volumes()).contains(where: { $0.mountPoint == mountPoint }) else { return }
+        let helpers = await fuseTHelperPIDs(at: mountPoint)
+        guard !helpers.isEmpty else { return }
+        for pid in helpers { _ = Darwin.kill(pid, SIGTERM) }
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !(await volumes()).contains(where: { $0.mountPoint == mountPoint }) else { return }
+        let survivors = Set(await fuseTHelperPIDs(at: mountPoint))
+        for pid in helpers where survivors.contains(pid) { _ = Darwin.kill(pid, SIGKILL) }
     }
 
     static func prepare(_ mountPoint: URL) throws {

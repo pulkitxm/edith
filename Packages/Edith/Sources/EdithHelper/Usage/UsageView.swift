@@ -377,11 +377,6 @@ struct UsageView: View {
 
 extension Double {
     var compactTokens: String {
-        switch self {
-        case 1e9...: return String(format: "%.2fB", self / 1e9)
-        case 1e6...: return String(format: "%.1fM", self / 1e6)
-        case 1e3...: return String(format: "%.1fK", self / 1e3)
-        default: return String(format: "%.0f", self)
-        }
+        TokenFormatter.compact(self)
     }
 }
