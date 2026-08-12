@@ -1285,7 +1285,7 @@ describe("usage pipeline", () => {
         JSON.stringify([[{ sessions }]]),
       ],
     )[0];
-    out.schemaVersion = 7;
+    out.schemaVersion = 8;
     for (const day of out.daily) {
       day.hours = Array.from({ length: 24 }, () => ({
         tokens: 0,
@@ -1439,7 +1439,7 @@ describe("usage pipeline", () => {
       (value) => value.daily.push(structuredClone(value.daily[0])),
       (value) => value.sources.push("codex"),
       (value) => value.defaultSources.push("missing"),
-      (value) => (value.schemaVersion = 6),
+      (value) => (value.schemaVersion = 7),
       (value) => value.daily[0].hours.pop(),
       (value) => delete value.daily[0].hours[0].byPath,
       (value) => delete value.daily[0].projects,
@@ -1885,7 +1885,7 @@ describe("repository and detail attribution", () => {
       "cm",
       JSON.stringify([mappings]),
     ]);
-    expect(out.schemaVersion).toBe(7);
+    expect(out.schemaVersion).toBe(8);
     expect(out.daily[0].projects).toHaveLength(2);
     expect(
       out.daily[0].projects.map((project) => project.repositoryID),
