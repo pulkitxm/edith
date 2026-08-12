@@ -15,7 +15,7 @@ struct BudgetCardView: View {
         50.0
     @AppStorage(AppStorageKeys.Budget.deadline, store: SharedDefaults.store) private
         var deadlineTS = 0.0
-    @State private var latest: DashLimitPoint?
+    @State private var latest: LimitPoint?
 
     private var kind: LimitWindowKind { kindRaw == "session" ? .session : .weekly }
     private var mode: BudgetMode { BudgetMode(rawValue: modeRaw) ?? .pace }
@@ -23,7 +23,7 @@ struct BudgetCardView: View {
     private var status: BudgetStatus? {
         guard enabled, let latest else { return nil }
         let pct = kind == .session ? latest.s : latest.w
-        let reset = kind == .session ? latest.sr : latest.wr
+        let reset = kind == .session ? latest.sessionReset : latest.weekReset
         guard let pct, let reset else { return nil }
         let start = reset.addingTimeInterval(-kind.duration)
         let deadline =
@@ -48,7 +48,7 @@ struct BudgetCardView: View {
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(60), alignment: .leading)
             }
         }
-        .task { latest = DashLimits.loadLatest() }
+        .task { latest = LimitsHistory.loadLatestPoint() }
     }
 
     private func content(_ status: BudgetStatus) -> some View {

@@ -2,124 +2,6 @@ import Charts
 import EdithKit
 import SwiftUI
 
-struct DashLimitPoint: Identifiable {
-    let t: Date
-    let s: Double?
-    let w: Double?
-    let sr: Date?
-    let wr: Date?
-    var id: TimeInterval { t.timeIntervalSince1970 }
-}
-
-struct ResetMarker: Identifiable {
-    let t: Date
-    let session: Bool
-    var id: String { "\(t.timeIntervalSince1970)-\(session)" }
-}
-
-enum DashLimits {
-    private struct Row: Decodable {
-        let ts: String
-        let p: LimitProvider?
-        let s: Double?
-        let w: Double?
-        let sr: String?
-        let wr: String?
-    }
-
-    static func loadAll(provider: LimitProvider = .claude) -> [DashLimitPoint] {
-        guard let text = try? String(contentsOf: LimitsHistory.url, encoding: .utf8) else {
-            return []
-        }
-        let dec = JSONDecoder()
-        var out: [DashLimitPoint] = []
-        for line in text.split(separator: "\n") {
-            guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
-            else { continue }
-            out.append(
-                DashLimitPoint(
-                    t: t, s: r.s, w: r.w,
-                    sr: r.sr.flatMap(EdithDate.parseISO), wr: r.wr.flatMap(EdithDate.parseISO)))
-        }
-        return out.sorted { $0.t < $1.t }
-    }
-
-    static func loadLatest(provider: LimitProvider = .claude) -> DashLimitPoint? {
-        let text = FileTail.read(LimitsHistory.url, maxBytes: 8192)
-        let dec = JSONDecoder()
-        for line in text.split(separator: "\n").reversed() {
-            guard let r = try? dec.decode(Row.self, from: Data(line.utf8)),
-                let t = EdithDate.parseISO(r.ts), (r.p ?? .claude) == provider
-            else { continue }
-            return DashLimitPoint(
-                t: t, s: r.s, w: r.w,
-                sr: r.sr.flatMap(EdithDate.parseISO), wr: r.wr.flatMap(EdithDate.parseISO))
-        }
-        return nil
-    }
-
-    static func availableProviders() -> [LimitProvider] {
-        let text = FileTail.read(LimitsHistory.url, maxBytes: 65_536)
-        let decoder = JSONDecoder()
-        let found = Set(
-            text.split(separator: "\n").compactMap { line in
-                (try? decoder.decode(Row.self, from: Data(line.utf8))).map { $0.p ?? .claude }
-            })
-        return LimitProvider.allCases.filter(found.contains)
-    }
-
-    static func downsample(_ rows: [DashLimitPoint], now: Date, rawWindow: TimeInterval = 7 * 86400)
-        -> [DashLimitPoint]
-    {
-        let cutoff = now.addingTimeInterval(-rawWindow)
-        var buckets: [TimeInterval: DashLimitPoint] = [:]
-        var raw: [DashLimitPoint] = []
-        for r in rows {
-            if r.t >= cutoff {
-                raw.append(r)
-                continue
-            }
-            let b = (r.t.timeIntervalSince1970 / 3600).rounded(.down) * 3600
-            if let cur = buckets[b] {
-                buckets[b] = DashLimitPoint(
-                    t: Date(timeIntervalSince1970: b),
-                    s: [cur.s, r.s].compactMap { $0 }.max(),
-                    w: [cur.w, r.w].compactMap { $0 }.max(),
-                    sr: r.sr, wr: r.wr)
-            } else {
-                buckets[b] = DashLimitPoint(
-                    t: Date(timeIntervalSince1970: b), s: r.s, w: r.w, sr: r.sr, wr: r.wr)
-            }
-        }
-        return (Array(buckets.values) + raw).sorted { $0.t < $1.t }
-    }
-
-    static func markers(_ pts: [DashLimitPoint], minGap: TimeInterval = 20 * 60) -> [ResetMarker] {
-        guard pts.count > 1 else { return [] }
-        var out: [ResetMarker] = []
-        var lastSession: Date?
-        var lastWeekly: Date?
-        for i in 1..<pts.count {
-            let p = pts[i - 1]
-            let q = pts[i]
-            if let a = p.sr, let b = q.sr, a != b,
-                lastSession.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
-            {
-                out.append(ResetMarker(t: q.t, session: true))
-                lastSession = q.t
-            }
-            if let a = p.wr, let b = q.wr, a != b,
-                lastWeekly.map({ q.t.timeIntervalSince($0) > minGap }) ?? true
-            {
-                out.append(ResetMarker(t: q.t, session: false))
-                lastWeekly = q.t
-            }
-        }
-        return out
-    }
-}
-
 struct RateLimitsDialsView: View {
     let dark: Bool
     var fill = false
@@ -129,7 +11,7 @@ struct RateLimitsDialsView: View {
         LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
-    @State private var point: DashLimitPoint?
+    @State private var point: LimitPoint?
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var selectedRaw =
         LimitProvider.claude.rawValue
@@ -146,10 +28,10 @@ struct RateLimitsDialsView: View {
     }
 
     private func reload() {
-        let found = DashLimits.availableProviders()
+        let found = LimitsHistory.availableProviders()
         providers = found
         let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
-        point = DashLimits.loadLatest(
+        point = LimitsHistory.loadLatestPoint(
             provider: found.contains(saved) ? saved : found.first ?? saved)
     }
 
@@ -166,12 +48,12 @@ struct RateLimitsDialsView: View {
                 LimitsRefreshButton(dark: dark) { reload() }
             }
             HStack(spacing: UIScale.pt(24)) {
-                dial("SESSION (5H)", pct: point?.s, reset: point?.sr)
-                dial("WEEKLY", pct: point?.w, reset: point?.wr)
+                dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
+                dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
             }
             .frame(maxWidth: .infinity)
             if let point {
-                Text("As of \(point.t.formatted(.dateTime.hour().minute()))")
+                Text("As of \(point.date.formatted(.dateTime.hour().minute()))")
                     .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
             }
             if showsJumpLink {
@@ -297,11 +179,11 @@ struct LimitsCardView: View {
         LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
-    @State private var all: [DashLimitPoint] = []
-    @State private var downsampled: [DashLimitPoint] = []
-    @State private var visible: [DashLimitPoint] = []
+    @State private var all: [LimitPoint] = []
+    @State private var downsampled: [LimitPoint] = []
+    @State private var visible: [LimitPoint] = []
     @State private var samples: [Sample] = []
-    @State private var marks: [ResetMarker] = []
+    @State private var marks: [LimitResetMarker] = []
     @State private var range = "24h"
     @State private var selected: Date?
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
@@ -370,27 +252,27 @@ struct LimitsCardView: View {
     }
 
     private func reloadAll() {
-        providers = DashLimits.availableProviders()
-        all = DashLimits.loadAll(provider: selectedProvider)
-        let now = all.last?.t ?? Date()
-        downsampled = DashLimits.downsample(all, now: now)
+        providers = LimitsHistory.availableProviders()
+        all = LimitsHistory.loadAll(provider: selectedProvider)
+        let now = all.last?.date ?? Date()
+        downsampled = LimitsHistory.downsample(all, now: now)
         rebuildVisible()
     }
 
     private func rebuildVisible() {
-        let now = all.last?.t ?? Date()
+        let now = all.last?.date ?? Date()
         let ms = ranges.first { $0.0 == range }?.1 ?? nil
         let pts =
-            ms.map { m in downsampled.filter { $0.t >= now.addingTimeInterval(-m) } }
+            ms.map { m in downsampled.filter { $0.date >= now.addingTimeInterval(-m) } }
             ?? downsampled
         visible = pts
-        let start = pts.first?.t ?? now
+        let start = pts.first?.date ?? now
         let spanDays = now.timeIntervalSince(start) / 86400
-        marks = DashLimits.markers(pts).filter { !$0.session || spanDays <= 7 }
+        marks = LimitsHistory.resetMarkers(pts).filter { !$0.session || spanDays <= 7 }
         samples = pts.flatMap { p -> [Sample] in
             [
-                p.s.map { Sample(t: p.t, v: $0, series: "Session") },
-                p.w.map { Sample(t: p.t, v: $0, series: "Weekly") },
+                p.s.map { Sample(t: p.date, v: $0, series: "Session") },
+                p.w.map { Sample(t: p.date, v: $0, series: "Weekly") },
             ].compactMap { $0 }
         }
     }
@@ -419,12 +301,14 @@ struct LimitsCardView: View {
 
     private var readout: some View {
         let point = selected.flatMap { d in
-            visible.min(by: { abs($0.t.timeIntervalSince(d)) < abs($1.t.timeIntervalSince(d)) })
+            visible.min(by: {
+                abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d))
+            })
         }
         return Group {
             if let point {
                 HStack(spacing: UIScale.pt(10)) {
-                    Text(point.t.formatted(.dateTime.month().day().hour().minute()))
+                    Text(point.date.formatted(.dateTime.month().day().hour().minute()))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     if let s = point.s {
                         Text("S \(Int(s))%")
@@ -451,12 +335,12 @@ struct LimitsCardView: View {
     }
 
     private var chart: some View {
-        let now = all.last?.t ?? Date()
-        let start = visible.first?.t ?? now
+        let now = all.last?.date ?? Date()
+        let start = visible.first?.date ?? now
         let spanDays = now.timeIntervalSince(start) / 86400
         return Chart {
             ForEach(marks) { m in
-                RuleMark(x: .value("Reset", m.t))
+                RuleMark(x: .value("Reset", m.date))
                     .foregroundStyle(m.session ? sessionC.opacity(0.3) : weeklyC.opacity(0.55))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [2, 3]))
             }

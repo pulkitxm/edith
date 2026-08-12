@@ -115,8 +115,7 @@ struct DashboardView: View {
     private var masthead: some View {
         PageHeader {
             (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                + Text("Thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
-                + Text(".").foregroundStyle(DashSkin.ink(dark)))
+                + Text("Thinking").italic().foregroundStyle(DashSkin.accentDeep(dark)))
         } trailing: {
             mastheadButtons
         } accessory: {
