@@ -85,7 +85,8 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
     public static let codex = CLIToolSpec(
         id: "codex", displayName: "Codex",
         why: "Reads Codex session and weekly limits when that provider is enabled.",
-        requirement: .whenPreferenceEnabled(key: "codexLimitsEnabled", defaultValue: true),
+        requirement: .whenPreferenceEnabled(
+            key: AppStorageKeys.Limits.codexEnabled, defaultValue: true),
         presenceStrategy: .executable(name: "codex", versionArguments: ["--version"]),
         installStrategy: .packageManagers(
             homebrewArguments: ["install", "--cask", "codex"],

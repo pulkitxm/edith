@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
@@ -33,12 +34,13 @@ final class WindowVisibility: ObservableObject {
 }
 
 @MainActor
-final class MusicDetailPresenter: ObservableObject {
+@Observable
+final class MusicDetailPresenter {
     static let shared = MusicDetailPresenter()
 
-    @Published private(set) var track: Track?
-    @Published private(set) var beginRename = false
-    @Published private(set) var renameArmed = false
+    private(set) var track: Track?
+    private(set) var beginRename = false
+    private(set) var renameArmed = false
     private(set) var followsPlayback = false
 
     func show(_ track: Track, renaming: Bool = false) {
@@ -75,31 +77,33 @@ final class MusicDetailPresenter: ObservableObject {
 }
 
 @MainActor
-final class MusicRemote: ObservableObject {
+@Observable
+final class MusicRemote {
     static let shared = MusicRemote()
 
-    @Published private(set) var tracks: [Track] = []
-    @Published private(set) var folderPath = ""
-    @Published private(set) var folders: [MusicFolder] = []
-    @Published private(set) var folderTracks: [Track] = []
-    @Published private(set) var searchTracks: [Track] = []
-    @Published private(set) var searchFolders: [MusicFolder] = []
-    @Published private(set) var favourites: [Track] = []
-    @Published private(set) var favouritePaths: Set<String> = []
-    @Published private(set) var showingFavourites = false
-    @Published private(set) var currentFile: String?
-    @Published private(set) var isPlaying = false
-    @Published private(set) var volume = 0.7 {
+    private(set) var tracks: [Track] = []
+    private(set) var folderPath = ""
+    private(set) var folders: [MusicFolder] = []
+    private(set) var folderTracks: [Track] = []
+    private(set) var searchTracks: [Track] = []
+    private(set) var searchFolders: [MusicFolder] = []
+    private(set) var favourites: [Track] = []
+    private(set) var favouritePaths: Set<String> = []
+    private(set) var showingFavourites = false
+    private(set) var currentFile: String?
+    private(set) var isPlaying = false
+    private(set) var volume = 0.7 {
         didSet { videoSession?.applyVolume(volume) }
     }
-    @Published private(set) var looping = false
-    @Published private(set) var shuffling = false
-    @Published private(set) var duration: TimeInterval = 0
-    @Published private(set) var restorePending = SharedDefaults.store.integer(
+    private(set) var looping = false
+    private(set) var shuffling = false
+    private(set) var duration: TimeInterval = 0
+    private(set) var restorePending = SharedDefaults.store.integer(
         forKey: "restorePending.music")
 
     private var elapsedBase: TimeInterval = 0
     private var elapsedTimestamp: TimeInterval = 0
+    private(set) var seekTick = 0
     private var stateObserver: NSObjectProtocol?
     private(set) var videoSession: VideoPreviewSession?
     private var videoResumesAudio = false
@@ -113,6 +117,7 @@ final class MusicRemote: ObservableObject {
     }
 
     var elapsed: TimeInterval {
+        _ = seekTick
         if let videoSession { return videoSession.elapsed }
         let raw =
             isPlaying
@@ -140,7 +145,7 @@ final class MusicRemote: ObservableObject {
             })
         IPC.post(IPC.Name.requestMusicState)
         folderObserver = NotificationCenter.default.addObserver(
-            forName: .musicFolderChanged, object: nil, queue: .main
+            forName: .musicFolderChangedLocally, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rescan() }
         }
@@ -284,7 +289,8 @@ final class MusicRemote: ObservableObject {
 
     func reveal(_ track: Track) {
         navigate(to: (track.relativePath as NSString).deletingLastPathComponent)
-        SharedDefaults.store.set(MainDestination.music.rawValue, forKey: "mainWindowSection")
+        SharedDefaults.store.set(
+            MainDestination.music.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
     }
 
     func openFavourites() {
@@ -365,7 +371,7 @@ final class MusicRemote: ObservableObject {
         guard let videoSession else { return }
         if isPlaying != videoSession.isPlaying { isPlaying = videoSession.isPlaying }
         if duration != videoSession.duration { duration = videoSession.duration }
-        objectWillChange.send()
+        seekTick += 1
     }
 
     private func leaveVideo() {
@@ -414,13 +420,13 @@ final class MusicRemote: ObservableObject {
         let clamped = min(max(fraction, 0), 1)
         if let videoSession {
             videoSession.seek(toFraction: clamped)
-            objectWillChange.send()
+            seekTick += 1
             return
         }
         if duration > 0 {
             elapsedBase = clamped * duration
             elapsedTimestamp = Date().timeIntervalSince1970
-            objectWillChange.send()
+            seekTick += 1
         }
         send("seek", ["value": clamped])
     }
@@ -517,7 +523,7 @@ final class MusicRemote: ObservableObject {
     private func broadcastFolderChanged() {
         TrackMeta.invalidateCaches()
         folderCache.removeAll()
-        NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+        NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
         IPC.post(IPC.Name.musicFolderChanged)
     }
 
@@ -533,16 +539,20 @@ final class MusicRemote: ObservableObject {
 }
 
 struct MusicPage: View {
-    @ObservedObject private var remote = MusicRemote.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var tabMusicEnabled = false
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+    @State private var remote = MusicRemote.shared
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+        var tabMusicEnabled = false
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic =
         true
     @AppStorage(
         Repo.musicFolderStaleKey, store: SharedDefaults.store)
     private var musicFolderStale = false
-    @AppStorage("musicGridView", store: SharedDefaults.store) private var gridView = false
-    @StateObject private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Music.gridView, store: SharedDefaults.store) private var gridView =
+        false
+    private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -692,8 +702,7 @@ struct MusicPage: View {
                 breadcrumbBar
                 if tabMusicEnabled, remote.restorePending > 0 {
                     Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -978,7 +987,7 @@ struct MusicPage: View {
 }
 
 struct SeekBar: View {
-    @ObservedObject private var remote = MusicRemote.shared
+    @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
     let theme: Color
     var height: CGFloat = 5
@@ -1485,11 +1494,13 @@ private struct MusicTrackTile: View {
 }
 
 struct MusicDetailOverlay: View {
-    @ObservedObject private var presenter = MusicDetailPresenter.shared
-    @ObservedObject private var remote = MusicRemote.shared
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    @State private var presenter = MusicDetailPresenter.shared
+    @State private var remote = MusicRemote.shared
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         MainDestination.home.rawValue
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var deleteTarget: Track?
 
@@ -1564,8 +1575,8 @@ private struct MusicDetailSheet: View {
     let onDelete: () -> Void
     let onOpenFolder: (String) -> Void
     let onClose: () -> Void
-    @ObservedObject private var remote = MusicRemote.shared
-    @ObservedObject private var presenter = MusicDetailPresenter.shared
+    @State private var remote = MusicRemote.shared
+    @State private var presenter = MusicDetailPresenter.shared
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
     @State private var namedTrack: URL?
@@ -1853,14 +1864,17 @@ extension View {
 }
 
 struct MusicFooter: View {
-    @ObservedObject private var remote = MusicRemote.shared
+    @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         MainDestination.home.rawValue
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic =
         true
-    @StateObject private var presenterState = PresenterState.shared
+    private var presenterState = PresenterState.shared
     @Environment(\.colorScheme) private var scheme
 
     private var theme: Color { themeColor(themeName) }
@@ -2023,8 +2037,7 @@ struct MusicFooter: View {
             .help(remote.looping ? "Repeating this track" : "Play through the queue")
             HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "speaker.wave.1")
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                 Slider(
                     value: Binding(get: { remote.volume }, set: { remote.setVolume($0) }),
                     in: 0...1

@@ -1,18 +1,20 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class CompanionDeskModel: ObservableObject {
-    @Published private(set) var question: CompanionQuestion?
-    @Published private(set) var budget: (asked: Int, total: Int) = (0, 3)
-    @Published private(set) var beliefs: [CompanionBelief] = []
-    @Published private(set) var predictions: [CompanionPrediction] = []
-    @Published private(set) var discrepancies: [CompanionDiscrepancy] = []
-    @Published private(set) var hypotheses: [CompanionHypothesis] = []
-    @Published private(set) var lastResolution: String?
-    @Published private(set) var busy = false
-    @Published private(set) var error: String?
-    @Published var draft = ""
+@Observable
+final class CompanionDeskModel {
+    private(set) var question: CompanionQuestion?
+    private(set) var budget: (asked: Int, total: Int) = (0, 3)
+    private(set) var beliefs: [CompanionBelief] = []
+    private(set) var predictions: [CompanionPrediction] = []
+    private(set) var discrepancies: [CompanionDiscrepancy] = []
+    private(set) var hypotheses: [CompanionHypothesis] = []
+    private(set) var lastResolution: String?
+    private(set) var busy = false
+    private(set) var error: String?
+    var draft = ""
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -117,7 +119,7 @@ final class CompanionDeskModel: ObservableObject {
 }
 
 struct CompanionDeskScreen: View {
-    @ObservedObject var model: CompanionDeskModel
+    @Bindable var model: CompanionDeskModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled

@@ -4,11 +4,12 @@ import EventKit
 import SwiftUI
 
 struct CalendarPage: View {
-    @StateObject private var store = CalendarStore()
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
+    @State private var store = CalendarStore()
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 

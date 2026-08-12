@@ -115,8 +115,7 @@ struct TerminalSettingsPane: View {
             ) { run(.copySourceLine) }
             if let hint = completions.compactMap(\.hint).first {
                 Text(hint)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                     .textSelection(.enabled)
             }
         } header: {

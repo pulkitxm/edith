@@ -26,7 +26,7 @@ final class NotchAlertDetectors {
     }
 
     private var bluetoothEnabled: Bool {
-        SharedDefaults.store.object(forKey: "notchAlertBluetooth") as? Bool == true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Notch.alertBluetooth) as? Bool == true
     }
 
     func start() {
@@ -112,7 +112,7 @@ final class NotchAlertDetectors {
         let device = Self.defaultOutputDevice()
         guard device != lastOutputDevice, device != 0 else { return }
         lastOutputDevice = device
-        guard !warmingUp, enabled("notchAlertAudio") else { return }
+        guard !warmingUp, enabled(AppStorageKeys.Notch.alertAudio) else { return }
         post(
             NotchAlert(
                 id: "audio.output", icon: "hifispeaker.fill", tint: "#4db3e6",
@@ -145,7 +145,9 @@ final class NotchAlertDetectors {
         let alerts = NotchAlertLogic.powerAlerts(
             now: now, lastOnAC: lastOnAC, lastCapacity: lastCapacity)
         for alert in alerts {
-            let flag = alert.id == "battery.low" ? "notchAlertBattery" : "notchAlertPower"
+            let flag =
+                alert.id == "battery.low"
+                ? AppStorageKeys.Notch.alertBattery : AppStorageKeys.Notch.alertPower
             if enabled(flag) { post(alert) }
         }
     }

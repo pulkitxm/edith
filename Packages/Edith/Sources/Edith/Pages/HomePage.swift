@@ -5,18 +5,25 @@ import EventKit
 import SwiftUI
 
 struct HomePage: View {
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+        var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+        var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+        var calendarEnabled =
         false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var systemEnabled = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
         false
     @Environment(\.colorScheme) private var scheme
+    @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var dark: Bool { scheme == .dark }
@@ -243,7 +250,8 @@ private struct HomeHeader: View {
 private struct WorldClocksCard: View {
     let dark: Bool
     @Environment(\.compactLayout) private var compact
-    @AppStorage("homeClockZones", store: SharedDefaults.store) private var zonesRaw =
+    @AppStorage(AppStorageKeys.General.homeClockZones, store: SharedDefaults.store) private
+        var zonesRaw =
         "America/New_York,America/Los_Angeles"
     @State private var showAdd = false
     @State private var query = ""
@@ -508,12 +516,17 @@ private struct ClockFace: View {
 
 private struct QuickActionsCard: View {
     let dark: Bool
-    @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenterMode = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+        var preventSleep = false
+    @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
+        var presenterMode = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
         false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var systemEnabled = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
 
     private var theme: Color { themeColor(themeName) }
 
@@ -584,10 +597,15 @@ private struct QuickActionsCard: View {
 
 private struct MeetingsCard: View {
     let dark: Bool
-    @StateObject private var store = CalendarStore()
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
+    @State private var store = CalendarStore()
+    private var presenterState = PresenterState.shared
+
+    init(dark: Bool) {
+        self.dark = dark
+    }
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
 
     private var theme: Color { themeColor(themeName) }
@@ -693,7 +711,8 @@ struct JumpLink: View {
     let title: String
     let destination: MainDestination
     let dark: Bool
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         MainDestination.home.rawValue
 
     var body: some View {
@@ -716,10 +735,15 @@ struct JumpLink: View {
 
 private struct UsageSummaryCard: View {
     let dark: Bool
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
+
+    init(dark: Bool) {
+        self.dark = dark
+    }
 
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
@@ -837,11 +861,18 @@ private struct UsageSummaryCard: View {
 
 private struct MusicCard: View {
     let dark: Bool
-    @ObservedObject private var remote = MusicRemote.shared
+    @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+    private var presenterState = PresenterState.shared
+
+    init(dark: Bool) {
+        self.dark = dark
+    }
+
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic =
         true
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 

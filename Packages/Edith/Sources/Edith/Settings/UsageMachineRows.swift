@@ -14,16 +14,14 @@ struct UsageMachineRows: View {
         Section {
             if machines.isEmpty {
                 Text("No machines are configured yet. Add one under Machines.")
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             } else {
                 ForEach(machines) { machine in
                     row(machine)
                 }
                 HStack(spacing: UIScale.pt(8)) {
                     Text(status.isEmpty ? footnote : status)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 0)
@@ -65,8 +63,7 @@ struct UsageMachineRows: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(machine.name)
                     Text(detail(machine, summary))
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
             }
             .pointerCursor()

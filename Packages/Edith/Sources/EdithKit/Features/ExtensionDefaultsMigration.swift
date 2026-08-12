@@ -39,18 +39,18 @@ public enum ExtensionDefaultsMigration {
     }
 
     private static let legacyDefaults: [String: Bool] = [
-        "tabUsageEnabled": true,
-        "tabSystemEnabled": true,
-        "tabMachinesEnabled": false,
-        "tabCompanionEnabled": false,
-        "menuBarSystemStats": false,
-        "micMuteEnabled": false,
-        "tabMusicEnabled": true,
-        "tabCalendarEnabled": true,
-        "notchShelfEnabled": false,
-        "clipboardEnabled": false,
-        "focusDimEnabled": false,
-        "presenterEnabled": true,
-        "colorPickerEnabled": false,
+        AppStorageKeys.Tabs.usageEnabled: true,
+        AppStorageKeys.Tabs.systemEnabled: true,
+        AppStorageKeys.Tabs.machinesEnabled: false,
+        AppStorageKeys.Tabs.companionEnabled: false,
+        AppStorageKeys.MenuBar.systemStats: false,
+        AppStorageKeys.Mic.muteEnabled: false,
+        AppStorageKeys.Tabs.musicEnabled: true,
+        AppStorageKeys.Tabs.calendarEnabled: true,
+        AppStorageKeys.Notch.shelfEnabled: false,
+        AppStorageKeys.Clipboard.enabled: false,
+        FocusDimState.enabledKey: false,
+        AppStorageKeys.Presenter.enabled: true,
+        AppStorageKeys.ColorPicker.enabled: false,
     ]
 }

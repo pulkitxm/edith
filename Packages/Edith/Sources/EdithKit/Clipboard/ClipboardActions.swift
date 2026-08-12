@@ -55,7 +55,7 @@ public enum ClipboardActions {
     }
 
     public static func pinToTopPreference(_ defaults: UserDefaults = SharedDefaults.store) -> Bool {
-        (defaults.string(forKey: "clipboardPinTo") ?? "top") != "bottom"
+        (defaults.string(forKey: AppStorageKeys.Clipboard.pinTo) ?? "top") != "bottom"
     }
 
     public static func listed(

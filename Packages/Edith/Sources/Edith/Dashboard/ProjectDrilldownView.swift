@@ -32,7 +32,7 @@ enum ProjColumns {
 }
 
 struct ProjectDrilldownView: View {
-    @ObservedObject var model: DashboardModel
+    @Bindable var model: DashboardModel
     let dark: Bool
     var blur = false
     var blurTokens = false

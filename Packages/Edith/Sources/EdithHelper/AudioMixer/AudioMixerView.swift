@@ -3,8 +3,9 @@ import SwiftUI
 
 @available(macOS 14.4, *)
 @MainActor
-final class MixerEngine: ObservableObject {
-    @Published private(set) var apps: [MixerApp] = []
+@Observable
+final class MixerEngine {
+    private(set) var apps: [MixerApp] = []
 
     private var taps: [pid_t: AppVolumeTap] = [:]
     private var savedGain: [String: Float] = [:]
@@ -54,7 +55,7 @@ struct NotchAudioTab: View {
 
 @available(macOS 14.4, *)
 private struct AudioMixerView: View {
-    @StateObject private var engine = MixerEngine()
+    private var engine = MixerEngine()
 
     var body: some View {
         ScrollView {

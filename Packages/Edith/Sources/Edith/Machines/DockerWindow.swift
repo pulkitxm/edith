@@ -81,7 +81,7 @@ struct PrunePlan: Identifiable, Equatable {
 }
 
 struct DockerConsoleView: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
     @State private var screen = DockerScreen.containers
     @State private var query = ""
@@ -368,7 +368,7 @@ struct DockerRow: Identifiable {
 }
 
 struct DockerUnavailableView: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }

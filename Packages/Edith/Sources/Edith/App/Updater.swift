@@ -1,23 +1,25 @@
 import EdithKit
+import Observation
 import Sparkle
 import SwiftUI
 
 @MainActor
-final class UpdaterModel: NSObject, ObservableObject,
+@Observable
+final class UpdaterModel: NSObject,
     @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate
 {
-    @Published private(set) var updateReady: String?
-    @Published private(set) var updaterAvailable = false
-    @Published private(set) var canCheckForUpdates = false
-    @Published private(set) var lastUpdateCheckDate: Date?
-    @Published private(set) var checkHistory: [UpdateCheckRecord] = []
-    @Published var checkInterval: TimeInterval = UpdateCheckInterval.fallback.seconds {
+    private(set) var updateReady: String?
+    private(set) var updaterAvailable = false
+    private(set) var canCheckForUpdates = false
+    private(set) var lastUpdateCheckDate: Date?
+    private(set) var checkHistory: [UpdateCheckRecord] = []
+    var checkInterval: TimeInterval = UpdateCheckInterval.fallback.seconds {
         didSet {
             guard let updater, updater.updateCheckInterval != checkInterval else { return }
             updater.updateCheckInterval = checkInterval
         }
     }
-    @Published var automaticallyChecksForUpdates = true {
+    var automaticallyChecksForUpdates = true {
         didSet {
             guard
                 let updater,
@@ -26,7 +28,7 @@ final class UpdaterModel: NSObject, ObservableObject,
             updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
     }
-    @Published var automaticallyDownloadsUpdates = true {
+    var automaticallyDownloadsUpdates = true {
         didSet {
             guard
                 let updater,

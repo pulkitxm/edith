@@ -1,10 +1,12 @@
 import Foundation
+import Observation
 
 @MainActor
-public final class MachineStore: ObservableObject {
-    @Published public private(set) var machines: [Machine] = []
-    @Published public private(set) var forwards: [PortForward] = []
-    @Published public private(set) var snippets: [CommandSnippet] = []
+@Observable
+public final class MachineStore {
+    public private(set) var machines: [Machine] = []
+    public private(set) var forwards: [PortForward] = []
+    public private(set) var snippets: [CommandSnippet] = []
 
     private let files: MachineRegistry.Files
 

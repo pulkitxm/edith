@@ -14,7 +14,7 @@ extension View {
 }
 
 struct NotchShelfContentView: View {
-    @ObservedObject var controller: NotchShelfController
+    var controller: NotchShelfController
     var displayID: CGDirectDisplayID = 0
     var collapsedBase: CGSize = NotchGeometry.fallbackSize
     var isBuiltin = true
@@ -237,7 +237,7 @@ struct NotchShelfContentView: View {
     }
 
     private var visibleTabs: [NotchTab] {
-        let mixerOn = SharedDefaults.store.bool(forKey: "notchAudioMixerEnabled")
+        let mixerOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
         return NotchTab.allCases.filter { $0 != .audio || mixerOn }
     }
 
@@ -276,13 +276,18 @@ struct NotchShelfContentView: View {
 }
 
 private struct NotchHomeTab: View {
-    @ObservedObject var controller: NotchShelfController
-    @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenterMode = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    var controller: NotchShelfController
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+        var preventSleep = false
+    @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
+        var presenterMode = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
         true
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = true
-    @AppStorage("notchShelfShowMusic", store: SharedDefaults.store) private var showMusic = true
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var systemEnabled = true
+    @AppStorage(AppStorageKeys.Notch.shelfShowMusic, store: SharedDefaults.store) private
+        var showMusic = true
 
     var body: some View {
         VStack(spacing: 8) {
@@ -377,12 +382,17 @@ private struct NotchHomeTab: View {
     }
 }
 
-private struct NotchNowPlayingCard: View {
-    @ObservedObject var controller: NotchShelfController
+fileprivate struct NotchNowPlayingCard: View {
+    var controller: NotchShelfController
     let track: NotchNowPlaying
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store)
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store)
     private var presenterBlurMusic = true
+
+    init(controller: NotchShelfController, track: NotchNowPlaying) {
+        self.controller = controller
+        self.track = track
+    }
 
     var body: some View {
         HStack(spacing: 11) {
@@ -478,7 +488,7 @@ private struct NotchNowPlayingCard: View {
 }
 
 private struct NotchSeekBar: View {
-    @ObservedObject var controller: NotchShelfController
+    var controller: NotchShelfController
     @State private var dragFraction: Double?
 
     var body: some View {
@@ -508,13 +518,14 @@ private struct NotchSeekBar: View {
 }
 
 private struct NotchUsageRings: View {
-    @ObservedObject var usage: UsageStore
+    var usage: UsageStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+        var selectedRaw =
         LimitProvider.claude.rawValue
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
         LimitRing.defaultWarnPercent
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
 
     private var providers: [LimitProvider] { usage.availableProviders }
@@ -626,7 +637,7 @@ private struct NotchUsageRings: View {
 }
 
 private struct NotchClipboardTab: View {
-    @ObservedObject var controller: NotchShelfController
+    var controller: NotchShelfController
 
     var body: some View {
         if let store = controller.clipboardStore {
@@ -640,7 +651,7 @@ private struct NotchClipboardTab: View {
 }
 
 private struct NotchClipboardList: View {
-    @ObservedObject var store: ClipboardStore
+    var store: ClipboardStore
     let controller: NotchShelfController
 
     var body: some View {
@@ -716,7 +727,7 @@ struct NotchRiseFade: ViewModifier, Animatable {
 
 private struct NotchAlertDropView: View {
     let alert: NotchAlert
-    @ObservedObject var controller: NotchShelfController
+    var controller: NotchShelfController
     let glide: Animation
     @State private var appeared = false
 
@@ -772,7 +783,7 @@ extension Color {
 }
 
 private struct NotchMusicWings: View {
-    @ObservedObject var controller: NotchShelfController
+    var controller: NotchShelfController
     let track: NotchNowPlaying
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -825,7 +836,7 @@ private struct NotchMusicWings: View {
 
 private struct ShelfItemView: View {
     let item: ShelfItem
-    @ObservedObject var controller: NotchShelfController
+    var controller: NotchShelfController
     let canvasSize: CGSize
     @State private var handedOffToSystemDrag = false
     @State private var thumbnail: NSImage?

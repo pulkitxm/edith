@@ -18,8 +18,9 @@ struct SettingsPane: View {
         }
     }
 
-    @ObservedObject var updater: UpdaterModel
-    @AppStorage("settingsTab", store: SharedDefaults.store) private var tabRaw =
+    let updater: UpdaterModel
+    @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
+        var tabRaw =
         Tab.general.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
@@ -69,7 +70,7 @@ struct SettingsPane: View {
 }
 
 private struct UpdatesPane: View {
-    @ObservedObject var updater: UpdaterModel
+    let updater: UpdaterModel
     @State private var showingSchedule = false
 
     private var currentVersion: String {
@@ -140,14 +141,20 @@ private struct UpdatesPane: View {
 }
 
 struct GeneralPane: View {
-    @AppStorage("appearance", store: SharedDefaults.store) private var appearance = "system"
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("lastPaletteTheme", store: SharedDefaults.store) private var lastPaletteTheme =
+    @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
+        var appearance = "system"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.General.lastPaletteTheme, store: SharedDefaults.store) private
+        var lastPaletteTheme =
         "blue"
-    @AppStorage("showDockIcon", store: SharedDefaults.store) private var showDockIcon = true
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    @AppStorage(AppStorageKeys.General.showDockIcon, store: SharedDefaults.store) private
+        var showDockIcon = true
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         MainDestination.home.rawValue
-    @AppStorage("settingsTab", store: SharedDefaults.store) private var settingsTab =
+    @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
+        var settingsTab =
         SettingsPane.Tab.general.rawValue
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled

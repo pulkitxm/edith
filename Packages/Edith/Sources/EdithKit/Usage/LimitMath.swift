@@ -44,8 +44,10 @@ public struct UsageThresholds: Equatable {
 
     public static func fromDefaults(_ d: UserDefaults = .standard) -> UsageThresholds {
         UsageThresholds(
-            warningPercent: d.object(forKey: "warnPercent") as? Int ?? 60,
-            criticalPercent: d.object(forKey: "critPercent") as? Int ?? 85)
+            warningPercent: d.object(forKey: AppStorageKeys.Limits.warnPercent) as? Int
+                ?? LimitRing.defaultWarnPercent,
+            criticalPercent: d.object(forKey: AppStorageKeys.Limits.critPercent) as? Int
+                ?? LimitRing.defaultCriticalPercent)
     }
 }
 

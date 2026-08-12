@@ -4,13 +4,15 @@ import EdithKit
 import SwiftUI
 
 struct ColorPickerRows: View {
-    @AppStorage("colorPickerEnabled", store: SharedDefaults.store) private var colorPickerEnabled =
+    @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
+        var colorPickerEnabled =
         false
-    @AppStorage("colorPickerCopyFormat", store: SharedDefaults.store) private var copyFormat:
-        ColorCopyFormat = .hex
-    @AppStorage("colorPickerProfile", store: SharedDefaults.store) private var profile:
-        ColorProfile = .sRGB
-    @AppStorage("colorPickerHistorySize", store: SharedDefaults.store) private var historySize = 100
+    @AppStorage(AppStorageKeys.ColorPicker.copyFormat, store: SharedDefaults.store) private
+        var copyFormat: ColorCopyFormat = .hex
+    @AppStorage(AppStorageKeys.ColorPicker.profile, store: SharedDefaults.store) private
+        var profile: ColorProfile = .sRGB
+    @AppStorage(AppStorageKeys.ColorPicker.historySize, store: SharedDefaults.store) private
+        var historySize = 100
     @State private var history: [ColorSwatch] = ColorHistoryStore.load()
 
     var body: some View {

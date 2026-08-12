@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 
 private struct MachineLiveMetrics {
     var sample: MachineSample?
@@ -12,28 +13,29 @@ private struct MachineLiveMetrics {
 }
 
 @MainActor
-public final class MachineSession: ObservableObject {
+@Observable
+public final class MachineSession {
     public let machine: Machine
     public nonisolated var id: UUID { machine.id }
 
-    @Published public private(set) var state: MachineConnectionState = .disconnected
-    @Published public private(set) var hello: MachineHello?
-    @Published public private(set) var slow: MachineSlow?
-    @Published private var liveMetrics = MachineLiveMetrics()
-    @Published public private(set) var docker = DockerAvailability(status: .unknown)
-    @Published public private(set) var containersLoaded = false
-    @Published public private(set) var containers: [DockerContainer] = []
-    @Published public private(set) var images: [DockerImage] = []
-    @Published public private(set) var volumes: [DockerVolume] = []
-    @Published public private(set) var diskUsage: [DockerDiskUsage] = []
-    @Published public private(set) var networks: [DockerNetwork] = []
-    @Published public private(set) var services: [SystemdService] = []
-    @Published public private(set) var facts = MachineSessionSummary()
-    @Published public private(set) var activeForwards: Set<UUID> = []
-    @Published public private(set) var mount: MachineMount?
-    @Published public private(set) var mountHealth: MountHealth?
-    @Published public private(set) var isRemounting = false
-    @Published public private(set) var isLocal: Bool
+    public private(set) var state: MachineConnectionState = .disconnected
+    public private(set) var hello: MachineHello?
+    public private(set) var slow: MachineSlow?
+    private var liveMetrics = MachineLiveMetrics()
+    public private(set) var docker = DockerAvailability(status: .unknown)
+    public private(set) var containersLoaded = false
+    public private(set) var containers: [DockerContainer] = []
+    public private(set) var images: [DockerImage] = []
+    public private(set) var volumes: [DockerVolume] = []
+    public private(set) var diskUsage: [DockerDiskUsage] = []
+    public private(set) var networks: [DockerNetwork] = []
+    public private(set) var services: [SystemdService] = []
+    public private(set) var facts = MachineSessionSummary()
+    public private(set) var activeForwards: Set<UUID> = []
+    public private(set) var mount: MachineMount?
+    public private(set) var mountHealth: MountHealth?
+    public private(set) var isRemounting = false
+    public private(set) var isLocal: Bool
 
     public static let historyLength = 60
 
@@ -58,7 +60,7 @@ public final class MachineSession: ObservableObject {
     private var metricsFailures = 0
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
-    private var wakeObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
     private var dockerObserverCount = 0

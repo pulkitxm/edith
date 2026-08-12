@@ -4,25 +4,31 @@ import EdithKit
 import SwiftUI
 
 struct PresenterRows: View {
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
         false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenterMode = false
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+    @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
+        var presenterMode = false
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic =
         true
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
-    @AppStorage("presenterBlurUsage", store: SharedDefaults.store) private var presenterBlurUsage =
+    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
+        var presenterBlurUsage =
         false
-    @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
-    @AppStorage("presenterAutoEnabled", store: SharedDefaults.store) private var autoEnabled = false
-    @AppStorage("presenterHideMenuBarNumbers", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Presenter.autoEnabled, store: SharedDefaults.store) private
+        var autoEnabled = false
+    @AppStorage(AppStorageKeys.Presenter.hideMenuBarNumbers, store: SharedDefaults.store)
     private var hideMenuBarNumbers = false
-    @AppStorage("presenterDetectRecording", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Presenter.detectRecording, store: SharedDefaults.store)
     private var detectRecording = true
-    @AppStorage("presenterDetectScreenSharing", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Presenter.detectScreenSharing, store: SharedDefaults.store)
     private var detectScreenSharing = true
-    @AppStorage("presenterDetectMirroring", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Presenter.detectMirroring, store: SharedDefaults.store)
     private var detectMirroring = true
 
     var body: some View {

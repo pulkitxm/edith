@@ -13,14 +13,16 @@ extension EnvironmentValues {
 }
 
 struct MachinesPage: View {
-    @StateObject private var model = MachinesModel.shared
+    @State private var model = MachinesModel.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
-    @AppStorage("machinesTab", store: SharedDefaults.store) private var storedTab =
+    @AppStorage(AppStorageKeys.Machines.tab, store: SharedDefaults.store) private var storedTab =
         MachineTab.overview.rawValue
-    @AppStorage("machinesSelection", store: SharedDefaults.store) private var storedSelection = ""
-    @AppStorage("machinesMode", store: SharedDefaults.store) private var modeRaw = "fleet"
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
+    @AppStorage(AppStorageKeys.Machines.selection, store: SharedDefaults.store) private
+        var storedSelection = ""
+    @AppStorage(AppStorageKeys.Machines.mode, store: SharedDefaults.store) private var modeRaw =
+        "fleet"
     @State private var addSheetPresented = false
     @State private var editingMachine: Machine?
     @State private var confirmRemoval: Machine?
@@ -202,7 +204,7 @@ struct MachinesPage: View {
 
 private struct MachineChip: View {
     let machine: Machine
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let selected: Bool
     let isLocal: Bool
     let dark: Bool
@@ -210,51 +212,25 @@ private struct MachineChip: View {
     let onDetach: () -> Void
     let onEdit: () -> Void
     let onRemove: () -> Void
-    @State private var hovering = false
 
     var body: some View {
-        Button {
-            if SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
-                onDetach()
-            } else {
-                onSelect()
-            }
-        } label: {
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: isLocal ? "laptopcomputer" : "server.rack")
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(machine.name)
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(1)
-                    Text(isLocal ? "Local" : machine.subtitle)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
+        SelectableChipRow(
+            icon: isLocal ? "laptopcomputer" : "server.rack",
+            title: machine.name,
+            subtitle: isLocal ? "Local" : machine.subtitle,
+            selected: selected, dark: dark,
+            onSelect: {
+                if SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
+                    onDetach()
+                } else {
+                    onSelect()
                 }
-                Circle()
-                    .fill(MachineStatusStyle.color(session.state, dark: dark))
-                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
             }
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(8))
-            .background(
-                selected ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(11))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(11))
-                    .strokeBorder(
-                        selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                        lineWidth: UIScale.pt(selected ? 1.4 : 1))
-            }
-            .contentShape(Rectangle())
+        ) {
+            Circle()
+                .fill(MachineStatusStyle.color(session.state, dark: dark))
+                .frame(width: UIScale.pt(7), height: UIScale.pt(7))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
-        .onHover { hovering = $0 }
         .help("\(machine.name) (⌘-click to open in its own window)")
         .contextMenu {
             Button("Open in New Window", action: onDetach)

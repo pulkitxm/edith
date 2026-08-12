@@ -3,8 +3,8 @@ import EdithKit
 import SwiftUI
 
 struct MachineDetailView: View {
-    @ObservedObject var session: MachineSession
-    @ObservedObject var model: MachinesModel
+    let session: MachineSession
+    let model: MachinesModel
     @Binding var tab: MachineTab
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -119,7 +119,7 @@ struct MachineDetailView: View {
 }
 
 struct ConnectionPill: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let dark: Bool
 
     var body: some View {
@@ -149,7 +149,7 @@ struct ConnectionPill: View {
 
 struct MachineWindowView: View {
     let machineID: UUID
-    @StateObject private var model = MachinesModel.shared
+    @State private var model = MachinesModel.shared
     @State private var tab = MachineTab.overview
     @Environment(\.colorScheme) private var scheme
 

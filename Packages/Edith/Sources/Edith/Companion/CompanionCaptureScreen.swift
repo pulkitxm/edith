@@ -1,26 +1,28 @@
 import AVFoundation
 import EdithKit
+import Observation
 import Speech
 import SwiftUI
 
 @MainActor
-final class CompanionCaptureModel: ObservableObject {
+@Observable
+final class CompanionCaptureModel {
     enum Phase {
         case idle
         case recording
         case preview
     }
 
-    @Published private(set) var phase = Phase.idle
-    @Published private(set) var transcript = ""
-    @Published private(set) var level: Double = 0
-    @Published private(set) var duration: TimeInterval = 0
-    @Published private(set) var remembering = false
-    @Published private(set) var outcome: String?
-    @Published private(set) var error: String?
-    @Published var note = ""
-    @Published private(set) var noteOutcome: String?
-    @Published private(set) var savingNote = false
+    private(set) var phase = Phase.idle
+    private(set) var transcript = ""
+    private(set) var level: Double = 0
+    private(set) var duration: TimeInterval = 0
+    private(set) var remembering = false
+    private(set) var outcome: String?
+    private(set) var error: String?
+    var note = ""
+    private(set) var noteOutcome: String?
+    private(set) var savingNote = false
 
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
@@ -231,8 +233,8 @@ final class CompanionCaptureModel: ObservableObject {
 }
 
 struct CompanionCaptureScreen: View {
-    @ObservedObject var model: CompanionCaptureModel
-    @ObservedObject var home: CompanionHomeModel
+    @Bindable var model: CompanionCaptureModel
+    let home: CompanionHomeModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

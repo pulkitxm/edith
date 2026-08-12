@@ -2,18 +2,24 @@ import EdithKit
 import SwiftUI
 
 struct UsageView: View {
-    @EnvironmentObject private var store: UsageStore
+    var store: UsageStore
     @State private var showLog = false
     @State private var showDiagnostics = false
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
-    @AppStorage("presenterBlurUsage", store: SharedDefaults.store) private var presenterBlurUsage =
+    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
+        var presenterBlurUsage =
         false
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn = 60
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit = 85
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
+        LimitRing.defaultWarnPercent
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
+        LimitRing.defaultCriticalPercent
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+        var selectedRaw =
         LimitProvider.claude.rawValue
 
     private var theme: Color { themeColor(themeName) }
@@ -28,6 +34,10 @@ struct UsageView: View {
         nonmutating set { selectedRaw = newValue.rawValue }
     }
     private var limits: ProviderLimits { store.limits(for: selected) }
+
+    init(store: UsageStore) {
+        self.store = store
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

@@ -383,6 +383,9 @@ public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
 }
 
 public struct CompanionClient: Sendable {
+    public static let defaultEndpointString = "http://127.0.0.1:4820"
+    public static let longRequestTimeout: TimeInterval = 300
+
     public let baseURL: URL
 
     public init(baseURL: URL) {
@@ -390,11 +393,11 @@ public struct CompanionClient: Sendable {
     }
 
     public static func endpoint(override: String?) -> URL {
-        let fallback = URL(string: "http://127.0.0.1:4820")!
+        let fallback = URL(string: defaultEndpointString)!
         let value =
             override
             ?? ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
-            ?? SharedDefaults.store.string(forKey: "companionEndpoint")
+            ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
         guard let value, !value.isEmpty else { return fallback }
         return URL(string: value) ?? fallback
     }
@@ -702,7 +705,9 @@ public struct CompanionClient: Sendable {
     }
 
     public func probeMachine(name: String) async throws -> CompanionMachine {
-        try await post("machines/\(name)/probe", body: EmptyBody(), timeout: 300)
+        try await post(
+            "machines/\(name)/probe", body: EmptyBody(), timeout: CompanionClient.longRequestTimeout
+        )
     }
 
     public func machinePlan() async throws -> CompanionPlan {

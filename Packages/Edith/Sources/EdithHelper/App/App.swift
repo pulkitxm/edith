@@ -76,12 +76,14 @@ struct EdithApp: App {
         DispatchQueue.global(qos: .utility).async {
             CLIInstaller.installIfNeeded()
         }
-        applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        applyAppearance(
+            SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         let services = AppState.services
         _ = IPC.observe(IPC.Name.settingsChanged) {
             HotKey.register()
             SettingsBackup.shared.settingsDidChange()
-            applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+            applyAppearance(
+                SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
@@ -121,7 +123,7 @@ struct EdithApp: App {
             services.presenter?.pauseUntilShareEnds()
         }
         _ = IPC.observe(IPC.Name.requestCalendarEvents) {
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 guard let store = services.calendar else {
                     IPC.post(
                         IPC.Name.calendarEvents,
@@ -134,13 +136,13 @@ struct EdithApp: App {
                         userInfo: [CalendarEventBridge.statusKey: "notAuthorized"])
                     return
                 }
-                store.refresh()
+                let events = await store.refreshAndWait()
                 IPC.post(
                     IPC.Name.calendarEvents,
                     userInfo: [
                         CalendarEventBridge.statusKey: "ok",
                         CalendarEventBridge.payloadKey: CalendarEventBridge.encode(
-                            CalendarEventBridge.payloads(store.events)),
+                            CalendarEventBridge.payloads(events)),
                     ])
             }
         }
@@ -229,13 +231,15 @@ enum GlobalHotKey {
 
 enum HotKey {
     static var code: Int {
-        SharedDefaults.store.object(forKey: "hotKeyCode") as? Int ?? kVK_ANSI_E
+        SharedDefaults.store.object(forKey: AppStorageKeys.General.hotKeyCode) as? Int
+            ?? kVK_ANSI_E
     }
     static var mods: Int {
-        SharedDefaults.store.object(forKey: "hotKeyMods") as? Int ?? (cmdKey | optionKey)
+        SharedDefaults.store.object(forKey: AppStorageKeys.General.hotKeyMods) as? Int
+            ?? (cmdKey | optionKey)
     }
     static var label: String {
-        SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
+        SharedDefaults.store.string(forKey: AppStorageKeys.General.hotKeyLabel) ?? "⌥⌘E"
     }
 
     static func register() {
@@ -249,9 +253,9 @@ enum HotKey {
     }
 
     static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: "hotKeyCode")
-        SharedDefaults.store.set(mods, forKey: "hotKeyMods")
-        SharedDefaults.store.set(label, forKey: "hotKeyLabel")
+        SharedDefaults.store.set(code, forKey: AppStorageKeys.General.hotKeyCode)
+        SharedDefaults.store.set(mods, forKey: AppStorageKeys.General.hotKeyMods)
+        SharedDefaults.store.set(label, forKey: AppStorageKeys.General.hotKeyLabel)
     }
 }
 
@@ -268,7 +272,8 @@ enum ClipboardHotKey {
     }
 
     static func register() {
-        let enabled = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        let enabled =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
         guard enabled else {
             GlobalHotKey.clear(id: GlobalHotKey.ID.clipboard)
             return
@@ -301,7 +306,7 @@ enum MicHotKey {
     }
 
     static func register() {
-        let enabled = SharedDefaults.store.bool(forKey: "micMuteEnabled")
+        let enabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Mic.muteEnabled)
         guard enabled else {
             GlobalHotKey.clear(id: GlobalHotKey.ID.micMute)
             return
@@ -367,15 +372,16 @@ enum PresenterHotKey {
     }
 
     static func register() {
-        let enabled = SharedDefaults.store.object(forKey: "presenterEnabled") as? Bool ?? false
+        let enabled =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.enabled) as? Bool ?? false
         guard enabled else {
             GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
             return
         }
         GlobalHotKey.set(id: GlobalHotKey.ID.presenterToggle, keyCode: code, modifiers: mods) {
             let d = SharedDefaults.store
-            let enabled = !d.bool(forKey: "presenterMode")
-            d.set(enabled, forKey: "presenterMode")
+            let enabled = !d.bool(forKey: AppStorageKeys.Presenter.mode)
+            d.set(enabled, forKey: AppStorageKeys.Presenter.mode)
             if !enabled { IPC.post(IPC.Name.presenterPauseAuto) }
             IPC.post(IPC.Name.settingsChanged)
         }
@@ -411,16 +417,16 @@ struct TabInfo {
 let allTabs: [TabInfo] = [
     TabInfo(
         id: "usage", title: "Agent Usage",
-        subtitle: "limit polling, usage stats", enabledKey: "tabUsageEnabled"),
+        subtitle: "limit polling, usage stats", enabledKey: AppStorageKeys.Tabs.usageEnabled),
     TabInfo(
         id: "music", title: "Music",
-        subtitle: "player, media keys", enabledKey: "tabMusicEnabled"),
+        subtitle: "player, media keys", enabledKey: AppStorageKeys.Tabs.musicEnabled),
     TabInfo(
         id: "system", title: "System",
-        subtitle: "prevent sleep, keyboard cleaning", enabledKey: "tabSystemEnabled"),
+        subtitle: "prevent sleep, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
     TabInfo(
         id: "calendar", title: "Calendar",
-        subtitle: "today's schedule", enabledKey: "tabCalendarEnabled"),
+        subtitle: "today's schedule", enabledKey: AppStorageKeys.Tabs.calendarEnabled),
 ]
 
 func orderedTabIDs(_ raw: String) -> [String] {
@@ -433,23 +439,37 @@ func orderedTabIDs(_ raw: String) -> [String] {
 }
 
 struct RootView: View {
-    @EnvironmentObject private var services: AppServices
-    @State private var tab = UserDefaults.standard.string(forKey: "tab") ?? "usage"
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+    let services: AppServices
+
+    init(services: AppServices) {
+        self.services = services
+    }
+
+    @State private var tab =
+        UserDefaults.standard.string(forKey: AppStorageKeys.General.panelTab) ?? "usage"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+        var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+        var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var systemEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+        var calendarEnabled =
         false
-    @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var focusDimEnabled = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
-    @AppStorage("tabOrder", store: SharedDefaults.store) private var tabOrderRaw =
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
+        false
+    @AppStorage(AppStorageKeys.Tabs.order, store: SharedDefaults.store) private var tabOrderRaw =
         "usage,music,system"
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         "dashboard"
-    @StateObject private var permissions = PermissionsModel.shared
-    @StateObject private var presenterState = PresenterState.shared
+    private var permissions = PermissionsModel.shared
+    private var presenterState = PresenterState.shared
     @State private var showDeveloper = false
 
     private var enabledTabs: [(id: String, title: String)] {
@@ -596,7 +616,7 @@ struct RootView: View {
             }
             .animation(.easeInOut(duration: 0.22), value: tab)
             if showDeveloper {
-                DeveloperPanel()
+                DeveloperPanel(services: services)
             }
         }
         .tint(themeColor(themeName))
@@ -605,7 +625,7 @@ struct RootView: View {
             permissions.refresh()
         }
         .onChange(of: tab) {
-            UserDefaults.standard.set(tab, forKey: "tab")
+            UserDefaults.standard.set(tab, forKey: AppStorageKeys.General.panelTab)
         }
         .onChange(of: usageEnabled) { pinTab() }
         .onChange(of: musicEnabled) { pinTab() }
@@ -620,13 +640,13 @@ struct RootView: View {
     @ViewBuilder
     private var tabBody: some View {
         if tab == "usage", let store = services.usage {
-            UsageView().environmentObject(store)
+            UsageView(store: store)
         } else if tab == "music", let player = services.music {
-            MusicView().environmentObject(player)
+            MusicView(player: player)
         } else if tab == "system", let system = services.system {
-            SystemView().environmentObject(system)
+            SystemView().environment(system)
         } else if tab == "calendar", let calendar = services.calendar {
-            CalendarView().environmentObject(calendar)
+            CalendarView().environment(calendar)
         } else if enabledTabs.isEmpty {
             Text("All tabs are off - enable one in Edith's settings (⚙)")
                 .font(.system(size: 12))

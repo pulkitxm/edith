@@ -3,11 +3,12 @@ import EventKit
 import SwiftUI
 
 struct CalendarView: View {
-    @EnvironmentObject private var store: CalendarStore
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
+    @Environment(CalendarStore.self) private var store
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
 
     private var theme: Color { themeColor(themeName) }
     private var blurCalendar: Bool { presenterState.active && presenterBlurCalendar }
@@ -34,11 +35,7 @@ struct CalendarView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 if groupedDays.isEmpty {
-                    Text("Nothing coming up")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 28)
-                        .frame(maxWidth: .infinity)
+                    EmptyStateText("Nothing coming up")
                 } else {
                     ForEach(groupedDays, id: \.day) { group in
                         VStack(alignment: .leading, spacing: 6) {

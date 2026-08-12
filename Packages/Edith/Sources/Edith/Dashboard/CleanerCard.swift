@@ -1,5 +1,6 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 
 final class CancelToken: @unchecked Sendable {
@@ -7,22 +8,23 @@ final class CancelToken: @unchecked Sendable {
 }
 
 @MainActor
-final class CleanerModel: ObservableObject {
+@Observable
+final class CleanerModel {
     static let shared = CleanerModel()
     private static let confirmedExternalPathsKey = "cleanerConfirmedExternalPaths"
 
-    @Published private(set) var categories: [JunkCategory] = []
-    @Published private(set) var scanning = false
-    @Published private(set) var scanned = false
-    @Published private(set) var logs: [String] = []
-    @Published var logsExpanded = false
-    @Published private(set) var lastReclaimed: Int64 = 0
-    @Published private(set) var drives: [DriveInfo] = []
-    @Published private(set) var driveOptions: [DriveInfo] = []
-    @Published private(set) var customFolders: [String] = []
-    @Published var search = ""
-    @Published var expanded: Set<String> = []
-    @Published private var driveSelection: Set<String>?
+    private(set) var categories: [JunkCategory] = []
+    private(set) var scanning = false
+    private(set) var scanned = false
+    private(set) var logs: [String] = []
+    var logsExpanded = false
+    private(set) var lastReclaimed: Int64 = 0
+    private(set) var drives: [DriveInfo] = []
+    private(set) var driveOptions: [DriveInfo] = []
+    private(set) var customFolders: [String] = []
+    var search = ""
+    private(set) var expanded: Set<String> = []
+    private var driveSelection: Set<String>?
     private var scanToken: CancelToken?
 
     init() {
@@ -302,7 +304,7 @@ final class CleanerModel: ObservableObject {
 
 struct CleanerCard: View {
     let dark: Bool
-    @ObservedObject private var model = CleanerModel.shared
+    @State private var model = CleanerModel.shared
     @State private var showDrivePicker = false
     @State private var pickerScans = false
     @State private var confirmClean = false
@@ -503,7 +505,7 @@ struct CleanerCard: View {
 }
 
 private struct DrivePickerSheet: View {
-    @ObservedObject var model: CleanerModel
+    let model: CleanerModel
     let dark: Bool
     let confirmTitle: String
     let onConfirm: () -> Void
@@ -654,7 +656,7 @@ private struct DrivePickerSheet: View {
 }
 
 private struct CleanerCategoryRow: View {
-    @ObservedObject var model: CleanerModel
+    let model: CleanerModel
     let category: JunkCategory
     let dark: Bool
     @State private var itemFilter = ""
@@ -736,7 +738,7 @@ private struct CleanerCategoryRow: View {
 }
 
 private struct CleanerItemRow: View {
-    @ObservedObject var model: CleanerModel
+    let model: CleanerModel
     let categoryID: String
     let item: JunkItem
     let dark: Bool

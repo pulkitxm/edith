@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct UsageMachinesPicker: View {
-    @ObservedObject var model: DashboardModel
+    let model: DashboardModel
     let dark: Bool
     let dismiss: () -> Void
 

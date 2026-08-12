@@ -3,7 +3,7 @@ import Foundation
 
 public enum RunningApps {
     public static let protectedBundleIDs: Set<String> = [
-        "com.apple.finder", "com.pulkit.edith", "com.pulkit.edith.statusbar",
+        "com.apple.finder", MainApp.bundleIdentifier, MainApp.statusBarBundleIdentifier,
     ]
 
     public static func quit(pid: pid_t, force: Bool) {

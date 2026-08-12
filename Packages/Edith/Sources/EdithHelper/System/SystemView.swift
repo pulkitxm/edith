@@ -2,8 +2,9 @@ import EdithKit
 import SwiftUI
 
 struct SystemView: View {
-    @EnvironmentObject private var store: SystemStore
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @Environment(SystemStore.self) private var store
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
 
     private var theme: Color { themeColor(themeName) }
 

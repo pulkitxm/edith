@@ -36,7 +36,7 @@ enum FinderClick {
 }
 
 struct FinderIconView: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -91,7 +91,7 @@ extension FinderIconView {
 }
 
 private struct FinderIconCell: View {
-    @ObservedObject var model: FinderModel
+    @Bindable var model: FinderModel
     let entry: RemoteFileEntry
     let dark: Bool
     @State private var hovering = false
@@ -172,7 +172,7 @@ private struct FinderIconCell: View {
 }
 
 struct FinderListView: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -248,7 +248,7 @@ struct FinderListView: View {
 }
 
 private struct FinderListRow: View {
-    @ObservedObject var model: FinderModel
+    @Bindable var model: FinderModel
     let entry: RemoteFileEntry
     let dark: Bool
     @State private var hovering = false
@@ -342,7 +342,7 @@ private struct FinderListRow: View {
 }
 
 struct QuickLookOverlay: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
     @State private var shown = false
 
@@ -473,7 +473,7 @@ struct QuickLookOverlay: View {
 }
 
 struct FinderSidebar: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -502,7 +502,7 @@ struct FinderSidebar: View {
 }
 
 private struct FinderSidebarRow: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let place: FilePlace
     let dark: Bool
     @State private var hovering = false
@@ -561,7 +561,7 @@ private struct FinderSidebarRow: View {
 }
 
 struct FinderInfoSheet: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let entry: RemoteFileEntry
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -634,7 +634,7 @@ struct FinderInfoSheet: View {
 }
 
 struct FinderConflictSheet: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let conflict: FinderModel.PendingConflict
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme

@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct FinderPane: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     var body: some View {
@@ -19,10 +19,10 @@ struct FinderPane: View {
 }
 
 struct FinderWindowView: View {
-    @StateObject private var model: FinderModel
+    @State private var model: FinderModel
 
     init(session: MachineSession, path: String? = nil) {
-        _model = StateObject(wrappedValue: FinderModel(session: session, path: path))
+        _model = State(wrappedValue: FinderModel(session: session, path: path))
     }
 
     var body: some View {
@@ -31,7 +31,7 @@ struct FinderWindowView: View {
 }
 
 struct FinderBody: View {
-    @ObservedObject var model: FinderModel
+    @Bindable var model: FinderModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
@@ -422,7 +422,7 @@ struct FinderBody: View {
 }
 
 struct FinderRowContextMenu: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let entry: RemoteFileEntry
 
     var body: some View {

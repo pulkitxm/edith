@@ -368,7 +368,7 @@ struct HeatCard: View {
 
     private func row(_ label: String, _ value: Double) -> some View {
         HStack {
-            Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+            Text(label).settingsCaption()
             Spacer()
             Text(DashFmt.tokens(value)).font(.system(size: UIScale.pt(10))).monospacedDigit()
                 .presenterBlur(blurTokens)

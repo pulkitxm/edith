@@ -1,5 +1,5 @@
-import Combine
 import Foundation
+import Observation
 
 public struct CLICommandRequest: Equatable, Sendable {
     public let executableURL: URL
@@ -102,7 +102,8 @@ public enum CLICommandRunner {
 }
 
 @MainActor
-public final class ToolProvisioner: ObservableObject {
+@Observable
+public final class ToolProvisioner {
     public typealias RunCommand =
         @Sendable (
             CLICommandRequest, @escaping @Sendable (String) -> Void
@@ -110,8 +111,8 @@ public final class ToolProvisioner: ObservableObject {
 
     public static let shared = ToolProvisioner()
 
-    @Published public private(set) var states: [String: CLIToolProvisionState] = [:]
-    @Published public private(set) var logs: [String: [String]] = [:]
+    public private(set) var states: [String: CLIToolProvisionState] = [:]
+    public private(set) var logs: [String: [String]] = [:]
 
     private let installer: ToolInstaller
     private var tasks: [String: Task<Void, Never>] = [:]

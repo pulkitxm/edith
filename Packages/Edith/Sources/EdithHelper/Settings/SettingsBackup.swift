@@ -1,6 +1,7 @@
 import AppKit
 import EdithKit
 import Foundation
+import Observation
 
 enum SettingsBackupDataClass: String, CaseIterable, Hashable, Sendable {
     case settings
@@ -71,146 +72,220 @@ func settingsBackupEnableRestoreDecision(
 }
 
 @MainActor
-final class SettingsBackup: ObservableObject {
+@Observable
+final class SettingsBackup {
     static let shared = SettingsBackup()
 
-    @Published private(set) var musicBackupRunning = false
-    @Published private(set) var clipboardBackupRunning = false
+    private(set) var musicBackupRunning = false
+    private(set) var clipboardBackupRunning = false
 
     nonisolated static let backedKeys = [
-        "onboardingCompleted", "dashPaths", "musicCrossfadeEnabled", "musicCrossfadeSeconds",
-        "theme", "tab", "presenterMode", "presenterBlurMusic", "presenterBlurMoney",
-        "presenterBlurUsage",
-        "presenterEnabled",
-        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
-        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
+        AppStorageKeys.General.theme, AppStorageKeys.General.panelTab,
+        AppStorageKeys.Presenter.mode,
+        AppStorageKeys.Presenter.blurMusic, AppStorageKeys.Presenter.blurMoney,
+        AppStorageKeys.Presenter.blurUsage,
+        AppStorageKeys.Presenter.enabled,
+        AppStorageKeys.Presenter.autoEnabled, AppStorageKeys.Presenter.hideMenuBarNumbers,
+        AppStorageKeys.Presenter.detectRecording,
+        AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
-        "tabUsageEnabled", "tabMusicEnabled", "usageMachines",
-        "hotKeyCode", "hotKeyMods", "hotKeyLabel", "musicVolume", "musicDownloadKind", "repoPath",
-        "icloudBackup", "musicBackup", "lastPaletteTheme", "appearance",
-        "tabSystemEnabled", "preventSleep", "tabOrder",
-        "tabMachinesEnabled", "machinesNotifyDown", "machinesNotifyDiskFull",
-        "machinesDiskThreshold", "machinesAutoConnect",
-        "tabCompanionEnabled", "companionEndpoint",
+        AppStorageKeys.Tabs.usageEnabled, AppStorageKeys.Tabs.musicEnabled, "usageMachines",
+        AppStorageKeys.General.hotKeyCode, AppStorageKeys.General.hotKeyMods,
+        AppStorageKeys.General.hotKeyLabel, AppStorageKeys.Music.volume,
+        AppStorageKeys.Music.downloadKind,
+        Repo.pathKey,
+        AppStorageKeys.Backup.icloud, AppStorageKeys.Music.backup,
+        AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
+        AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
+        AppStorageKeys.Tabs.order,
+        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDiskFull,
+        AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
+        AppStorageKeys.Tabs.companionEnabled, AppStorageKeys.Companion.endpoint,
         "finderViewMode", "finderSortKey", "finderSortAscending", "finderShowHidden",
         "finderIconSize", "dockerLogWrap", "dockerLogTimestamps", "dockerLogFontSize",
-        "backupSettings", "backupUsage", "backupLimits",
-        "budgetEnabled", "budgetMode", "budgetKind", "budgetCapPercent", "budgetDeadline",
-        "claudeLimitsEnabled", "codexLimitsEnabled", "limitsProvider",
-        "limitsInMenuBar", "menuBarColorMode", "smartColor",
-        "menuBarSubColorHex", "menuBarLowColorHex", "menuBarMidColorHex", "menuBarHighColorHex",
-        "menuBarStatsColorHex", "warnPercent", "critPercent", "pacingMargin",
-        "notifyMaster", "notifyTrackSession", "notifyTrackWeekly",
-        "notifyRecovery", "notifyPacingWarning", "notifyPacingHot",
-        "notifyReminderSession", "notifyReminderSessionOffsetMin",
-        "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
-        "notifyTokenExpired",
+        AppStorageKeys.Backup.settings, AppStorageKeys.Backup.usage, AppStorageKeys.Backup.limits,
+        AppStorageKeys.Budget.enabled, AppStorageKeys.Budget.mode, AppStorageKeys.Budget.kind,
+        AppStorageKeys.Budget.capPercent, AppStorageKeys.Budget.deadline,
+        AppStorageKeys.Limits.claudeEnabled, AppStorageKeys.Limits.codexEnabled,
+        AppStorageKeys.Limits.provider,
+        AppStorageKeys.Limits.inMenuBar, AppStorageKeys.MenuBar.colorMode,
+        AppStorageKeys.General.smartColor,
+        AppStorageKeys.MenuBar.subColorHex, AppStorageKeys.MenuBar.lowColorHex,
+        AppStorageKeys.MenuBar.midColorHex, AppStorageKeys.MenuBar.highColorHex,
+        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.Limits.warnPercent,
+        AppStorageKeys.Limits.critPercent, AppStorageKeys.Limits.pacingMargin,
+        AppStorageKeys.Notify.master, AppStorageKeys.Notify.trackSession,
+        AppStorageKeys.Notify.trackWeekly,
+        AppStorageKeys.Notify.recovery, AppStorageKeys.Notify.pacingWarning,
+        AppStorageKeys.Notify.pacingHot,
+        AppStorageKeys.Notify.reminderSession, AppStorageKeys.Notify.reminderSessionOffsetMin,
+        AppStorageKeys.Notify.reminderWeekly, AppStorageKeys.Notify.reminderWeeklyOffsetMin,
+        AppStorageKeys.Notify.tokenExpired,
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
         "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
-        "menuBarSystemStats", "micMuteEnabled", "micMuteInMenuBar",
+        AppStorageKeys.MenuBar.systemStats, AppStorageKeys.Mic.muteEnabled,
+        AppStorageKeys.Mic.muteInMenuBar,
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
-        "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
-        "notchShelfShowOnExternal", "notchShelfHaptics", "notchShelfShowMusic",
-        "notchAlertsEnabled", "notchAlertAudio", "notchAlertPower", "notchAlertBattery",
-        "notchAlertBluetooth", "notchAudioMixerEnabled",
-        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
-        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
-        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
-        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
-        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
-        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
+        AppStorageKeys.Notch.shelfOpenOnHover,
+        AppStorageKeys.Notch.shelfRequireOption, AppStorageKeys.Notch.shelfKeepDuration,
+        AppStorageKeys.Notch.shelfRemoveAfterDragOut,
+        AppStorageKeys.Notch.shelfShowOnExternal, AppStorageKeys.Notch.shelfHaptics,
+        AppStorageKeys.Notch.shelfShowMusic,
+        AppStorageKeys.Notch.alertsEnabled, AppStorageKeys.Notch.alertAudio,
+        AppStorageKeys.Notch.alertPower, AppStorageKeys.Notch.alertBattery,
+        AppStorageKeys.Notch.alertBluetooth, AppStorageKeys.Notch.audioMixerEnabled,
+        AppStorageKeys.Clipboard.enabled, "clipboardHotKeyCode", "clipboardHotKeyMods",
+        "clipboardHotKeyLabel",
+        AppStorageKeys.Clipboard.maxItems, AppStorageKeys.Clipboard.maxItemBytes,
+        AppStorageKeys.Clipboard.maxAgeDays,
+        AppStorageKeys.Clipboard.ignoredApps, AppStorageKeys.Clipboard.autoPaste,
+        AppStorageKeys.Clipboard.pastePlainText,
+        AppStorageKeys.Clipboard.checkInterval, AppStorageKeys.Clipboard.backup,
+        AppStorageKeys.Clipboard.lastBackupAt,
+        AppStorageKeys.Clipboard.popupAt, AppStorageKeys.Clipboard.pinTo,
+        AppStorageKeys.Clipboard.showFooter,
+        AppStorageKeys.Clipboard.saveFiles, AppStorageKeys.Clipboard.saveImages,
+        AppStorageKeys.Clipboard.saveText,
         "clipboardWindowPositionX", "clipboardWindowPositionY",
-        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
-        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
-        "focusDimHotKeyLabel",
-        "colorPickerEnabled", "colorPickerCopyFormat", "colorPickerProfile",
-        "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
+        FocusDimState.enabledKey, AppStorageKeys.FocusDim.intensity,
+        AppStorageKeys.FocusDim.animationDuration,
+        AppStorageKeys.FocusDim.otherDisplaysMode, AppStorageKeys.FocusDim.hotKeyCode,
+        AppStorageKeys.FocusDim.hotKeyMods,
+        AppStorageKeys.FocusDim.hotKeyLabel,
+        AppStorageKeys.ColorPicker.enabled, AppStorageKeys.ColorPicker.copyFormat,
+        AppStorageKeys.ColorPicker.profile,
+        AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
-        "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "tabCalendarEnabled", "musicLooping", "musicShuffling", "musicGridView",
+        AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
+        AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
+        AppStorageKeys.Tabs.calendarEnabled, AppStorageKeys.Music.looping,
+        AppStorageKeys.Music.shuffling,
+        AppStorageKeys.Music.gridView,
         "musicFavourites", "musicLastTrack", "musicLastPosition", "musicWasPlaying",
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+        AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
+        AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
-        "onboardingCompleted", "dashPaths", "musicCrossfadeEnabled", "musicCrossfadeSeconds",
-        "theme", "lastPaletteTheme", "appearance", "musicDownloadKind",
-        "presenterMode", "presenterEnabled", "presenterBlurMusic", "presenterBlurMoney",
-        "presenterBlurUsage",
-        "presenterAutoEnabled", "presenterHideMenuBarNumbers", "presenterDetectRecording",
-        "presenterDetectScreenSharing", "presenterDetectMirroring",
+        "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
+        AppStorageKeys.General.theme, AppStorageKeys.General.lastPaletteTheme,
+        AppStorageKeys.General.appearance, AppStorageKeys.Music.downloadKind,
+        AppStorageKeys.Presenter.mode, AppStorageKeys.Presenter.enabled,
+        AppStorageKeys.Presenter.blurMusic, AppStorageKeys.Presenter.blurMoney,
+        AppStorageKeys.Presenter.blurUsage,
+        AppStorageKeys.Presenter.autoEnabled, AppStorageKeys.Presenter.hideMenuBarNumbers,
+        AppStorageKeys.Presenter.detectRecording,
+        AppStorageKeys.Presenter.detectScreenSharing, AppStorageKeys.Presenter.detectMirroring,
         "presenterHotKeyCode", "presenterHotKeyMods", "presenterHotKeyLabel",
-        "tabUsageEnabled", "tabMusicEnabled", "tabSystemEnabled", "tabCalendarEnabled", "tabOrder",
+        AppStorageKeys.Tabs.usageEnabled, AppStorageKeys.Tabs.musicEnabled,
+        AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.Tabs.calendarEnabled,
+        AppStorageKeys.Tabs.order,
         "usageMachines",
-        "tabMachinesEnabled", "machinesNotifyDown", "machinesNotifyDiskFull",
-        "machinesDiskThreshold", "machinesAutoConnect",
-        "tabCompanionEnabled", "companionEndpoint",
+        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDiskFull,
+        AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
+        AppStorageKeys.Tabs.companionEnabled, AppStorageKeys.Companion.endpoint,
         "finderViewMode", "finderSortKey", "finderSortAscending", "finderShowHidden",
         "finderIconSize", "dockerLogWrap", "dockerLogTimestamps", "dockerLogFontSize",
-        "icloudBackup", "lastBackupAt", "musicBackup", "lastMusicBackupAt",
-        "backupSettings", "backupUsage", "backupLimits",
-        "budgetEnabled", "budgetMode", "budgetKind", "budgetCapPercent", "budgetDeadline",
-        "claudeLimitsEnabled", "codexLimitsEnabled", "limitsProvider",
-        "limitsInMenuBar", "menuBarColorMode", "smartColor",
-        "menuBarSubColorHex", "menuBarLowColorHex", "menuBarMidColorHex", "menuBarHighColorHex",
-        "menuBarStatsColorHex", "warnPercent", "critPercent", "pacingMargin",
-        "notifyMaster", "notifyTrackSession", "notifyTrackWeekly",
-        "notifyRecovery", "notifyPacingWarning", "notifyPacingHot",
-        "notifyReminderSession", "notifyReminderSessionOffsetMin",
-        "notifyReminderWeekly", "notifyReminderWeeklyOffsetMin",
-        "notifyTokenExpired", "hotKeyCode", "hotKeyMods", "hotKeyLabel",
+        AppStorageKeys.Backup.icloud, AppStorageKeys.Backup.lastBackupAt,
+        AppStorageKeys.Music.backup, AppStorageKeys.Music.lastBackupAt,
+        AppStorageKeys.Backup.settings, AppStorageKeys.Backup.usage, AppStorageKeys.Backup.limits,
+        AppStorageKeys.Budget.enabled, AppStorageKeys.Budget.mode, AppStorageKeys.Budget.kind,
+        AppStorageKeys.Budget.capPercent, AppStorageKeys.Budget.deadline,
+        AppStorageKeys.Limits.claudeEnabled, AppStorageKeys.Limits.codexEnabled,
+        AppStorageKeys.Limits.provider,
+        AppStorageKeys.Limits.inMenuBar, AppStorageKeys.MenuBar.colorMode,
+        AppStorageKeys.General.smartColor,
+        AppStorageKeys.MenuBar.subColorHex, AppStorageKeys.MenuBar.lowColorHex,
+        AppStorageKeys.MenuBar.midColorHex, AppStorageKeys.MenuBar.highColorHex,
+        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.Limits.warnPercent,
+        AppStorageKeys.Limits.critPercent, AppStorageKeys.Limits.pacingMargin,
+        AppStorageKeys.Notify.master, AppStorageKeys.Notify.trackSession,
+        AppStorageKeys.Notify.trackWeekly,
+        AppStorageKeys.Notify.recovery, AppStorageKeys.Notify.pacingWarning,
+        AppStorageKeys.Notify.pacingHot,
+        AppStorageKeys.Notify.reminderSession, AppStorageKeys.Notify.reminderSessionOffsetMin,
+        AppStorageKeys.Notify.reminderWeekly, AppStorageKeys.Notify.reminderWeeklyOffsetMin,
+        AppStorageKeys.Notify.tokenExpired, AppStorageKeys.General.hotKeyCode,
+        AppStorageKeys.General.hotKeyMods,
+        AppStorageKeys.General.hotKeyLabel,
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
         "dashBillingDay", "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
-        "menuBarSystemStats", "micMuteEnabled", "micMuteInMenuBar",
+        AppStorageKeys.MenuBar.systemStats, AppStorageKeys.Mic.muteEnabled,
+        AppStorageKeys.Mic.muteInMenuBar,
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        "preventSleep", "repoPath",
-        "notchShelfEnabled", "notchShelfOpenOnDrag", "notchShelfOpenOnHover",
-        "notchShelfRequireOption", "notchShelfKeepDuration", "notchShelfRemoveAfterDragOut",
-        "notchShelfShowOnExternal", "notchShelfHaptics", "notchShelfShowMusic",
-        "notchAlertsEnabled", "notchAlertAudio", "notchAlertPower", "notchAlertBattery",
-        "notchAlertBluetooth", "notchAudioMixerEnabled",
-        "clipboardEnabled", "clipboardHotKeyCode", "clipboardHotKeyMods", "clipboardHotKeyLabel",
-        "clipboardMaxItems", "clipboardMaxItemBytes", "clipboardMaxAgeDays",
-        "clipboardIgnoredApps", "clipboardAutoPaste", "clipboardPastePlainText",
-        "clipboardCheckInterval", "clipboardBackup", "lastClipboardBackupAt",
-        "clipboardPopupAt", "clipboardPinTo", "clipboardShowFooter",
-        "clipboardSaveFiles", "clipboardSaveImages", "clipboardSaveText",
+        AppStorageKeys.General.preventSleep, Repo.pathKey,
+        AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
+        AppStorageKeys.Notch.shelfOpenOnHover,
+        AppStorageKeys.Notch.shelfRequireOption, AppStorageKeys.Notch.shelfKeepDuration,
+        AppStorageKeys.Notch.shelfRemoveAfterDragOut,
+        AppStorageKeys.Notch.shelfShowOnExternal, AppStorageKeys.Notch.shelfHaptics,
+        AppStorageKeys.Notch.shelfShowMusic,
+        AppStorageKeys.Notch.alertsEnabled, AppStorageKeys.Notch.alertAudio,
+        AppStorageKeys.Notch.alertPower, AppStorageKeys.Notch.alertBattery,
+        AppStorageKeys.Notch.alertBluetooth, AppStorageKeys.Notch.audioMixerEnabled,
+        AppStorageKeys.Clipboard.enabled, "clipboardHotKeyCode", "clipboardHotKeyMods",
+        "clipboardHotKeyLabel",
+        AppStorageKeys.Clipboard.maxItems, AppStorageKeys.Clipboard.maxItemBytes,
+        AppStorageKeys.Clipboard.maxAgeDays,
+        AppStorageKeys.Clipboard.ignoredApps, AppStorageKeys.Clipboard.autoPaste,
+        AppStorageKeys.Clipboard.pastePlainText,
+        AppStorageKeys.Clipboard.checkInterval, AppStorageKeys.Clipboard.backup,
+        AppStorageKeys.Clipboard.lastBackupAt,
+        AppStorageKeys.Clipboard.popupAt, AppStorageKeys.Clipboard.pinTo,
+        AppStorageKeys.Clipboard.showFooter,
+        AppStorageKeys.Clipboard.saveFiles, AppStorageKeys.Clipboard.saveImages,
+        AppStorageKeys.Clipboard.saveText,
         "clipboardWindowPositionX", "clipboardWindowPositionY",
-        "focusDimEnabled", "focusDimIntensity", "focusDimAnimationDuration",
-        "focusDimOtherDisplaysMode", "focusDimHotKeyCode", "focusDimHotKeyMods",
-        "focusDimHotKeyLabel",
-        "colorPickerEnabled", "colorPickerCopyFormat", "colorPickerProfile",
-        "colorPickerHistorySize", "colorPickerHotKeyCode", "colorPickerHotKeyMods",
+        FocusDimState.enabledKey, AppStorageKeys.FocusDim.intensity,
+        AppStorageKeys.FocusDim.animationDuration,
+        AppStorageKeys.FocusDim.otherDisplaysMode, AppStorageKeys.FocusDim.hotKeyCode,
+        AppStorageKeys.FocusDim.hotKeyMods,
+        AppStorageKeys.FocusDim.hotKeyLabel,
+        AppStorageKeys.ColorPicker.enabled, AppStorageKeys.ColorPicker.copyFormat,
+        AppStorageKeys.ColorPicker.profile,
+        AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
-        "creditHidden", "homeClockZones", "presenterBlurCalendar", "showDockIcon",
-        "musicGridView", "musicFavourites",
-        "mainWindowSection", "settingsTab", "mainSidebarOpen", "mainSidebarWidth",
+        AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
+        AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
+        AppStorageKeys.Music.gridView, "musicFavourites",
+        AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
+        AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [
-        "extensionsExpand", "hasPromptedPermissions", "lastBackupAt", "lastMusicBackupAt",
-        "lastClipboardBackupAt", "micMuted", "migratedFromControlCenter",
+        "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
+        AppStorageKeys.Music.lastBackupAt,
+        AppStorageKeys.Clipboard.lastBackupAt, "micMuted", "migratedFromControlCenter",
         "notifSessionLevel", "notifSessionPacing", "notifTokenExpiredAt", "notifWeeklyLevel",
-        "notifWeeklyPacing", "permissionsFilter", "permissionPromptCount", "permissionHintShown",
+        "notifWeeklyPacing", AppStorageKeys.Permissions.filter, "permissionPromptCount",
+        "permissionHintShown",
         "focusDimActive",
-        "permAccessibilityGranted", "permCalendarGranted",
-        "permCameraGranted", "permFullDiskGranted", "permInputMonitoringGranted",
-        "permNotificationsGranted",
-        "permScreenRecordingGranted", "presenterAutoActive", "presenterAutoPaused",
-        "presenterAutoReason", "settingsSection", "musicFolderPath", "musicFolderStale",
+        AppStorageKeys.Permissions.accessibilityGranted,
+        AppStorageKeys.Permissions.calendarGranted,
+        AppStorageKeys.Permissions.cameraGranted, AppStorageKeys.Permissions.fullDiskGranted,
+        AppStorageKeys.Permissions.inputMonitoringGranted,
+        AppStorageKeys.Permissions.notificationsGranted,
+        AppStorageKeys.Permissions.screenRecordingGranted, AppStorageKeys.Presenter.autoActive,
+        AppStorageKeys.Presenter.autoPaused,
+        AppStorageKeys.Presenter.autoReason, "settingsSection", Repo.musicFolderPathKey,
+        Repo.musicFolderStaleKey,
         "musicFolderExternalConfirmation", "musicRevealPath", "repoPathExternalConfirmation",
         "cleanerConfirmedExternalPaths",
-        "mainWindowZoom", "EdithMainWindowFullScreen", "machinesSelection", "machinesTab",
-        "machinesMode", "companionTab",
-        "completionsAutoRefresh", "completionScriptPaths",
+        "mainWindowZoom", AppStorageKeys.General.editMainWindowFullScreen,
+        AppStorageKeys.Machines.selection, AppStorageKeys.Machines.tab,
+        AppStorageKeys.Machines.mode, AppStorageKeys.Companion.tab,
+        CompletionScripts.autoRefreshKey, "completionScriptPaths",
         "restorePending.usage", "restorePending.limits", "restorePending.music",
         "restorePending.clipboard", "restoreTimedOut.usage", "restoreTimedOut.limits",
         "restoreTimedOut.music", "restoreTimedOut.clipboard",
@@ -247,7 +322,7 @@ final class SettingsBackup: ObservableObject {
     static let settingsRestoreDeadlineInterval: TimeInterval = 600
 
     private var cloudEnabled: Bool {
-        SharedDefaults.store.bool(forKey: "icloudBackup") && AppData.cloudAvailable
+        SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud) && AppData.cloudAvailable
     }
 
     private func flag(_ key: String) -> Bool {
@@ -261,24 +336,24 @@ final class SettingsBackup: ObservableObject {
         let extensionEnabled: Bool
         switch dataClass {
         case .settings:
-            subToggleEnabled = flag("backupSettings")
+            subToggleEnabled = flag(AppStorageKeys.Backup.settings)
             extensionEnabled = true
         case .usage:
-            subToggleEnabled = flag("backupUsage")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "tabUsageEnabled")
+            subToggleEnabled = flag(AppStorageKeys.Backup.usage)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled)
         case .limits:
-            subToggleEnabled = flag("backupLimits")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "tabUsageEnabled")
+            subToggleEnabled = flag(AppStorageKeys.Backup.limits)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled)
         case .music:
-            subToggleEnabled = SharedDefaults.store.bool(forKey: "musicBackup")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "tabMusicEnabled")
+            subToggleEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Music.backup)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.musicEnabled)
         case .clipboard:
-            subToggleEnabled = SharedDefaults.store.bool(forKey: "clipboardBackup")
-            extensionEnabled = SharedDefaults.store.bool(forKey: "clipboardEnabled")
+            subToggleEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.backup)
+            extensionEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled)
         }
         return settingsBackupTransferDecision(
             for: dataClass,
-            masterEnabled: SharedDefaults.store.bool(forKey: "icloudBackup"),
+            masterEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud),
             subToggleEnabled: subToggleEnabled,
             extensionEnabled: extensionEnabled)
     }
@@ -289,7 +364,7 @@ final class SettingsBackup: ObservableObject {
         guard
             settingsBackupEnableRestoreDecision(
                 for: dataClass, cloudDataExists: dataExists,
-                masterEnabled: SharedDefaults.store.bool(forKey: "icloudBackup"))
+                masterEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud))
         else { return }
         let restoreOnly = SettingsBackupTransferDecision(shouldRestore: true, shouldExport: false)
         switch dataClass {
@@ -554,7 +629,7 @@ final class SettingsBackup: ObservableObject {
         case .limits:
             IPC.post(IPC.Name.limitsUpdated)
         case .music:
-            NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
         case .clipboard:
             IPC.post(IPC.Name.clipboardChanged)
@@ -617,7 +692,7 @@ final class SettingsBackup: ObservableObject {
         where dataClass != .settings && restoreTasks[dataClass] == nil {
             clearRestoreState(for: dataClass)
         }
-        observedICloudBackup = SharedDefaults.store.bool(forKey: "icloudBackup")
+        observedICloudBackup = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
         beginSettingsRestore()
         let restored = restoreFromCloud()
         export()
@@ -655,12 +730,12 @@ final class SettingsBackup: ObservableObject {
     }
 
     func settingsDidChange() {
-        let icloudBackup = SharedDefaults.store.bool(forKey: "icloudBackup")
+        let icloudBackup = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
         let shouldRestore = icloudBackup && !observedICloudBackup
         observedICloudBackup = icloudBackup
         if shouldRestore {
             _ = restoreFromCloud()
-            observedICloudBackup = SharedDefaults.store.bool(forKey: "icloudBackup")
+            observedICloudBackup = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
             exportLimits()
             exportUsage()
             backupMusic()
@@ -738,7 +813,7 @@ final class SettingsBackup: ObservableObject {
                 self.musicBackupRunning = false
                 if process.terminationStatus == 0 {
                     SharedDefaults.store.set(
-                        Date().timeIntervalSince1970, forKey: "lastMusicBackupAt")
+                        Date().timeIntervalSince1970, forKey: AppStorageKeys.Music.lastBackupAt)
                 }
             }
         }
@@ -807,7 +882,7 @@ final class SettingsBackup: ObservableObject {
                 self.clipboardBackupRunning = false
                 if process.terminationStatus == 0 {
                     SharedDefaults.store.set(
-                        Date().timeIntervalSince1970, forKey: "lastClipboardBackupAt")
+                        Date().timeIntervalSince1970, forKey: AppStorageKeys.Clipboard.lastBackupAt)
                 }
             }
         }
@@ -858,7 +933,8 @@ final class SettingsBackup: ObservableObject {
             at: AppData.cloudDir, withIntermediateDirectories: true)
         if (try? Data(contentsOf: cloudFile)) != data {
             try? data.write(to: cloudFile)
-            SharedDefaults.store.set(Date().timeIntervalSince1970, forKey: "lastBackupAt")
+            SharedDefaults.store.set(
+                Date().timeIntervalSince1970, forKey: AppStorageKeys.Backup.lastBackupAt)
         }
     }
 
@@ -1001,7 +1077,7 @@ final class SettingsBackup: ObservableObject {
         }
         for (key, value) in dict where Self.backedKeys.contains(key) {
             switch key {
-            case "repoPath":
+            case Repo.pathKey:
                 guard let path = value as? String else { continue }
                 guard RestoredPathValidation.verdict(for: path) == .keep else {
                     Repo.setDevRootPath(nil)

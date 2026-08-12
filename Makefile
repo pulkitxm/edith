@@ -12,11 +12,11 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall loc ci ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push linux-test linux-build linux-run linux-diagnose linux-metadata linux-package linux-check
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push linux-test linux-build linux-run linux-diagnose linux-metadata linux-package linux-check
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-lint ci-scripts ci-site ci-promo ci-swift
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-site ci-promo ci-swift
 
 linux-test:
 	swift test --package-path $(PKG)
@@ -74,6 +74,9 @@ ci-comments:
 
 ci-secrets:
 	bun run check-secrets
+
+ci-duplicate-keys:
+	bun run check-duplicate-keys
 
 ci-lint:
 	bun run lint

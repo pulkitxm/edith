@@ -1,15 +1,17 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class CompanionSetupModel: ObservableObject {
-    @Published private(set) var machines: [CompanionMachine] = []
-    @Published private(set) var plan: CompanionPlan?
-    @Published private(set) var busy = false
-    @Published private(set) var error: String?
-    @Published var name = ""
-    @Published var transport = "local"
-    @Published var at = ""
+@Observable
+final class CompanionSetupModel {
+    private(set) var machines: [CompanionMachine] = []
+    private(set) var plan: CompanionPlan?
+    private(set) var busy = false
+    private(set) var error: String?
+    var name = ""
+    var transport = "local"
+    var at = ""
 
     static let transports = ["local", "ssh", "context"]
     static let tiers = ["gpu-large", "gpu-small", "apple-metal", "cpu-only"]
@@ -70,7 +72,7 @@ final class CompanionSetupModel: ObservableObject {
 }
 
 struct CompanionSetupScreen: View {
-    @ObservedObject var model: CompanionSetupModel
+    @Bindable var model: CompanionSetupModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled

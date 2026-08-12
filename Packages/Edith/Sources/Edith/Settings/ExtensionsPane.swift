@@ -19,33 +19,52 @@ enum ExtensionPermissionState {
 }
 
 struct ExtensionsPane: View {
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-    @AppStorage("claudeLimitsEnabled", store: SharedDefaults.store) private var claudeEnabled = true
-    @AppStorage("codexLimitsEnabled", store: SharedDefaults.store) private var codexEnabled = true
-    @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
-    @AppStorage("notifyMaster", store: SharedDefaults.store) private var notifyMaster = false
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var limitsProviderRaw =
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+        var usageEnabled = false
+    @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
+        var claudeEnabled = true
+    @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
+        var codexEnabled = true
+    @AppStorage(AppStorageKeys.Limits.inMenuBar, store: SharedDefaults.store) private
+        var limitsInMenuBar = true
+    @AppStorage(AppStorageKeys.Notify.master, store: SharedDefaults.store) private
+        var notifyMaster = false
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+        var limitsProviderRaw =
         LimitProvider.claude.rawValue
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+        var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+        var calendarEnabled =
         false
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("tabMachinesEnabled", store: SharedDefaults.store) private var machinesEnabled =
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var systemEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
+        var machinesEnabled =
         false
-    @AppStorage("tabCompanionEnabled", store: SharedDefaults.store) private var companionEnabled =
+    @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
+        var companionEnabled =
         false
-    @AppStorage("menuBarSystemStats", store: SharedDefaults.store) private var systemStats = false
-    @AppStorage("notchShelfEnabled", store: SharedDefaults.store) private var notchShelfEnabled =
+    @AppStorage(AppStorageKeys.MenuBar.systemStats, store: SharedDefaults.store) private
+        var systemStats = false
+    @AppStorage(AppStorageKeys.Notch.shelfEnabled, store: SharedDefaults.store) private
+        var notchShelfEnabled =
         false
-    @AppStorage("clipboardEnabled", store: SharedDefaults.store) private var clipboardEnabled =
+    @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
+        var clipboardEnabled =
         false
-    @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var focusDimEnabled = false
-    @AppStorage("micMuteEnabled", store: SharedDefaults.store) private var micMuteEnabled = false
-    @AppStorage("colorPickerEnabled", store: SharedDefaults.store) private var colorPickerEnabled =
+    @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
+        var micMuteEnabled = false
+    @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
+        var colorPickerEnabled =
         false
-    @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
+        false
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+        var preventSleep = false
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -242,19 +261,19 @@ struct ExtensionsPane: View {
 
     private func enabledBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
         switch entry.defaultsKey {
-        case "tabUsageEnabled": agentUsageBinding
-        case "tabSystemEnabled": $systemEnabled
-        case "tabMachinesEnabled": $machinesEnabled
-        case "tabCompanionEnabled": $companionEnabled
-        case "menuBarSystemStats": $systemStats
-        case "micMuteEnabled": $micMuteEnabled
-        case "tabMusicEnabled": $musicEnabled
-        case "tabCalendarEnabled": $calendarEnabled
-        case "notchShelfEnabled": $notchShelfEnabled
-        case "clipboardEnabled": $clipboardEnabled
-        case "focusDimEnabled": $focusDimEnabled
-        case "presenterEnabled": $presenterEnabled
-        case "colorPickerEnabled": $colorPickerEnabled
+        case AppStorageKeys.Tabs.usageEnabled: agentUsageBinding
+        case AppStorageKeys.Tabs.systemEnabled: $systemEnabled
+        case AppStorageKeys.Tabs.machinesEnabled: $machinesEnabled
+        case AppStorageKeys.Tabs.companionEnabled: $companionEnabled
+        case AppStorageKeys.MenuBar.systemStats: $systemStats
+        case AppStorageKeys.Mic.muteEnabled: $micMuteEnabled
+        case AppStorageKeys.Tabs.musicEnabled: $musicEnabled
+        case AppStorageKeys.Tabs.calendarEnabled: $calendarEnabled
+        case AppStorageKeys.Notch.shelfEnabled: $notchShelfEnabled
+        case AppStorageKeys.Clipboard.enabled: $clipboardEnabled
+        case FocusDimState.enabledKey: $focusDimEnabled
+        case AppStorageKeys.Presenter.enabled: $presenterEnabled
+        case AppStorageKeys.ColorPicker.enabled: $colorPickerEnabled
         default: .constant(false)
         }
     }
@@ -639,12 +658,10 @@ private struct ExtensionPermissionSheet: View {
                         .foregroundStyle(required ? .orange : .secondary)
                 }
                 Text(permission.reason)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                 if let firstUseExplanation = permission.firstUseExplanation {
                     Text(firstUseExplanation)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
             }
             Spacer(minLength: 12)
@@ -671,46 +688,74 @@ private struct ExtensionPermissionSheet: View {
 }
 
 private struct UsageRows: View {
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("limitsInMenuBar", store: SharedDefaults.store) private var limitsInMenuBar = true
-    @AppStorage("claudeLimitsEnabled", store: SharedDefaults.store) private var claudeEnabled = true
-    @AppStorage("codexLimitsEnabled", store: SharedDefaults.store) private var codexEnabled = true
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var limitsProviderRaw =
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private var enabled =
+        false
+    @AppStorage(AppStorageKeys.Limits.inMenuBar, store: SharedDefaults.store) private
+        var limitsInMenuBar = true
+    @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
+        var claudeEnabled = true
+    @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
+        var codexEnabled = true
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+        var limitsProviderRaw =
         LimitProvider.claude.rawValue
-    @AppStorage("menuBarColorMode", store: SharedDefaults.store) private var menuBarColorMode =
+    @AppStorage(AppStorageKeys.MenuBar.colorMode, store: SharedDefaults.store) private
+        var menuBarColorMode =
         "auto"
-    @AppStorage("smartColor", store: SharedDefaults.store) private var smartColor = true
-    @AppStorage("menuBarSubColorHex", store: SharedDefaults.store) private var subColorHex =
+    @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
+        var smartColor = true
+    @AppStorage(AppStorageKeys.MenuBar.subColorHex, store: SharedDefaults.store) private
+        var subColorHex =
         "8E8E93"
-    @AppStorage("menuBarLowColorHex", store: SharedDefaults.store) private var lowColorHex =
+    @AppStorage(AppStorageKeys.MenuBar.lowColorHex, store: SharedDefaults.store) private
+        var lowColorHex =
         "34C759"
-    @AppStorage("menuBarMidColorHex", store: SharedDefaults.store) private var midColorHex =
+    @AppStorage(AppStorageKeys.MenuBar.midColorHex, store: SharedDefaults.store) private
+        var midColorHex =
         "FF9500"
-    @AppStorage("menuBarHighColorHex", store: SharedDefaults.store) private var highColorHex =
+    @AppStorage(AppStorageKeys.MenuBar.highColorHex, store: SharedDefaults.store) private
+        var highColorHex =
         "FF3B30"
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warnPercent = 60
-    @AppStorage("critPercent", store: SharedDefaults.store) private var critPercent = 85
-    @AppStorage("pacingMargin", store: SharedDefaults.store) private var pacingMargin = 10.0
-    @AppStorage("budgetEnabled", store: SharedDefaults.store) private var budgetEnabled = false
-    @AppStorage("budgetMode", store: SharedDefaults.store) private var budgetMode = "pace"
-    @AppStorage("budgetKind", store: SharedDefaults.store) private var budgetKind = "weekly"
-    @AppStorage("budgetCapPercent", store: SharedDefaults.store) private var budgetCap = 50.0
-    @AppStorage("budgetDeadline", store: SharedDefaults.store) private var budgetDeadlineTS = 0.0
-    @AppStorage("notifyMaster", store: SharedDefaults.store) private var notifyMaster = false
-    @AppStorage("notifyTrackSession", store: SharedDefaults.store) private var trackSession = true
-    @AppStorage("notifyTrackWeekly", store: SharedDefaults.store) private var trackWeekly = true
-    @AppStorage("notifyRecovery", store: SharedDefaults.store) private var recovery = true
-    @AppStorage("notifyPacingWarning", store: SharedDefaults.store) private var pacingWarning = true
-    @AppStorage("notifyPacingHot", store: SharedDefaults.store) private var pacingHot = true
-    @AppStorage("notifyReminderSession", store: SharedDefaults.store) private var reminderSession =
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private
+        var warnPercent = LimitRing.defaultWarnPercent
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private
+        var critPercent = LimitRing.defaultCriticalPercent
+    @AppStorage(AppStorageKeys.Limits.pacingMargin, store: SharedDefaults.store) private
+        var pacingMargin = 10.0
+    @AppStorage(AppStorageKeys.Budget.enabled, store: SharedDefaults.store) private
+        var budgetEnabled = false
+    @AppStorage(AppStorageKeys.Budget.mode, store: SharedDefaults.store) private var budgetMode =
+        "pace"
+    @AppStorage(AppStorageKeys.Budget.kind, store: SharedDefaults.store) private var budgetKind =
+        "weekly"
+    @AppStorage(AppStorageKeys.Budget.capPercent, store: SharedDefaults.store) private
+        var budgetCap = 50.0
+    @AppStorage(AppStorageKeys.Budget.deadline, store: SharedDefaults.store) private
+        var budgetDeadlineTS = 0.0
+    @AppStorage(AppStorageKeys.Notify.master, store: SharedDefaults.store) private
+        var notifyMaster = false
+    @AppStorage(AppStorageKeys.Notify.trackSession, store: SharedDefaults.store) private
+        var trackSession = true
+    @AppStorage(AppStorageKeys.Notify.trackWeekly, store: SharedDefaults.store) private
+        var trackWeekly = true
+    @AppStorage(AppStorageKeys.Notify.recovery, store: SharedDefaults.store) private var recovery =
+        true
+    @AppStorage(AppStorageKeys.Notify.pacingWarning, store: SharedDefaults.store) private
+        var pacingWarning = true
+    @AppStorage(AppStorageKeys.Notify.pacingHot, store: SharedDefaults.store) private
+        var pacingHot = true
+    @AppStorage(AppStorageKeys.Notify.reminderSession, store: SharedDefaults.store) private
+        var reminderSession =
         false
-    @AppStorage("notifyReminderSessionOffsetMin", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Notify.reminderSessionOffsetMin, store: SharedDefaults.store)
     private var reminderSessionOffset = 30
-    @AppStorage("notifyReminderWeekly", store: SharedDefaults.store) private var reminderWeekly =
+    @AppStorage(AppStorageKeys.Notify.reminderWeekly, store: SharedDefaults.store) private
+        var reminderWeekly =
         false
-    @AppStorage("notifyReminderWeeklyOffsetMin", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Notify.reminderWeeklyOffsetMin, store: SharedDefaults.store)
     private var reminderWeeklyOffset = 120
-    @AppStorage("notifyTokenExpired", store: SharedDefaults.store) private var tokenExpired = true
+    @AppStorage(AppStorageKeys.Notify.tokenExpired, store: SharedDefaults.store) private
+        var tokenExpired = true
     @State private var testSent = false
 
     private var hasProvider: Bool { claudeEnabled || codexEnabled }
@@ -781,8 +826,7 @@ private struct UsageRows: View {
                 Text(
                     "Turn on Agent Usage above to restore \(selectedProvider.label) limits. Menu bar limits and alerts are off."
                 )
-                .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(.secondary)
+                .settingsCaption()
             }
         } header: {
             Text("Readout styling")
@@ -803,7 +847,7 @@ private struct UsageRows: View {
             Text(
                 "Set a personal cap under the real limit and get told if you're spending too fast."
             )
-            .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+            .settingsCaption()
             if budgetEnabled {
                 Picker("Mode", selection: $budgetMode) {
                     Text("Auto daily pace").tag("pace")
@@ -916,7 +960,7 @@ private struct UsageRows: View {
                 .pointerCursor()
                 if testSent {
                     Text("Sent - check Notification Center")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
             }
         } header: {
@@ -941,7 +985,10 @@ private struct UsageRows: View {
             get: { notifyMaster },
             set: { enabled in
                 notifyMaster = enabled
-                if enabled && !SharedDefaults.store.bool(forKey: "permNotificationsGranted") {
+                if enabled
+                    && !SharedDefaults.store.bool(
+                        forKey: AppStorageKeys.Permissions.notificationsGranted)
+                {
                     IPC.post(IPC.Name.grantNotifications)
                 }
             })
@@ -980,8 +1027,10 @@ private struct UsageRows: View {
 }
 
 private struct SystemStatsRows: View {
-    @AppStorage("menuBarSystemStats", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("menuBarStatsColorHex", store: SharedDefaults.store) private var statsColorHex =
+    @AppStorage(AppStorageKeys.MenuBar.systemStats, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
+        var statsColorHex =
         "FFFFFF"
 
     var body: some View {
@@ -993,7 +1042,7 @@ private struct SystemStatsRows: View {
                     set: { statsColorHex = $0.hex6 }),
                 supportsOpacity: false)
             Text("Sampled every couple of seconds; costs nothing measurable.")
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -1001,7 +1050,8 @@ private struct SystemStatsRows: View {
 }
 
 private struct MusicRows: View {
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var enabled = false
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private var enabled =
+        false
     @AppStorage(MusicFade.enabledKey, store: SharedDefaults.store) private var crossfade = true
     @AppStorage(MusicFade.secondsKey, store: SharedDefaults.store) private var crossfadeSeconds =
         MusicFade.defaultSeconds
@@ -1030,7 +1080,7 @@ private struct MusicRows: View {
                     Slider(value: $crossfadeSeconds, in: MusicFade.secondsRange)
                         .pointerCursor()
                     Text("How long the old track fades out while the next one fades in.")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
             }
         }
@@ -1040,15 +1090,17 @@ private struct MusicRows: View {
 }
 
 private struct MicMuteRows: View {
-    @AppStorage("micMuteEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("micMuteInMenuBar", store: SharedDefaults.store) private var inMenuBar = true
+    @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private var enabled =
+        false
+    @AppStorage(AppStorageKeys.Mic.muteInMenuBar, store: SharedDefaults.store) private
+        var inMenuBar = true
 
     var body: some View {
         Section {
             Toggle("Show in the menu bar", isOn: $inMenuBar)
                 .pointerCursor()
             Text("The menu bar icon shows the current mute state and toggles it on click.")
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -1056,8 +1108,10 @@ private struct MicMuteRows: View {
 }
 
 private struct SystemRows: View {
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+        var preventSleep = false
     @State private var cleaningStarted = false
 
     var body: some View {
@@ -1079,7 +1133,7 @@ private struct SystemRows: View {
                 Spacer()
                 if cleaningStarted {
                     Text("Locked - check the overlay")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                        .settingsCaption()
                 }
                 Button("Clean now") {
                     IPC.post(IPC.Name.requestKeyboardClean)

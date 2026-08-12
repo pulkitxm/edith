@@ -3,7 +3,8 @@ import EdithKit
 import SwiftUI
 
 struct AboutPane: View {
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @State private var contributors: [Contributor] = []
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 

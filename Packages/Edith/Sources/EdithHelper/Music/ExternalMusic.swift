@@ -1,6 +1,6 @@
-import EdithKit
 import AppKit
-import Combine
+import EdithKit
+import Observation
 
 enum ExternalApp: String, Equatable, CaseIterable, Sendable {
     case spotify
@@ -65,8 +65,9 @@ enum ExternalNowPlaying {
 }
 
 @MainActor
-final class ExternalMusic: ObservableObject {
-    @Published private(set) var current: ExternalTrack?
+@Observable
+final class ExternalMusic {
+    private(set) var current: ExternalTrack?
 
     private var observers: [(ExternalApp, NSObjectProtocol)] = []
 

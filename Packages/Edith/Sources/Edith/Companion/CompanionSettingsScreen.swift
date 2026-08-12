@@ -1,29 +1,31 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class CompanionSettingsModel: ObservableObject {
-    @Published var provider = "anthropic"
-    @Published var model = ""
-    @Published var url = ""
-    @Published var apiKey = ""
-    @Published private(set) var current: CompanionReasonSettings?
-    @Published private(set) var saving = false
-    @Published private(set) var testing = false
-    @Published private(set) var testResult: String?
-    @Published private(set) var testPassed = false
-    @Published private(set) var syncing = false
-    @Published private(set) var syncResult: String?
-    @Published private(set) var error: String?
-    @Published private(set) var loaded = false
-    @Published private(set) var connectors: CompanionConnectorSettings?
-    @Published var githubToken = ""
-    @Published var notionToken = ""
-    @Published private(set) var savingTokens = false
-    @Published private(set) var syncingNotion = false
-    @Published private(set) var importing = false
+@Observable
+final class CompanionSettingsModel {
+    var provider = "anthropic"
+    var model = ""
+    var url = ""
+    var apiKey = ""
+    private(set) var current: CompanionReasonSettings?
+    private(set) var saving = false
+    private(set) var testing = false
+    private(set) var testResult: String?
+    private(set) var testPassed = false
+    private(set) var syncing = false
+    private(set) var syncResult: String?
+    private(set) var error: String?
+    private(set) var loaded = false
+    private(set) var connectors: CompanionConnectorSettings?
+    var githubToken = ""
+    var notionToken = ""
+    private(set) var savingTokens = false
+    private(set) var syncingNotion = false
+    private(set) var importing = false
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -166,10 +168,10 @@ final class CompanionSettingsModel: ObservableObject {
 }
 
 struct CompanionSettingsScreen: View {
-    @ObservedObject var model: CompanionSettingsModel
-    @ObservedObject var home: CompanionHomeModel
-    @AppStorage("companionEndpoint", store: SharedDefaults.store)
-    private var endpoint = "http://127.0.0.1:4820"
+    @Bindable var model: CompanionSettingsModel
+    let home: CompanionHomeModel
+    @AppStorage(AppStorageKeys.Companion.endpoint, store: SharedDefaults.store)
+    private var endpoint = CompanionClient.defaultEndpointString
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
@@ -423,7 +425,7 @@ struct CompanionSettingsScreen: View {
         SkinCard(title: "Connection", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 fieldLabel("Companion endpoint")
-                EdithTextField(placeholder: "http://127.0.0.1:4820", text: $endpoint)
+                EdithTextField(placeholder: CompanionClient.defaultEndpointString, text: $endpoint)
                 if let result = model.syncResult {
                     Text(result)
                         .font(.system(size: UIScale.pt(11)))

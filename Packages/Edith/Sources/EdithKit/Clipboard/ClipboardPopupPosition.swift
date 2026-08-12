@@ -21,7 +21,8 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
 
     public static var current: ClipboardPopupPosition {
         ClipboardPopupPosition(
-            rawValue: SharedDefaults.store.string(forKey: "clipboardPopupAt") ?? "") ?? .cursor
+            rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.Clipboard.popupAt) ?? "")
+            ?? .cursor
     }
 
     @MainActor

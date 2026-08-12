@@ -1,8 +1,10 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class CompanionChatModel: ObservableObject {
+@Observable
+final class CompanionChatModel {
     struct DisplayMessage: Identifiable, Equatable {
         let id: String
         let role: String
@@ -11,19 +13,19 @@ final class CompanionChatModel: ObservableObject {
         var streaming: Bool
     }
 
-    @Published private(set) var conversations: [CompanionConversation] = []
-    @Published private(set) var messages: [DisplayMessage] = []
-    @Published private(set) var activeConversationId: String?
-    @Published var draft = ""
-    @Published private(set) var streaming = false
-    @Published private(set) var model: String?
-    @Published private(set) var error: String?
-    @Published private(set) var loaded = false
-    @Published private(set) var personas: [CompanionPersona] = []
-    @Published var persona: String?
-    @Published private(set) var council: CompanionCouncil?
-    @Published private(set) var councilRunning = false
-    @Published private(set) var councilQuestion: String?
+    private(set) var conversations: [CompanionConversation] = []
+    private(set) var messages: [DisplayMessage] = []
+    private(set) var activeConversationId: String?
+    var draft = ""
+    private(set) var streaming = false
+    private(set) var model: String?
+    private(set) var error: String?
+    private(set) var loaded = false
+    private(set) var personas: [CompanionPersona] = []
+    var persona: String?
+    private(set) var council: CompanionCouncil?
+    private(set) var councilRunning = false
+    private(set) var councilQuestion: String?
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -148,8 +150,8 @@ final class CompanionChatModel: ObservableObject {
 }
 
 struct CompanionChatScreen: View {
-    @ObservedObject var model: CompanionChatModel
-    @ObservedObject var home: CompanionHomeModel
+    @Bindable var model: CompanionChatModel
+    let home: CompanionHomeModel
     var openEpisode: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact

@@ -9,7 +9,9 @@
 /* Begin PBXBuildFile section */
 		086A0082815C2A9D91ECFD02 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		0C791FBC581A5F863D63D46F /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
+		2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 0F4B21C7A5E94D3B8C1D6E22 /* Edith */; };
 		2EB6B8EDF10E0970CD570532 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
+		3C9E55FAD81C604EBF209135 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 1A7C33D8B6FA4E2C9D0E7F13 /* Edith */; };
 		3EE67C3597AF4232B0A60A7E /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5729B458450B4A17A4E43121 /* Sparkle */; };
 		55E29D247B2AF1C7EE207A52 /* edh in Embed CLI Tools */ = {isa = PBXBuildFile; fileRef = 63ECAD9E47BEB05D6F5FE706 /* edh */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		5806BA00CEAD40AE831B94B2 /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4BF07CFCBD4C4C2BB2F631D3 /* EdithKit */; };
@@ -19,7 +21,7 @@
 		83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 50E40C33BF204D7FBD48418B /* Sparkle */; };
 		8D470AF01797472FBC96341E /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = 913CAC95E41B423F9FF20D41 /* Highlighter */; };
 		9158E2CD1C3E9F209ADBEA16 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
-		A191C1CE3CD44753BB045A59 /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = F89CAED93BE84261A12A1C8F /* EdithKit */; };
+		A191C1CE3CD44753BB045A59 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		A32E72901AF888B4A1E13D0F /* ed in Embed CLI Tools */ = {isa = PBXBuildFile; fileRef = 6687BAF8A3552A0AA85404C5 /* ed */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		AE432717A8BA5DF0A8AE3C81 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
 		B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = CCC83B99D6204A92B3072609 /* SwiftTerm */; };
@@ -29,8 +31,6 @@
 		EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
 		F52F2ACA3C74115D1EADA87B /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithKit */; };
 		FEAA353692304612B813A1EE /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = DCE8E48CB51E47BABB61A582 /* SwiftTerm */; };
-		2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 0F4B21C7A5E94D3B8C1D6E22 /* Edith */; };
-		3C9E55FAD81C604EBF209135 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 1A7C33D8B6FA4E2C9D0E7F13 /* Edith */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,57 +92,37 @@
 
 /* Begin PBXFileReference section */
 		10C5E37D0A600FE4AA48E586 /* EdithHelper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdithHelper.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		63ECAD9E47BEB05D6F5FE706 /* edh */ = {isa = PBXFileReference; includeInIndex = 0; path = edh; sourceTree = BUILT_PRODUCTS_DIR; };
-		6687BAF8A3552A0AA85404C5 /* ed */ = {isa = PBXFileReference; includeInIndex = 0; path = ed; sourceTree = BUILT_PRODUCTS_DIR; };
-		79153EBC5647B887B9985B8D /* AppIcon.icns */ = {isa = PBXFileReference; includeInIndex = 1; path = AppIcon.icns; sourceTree = "<group>"; };
-		B58D5576268A68555AD2FCF2 /* EdithFiles.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdithFiles.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C42196203122A2922205077A /* EdithMain.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdithMain.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		63ECAD9E47BEB05D6F5FE706 /* edh */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = edh; sourceTree = BUILT_PRODUCTS_DIR; };
+		6687BAF8A3552A0AA85404C5 /* ed */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = ed; sourceTree = BUILT_PRODUCTS_DIR; };
+		79153EBC5647B887B9985B8D /* AppIcon.icns */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		B58D5576268A68555AD2FCF2 /* EdithFiles.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = EdithFiles.app; path = "Edith Files.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C42196203122A2922205077A /* EdithMain.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = EdithMain.app; path = Edith.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7FD5DA1D56566638BEC52FB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5E1A77BCD03E829FA1423157 /* EdithMain */ = {
+		5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Packages/Edith/Sources/EdithMain;
 			sourceTree = "<group>";
 		};
-		6F2B88CDE14F930AB2534268 /* EdithHelper */ = {
+		6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Packages/Edith/Sources/EdithHelper;
 			sourceTree = "<group>";
 		};
-		7A3C99DEF2504A1BC3645379 /* EdithFiles */ = {
+		7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Packages/Edith/Sources/EdithFiles;
 			sourceTree = "<group>";
 		};
-		8B4DAAEF03615B2CD475648A /* ed */ = {
+		8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Packages/Edith/Sources/ed;
 			sourceTree = "<group>";
 		};
-		9C5EBBF014726C3DE586759B /* edh */ = {
+		9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Packages/Edith/Sources/edh;
 			sourceTree = "<group>";
 		};
@@ -195,7 +175,7 @@
 			files = (
 				9158E2CD1C3E9F209ADBEA16 /* Cocoa.framework in Frameworks */,
 				2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */,
-				A191C1CE3CD44753BB045A59 /* EdithKit in Frameworks */,
+				A191C1CE3CD44753BB045A59 /* (null) in Frameworks */,
 				5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */,
 				83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */,
 				B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */,
@@ -224,11 +204,11 @@
 		E2CD9CE63028F1FD00967D47 = {
 			isa = PBXGroup;
 			children = (
-				5E1A77BCD03E829FA1423157 /* EdithMain */,
-				6F2B88CDE14F930AB2534268 /* EdithHelper */,
-				7A3C99DEF2504A1BC3645379 /* EdithFiles */,
-				8B4DAAEF03615B2CD475648A /* ed */,
-				9C5EBBF014726C3DE586759B /* edh */,
+				5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */,
+				6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */,
+				7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */,
+				8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */,
+				9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */,
 				BE70DD1236948E5F07A8971D /* Resources */,
 				AD6FCC0125837D4EF697860C /* Frameworks */,
 				E2CD9CF03028F1FD00967D47 /* Products */,
@@ -262,7 +242,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				8B4DAAEF03615B2CD475648A /* ed */,
+				8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */,
 			);
 			name = ed;
 			packageProductDependencies = (
@@ -292,12 +272,11 @@
 				433AD7B7D4E5BEFBAB0DE22A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				5E1A77BCD03E829FA1423157 /* EdithMain */,
+				5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */,
 			);
 			name = EdithMain;
 			packageProductDependencies = (
 				0F4B21C7A5E94D3B8C1D6E22 /* Edith */,
-				F89CAED93BE84261A12A1C8F /* EdithKit */,
 				D09B7FAF0E894B2E88306846 /* Highlighter */,
 				50E40C33BF204D7FBD48418B /* Sparkle */,
 				CCC83B99D6204A92B3072609 /* SwiftTerm */,
@@ -319,7 +298,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				7A3C99DEF2504A1BC3645379 /* EdithFiles */,
+				7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */,
 			);
 			name = EdithFiles;
 			packageProductDependencies = (
@@ -346,7 +325,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				6F2B88CDE14F930AB2534268 /* EdithHelper */,
+				6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */,
 			);
 			name = EdithHelper;
 			packageProductDependencies = (
@@ -368,7 +347,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				9C5EBBF014726C3DE586759B /* edh */,
+				9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */,
 			);
 			name = edh;
 			packageProductDependencies = (
@@ -398,7 +377,7 @@
 			mainGroup = E2CD9CE63028F1FD00967D47;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */,
+				4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */,
 				81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
@@ -903,7 +882,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */ = {
+		4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Edith;
 		};
@@ -931,17 +910,17 @@
 /* Begin XCSwiftPackageProductDependency section */
 		0F4B21C7A5E94D3B8C1D6E22 /* Edith */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = Edith;
 		};
 		1A7C33D8B6FA4E2C9D0E7F13 /* Edith */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = Edith;
 		};
 		4BF07CFCBD4C4C2BB2F631D3 /* EdithKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = EdithKit;
 		};
 		50E40C33BF204D7FBD48418B /* Sparkle */ = {
@@ -956,22 +935,22 @@
 		};
 		85207CCF2D3033EE450F487B /* EdithCLI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = EdithCLI;
 		};
 		913CAC95E41B423F9FF20D41 /* Highlighter */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = Highlighter;
 		};
 		92CD22FFF15A7E58164A819B /* EdithKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = EdithKit;
 		};
 		B1ED96385BD98F48940FD77E /* EdithCLI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = EdithCLI;
 		};
 		CCC83B99D6204A92B3072609 /* SwiftTerm */ = {
@@ -981,7 +960,7 @@
 		};
 		D09B7FAF0E894B2E88306846 /* Highlighter */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Edith" */;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = Highlighter;
 		};
 		DCE8E48CB51E47BABB61A582 /* SwiftTerm */ = {

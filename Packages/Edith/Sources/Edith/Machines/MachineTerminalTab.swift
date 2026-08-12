@@ -1,5 +1,6 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftTerm
 import SwiftUI
 
@@ -15,10 +16,11 @@ extension EnvironmentValues {
 }
 
 @MainActor
-final class TerminalSessionHolder: ObservableObject {
+@Observable
+final class TerminalSessionHolder {
     let terminalView = LocalProcessTerminalView(frame: .zero)
-    @Published private(set) var started = false
-    @Published private(set) var exitMessage: String?
+    private(set) var started = false
+    private(set) var exitMessage: String?
 
     private var delegateBox: TerminalProcessDelegate?
 
@@ -81,7 +83,7 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
 }
 
 struct TerminalPane: NSViewRepresentable {
-    @ObservedObject var holder: TerminalSessionHolder
+    let holder: TerminalSessionHolder
     let dark: Bool
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
@@ -97,8 +99,8 @@ struct TerminalPane: NSViewRepresentable {
 }
 
 struct MachineTerminalTab: View {
-    @ObservedObject var session: MachineSession
-    @StateObject private var ownHolder = TerminalSessionHolder()
+    let session: MachineSession
+    @State private var ownHolder = TerminalSessionHolder()
     private let injectedHolder: TerminalSessionHolder?
 
     init(session: MachineSession, holder: TerminalSessionHolder? = nil) {
@@ -169,9 +171,9 @@ struct MachineTerminalTab: View {
 }
 
 struct ContainerTerminalSheet: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let container: DockerContainer
-    @StateObject private var holder = TerminalSessionHolder()
+    @State private var holder = TerminalSessionHolder()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @Environment(\.terminalLaunchEnabled) private var launchEnabled

@@ -142,11 +142,12 @@ final class MachineMonitor: FeatureModule {
         guard !probing else { return }
         let machines = store.machines
         guard !machines.isEmpty else { return }
-        let notifyDown = AppServices.preferenceOnByDefault("machinesNotifyDown")
-        let notifyDisk = AppServices.preferenceOnByDefault("machinesNotifyDiskFull")
+        let notifyDown = AppServices.preferenceOnByDefault(AppStorageKeys.Machines.notifyDown)
+        let notifyDisk = AppServices.preferenceOnByDefault(AppStorageKeys.Machines.notifyDiskFull)
         guard notifyDown || notifyDisk else { return }
         let threshold =
-            SharedDefaults.store.object(forKey: "machinesDiskThreshold") as? Double ?? 90
+            SharedDefaults.store.object(forKey: AppStorageKeys.Machines.diskThreshold) as? Double
+            ?? FleetMath.diskWarningPercent
         let known = Set(machines.map(\.id))
         health = health.filter { known.contains($0.key) }
         probing = true

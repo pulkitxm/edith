@@ -4,7 +4,7 @@ import SwiftUI
 
 enum DashSkin {
     private static var themeName: String {
-        SharedDefaults.store.string(forKey: "theme") ?? "accent"
+        SharedDefaults.store.string(forKey: AppStorageKeys.General.theme) ?? "accent"
     }
 
     private static func shifted(_ color: Color, toward target: NSColor, by fraction: CGFloat)

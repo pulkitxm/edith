@@ -1,24 +1,26 @@
 import AVFoundation
 import AppKit
 import EdithKit
+import Observation
 import PDFKit
 import SwiftUI
 
 @MainActor
-final class CompanionLibraryModel: ObservableObject {
-    @Published var dropTargeted = false
-    @Published var query = ""
-    @Published private(set) var episodes: [CompanionEpisode] = []
-    @Published private(set) var hits: [CompanionSearchHit] = []
-    @Published private(set) var ingesting = false
-    @Published private(set) var ingestSummary: String?
-    @Published private(set) var indexing = false
-    @Published private(set) var selectedId: String?
-    @Published private(set) var detail: CompanionEpisodeDetail?
-    @Published private(set) var signals: [CompanionSignal] = []
-    @Published private(set) var media: Data?
-    @Published private(set) var loadingDetail = false
-    @Published private(set) var error: String?
+@Observable
+final class CompanionLibraryModel {
+    var dropTargeted = false
+    var query = ""
+    private(set) var episodes: [CompanionEpisode] = []
+    private(set) var hits: [CompanionSearchHit] = []
+    private(set) var ingesting = false
+    private(set) var ingestSummary: String?
+    private(set) var indexing = false
+    private(set) var selectedId: String?
+    private(set) var detail: CompanionEpisodeDetail?
+    private(set) var signals: [CompanionSignal] = []
+    private(set) var media: Data?
+    private(set) var loadingDetail = false
+    private(set) var error: String?
     let playback = AudioPlayback()
     private var searchTask: Task<Void, Never>?
 
@@ -154,10 +156,11 @@ final class CompanionLibraryModel: ObservableObject {
 }
 
 @MainActor
-final class AudioPlayback: ObservableObject {
-    @Published private(set) var playing = false
-    @Published private(set) var progress: Double = 0
-    @Published private(set) var currentTime: TimeInterval = 0
+@Observable
+final class AudioPlayback {
+    private(set) var playing = false
+    private(set) var progress: Double = 0
+    private(set) var currentTime: TimeInterval = 0
     private var player: AVAudioPlayer?
     private var timer: Timer?
 
@@ -207,8 +210,8 @@ final class AudioPlayback: ObservableObject {
 }
 
 struct CompanionLibraryScreen: View {
-    @ObservedObject var model: CompanionLibraryModel
-    @ObservedObject var home: CompanionHomeModel
+    @Bindable var model: CompanionLibraryModel
+    let home: CompanionHomeModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -599,7 +602,7 @@ struct CompanionLibraryScreen: View {
 }
 
 struct VoicePlayerBar: View {
-    @ObservedObject var playback: AudioPlayback
+    let playback: AudioPlayback
     let dark: Bool
 
     var body: some View {

@@ -3,13 +3,16 @@ import EdithKit
 import SwiftUI
 
 struct DashboardView: View {
-    @StateObject private var refresh = DashboardRefreshBridge()
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    @State private var refresh = DashboardRefreshBridge()
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
-    @AppStorage("presenterBlurUsage", store: SharedDefaults.store) private var presenterBlurUsage =
+    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
+        var presenterBlurUsage =
         false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -112,7 +115,7 @@ struct DashboardView: View {
     private var masthead: some View {
         PageHeader {
             (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                + Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
+                + Text("Thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
                 + Text(".").foregroundStyle(DashSkin.ink(dark)))
         } trailing: {
             mastheadButtons
@@ -129,29 +132,44 @@ struct DashboardView: View {
 
     private var mastheadButtons: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Button {
-                refresh.requestRefresh()
-            } label: {
+            MastheadButton(
+                action: refresh.requestRefresh,
+                systemImage: "arrow.clockwise",
+                helperText: "Refresh usage data",
+                isLoading: refresh.updating
+            )
+            MastheadButton(
+                action: { withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() } },
+                systemImage: "terminal",
+                helperText: "Show collector log",
+                tint: showLog ? appTheme : DashSkin.inkFaint(dark)
+            )
+        }
+    }
+
+    private struct MastheadButton: View {
+        let action: () -> Void
+        let systemImage: String
+        let helperText: String
+        var isLoading = false
+        var tint: Color?
+
+        var body: some View {
+            Button(action: action) {
                 Group {
-                    if refresh.updating {
+                    if isLoading {
                         ProgressView().controlSize(.small)
+                    } else if let tint {
+                        Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: systemImage)
                     }
                 }
                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
             .buttonStyle(HoverButtonStyle())
-            .disabled(refresh.updating)
-            .help("Refresh usage data")
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
-            } label: {
-                Image(systemName: "terminal")
-                    .foregroundStyle(showLog ? appTheme : DashSkin.inkFaint(dark))
-            }
-            .buttonStyle(HoverButtonStyle())
-            .help("Show collector log")
+            .disabled(isLoading)
+            .help(helperText)
         }
     }
 
@@ -257,56 +275,83 @@ struct DashboardView: View {
     }
 
     private var controlsBar: some View {
-        WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-            rangeButton("Today", .today)
-            rangeButton("Yesterday", .yesterday)
-            rangeButton("Week", .thisWeek)
-            rangeButton("Last week", .lastWeek)
-            rangeButton("Cycle", .cycle(nil))
-            rangeButton("All", .all)
-            if !model.cycleOptions.isEmpty {
-                Menu {
-                    ForEach(model.cycleOptions) { c in
-                        Button(c.label) { model.range = .cycle(c.id) }
+        VStack(spacing: 10) {
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                rangeButton("Today", .today)
+                rangeButton("Yesterday", .yesterday)
+                rangeButton("Week", .thisWeek)
+                rangeButton("Last week", .lastWeek)
+                rangeButton("Cycle", .cycle(nil))
+                rangeButton("All", .all)
+                if !model.cycleOptions.isEmpty {
+                    Menu {
+                        ForEach(model.cycleOptions) { c in
+                            Button(c.label) { model.range = .cycle(c.id) }
+                        }
+                    } label: {
+                        Label("Cycle", systemImage: "calendar").font(.system(size: UIScale.pt(11)))
                     }
-                } label: {
-                    Label("Cycle", systemImage: "calendar").font(.system(size: UIScale.pt(11)))
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+                    .modifier(FilterChip(dark: dark))
                 }
-                .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                .modifier(FilterChip(dark: dark))
-            }
-            if !model.monthOptions.isEmpty {
-                Menu {
-                    ForEach(model.monthOptions, id: \.self) { m in
-                        Button(m) { model.range = .month(m) }
+                if !model.monthOptions.isEmpty {
+                    Menu {
+                        ForEach(model.monthOptions, id: \.self) { m in
+                            Button(m) { model.range = .month(m) }
+                        }
+                    } label: {
+                        Label("Month", systemImage: "calendar.badge.clock")
+                            .font(.system(size: UIScale.pt(11)))
                     }
-                } label: {
-                    Label("Month", systemImage: "calendar.badge.clock")
-                        .font(.system(size: UIScale.pt(11)))
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+                    .modifier(FilterChip(dark: dark))
                 }
-                .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                .modifier(FilterChip(dark: dark))
+                if !model.machineGroups.isEmpty { machineMenu }
+                Button("Reset") { model.reset() }
+                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
+                    .foregroundStyle(acc)
+                    .padding(.vertical, UIScale.pt(5))
             }
-            Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
-                .pointerCursor().font(.system(size: UIScale.pt(11))).fixedSize()
-            customRange
-            sourceMenu
-            modelMenu
-            projectMenu
-            if !model.machineGroups.isEmpty { machineMenu }
-            Button("Reset") { model.reset() }
-                .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
-                .foregroundStyle(acc)
-                .padding(.vertical, UIScale.pt(5))
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                modelMenu
+                projectMenu
+                sourceMenu
+                billingDayControl
+                customRange
+            }
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .pageGutter(compactLayout)
-        .padding(.bottom, UIScale.pt(10))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper(dark))
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
+        .padding(.vertical)
+    }
+
+    private var billingDayControl: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            Text("Billing day \(model.billingDay)")
+                .font(.system(size: UIScale.pt(11)))
+                .monospacedDigit()
+            HStack(spacing: UIScale.pt(2)) {
+                billingDayStep("minus", enabled: model.billingDay > 1) { model.billingDay -= 1 }
+                billingDayStep("plus", enabled: model.billingDay < 31) { model.billingDay += 1 }
+            }
         }
+        .pointerCursor().fixedSize()
+        .modifier(FilterChip(dark: dark))
+    }
+
+    private func billingDayStep(_ systemImage: String, enabled: Bool, action: @escaping () -> Void)
+        -> some View
+    {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: UIScale.pt(9), weight: .semibold))
+                .frame(width: UIScale.pt(14), height: UIScale.pt(14))
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .opacity(enabled ? 1 : 0.3)
+        .disabled(!enabled)
     }
 
     private var customRange: some View {
@@ -809,9 +854,9 @@ struct ActivityHeatmap: View {
 
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
         if cost <= 0 { return DashSkin.grid(dark) }
-        if cost <= cuts[0] { return DashPalette.color("#f6d9bf") }
-        if cost <= cuts[1] { return DashPalette.color("#f0b384") }
-        if cost <= cuts[2] { return DashPalette.color("#e2884f") }
-        return DashPalette.color("#c75e36")
+        if cost <= cuts[0] { return DashPalette.color("#008000") }
+        if cost <= cuts[1] { return DashPalette.color("#006400") }
+        if cost <= cuts[2] { return DashPalette.color("#004700") }
+        return DashPalette.color("#002B00")
     }
 }

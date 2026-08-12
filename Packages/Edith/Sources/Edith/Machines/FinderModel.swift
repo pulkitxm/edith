@@ -1,30 +1,32 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class FinderModel: ObservableObject {
-    @Published var path: String
-    @Published var entries: [RemoteFileEntry] = []
-    @Published private(set) var loading = false
-    @Published var errorMessage: String?
-    @Published var statusMessage: String?
-    @Published var selection: Set<String> = [] {
+@Observable
+final class FinderModel {
+    var path: String
+    var entries: [RemoteFileEntry] = []
+    private(set) var loading = false
+    var errorMessage: String?
+    var statusMessage: String?
+    var selection: Set<String> = [] {
         didSet { syncQuickLookToSelection() }
     }
-    @Published var renaming: String?
-    @Published var renameText = ""
-    @Published var quickLookPath: String?
-    @Published var freeSpaceKB: Int64?
-    @Published var searchQuery = ""
-    @Published var searchResults: [RemoteFileEntry]?
-    @Published var places: [FilePlaceSection] = []
-    @Published var infoTarget: RemoteFileEntry?
-    @Published var showSidebar = true
-    @Published var progress: FileOperationProgress?
-    @Published var pendingConflict: PendingConflict?
-    @Published var scrollTarget: String?
+    var renaming: String?
+    var renameText = ""
+    var quickLookPath: String?
+    var freeSpaceKB: Int64?
+    var searchQuery = ""
+    var searchResults: [RemoteFileEntry]?
+    var places: [FilePlaceSection] = []
+    var infoTarget: RemoteFileEntry?
+    var showSidebar = true
+    var progress: FileOperationProgress?
+    var pendingConflict: PendingConflict?
+    var scrollTarget: String?
     static var clipboard: FileClipboard?
 
     struct PendingConflict: Identifiable {
@@ -34,19 +36,19 @@ final class FinderModel: ObservableObject {
         var names: [String]
     }
 
-    @Published var viewModeRaw = FinderDefaults.viewMode {
+    var viewModeRaw = FinderDefaults.viewMode {
         didSet { FinderDefaults.viewMode = viewModeRaw }
     }
-    @Published var sortKeyRaw = FinderDefaults.sortKey {
+    var sortKeyRaw = FinderDefaults.sortKey {
         didSet { FinderDefaults.sortKey = sortKeyRaw }
     }
-    @Published var sortAscending = FinderDefaults.sortAscending {
+    var sortAscending = FinderDefaults.sortAscending {
         didSet { FinderDefaults.sortAscending = sortAscending }
     }
-    @Published var showHidden = FinderDefaults.showHidden {
+    var showHidden = FinderDefaults.showHidden {
         didSet { FinderDefaults.showHidden = showHidden }
     }
-    @Published var iconSize = FinderDefaults.iconSize {
+    var iconSize = FinderDefaults.iconSize {
         didSet { FinderDefaults.iconSize = iconSize }
     }
 

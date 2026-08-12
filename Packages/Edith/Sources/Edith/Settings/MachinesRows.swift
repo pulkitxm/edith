@@ -2,12 +2,17 @@ import EdithKit
 import SwiftUI
 
 struct MachinesRows: View {
-    @AppStorage("tabMachinesEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("machinesNotifyDown", store: SharedDefaults.store) private var notifyDown = true
-    @AppStorage("machinesNotifyDiskFull", store: SharedDefaults.store) private var notifyDisk = true
-    @AppStorage("machinesDiskThreshold", store: SharedDefaults.store) private var diskThreshold =
-        90.0
-    @AppStorage("machinesAutoConnect", store: SharedDefaults.store) private var autoConnect = true
+    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.Machines.notifyDown, store: SharedDefaults.store) private
+        var notifyDown = true
+    @AppStorage(AppStorageKeys.Machines.notifyDiskFull, store: SharedDefaults.store) private
+        var notifyDisk = true
+    @AppStorage(AppStorageKeys.Machines.diskThreshold, store: SharedDefaults.store) private
+        var diskThreshold =
+        FleetMath.diskWarningPercent
+    @AppStorage(AppStorageKeys.Machines.autoConnect, store: SharedDefaults.store) private
+        var autoConnect = true
 
     var body: some View {
         Section {

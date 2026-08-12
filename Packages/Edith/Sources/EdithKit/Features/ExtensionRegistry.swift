@@ -51,13 +51,13 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
 
     public var grantedDefaultsKey: String? {
         switch self {
-        case .calendar: "permCalendarGranted"
-        case .notifications: "permNotificationsGranted"
-        case .accessibility: "permAccessibilityGranted"
-        case .inputMonitoring: "permInputMonitoringGranted"
-        case .fullDisk: "permFullDiskGranted"
-        case .screenRecording: "permScreenRecordingGranted"
-        case .camera: "permCameraGranted"
+        case .calendar: AppStorageKeys.Permissions.calendarGranted
+        case .notifications: AppStorageKeys.Permissions.notificationsGranted
+        case .accessibility: AppStorageKeys.Permissions.accessibilityGranted
+        case .inputMonitoring: AppStorageKeys.Permissions.inputMonitoringGranted
+        case .fullDisk: AppStorageKeys.Permissions.fullDiskGranted
+        case .screenRecording: AppStorageKeys.Permissions.screenRecordingGranted
+        case .camera: AppStorageKeys.Permissions.cameraGranted
         case .bluetooth, .automation: nil
         }
     }

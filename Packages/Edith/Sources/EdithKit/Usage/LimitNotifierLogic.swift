@@ -30,20 +30,21 @@ public struct NotifySettings {
 
     public static func fromDefaults(_ d: UserDefaults = .standard) -> NotifySettings {
         var s = NotifySettings()
-        s.master = d.bool(forKey: "notifyMaster")
-        s.trackSession = d.object(forKey: "notifyTrackSession") as? Bool ?? true
-        s.trackWeekly = d.object(forKey: "notifyTrackWeekly") as? Bool ?? true
-        s.recovery = d.object(forKey: "notifyRecovery") as? Bool ?? true
-        s.pacingWarning = d.object(forKey: "notifyPacingWarning") as? Bool ?? true
-        s.pacingHot = d.object(forKey: "notifyPacingHot") as? Bool ?? true
-        s.reminderSession = d.bool(forKey: "notifyReminderSession")
+        s.master = d.bool(forKey: AppStorageKeys.Notify.master)
+        s.trackSession = d.object(forKey: AppStorageKeys.Notify.trackSession) as? Bool ?? true
+        s.trackWeekly = d.object(forKey: AppStorageKeys.Notify.trackWeekly) as? Bool ?? true
+        s.recovery = d.object(forKey: AppStorageKeys.Notify.recovery) as? Bool ?? true
+        s.pacingWarning = d.object(forKey: AppStorageKeys.Notify.pacingWarning) as? Bool ?? true
+        s.pacingHot = d.object(forKey: AppStorageKeys.Notify.pacingHot) as? Bool ?? true
+        s.reminderSession = d.bool(forKey: AppStorageKeys.Notify.reminderSession)
         s.reminderSessionOffsetMin =
-            d.object(forKey: "notifyReminderSessionOffsetMin") as? Int ?? 30
-        s.reminderWeekly = d.bool(forKey: "notifyReminderWeekly")
-        s.reminderWeeklyOffsetMin = d.object(forKey: "notifyReminderWeeklyOffsetMin") as? Int ?? 120
-        s.tokenExpired = d.object(forKey: "notifyTokenExpired") as? Bool ?? true
-        s.smartColor = d.object(forKey: "smartColor") as? Bool ?? true
-        s.pacingMargin = d.object(forKey: "pacingMargin") as? Double ?? 10
+            d.object(forKey: AppStorageKeys.Notify.reminderSessionOffsetMin) as? Int ?? 30
+        s.reminderWeekly = d.bool(forKey: AppStorageKeys.Notify.reminderWeekly)
+        s.reminderWeeklyOffsetMin =
+            d.object(forKey: AppStorageKeys.Notify.reminderWeeklyOffsetMin) as? Int ?? 120
+        s.tokenExpired = d.object(forKey: AppStorageKeys.Notify.tokenExpired) as? Bool ?? true
+        s.smartColor = d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true
+        s.pacingMargin = d.object(forKey: AppStorageKeys.Limits.pacingMargin) as? Double ?? 10
         s.thresholds = UsageThresholds.fromDefaults(d)
         return s
     }

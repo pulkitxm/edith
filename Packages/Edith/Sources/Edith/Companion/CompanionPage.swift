@@ -1,5 +1,6 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -51,10 +52,11 @@ enum CompanionTab: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-final class CompanionHomeModel: ObservableObject {
-    @Published private(set) var checks: [CompanionCheck] = []
-    @Published private(set) var status: CompanionStatus?
-    @Published private(set) var error: String?
+@Observable
+final class CompanionHomeModel {
+    private(set) var checks: [CompanionCheck] = []
+    private(set) var status: CompanionStatus?
+    private(set) var error: String?
 
     var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -75,15 +77,15 @@ final class CompanionHomeModel: ObservableObject {
 }
 
 struct CompanionPage: View {
-    @StateObject private var home = CompanionHomeModel()
-    @StateObject private var chat = CompanionChatModel()
-    @StateObject private var capture = CompanionCaptureModel()
-    @StateObject private var library = CompanionLibraryModel()
-    @StateObject private var mind = CompanionMindModel()
-    @StateObject private var desk = CompanionDeskModel()
-    @StateObject private var setup = CompanionSetupModel()
-    @StateObject private var reason = CompanionSettingsModel()
-    @AppStorage("companionTab", store: SharedDefaults.store)
+    @State private var home = CompanionHomeModel()
+    @State private var chat = CompanionChatModel()
+    @State private var capture = CompanionCaptureModel()
+    @State private var library = CompanionLibraryModel()
+    @State private var mind = CompanionMindModel()
+    @State private var desk = CompanionDeskModel()
+    @State private var setup = CompanionSetupModel()
+    @State private var reason = CompanionSettingsModel()
+    @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact

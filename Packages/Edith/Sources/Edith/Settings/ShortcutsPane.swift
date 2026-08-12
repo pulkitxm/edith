@@ -4,12 +4,16 @@ import EdithKit
 import SwiftUI
 
 struct ShortcutsSettingsPane: View {
-    @AppStorage("clipboardEnabled", store: SharedDefaults.store) private var clipboardEnabled =
+    @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
+        var clipboardEnabled =
         false
-    @AppStorage("colorPickerEnabled", store: SharedDefaults.store) private var colorPickerEnabled =
+    @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
+        var colorPickerEnabled =
         false
-    @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var focusDimEnabled = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
+        false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
         false
 
     private var extensionShortcuts: [ExtensionShortcut] {
@@ -31,8 +35,7 @@ struct ShortcutsSettingsPane: View {
             Section {
                 if extensionShortcuts.isEmpty {
                     Text("Extensions with shortcuts appear here when enabled.")
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                 } else {
                     ForEach(extensionShortcuts, id: \.self) { shortcut in
                         extensionShortcutRow(shortcut)
@@ -84,8 +87,7 @@ struct ShortcutsSettingsPane: View {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
                 Text(subtitle)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
             Spacer()
             HotKeyRecorderControl(keyPrefix: keyPrefix, defaultLabel: defaultLabel)

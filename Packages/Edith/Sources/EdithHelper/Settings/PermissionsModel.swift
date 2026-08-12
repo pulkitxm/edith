@@ -8,15 +8,16 @@ import SwiftUI
 import UserNotifications
 
 @MainActor
-final class PermissionsModel: ObservableObject {
+@Observable
+final class PermissionsModel {
     static let shared = PermissionsModel()
 
-    @Published private(set) var notifications = false
-    @Published private(set) var accessibility = false
-    @Published private(set) var inputMonitoring = false
-    @Published private(set) var fullDisk = false
-    @Published private(set) var screenRecording = false
-    @Published private(set) var camera = false
+    private(set) var notifications = false
+    private(set) var accessibility = false
+    private(set) var inputMonitoring = false
+    private(set) var fullDisk = false
+    private(set) var screenRecording = false
+    private(set) var camera = false
 
     private let eventStore = EKEventStore()
     private var ipcTokens: [NSObjectProtocol] = []
@@ -76,12 +77,12 @@ final class PermissionsModel: ObservableObject {
                 changed = true
             }
         }
-        setIfChanged(notifications, "permNotificationsGranted")
-        setIfChanged(accessibility, "permAccessibilityGranted")
-        setIfChanged(inputMonitoring, "permInputMonitoringGranted")
-        setIfChanged(fullDisk, "permFullDiskGranted")
-        setIfChanged(screenRecording, "permScreenRecordingGranted")
-        setIfChanged(camera, "permCameraGranted")
+        setIfChanged(notifications, AppStorageKeys.Permissions.notificationsGranted)
+        setIfChanged(accessibility, AppStorageKeys.Permissions.accessibilityGranted)
+        setIfChanged(inputMonitoring, AppStorageKeys.Permissions.inputMonitoringGranted)
+        setIfChanged(fullDisk, AppStorageKeys.Permissions.fullDiskGranted)
+        setIfChanged(screenRecording, AppStorageKeys.Permissions.screenRecordingGranted)
+        setIfChanged(camera, AppStorageKeys.Permissions.cameraGranted)
         if changed { IPC.post(IPC.Name.permissionsRefreshed) }
     }
 

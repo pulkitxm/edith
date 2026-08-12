@@ -70,6 +70,16 @@ enum CatalogSamples {
         #expect(ConfigCatalog.settings.count > 150)
     }
 
+    @Test func everySettingKeyIsUnique() {
+        let keys = ConfigCatalog.settings.map(\.key)
+        var seen: Set<String> = []
+        var duplicates: Set<String> = []
+        for key in keys where !seen.insert(key).inserted {
+            duplicates.insert(key)
+        }
+        #expect(duplicates.isEmpty, "duplicate keys in ConfigCatalog.settings: \(duplicates)")
+    }
+
     @Test func everySettingParsesSetsReadsBackAndUnsets() throws {
         let suite = Self.scratch()
         let store = ConfigStore(shared: suite.defaults, standard: suite.defaults)

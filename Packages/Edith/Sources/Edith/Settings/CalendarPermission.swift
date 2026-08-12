@@ -11,8 +11,8 @@ enum CalendarPermission {
     static func mirror() -> Bool {
         let value = isGranted
         let defaults = SharedDefaults.store
-        if defaults.object(forKey: "permCalendarGranted") as? Bool != value {
-            defaults.set(value, forKey: "permCalendarGranted")
+        if defaults.object(forKey: AppStorageKeys.Permissions.calendarGranted) as? Bool != value {
+            defaults.set(value, forKey: AppStorageKeys.Permissions.calendarGranted)
             IPC.post(IPC.Name.permissionsRefreshed)
         }
         return value

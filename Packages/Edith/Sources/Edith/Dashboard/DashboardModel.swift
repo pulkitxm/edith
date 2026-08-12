@@ -1,4 +1,5 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 enum DashPalette {
@@ -418,48 +419,49 @@ struct MetaLine {
 }
 
 @MainActor
-final class DashboardModel: ObservableObject {
+@Observable
+final class DashboardModel {
     static let shared = DashboardModel()
     static let unattributedCostModel = "unattributed-cost"
 
-    @Published var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
-    @Published var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var selectedPaths: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
-    @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
-    @Published var sortAscending = false { didSet { persist(); resortTotals() } }
-    @Published var heatMetric: DashMetric = .tokens { didSet { persist() } }
-    @Published var projSortKey: ProjSortKey = .cost { didSet { persist(); resortProjectTree() } }
-    @Published var projSortAscending = false { didSet { persist(); resortProjectTree() } }
-    @Published var projListOpen = false
-    @Published var projExpanded: Set<String> = []
-    @Published var projQuery = ""
+    var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
+    var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
+    var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
+    var selectedPaths: Set<String> = [] { didSet { persist(); recompute() } }
+    var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
+    var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
+    var sortAscending = false { didSet { persist(); resortTotals() } }
+    var heatMetric: DashMetric = .tokens { didSet { persist() } }
+    var projSortKey: ProjSortKey = .cost { didSet { persist(); resortProjectTree() } }
+    var projSortAscending = false { didSet { persist(); resortProjectTree() } }
+    var projListOpen = false
+    var projExpanded: Set<String> = []
+    var projQuery = ""
 
     private var loading = false
     private var restored = false
     private var knownSources: Set<String> = []
     private var knownModels: Set<String> = []
 
-    @Published private(set) var loaded = false
-    @Published private(set) var loadAttempted = false
-    @Published private(set) var series: [DayDatum] = []
-    @Published private(set) var kpis: [KPI] = []
-    @Published private(set) var modelTotals: [ModelTotal] = []
-    @Published private(set) var dow: [DOWDatum] = []
-    @Published private(set) var hourlyAll: [HourDatum] = []
-    @Published private(set) var hourlyUnattributedTokens = 0.0
-    @Published private(set) var hourlyUnattributedCost = 0.0
-    @Published private(set) var pathUnattributedTokens = 0.0
-    @Published private(set) var pathUnattributedCost = 0.0
-    @Published private(set) var modelUnfilterableCost = 0.0
-    @Published private(set) var projects: [ProjectAgg] = []
-    @Published private(set) var projectTree: [ProjTreeRow] = []
-    @Published private(set) var meta = MetaLine()
-    @Published private(set) var calendarDays: [DayPoint] = []
-    @Published private(set) var heatDetail: [String: HeatDay] = [:]
-    @Published private(set) var chartData = DashChartData()
-    @Published private(set) var revision = 0
+    private(set) var loaded = false
+    private(set) var loadAttempted = false
+    private(set) var series: [DayDatum] = []
+    private(set) var kpis: [KPI] = []
+    private(set) var modelTotals: [ModelTotal] = []
+    private(set) var dow: [DOWDatum] = []
+    private(set) var hourlyAll: [HourDatum] = []
+    private(set) var hourlyUnattributedTokens = 0.0
+    private(set) var hourlyUnattributedCost = 0.0
+    private(set) var pathUnattributedTokens = 0.0
+    private(set) var pathUnattributedCost = 0.0
+    private(set) var modelUnfilterableCost = 0.0
+    private(set) var projects: [ProjectAgg] = []
+    private(set) var projectTree: [ProjTreeRow] = []
+    private(set) var meta = MetaLine()
+    private(set) var calendarDays: [DayPoint] = []
+    private(set) var heatDetail: [String: HeatDay] = [:]
+    private(set) var chartData = DashChartData()
+    private(set) var revision = 0
 
     private(set) var allModels: [String] = []
     private(set) var allProjectPaths: [ProjectPath] = []
@@ -513,7 +515,7 @@ final class DashboardModel: ObservableObject {
     }
 
     private var extensionEnabled: Bool {
-        preferences.object(forKey: "tabUsageEnabled") as? Bool ?? false
+        preferences.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool ?? false
     }
 
     private func scheduleReload() {
