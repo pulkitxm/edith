@@ -11,10 +11,11 @@ public enum UsageHistory {
             return oneSided(
                 original: cloud, raw: rawCloud, normalized: pruningUnusedMachineSources(c))
         }
-        guard let c = normalizedCloud else {
+        guard let cloudDocument = normalizedCloud else {
             return oneSided(
                 original: local, raw: rawLocal, normalized: pruningUnusedMachineSources(l))
         }
+        let c = removingReplacedMachines(from: cloudDocument, active: l)
 
         var mergedByPeriod: [String: [String: Any]] = [:]
         for day in daily(c) {
@@ -49,6 +50,214 @@ public enum UsageHistory {
     }
 
     private static let legacyCloudSource = "cc-cloud"
+
+    private struct MachineHistory {
+        var host = ""
+        var sessionsByTool: [String: Set<String>] = [:]
+
+        var sessionCount: Int {
+            sessionsByTool.values.reduce(0) { $0 + $1.count }
+        }
+    }
+
+    private static func removingReplacedMachines(
+        from cloud: [String: Any], active local: [String: Any]
+    ) -> [String: Any] {
+        let activeIDs = Set(
+            (local["machines"] as? [[String: Any]] ?? []).compactMap {
+                ($0["id"] as? String)?.lowercased()
+            })
+        guard !activeIDs.isEmpty else { return cloud }
+        let localHistory = machineHistory(local)
+        let cloudHistory = machineHistory(cloud)
+        let replaced = Set(
+            cloudHistory.keys.filter { cloudID in
+                guard !activeIDs.contains(cloudID), let old = cloudHistory[cloudID] else {
+                    return false
+                }
+                return activeIDs.contains { activeID in
+                    guard activeID != cloudID, let current = localHistory[activeID] else {
+                        return false
+                    }
+                    let sharedTools = Set(old.sessionsByTool.keys).intersection(
+                        current.sessionsByTool.keys)
+                    let overlap = sharedTools.reduce(0) { total, tool in
+                        total
+                            + (old.sessionsByTool[tool] ?? []).intersection(
+                                current.sessionsByTool[tool] ?? []
+                            ).count
+                    }
+                    let smallerHistory = min(old.sessionCount, current.sessionCount)
+                    if !old.host.isEmpty, old.host == current.host, smallerHistory == 1 {
+                        return overlap == 1
+                    }
+                    return overlap >= 2 && overlap * 10 >= smallerHistory * 9
+                }
+            })
+        guard !replaced.isEmpty else { return cloud }
+        return removingMachineIDs(replaced, from: cloud)
+    }
+
+    private static func machineHistory(_ obj: [String: Any]) -> [String: MachineHistory] {
+        let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
+        var history: [String: MachineHistory] = [:]
+        for machine in obj["machines"] as? [[String: Any]] ?? [] {
+            guard let id = (machine["id"] as? String)?.lowercased() else { continue }
+            var item = history[id] ?? MachineHistory()
+            item.host = normalizedHost(machine["host"] as? String)
+            history[id] = item
+        }
+        for (source, value) in sourceMeta {
+            guard let id = machineIdentity(source, sourceMeta: sourceMeta)?.id else { continue }
+            let meta = value as? [String: Any]
+            let host = normalizedHost(meta?["machineHost"] as? String)
+            var item = history[id] ?? MachineHistory()
+            if !host.isEmpty { item.host = host }
+            history[id] = item
+        }
+        for session in obj["sessions"] as? [[String: Any]] ?? [] {
+            guard let source = session["source"] as? String,
+                let id = session["id"] as? String, !id.isEmpty,
+                let identity = machineIdentity(source, sourceMeta: sourceMeta)
+            else { continue }
+            var item = history[identity.id] ?? MachineHistory()
+            item.sessionsByTool[identity.tool, default: []].insert(id)
+            history[identity.id] = item
+        }
+        return history
+    }
+
+    private static func normalizedHost(_ value: String?) -> String {
+        value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    }
+
+    private static func machineIdentity(
+        _ source: String, sourceMeta: [String: Any]
+    ) -> (id: String, tool: String)? {
+        let pieces = source.split(separator: ":", omittingEmptySubsequences: false)
+        let tool = pieces.last.map(String.init)?.lowercased() ?? ""
+        let metadataID = ((sourceMeta[source] as? [String: Any])?["machineID"] as? String)?
+            .lowercased()
+        let canonicalID =
+            pieces.count >= 3 && pieces[0].lowercased() == "machine"
+            ? String(pieces[1]).lowercased() : nil
+        guard let id = metadataID ?? canonicalID, !id.isEmpty, !tool.isEmpty else { return nil }
+        return (id, tool)
+    }
+
+    private static func removingMachineIDs(
+        _ ids: Set<String>, from obj: [String: Any]
+    ) -> [String: Any] {
+        let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
+        let keep: (String) -> Bool = { source in
+            guard let id = machineIdentity(source, sourceMeta: sourceMeta)?.id else { return true }
+            return !ids.contains(id)
+        }
+        var out = obj
+        out["sources"] = strings(obj["sources"]).filter(keep)
+        out["defaultSources"] = strings(obj["defaultSources"]).filter(keep)
+        out["sourceMeta"] = sourceMeta.filter { keep($0.key) }
+        out["machines"] = (obj["machines"] as? [[String: Any]] ?? []).filter {
+            guard let id = ($0["id"] as? String)?.lowercased() else { return true }
+            return !ids.contains(id)
+        }
+        out["sessions"] = (obj["sessions"] as? [[String: Any]] ?? []).filter {
+            guard let source = $0["source"] as? String else { return true }
+            return keep(source)
+        }
+        let filteredDaily = daily(obj).map {
+            filteringMachineDay($0, keep: keep)
+        }
+        out["daily"] = filteredDaily
+        out["totals"] = totals(of: filteredDaily)
+        return out
+    }
+
+    private static func filteringMachineDay(
+        _ day: [String: Any], keep: (String) -> Bool
+    ) -> [String: Any] {
+        var out = day
+        out["bySource"] = filteringSourceMap(day["bySource"], keep: keep)
+        if let hours = day["hours"] as? [[String: Any]] {
+            out["hours"] = hours.map {
+                filteringMachineDetail($0, keepEmpty: true, keep: keep) ?? [:]
+            }
+        }
+        if let projects = day["projects"] as? [[String: Any]] {
+            out["projects"] = projects.compactMap {
+                filteringMachineProject($0, keep: keep)
+            }
+        }
+        return out
+    }
+
+    private static func filteringMachineDetail(
+        _ detail: [String: Any], keepEmpty: Bool, keep: (String) -> Bool
+    ) -> [String: Any]? {
+        var out = detail
+        if detail["bySource"] != nil {
+            let bySource = filteringSourceMap(detail["bySource"], keep: keep)
+            guard keepEmpty || !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        }
+        if let paths = detail["byPath"] as? [String: Any] {
+            out["byPath"] = paths.reduce(into: [String: Any]()) { result, entry in
+                guard let value = entry.value as? [String: Any],
+                    let filtered = filteringMachineDetail(value, keepEmpty: false, keep: keep)
+                else { return }
+                result[entry.key] = filtered
+            }
+        }
+        return out
+    }
+
+    private static func filteringMachineProject(
+        _ project: [String: Any], keep: (String) -> Bool
+    ) -> [String: Any]? {
+        guard var out = filteringMachineDetail(project, keepEmpty: false, keep: keep) else {
+            return nil
+        }
+        if let chats = project["chats"] as? [[String: Any]] {
+            out["chats"] = chats.filter { recordUsesKeptSource($0, keep: keep) }
+        }
+        if let worktrees = project["worktrees"] as? [[String: Any]] {
+            out["worktrees"] = worktrees.compactMap {
+                filteringMachineWorktree($0, keep: keep)
+            }
+        }
+        return out
+    }
+
+    private static func filteringMachineWorktree(
+        _ worktree: [String: Any], keep: (String) -> Bool
+    ) -> [String: Any]? {
+        guard var out = filteringMachineDetail(worktree, keepEmpty: false, keep: keep) else {
+            return nil
+        }
+        guard let chats = worktree["chats"] as? [[String: Any]] else { return out }
+        let filtered = chats.filter { recordUsesKeptSource($0, keep: keep) }
+        guard !filtered.isEmpty || chats.isEmpty else { return nil }
+        out["chats"] = filtered
+        if worktree["bySource"] == nil {
+            out["tokens"] = filtered.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] = filtered.reduce(0) { $0 + num($1["cost"]) }
+        }
+        return out
+    }
+
+    private static func filteringSourceMap(
+        _ value: Any?, keep: (String) -> Bool
+    ) -> [String: Any] {
+        (value as? [String: Any] ?? [:]).filter { keep($0.key) }
+    }
+
+    private static func recordUsesKeptSource(
+        _ record: [String: Any], keep: (String) -> Bool
+    ) -> Bool {
+        guard let source = record["source"] as? String else { return true }
+        return keep(source)
+    }
 
     private static func normalized(_ decoded: [String: Any]) -> [String: Any] {
         return removingUnsafeCodexDetail(

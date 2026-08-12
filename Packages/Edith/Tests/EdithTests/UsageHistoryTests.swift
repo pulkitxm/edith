@@ -161,6 +161,90 @@ import Testing
         return try! JSONSerialization.data(withJSONObject: obj)
     }
 
+    private func replacementDocument(
+        machineID: String, machineName: String, host: String,
+        tokensByTool: [String: Double], sessionsByTool: [String: [String]]
+    ) -> Data {
+        let prefix = "machine:\(machineID.lowercased()):"
+        let sources = tokensByTool.keys.sorted().map { prefix + $0 }
+        let sourceMeta = Dictionary(
+            uniqueKeysWithValues: sources.map { source in
+                let tool = String(source.split(separator: ":").last ?? "")
+                return (
+                    source,
+                    [
+                        "label": "\(tool) · \(machineName)", "tool": tool,
+                        "machine": machineName, "machineID": machineID,
+                        "machineHost": host,
+                    ] as [String: Any]
+                )
+            })
+        let bySource = Dictionary(
+            uniqueKeysWithValues: tokensByTool.map { tool, tokens in
+                (prefix + tool, [model(tool, input: tokens, cost: tokens / 10)])
+            })
+        let detailBySource = Dictionary(
+            uniqueKeysWithValues: tokensByTool.map { tool, tokens in
+                (
+                    prefix + tool,
+                    [
+                        "tokens": tokens, "cost": tokens / 10,
+                        "byModel": [tool: ["tokens": tokens, "cost": tokens / 10]],
+                    ] as [String: Any]
+                )
+            })
+        let sessions = sessionsByTool.flatMap { tool, ids in
+            ids.map { ["id": $0, "source": prefix + tool] }
+        }
+        let chats = sessions.map { session in
+            [
+                "id": session["id"] ?? "", "source": session["source"] ?? "",
+                "path": "/work", "tokens": 1, "cost": 0.1,
+            ] as [String: Any]
+        }
+        let totalTokens = tokensByTool.values.reduce(0, +)
+        let totalCost = totalTokens / 10
+        let project: [String: Any] = [
+            "projectName": "project", "repositoryID": "github.com/example/project",
+            "repositoryName": "project", "folderName": "project", "path": "/work",
+            "machineName": machineName, "machineID": machineID,
+            "tokens": totalTokens, "cost": totalCost, "bySource": detailBySource,
+            "chats": chats, "worktrees": [],
+        ]
+        let obj: [String: Any] = [
+            "schemaVersion": 7,
+            "generatedAt": "2026-08-12T00:00:00Z",
+            "sources": sources,
+            "defaultSources": sources,
+            "sourceMeta": sourceMeta,
+            "machines": [
+                [
+                    "id": machineID, "name": machineName, "slug": machineName.lowercased(),
+                    "host": host, "sources": sources,
+                ]
+            ],
+            "totals": ["cost": totalCost, "tokens": totalTokens],
+            "daily": [
+                day(
+                    "2026-08-12", bySource: bySource,
+                    hours: [
+                        [
+                            "tokens": totalTokens, "cost": totalCost,
+                            "bySource": detailBySource,
+                            "byPath": [
+                                "/work": [
+                                    "tokens": totalTokens, "cost": totalCost,
+                                    "bySource": detailBySource,
+                                ]
+                            ],
+                        ]
+                    ], projects: [project])
+            ],
+            "sessions": sessions,
+        ]
+        return try! JSONSerialization.data(withJSONObject: obj)
+    }
+
     private func machineAliasDocument(
         machineID: String, currentSlug: String, entries: [MachineAliasEntry]
     ) -> Data {
@@ -609,6 +693,61 @@ import Testing
         #expect(totalsBySource["tof:cli"]?["tokens"] == 8)
         #expect(totalsBySource["tof:codex"]?["tokens"] == 20)
         #expect(totalsBySource["laptop:cli"]?["tokens"] == 5)
+    }
+
+    @Test func replacedMachineHistoryIsNotCountedTwice() throws {
+        let oldID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+        let currentID = "7F2B9AB7-3A0A-4289-9743-6BD57F4D4011"
+        let local = replacementDocument(
+            machineID: currentID, machineName: "TUF Wired", host: "pulkit-tuf",
+            tokensByTool: ["cli": 1, "codex": 2, "opencode": 3, "pi": 4, "future": 5],
+            sessionsByTool: [
+                "cli": ["cli-1", "cli-2", "cli-3", "cli-4", "cli-5"],
+                "codex": ["codex-1"],
+                "opencode": ["opencode-1", "opencode-2", "opencode-3", "opencode-4"],
+                "pi": ["pi-1"], "future": ["future-1"],
+            ])
+        let cloud = replacementDocument(
+            machineID: oldID, machineName: "TUF", host: "",
+            tokensByTool: ["cli": 100, "codex": 200, "opencode": 300],
+            sessionsByTool: [
+                "cli": ["cli-1", "cli-2", "cli-3", "cli-4", "cli-5"],
+                "codex": ["codex-1", "retired-only"],
+                "opencode": ["opencode-1", "opencode-2", "opencode-3", "opencode-4"],
+            ])
+
+        let mergedData = try #require(UsageHistory.merge(local: local, cloud: cloud))
+        let merged = decode(mergedData)
+        let currentPrefix = "machine:\(currentID.lowercased()):"
+        let expectedSources = Set(
+            ["cli", "codex", "opencode", "pi", "future"].map {
+                currentPrefix + $0
+            })
+
+        #expect(Set(merged["sources"] as? [String] ?? []) == expectedSources)
+        #expect(Set(merged["defaultSources"] as? [String] ?? []) == expectedSources)
+        let totals = merged["totals"] as? [String: Any]
+        #expect(totals?["tokens"] as? Double == 15)
+        let bySource = totals?["bySource"] as? [String: [String: Double]]
+        #expect(Set(bySource?.keys.map { $0 } ?? []) == expectedSources)
+        #expect(bySource?[currentPrefix + "pi"]?["tokens"] == 4)
+        #expect(bySource?[currentPrefix + "future"]?["tokens"] == 5)
+        let encoded = String(decoding: mergedData, as: UTF8.self).lowercased()
+        #expect(!encoded.contains(oldID.lowercased()))
+    }
+
+    @Test func differentMachineHistoryRemainsIndependent() {
+        let local = replacementDocument(
+            machineID: "11111111-1111-1111-1111-111111111111", machineName: "TUF",
+            host: "tuf", tokensByTool: ["cli": 10], sessionsByTool: ["cli": ["a", "b"]])
+        let cloud = replacementDocument(
+            machineID: "22222222-2222-2222-2222-222222222222", machineName: "Pi",
+            host: "pi", tokensByTool: ["cli": 20], sessionsByTool: ["cli": ["c", "d"]])
+        let merged = decode(UsageHistory.merge(local: local, cloud: cloud))
+        let totals = merged["totals"] as? [String: Any]
+
+        #expect(totals?["tokens"] as? Double == 30)
+        #expect((merged["sources"] as? [String])?.count == 2)
     }
 
     @MainActor
