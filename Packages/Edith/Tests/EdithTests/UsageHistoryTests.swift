@@ -1036,6 +1036,62 @@ import Testing
         #expect((projects[0]["worktrees"] as! [[String: Any]]).isEmpty)
     }
 
+    @Test func reconciledCodexDetailSurvivesCloudSync() throws {
+        let codexDetail: [String: Any] = [
+            "tokens": 20.0, "cost": 2.0,
+            "byModel": ["gpt": ["tokens": 20.0, "cost": 2.0]],
+        ]
+        let project: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "repositoryName": "edith", "folderName": "edith", "path": "/work/edith",
+            "tokens": 20.0, "cost": 2.0, "bySource": ["codex": codexDetail],
+            "chats": [
+                [
+                    "id": "codex-session", "path": "/work/edith", "source": "codex",
+                    "tokens": 20.0, "cost": 2.0,
+                ]
+            ],
+            "worktrees": [],
+        ]
+        let usageDay = day(
+            "2026-08-12", bySource: ["codex": [model("gpt", input: 20, cost: 2)]],
+            hours: [
+                [
+                    "tokens": 20.0, "cost": 2.0, "bySource": ["codex": codexDetail],
+                    "byPath": [
+                        "/work/edith": [
+                            "tokens": 20.0, "cost": 2.0,
+                            "bySource": ["codex": codexDetail],
+                        ]
+                    ],
+                ]
+            ], projects: [project])
+        let reconciled = document(
+            days: [usageDay], sources: ["codex"], schemaVersion: 8)
+        let legacy = document(days: [usageDay], sources: ["codex"], schemaVersion: 7)
+        let outputs = [
+            try #require(UsageHistory.merge(local: reconciled, cloud: nil)),
+            try #require(UsageHistory.merge(local: nil, cloud: reconciled)),
+            try #require(UsageHistory.merge(local: reconciled, cloud: legacy)),
+        ]
+
+        for output in outputs {
+            let merged = decode(output)
+            #expect(merged["schemaVersion"] as? Int == 8)
+            let mergedDay = try #require((merged["daily"] as? [[String: Any]])?.first)
+            let hour = try #require((mergedDay["hours"] as? [[String: Any]])?.first)
+            let hourSources = try #require(hour["bySource"] as? [String: [String: Any]])
+            #expect(hourSources["codex"]?["tokens"] as? Double == 20)
+            let projects = try #require(mergedDay["projects"] as? [[String: Any]])
+            #expect(projects.count == 1)
+            let projectSources = try #require(
+                projects.first?["bySource"] as? [String: [String: Any]])
+            #expect(projectSources["codex"]?["tokens"] as? Double == 20)
+            let chats = try #require(projects.first?["chats"] as? [[String: Any]])
+            #expect(chats.first?["source"] as? String == "codex")
+        }
+    }
+
     @Test func missingSideReturnsOtherVerbatim() {
         let local = usage(days: [("2026-06-10", 100, 1)])
         #expect(UsageHistory.merge(local: local, cloud: nil) == local)

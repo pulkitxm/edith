@@ -342,7 +342,7 @@ FLEET='
   .[0] as $base
   | [ .[1:][] | qualify ] as $fleet
   | {
-      schemaVersion: 7,
+      schemaVersion: 8,
       generatedAt: $base.generatedAt,
       sources: ((($base.sources // []) + [ $fleet[].sources[] ]) | dedupe),
       defaultSources: ((($base.defaultSources // []) + [ $fleet[].defaultSources[] ]) | dedupe),
@@ -379,7 +379,7 @@ FLEET='
 
 EMPTY='
   {
-    schemaVersion: 7, generatedAt: $now, sources: [], defaultSources: [], sourceMeta: {},
+    schemaVersion: 8, generatedAt: $now, sources: [], defaultSources: [], sourceMeta: {},
     totals: { cost: 0, tokens: 0, inputTokens: 0, outputTokens: 0,
       cacheCreationTokens: 0, cacheReadTokens: 0 },
     daily: [], sessions: []
@@ -411,7 +411,7 @@ VALIDATE='
   [ .daily[].bySource[][] ] as $rows
   | ([ .daily[].period ] | length) as $dayCount
   | ([ .daily[].period ] | unique | length) as $uniqueDayCount
-  | (.schemaVersion == 7)
+  | (.schemaVersion == 8)
     and (. as $root | all($root.defaultSources[]; . as $source | ($root.sources | index($source)) != null))
     and ($dayCount == $uniqueDayCount)
     and ([ .daily[].period ] == ([ .daily[].period ] | sort))
@@ -1010,7 +1010,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
       | map({(.key): {hours: .hours, projects: .projects}})
       | add // {}) as $BY
     | $usage
-    | .schemaVersion = 7
+    | .schemaVersion = 8
     | .daily = [ .daily[]
         | ($BY[.period]) as $b
         | .hours = ([range(0; 24)] | map(. as $h

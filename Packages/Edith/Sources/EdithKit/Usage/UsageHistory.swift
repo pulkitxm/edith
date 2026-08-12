@@ -260,8 +260,9 @@ public enum UsageHistory {
     }
 
     private static func normalized(_ decoded: [String: Any]) -> [String: Any] {
-        return removingUnsafeCodexDetail(
-            canonicalizedMachineSources(foldLegacyCloudSource(decoded)))
+        let canonical = canonicalizedMachineSources(foldLegacyCloudSource(decoded))
+        guard intOf(canonical["schemaVersion"]) < 8 else { return canonical }
+        return removingUnsafeCodexDetail(canonical)
     }
 
     private static func pruningUnusedMachineSources(_ obj: [String: Any]) -> [String: Any] {
