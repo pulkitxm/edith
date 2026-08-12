@@ -59,7 +59,7 @@ import Testing
 
     @Test func everyNameInTheIPCCatalogIsUsedByBothHalves() throws {
         let catalog = try String(
-            contentsOf: Self.sources.appendingPathComponent("EdithKit/Core/IPC.swift"),
+            contentsOf: Self.sources.appendingPathComponent("EdithKit/Core/IPC/IPC.swift"),
             encoding: .utf8)
         let declared = Self.matches(
             #"public static let (\w+) = Notification\.Name"#, in: [catalog])
