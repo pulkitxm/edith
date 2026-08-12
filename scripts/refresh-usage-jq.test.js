@@ -1745,6 +1745,7 @@ describe("FLEET", () => {
     expect(out.defaultSources).toEqual(["cli", tufCLI, tufCodex]);
     expect(out.sourceMeta[tufCLI].label).toBe("Claude Code · tuf");
     expect(out.sourceMeta[tufCLI].machine).toBe("tuf");
+    expect(out.sourceMeta[tufCLI].machineHost).toBe("tuf.local");
     expect(out.sourceMeta.cli.label).toBe("Claude Code");
   });
 

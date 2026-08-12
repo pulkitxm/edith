@@ -245,6 +245,7 @@ FLEET='
   def qualify:
     (.machine.slug // "machine") as $slug
     | (.machine.name // .machine.slug // "machine") as $name
+    | (.machine.host // "") as $host
     | (.machine.id // null) as $mid
     | if ($mid | type) != "string" then error("machine.id must be a UUID string")
       elif ($mid | test("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$") | not)
@@ -279,7 +280,7 @@ FLEET='
       {
         machine: {
           id: $mid, name: $name, slug: $slug,
-          host: (.machine.host // ""),
+          host: $host,
           collectedAt: (.machine.collectedAt // .generatedAt),
           sources: [ (.sources // [])[] | sid(.) ]
         },
@@ -290,7 +291,8 @@ FLEET='
               label: (($meta[$s].label // $s) + " · " + $name),
               tool: ($meta[$s].tool // $s),
               machine: $name,
-              machineID: $mid
+              machineID: $mid,
+              machineHost: $host
             }) ),
         sessions: [ (.sessions // [])[] | { id: (.id // ""), source: sid(.source // "") } ],
         daily: [ (.daily // [])[] | {
