@@ -37,18 +37,18 @@ import Testing
 
     @Test func burstOfSessionResetsWithinMinGapCollapsesToOneMarker() {
         let pts = [
-            DashLimitPoint(t: now, s: 10, w: nil, sr: now, wr: nil),
-            DashLimitPoint(
-                t: now.addingTimeInterval(60), s: 10, w: nil,
-                sr: now.addingTimeInterval(5 * 3600), wr: nil),
-            DashLimitPoint(
-                t: now.addingTimeInterval(120), s: 10, w: nil,
-                sr: now.addingTimeInterval(5 * 3600 + 30), wr: nil),
-            DashLimitPoint(
-                t: now.addingTimeInterval(3 * 3600), s: 10, w: nil,
-                sr: now.addingTimeInterval(8 * 3600), wr: nil),
+            LimitPoint(date: now, s: 10, w: nil, sessionReset: now, weekReset: nil),
+            LimitPoint(
+                date: now.addingTimeInterval(60), s: 10, w: nil,
+                sessionReset: now.addingTimeInterval(5 * 3600), weekReset: nil),
+            LimitPoint(
+                date: now.addingTimeInterval(120), s: 10, w: nil,
+                sessionReset: now.addingTimeInterval(5 * 3600 + 30), weekReset: nil),
+            LimitPoint(
+                date: now.addingTimeInterval(3 * 3600), s: 10, w: nil,
+                sessionReset: now.addingTimeInterval(8 * 3600), weekReset: nil),
         ]
-        let marks = DashLimits.markers(pts)
+        let marks = LimitsHistory.resetMarkers(pts)
         #expect(marks.count == 2)
         #expect(marks.allSatisfy { $0.session })
     }

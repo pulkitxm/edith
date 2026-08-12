@@ -116,6 +116,11 @@
 			path = Packages/Edith/Sources/EdithFiles;
 			sourceTree = "<group>";
 		};
+		8AE367B9762B44338D71F604 /* Packages/Edith/Sources/Edith */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/Edith;
+			sourceTree = "<group>";
+		};
 		8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Packages/Edith/Sources/ed;
@@ -124,6 +129,11 @@
 		9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Packages/Edith/Sources/edh;
+			sourceTree = "<group>";
+		};
+		F1B30D0164D945738D174DAF /* Packages/Edith/Sources/EdithKit */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/EdithKit;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -207,6 +217,8 @@
 				5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */,
 				6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */,
 				7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */,
+				8AE367B9762B44338D71F604 /* Packages/Edith/Sources/Edith */,
+				F1B30D0164D945738D174DAF /* Packages/Edith/Sources/EdithKit */,
 				8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */,
 				9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */,
 				BE70DD1236948E5F07A8971D /* Resources */,
