@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import {
   chmodSync,
   mkdirSync,
@@ -50,6 +51,12 @@ function extractBlock(name) {
   return m[1];
 }
 
+function extractDoubleBlock(name) {
+  const m = script.match(new RegExp(`\\n\\s*${name}="([\\s\\S]*?)\\n\\s*"`));
+  expect(m).not.toBeNull();
+  return m[1].replaceAll("\\$", "$");
+}
+
 const NORM = extractBlock("NORM");
 const GITHUB = extractBlock("GITHUB");
 const CWD_CACHE = extractBlock("CWD_CACHE");
@@ -63,6 +70,11 @@ const DEDUP = extractBlock("DEDUP");
 const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
 const FLEET = extractBlock("FLEET");
+const OPENCODE_MESSAGES = extractDoubleBlock("OPENCODE_MESSAGES");
+const OPENCODE_MESSAGES_FALLBACK = extractDoubleBlock(
+  "OPENCODE_MESSAGES_FALLBACK",
+);
+const OPENCODE_TITLES = extractDoubleBlock("OPENCODE_TITLES");
 
 function jq(program, input, args = []) {
   const proc = Bun.spawnSync(["jq", "-c", ...args, program], {
@@ -457,10 +469,13 @@ const secondCumulativeUsage = {
 };
 
 describe("WALKC", () => {
-  test("session metadata is retained while token snapshots emit no detail", () => {
+  test("attributes incremental token usage to the active repository and model", () => {
     const out = walkc([
       sessionMeta(),
-      { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
+      {
+        type: "turn_context",
+        payload: { model: "gpt-5.6-sol", cwd: "/repo/worktree" },
+      },
       tokenCount(),
       tokenCount(
         {},
@@ -468,41 +483,86 @@ describe("WALKC", () => {
         secondCumulativeUsage,
       ),
     ]);
-    expect(out).toEqual([
-      { t: "meta", sid: "cx-1", cwd: "/repo/app", src: "codex" },
-    ]);
+    expect(out[0]).toEqual({
+      t: "meta",
+      sid: "cx-1",
+      cwd: "/repo/app",
+      src: "codex",
+    });
+    expect(out.slice(1)).toHaveLength(2);
+    expect(out[1]).toMatchObject({
+      t: "rec",
+      date: "2026-06-10",
+      hour: 12,
+      model: "gpt-5.6-sol",
+      cwd: "/repo/worktree",
+      sid: "cx-1",
+      src: "codex",
+      inp: 40,
+      out: 20,
+      cc: 0,
+      cr: 60,
+      tok: 120,
+    });
+    expect(out[2]).toMatchObject({
+      hour: 13,
+      model: "gpt-5.6-sol",
+      cwd: "/repo/worktree",
+      tok: 120,
+    });
   });
 
-  test("fork replay, model switches, repeats, and cumulative resets stay unattributed", () => {
-    const resetUsage = {
-      input_tokens: 40,
-      cached_input_tokens: 20,
-      output_tokens: 10,
-      reasoning_output_tokens: 2,
-      total_tokens: 50,
-    };
+  test("ignores repeated snapshots and follows model and cwd changes", () => {
     const out = walkc([
       sessionMeta(),
       { type: "turn_context", payload: { model: "gpt-first" } },
       tokenCount({}, { timestamp: "2026-06-10T12:30:00.123Z" }),
       tokenCount({}, { timestamp: "2026-06-10T12:31:00.123Z" }),
-      { type: "turn_context", payload: { model: "gpt-second" } },
+      {
+        type: "turn_context",
+        payload: { model: "gpt-second", cwd: "/repo/second" },
+      },
       tokenCount(
         {},
         { timestamp: "2026-06-10T12:32:00.123Z" },
         secondCumulativeUsage,
       ),
-      tokenCount({}, { timestamp: "2026-06-10T12:33:00.123Z" }, resetUsage),
-      tokenCount(
-        {},
-        { timestamp: "2026-06-10T12:34:00.123Z" },
-        secondCumulativeUsage,
-      ),
     ]);
-    expect(out).toEqual([
-      { t: "meta", sid: "cx-1", cwd: "/repo/app", src: "codex" },
+    const records = out.filter((record) => record.t === "rec");
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.model)).toEqual([
+      "gpt-first",
+      "gpt-second",
     ]);
-    expect(out.some((record) => record.t === "rec")).toBeFalse();
+    expect(records.map((record) => record.cwd)).toEqual([
+      "/repo/app",
+      "/repo/second",
+    ]);
+  });
+
+  test("derives increments from cumulative totals when last usage is absent", () => {
+    const first = tokenCount();
+    const second = tokenCount(
+      {},
+      { timestamp: "2026-06-10T13:30:00.123Z" },
+      secondCumulativeUsage,
+    );
+    delete first.payload.info.last_token_usage;
+    delete second.payload.info.last_token_usage;
+    const records = walkc([sessionMeta(), first, second]).filter(
+      (record) => record.t === "rec",
+    );
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.tok)).toEqual([120, 120]);
+    expect(records[1]).toMatchObject({ inp: 40, out: 20, cc: 0, cr: 60 });
+  });
+
+  test("uses a stable event identity across replayed session files", () => {
+    const first = walkc([sessionMeta({ id: "original" }), tokenCount()]);
+    const replay = walkc([sessionMeta({ id: "fork" }), tokenCount()]);
+    expect(first.find((record) => record.t === "rec").id).toBe(
+      replay.find((record) => record.t === "rec").id,
+    );
   });
 
   test("user_message becomes a text record, tag-prefixed and empty skipped", () => {
@@ -801,6 +861,79 @@ describe("WALKCC", () => {
     );
     expect(rec.date).toBe("2026-06-11");
     expect(rec.hour).toBe(1);
+  });
+});
+
+describe("OpenCode repository queries", () => {
+  test("uses the session directory when the message has no cwd", () => {
+    const database = new Database(":memory:");
+    database.run("create table session (id text primary key, directory text, title text)");
+    database.run("create table message (session_id text, data text)");
+    database.run(
+      "insert into session values (?, ?, ?)",
+      "session-1",
+      "/repo/from-session",
+      "OpenCode chat",
+    );
+    database.run(
+      "insert into message values (?, ?)",
+      "session-1",
+      JSON.stringify({
+        role: "assistant",
+        time: { created: 1_786_000_000_000 },
+        modelID: "gpt-5",
+        cost: 0.5,
+        tokens: { input: 10, output: 2, cache: { write: 1, read: 4 } },
+      }),
+    );
+    const row = JSON.parse(database.query(OPENCODE_MESSAGES).values()[0][0]);
+    expect(row).toEqual({
+      sid: "session-1",
+      ts: 1_786_000_000_000,
+      cwd: "/repo/from-session",
+      model: "gpt-5",
+      cost: 0.5,
+      inp: 10,
+      out: 2,
+      cc: 1,
+      cr: 4,
+    });
+    const title = JSON.parse(database.query(OPENCODE_TITLES).values()[0][0]);
+    expect(title).toEqual({ sid: "session-1", title: "OpenCode chat" });
+    database.close();
+  });
+
+  test("prefers message cwd and supports databases without a session table", () => {
+    const modern = new Database(":memory:");
+    modern.run("create table session (id text primary key, directory text, title text)");
+    modern.run("create table message (session_id text, data text)");
+    const message = JSON.stringify({
+      role: "assistant",
+      time: { created: 1_786_000_000_000 },
+      path: { cwd: "/repo/from-message" },
+      tokens: { input: 1, output: 1 },
+    });
+    modern.run(
+      "insert into session values (?, ?, ?)",
+      "session-2",
+      "/repo/from-session",
+      "",
+    );
+    modern.run("insert into message values (?, ?)", "session-2", message);
+    const modernRow = JSON.parse(
+      modern.query(OPENCODE_MESSAGES).values()[0][0],
+    );
+    expect(modernRow.cwd).toBe("/repo/from-message");
+    modern.close();
+
+    const legacy = new Database(":memory:");
+    legacy.run("create table message (session_id text, data text)");
+    legacy.run("insert into message values (?, ?)", "session-2", message);
+    const legacyRow = JSON.parse(
+      legacy.query(OPENCODE_MESSAGES_FALLBACK).values()[0][0],
+    );
+    expect(legacyRow.cwd).toBe("/repo/from-message");
+    legacy.close();
   });
 });
 
@@ -1905,7 +2038,7 @@ describe("FLEET", () => {
     expect(Object.keys(projects[1].bySource)).toEqual([tufCLI]);
   });
 
-  test("stored remote Codex detail stays unavailable", () => {
+  test("stored remote Codex detail is machine-qualified and retained", () => {
     const doc = machineDoc();
     doc.daily[0].bySource.codex = [
       {
@@ -1957,17 +2090,20 @@ describe("FLEET", () => {
     const out = fleet([localDoc(), doc]);
     const remoteDay = out.daily[0];
     expect(remoteDay.bySource[tufCodex][0].inputTokens).toBe(5);
-    expect(remoteDay.hours[0].tokens).toBe(103);
-    expect(remoteDay.hours[0].bySource[tufCodex]).toBeUndefined();
-    expect(
-      remoteDay.hours[0].byPath[`${tufPrefix}/home/p/codex`],
-    ).toBeUndefined();
+    expect(remoteDay.hours[0].tokens).toBe(108);
+    expect(remoteDay.hours[0].bySource[tufCodex].tokens).toBe(5);
+    expect(remoteDay.hours[0].byPath[`${tufPrefix}/home/p/codex`].tokens).toBe(
+      5,
+    );
     expect(remoteDay.projects.map((project) => project.projectName)).toEqual([
       "edith",
       "edith",
+      "codex-only",
     ]);
     expect(remoteDay.projects[1].tokens).toBe(3);
     expect(remoteDay.projects[1].worktrees).toEqual([]);
+    expect(remoteDay.projects[2].bySource[tufCodex].tokens).toBe(5);
+    expect(remoteDay.projects[2].chats[0].source).toBe(tufCodex);
     expect(out.totals.tokens).toBe(108);
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
