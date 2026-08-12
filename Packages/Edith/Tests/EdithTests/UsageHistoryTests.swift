@@ -1036,6 +1036,90 @@ import Testing
         #expect((projects[0]["worktrees"] as! [[String: Any]]).isEmpty)
     }
 
+    @Test func reconciledDetailSurvivesCloudSyncAcrossSources() throws {
+        let opencode = "machine:4303dcf1-52d8-4075-ae9b-c2fd86d3821a:opencode"
+        let pi = "machine:4303dcf1-52d8-4075-ae9b-c2fd86d3821a:pi"
+        let codexDetail: [String: Any] = [
+            "tokens": 20.0, "cost": 2.0,
+            "byModel": ["gpt": ["tokens": 20.0, "cost": 2.0]],
+        ]
+        let opencodeDetail: [String: Any] = [
+            "tokens": 30.0, "cost": 3.0,
+            "byModel": ["gpt": ["tokens": 30.0, "cost": 3.0]],
+        ]
+        let piDetail: [String: Any] = [
+            "tokens": 4.0, "cost": 0.4,
+            "byModel": ["gpt": ["tokens": 4.0, "cost": 0.4]],
+        ]
+        let sourceDetails = ["codex": codexDetail, opencode: opencodeDetail, pi: piDetail]
+        let project: [String: Any] = [
+            "projectName": "edith", "repositoryID": "github.com/pulkitxm/edith",
+            "repositoryName": "edith", "folderName": "edith", "path": "/work/edith",
+            "tokens": 54.0, "cost": 5.4, "bySource": sourceDetails,
+            "chats": [
+                [
+                    "id": "codex-session", "path": "/work/edith", "source": "codex",
+                    "tokens": 20.0, "cost": 2.0,
+                ],
+                [
+                    "id": "opencode-session", "path": "/work/edith", "source": opencode,
+                    "tokens": 30.0, "cost": 3.0,
+                ],
+                [
+                    "id": "pi-session", "path": "/work/edith", "source": pi,
+                    "tokens": 4.0, "cost": 0.4,
+                ],
+            ],
+            "worktrees": [],
+        ]
+        let usageDay = day(
+            "2026-08-12",
+            bySource: [
+                "codex": [model("gpt", input: 20, cost: 2)],
+                opencode: [model("gpt", input: 30, cost: 3)],
+                pi: [model("gpt", input: 4, cost: 0.4)],
+            ],
+            hours: [
+                [
+                    "tokens": 54.0, "cost": 5.4, "bySource": sourceDetails,
+                    "byPath": [
+                        "/work/edith": [
+                            "tokens": 54.0, "cost": 5.4, "bySource": sourceDetails,
+                        ]
+                    ],
+                ]
+            ], projects: [project])
+        let sources = ["codex", opencode, pi]
+        let reconciled = document(
+            days: [usageDay], sources: sources, schemaVersion: 8)
+        let legacy = document(days: [usageDay], sources: sources, schemaVersion: 7)
+        let outputs = [
+            try #require(UsageHistory.merge(local: reconciled, cloud: nil)),
+            try #require(UsageHistory.merge(local: nil, cloud: reconciled)),
+            try #require(UsageHistory.merge(local: reconciled, cloud: legacy)),
+        ]
+
+        for output in outputs {
+            let merged = decode(output)
+            #expect(merged["schemaVersion"] as? Int == 8)
+            let mergedDay = try #require((merged["daily"] as? [[String: Any]])?.first)
+            let hour = try #require((mergedDay["hours"] as? [[String: Any]])?.first)
+            let hourSources = try #require(hour["bySource"] as? [String: [String: Any]])
+            #expect(hourSources["codex"]?["tokens"] as? Double == 20)
+            #expect(hourSources[opencode]?["tokens"] as? Double == 30)
+            #expect(hourSources[pi]?["tokens"] as? Double == 4)
+            let projects = try #require(mergedDay["projects"] as? [[String: Any]])
+            #expect(projects.count == 1)
+            let projectSources = try #require(
+                projects.first?["bySource"] as? [String: [String: Any]])
+            #expect(projectSources["codex"]?["tokens"] as? Double == 20)
+            #expect(projectSources[opencode]?["tokens"] as? Double == 30)
+            #expect(projectSources[pi]?["tokens"] as? Double == 4)
+            let chats = try #require(projects.first?["chats"] as? [[String: Any]])
+            #expect(Set(chats.compactMap { $0["source"] as? String }) == Set(sources))
+        }
+    }
+
     @Test func missingSideReturnsOtherVerbatim() {
         let local = usage(days: [("2026-06-10", 100, 1)])
         #expect(UsageHistory.merge(local: local, cloud: nil) == local)
