@@ -17,8 +17,7 @@ struct MachinesPage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
-    @AppStorage("machinesTab", store: SharedDefaults.store) private var storedTab =
-        MachineTab.overview.rawValue
+    @AppStorage("machinesTab", store: SharedDefaults.store) private var storedTab = MachineTab.overview.rawValue
     @AppStorage("machinesSelection", store: SharedDefaults.store) private var storedSelection = ""
     @AppStorage("machinesMode", store: SharedDefaults.store) private var modeRaw = "fleet"
     @State private var addSheetPresented = false
