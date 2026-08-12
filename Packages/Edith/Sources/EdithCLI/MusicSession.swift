@@ -30,7 +30,7 @@ public enum MusicMemory {
 }
 
 public enum MusicSession {
-    public static let builtinExtensionKey = "tabMusicEnabled"
+    public static let builtinExtensionKey = AppStorageKeys.Tabs.musicEnabled
 
     public static func builtinCommands(_ action: PlayerAction) -> [BuiltinCommand] {
         switch action {

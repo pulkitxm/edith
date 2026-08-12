@@ -4,23 +4,47 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Run every product check, then cut a release from main."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ci-${{ github.ref }}-${{
+      github.event_name == 'workflow_dispatch' && github.run_id
+      || (github.event_name == 'push'
+      && (startsWith(github.event.head_commit.message, 'Release v')
+      || startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      && github.sha)
+      || 'active'
+    }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   changes:
+    if: >-
+      github.event_name != 'push'
+      || (!startsWith(github.event.head_commit.message, 'Release v')
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
+      docs: ${{ steps.areas.outputs.docs }}
       linux: ${{ steps.areas.outputs.linux }}
+      workflows: ${{ steps.areas.outputs.workflows }}
       promo: ${{ steps.areas.outputs.promo }}
       site: ${{ steps.areas.outputs.site }}
       scripts: ${{ steps.areas.outputs.scripts }}
       source: ${{ steps.areas.outputs.source }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -30,11 +54,11 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
         run: |
-          if [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+          if [ -n "$BASE_REF" ]; then
+            base="$(git merge-base "origin/$BASE_REF" HEAD)"
+          elif [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
             && git merge-base --is-ancestor "$BEFORE" HEAD 2>/dev/null; then
             base="$BEFORE"
-          elif [ -n "$BASE_REF" ]; then
-            base="$(git merge-base "origin/$BASE_REF" HEAD)"
           else
             base=""
           fi
@@ -54,42 +78,55 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(Packages/Edith/|Resources/|docs/|edth\.xcodeproj/|build\.sh$|Makefile$)'
-          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$|\.github/workflows/(ci|release)\.yml$)'
+          area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area docs '^docs/'
+          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$)'
+          area workflows '^\.github/workflows/'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
-          area scripts '^(scripts/|package\.json$|bun\.lock$|biome\.json$)'
+          area scripts '^(scripts/|Casks/|package\.json$|bun\.lock$|biome\.json$)'
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
 
   checks:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-go@v7
+        if: needs.changes.outputs.workflows == 'true'
+        with:
+          go-version: "1.26.x"
+          cache: false
       - run: bun install --frozen-lockfile
+      - name: Validate workflows
+        if: needs.changes.outputs.workflows == 'true'
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: No committed secrets
         run: make ci-secrets
       - name: No disallowed comments
         if: needs.changes.outputs.source == 'true'
         run: make ci-comments
+      - name: No duplicate UserDefaults keys
+        if: needs.changes.outputs.swift == 'true'
+        run: make ci-duplicate-keys
       - name: Lint (Biome)
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
         run: make ci-lint
       - name: Script tests
-        if: needs.changes.outputs.scripts == 'true'
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-scripts
       - name: Site is self-contained
-        if: needs.changes.outputs.site == 'true'
+        if: needs.changes.outputs.site == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-site
 
   ubuntu:
     needs: changes
-    if: needs.changes.outputs.linux == 'true'
+    if: needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-24.04
-    container: swift:6.3.2-noble
+    container: swift:6.3.3-noble
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Install native dependencies
         run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
       - name: Test portable core
@@ -104,7 +141,7 @@ jobs:
           dpkg-deb --contents dist/linux/*.deb
           apt-get install -y ./dist/linux/*.deb
           edith-linux --diagnose
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: edith-ubuntu-amd64
           path: dist/linux/*.deb
@@ -112,11 +149,11 @@ jobs:
 
   promo-video:
     needs: changes
-    if: needs.changes.outputs.promo == 'true'
+    if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -130,15 +167,15 @@ jobs:
 
   swift-build:
     needs: changes
-    if: needs.changes.outputs.swift == 'true'
+    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
         working-directory: Packages/Edith
       - name: Cache resolved packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/SourcePackages
           key: spm-xcode-${{ runner.os }}-${{ hashFiles('edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/Edith/Package.resolved') }}
@@ -150,12 +187,15 @@ jobs:
 
   swift-test:
     needs: changes
-    if: needs.changes.outputs.swift == 'true'
+    if: >-
+      needs.changes.outputs.swift == 'true'
+      || needs.changes.outputs.docs == 'true'
+      || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Cache resolved packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             Packages/Edith/.build/checkouts
@@ -166,3 +206,29 @@ jobs:
       - name: Tests
         run: ./test.sh
         working-directory: Packages/Edith
+
+  release:
+    needs: [changes, checks, ubuntu, swift-build, swift-test]
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && needs.changes.result == 'success'
+      && needs.checks.result == 'success'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+      && ((needs.changes.outputs.linux != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.ubuntu.result == 'success')
+      && ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
+      && ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.docs != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
+      && ((github.event_name == 'push'
+      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true'))
+      || (github.event_name == 'workflow_dispatch' && inputs.release))
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      cut_release: true
+    secrets: inherit

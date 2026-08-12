@@ -1,10 +1,12 @@
 import AppKit
 import CoreAudio
 import EdithKit
+import Observation
 
 @MainActor
-final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
-    @Published private(set) var muted = false
+@Observable
+final class MicMuteEngine: NSObject, FeatureModule {
+    private(set) var muted = false
 
     private var savedVolumes: [AudioDeviceID: [UInt32: Float]] = [:]
     private var deviceListListener: AudioObjectPropertyListenerBlock?
@@ -48,7 +50,8 @@ final class MicMuteEngine: NSObject, ObservableObject, FeatureModule {
     }
 
     func updateStatusItemPresence() {
-        let wanted = SharedDefaults.store.object(forKey: "micMuteInMenuBar") as? Bool ?? true
+        let wanted =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
         if wanted, statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             StatusItemMenu.attach(to: item, target: self, action: #selector(statusClicked))

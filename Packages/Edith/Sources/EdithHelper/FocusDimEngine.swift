@@ -110,11 +110,13 @@ final class FocusDimEngine: FeatureModule {
     private func loadSettings() {
         let d = SharedDefaults.store
         intensity = FocusDimMath.clampIntensity(
-            d.object(forKey: "focusDimIntensity") as? Double ?? FocusDimMath.defaultIntensity)
+            d.object(forKey: AppStorageKeys.FocusDim.intensity) as? Double
+                ?? FocusDimMath.defaultIntensity)
         animationDuration = FocusDimMath.clampAnimationDuration(
-            d.object(forKey: "focusDimAnimationDuration") as? Double
+            d.object(forKey: AppStorageKeys.FocusDim.animationDuration) as? Double
                 ?? FocusDimMath.defaultAnimationDuration)
-        displayMode = FocusDimDisplayMode.from(d.string(forKey: "focusDimOtherDisplaysMode"))
+        displayMode = FocusDimDisplayMode.from(
+            d.string(forKey: AppStorageKeys.FocusDim.otherDisplaysMode))
     }
 
     private func rebuildOverlays() {

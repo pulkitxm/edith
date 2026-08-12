@@ -2,25 +2,37 @@ import Foundation
 
 public enum UsageHistory {
     public static func merge(local: Data?, cloud: Data?) -> Data? {
-        guard let local else { return cloud }
-        guard let cloud else { return local }
-        guard let rawLocal = decode(local) else { return cloud }
-        guard let rawCloud = decode(cloud) else { return local }
-        let l = foldLegacyCloudSource(rawLocal)
-        let c = foldLegacyCloudSource(rawCloud)
-        let preferLocalDays = intOf(l["schemaVersion"]) > intOf(c["schemaVersion"])
+        let rawLocal = local.flatMap(decode)
+        let rawCloud = cloud.flatMap(decode)
+        let normalizedLocal = rawLocal.map(normalized)
+        let normalizedCloud = rawCloud.map(normalized)
+        guard let l = normalizedLocal else {
+            guard let c = normalizedCloud else { return nil }
+            return oneSided(
+                original: cloud, raw: rawCloud, normalized: pruningUnusedMachineSources(c))
+        }
+        guard let c = normalizedCloud else {
+            return oneSided(
+                original: local, raw: rawLocal, normalized: pruningUnusedMachineSources(l))
+        }
 
-        var best: [String: [String: Any]] = [:]
+        var mergedByPeriod: [String: [String: Any]] = [:]
         for day in daily(c) {
             guard let p = day["period"] as? String else { continue }
-            best[p] = day
+            mergedByPeriod[p] = day
         }
         for day in daily(l) {
             guard let p = day["period"] as? String else { continue }
-            if !preferLocalDays, let cur = best[p], dayTokens(cur) > dayTokens(day) { continue }
-            best[p] = day
+            if let cloudDay = mergedByPeriod[p] {
+                mergedByPeriod[p] = mergeDay(
+                    local: day, cloud: cloudDay,
+                    mergeSourceDetail: intOf(l["schemaVersion"]) >= 7
+                        && intOf(c["schemaVersion"]) >= 7)
+            } else {
+                mergedByPeriod[p] = day
+            }
         }
-        let mergedDaily = best.keys.sorted().compactMap { best[$0] }
+        let mergedDaily = mergedByPeriod.keys.sorted().compactMap { mergedByPeriod[$0] }
 
         var out = l
         out["schemaVersion"] = max(intOf(l["schemaVersion"]), intOf(c["schemaVersion"]))
@@ -33,10 +45,50 @@ public enum UsageHistory {
         out["sessions"] = mergeSessions(l["sessions"], c["sessions"])
         out["totals"] = totals(of: mergedDaily)
 
-        return try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys])
+        return encoded(pruningUnusedMachineSources(out))
     }
 
     private static let legacyCloudSource = "cc-cloud"
+
+    private static func normalized(_ decoded: [String: Any]) -> [String: Any] {
+        return removingUnsafeCodexDetail(
+            canonicalizedMachineSources(foldLegacyCloudSource(decoded)))
+    }
+
+    private static func pruningUnusedMachineSources(_ obj: [String: Any]) -> [String: Any] {
+        let active = Set(
+            daily(obj).flatMap { day in
+                (day["bySource"] as? [String: Any] ?? [:]).keys
+            })
+        let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
+        let unusedMachines = Set(
+            sourceMeta.compactMap { source, value -> String? in
+                guard let meta = value as? [String: Any], meta["machineID"] is String,
+                    !active.contains(source)
+                else { return nil }
+                return source
+            })
+        var out = obj
+        out["sources"] = strings(obj["sources"]).filter { !unusedMachines.contains($0) }
+        out["defaultSources"] = strings(obj["defaultSources"]).filter {
+            !unusedMachines.contains($0)
+        }
+        out["sourceMeta"] = sourceMeta.filter { !unusedMachines.contains($0.key) }
+        return out
+    }
+
+    private static func oneSided(
+        original: Data?, raw: [String: Any]?, normalized: [String: Any]
+    ) -> Data? {
+        guard let original, let raw, encoded(raw) == encoded(normalized) else {
+            return encoded(normalized)
+        }
+        return original
+    }
+
+    private static func encoded(_ value: [String: Any]) -> Data? {
+        try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+    }
 
     static func foldLegacyCloudSource(_ obj: [String: Any]) -> [String: Any] {
         var out = obj
@@ -51,6 +103,409 @@ public enum UsageHistory {
         }
         out["daily"] = daily(obj).map(foldedDay)
         return out
+    }
+
+    static func canonicalizedMachineSources(_ obj: [String: Any]) -> [String: Any] {
+        let sourceMeta = obj["sourceMeta"] as? [String: Any] ?? [:]
+        let aliases = machineSourceAliases(sourceMeta)
+        guard !aliases.isEmpty else { return obj }
+        let preferred = preferredMachineSources(in: obj, sourceMeta: sourceMeta, aliases: aliases)
+        var out = obj
+        out["sources"] = canonicalizedSourceList(strings(obj["sources"]), aliases: aliases)
+        out["defaultSources"] = canonicalizedSourceList(
+            strings(obj["defaultSources"]), aliases: aliases)
+        out["sourceMeta"] = canonicalizedSourceMeta(
+            sourceMeta, aliases: aliases, preferred: preferred)
+        if let sessions = obj["sessions"] as? [[String: Any]] {
+            out["sessions"] = canonicalizedSessions(
+                sessions, aliases: aliases, preferred: preferred)
+        }
+        let normalizedDaily = daily(obj).map {
+            canonicalizedMachineDay($0, aliases: aliases, preferred: preferred)
+        }
+        out["daily"] = normalizedDaily
+        out["totals"] = totals(of: normalizedDaily)
+        return out
+    }
+
+    private static func machineSourceAliases(_ sourceMeta: [String: Any]) -> [String: String] {
+        sourceMeta.reduce(into: [:]) { aliases, entry in
+            guard let meta = entry.value as? [String: Any],
+                let machineID = meta["machineID"] as? String,
+                let canonical = MachineUsageSourceIdentity.canonical(
+                    machineID: machineID, source: entry.key)
+            else { return }
+            aliases[entry.key] = canonical
+        }
+    }
+
+    private static func scopedPreferredSources(
+        _ value: Any?, aliases: [String: String], preferred: [String: String]
+    ) -> [String: String] {
+        guard let sourceMap = value as? [String: Any] else { return [:] }
+        let grouped = Dictionary(grouping: sourceMap.keys, by: { aliases[$0] ?? $0 })
+        return grouped.reduce(into: [:]) { result, entry in
+            let canonical = entry.key
+            let candidates = entry.value.sorted()
+            if candidates.contains(canonical) {
+                result[canonical] = canonical
+            } else if let selected = preferred[canonical], candidates.contains(selected) {
+                result[canonical] = selected
+            } else {
+                result[canonical] = candidates.first
+            }
+        }
+    }
+
+    private static func preferredMachineSources(
+        in obj: [String: Any], sourceMeta: [String: Any], aliases: [String: String]
+    ) -> [String: String] {
+        let machineSlugs = (obj["machines"] as? [[String: Any]] ?? []).reduce(
+            into: [String: String]()
+        ) { slugs, machine in
+            guard let id = machine["id"] as? String,
+                let slug = machine["slug"] as? String
+            else { return }
+            slugs[id.lowercased()] = slug.lowercased()
+        }
+        let grouped = Dictionary(grouping: aliases.keys, by: { aliases[$0] ?? $0 })
+        return grouped.reduce(into: [:]) { result, entry in
+            let canonical = entry.key
+            let candidates = entry.value.sorted()
+            if candidates.contains(canonical) {
+                result[canonical] = canonical
+                return
+            }
+            let machineID = candidates.compactMap {
+                (sourceMeta[$0] as? [String: Any])?["machineID"] as? String
+            }.first?.lowercased()
+            if let machineID, let slug = machineSlugs[machineID],
+                let current = candidates.first(where: { source in
+                    source.lowercased().hasPrefix("\(slug):")
+                })
+            {
+                result[canonical] = current
+            } else {
+                result[canonical] = candidates.first
+            }
+        }
+    }
+
+    private static func canonicalizedSourceList(
+        _ sources: [String], aliases: [String: String]
+    ) -> [String] {
+        var seen = Set<String>()
+        return sources.compactMap { source in
+            let canonical = aliases[source] ?? source
+            return seen.insert(canonical).inserted ? canonical : nil
+        }
+    }
+
+    private static func canonicalizedSourceMeta(
+        _ sourceMeta: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any] {
+        sourceMeta.keys.sorted().reduce(into: [:]) { meta, source in
+            let canonical = aliases[source] ?? source
+            if preferred[canonical] == nil || preferred[canonical] == source {
+                meta[canonical] = sourceMeta[source]
+            }
+        }
+    }
+
+    private static func canonicalizedSourceMap(
+        _ value: Any?, aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
+        guard let sourceMap = value as? [String: Any] else { return nil }
+        return sourceMap.keys.sorted().reduce(into: [:]) { result, source in
+            let canonical = aliases[source] ?? source
+            if preferred[canonical] == nil || preferred[canonical] == source {
+                result[canonical] = sourceMap[source]
+            }
+        }
+    }
+
+    private static func canonicalizedSessions(
+        _ sessions: [[String: Any]], aliases: [String: String], preferred: [String: String]
+    ) -> [[String: Any]] {
+        var order: [String] = []
+        var records: [String: [String: Any]] = [:]
+        var priorities: [String: Int] = [:]
+        for (index, session) in sessions.enumerated() {
+            guard let source = session["source"] as? String else {
+                let key = "unqualified:\(index)"
+                order.append(key)
+                records[key] = session
+                continue
+            }
+            let canonical = aliases[source] ?? source
+            var normalized = session
+            normalized["source"] = canonical
+            let id = session["id"] as? String ?? ""
+            let key = id.isEmpty ? "unidentified:\(index)" : "\(canonical)\u{1F}\(id)"
+            let priority =
+                source == canonical ? 2 : (preferred[canonical] == source ? 1 : 0)
+            if records[key] == nil {
+                order.append(key)
+                records[key] = normalized
+                priorities[key] = priority
+            } else if priority > (priorities[key] ?? -1)
+                || (priority == priorities[key] && normalized.count >= (records[key]?.count ?? 0))
+            {
+                records[key] = normalized
+                priorities[key] = priority
+            }
+        }
+        return order.compactMap { records[$0] }
+    }
+
+    private static func canonicalizedSourceRecord(
+        _ record: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
+        guard let source = record["source"] as? String else { return record }
+        let canonical = aliases[source] ?? source
+        guard preferred[canonical] == nil || preferred[canonical] == source else {
+            return nil
+        }
+        guard canonical != source else { return record }
+        var out = record
+        out["source"] = canonical
+        return out
+    }
+
+    private static func canonicalizedMachineDay(
+        _ day: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any] {
+        var out = day
+        let scopedPreferred = scopedPreferredSources(
+            day["bySource"], aliases: aliases, preferred: preferred)
+        if let bySource = canonicalizedSourceMap(
+            day["bySource"], aliases: aliases, preferred: scopedPreferred)
+        {
+            out["bySource"] = bySource
+        }
+        if let hours = day["hours"] as? [[String: Any]] {
+            out["hours"] = hours.map {
+                canonicalizedHour($0, aliases: aliases, preferred: scopedPreferred)
+            }
+        }
+        if let projects = day["projects"] as? [[String: Any]] {
+            out["projects"] = projects.compactMap {
+                canonicalizedMachineProject($0, aliases: aliases, preferred: scopedPreferred)
+            }
+        }
+        return out
+    }
+
+    private static func canonicalizedHour(
+        _ hour: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any] {
+        var out = hour
+        if let bySource = canonicalizedSourceMap(
+            hour["bySource"], aliases: aliases, preferred: preferred)
+        {
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        }
+        if let paths = hour["byPath"] as? [String: Any] {
+            out["byPath"] = paths.reduce(into: [String: Any]()) { result, entry in
+                guard var path = entry.value as? [String: Any] else {
+                    result[entry.key] = entry.value
+                    return
+                }
+                if let bySource = canonicalizedSourceMap(
+                    path["bySource"], aliases: aliases, preferred: preferred)
+                {
+                    guard !bySource.isEmpty else { return }
+                    path["bySource"] = bySource
+                    setDetailTotals(&path, bySource: bySource)
+                }
+                result[entry.key] = path
+            }
+        }
+        return out
+    }
+
+    private static func canonicalizedMachineProject(
+        _ project: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
+        var out = project
+        let originalChats = project["chats"] as? [[String: Any]] ?? []
+        let originalWorktrees = project["worktrees"] as? [[String: Any]] ?? []
+        if let bySource = canonicalizedSourceMap(
+            project["bySource"], aliases: aliases, preferred: preferred)
+        {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        }
+        let chats = originalChats.compactMap {
+            canonicalizedSourceRecord($0, aliases: aliases, preferred: preferred)
+        }
+        if project["chats"] != nil {
+            out["chats"] = chats
+        }
+        let worktrees = originalWorktrees.compactMap {
+            canonicalizedMachineWorktree($0, aliases: aliases, preferred: preferred)
+        }
+        if project["worktrees"] != nil {
+            out["worktrees"] = worktrees
+        }
+        if project["bySource"] == nil && (!originalChats.isEmpty || !originalWorktrees.isEmpty) {
+            guard !chats.isEmpty || !worktrees.isEmpty else { return nil }
+            out["tokens"] =
+                chats.reduce(0) { $0 + num($1["tokens"]) }
+                + worktrees.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] =
+                chats.reduce(0) { $0 + num($1["cost"]) }
+                + worktrees.reduce(0) { $0 + num($1["cost"]) }
+        }
+        return out
+    }
+
+    private static func canonicalizedMachineWorktree(
+        _ worktree: [String: Any], aliases: [String: String], preferred: [String: String]
+    ) -> [String: Any]? {
+        var out = worktree
+        if let bySource = canonicalizedSourceMap(
+            worktree["bySource"], aliases: aliases, preferred: preferred)
+        {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        }
+        if let chats = worktree["chats"] as? [[String: Any]] {
+            let retained = chats.compactMap {
+                canonicalizedSourceRecord($0, aliases: aliases, preferred: preferred)
+            }
+            guard !retained.isEmpty || chats.isEmpty else { return nil }
+            out["chats"] = retained
+            if worktree["bySource"] == nil {
+                out["tokens"] = retained.reduce(0) { $0 + num($1["tokens"]) }
+                out["cost"] = retained.reduce(0) { $0 + num($1["cost"]) }
+            }
+        }
+        return out
+    }
+
+    private static func removingUnsafeCodexDetail(_ obj: [String: Any]) -> [String: Any] {
+        var out = obj
+        let originalDays = daily(obj)
+        let normalizedDays = originalDays.map(removingUnsafeCodexDay)
+        guard serialized(originalDays) != serialized(normalizedDays) else { return obj }
+        out["daily"] = normalizedDays
+        out["totals"] = totals(of: normalizedDays)
+        return out
+    }
+
+    private static func serialized(_ value: Any) -> Data? {
+        try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+    }
+
+    private static func removingUnsafeCodexDay(_ day: [String: Any]) -> [String: Any] {
+        var out = day
+        let canonicalSources = day["bySource"] as? [String: Any] ?? [:]
+        let hasCodex = canonicalSources.keys.contains(where: isCodexSource)
+        if let hours = day["hours"] as? [[String: Any]] {
+            out["hours"] = hours.map {
+                removingUnsafeCodexDetail($0, canonicalDayHasCodex: hasCodex)
+            }
+        }
+        if let projects = day["projects"] as? [[String: Any]] {
+            out["projects"] = projects.compactMap(removingUnsafeCodexProject)
+        }
+        return out
+    }
+
+    private static func removingUnsafeCodexDetail(
+        _ hour: [String: Any], canonicalDayHasCodex: Bool
+    ) -> [String: Any] {
+        var out = hour
+        if let bySource = withoutCodexSources(hour["bySource"]) {
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+            out["byPath"] = withoutCodexPaths(hour["byPath"])
+        } else if canonicalDayHasCodex {
+            out["tokens"] = 0.0
+            out["cost"] = 0.0
+            out["bySource"] = [String: Any]()
+            out["byPath"] = [String: Any]()
+        }
+        return out
+    }
+
+    private static func withoutCodexPaths(_ value: Any?) -> [String: Any] {
+        let paths = value as? [String: Any] ?? [:]
+        return paths.reduce(into: [:]) { result, entry in
+            guard var path = entry.value as? [String: Any],
+                let bySource = withoutCodexSources(path["bySource"]), !bySource.isEmpty
+            else { return }
+            path["bySource"] = bySource
+            setDetailTotals(&path, bySource: bySource)
+            result[entry.key] = path
+        }
+    }
+
+    private static func removingUnsafeCodexProject(
+        _ project: [String: Any]
+    ) -> [String: Any]? {
+        var out = project
+        let originalBySource = project["bySource"] as? [String: Any]
+        let bySource = withoutCodexSources(project["bySource"])
+        let originalChats = project["chats"] as? [[String: Any]] ?? []
+        let chats = originalChats.filter { !isCodexSource($0["source"] as? String ?? "") }
+        let originalWorktrees = project["worktrees"] as? [[String: Any]] ?? []
+        let worktrees = originalWorktrees.compactMap(removingUnsafeCodexWorktree)
+        out["chats"] = chats
+        out["worktrees"] = worktrees
+        if let bySource {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        } else if !originalChats.isEmpty || !originalWorktrees.isEmpty {
+            guard !chats.isEmpty || !worktrees.isEmpty else { return nil }
+            out["tokens"] =
+                chats.reduce(0) { $0 + num($1["tokens"]) }
+                + worktrees.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] =
+                chats.reduce(0) { $0 + num($1["cost"]) }
+                + worktrees.reduce(0) { $0 + num($1["cost"]) }
+        } else if originalBySource != nil {
+            return nil
+        }
+        return out
+    }
+
+    private static func removingUnsafeCodexWorktree(
+        _ worktree: [String: Any]
+    ) -> [String: Any]? {
+        var out = worktree
+        let originalBySource = worktree["bySource"] as? [String: Any]
+        let bySource = withoutCodexSources(worktree["bySource"])
+        let originalChats = worktree["chats"] as? [[String: Any]] ?? []
+        let chats = originalChats.filter { !isCodexSource($0["source"] as? String ?? "") }
+        out["chats"] = chats
+        if let bySource {
+            guard !bySource.isEmpty else { return nil }
+            out["bySource"] = bySource
+            setDetailTotals(&out, bySource: bySource)
+        } else if !originalChats.isEmpty {
+            guard !chats.isEmpty else { return nil }
+            out["tokens"] = chats.reduce(0) { $0 + num($1["tokens"]) }
+            out["cost"] = chats.reduce(0) { $0 + num($1["cost"]) }
+        } else if originalBySource != nil {
+            return nil
+        }
+        return out
+    }
+
+    private static func withoutCodexSources(_ value: Any?) -> [String: Any]? {
+        guard let sources = value as? [String: Any] else { return nil }
+        return sources.filter { !isCodexSource($0.key) }
+    }
+
+    private static func isCodexSource(_ source: String) -> Bool {
+        source.split(separator: ":", omittingEmptySubsequences: false).last?
+            .lowercased() == "codex"
     }
 
     private static func foldedSourceList(_ sources: [String]) -> [String] {
@@ -154,6 +609,230 @@ public enum UsageHistory {
         return out
     }
 
+    private static func mergeDay(
+        local: [String: Any], cloud: [String: Any], mergeSourceDetail: Bool
+    ) -> [String: Any] {
+        var out = cloud
+        for (key, value) in local { out[key] = value }
+        var bySource = cloud["bySource"] as? [String: Any] ?? [:]
+        let localBySource = local["bySource"] as? [String: Any] ?? [:]
+        for (source, value) in localBySource {
+            bySource[source] = value
+        }
+        out["bySource"] = bySource
+        guard mergeSourceDetail else { return out }
+        let replacingSources = Set(localBySource.keys)
+        out["hours"] = mergeHours(
+            local["hours"], cloud["hours"], replacingSources: replacingSources)
+        out["projects"] = mergeProjects(
+            local["projects"], cloud["projects"], replacingSources: replacingSources)
+        return out
+    }
+
+    private static func mergeHours(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        guard hasSourceDetail(local), hasSourceDetail(cloud) else {
+            return localValue != nil ? local : cloud
+        }
+        return (0..<max(local.count, cloud.count)).map { index in
+            let localHour = index < local.count ? local[index] : [:]
+            let cloudHour = index < cloud.count ? cloud[index] : [:]
+            var merged = cloudHour
+            for (key, value) in localHour { merged[key] = value }
+            let bySource = mergedSourceMap(
+                localHour["bySource"], cloudHour["bySource"],
+                replacingSources: replacingSources)
+            merged["bySource"] = bySource
+            merged["byPath"] = mergedPathMap(
+                localHour["byPath"], cloudHour["byPath"],
+                replacingSources: replacingSources)
+            setDetailTotals(&merged, bySource: bySource)
+            return merged
+        }
+    }
+
+    private static func mergeProjects(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        guard hasSourceDetail(local), hasSourceDetail(cloud) else {
+            return localValue != nil ? local : cloud
+        }
+        var localByKey: [String: [String: Any]] = [:]
+        var cloudByKey: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for project in cloud {
+            let key = projectKey(project)
+            if cloudByKey[key] == nil { order.append(key) }
+            cloudByKey[key] = project
+        }
+        for project in local {
+            let key = projectKey(project)
+            if localByKey[key] == nil, cloudByKey[key] == nil { order.append(key) }
+            localByKey[key] = project
+        }
+        return order.compactMap { key in
+            let localProject = localByKey[key] ?? [:]
+            let cloudProject = cloudByKey[key] ?? [:]
+            var merged = cloudProject
+            for (field, value) in localProject { merged[field] = value }
+            let bySource = mergedSourceMap(
+                localProject["bySource"], cloudProject["bySource"],
+                replacingSources: replacingSources)
+            guard !bySource.isEmpty else { return nil }
+            merged["bySource"] = bySource
+            merged["chats"] = mergeChats(
+                localProject["chats"], cloudProject["chats"],
+                replacingSources: replacingSources)
+            merged["worktrees"] = mergeWorktrees(
+                localProject["worktrees"], cloudProject["worktrees"],
+                replacingSources: replacingSources)
+            setDetailTotals(&merged, bySource: bySource)
+            return merged
+        }
+    }
+
+    private static func mergeChats(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        var merged: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for chat in cloud {
+            let source = chat["source"] as? String ?? ""
+            guard !replacingSources.contains(source) else { continue }
+            let key = chatKey(chat)
+            if merged[key] == nil { order.append(key) }
+            merged[key] = chat
+        }
+        for chat in local {
+            let key = chatKey(chat)
+            if merged[key] == nil { order.append(key) }
+            merged[key] = chat
+        }
+        return order.compactMap { merged[$0] }
+    }
+
+    private static func mergeWorktrees(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        var localByKey: [String: [String: Any]] = [:]
+        var cloudByKey: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for worktree in cloud {
+            let key = worktreeKey(worktree)
+            if cloudByKey[key] == nil { order.append(key) }
+            cloudByKey[key] = worktree
+        }
+        for worktree in local {
+            let key = worktreeKey(worktree)
+            if localByKey[key] == nil, cloudByKey[key] == nil { order.append(key) }
+            localByKey[key] = worktree
+        }
+        return order.compactMap { key in
+            let localWorktree = localByKey[key] ?? [:]
+            let cloudWorktree = cloudByKey[key] ?? [:]
+            var merged = cloudWorktree
+            for (field, value) in localWorktree { merged[field] = value }
+            let chats = mergeChats(
+                localWorktree["chats"], cloudWorktree["chats"],
+                replacingSources: replacingSources)
+            guard !chats.isEmpty || !localWorktree.isEmpty else { return nil }
+            merged["chats"] = chats
+            merged["tokens"] = chats.reduce(0) { $0 + num($1["tokens"]) }
+            merged["cost"] = chats.reduce(0) { $0 + num($1["cost"]) }
+            return merged
+        }
+    }
+
+    private static func chatKey(_ chat: [String: Any]) -> String {
+        let source = chat["source"] as? String ?? ""
+        let id = chat["id"] as? String ?? ""
+        let identity =
+            id.isEmpty
+            ? [chat["path"] as? String ?? "", chat["title"] as? String ?? ""]
+                .joined(separator: "\u{1F}") : id
+        return [source, identity].joined(separator: "\u{1F}")
+    }
+
+    private static func worktreeKey(_ worktree: [String: Any]) -> String {
+        [worktree["name"] as? String ?? "", worktree["path"] as? String ?? ""]
+            .joined(separator: "\u{1F}")
+    }
+
+    private static func hasSourceDetail(_ rows: [[String: Any]]) -> Bool {
+        rows.allSatisfy { $0["bySource"] is [String: Any] }
+    }
+
+    private static func mergedSourceMap(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [String: Any] {
+        var merged = cloudValue as? [String: Any] ?? [:]
+        for source in replacingSources { merged[source] = nil }
+        for (source, value) in localValue as? [String: Any] ?? [:] {
+            merged[source] = value
+        }
+        return merged
+    }
+
+    private static func mergedPathMap(
+        _ localValue: Any?, _ cloudValue: Any?, replacingSources: Set<String>
+    ) -> [String: Any] {
+        let local = localValue as? [String: Any] ?? [:]
+        let cloud = cloudValue as? [String: Any] ?? [:]
+        var keys = Array(cloud.keys)
+        for key in local.keys where !keys.contains(key) { keys.append(key) }
+        return keys.reduce(into: [String: Any]()) { paths, path in
+            let localPath = local[path] as? [String: Any] ?? [:]
+            let cloudPath = cloud[path] as? [String: Any] ?? [:]
+            var merged = cloudPath
+            for (key, value) in localPath { merged[key] = value }
+            let bySource = mergedSourceMap(
+                localPath["bySource"], cloudPath["bySource"],
+                replacingSources: replacingSources)
+            guard !bySource.isEmpty else { return }
+            merged["bySource"] = bySource
+            setDetailTotals(&merged, bySource: bySource)
+            paths[path] = merged
+        }
+    }
+
+    private static func setDetailTotals(
+        _ detail: inout [String: Any], bySource: [String: Any]
+    ) {
+        detail["tokens"] = bySource.values.reduce(0) { $0 + detailTokens($1) }
+        detail["cost"] = bySource.values.reduce(0) { $0 + detailCost($1) }
+    }
+
+    private static func detailTokens(_ value: Any) -> Double {
+        guard let detail = value as? [String: Any] else { return 0 }
+        if detail["tokens"] != nil { return num(detail["tokens"]) }
+        let models = detail["byModel"] as? [String: Any] ?? [:]
+        return models.values.reduce(0) { $0 + detailTokens($1) }
+    }
+
+    private static func detailCost(_ value: Any) -> Double {
+        guard let detail = value as? [String: Any] else { return 0 }
+        if detail["cost"] != nil { return num(detail["cost"]) }
+        let models = detail["byModel"] as? [String: Any] ?? [:]
+        return models.values.reduce(0) { $0 + detailCost($1) }
+    }
+
+    private static func projectKey(_ project: [String: Any]) -> String {
+        [
+            project["repositoryID"] as? String ?? project["projectName"] as? String ?? "unknown",
+            project["machineID"] as? String ?? project["machineName"] as? String ?? "",
+            project["path"] as? String ?? project["folderName"] as? String ?? "",
+        ].joined(separator: "\u{1F}")
+    }
+
     private static func rows(_ day: [String: Any]) -> [(source: String, row: [String: Any])] {
         guard let by = day["bySource"] as? [String: Any] else { return [] }
         return by.flatMap { src, v in
@@ -177,7 +856,7 @@ public enum UsageHistory {
             for s in list {
                 guard let id = s["id"] as? String, !id.isEmpty else { continue }
                 let key = "\(id)|\(s["source"] as? String ?? "")"
-                if let cur = seen[key], cur.count >= s.count { continue }
+                if let cur = seen[key], cur.count > s.count { continue }
                 if seen[key] == nil { order.append(key) }
                 seen[key] = s
             }

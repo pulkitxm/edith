@@ -14,6 +14,31 @@ Do not write comments in code. This repo is kept comment-free and CI enforces it
 Write code clear enough not to need comments. If a name or a block needs
 explaining, improve the name or the structure instead of adding prose.
 
+## Code standards: one source of truth, reused everywhere
+
+Duplicated literals and duplicated views are the two recurring rot patterns in this
+codebase. Both have a designated home; use it instead of retyping the value or the view.
+
+- `UserDefaults`/`SharedDefaults` keys: every key string lives once, in
+  `AppStorageKeys` (`Packages/Edith/Sources/EdithKit/Core/AppStorageKeys.swift`), grouped
+  by feature (`AppStorageKeys.Presenter.autoActive`, not `"presenterAutoActive"`
+  retyped at every call site). `bun run check-duplicate-keys` fails CI when the same
+  `forKey: "..."` literal shows up in more than one file; it does not know about a
+  literal used only once, so give a new setting a constant as soon as a second file
+  needs it, not before.
+- Bundle identifiers, the marketing site URL, and other single-instance app identity
+  strings live on `MainApp` (`Packages/Edith/Sources/EdithKit/Core/MainApp.swift`);
+  default values that a SwiftUI `@AppStorage` and a plain `UserDefaults` fallback both
+  need (clipboard limits, provider timeouts, retention defaults) live as a `static let`
+  next to the logic that owns them (`ClipboardIndex.defaultMaxItems`,
+  `LimitRing.defaultWarnPercent`, `CompanionClient.defaultEndpointString`) rather than
+  as two independently typed numbers that can drift apart.
+- Shared, cross-feature SwiftUI views and modifiers live in `EdithKit/UI`
+  (`HoverButton`, `EmptyStateText`, `LimitRing`, ...). A feature-specific view stays in
+  its feature folder. Before adding a new chip/badge/card/row, check whether an
+  existing `EdithKit/UI` component already does the job with different content, and
+  prefer adding a parameter over copy-pasting the modifier chain.
+
 ## Delegating to Codex (make jobs finish fast)
 
 Codex runs in a sandbox that HANGS on any command over ~10 minutes: `swift build`,
@@ -92,10 +117,18 @@ Four tests hold that shape: `everyGroupIsListedInTheIndex`,
 `everyCommandPageIsListedByItsGroup`, `everyPageLinksBackToItsIndex` and
 `everyRelativeLinkResolves`.
 
+Markdown files sitting directly in `docs/` are the long-form guides, one topic per
+file. They are not part of the CLI reference and are not indexed by `docs/cli/README.md`.
+
 `scripts/sync-wiki.mjs` mirrors `docs/` into this repo's GitHub wiki, one wiki page
 per markdown file, plus a generated `Home`, `_Sidebar` and `_Footer`. A group becomes
-`CLI-<Group>` and its commands `CLI-<Group>-<Command>`, nested one level under the
-group in the sidebar and ordered the way the group `README.md` links them. Relative
+`CLI-<Group>` and its commands `CLI-<Group>-<Command>`, ordered the way the group
+`README.md` links them. A top level guide becomes `Guides-<Topic>` under a `Guides`
+heading after the CLI reference, so adding a page to `docs/` is all it takes to publish
+it. The sidebar is one row per group: each group is a collapsed `<details>` whose summary
+links the group page and whose body lists its commands, so the sidebar stays the length
+of the group list however many commands exist. `Home` lists each group on one line with
+its commands after it. Relative
 links between docs are rewritten to wiki slugs. `.github/workflows/wiki-sync.yml` runs it
 on every push to `main` that touches `docs/`. Preview the output locally with
 `make wiki` (writes `.wiki-build/`, never pushes); `make wiki-push` publishes.
@@ -114,6 +147,8 @@ copy of a source tree; there is one.
 ## Checks
 
 - `bun run check-comments` - no disallowed comments (all tracked source).
+- `bun run check-duplicate-keys` - no `UserDefaults`/`SharedDefaults` key spelled out
+  as a raw string literal in more than one Swift file; see "Code standards" above.
 - Swift checks: `make ci-swift-check` runs all of it. The three halves are separate
   targets, and nothing makes you wait for the others: `make ci-swift-lint`
   (`swift format lint --strict`), `make ci-swift-build` (one `xcodebuild`), and

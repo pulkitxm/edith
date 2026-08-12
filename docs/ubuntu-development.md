@@ -1,6 +1,6 @@
 # Ubuntu development
 
-Edith targets Ubuntu 24.04 LTS with Swift 6.3.2 and GTK 4. Published Debian
+Edith targets Ubuntu 24.04 LTS with Swift 6.3.3 and GTK 4. Published Debian
 packages currently target `amd64`. Local source builds also follow the architecture
 of the installed Swift toolchain and Ubuntu system.
 
@@ -17,8 +17,8 @@ Install Swiftly by following the official
 the same Swift release used by CI:
 
 ```bash
-swiftly install 6.3.2
-swiftly use 6.3.2
+swiftly install 6.3.3
+swiftly use 6.3.3
 swift --version
 ```
 

@@ -1,30 +1,32 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class DockerDetailModel: ObservableObject {
-    @Published var logs: [DockerLogLine] = []
-    @Published var inspect: DockerInspectSummary?
-    @Published var processes: [DockerProcess] = []
-    @Published var files: [RemoteFileEntry] = []
-    @Published var filePath = "/"
-    @Published var cpuHistory: [Double] = []
-    @Published var memHistory: [Double] = []
-    @Published var follow = true
-    @Published var wrapLines = DockerLogDefaults.wrapLines {
+@Observable
+final class DockerDetailModel {
+    var logs: [DockerLogLine] = []
+    var inspect: DockerInspectSummary?
+    var processes: [DockerProcess] = []
+    var files: [RemoteFileEntry] = []
+    var filePath = "/"
+    var cpuHistory: [Double] = []
+    var memHistory: [Double] = []
+    var follow = true
+    var wrapLines = DockerLogDefaults.wrapLines {
         didSet { DockerLogDefaults.wrapLines = wrapLines }
     }
-    @Published var logFontSize = DockerLogDefaults.fontSize {
+    var logFontSize = DockerLogDefaults.fontSize {
         didSet { DockerLogDefaults.fontSize = logFontSize }
     }
-    @Published var showTimestamps = DockerLogDefaults.showTimestamps {
+    var showTimestamps = DockerLogDefaults.showTimestamps {
         didSet { DockerLogDefaults.showTimestamps = showTimestamps }
     }
-    @Published private(set) var streamEnded = false
-    @Published var logFilter = ""
+    private(set) var streamEnded = false
+    var logFilter = ""
 
-    @Published var inspectFailed = false
+    var inspectFailed = false
 
     private var stream: SSHLineStream?
     private var nextLogID = 0
@@ -174,7 +176,7 @@ final class DockerDetailModel: ObservableObject {
 }
 
 struct DockerContainerDetail: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let container: DockerContainer
     let dark: Bool
     let onBack: () -> Void
@@ -183,7 +185,7 @@ struct DockerContainerDetail: View {
     let onRemove: () -> Void
     let onSwitch: (DockerContainer) -> Void
 
-    @StateObject private var model = DockerDetailModel()
+    @State private var model = DockerDetailModel()
     @State private var tab = DockerDetailTab.logs
 
     private var live: DockerContainer {

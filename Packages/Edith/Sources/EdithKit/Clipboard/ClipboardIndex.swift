@@ -1,6 +1,10 @@
 import Foundation
 
 public enum ClipboardIndex {
+    public static let defaultMaxItems = 200
+    public static let defaultMaxItemBytes = 10_000_000
+    public static let defaultCheckInterval = 1.0
+
     private static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

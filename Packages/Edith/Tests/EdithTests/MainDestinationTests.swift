@@ -74,6 +74,11 @@ import Testing
                     mainWindowSection: "settings", settingsTab: "general"))
         #expect(
             MainNavigationFallback.resolve(
+                mainWindowSection: "settings", settingsTab: "terminal")
+                == MainNavigationSelection(
+                    mainWindowSection: "settings", settingsTab: "terminal"))
+        #expect(
+            MainNavigationFallback.resolve(
                 mainWindowSection: "permissions", settingsTab: "shortcuts")
                 == MainNavigationSelection(
                     mainWindowSection: "home", settingsTab: "shortcuts"))

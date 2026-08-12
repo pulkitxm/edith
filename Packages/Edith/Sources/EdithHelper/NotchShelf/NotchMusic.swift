@@ -6,7 +6,9 @@ enum NotchTab: String, CaseIterable, Equatable {
 
     static var allCases: [NotchTab] {
         var tabs: [NotchTab] = [.home, .files]
-        if SharedDefaults.store.bool(forKey: "clipboardEnabled") { tabs.append(.clipboard) }
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled) {
+            tabs.append(.clipboard)
+        }
         tabs.append(contentsOf: [.audio, .camera])
         return tabs
     }

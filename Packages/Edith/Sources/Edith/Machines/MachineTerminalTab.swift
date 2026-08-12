@@ -1,13 +1,26 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftTerm
 import SwiftUI
 
+private struct TerminalLaunchEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var terminalLaunchEnabled: Bool {
+        get { self[TerminalLaunchEnabledKey.self] }
+        set { self[TerminalLaunchEnabledKey.self] = newValue }
+    }
+}
+
 @MainActor
-final class TerminalSessionHolder: ObservableObject {
+@Observable
+final class TerminalSessionHolder {
     let terminalView = LocalProcessTerminalView(frame: .zero)
-    @Published private(set) var started = false
-    @Published private(set) var exitMessage: String?
+    private(set) var started = false
+    private(set) var exitMessage: String?
 
     private var delegateBox: TerminalProcessDelegate?
 
@@ -70,7 +83,7 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
 }
 
 struct TerminalPane: NSViewRepresentable {
-    @ObservedObject var holder: TerminalSessionHolder
+    let holder: TerminalSessionHolder
     let dark: Bool
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
@@ -86,8 +99,8 @@ struct TerminalPane: NSViewRepresentable {
 }
 
 struct MachineTerminalTab: View {
-    @ObservedObject var session: MachineSession
-    @StateObject private var ownHolder = TerminalSessionHolder()
+    let session: MachineSession
+    @State private var ownHolder = TerminalSessionHolder()
     private let injectedHolder: TerminalSessionHolder?
 
     init(session: MachineSession, holder: TerminalSessionHolder? = nil) {
@@ -98,6 +111,7 @@ struct MachineTerminalTab: View {
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -135,7 +149,7 @@ struct MachineTerminalTab: View {
     }
 
     private func startIfPossible() {
-        guard !holder.started else { return }
+        guard launchEnabled, !holder.started else { return }
         if session.isLocal {
             holder.start(
                 executable: "/bin/zsh", arguments: ["-l"],
@@ -157,11 +171,12 @@ struct MachineTerminalTab: View {
 }
 
 struct ContainerTerminalSheet: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let container: DockerContainer
-    @StateObject private var holder = TerminalSessionHolder()
+    @State private var holder = TerminalSessionHolder()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -191,6 +206,7 @@ struct ContainerTerminalSheet: View {
     }
 
     private func start() {
+        guard launchEnabled else { return }
         guard let connection = session.connectionRef else { return }
         let command = DockerCommands.execShell(containerID: container.id)
         holder.start(

@@ -1,17 +1,19 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class CompanionMindModel: ObservableObject {
-    @Published private(set) var beliefs: [CompanionBelief] = []
-    @Published private(set) var claims: [CompanionClaim] = []
-    @Published private(set) var observations: [CompanionObservation] = []
-    @Published private(set) var runs: [CompanionRun] = []
-    @Published private(set) var core: [CompanionCoreSection] = []
-    @Published private(set) var calibration: [CompanionCalibration] = []
-    @Published private(set) var savingCore = false
-    @Published private(set) var runningNightly = false
-    @Published private(set) var error: String?
+@Observable
+final class CompanionMindModel {
+    private(set) var beliefs: [CompanionBelief] = []
+    private(set) var claims: [CompanionClaim] = []
+    private(set) var observations: [CompanionObservation] = []
+    private(set) var runs: [CompanionRun] = []
+    private(set) var core: [CompanionCoreSection] = []
+    private(set) var calibration: [CompanionCalibration] = []
+    private(set) var savingCore = false
+    private(set) var runningNightly = false
+    private(set) var error: String?
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -72,11 +74,12 @@ enum MindDetail: Identifiable {
 }
 
 struct CompanionMindScreen: View {
-    @ObservedObject var model: CompanionMindModel
+    let model: CompanionMindModel
     var openEpisode: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @State private var barsFilled = false
     @State private var detail: MindDetail?
     @State private var editingSection: String?
@@ -106,7 +109,7 @@ struct CompanionMindScreen: View {
             .pageContent(compact)
         }
         .task {
-            await model.refresh()
+            if requestsEnabled { await model.refresh() }
             withAnimation(Motion.animation(Motion.settle, reduceMotion: reduceMotion)) {
                 barsFilled = true
             }
@@ -438,6 +441,7 @@ private struct MindDetailSheet: View {
     let openEpisode: (String) -> Void
     let close: () -> Void
     @State private var episodeRefs: [(String, String)] = []
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -490,7 +494,7 @@ private struct MindDetailSheet: View {
         .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
         .background(DashSkin.paper(dark))
         .task {
-            await loadRefs()
+            if requestsEnabled { await loadRefs() }
         }
     }
 

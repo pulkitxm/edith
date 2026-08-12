@@ -1,10 +1,12 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class SectionWindowController: ObservableObject {
-    @Published var destination: MainDestination
+@Observable
+final class SectionWindowController {
+    var destination: MainDestination
 
     init(destination: MainDestination) {
         self.destination = destination
@@ -12,8 +14,9 @@ final class SectionWindowController: ObservableObject {
 }
 
 struct DetachedSectionView: View {
-    @ObservedObject var controller: SectionWindowController
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    let controller: SectionWindowController
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {

@@ -93,7 +93,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     private var tint: NSColor {
-        LimitsStatusItem.nsColor(hex: SharedDefaults.store.string(forKey: "menuBarStatsColorHex"))
+        LimitsStatusItem.nsColor(
+            hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.statsColorHex))
             ?? .white
     }
 

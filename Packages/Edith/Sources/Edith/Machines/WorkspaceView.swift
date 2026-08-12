@@ -1,13 +1,15 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class WorkspaceModel: ObservableObject {
+@Observable
+final class WorkspaceModel {
     static let shared = WorkspaceModel(machines: .shared)
 
-    @Published var layout: WorkspaceLayout
-    @Published var store: WorkspaceStore
+    var layout: WorkspaceLayout
+    var store: WorkspaceStore
 
     private let file: URL
 
@@ -135,9 +137,10 @@ final class WorkspaceModel: ObservableObject {
 }
 
 struct WorkspaceView: View {
-    @ObservedObject var machines: MachinesModel
-    @ObservedObject private var model = WorkspaceModel.shared
+    let machines: MachinesModel
+    @State private var model = WorkspaceModel.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -156,7 +159,9 @@ struct WorkspaceView: View {
             }
         }
         .background(DashSkin.paper(dark))
-        .onAppear { machines.connectAll() }
+        .onAppear {
+            if connectionsEnabled { machines.connectAll() }
+        }
     }
 
     private var toolbar: some View {
@@ -233,8 +238,8 @@ struct WorkspaceView: View {
 
 struct WorkspaceNodeView: View {
     let node: LayoutNode
-    @ObservedObject var model: WorkspaceModel
-    @ObservedObject var machines: MachinesModel
+    let model: WorkspaceModel
+    let machines: MachinesModel
     let size: CGSize
     let dark: Bool
 

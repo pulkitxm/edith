@@ -4,7 +4,8 @@ import SwiftUI
 @MainActor
 final class FilesAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        applyAppearance(
+            SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         NSApp.setActivationPolicy(.regular)
         FinderOpenBridge.start()
         guard

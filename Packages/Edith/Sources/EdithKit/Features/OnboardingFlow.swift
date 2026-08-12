@@ -13,7 +13,7 @@ public struct OnboardingPermission: Equatable, Sendable {
 
 public enum OnboardingFlow {
     public static let completionKey = "onboardingCompleted"
-    public static let iCloudBackupKey = "icloudBackup"
+    public static let iCloudBackupKey = AppStorageKeys.Backup.icloud
     public static let initialSelectedIDs: Set<String> = []
     public static let initialICloudBackup = true
 

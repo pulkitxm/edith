@@ -2,6 +2,17 @@ import AppKit
 import EdithKit
 import SwiftUI
 
+private struct AutomaticViewActionsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var automaticViewActionsEnabled: Bool {
+        get { self[AutomaticViewActionsEnabledKey.self] }
+        set { self[AutomaticViewActionsEnabledKey.self] = newValue }
+    }
+}
+
 enum MainDestination: String, CaseIterable, Identifiable {
     case home, dashboard, music, calendar, system, machines, companion
     case extensions, settings, about
@@ -65,7 +76,9 @@ enum MainNavigationFallback {
             return MainNavigationSelection(mainWindowSection: "settings", settingsTab: "shortcuts")
         }
         let section = MainDestination(rawValue: mainWindowSection)?.rawValue ?? "home"
-        let validSettingsTabs = ["general", "permissions", "shortcuts", "icloud", "updates"]
+        let validSettingsTabs = [
+            "general", "permissions", "shortcuts", "terminal", "icloud", "updates",
+        ]
         let resolvedSettingsTab =
             validSettingsTabs.contains(settingsTab) ? settingsTab : "general"
         return MainNavigationSelection(
@@ -94,7 +107,8 @@ enum Brand {
 struct TitlebarChrome: View {
     let height: CGFloat
     let width: CGFloat
-    @AppStorage("mainSidebarOpen", store: SharedDefaults.store) private var sidebarOpen = true
+    @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
+        var sidebarOpen = true
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -236,37 +250,65 @@ private struct NavStack {
 }
 
 struct MainWindowView: View {
-    @ObservedObject var updater = UpdaterModel()
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    let updater: UpdaterModel
+
+    init(updater: UpdaterModel) {
+        self.updater = updater
+    }
+
+    @MainActor
+    init() {
+        self.init(updater: UpdaterModel())
+    }
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         MainDestination.home.rawValue
-    @AppStorage("settingsTab", store: SharedDefaults.store) private var settingsTab = "general"
-    @AppStorage("mainSidebarOpen", store: SharedDefaults.store) private var sidebarOpen = true
-    @AppStorage("mainSidebarWidth", store: SharedDefaults.store) private var sidebarWidth = 230.0
-    @AppStorage("tabSystemEnabled", store: SharedDefaults.store) private var systemEnabled = false
-    @AppStorage("tabMusicEnabled", store: SharedDefaults.store) private var musicEnabled = false
-    @AppStorage("tabUsageEnabled", store: SharedDefaults.store) private var usageEnabled = false
-    @AppStorage("tabCalendarEnabled", store: SharedDefaults.store) private var calendarEnabled =
+    @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
+        var settingsTab = "general"
+    @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
+        var sidebarOpen = true
+    @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
+        var sidebarWidth = 230.0
+    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
+        var systemEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
+        var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
+        var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+        var calendarEnabled =
         false
-    @AppStorage("tabMachinesEnabled", store: SharedDefaults.store) private var machinesEnabled =
+    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
+        var machinesEnabled =
         false
-    @AppStorage("tabCompanionEnabled", store: SharedDefaults.store) private var companionEnabled =
+    @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
+        var companionEnabled =
         false
-    @AppStorage("preventSleep", store: SharedDefaults.store) private var preventSleep = false
-    @AppStorage("presenterMode", store: SharedDefaults.store) private var presenterMode = false
-    @AppStorage("presenterEnabled", store: SharedDefaults.store) private var presenterEnabled =
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+        var preventSleep = false
+    @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
+        var presenterMode = false
+    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
+        var presenterEnabled =
         false
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic =
         true
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
-    @AppStorage("presenterBlurUsage", store: SharedDefaults.store) private var presenterBlurUsage =
+    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
+        var presenterBlurUsage =
         false
-    @AppStorage("presenterBlurCalendar", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("creditHidden", store: SharedDefaults.store) private var creditHidden = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
+        var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
-    @AppStorage("EdithMainWindowFullScreen") private var windowFullScreen = false
+    @AppStorage(AppStorageKeys.General.editMainWindowFullScreen) private var windowFullScreen =
+        false
     @State private var dragBaseWidth: Double?
     @State private var musicKeyMonitor: Any?
     @State private var windowKeyMonitor: Any?
@@ -283,6 +325,7 @@ struct MainWindowView: View {
     @Namespace private var sidebarSelectionNamespace
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var theme: Color { themeColor(themeName) }
 
@@ -374,7 +417,9 @@ struct MainWindowView: View {
         }
         .background(historyShortcuts)
         .onExitCommand { InputFocus.resignEditing() }
-        .onReceive(MusicRemote.shared.$folderPath) { musicFolderPath = $0 }
+        .onChange(of: MusicRemote.shared.folderPath, initial: true) { _, newValue in
+            musicFolderPath = newValue
+        }
         .onChange(of: currentLocation) { _, location in
             if restoringHistory {
                 restoringHistory = false
@@ -383,6 +428,7 @@ struct MainWindowView: View {
             }
         }
         .onAppear {
+            guard automaticActionsEnabled else { return }
             applyNavigationFallback()
             installWindowKeys()
             installCommandHintMonitor()
@@ -391,9 +437,14 @@ struct MainWindowView: View {
             refreshPermissionsPill()
             if nav.entries.isEmpty { nav.record(currentLocation) }
         }
-        .onChange(of: musicEnabled) { _, _ in syncMusicResources() }
-        .onChange(of: presenterEnabled) { _, on in PresenterState.shared.syncEnabled(on) }
+        .onChange(of: musicEnabled) { _, _ in
+            if automaticActionsEnabled { syncMusicResources() }
+        }
+        .onChange(of: presenterEnabled) { _, on in
+            if automaticActionsEnabled { PresenterState.shared.syncEnabled(on) }
+        }
         .onDisappear {
+            guard automaticActionsEnabled else { return }
             removeWindowKeys()
             removeCommandHintMonitor()
             removeMusicKeys()
@@ -403,13 +454,15 @@ struct MainWindowView: View {
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification)
         ) { _ in
-            refreshPermissionsPill()
+            if automaticActionsEnabled { refreshPermissionsPill() }
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)
         ) { _ in
-            permissionsNeedAttention = PermissionsStatus.current
+            if automaticActionsEnabled {
+                permissionsNeedAttention = PermissionsStatus.current
+            }
         }
     }
 
@@ -480,6 +533,9 @@ struct MainWindowView: View {
             sidebar(bandHeight)
                 .frame(width: displaySidebarWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .offset(x: sidebarOpen ? 0 : -displaySidebarWidth)
+                .opacity(sidebarOpen ? 1 : 0)
+                .allowsHitTesting(sidebarOpen)
 
             detailColumn(bandHeight)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -951,7 +1007,7 @@ struct MainWindowView: View {
                 Text("Made with ♥ by")
                     .foregroundStyle(.tertiary)
                 Button("Pulkit") {
-                    NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
+                    NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
                 }
                 .buttonStyle(.plain)
                 .fontWeight(.semibold)

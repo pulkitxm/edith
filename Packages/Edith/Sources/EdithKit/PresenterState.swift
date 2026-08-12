@@ -1,18 +1,19 @@
 import Foundation
 
 @MainActor
-public final class PresenterState: ObservableObject {
+@Observable
+public final class PresenterState {
     public static let shared = PresenterState()
 
-    @Published public private(set) var manual = false
-    @Published public private(set) var autoActive = false
-    @Published public private(set) var autoReason: String?
+    public private(set) var manual = false
+    public private(set) var autoActive = false
+    public private(set) var autoReason: String?
 
     public var active: Bool {
         FeatureGates.presenterActive(enabled: enabled, manual: manual, autoActive: autoActive)
     }
 
-    @Published public private(set) var enabled = false
+    public private(set) var enabled = false
 
     private var localToken: NSObjectProtocol?
     private var settingsToken: NSObjectProtocol?
@@ -60,10 +61,10 @@ public final class PresenterState: ObservableObject {
 
     private func refresh() {
         let d = SharedDefaults.store
-        let newEnabled = d.object(forKey: "presenterEnabled") as? Bool ?? false
-        let newManual = newEnabled && d.bool(forKey: "presenterMode")
-        let newAutoActive = newEnabled && d.bool(forKey: "presenterAutoActive")
-        let newAutoReason = newEnabled ? d.string(forKey: "presenterAutoReason") : nil
+        let newEnabled = d.object(forKey: AppStorageKeys.Presenter.enabled) as? Bool ?? false
+        let newManual = newEnabled && d.bool(forKey: AppStorageKeys.Presenter.mode)
+        let newAutoActive = newEnabled && d.bool(forKey: AppStorageKeys.Presenter.autoActive)
+        let newAutoReason = newEnabled ? d.string(forKey: AppStorageKeys.Presenter.autoReason) : nil
         if enabled != newEnabled { enabled = newEnabled }
         if manual != newManual { manual = newManual }
         if autoActive != newAutoActive { autoActive = newAutoActive }

@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct UpdateSchedulePanel: View {
-    @ObservedObject var updater: UpdaterModel
+    let updater: UpdaterModel
     @Environment(\.dismiss) private var dismiss
     @State private var editingCustom = false
     @State private var customSeconds = ""

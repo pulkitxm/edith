@@ -4,12 +4,13 @@ import EdithKit
 import SwiftUI
 
 struct FocusDimRows: View {
-    @AppStorage("focusDimEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("focusDimIntensity", store: SharedDefaults.store) private var intensity =
+    @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var enabled = false
+    @AppStorage(AppStorageKeys.FocusDim.intensity, store: SharedDefaults.store) private
+        var intensity =
         FocusDimMath.defaultIntensity
-    @AppStorage("focusDimAnimationDuration", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.FocusDim.animationDuration, store: SharedDefaults.store)
     private var animationDuration = FocusDimMath.defaultAnimationDuration
-    @AppStorage("focusDimOtherDisplaysMode", store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.FocusDim.otherDisplaysMode, store: SharedDefaults.store)
     private var otherDisplaysMode = FocusDimDisplayMode.perScreenFront
     @AppStorage(FocusDimState.activeKey, store: SharedDefaults.store) private var active = false
 
@@ -20,7 +21,7 @@ struct FocusDimRows: View {
             Text(
                 "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
             )
-            .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+            .settingsCaption()
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Intensity") {
                     Text("\(Int(intensity * 100))%")
@@ -30,7 +31,7 @@ struct FocusDimRows: View {
                 Slider(value: $intensity, in: FocusDimMath.intensityRange)
                     .pointerCursor()
                 Text("How dark the background gets.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
             }
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Animation") {
@@ -41,7 +42,7 @@ struct FocusDimRows: View {
                 Slider(value: $animationDuration, in: FocusDimMath.animationDurationRange)
                     .pointerCursor()
                 Text("How quickly the dim follows you when switching apps.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                    .settingsCaption()
             }
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Picker("Other displays", selection: $otherDisplaysMode) {
@@ -53,7 +54,7 @@ struct FocusDimRows: View {
                 Text(
                     "Highlight the front window on each screen, or fully dim displays without keyboard focus so you can tell where you're typing."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
             }
             LabeledContent {
                 HotKeyRecorderControl(keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")

@@ -86,6 +86,7 @@ Run `make ci` before pushing; the pre-push hook runs the same gates.
 | `make ci` | All macOS, script, site, and policy checks below, after `bun install --frozen-lockfile`. |
 | `make ci-comments` | Fails on any disallowed comment in tracked source. |
 | `make ci-secrets` | Scans every tracked file for leaked secrets. |
+| `make ci-duplicate-keys` | Fails when a `UserDefaults`/`SharedDefaults` key is spelled out as a raw string literal in more than one Swift file instead of going through one shared constant. |
 | `make ci-lint` | Biome format and lint for `scripts/` and `apps/site`. |
 | `make ci-scripts` | The `bun test` suite for `scripts/`. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |
@@ -106,17 +107,18 @@ if one slips in. Write names and structure that do not need prose.
 
 ## Releases
 
-Merging application, packaging, or release workflow changes into `main` publishes
-a new patch version automatically. The `Release on merge` workflow validates the
-release secrets, bumps the last version component (`0.0.1` becomes `0.0.2`, never
-`0.1.1`), commits the bump, and creates the tag. The tag workflow builds the signed
-DMG and the Ubuntu package in parallel, notarizes the DMG when Apple credentials are
-available, generates the signed Sparkle appcast, installs and diagnoses the Debian
-package, then publishes all three assets to one GitHub Release.
-
-`make release V=1.8.0` validates a clean, current `main`, commits the requested
-version, and pushes the tag atomically. The tag workflow builds and publishes the
-three release assets.
+Merging application or packaging changes into `main` publishes
+a new patch version after the required CI jobs pass. CI calls the reusable release
+workflow, which builds the signed DMG and Ubuntu package in parallel, notarizes the
+DMG when Apple credentials are available, generates the signed Sparkle appcast,
+installs and diagnoses the Debian package, then publishes all three assets to one
+GitHub Release. The versioned plists and cask land together in one release commit
+and tag, and the cask is mirrored to the tap. To rebuild an existing release, run
+the Release workflow manually from `main` with `rebuild` set to the current tag.
+The rebuild refreshes the release assets, repository cask checksum and tap copy
+together. To recover a skipped automatic release, run the CI workflow manually
+from `main` with `release` enabled. That path runs every product check before it
+calls the release workflow.
 
 ### Required secrets
 
@@ -125,6 +127,22 @@ three release assets.
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
 | `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
+| `RELEASE_PUSH_TOKEN` | Pushes the release commit and tag to a protected `main`. |
+| `TAP_PUSH_TOKEN` | Pushes the updated cask to `pulkitxm/homebrew-tap`. |
+
+`main` is protected by a ruleset that requires pull requests and status checks. The
+`GITHUB_TOKEN` an Actions run is given cannot bypass it, and the GitHub Actions app
+cannot be added to a bypass list on a personal repository. The release jobs
+therefore check out with `RELEASE_PUSH_TOKEN`, a fine grained personal access token
+scoped to this repository with read and write access to contents. It acts as its
+owner, and the ruleset already grants the repository admin role an unconditional
+bypass, so pushes made with it are accepted. Without the secret the release fails
+immediately with a message naming it, rather than building for ten minutes and
+failing at the push.
+
+`TAP_PUSH_TOKEN` is the equivalent for the Homebrew tap, scoped to
+`pulkitxm/homebrew-tap`, and is documented in
+[docs/homebrew-internals.md](docs/homebrew-internals.md).
 
 ### Optional notarization secrets
 

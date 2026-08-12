@@ -5,11 +5,16 @@ struct BudgetCardView: View {
     let theme: Color
     let dark: Bool
 
-    @AppStorage("budgetEnabled", store: SharedDefaults.store) private var enabled = false
-    @AppStorage("budgetMode", store: SharedDefaults.store) private var modeRaw = "pace"
-    @AppStorage("budgetKind", store: SharedDefaults.store) private var kindRaw = "weekly"
-    @AppStorage("budgetCapPercent", store: SharedDefaults.store) private var cap = 50.0
-    @AppStorage("budgetDeadline", store: SharedDefaults.store) private var deadlineTS = 0.0
+    @AppStorage(AppStorageKeys.Budget.enabled, store: SharedDefaults.store) private var enabled =
+        false
+    @AppStorage(AppStorageKeys.Budget.mode, store: SharedDefaults.store) private var modeRaw =
+        "pace"
+    @AppStorage(AppStorageKeys.Budget.kind, store: SharedDefaults.store) private var kindRaw =
+        "weekly"
+    @AppStorage(AppStorageKeys.Budget.capPercent, store: SharedDefaults.store) private var cap =
+        50.0
+    @AppStorage(AppStorageKeys.Budget.deadline, store: SharedDefaults.store) private
+        var deadlineTS = 0.0
     @State private var latest: DashLimitPoint?
 
     private var kind: LimitWindowKind { kindRaw == "session" ? .session : .weekly }

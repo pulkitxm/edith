@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct SystemPage: View {
-    @StateObject private var model = RunningAppsModel()
+    @State private var model = RunningAppsModel()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var confirmQuitAll = false

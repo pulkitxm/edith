@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import EdithKit
 import SwiftUI
 
@@ -10,31 +9,31 @@ extension NSScreen {
 }
 
 @MainActor
-final class NotchShelfController: ObservableObject, FeatureModule {
-    @Published private(set) var items: [ShelfItem] = []
-    @Published private(set) var expandedDisplay: CGDirectDisplayID?
-    @Published private(set) var hoverDisplay: CGDirectDisplayID?
-    @Published private(set) var nowPlaying: NotchNowPlaying?
-    @Published private(set) var nowPlayingArtwork: NSImage?
-    @Published var activeTab: NotchTab = .home
-    @Published private(set) var currentAlert: NotchAlert?
+@Observable
+final class NotchShelfController: FeatureModule {
+    private(set) var items: [ShelfItem] = []
+    private(set) var expandedDisplay: CGDirectDisplayID?
+    private(set) var hoverDisplay: CGDirectDisplayID?
+    private(set) var nowPlaying: NotchNowPlaying?
+    private(set) var nowPlayingArtwork: NSImage?
+    var activeTab: NotchTab = .home
+    private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
     private weak var colorPickerStore: ColorPickerStore?
-    @Published private(set) var canPickColor = false
-    @Published private(set) var usageStore: UsageStore?
-    @Published private(set) var calendarStore: CalendarStore?
+    private(set) var canPickColor = false
+    private(set) var usageStore: UsageStore?
+    private(set) var calendarStore: CalendarStore?
     private var externalVolume: Double = 0.7
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
     private var pendingAlerts: [PendingNotchAlert] = []
-    @Published private(set) var livePositions: [UUID: CGPoint] = [:]
-    @Published private(set) var selectedIDs: Set<UUID> = []
+    private(set) var livePositions: [UUID: CGPoint] = [:]
+    private(set) var selectedIDs: Set<UUID> = []
 
     let external = ExternalMusic()
     private weak var localMusic: MusicPlayer?
-    private var externalCancellable: AnyCancellable?
-    private var localCancellable: AnyCancellable?
+    private var externalObserving = false
     private var artworkTask: Task<Void, Never>?
 
     private let store = ShelfStore()
@@ -93,7 +92,7 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         startAlertsIfEnabled()
     }
 
-    private var alertsEnabled: Bool { flag("notchAlertsEnabled", default: true) }
+    private var alertsEnabled: Bool { flag(AppStorageKeys.Notch.alertsEnabled, default: true) }
 
     private func startAlertsIfEnabled() {
         guard alertsEnabled, alertDetectors == nil else { return }
@@ -180,8 +179,8 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         alertWorkItem?.cancel()
         alertWorkItem = nil
         external.stop()
-        externalCancellable = nil
-        localCancellable = nil
+        externalObserving = false
+        localMusic = nil
         artworkTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
@@ -201,16 +200,23 @@ final class NotchShelfController: ObservableObject, FeatureModule {
     private func flag(_ key: String, default def: Bool) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? def
     }
-    private var openOnDrag: Bool { flag("notchShelfOpenOnDrag", default: true) }
-    private var openOnHover: Bool { flag("notchShelfOpenOnHover", default: true) }
-    private var showMusic: Bool { flag("notchShelfShowMusic", default: true) }
-    private var requireOption: Bool { flag("notchShelfRequireOption", default: false) }
-    private var removeAfterDragOut: Bool { flag("notchShelfRemoveAfterDragOut", default: true) }
-    private var showOnExternal: Bool { flag("notchShelfShowOnExternal", default: true) }
-    private var hapticsOn: Bool { flag("notchShelfHaptics", default: true) }
+    private var openOnDrag: Bool { flag(AppStorageKeys.Notch.shelfOpenOnDrag, default: true) }
+    private var openOnHover: Bool { flag(AppStorageKeys.Notch.shelfOpenOnHover, default: true) }
+    private var showMusic: Bool { flag(AppStorageKeys.Notch.shelfShowMusic, default: true) }
+    private var requireOption: Bool {
+        flag(AppStorageKeys.Notch.shelfRequireOption, default: false)
+    }
+    private var removeAfterDragOut: Bool {
+        flag(AppStorageKeys.Notch.shelfRemoveAfterDragOut, default: true)
+    }
+    private var showOnExternal: Bool {
+        flag(AppStorageKeys.Notch.shelfShowOnExternal, default: true)
+    }
+    private var hapticsOn: Bool { flag(AppStorageKeys.Notch.shelfHaptics, default: true) }
     private var keepDuration: ShelfKeepDuration {
         ShelfKeepDuration(
-            rawValue: SharedDefaults.store.string(forKey: "notchShelfKeepDuration") ?? "")
+            rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.Notch.shelfKeepDuration)
+                ?? "")
             ?? .forever
     }
 
@@ -607,23 +613,48 @@ final class NotchShelfController: ObservableObject, FeatureModule {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
     }
 
+    private func observeLocalMusic(_ player: MusicPlayer) {
+        withObservationTracking {
+            _ = player.current
+            _ = player.isPlaying
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.recomputeNowPlaying()
+                if let self, let current = self.localMusic, current === player {
+                    self.observeLocalMusic(player)
+                }
+            }
+        }
+    }
+
+    private func observeExternal() {
+        withObservationTracking {
+            _ = external.current
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.recomputeNowPlaying()
+                if let self, self.showMusic {
+                    self.observeExternal()
+                }
+            }
+        }
+    }
+
     func attachLocalMusic(_ player: MusicPlayer?) {
         if showMusic {
             external.start()
-            if externalCancellable == nil {
-                externalCancellable = external.objectWillChange.sink { [weak self] in
-                    Task { @MainActor in self?.recomputeNowPlaying() }
-                }
+            if !externalObserving {
+                externalObserving = true
+                observeExternal()
             }
             localMusic = player
-            localCancellable = player?.objectWillChange.sink { [weak self] in
-                Task { @MainActor in self?.recomputeNowPlaying() }
+            if let player {
+                observeLocalMusic(player)
             }
         } else {
             external.stop()
-            externalCancellable = nil
+            externalObserving = false
             localMusic = nil
-            localCancellable = nil
         }
         recomputeNowPlaying()
     }

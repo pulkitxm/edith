@@ -15,7 +15,10 @@ const repoRoot = path.resolve(
   "..",
 );
 
-const SECTIONS = [{ dir: "docs/cli", prefix: "CLI", label: "CLI reference" }];
+const SECTIONS = [
+  { dir: "docs/cli", prefix: "CLI", label: "CLI reference" },
+  { dir: "docs", prefix: "Guides", label: "Guides", filesOnly: true },
+];
 
 const READING_ORDER = [
   "getting-started",
@@ -41,6 +44,9 @@ const READING_ORDER = [
   "machines-files",
   "machines-power",
   "machines-workspace",
+  "homebrew",
+  "homebrew-internals",
+  "ubuntu-development",
 ];
 
 const SMALL = new Set([
@@ -139,6 +145,8 @@ export function collect(root = repoRoot) {
             },
       );
     }
+
+    if (section.filesOnly) continue;
 
     for (const dir of entries.filter((e) => e.isDirectory())) {
       const groupDir = `${section.dir}/${dir.name}`;
@@ -259,17 +267,33 @@ function endWithNewline(text) {
   return `${text.replace(/\s*$/, "")}\n`;
 }
 
+function sectionTree(label) {
+  const inSection = docs.filter((d) => d.section === label);
+  return sectionDocs(label)
+    .filter((d) => !d.depth)
+    .map((doc) => ({
+      doc,
+      children: inSection
+        .filter((d) => d.parent === doc.slug)
+        .sort((a, b) => a.childOrder - b.childOrder),
+    }));
+}
+
 function buildHome() {
   const lines = [
-    "Reference documentation for the **Edith** command line, auto-generated from the `docs/` directory of the main repository. Edit the docs in the repo, these pages are overwritten on every push to `main`.",
+    "Documentation for **Edith**: the command line reference and the longer guides, auto-generated from the `docs/` directory of the main repository. Edit the docs in the repo, these pages are overwritten on every push to `main`.",
     "",
     "`ed`, `edh` and `edith` are the same binary. The built-in manual is `ed guide`.",
     "",
   ];
   for (const section of SECTIONS) {
     lines.push(`## ${section.label}`, "");
-    for (const doc of sectionDocs(section.label))
-      lines.push(`${doc.depth ? "  " : ""}- [${doc.title}](${doc.slug})`);
+    for (const { doc, children } of sectionTree(section.label)) {
+      const commands = children.length
+        ? `: ${children.map((c) => `[${c.title}](${c.slug})`).join(", ")}`
+        : "";
+      lines.push(`- [${doc.title}](${doc.slug})${commands}`);
+    }
     lines.push("");
   }
   return endWithNewline(lines.join("\n"));
@@ -279,8 +303,22 @@ function buildSidebar() {
   const lines = ["- [Home](Home)", ""];
   for (const section of SECTIONS) {
     lines.push(`**${section.label}**`, "");
-    for (const doc of sectionDocs(section.label))
-      lines.push(`${doc.depth ? "  " : ""}- [${doc.title}](${doc.slug})`);
+    for (const { doc, children } of sectionTree(section.label)) {
+      if (!children.length) {
+        lines.push(`- [${doc.title}](${doc.slug})`);
+        continue;
+      }
+      if (lines.at(-1) !== "") lines.push("");
+      lines.push(
+        "<details>",
+        `<summary><a href="${doc.slug}">${doc.title}</a></summary>`,
+        "",
+        ...children.map((child) => `- [${child.title}](${child.slug})`),
+        "",
+        "</details>",
+        "",
+      );
+    }
     lines.push("");
   }
   return endWithNewline(lines.join("\n"));

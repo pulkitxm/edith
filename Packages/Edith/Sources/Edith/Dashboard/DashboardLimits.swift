@@ -123,13 +123,15 @@ enum DashLimits {
 struct RateLimitsDialsView: View {
     let dark: Bool
     var fill = false
+    var minHeight: CGFloat? = nil
     var showsJumpLink = false
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
         LimitRing.defaultWarnPercent
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
     @State private var point: DashLimitPoint?
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedRaw =
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+        var selectedRaw =
         LimitProvider.claude.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -181,7 +183,10 @@ struct RateLimitsDialsView: View {
                 top: UIScale.pt(16), leading: UIScale.pt(16),
                 bottom: UIScale.pt(14), trailing: UIScale.pt(16))
         )
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
+        .frame(
+            maxWidth: .infinity, minHeight: minHeight, maxHeight: fill ? .infinity : nil,
+            alignment: .topLeading
+        )
         .background {
             RoundedRectangle(cornerRadius: UIScale.pt(16))
                 .fill(DashSkin.paper2(dark))
@@ -288,9 +293,9 @@ struct LimitsRefreshButton: View {
 struct LimitsCardView: View {
     let theme: Color
     let dark: Bool
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn =
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
         LimitRing.defaultWarnPercent
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit =
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
     @State private var all: [DashLimitPoint] = []
     @State private var downsampled: [DashLimitPoint] = []
@@ -299,7 +304,8 @@ struct LimitsCardView: View {
     @State private var marks: [ResetMarker] = []
     @State private var range = "24h"
     @State private var selected: Date?
-    @AppStorage("limitsProvider", store: SharedDefaults.store) private var selectedProviderRaw =
+    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
+        var selectedProviderRaw =
         LimitProvider.claude.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

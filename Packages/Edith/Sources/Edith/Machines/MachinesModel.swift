@@ -1,14 +1,16 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 
 @MainActor
-final class MachinesModel: ObservableObject {
+@Observable
+final class MachinesModel {
     static let shared = MachinesModel()
 
-    @Published private(set) var store = MachineStore()
-    @Published private(set) var sessions: [UUID: MachineSession] = [:]
-    @Published var selection: UUID?
+    private(set) var store = MachineStore()
+    private(set) var sessions: [UUID: MachineSession] = [:]
+    var selection: UUID?
 
     static let localMachineID = UUID(uuidString: "00000000-0000-0000-0000-0000000000ED")!
 
@@ -19,12 +21,10 @@ final class MachinesModel: ObservableObject {
     private var machinesObserver: NSObjectProtocol?
 
     private init() {
-        MachinePaths.prepare()
         machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
             Task { @MainActor in
                 self?.store.reload()
                 self?.ensureSelection()
-                self?.objectWillChange.send()
             }
         }
     }

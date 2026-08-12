@@ -29,7 +29,7 @@ enum MachineEditing {
         }
         if agent { return .agent }
         guard let keyFile else { return nil }
-        let path = (keyFile as NSString).expandingTildeInPath
+        let path = keyFile.expandingTilde()
         guard FileManager.default.fileExists(atPath: path) else {
             throw CLIFailure.notFound(
                 "there is no key file at \(path)",

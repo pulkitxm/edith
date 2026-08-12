@@ -1,19 +1,21 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftTerm
 import SwiftUI
 
 @MainActor
-final class TerminalTabsModel: ObservableObject {
+@Observable
+final class TerminalTabsModel {
     struct Tab: Identifiable {
         let id = UUID()
         var title: String
         var holder: TerminalSessionHolder
     }
 
-    @Published private(set) var tabs: [Tab] = []
-    @Published var selected: UUID?
-    @Published var broadcast = false
+    private(set) var tabs: [Tab] = []
+    var selected: UUID?
+    var broadcast = false
 
     func ensureFirstTab(named title: String) {
         guard tabs.isEmpty else { return }
@@ -60,8 +62,8 @@ final class TerminalTabsModel: ObservableObject {
 }
 
 struct TerminalTabsView: View {
-    @ObservedObject var session: MachineSession
-    @StateObject private var model = TerminalTabsModel()
+    let session: MachineSession
+    @State private var model = TerminalTabsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var command = ""
 

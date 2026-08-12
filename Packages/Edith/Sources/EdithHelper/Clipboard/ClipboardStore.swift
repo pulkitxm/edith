@@ -3,9 +3,10 @@ import EdithKit
 import Foundation
 
 @MainActor
-final class ClipboardStore: ObservableObject, FeatureModule {
-    @Published private(set) var entries: [ClipboardEntry] = []
-    @Published private(set) var skippedOversizeAt: Date?
+@Observable
+final class ClipboardStore: FeatureModule {
+    private(set) var entries: [ClipboardEntry] = []
+    private(set) var skippedOversizeAt: Date?
 
     private var timer: DispatchSourceTimer?
     private var lastChangeCount = NSPasteboard.general.changeCount
@@ -77,7 +78,8 @@ final class ClipboardStore: ObservableObject, FeatureModule {
     }
 
     private var interval: Double {
-        SharedDefaults.store.object(forKey: "clipboardCheckInterval") as? Double ?? 1.0
+        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.checkInterval) as? Double
+            ?? ClipboardIndex.defaultCheckInterval
     }
 
     private func startTimer() {
@@ -114,21 +116,22 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         let frontApp = NSWorkspace.shared.frontmostApplication
         let bundleID = frontApp?.bundleIdentifier
         let ignoreList = ClipboardIgnore.parseUserList(
-            SharedDefaults.store.string(forKey: "clipboardIgnoredApps") ?? "")
+            SharedDefaults.store.string(forKey: AppStorageKeys.Clipboard.ignoredApps) ?? "")
         guard !ClipboardIgnore.isIgnored(bundleID: bundleID, userList: ignoreList) else { return }
 
         let defaults = SharedDefaults.store
         let options = ClipboardCaptureOptions(
-            saveFiles: defaults.object(forKey: "clipboardSaveFiles") as? Bool ?? true,
-            saveImages: defaults.object(forKey: "clipboardSaveImages") as? Bool ?? true,
-            saveText: defaults.object(forKey: "clipboardSaveText") as? Bool ?? true)
+            saveFiles: defaults.object(forKey: AppStorageKeys.Clipboard.saveFiles) as? Bool ?? true,
+            saveImages: defaults.object(forKey: AppStorageKeys.Clipboard.saveImages) as? Bool
+                ?? true,
+            saveText: defaults.object(forKey: AppStorageKeys.Clipboard.saveText) as? Bool ?? true)
         guard let captured = ClipboardPayloadExtractor.extract(from: pb, options: options) else {
             return
         }
 
         let maxBytes =
-            SharedDefaults.store.object(forKey: "clipboardMaxItemBytes") as? Int
-            ?? 10_000_000
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItemBytes) as? Int
+            ?? ClipboardIndex.defaultMaxItemBytes
         guard captured.data.count <= maxBytes else {
             skippedOversizeAt = Date()
             return
@@ -166,8 +169,11 @@ final class ClipboardStore: ObservableObject, FeatureModule {
 
     private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
         let beforeRetention = entries.count
-        let maxItems = SharedDefaults.store.object(forKey: "clipboardMaxItems") as? Int ?? 200
-        let maxAgeDays = SharedDefaults.store.object(forKey: "clipboardMaxAgeDays") as? Int ?? 0
+        let maxItems =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int
+            ?? ClipboardIndex.defaultMaxItems
+        let maxAgeDays =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil
         entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
         let removedAny = entries.count != beforeRetention
@@ -209,7 +215,9 @@ final class ClipboardStore: ObservableObject, FeatureModule {
     }
 
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {
-        let plain = forcePlainText || SharedDefaults.store.bool(forKey: "clipboardPastePlainText")
+        let plain =
+            forcePlainText
+            || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
         guard let outcome = try? ClipboardActions.copy(entry, asPlainText: plain) else { return }
         lastChangeCount = NSPasteboard.general.changeCount
         if outcome.changed > 0 {
@@ -219,8 +227,8 @@ final class ClipboardStore: ObservableObject, FeatureModule {
         }
 
         let autoPaste =
-            SharedDefaults.store.bool(forKey: "clipboardAutoPaste")
-            && SharedDefaults.store.bool(forKey: "permAccessibilityGranted")
+            SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.autoPaste)
+            && SharedDefaults.store.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
         guard autoPaste else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             ClipboardPasteSynth.synthesizeCommandV()

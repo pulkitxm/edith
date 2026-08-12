@@ -4,20 +4,25 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct FinderPane: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     var body: some View {
         FinderBody(model: model)
-            .onAppear { FinderUndoBridge.register(model) }
-            .onDisappear { FinderUndoBridge.forget(model) }
+            .onAppear {
+                if connectionsEnabled { FinderUndoBridge.register(model) }
+            }
+            .onDisappear {
+                if connectionsEnabled { FinderUndoBridge.forget(model) }
+            }
     }
 }
 
 struct FinderWindowView: View {
-    @StateObject private var model: FinderModel
+    @State private var model: FinderModel
 
     init(session: MachineSession, path: String? = nil) {
-        _model = StateObject(wrappedValue: FinderModel(session: session, path: path))
+        _model = State(wrappedValue: FinderModel(session: session, path: path))
     }
 
     var body: some View {
@@ -26,8 +31,9 @@ struct FinderWindowView: View {
 }
 
 struct FinderBody: View {
-    @ObservedObject var model: FinderModel
+    @Bindable var model: FinderModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
     @FocusState private var searchFocused: Bool
 
@@ -53,13 +59,14 @@ struct FinderBody: View {
         }
         .background(DashSkin.paper(dark))
         .task {
+            guard connectionsEnabled else { return }
             model.connectIfNeeded()
             await model.waitForConnection()
             await model.loadPlaces()
             await model.load()
         }
         .onChange(of: model.session.state.isConnected) { _, connected in
-            if connected { model.refresh() }
+            if connectionsEnabled, connected { model.refresh() }
         }
         .overlay {
             if model.quickLookPath != nil {
@@ -415,7 +422,7 @@ struct FinderBody: View {
 }
 
 struct FinderRowContextMenu: View {
-    @ObservedObject var model: FinderModel
+    let model: FinderModel
     let entry: RemoteFileEntry
 
     var body: some View {

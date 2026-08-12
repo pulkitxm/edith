@@ -1,5 +1,5 @@
-import Combine
 import Foundation
+import Observation
 import Testing
 
 @testable import EdithKit
@@ -64,12 +64,31 @@ private final class CommandRecorder: @unchecked Sendable {
             return CLICommandResult(terminationStatus: 0, output: "installed\n")
         }
         var transitions: [CLIToolProvisionState] = []
-        let observation = provisioner.$states.sink { states in
-            if let state = states[self.tool.id] { transitions.append(state) }
+        var observing = true
+        func observeStates() {
+            withObservationTracking {
+                _ = provisioner.states
+            } onChange: {
+                Task { @MainActor in
+                    guard observing else { return }
+                    if let state = provisioner.states[self.tool.id] {
+                        transitions.append(state)
+                        switch state {
+                        case .installed, .failed:
+                            observing = false
+                            return
+                        default:
+                            break
+                        }
+                    }
+                    observeStates()
+                }
+            }
         }
+        observeStates()
 
         await provisioner.provision(tool).value
-        observation.cancel()
+        for _ in 0..<10 { await Task.yield() }
 
         let checking = transitions.firstIndex(of: .checking)
         let installing = transitions.firstIndex {

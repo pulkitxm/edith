@@ -1,0 +1,42 @@
+name: Contributors
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: contributors
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          persist-credentials: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Rewrite the contributor list
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bun scripts/contributors.mjs
+
+      - name: Commit when the list moved
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "the contributor list is unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "Refresh the contributor list"
+          git push origin HEAD:main

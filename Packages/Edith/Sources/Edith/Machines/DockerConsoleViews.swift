@@ -3,7 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct DockerContainerList: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let query: String
     let dark: Bool
     let busyIDs: Set<String>
@@ -341,7 +341,7 @@ struct DockerSimpleList: View {
 }
 
 struct DockerUsageView: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     let dark: Bool
 
     var body: some View {

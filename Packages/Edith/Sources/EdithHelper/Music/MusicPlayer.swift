@@ -4,26 +4,27 @@ import EdithKit
 import MediaPlayer
 
 @MainActor
-final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, FeatureModule {
-    @Published private(set) var tracks: [Track] = []
-    @Published private(set) var current: Track?
-    @Published private(set) var isPlaying = false
-    @Published var volume: Double {
+@Observable
+final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
+    private(set) var tracks: [Track] = []
+    private(set) var current: Track?
+    private(set) var isPlaying = false
+    var volume: Double {
         didSet {
             player?.setVolume(Float(volume), fadeDuration: 0.1)
-            UserDefaults.standard.set(volume, forKey: "musicVolume")
+            UserDefaults.standard.set(volume, forKey: AppStorageKeys.Music.volume)
             broadcastState()
         }
     }
-    @Published var isLooping: Bool {
+    var isLooping: Bool {
         didSet {
-            UserDefaults.standard.set(isLooping, forKey: "musicLooping")
+            UserDefaults.standard.set(isLooping, forKey: AppStorageKeys.Music.looping)
             broadcastState()
         }
     }
-    @Published var isShuffling: Bool {
+    var isShuffling: Bool {
         didSet {
-            UserDefaults.standard.set(isShuffling, forKey: "musicShuffling")
+            UserDefaults.standard.set(isShuffling, forKey: AppStorageKeys.Music.shuffling)
             if case .directory = queueSource { queueCache = nil }
             shuffledCache = nil
             broadcastState()
@@ -71,16 +72,16 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     private var stateRequestObserver: NSObjectProtocol?
 
     override init() {
-        let saved = UserDefaults.standard.object(forKey: "musicVolume") as? Double
+        let saved = UserDefaults.standard.object(forKey: AppStorageKeys.Music.volume) as? Double
         volume = saved ?? 0.7
-        isLooping = UserDefaults.standard.bool(forKey: "musicLooping")
-        isShuffling = UserDefaults.standard.bool(forKey: "musicShuffling")
+        isLooping = UserDefaults.standard.bool(forKey: AppStorageKeys.Music.looping)
+        isShuffling = UserDefaults.standard.bool(forKey: AppStorageKeys.Music.shuffling)
         super.init()
         rescan()
         restoreLastPlayback()
         setupRemoteCommands()
         folderChangedObserver = NotificationCenter.default.addObserver(
-            forName: .musicFolderChanged, object: nil, queue: .main
+            forName: .musicFolderChangedLocally, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.rescan() }
         }
@@ -561,7 +562,6 @@ final class MusicPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate, Feat
     func seek(to fraction: Double) {
         guard let p = player, p.duration > 0 else { return }
         p.currentTime = min(max(fraction, 0), 0.999) * p.duration
-        objectWillChange.send()
         updateNowPlaying()
         persistPlayback()
         broadcastState()

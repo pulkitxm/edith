@@ -51,7 +51,7 @@ enum CleanerBridge {
 
     static func roots(_ raw: [String]) throws -> [URL] {
         try raw.map { path in
-            let expanded = (path as NSString).expandingTildeInPath
+            let expanded = path.expandingTilde()
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
                 isDirectory.boolValue

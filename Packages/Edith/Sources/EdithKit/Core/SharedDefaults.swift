@@ -3,7 +3,7 @@ import Foundation
 public enum SharedDefaults {
     public static let suiteName = "com.pulkit.edith.shared"
     public static let registeredDefaults: [String: Any] = [
-        "icloudBackup": true,
+        AppStorageKeys.Backup.icloud: true,
         CompletionScripts.autoRefreshKey: true,
         MusicFade.enabledKey: true,
         MusicFade.secondsKey: MusicFade.defaultSeconds,

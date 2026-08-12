@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import EdithKit
+import Observation
 
 struct RunningAppRow: Identifiable {
     let pid: pid_t
@@ -17,11 +18,12 @@ enum AppSortKey: String {
 }
 
 @MainActor
-final class RunningAppsModel: ObservableObject {
-    @Published private(set) var apps: [RunningAppRow] = []
-    @Published private(set) var totalMemoryMB: Double = 0
-    @Published private(set) var sortKey: AppSortKey = .cpu
-    @Published private(set) var ascending = false
+@Observable
+final class RunningAppsModel {
+    private(set) var apps: [RunningAppRow] = []
+    private(set) var totalMemoryMB: Double = 0
+    private(set) var sortKey: AppSortKey = .cpu
+    private(set) var ascending = false
 
     private var lastCPU: [pid_t: (time: UInt64, at: Date)] = [:]
 

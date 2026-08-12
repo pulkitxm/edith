@@ -3,7 +3,7 @@ import EdithKit
 import SwiftUI
 
 @MainActor
-final class PaneViewStore: ObservableObject {
+final class PaneViewStore {
     static let shared = PaneViewStore()
 
     private struct Key: Hashable {
@@ -59,8 +59,8 @@ struct PaneContentIdentity: Hashable {
 }
 
 struct PaneContentView: View {
-    @ObservedObject var session: MachineSession
-    @ObservedObject var machines: MachinesModel
+    let session: MachineSession
+    let machines: MachinesModel
     let screen: PaneScreen
     let tabID: UUID
 
@@ -82,9 +82,10 @@ struct PaneContentView: View {
 
 struct WorkspacePaneView: View {
     let pane: PaneNode
-    @ObservedObject var model: WorkspaceModel
-    @ObservedObject var machines: MachinesModel
+    let model: WorkspaceModel
+    let machines: MachinesModel
     let dark: Bool
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     private var focused: Bool { model.layout.focused == pane.id }
 
@@ -132,7 +133,7 @@ struct WorkspacePaneView: View {
 
     @ViewBuilder
     private var content: some View {
-        if pane.tabs.isEmpty {
+        if !connectionsEnabled || pane.tabs.isEmpty {
             Color.clear
         } else {
             ZStack {

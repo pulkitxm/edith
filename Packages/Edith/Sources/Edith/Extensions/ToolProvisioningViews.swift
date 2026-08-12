@@ -22,7 +22,7 @@ struct ToolProvisioningPanel: View {
     let title: String
     let tools: [CLIToolSpec]
     let continueAction: (() -> Void)?
-    @ObservedObject private var provisioner = ToolProvisioner.shared
+    @State private var provisioner = ToolProvisioner.shared
     @State private var logExpanded = false
 
     var body: some View {
@@ -94,12 +94,10 @@ private struct ProvisioningToolRow: View {
                         .lineLimit(1)
                 }
                 Text(tool.why)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                 if case let .failed(_, instruction) = state {
                     Text(instruction)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .textSelection(.enabled)
                 }
             }
@@ -154,7 +152,7 @@ private struct ToolStateIcon: View {
 struct CLIToolStatusSection: View {
     let tools: [CLIToolSpec]
     let extensionEnabled: Bool
-    @ObservedObject private var provisioner = ToolProvisioner.shared
+    @State private var provisioner = ToolProvisioner.shared
 
     var body: some View {
         Section {
@@ -166,8 +164,7 @@ struct CLIToolStatusSection: View {
                         Text(tool.displayName)
                             .fontWeight(.medium)
                         Text(detail(for: tool))
-                            .font(.system(size: UIScale.pt(10)))
-                            .foregroundStyle(.secondary)
+                            .settingsCaption()
                             .textSelection(.enabled)
                     }
                     Spacer(minLength: 12)

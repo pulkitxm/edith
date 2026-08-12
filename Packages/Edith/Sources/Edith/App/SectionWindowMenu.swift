@@ -253,8 +253,9 @@ enum CloseCommand {
 
     private static var workspaceIsOnScreen: Bool {
         let store = SharedDefaults.store
-        return store.string(forKey: "mainWindowSection") == MainDestination.machines.rawValue
-            && store.string(forKey: "machinesMode") == MachinesMode.workspace.rawValue
+        return store.string(forKey: AppStorageKeys.General.mainWindowSection)
+            == MainDestination.machines.rawValue
+            && store.string(forKey: AppStorageKeys.Machines.mode) == MachinesMode.workspace.rawValue
     }
 
     private static func isMainWindow(_ window: NSWindow) -> Bool {

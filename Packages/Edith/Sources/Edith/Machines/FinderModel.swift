@@ -1,30 +1,32 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class FinderModel: ObservableObject {
-    @Published var path: String
-    @Published var entries: [RemoteFileEntry] = []
-    @Published private(set) var loading = false
-    @Published var errorMessage: String?
-    @Published var statusMessage: String?
-    @Published var selection: Set<String> = [] {
+@Observable
+final class FinderModel {
+    var path: String
+    var entries: [RemoteFileEntry] = []
+    private(set) var loading = false
+    var errorMessage: String?
+    var statusMessage: String?
+    var selection: Set<String> = [] {
         didSet { syncQuickLookToSelection() }
     }
-    @Published var renaming: String?
-    @Published var renameText = ""
-    @Published var quickLookPath: String?
-    @Published var freeSpaceKB: Int64?
-    @Published var searchQuery = ""
-    @Published var searchResults: [RemoteFileEntry]?
-    @Published var places: [FilePlaceSection] = []
-    @Published var infoTarget: RemoteFileEntry?
-    @Published var showSidebar = true
-    @Published var progress: FileOperationProgress?
-    @Published var pendingConflict: PendingConflict?
-    @Published var scrollTarget: String?
+    var renaming: String?
+    var renameText = ""
+    var quickLookPath: String?
+    var freeSpaceKB: Int64?
+    var searchQuery = ""
+    var searchResults: [RemoteFileEntry]?
+    var places: [FilePlaceSection] = []
+    var infoTarget: RemoteFileEntry?
+    var showSidebar = true
+    var progress: FileOperationProgress?
+    var pendingConflict: PendingConflict?
+    var scrollTarget: String?
     static var clipboard: FileClipboard?
 
     struct PendingConflict: Identifiable {
@@ -34,19 +36,19 @@ final class FinderModel: ObservableObject {
         var names: [String]
     }
 
-    @Published var viewModeRaw = FinderDefaults.viewMode {
+    var viewModeRaw = FinderDefaults.viewMode {
         didSet { FinderDefaults.viewMode = viewModeRaw }
     }
-    @Published var sortKeyRaw = FinderDefaults.sortKey {
+    var sortKeyRaw = FinderDefaults.sortKey {
         didSet { FinderDefaults.sortKey = sortKeyRaw }
     }
-    @Published var sortAscending = FinderDefaults.sortAscending {
+    var sortAscending = FinderDefaults.sortAscending {
         didSet { FinderDefaults.sortAscending = sortAscending }
     }
-    @Published var showHidden = FinderDefaults.showHidden {
+    var showHidden = FinderDefaults.showHidden {
         didSet { FinderDefaults.showHidden = showHidden }
     }
-    @Published var iconSize = FinderDefaults.iconSize {
+    var iconSize = FinderDefaults.iconSize {
         didSet { FinderDefaults.iconSize = iconSize }
     }
 
@@ -61,13 +63,24 @@ final class FinderModel: ObservableObject {
     private var loadToken = 0
     private var flashToken = 0
     private var searchToken = 0
+    private var searchTask: Task<Void, Never>?
+    private let localSearch: @Sendable (String, String) async -> [RemoteFileEntry]
     private var folderSizes: [String: Int64] = [:]
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
     private var undoStack: [FinderUndoStep] = []
 
-    init(session: MachineSession, path: String? = nil) {
+    init(
+        session: MachineSession, path: String? = nil,
+        localSearch: @escaping @Sendable (String, String) async -> [RemoteFileEntry] = {
+            root, query in
+            await Task.detached(priority: .userInitiated) {
+                MachineSession.searchLocalFiles(root: root, query: query)
+            }.value
+        }
+    ) {
         self.session = session
+        self.localSearch = localSearch
         self.path =
             path
             ?? (session.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
@@ -245,6 +258,7 @@ final class FinderModel: ObservableObject {
     func navigate(to newPath: String, recordHistory: Bool = true) {
         let target = expandingHome(newPath)
         guard target != path else { return }
+        invalidateSearch()
         if recordHistory {
             history.append(path)
             future.removeAll()
@@ -666,16 +680,15 @@ final class FinderModel: ObservableObject {
     }
 
     func searchQueryChanged() {
+        invalidateSearch()
         let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
             searchResults = nil
-            searchToken += 1
             return
         }
         searchResults = entries.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
-        searchToken += 1
         let token = searchToken
-        Task { [weak self] in
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
             guard let self, token == searchToken, searchQuery == trimmed || !searchQuery.isEmpty
             else { return }
@@ -687,9 +700,7 @@ final class FinderModel: ObservableObject {
         let shallow = entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
         guard !session.isLocal else {
             let root = path
-            let deep = await Task.detached(priority: .userInitiated) {
-                MachineSession.searchLocalFiles(root: root, query: query)
-            }.value
+            let deep = await localSearch(root, query)
             guard token == searchToken else { return }
             var seen = Set(shallow.map { FilePathKey.canonical($0.path) })
             searchResults =
@@ -713,8 +724,15 @@ final class FinderModel: ObservableObject {
         searchResults = combined
     }
 
+    private func invalidateSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        searchToken += 1
+    }
+
     func runSearch() async {
         searchQueryChanged()
+        await searchTask?.value
     }
 
     private func run(_ command: String, reload: Bool) async {

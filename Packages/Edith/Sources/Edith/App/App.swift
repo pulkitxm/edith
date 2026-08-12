@@ -2,7 +2,7 @@ import EdithKit
 import ServiceManagement
 import SwiftUI
 
-private let helperBundleIdentifier = "com.pulkit.edith.statusbar"
+private let helperBundleIdentifier = MainApp.statusBarBundleIdentifier
 
 @MainActor
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
@@ -12,7 +12,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var appStarted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        applyAppearance(SharedDefaults.store.string(forKey: "appearance") ?? "system")
+        applyAppearance(
+            SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         InputFocus.install()
         ScrollForwarding.install()
         RetiredLicenseCleanup.run()
@@ -33,7 +34,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         launchHelperIfNeeded()
         let dashboard = DashboardModel.shared
         dashboard.syncExtensionState()
-        if SharedDefaults.store.bool(forKey: "tabUsageEnabled") {
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled) {
             Task { await dashboard.load() }
         }
         showInitialWindow()
@@ -52,7 +53,9 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyConfiguredActivationPolicy() {
-        let showDockIcon = SharedDefaults.store.object(forKey: "showDockIcon") as? Bool ?? true
+        let showDockIcon =
+            SharedDefaults.store.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool
+            ?? true
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
     }
 
@@ -162,7 +165,8 @@ private struct SettingsRedirect: View {
             .frame(width: UIScale.pt(1), height: UIScale.pt(1))
             .onAppear {
                 SharedDefaults.store.set(
-                    MainDestination.settings.rawValue, forKey: "mainWindowSection")
+                    MainDestination.settings.rawValue,
+                    forKey: AppStorageKeys.General.mainWindowSection)
                 DispatchQueue.main.async {
                     for window in NSApp.windows
                     where window.identifier?.rawValue.contains("Settings") == true

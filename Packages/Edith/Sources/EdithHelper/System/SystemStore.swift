@@ -1,23 +1,24 @@
 import AppKit
 import ApplicationServices
-import Combine
 import CoreGraphics
 import EdithKit
 import IOKit.pwr_mgt
+import Observation
 import SwiftUI
 
 @MainActor
-final class SystemStore: ObservableObject, FeatureModule {
+@Observable
+final class SystemStore: FeatureModule {
 
-    @Published private(set) var preventingSleep = false
+    private(set) var preventingSleep = false
     private var assertionID: IOPMAssertionID = 0
 
     enum CleaningPhase { case idle, arming, cleaning }
-    @Published private(set) var phase = CleaningPhase.idle
-    @Published private(set) var armingCountdown = 0
-    @Published private(set) var failsafeRemaining = 0
-    @Published private(set) var hasInputMonitoring = false
-    @Published private(set) var hasAccessibility = false
+    private(set) var phase = CleaningPhase.idle
+    private(set) var armingCountdown = 0
+    private(set) var failsafeRemaining = 0
+    private(set) var hasInputMonitoring = false
+    private(set) var hasAccessibility = false
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -32,7 +33,7 @@ final class SystemStore: ObservableObject, FeatureModule {
 
     init() {
         refreshPermissions()
-        if SharedDefaults.store.bool(forKey: "preventSleep") {
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.General.preventSleep) {
             enableSleepPrevention()
         }
         terminateObserver = NotificationCenter.default.addObserver(
@@ -55,12 +56,12 @@ final class SystemStore: ObservableObject, FeatureModule {
     }
 
     func setPreventSleep(_ on: Bool) {
-        SharedDefaults.store.set(on, forKey: "preventSleep")
+        SharedDefaults.store.set(on, forKey: AppStorageKeys.General.preventSleep)
         on ? enableSleepPrevention() : disableSleepPrevention()
     }
 
     func syncPreventSleep() {
-        let want = SharedDefaults.store.bool(forKey: "preventSleep")
+        let want = SharedDefaults.store.bool(forKey: AppStorageKeys.General.preventSleep)
         guard want != preventingSleep else { return }
         want ? enableSleepPrevention() : disableSleepPrevention()
     }

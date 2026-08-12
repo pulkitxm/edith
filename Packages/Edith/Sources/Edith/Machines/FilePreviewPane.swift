@@ -2,6 +2,7 @@ import AVKit
 import AppKit
 import EdithKit
 import Highlighter
+import Observation
 import PDFKit
 import Quartz
 import SwiftUI
@@ -51,7 +52,8 @@ enum PreviewCache {
 }
 
 @MainActor
-final class FilePreviewModel: ObservableObject {
+@Observable
+final class FilePreviewModel {
     enum Content: Equatable {
         case empty
         case loading
@@ -64,7 +66,7 @@ final class FilePreviewModel: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var content = Content.empty
+    private(set) var content = Content.empty
     private var task: Task<Void, Never>?
 
     static let textPreviewLimit = 400 * 1024
@@ -172,8 +174,8 @@ final class FilePreviewModel: ObservableObject {
 
 struct FilePreviewPane: View {
     let entry: RemoteFileEntry?
-    @ObservedObject var session: MachineSession
-    @StateObject private var model = FilePreviewModel()
+    let session: MachineSession
+    @State private var model = FilePreviewModel()
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }

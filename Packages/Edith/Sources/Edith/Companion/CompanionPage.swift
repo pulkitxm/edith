@@ -1,7 +1,19 @@
 import AppKit
 import EdithKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
+
+private struct CompanionRequestsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var companionRequestsEnabled: Bool {
+        get { self[CompanionRequestsEnabledKey.self] }
+        set { self[CompanionRequestsEnabledKey.self] = newValue }
+    }
+}
 
 enum CompanionTab: String, CaseIterable, Identifiable {
     case chat
@@ -40,10 +52,11 @@ enum CompanionTab: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-final class CompanionHomeModel: ObservableObject {
-    @Published private(set) var checks: [CompanionCheck] = []
-    @Published private(set) var status: CompanionStatus?
-    @Published private(set) var error: String?
+@Observable
+final class CompanionHomeModel {
+    private(set) var checks: [CompanionCheck] = []
+    private(set) var status: CompanionStatus?
+    private(set) var error: String?
 
     var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -64,19 +77,20 @@ final class CompanionHomeModel: ObservableObject {
 }
 
 struct CompanionPage: View {
-    @StateObject private var home = CompanionHomeModel()
-    @StateObject private var chat = CompanionChatModel()
-    @StateObject private var capture = CompanionCaptureModel()
-    @StateObject private var library = CompanionLibraryModel()
-    @StateObject private var mind = CompanionMindModel()
-    @StateObject private var desk = CompanionDeskModel()
-    @StateObject private var setup = CompanionSetupModel()
-    @StateObject private var reason = CompanionSettingsModel()
-    @AppStorage("companionTab", store: SharedDefaults.store)
+    @State private var home = CompanionHomeModel()
+    @State private var chat = CompanionChatModel()
+    @State private var capture = CompanionCaptureModel()
+    @State private var library = CompanionLibraryModel()
+    @State private var mind = CompanionMindModel()
+    @State private var desk = CompanionDeskModel()
+    @State private var setup = CompanionSetupModel()
+    @State private var reason = CompanionSettingsModel()
+    @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
 
     private var dark: Bool { scheme == .dark }
@@ -102,6 +116,7 @@ struct CompanionPage: View {
             return true
         }
         .task {
+            guard requestsEnabled else { return }
             while !Task.isCancelled {
                 await home.refresh()
                 try? await Task.sleep(for: .seconds(20))

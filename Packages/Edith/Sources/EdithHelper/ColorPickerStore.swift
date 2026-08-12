@@ -1,10 +1,12 @@
 import AppKit
 import Carbon.HIToolbox
 import EdithKit
+import Observation
 
 @MainActor
-final class ColorPickerStore: ObservableObject, FeatureModule {
-    @Published private(set) var history: [ColorSwatch] = []
+@Observable
+final class ColorPickerStore: FeatureModule {
+    private(set) var history: [ColorSwatch] = []
 
     init() {
         history = ColorHistoryStore.load()
@@ -55,17 +57,20 @@ final class ColorPickerStore: ObservableObject, FeatureModule {
     }
 
     private var format: ColorCopyFormat {
-        let raw = SharedDefaults.store.string(forKey: "colorPickerCopyFormat") ?? ""
+        let raw = SharedDefaults.store.string(forKey: AppStorageKeys.ColorPicker.copyFormat) ?? ""
         return ColorCopyFormat(rawValue: raw) ?? .hex
     }
 
     private var profile: ColorProfile {
-        ColorProfile(rawValue: SharedDefaults.store.string(forKey: "colorPickerProfile") ?? "")
+        ColorProfile(
+            rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.ColorPicker.profile) ?? "")
             ?? .sRGB
     }
 
     private var historySize: Int {
-        let raw = SharedDefaults.store.object(forKey: "colorPickerHistorySize") as? Int ?? 100
+        let raw =
+            SharedDefaults.store.object(forKey: AppStorageKeys.ColorPicker.historySize) as? Int
+            ?? 100
         return min(max(raw, 1), 100)
     }
 }

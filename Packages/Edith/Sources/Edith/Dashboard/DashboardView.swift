@@ -3,17 +3,21 @@ import EdithKit
 import SwiftUI
 
 struct DashboardView: View {
-    @StateObject private var refresh = DashboardRefreshBridge()
-    @ObservedObject private var model = DashboardModel.shared
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
-    @AppStorage("presenterBlurMoney", store: SharedDefaults.store) private var presenterBlurMoney =
+    @State private var refresh = DashboardRefreshBridge()
+    @State private var model = DashboardModel.shared
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney =
         true
-    @AppStorage("presenterBlurUsage", store: SharedDefaults.store) private var presenterBlurUsage =
+    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
+        var presenterBlurUsage =
         false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compactLayout
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @State private var showLog = false
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
@@ -75,14 +79,15 @@ struct DashboardView: View {
         }
         .navigationTitle("Agent Usage")
         .task {
+            guard automaticActionsEnabled else { return }
             await model.load()
             syncCustomDates()
         }
         .onChange(of: model.loaded) { _, loaded in
-            if loaded { syncCustomDates() }
+            if automaticActionsEnabled, loaded { syncCustomDates() }
         }
         .onChange(of: refresh.updating) { _, updating in
-            if !updating {
+            if automaticActionsEnabled, !updating {
                 Task { await model.load() }
             }
         }
@@ -110,7 +115,7 @@ struct DashboardView: View {
     private var masthead: some View {
         PageHeader {
             (Text("The cost of ").foregroundStyle(DashSkin.ink(dark))
-                + Text("thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
+                + Text("Thinking").italic().foregroundStyle(DashSkin.accentDeep(dark))
                 + Text(".").foregroundStyle(DashSkin.ink(dark)))
         } trailing: {
             mastheadButtons
@@ -127,29 +132,44 @@ struct DashboardView: View {
 
     private var mastheadButtons: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Button {
-                refresh.requestRefresh()
-            } label: {
+            MastheadButton(
+                action: refresh.requestRefresh,
+                systemImage: "arrow.clockwise",
+                helperText: "Refresh usage data",
+                isLoading: refresh.updating
+            )
+            MastheadButton(
+                action: { withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() } },
+                systemImage: "terminal",
+                helperText: "Show collector log",
+                tint: showLog ? appTheme : DashSkin.inkFaint(dark)
+            )
+        }
+    }
+
+    private struct MastheadButton: View {
+        let action: () -> Void
+        let systemImage: String
+        let helperText: String
+        var isLoading = false
+        var tint: Color?
+
+        var body: some View {
+            Button(action: action) {
                 Group {
-                    if refresh.updating {
+                    if isLoading {
                         ProgressView().controlSize(.small)
+                    } else if let tint {
+                        Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: systemImage)
                     }
                 }
                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
             .buttonStyle(HoverButtonStyle())
-            .disabled(refresh.updating)
-            .help("Refresh usage data")
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() }
-            } label: {
-                Image(systemName: "terminal")
-                    .foregroundStyle(showLog ? appTheme : DashSkin.inkFaint(dark))
-            }
-            .buttonStyle(HoverButtonStyle())
-            .help("Show collector log")
+            .disabled(isLoading)
+            .help(helperText)
         }
     }
 
@@ -258,56 +278,83 @@ struct DashboardView: View {
     }
 
     private var controlsBar: some View {
-        WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-            rangeButton("Today", .today)
-            rangeButton("Yesterday", .yesterday)
-            rangeButton("Week", .thisWeek)
-            rangeButton("Last week", .lastWeek)
-            rangeButton("Cycle", .cycle(nil))
-            rangeButton("All", .all)
-            if !model.cycleOptions.isEmpty {
-                Menu {
-                    ForEach(model.cycleOptions) { c in
-                        Button(c.label) { model.range = .cycle(c.id) }
+        VStack(spacing: 10) {
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                rangeButton("Today", .today)
+                rangeButton("Yesterday", .yesterday)
+                rangeButton("Week", .thisWeek)
+                rangeButton("Last week", .lastWeek)
+                rangeButton("Cycle", .cycle(nil))
+                rangeButton("All", .all)
+                if !model.cycleOptions.isEmpty {
+                    Menu {
+                        ForEach(model.cycleOptions) { c in
+                            Button(c.label) { model.range = .cycle(c.id) }
+                        }
+                    } label: {
+                        Label("Cycle", systemImage: "calendar").font(.system(size: UIScale.pt(11)))
                     }
-                } label: {
-                    Label("Cycle", systemImage: "calendar").font(.system(size: UIScale.pt(11)))
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+                    .modifier(FilterChip(dark: dark))
                 }
-                .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                .modifier(FilterChip(dark: dark))
-            }
-            if !model.monthOptions.isEmpty {
-                Menu {
-                    ForEach(model.monthOptions, id: \.self) { m in
-                        Button(m) { model.range = .month(m) }
+                if !model.monthOptions.isEmpty {
+                    Menu {
+                        ForEach(model.monthOptions, id: \.self) { m in
+                            Button(m) { model.range = .month(m) }
+                        }
+                    } label: {
+                        Label("Month", systemImage: "calendar.badge.clock")
+                            .font(.system(size: UIScale.pt(11)))
                     }
-                } label: {
-                    Label("Month", systemImage: "calendar.badge.clock")
-                        .font(.system(size: UIScale.pt(11)))
+                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+                    .modifier(FilterChip(dark: dark))
                 }
-                .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                .modifier(FilterChip(dark: dark))
+                if !model.machineGroups.isEmpty { machineMenu }
+                Button("Reset") { model.reset() }
+                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
+                    .foregroundStyle(acc)
+                    .padding(.vertical, UIScale.pt(5))
             }
-            Stepper("Billing day \(model.billingDay)", value: $model.billingDay, in: 1...31)
-                .pointerCursor().font(.system(size: UIScale.pt(11))).fixedSize()
-            customRange
-            sourceMenu
-            modelMenu
-            projectMenu
-            if !model.machineGroups.isEmpty { machineMenu }
-            Button("Reset") { model.reset() }
-                .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
-                .foregroundStyle(acc)
-                .padding(.vertical, UIScale.pt(5))
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                modelMenu
+                projectMenu
+                sourceMenu
+                billingDayControl
+                customRange
+            }
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .pageGutter(compactLayout)
-        .padding(.bottom, UIScale.pt(10))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper(dark))
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
+        .padding(.vertical)
+    }
+
+    private var billingDayControl: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            Text("Billing day \(model.billingDay)")
+                .font(.system(size: UIScale.pt(11)))
+                .monospacedDigit()
+            HStack(spacing: UIScale.pt(2)) {
+                billingDayStep("minus", enabled: model.billingDay > 1) { model.billingDay -= 1 }
+                billingDayStep("plus", enabled: model.billingDay < 31) { model.billingDay += 1 }
+            }
         }
+        .pointerCursor().fixedSize()
+        .modifier(FilterChip(dark: dark))
+    }
+
+    private func billingDayStep(_ systemImage: String, enabled: Bool, action: @escaping () -> Void)
+        -> some View
+    {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: UIScale.pt(9), weight: .semibold))
+                .frame(width: UIScale.pt(14), height: UIScale.pt(14))
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .opacity(enabled ? 1 : 0.3)
+        .disabled(!enabled)
     }
 
     private var customRange: some View {
@@ -431,26 +478,48 @@ struct DashboardView: View {
     }
 
     private var machineMenu: some View {
-        Button {
-            machinePickerOpen = true
-        } label: {
-            Label(machineSummary, systemImage: "server.rack")
+        TimelineView(.periodic(from: .now, by: 60)) { timeline in
+            let stale = selectedStaleMachines(now: timeline.date)
+            Button {
+                machinePickerOpen = true
+            } label: {
+                Label(
+                    machineSummary(now: timeline.date),
+                    systemImage: stale.isEmpty ? "server.rack" : "exclamationmark.triangle.fill"
+                )
                 .font(.system(size: UIScale.pt(11)))
+            }
+            .buttonStyle(.plain).pointerCursor().fixedSize()
+            .modifier(FilterChip(dark: dark))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
             UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
         }
     }
 
-    private var machineSummary: String {
+    private func machineSummary(now: Date) -> String {
         let groups = model.machineGroups
         guard !groups.isEmpty else { return "Machines" }
+        let stale = selectedStaleMachines(now: now)
+        if stale.count == 1, let item = stale.first {
+            return "\(item.group.name) stale \(item.freshness.ageLabel)"
+        }
+        if stale.count > 1 { return "\(stale.count) stale machines" }
         let shown = groups.filter { model.machineIsShown($0) || model.machineIsPartlyShown($0) }
         if shown.count == groups.count { return "All machines" }
         if shown.count == 1, let only = shown.first { return only.name }
         return "\(shown.count) of \(groups.count) machines"
+    }
+
+    private func selectedStaleMachines(now: Date) -> [(
+        group: MachineGroup, freshness: MachineUsageFreshness
+    )] {
+        model.machineGroups.compactMap { group in
+            guard model.machineIsShown(group) || model.machineIsPartlyShown(group),
+                let freshness = model.machineFreshness(group, now: now), freshness.isStale
+            else { return nil }
+            return (group, freshness)
+        }
     }
 
     private var modelMenu: some View {
@@ -513,23 +582,86 @@ struct DashboardView: View {
                 shareByModelCard
             }
         }
-        if !model.projects.isEmpty {
+        if !model.projects.isEmpty || !pathUnattributedText.isEmpty {
             SkinCard(title: "By project", dark: dark) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    ComboChart(
-                        points: model.chartData.project, barColor: acc, lineColor: gold,
-                        dark: dark, height: UIScale.pt(280), blur: blurMoney, blurTokens: blurUsage)
-                    ProjectDrilldownView(
-                        model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+                    if !model.projects.isEmpty {
+                        ComboChart(
+                            points: model.chartData.project, barColor: acc, lineColor: gold,
+                            dark: dark, height: UIScale.pt(280), blur: blurMoney,
+                            blurTokens: blurUsage)
+                        ProjectDrilldownView(
+                            model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+                    }
+                    if !pathUnattributedText.isEmpty {
+                        Text(pathUnattributedText)
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .presenterBlur(blurMoney || blurUsage)
+                    }
                 }
             }
         }
         SkinCard(title: "Hourly usage", dark: dark) {
-            ComboChart(
-                points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
-                height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                ComboChart(
+                    points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
+                    height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+                if !hourlyUnattributedText.isEmpty {
+                    Text(hourlyUnattributedText)
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .presenterBlur(blurMoney || blurUsage)
+                }
+            }
         }
-        SkinCard(title: "Models", dark: dark) { modelsTable }
+        SkinCard(title: "Models", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                if model.modelUnfilterableCost > 0.000_001 {
+                    Text(
+                        "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
+                    )
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .presenterBlur(blurMoney)
+                }
+                modelsTable
+            }
+        }
+    }
+
+    private var hourlyUnattributedText: String {
+        let tokens = model.hourlyUnattributedTokens
+        let cost = model.hourlyUnattributedCost
+        if tokens > 0.000_001, cost > 0.000_001 {
+            let tokenText = DashFmt.tokens(tokens)
+            return "Hourly detail is unavailable for \(tokenText) tokens and \(DashFmt.usd(cost))."
+        }
+        if tokens > 0.000_001 {
+            return "Hourly detail is unavailable for \(DashFmt.tokens(tokens)) tokens."
+        }
+        if cost > 0.000_001 {
+            return "Hourly detail is unavailable for \(DashFmt.usd(cost))."
+        }
+        return ""
+    }
+
+    private var pathUnattributedText: String {
+        let tokens = model.pathUnattributedTokens
+        let cost = model.pathUnattributedCost
+        if tokens > 0.000_001, cost > 0.000_001 {
+            return
+                "Folder detail is unavailable for \(DashFmt.tokens(tokens)) tokens and \(DashFmt.usd(cost)), so it is excluded from this folder view."
+        }
+        if tokens > 0.000_001 {
+            return
+                "Folder detail is unavailable for \(DashFmt.tokens(tokens)) tokens, so it is excluded from this folder view."
+        }
+        if cost > 0.000_001 {
+            return
+                "Folder detail is unavailable for \(DashFmt.usd(cost)), so it is excluded from this folder view."
+        }
+        return ""
     }
 
     private var dowCard: some View {
@@ -562,7 +694,7 @@ struct DashboardView: View {
                 HStack(spacing: UIScale.pt(8)) {
                     Circle().fill(model.modelColor(m.model, dark: dark)).frame(
                         width: UIScale.pt(8), height: UIScale.pt(8))
-                    Text(DashFmt.shortModel(m.model))
+                    Text(model.modelLabel(m.model))
                         .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
                         .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
                     Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
@@ -623,9 +755,9 @@ struct DashboardView: View {
         model.allSources.map { model.sourceColor($0.id, dark: dark) }
     }
     private var donutSlices: [DonutSlice] {
-        model.modelTotals.filter { $0.tokens > 0 }.map {
+        model.tokenBearingModelTotals.map {
             DonutSlice(
-                id: $0.model, label: DashFmt.shortModel($0.model), value: $0.tokens,
+                id: $0.model, label: model.modelLabel($0.model), value: $0.tokens,
                 color: model.modelColor($0.model, dark: dark))
         }
     }
@@ -734,9 +866,9 @@ struct ActivityHeatmap: View {
 
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
         if cost <= 0 { return DashSkin.grid(dark) }
-        if cost <= cuts[0] { return DashPalette.color("#f6d9bf") }
-        if cost <= cuts[1] { return DashPalette.color("#f0b384") }
-        if cost <= cuts[2] { return DashPalette.color("#e2884f") }
-        return DashPalette.color("#c75e36")
+        if cost <= cuts[0] { return DashPalette.color("#008000") }
+        if cost <= cuts[1] { return DashPalette.color("#006400") }
+        if cost <= cuts[2] { return DashPalette.color("#004700") }
+        return DashPalette.color("#002B00")
     }
 }

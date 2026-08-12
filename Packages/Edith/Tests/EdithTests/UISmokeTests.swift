@@ -7,7 +7,13 @@ import Testing
 
 @MainActor
 private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 700) -> Bool {
-    let host = NSHostingView(rootView: view)
+    let host = NSHostingView(
+        rootView:
+            view
+            .environment(\.automaticViewActionsEnabled, false)
+            .environment(\.companionRequestsEnabled, false)
+            .environment(\.machineConnectionsEnabled, false)
+            .environment(\.terminalLaunchEnabled, false))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
     let window = NSWindow(
         contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -18,6 +24,12 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return false }
     host.cacheDisplay(in: host.bounds, to: rep)
     return rep.pixelsWide > 0 && rep.pixelsHigh > 0
+}
+
+@MainActor private func smokeUpdater() -> UpdaterModel {
+    UpdaterModel(
+        logURL: URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("edith-smoke-\(UUID().uuidString).json"))
 }
 
 @MainActor @Suite(.serialized) struct UISmokeTests {
@@ -55,13 +67,19 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
         }
         for destination in MainDestination.allCases {
             SharedDefaults.store.set(destination.rawValue, forKey: "mainWindowSection")
-            #expect(renders(MainWindowView()), "\(destination.rawValue) failed to render")
+            #expect(
+                renders(MainWindowView(updater: smokeUpdater())),
+                "\(destination.rawValue) failed to render")
         }
         SharedDefaults.store.set("permissions", forKey: "mainWindowSection")
-        #expect(renders(MainWindowView()), "legacy permissions destination failed to render")
+        #expect(
+            renders(MainWindowView(updater: smokeUpdater())),
+            "legacy permissions destination failed to render")
         SharedDefaults.store.set("general", forKey: "settingsTab")
         SharedDefaults.store.set("shortcuts", forKey: "mainWindowSection")
-        #expect(renders(MainWindowView()), "legacy shortcuts destination failed to render")
+        #expect(
+            renders(MainWindowView(updater: smokeUpdater())),
+            "legacy shortcuts destination failed to render")
     }
 
     @Test func extensionsPaneRenders() {
@@ -78,7 +96,7 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
             }
         }
         SharedDefaults.store.set("shortcuts", forKey: "settingsTab")
-        #expect(renders(SettingsPane(updater: UpdaterModel())))
+        #expect(renders(SettingsPane(updater: smokeUpdater())))
     }
 
     @Test func permissionsPaneRenders() {
@@ -89,9 +107,35 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
         #expect(renders(TerminalSettingsPane()))
     }
 
+    @Test func terminalSmokeRenderDoesNotStartShell() {
+        let session = MachineSession(
+            machine: Machine(name: "This Mac", host: "localhost"), local: true)
+        let holder = TerminalSessionHolder()
+        #expect(renders(MachineTerminalTab(session: session, holder: holder)))
+        #expect(!holder.started)
+    }
+
+    @Test func finderSmokeRenderDoesNotStartConnection() async throws {
+        let session = MachineSession(
+            machine: Machine(name: "Remote", host: "203.0.113.1"), local: false,
+            observesWakeRequests: false)
+        let model = FinderModel(session: session)
+        #expect(renders(FinderPane(model: model)))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(session.state == .disconnected)
+    }
+
     @Test func terminalSettingsTabRenders() {
+        let saved = SharedDefaults.store.string(forKey: "settingsTab")
+        defer {
+            if let saved {
+                SharedDefaults.store.set(saved, forKey: "settingsTab")
+            } else {
+                SharedDefaults.store.removeObject(forKey: "settingsTab")
+            }
+        }
         SharedDefaults.store.set("terminal", forKey: "settingsTab")
-        #expect(renders(SettingsPane(updater: UpdaterModel())))
+        #expect(renders(SettingsPane(updater: smokeUpdater())))
     }
 
     @Test func updateSchedulePanelRenders() {
@@ -126,7 +170,7 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
             }
         }
         SharedDefaults.store.set("permissions", forKey: "settingsTab")
-        #expect(renders(SettingsPane(updater: UpdaterModel())))
+        #expect(renders(SettingsPane(updater: smokeUpdater())))
     }
 
     @Test func calendarPageRenders() {

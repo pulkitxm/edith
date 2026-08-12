@@ -34,8 +34,8 @@ private struct PowerIconButton: View {
 }
 
 struct MachinePowerControls: View {
-    @ObservedObject var session: MachineSession
-    @ObservedObject var model: MachinesModel
+    let session: MachineSession
+    let model: MachinesModel
     let dark: Bool
 
     @State private var confirmPower: String?

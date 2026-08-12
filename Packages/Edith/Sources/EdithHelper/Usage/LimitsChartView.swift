@@ -5,8 +5,10 @@ import SwiftUI
 struct LimitsChartView: View {
     let points: [LimitPoint]
     let theme: Color
-    @AppStorage("warnPercent", store: SharedDefaults.store) private var warn = 60
-    @AppStorage("critPercent", store: SharedDefaults.store) private var crit = 85
+    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
+        LimitRing.defaultWarnPercent
+    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
+        LimitRing.defaultCriticalPercent
 
     struct Sample: Identifiable {
         let date: Date

@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct MachineProcessesTab: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var query = ""

@@ -2,14 +2,19 @@ import EdithKit
 import SwiftUI
 
 struct NowPlayingBar: View {
-    @ObservedObject var player: MusicPlayer
+    @Bindable var player: MusicPlayer
     let theme: Color
     @State private var dragFraction: Double?
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
-        true
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic = true
 
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
+
+    init(player: MusicPlayer, theme: Color) {
+        self.player = player
+        self.theme = theme
+    }
 
     var body: some View {
         if let track = player.current {

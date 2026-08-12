@@ -2,21 +2,17 @@ import EdithKit
 import SwiftUI
 
 struct MusicView: View {
-    @EnvironmentObject private var player: MusicPlayer
+    var player: MusicPlayer
 
     var body: some View {
         VStack(spacing: 10) {
             if player.tracks.isEmpty {
-                Text("No playable files in \(Repo.musicDir.path)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.vertical, 28)
+                EmptyStateText("No playable files in \(Repo.musicDir.path)")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(player.tracks) { track in
-                            TrackRow(track: track)
+                            TrackRow(player: player, track: track)
                         }
                     }
                 }
@@ -28,16 +24,24 @@ struct MusicView: View {
     }
 }
 
-private struct TrackRow: View {
-    @EnvironmentObject private var player: MusicPlayer
+struct TrackRow: View {
+    var player: MusicPlayer
     let track: Track
+
+    init(player: MusicPlayer, track: Track) {
+        self.player = player
+        self.track = track
+    }
+
     @State private var artwork: NSImage?
     @State private var duration: String?
     @State private var hovering = false
-    @StateObject private var presenterState = PresenterState.shared
-    @AppStorage("presenterBlurMusic", store: SharedDefaults.store) private var presenterBlurMusic =
+    private var presenterState = PresenterState.shared
+    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
+        var presenterBlurMusic =
         true
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
 
     private var theme: Color { themeColor(themeName) }
     private var isCurrent: Bool { player.current == track }

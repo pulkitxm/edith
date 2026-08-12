@@ -1,4 +1,5 @@
 import EdithKit
+import Observation
 import SwiftUI
 
 enum DashPalette {
@@ -60,6 +61,7 @@ struct DashUsage: Decodable {
     let defaultSources: [String]?
     let sourceMeta: [String: Meta]?
     let totals: Totals?
+    let machines: [Machine]?
     let daily: [Day]
     let sessions: [Session]?
 
@@ -76,6 +78,10 @@ struct DashUsage: Decodable {
     struct Session: Decodable {
         let id: String?
         let source: String?
+    }
+    struct Machine: Decodable {
+        let id: String?
+        let collectedAt: String?
     }
     struct Day: Decodable {
         let period: String
@@ -97,11 +103,27 @@ struct DashUsage: Decodable {
     }
     struct Project: Decodable {
         let projectName: String?
+        let repositoryID: String?
+        let repositoryName: String?
+        let repositoryURL: String?
+        let folderName: String?
         let path: String?
+        let machineName: String?
+        let machineID: String?
         let tokens: Double?
         let cost: Double?
+        let bySource: [String: SourceBreakdown]?
         let chats: [Chat]?
         let worktrees: [Worktree]?
+    }
+    struct SourceBreakdown: Decodable {
+        let tokens: Double?
+        let cost: Double?
+        let byModel: [String: ProjectUsage]?
+    }
+    struct ProjectUsage: Decodable {
+        let tokens: Double?
+        let cost: Double?
     }
     struct Worktree: Decodable {
         let name: String?
@@ -122,6 +144,13 @@ struct DashUsage: Decodable {
     struct Hour: Decodable {
         let tokens: Double?
         let cost: Double?
+        let bySource: [String: SourceBreakdown]?
+        let byPath: [String: PathBreakdown]?
+    }
+    struct PathBreakdown: Decodable {
+        let tokens: Double?
+        let cost: Double?
+        let bySource: [String: SourceBreakdown]?
     }
 }
 
@@ -158,6 +187,7 @@ struct ModelTotal: Identifiable {
     let cacheRead: Double
     let days: Int
     var share = 0.0
+    var tokenShare = 0.0
 }
 
 struct DOWDatum: Identifiable {
@@ -271,22 +301,64 @@ struct ProjWorktree: Identifiable, ProjSortable {
     var sortName: String { name }
 }
 
+struct ProjFolder: Identifiable, ProjSortable {
+    let id: String
+    let name: String
+    let path: String
+    let machineName: String
+    let machineID: String
+    let tokens: Double
+    let cost: Double
+    var share = 0.0
+    let daySet: Set<String>
+    let dur: Double
+    let lastActive: String
+    var chats: [ProjChat]
+    var worktrees: [ProjWorktree]
+    var days: Int { daySet.count }
+    var sortName: String { displayName }
+    var displayName: String {
+        machineName.isEmpty ? name : "\(name) · \(machineName)"
+    }
+    var nestedCount: Int {
+        chats.count + worktrees.count + worktrees.reduce(0) { $0 + $1.chats.count }
+    }
+    var expandable: Bool { !chats.isEmpty || !worktrees.isEmpty }
+}
+
 struct ProjTreeRow: Identifiable, ProjSortable {
     let id: String
     let name: String
+    let repositoryURL: String
     let tokens: Double
     let cost: Double
     var share = 0.0
     let days: Int
     let dur: Double
     let lastActive: String
-    var chats: [ProjChat]
-    var worktrees: [ProjWorktree]
+    var folders: [ProjFolder]
     var sortName: String { name }
+    var chats: [ProjChat] { folders.flatMap(\.chats) }
+    var worktrees: [ProjWorktree] { folders.flatMap(\.worktrees) }
     var nestedCount: Int {
-        chats.count + worktrees.count + worktrees.reduce(0) { $0 + $1.chats.count }
+        folders.count + folders.reduce(0) { $0 + $1.nestedCount }
     }
-    var expandable: Bool { !chats.isEmpty || !worktrees.isEmpty }
+    var expandable: Bool { !folders.isEmpty }
+
+    func matches(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return true }
+        func hit(_ value: String) -> Bool { value.localizedCaseInsensitiveContains(q) }
+        return hit(name) || hit(id) || hit(repositoryURL)
+            || folders.contains { folder in
+                hit(folder.name) || hit(folder.path) || hit(folder.machineName)
+                    || hit(folder.machineID)
+                    || folder.chats.contains { hit($0.id) || hit($0.title) }
+                    || folder.worktrees.contains {
+                        hit($0.name) || $0.chats.contains { hit($0.id) || hit($0.title) }
+                    }
+            }
+    }
 }
 
 struct KPI: Identifiable {
@@ -347,48 +419,55 @@ struct MetaLine {
 }
 
 @MainActor
-final class DashboardModel: ObservableObject {
+@Observable
+final class DashboardModel {
     static let shared = DashboardModel()
+    static let unattributedCostModel = "unattributed-cost"
 
-    @Published var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
-    @Published var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var selectedPaths: Set<String> = [] { didSet { persist(); recompute() } }
-    @Published var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
-    @Published var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
-    @Published var sortAscending = false { didSet { persist(); resortTotals() } }
-    @Published var heatMetric: DashMetric = .tokens { didSet { persist() } }
-    @Published var projSortKey: ProjSortKey = .cost { didSet { persist(); resortProjectTree() } }
-    @Published var projSortAscending = false { didSet { persist(); resortProjectTree() } }
-    @Published var projListOpen = false
-    @Published var projExpanded: Set<String> = []
-    @Published var projQuery = ""
+    var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
+    var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
+    var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
+    var selectedPaths: Set<String> = [] { didSet { persist(); recompute() } }
+    var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
+    var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
+    var sortAscending = false { didSet { persist(); resortTotals() } }
+    var heatMetric: DashMetric = .tokens { didSet { persist() } }
+    var projSortKey: ProjSortKey = .cost { didSet { persist(); resortProjectTree() } }
+    var projSortAscending = false { didSet { persist(); resortProjectTree() } }
+    var projListOpen = false
+    var projExpanded: Set<String> = []
+    var projQuery = ""
 
     private var loading = false
     private var restored = false
     private var knownSources: Set<String> = []
     private var knownModels: Set<String> = []
 
-    @Published private(set) var loaded = false
-    @Published private(set) var loadAttempted = false
-    @Published private(set) var series: [DayDatum] = []
-    @Published private(set) var kpis: [KPI] = []
-    @Published private(set) var modelTotals: [ModelTotal] = []
-    @Published private(set) var dow: [DOWDatum] = []
-    @Published private(set) var hourlyAll: [HourDatum] = []
-    @Published private(set) var projects: [ProjectAgg] = []
-    @Published private(set) var projectTree: [ProjTreeRow] = []
-    @Published private(set) var meta = MetaLine()
-    @Published private(set) var calendarDays: [DayPoint] = []
-    @Published private(set) var heatDetail: [String: HeatDay] = [:]
-    @Published private(set) var chartData = DashChartData()
-    @Published private(set) var revision = 0
+    private(set) var loaded = false
+    private(set) var loadAttempted = false
+    private(set) var series: [DayDatum] = []
+    private(set) var kpis: [KPI] = []
+    private(set) var modelTotals: [ModelTotal] = []
+    private(set) var dow: [DOWDatum] = []
+    private(set) var hourlyAll: [HourDatum] = []
+    private(set) var hourlyUnattributedTokens = 0.0
+    private(set) var hourlyUnattributedCost = 0.0
+    private(set) var pathUnattributedTokens = 0.0
+    private(set) var pathUnattributedCost = 0.0
+    private(set) var modelUnfilterableCost = 0.0
+    private(set) var projects: [ProjectAgg] = []
+    private(set) var projectTree: [ProjTreeRow] = []
+    private(set) var meta = MetaLine()
+    private(set) var calendarDays: [DayPoint] = []
+    private(set) var heatDetail: [String: HeatDay] = [:]
+    private(set) var chartData = DashChartData()
+    private(set) var revision = 0
 
     private(set) var allModels: [String] = []
     private(set) var allProjectPaths: [ProjectPath] = []
-    private var pathByProjectName: [String: String] = [:]
     private(set) var allSources: [SourceInfo] = []
     private(set) var machineGroups: [MachineGroup] = []
+    private(set) var machineCollectionDates: [String: Date] = [:]
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
     private(set) var cycleOptions: [CycleOption] = []
@@ -398,8 +477,6 @@ final class DashboardModel: ObservableObject {
 
     private var data: DashUsage?
     private var sortedPeriods: [String] = []
-    private var ingestStamp = 0
-    private var calendarKey = ""
     private var mtime: Date?
     private var dataDirWatch: DispatchSourceFileSystemObject?
     private var reloadDebounce: Task<Void, Never>?
@@ -438,7 +515,7 @@ final class DashboardModel: ObservableObject {
     }
 
     private var extensionEnabled: Bool {
-        preferences.object(forKey: "tabUsageEnabled") as? Bool ?? false
+        preferences.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool ?? false
     }
 
     private func scheduleReload() {
@@ -460,6 +537,9 @@ final class DashboardModel: ObservableObject {
 
     func modelColor(_ model: String, dark: Bool) -> Color {
         DashPalette.modelColor(modelIndex[model], dark: dark)
+    }
+    func modelLabel(_ model: String) -> String {
+        model == Self.unattributedCostModel ? "Unattributed cost" : DashFmt.shortModel(model)
     }
     func sourceColor(_ source: String, dark: Bool) -> Color {
         DashPalette.sourceColor(sourceIndex[source], dark: dark)
@@ -497,7 +577,6 @@ final class DashboardModel: ObservableObject {
     func ingest(_ parsed: DashUsage) {
         data = parsed
         sortedPeriods = parsed.daily.map(\.period).sorted()
-        ingestStamp += 1
         let srcIds = (parsed.sources ?? []).filter { id in
             parsed.daily.contains { ($0.bySource?[id]?.isEmpty == false) }
         }
@@ -506,18 +585,34 @@ final class DashboardModel: ObservableObject {
         sourceIndex = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
         machineGroups = Self.groupByMachine(
             ids, meta: parsed.sourceMeta ?? [:], naming: Self.registryNames())
+        machineCollectionDates = Dictionary(
+            parsed.machines?.compactMap { machine in
+                guard let rawID = machine.id, let id = UUID(uuidString: rawID),
+                    let collectedAt = EdithDate.parseISO(machine.collectedAt)
+                else { return nil }
+                return (id.uuidString.lowercased(), collectedAt)
+            } ?? [],
+            uniquingKeysWith: max)
         defaultSources = (parsed.defaultSources ?? ids).filter { ids.contains($0) }
         if defaultSources.isEmpty { defaultSources = ids }
 
-        var costByModel: [String: Double] = [:]
+        var usageByModel: [String: (cost: Double, tokens: Double)] = [:]
         for day in parsed.daily {
             for (_, rows) in day.bySource ?? [:] {
-                for r in rows where r.modelName != nil {
-                    costByModel[r.modelName!, default: 0] += r.cost ?? 0
+                for row in rows where !Self.isUnattributedCost(row) {
+                    let name = row.modelName ?? "unknown"
+                    var usage = usageByModel[name] ?? (0, 0)
+                    usage.cost += row.cost ?? 0
+                    usage.tokens += row.tokens
+                    usageByModel[name] = usage
                 }
             }
         }
-        allModels = costByModel.sorted { $0.value > $1.value }.map(\.key)
+        allModels = usageByModel.sorted {
+            if $0.value.cost != $1.value.cost { return $0.value.cost > $1.value.cost }
+            if $0.value.tokens != $1.value.tokens { return $0.value.tokens > $1.value.tokens }
+            return $0.key < $1.key
+        }.map(\.key)
         modelIndex = Dictionary(uniqueKeysWithValues: allModels.enumerated().map { ($1, $0) })
         defaultModels = allModels
 
@@ -525,7 +620,8 @@ final class DashboardModel: ObservableObject {
         for day in parsed.daily {
             for p in day.projects ?? [] {
                 guard let path = p.path, !path.isEmpty else { continue }
-                let name = p.projectName ?? URL(fileURLWithPath: path).lastPathComponent
+                let last = URL(fileURLWithPath: path).lastPathComponent
+                let name = p.folderName ?? (last.isEmpty ? p.projectName ?? "unknown" : last)
                 byPath[path, default: (name, 0)].tokens += p.tokens ?? 0
             }
         }
@@ -533,8 +629,6 @@ final class DashboardModel: ObservableObject {
             byPath
             .map { ProjectPath(path: $0.key, name: $0.value.name, tokens: $0.value.tokens) }
             .sorted { ($0.tokens, $1.path) > ($1.tokens, $0.path) }
-        pathByProjectName = allProjectPaths.reversed()
-            .reduce(into: [:]) { $0[$1.name] = $1.path }
 
         rebuildCycles()
         var months = Set<String>()
@@ -549,6 +643,7 @@ final class DashboardModel: ObservableObject {
             restore()
             restored = true
         }
+        rebuildActivity(parsed)
         loaded = true
         recompute()
     }
@@ -604,6 +699,11 @@ final class DashboardModel: ObservableObject {
         group.sourceIDs.contains { selectedSources.contains($0) } && !machineIsShown(group)
     }
 
+    func machineFreshness(_ group: MachineGroup, now: Date = Date()) -> MachineUsageFreshness? {
+        guard !group.isLocal, let collectedAt = machineCollectionDates[group.id] else { return nil }
+        return MachineUsageFreshness(collectedAt: collectedAt, now: now)
+    }
+
     func showMachine(_ group: MachineGroup, _ shown: Bool) {
         var next = selectedSources
         if shown {
@@ -641,7 +741,7 @@ final class DashboardModel: ObservableObject {
             selectedModels = Set(defaultModels)
         }
         if let raw = d.string(forKey: "dashPaths"), !raw.isEmpty {
-            selectedPaths = Set(raw.split(separator: "\n").map(String.init))
+            selectedPaths = reconciledPaths(Set(raw.split(separator: "\n").map(String.init)))
         }
         if d.object(forKey: "dashBillingDay") != nil {
             billingDay = min(max(d.integer(forKey: "dashBillingDay"), 1), 31)
@@ -681,6 +781,31 @@ final class DashboardModel: ObservableObject {
             selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
         selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
         knownModels = validModels
+        selectedPaths = reconciledPaths(selectedPaths)
+        preferences.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
+        preferences.set(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
+    }
+
+    private func reconciledPaths(_ paths: Set<String>) -> Set<String> {
+        paths.filter { scope in
+            allProjectPaths.contains { entry in
+                Self.path(entry.path, isWithin: scope) || Self.path(scope, isWithin: entry.path)
+            }
+        }
+    }
+
+    private static func path(_ path: String, isWithin scope: String) -> Bool {
+        let caseSensitive = !path.hasPrefix("/") || !scope.hasPrefix("/")
+        let value = normalizedPath(path, caseSensitive: caseSensitive)
+        let parent = normalizedPath(scope, caseSensitive: caseSensitive)
+        guard !value.isEmpty, !parent.isEmpty else { return false }
+        return value == parent || value.hasPrefix(parent + "/")
+    }
+
+    private static func normalizedPath(_ path: String, caseSensitive: Bool) -> String {
+        let raw = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = caseSensitive ? raw : raw.lowercased()
+        return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
     }
 
     private func persist() {
@@ -754,6 +879,16 @@ final class DashboardModel: ObservableObject {
 
     private func parseYMD(_ s: String) -> Date? { Self.ymd.date(from: s) }
     private func ymdStr(_ d: Date) -> String { Self.ymd.string(from: d) }
+
+    private static func isUnattributedCost(_ row: DashUsage.Model) -> Bool {
+        let name = row.modelName ?? "unknown"
+        return name == unattributedCostModel
+            || (row.tokens == 0 && (row.cost ?? 0) > 0)
+    }
+
+    var tokenBearingModelTotals: [ModelTotal] {
+        modelTotals.filter { $0.model != Self.unattributedCostModel && $0.tokens > 0 }
+    }
 
     var dataRange: ClosedRange<Date>? {
         guard let first = sortedPeriods.first, let last = sortedPeriods.last,
@@ -891,28 +1026,61 @@ final class DashboardModel: ObservableObject {
         var dowCost = [Double](repeating: 0, count: 7)
         var hourTok = [Double](repeating: 0, count: 24)
         var hourCost = [Double](repeating: 0, count: 24)
-        var projAgg: [String: ProjAccum] = [:]
+        var hourlyUnattributed = UsageAmount()
+        var pathUnattributed = UsageAmount()
+        var unfilterableModelCost = 0.0
+        var projAgg: [String: RepoAccum] = [:]
+        let fullModelScope = selectedModels == Set(allModels)
 
         var cursor = win.from
         while cursor <= win.to {
             let key = ymdStr(cursor)
             var datum = DayDatum(id: key, date: cursor, label: String(key.dropFirst(5)))
             if let day = byDate[key] {
-                let projShare = projectShare(day)
-                let dayInScope = projShare.tokens > 0 || projShare.cost > 0
+                let useProjectTotal = canonicalSourceCount(day) == 1
+                var canonicalProjects: [ProjectAttributionKey: UsageAmount] = [:]
                 for (src, models) in day.bySource ?? [:]
-                where dayInScope && selectedSources.contains(src) {
+                where selectedSources.contains(src) {
+                    let sourceTokenModels: Set<String> = Set(
+                        models.compactMap { row -> String? in
+                            guard !Self.isUnattributedCost(row), row.tokens > 0 else { return nil }
+                            return row.modelName ?? "unknown"
+                        })
+                    let selectedSourceModels = sourceTokenModels.intersection(selectedModels)
+                    let includeUnattributedCost =
+                        fullModelScope
+                        || (!sourceTokenModels.isEmpty
+                            && sourceTokenModels.isSubset(of: selectedModels))
                     for m in models {
-                        let name = m.modelName ?? "unknown"
-                        guard selectedModels.contains(name) else { continue }
+                        let unattributedCost = Self.isUnattributedCost(m)
+                        if unattributedCost, !includeUnattributedCost {
+                            if !selectedSourceModels.isEmpty {
+                                unfilterableModelCost += m.cost ?? 0
+                            }
+                            continue
+                        }
+                        let name =
+                            unattributedCost
+                            ? Self.unattributedCostModel : (m.modelName ?? "unknown")
+                        guard unattributedCost || selectedModels.contains(name) else { continue }
+                        let attributionKey = ProjectAttributionKey(source: src, model: name)
+                        guard
+                            let projShare = projectShare(
+                                day, key: attributionKey, useProjectTotal: useProjectTotal)
+                        else {
+                            pathUnattributed.tokens += m.tokens
+                            pathUnattributed.cost += m.cost ?? 0
+                            continue
+                        }
                         let tokens = m.tokens * projShare.tokens
                         let cost = (m.cost ?? 0) * projShare.cost
+                        guard tokens > 0 || cost > 0 else { continue }
                         datum.input += (m.inputTokens ?? 0) * projShare.tokens
                         datum.output += (m.outputTokens ?? 0) * projShare.tokens
                         datum.cacheCreate += (m.cacheCreationTokens ?? 0) * projShare.tokens
                         datum.cacheRead += (m.cacheReadTokens ?? 0) * projShare.tokens
                         datum.cost += cost
-                        datum.byModel[name, default: 0] += tokens
+                        if tokens > 0 { datum.byModel[name, default: 0] += tokens }
                         datum.bySource[src, default: 0] += tokens
                         var agg = modelAgg[name] ?? (0, 0, 0, 0, 0, [])
                         agg.tokens += tokens
@@ -922,35 +1090,57 @@ final class DashboardModel: ObservableObject {
                         agg.cacheRead += (m.cacheReadTokens ?? 0) * projShare.tokens
                         agg.days.insert(key)
                         modelAgg[name] = agg
+                        canonicalProjects[attributionKey, default: UsageAmount()].tokens += tokens
+                        canonicalProjects[attributionKey, default: UsageAmount()].cost += cost
                     }
                 }
                 let wd = (cal.component(.weekday, from: cursor) + 6) % 7
                 dowTokens[wd] += datum.tokens
                 dowCost[wd] += datum.cost
-                let hours = Array((day.hours ?? []).prefix(24))
-                let rawHourTokens = hours.reduce(0) { $0 + ($1.tokens ?? 0) }
-                let rawHourCost = hours.reduce(0) { $0 + ($1.cost ?? 0) }
-                for (i, h) in hours.enumerated() {
-                    hourTok[i] += normalizedPart(
-                        h.tokens ?? 0, alternate: h.cost ?? 0, rawTotal: rawHourTokens,
-                        rawAlternateTotal: rawHourCost, target: datum.tokens)
-                    hourCost[i] += normalizedPart(
-                        h.cost ?? 0, alternate: h.tokens ?? 0, rawTotal: rawHourCost,
-                        rawAlternateTotal: rawHourTokens, target: datum.cost)
+                let hourly = allocateHours(day, targets: canonicalProjects)
+                for index in 0..<24 {
+                    hourTok[index] += hourly.tokens[index]
+                    hourCost[index] += hourly.cost[index]
                 }
-                if rawHourTokens == 0, rawHourCost == 0 {
-                    hourTok[0] += datum.tokens
-                    hourCost[0] += datum.cost
+                hourlyUnattributed.tokens += hourly.unattributed.tokens
+                hourlyUnattributed.cost += hourly.unattributed.cost
+                let attributed = projectAllocations(day, canonical: canonicalProjects)
+                for allocation in attributed.projects {
+                    let p = allocation.project
+                    let repository = repositoryIdentity(p)
+                    let folder = folderIdentity(p, repository: repository)
+                    var repositoryAccum =
+                        projAgg[repository.id]
+                        ?? RepoAccum(name: repository.name, url: repository.url)
+                    var folderAccum =
+                        repositoryAccum.folders[folder.id]
+                        ?? ProjAccum(
+                            name: folder.name, path: folder.path,
+                            machineName: folder.machineName, machineID: folder.machineID)
+                    let scale = projectScale(
+                        p, targetTokens: allocation.amount.tokens,
+                        targetCost: allocation.amount.cost)
+                    if ProjAccum.hasTokenedChat(p), scale.rawTokens == 0, scale.rawCost == 0 {
+                        folderAccum.addFallback(allocation.amount, period: key)
+                    } else {
+                        folderAccum.absorb(
+                            p, period: key, scale: scale,
+                            include: { self.pathInScope($0.path ?? self.knownPath(p)) })
+                    }
+                    repositoryAccum.folders[folder.id] = folderAccum
+                    projAgg[repository.id] = repositoryAccum
                 }
-                let scale = dayScale(day, dayTokens: datum.tokens, dayCost: datum.cost)
-                for p in day.projects ?? [] {
-                    guard pathInScope(knownPath(p)) || ProjAccum.hasTokenedChat(p) else { continue }
-                    let name = p.projectName ?? "unknown"
-                    var a = projAgg[name] ?? ProjAccum()
-                    a.absorb(
-                        p, period: key, scale: scale,
-                        include: { self.pathInScope($0.path ?? self.knownPath(p)) })
-                    projAgg[name] = a
+                if attributed.unattributed.tokens > 0 || attributed.unattributed.cost > 0 {
+                    var repositoryAccum =
+                        projAgg["unattributed"]
+                        ?? RepoAccum(name: "Unattributed", url: "")
+                    var folderAccum =
+                        repositoryAccum.folders["folder:unattributed"]
+                        ?? ProjAccum(
+                            name: "Unattributed", path: "", machineName: "", machineID: "")
+                    folderAccum.addFallback(attributed.unattributed, period: key)
+                    repositoryAccum.folders["folder:unattributed"] = folderAccum
+                    projAgg["unattributed"] = repositoryAccum
                 }
             }
             rows.append(datum)
@@ -960,11 +1150,13 @@ final class DashboardModel: ObservableObject {
         series = rows
 
         let totalCost = modelAgg.values.reduce(0) { $0 + $1.cost }
+        let totalModelTokens = modelAgg.values.reduce(0) { $0 + $1.tokens }
         var totals = modelAgg.map { name, a in
             ModelTotal(
                 id: name, model: name, tokens: a.tokens, cost: a.cost, input: a.input,
                 output: a.output, cacheRead: a.cacheRead, days: a.days.count,
-                share: totalCost > 0 ? a.cost / totalCost : 0)
+                share: totalCost > 0 ? a.cost / totalCost : 0,
+                tokenShare: totalModelTokens > 0 ? a.tokens / totalModelTokens : 0)
         }
         totals.sort(by: sortComparator)
         modelTotals = totals
@@ -976,6 +1168,11 @@ final class DashboardModel: ObservableObject {
         hourlyAll = (0..<24).map {
             HourDatum(id: $0, hour: $0, tokens: hourTok[$0], cost: hourCost[$0])
         }
+        hourlyUnattributedTokens = hourlyUnattributed.tokens
+        hourlyUnattributedCost = hourlyUnattributed.cost
+        pathUnattributedTokens = pathUnattributed.tokens
+        pathUnattributedCost = pathUnattributed.cost
+        modelUnfilterableCost = unfilterableModelCost
 
         let totalTokens = rows.reduce(0) { $0 + $1.tokens }
         let activeDays = Set(rows.filter { $0.tokens > 0 || $0.cost > 0 }.map(\.id))
@@ -988,11 +1185,6 @@ final class DashboardModel: ObservableObject {
 
         buildKPIs(rows: rows, totalCost: totalCost)
         buildMeta(from: fromStr, to: toStr)
-        let key = String(ingestStamp)
-        if key != calendarKey {
-            calendarKey = key
-            buildCalendar(data: data)
-        }
         rebuildChartData()
     }
 
@@ -1004,11 +1196,7 @@ final class DashboardModel: ObservableObject {
     func pathInScope(_ path: String?) -> Bool {
         guard !selectedPaths.isEmpty else { return true }
         guard let path, !path.isEmpty else { return false }
-        let lower = path.lowercased()
-        return selectedPaths.contains { scope in
-            let s = (scope.hasSuffix("/") ? String(scope.dropLast()) : scope).lowercased()
-            return lower == s || lower.hasPrefix(s + "/")
-        }
+        return selectedPaths.contains { Self.path(path, isWithin: $0) }
     }
 
     private func chatInScope(_ c: DashUsage.Chat, fallback: String?) -> Bool {
@@ -1016,7 +1204,7 @@ final class DashboardModel: ObservableObject {
     }
 
     private func knownPath(_ p: DashUsage.Project) -> String? {
-        p.path ?? pathByProjectName[p.projectName ?? ""]
+        p.path
     }
 
     private func rawUsage(_ p: DashUsage.Project, scoped: Bool) -> (tokens: Double, cost: Double) {
@@ -1035,32 +1223,406 @@ final class DashboardModel: ObservableObject {
         }
     }
 
-    private func projectShare(_ day: DashUsage.Day) -> (tokens: Double, cost: Double) {
-        guard !selectedPaths.isEmpty else { return (1, 1) }
-        var all = (tokens: 0.0, cost: 0.0)
-        var mine = (tokens: 0.0, cost: 0.0)
+    private func projectShare(
+        _ day: DashUsage.Day, key: ProjectAttributionKey, useProjectTotal: Bool
+    ) -> UsageAmount? {
+        guard !selectedPaths.isEmpty else { return UsageAmount(tokens: 1, cost: 1) }
+        let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
+        var all = UsageAmount()
+        var mine = UsageAmount()
         for p in day.projects ?? [] {
-            let raw = rawUsage(p, scoped: false)
-            let scoped = rawUsage(p, scoped: true)
+            let raw = rawProjectAmount(
+                p, key: key, useSourceTotal: useSourceTotal,
+                useProjectTotal: useProjectTotal, scoped: false)
+            let scoped = rawProjectAmount(
+                p, key: key, useSourceTotal: useSourceTotal,
+                useProjectTotal: useProjectTotal, scoped: true)
             all.tokens += raw.tokens
             all.cost += raw.cost
             mine.tokens += scoped.tokens
             mine.cost += scoped.cost
         }
-        return (
-            all.tokens > 0 ? mine.tokens / all.tokens : 0,
-            all.cost > 0 ? mine.cost / all.cost : 0
+        guard all.tokens > 0 || all.cost > 0 else { return nil }
+        return UsageAmount(
+            tokens: normalizedPart(
+                mine.tokens, alternate: mine.cost, rawTotal: all.tokens,
+                rawAlternateTotal: all.cost, target: 1),
+            cost: normalizedPart(
+                mine.cost, alternate: mine.tokens, rawTotal: all.cost,
+                rawAlternateTotal: all.tokens, target: 1)
         )
     }
 
-    private func dayScale(_ day: DashUsage.Day, dayTokens: Double, dayCost: Double) -> DayScale {
-        var scale = DayScale(dayTokens: dayTokens, dayCost: dayCost)
-        for p in day.projects ?? [] {
-            let raw = rawUsage(p, scoped: true)
-            scale.rawTokens += raw.tokens
-            scale.rawCost += raw.cost
+    private struct ProjectAttributionKey: Hashable {
+        let source: String
+        let model: String
+    }
+
+    private struct UsageAmount {
+        var tokens = 0.0
+        var cost = 0.0
+    }
+
+    private struct ProjectAllocation {
+        let project: DashUsage.Project
+        var amount = UsageAmount()
+    }
+
+    private func projectAllocations(
+        _ day: DashUsage.Day, canonical: [ProjectAttributionKey: UsageAmount]
+    ) -> (projects: [ProjectAllocation], unattributed: UsageAmount) {
+        let projects = day.projects ?? []
+        var amounts = projects.map { ProjectAllocation(project: $0) }
+        var unattributed = UsageAmount()
+        let useProjectTotal = canonicalSourceCount(day) == 1
+        for (key, target) in canonical {
+            let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
+            let raw = projects.map {
+                rawProjectAmount(
+                    $0, key: key, useSourceTotal: useSourceTotal,
+                    useProjectTotal: useProjectTotal, scoped: true)
+            }
+            let rawTokens = raw.reduce(0) { $0 + $1.tokens }
+            let rawCost = raw.reduce(0) { $0 + $1.cost }
+            guard rawTokens > 0 || rawCost > 0 else {
+                unattributed.tokens += target.tokens
+                unattributed.cost += target.cost
+                continue
+            }
+            for index in projects.indices {
+                amounts[index].amount.tokens += normalizedPart(
+                    raw[index].tokens, alternate: raw[index].cost, rawTotal: rawTokens,
+                    rawAlternateTotal: rawCost, target: target.tokens)
+                amounts[index].amount.cost += normalizedPart(
+                    raw[index].cost, alternate: raw[index].tokens, rawTotal: rawCost,
+                    rawAlternateTotal: rawTokens, target: target.cost)
+            }
         }
-        return scale
+        return (
+            amounts.filter { $0.amount.tokens > 0 || $0.amount.cost > 0 }, unattributed
+        )
+    }
+
+    private func rawProjectAmount(
+        _ project: DashUsage.Project, key: ProjectAttributionKey, useSourceTotal: Bool,
+        useProjectTotal: Bool, scoped: Bool
+    ) -> UsageAmount {
+        if let breakdown = project.bySource?[key.source] {
+            guard
+                let amount = sourceAmount(
+                    breakdown, model: key.model, useSourceTotal: useSourceTotal)
+            else { return UsageAmount() }
+            let scope = projectScope(
+                project, source: key.source, allowChatScope: useSourceTotal, scoped: scoped)
+            return UsageAmount(
+                tokens: amount.tokens * scope.tokens,
+                cost: amount.cost * scope.cost)
+        }
+        if let bySource = project.bySource, !bySource.isEmpty { return UsageAmount() }
+
+        let hasFullModelScope = selectedModels == Set(allModels)
+        guard hasFullModelScope || useSourceTotal else { return UsageAmount() }
+        let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        let sourceChats = chats.filter { $0.source == key.source }
+        if !sourceChats.isEmpty {
+            let scopedChats =
+                scoped
+                ? sourceChats.filter { pathInScope($0.path ?? knownPath(project)) }
+                : sourceChats
+            return scopedChats.reduce(into: UsageAmount()) {
+                $0.tokens += $1.tokens ?? 0
+                $0.cost += $1.cost ?? 0
+            }
+        }
+
+        guard !ProjAccum.hasTokenedChat(project), useProjectTotal,
+            !scoped || pathInScope(knownPath(project))
+        else { return UsageAmount() }
+        return UsageAmount(tokens: project.tokens ?? 0, cost: project.cost ?? 0)
+    }
+
+    private func canonicalSourceCount(_ day: DashUsage.Day) -> Int {
+        (day.bySource ?? [:]).values.filter { !$0.isEmpty }.count
+    }
+
+    private func sourceHasSingleCanonicalModel(
+        _ day: DashUsage.Day, key: ProjectAttributionKey
+    ) -> Bool {
+        let tokenModels = Set(
+            (day.bySource?[key.source] ?? []).compactMap { row -> String? in
+                guard !Self.isUnattributedCost(row), row.tokens > 0 else { return nil }
+                return row.modelName ?? "unknown"
+            })
+        return key.model == Self.unattributedCostModel
+            || (tokenModels.count == 1 && tokenModels.contains(key.model))
+    }
+
+    private func sourceAmount(
+        _ breakdown: DashUsage.SourceBreakdown, model: String, useSourceTotal: Bool
+    ) -> UsageAmount? {
+        if useSourceTotal {
+            let models = Array((breakdown.byModel ?? [:]).values)
+            return UsageAmount(
+                tokens: breakdown.tokens ?? models.reduce(0) { $0 + ($1.tokens ?? 0) },
+                cost: breakdown.cost ?? models.reduce(0) { $0 + ($1.cost ?? 0) })
+        }
+        guard let usage = breakdown.byModel?[model] else { return nil }
+        return UsageAmount(tokens: usage.tokens ?? 0, cost: usage.cost ?? 0)
+    }
+
+    private func projectScope(
+        _ project: DashUsage.Project, source: String, allowChatScope: Bool, scoped: Bool
+    ) -> UsageAmount {
+        guard scoped, !selectedPaths.isEmpty else { return UsageAmount(tokens: 1, cost: 1) }
+        if pathInScope(knownPath(project)) { return UsageAmount(tokens: 1, cost: 1) }
+        guard allowChatScope else { return UsageAmount() }
+        let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        let sourceChats = chats.filter { $0.source == source }
+        let all = sourceChats.reduce(into: UsageAmount()) {
+            $0.tokens += $1.tokens ?? 0
+            $0.cost += $1.cost ?? 0
+        }
+        let matching = sourceChats.filter { pathInScope($0.path ?? knownPath(project)) }
+        let mine = matching.reduce(into: UsageAmount()) {
+            $0.tokens += $1.tokens ?? 0
+            $0.cost += $1.cost ?? 0
+        }
+        return UsageAmount(
+            tokens: normalizedPart(
+                mine.tokens, alternate: mine.cost, rawTotal: all.tokens,
+                rawAlternateTotal: all.cost, target: 1),
+            cost: normalizedPart(
+                mine.cost, alternate: mine.tokens, rawTotal: all.cost,
+                rawAlternateTotal: all.tokens, target: 1))
+    }
+
+    private struct HourlyAllocation {
+        var tokens = [Double](repeating: 0, count: 24)
+        var cost = [Double](repeating: 0, count: 24)
+        var unattributed = UsageAmount()
+    }
+
+    private var hourlyFiltersAreUnfiltered: Bool {
+        selectedSources == Set(allSources.map(\.id)) && selectedModels == Set(allModels)
+            && selectedPaths.isEmpty
+    }
+
+    private func allocateHours(
+        _ day: DashUsage.Day, targets: [ProjectAttributionKey: UsageAmount]
+    ) -> HourlyAllocation {
+        var result = HourlyAllocation()
+        let hours = Array((day.hours ?? []).prefix(24))
+        let total = targets.values.reduce(into: UsageAmount()) {
+            $0.tokens += $1.tokens
+            $0.cost += $1.cost
+        }
+        guard total.tokens > 0 || total.cost > 0 else { return result }
+
+        func add(
+            target: UsageAmount, rawTokens: [Double], rawCost: [Double],
+            to result: inout HourlyAllocation
+        ) {
+            let rawTokenTotal = rawTokens.reduce(0, +)
+            let rawCostTotal = rawCost.reduce(0, +)
+            guard rawTokenTotal > 0 || rawCostTotal > 0 else {
+                result.unattributed.tokens += target.tokens
+                result.unattributed.cost += target.cost
+                return
+            }
+            for index in 0..<24 {
+                result.tokens[index] += normalizedPart(
+                    rawTokens[index], alternate: rawCost[index], rawTotal: rawTokenTotal,
+                    rawAlternateTotal: rawCostTotal, target: target.tokens)
+                result.cost[index] += normalizedPart(
+                    rawCost[index], alternate: rawTokens[index], rawTotal: rawCostTotal,
+                    rawAlternateTotal: rawTokenTotal, target: target.cost)
+            }
+        }
+
+        if !selectedPaths.isEmpty {
+            guard hours.contains(where: { $0.byPath != nil }) else {
+                result.unattributed = total
+                return result
+            }
+            for (key, target) in targets {
+                let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
+                var rawTokens = [Double](repeating: 0, count: 24)
+                var rawCost = [Double](repeating: 0, count: 24)
+                for (index, hour) in hours.enumerated() {
+                    for (path, breakdown) in hour.byPath ?? [:] where pathInScope(path) {
+                        guard let source = breakdown.bySource?[key.source],
+                            let amount = sourceAmount(
+                                source, model: key.model, useSourceTotal: useSourceTotal)
+                        else { continue }
+                        rawTokens[index] += amount.tokens
+                        rawCost[index] += amount.cost
+                    }
+                }
+                add(
+                    target: target, rawTokens: rawTokens, rawCost: rawCost,
+                    to: &result)
+            }
+            return result
+        }
+
+        if hours.contains(where: { $0.bySource != nil }) {
+            for (key, target) in targets {
+                let useSourceTotal = sourceHasSingleCanonicalModel(day, key: key)
+                var rawTokens = [Double](repeating: 0, count: 24)
+                var rawCost = [Double](repeating: 0, count: 24)
+                for (index, hour) in hours.enumerated() {
+                    guard let source = hour.bySource?[key.source],
+                        let amount = sourceAmount(
+                            source, model: key.model, useSourceTotal: useSourceTotal)
+                    else { continue }
+                    rawTokens[index] = amount.tokens
+                    rawCost[index] = amount.cost
+                }
+                add(
+                    target: target, rawTokens: rawTokens, rawCost: rawCost,
+                    to: &result)
+            }
+            return result
+        }
+
+        guard hourlyFiltersAreUnfiltered else {
+            result.unattributed = total
+            return result
+        }
+        var rawTokens = [Double](repeating: 0, count: 24)
+        var rawCost = [Double](repeating: 0, count: 24)
+        for (index, hour) in hours.enumerated() {
+            rawTokens[index] = hour.tokens ?? 0
+            rawCost[index] = hour.cost ?? 0
+        }
+        add(target: total, rawTokens: rawTokens, rawCost: rawCost, to: &result)
+        return result
+    }
+
+    private func rebuildActivity(_ parsed: DashUsage) {
+        var detail: [String: HeatDay] = [:]
+        var dates: [Date] = []
+        for day in parsed.daily {
+            guard let date = parseYMD(day.period) else { continue }
+            dates.append(date)
+            detail[day.period] = activityHeatDay(day, date: date)
+        }
+        guard let first = dates.min(), let last = dates.max() else {
+            heatDetail = [:]
+            calendarDays = []
+            return
+        }
+        buildCalendar(detail: detail, from: first, to: last)
+    }
+
+    private func activityHeatDay(_ day: DashUsage.Day, date: Date) -> HeatDay {
+        var heat = HeatDay(date: date)
+        var modelTokens: [String: Double] = [:]
+        var sourceTokens: [String: Double] = [:]
+        for (source, rows) in day.bySource ?? [:] {
+            for row in rows {
+                heat.input += row.inputTokens ?? 0
+                heat.output += row.outputTokens ?? 0
+                heat.cacheCreate += row.cacheCreationTokens ?? 0
+                heat.cacheRead += row.cacheReadTokens ?? 0
+                heat.cost += row.cost ?? 0
+                guard row.tokens > 0 else { continue }
+                let name = row.modelName ?? "unknown"
+                modelTokens[name, default: 0] += row.tokens
+                sourceTokens[source, default: 0] += row.tokens
+            }
+        }
+        heat.tokens = heat.input + heat.output + heat.cacheCreate + heat.cacheRead
+        heat.models = modelTokens.sorted { $0.value > $1.value }.map {
+            NamedValue(id: $0.key, name: modelLabel($0.key), value: $0.value)
+        }
+        heat.sources = sourceTokens.sorted { $0.value > $1.value }.map {
+            NamedValue(id: $0.key, name: sourceLabel($0.key), value: $0.value)
+        }
+        activityProjects(day, heat: &heat)
+        activityPeak(day, heat: &heat)
+        return heat
+    }
+
+    private func activityProjects(_ day: DashUsage.Day, heat: inout HeatDay) {
+        let projects = day.projects ?? []
+        let raw = projects.map { project -> UsageAmount in
+            let sources = Array((project.bySource ?? [:]).values)
+            let sourceTokens = sources.reduce(0) {
+                $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.tokens ?? 0)
+            }
+            let sourceCost = sources.reduce(0) {
+                $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.cost ?? 0)
+            }
+            return UsageAmount(
+                tokens: project.tokens ?? sourceTokens,
+                cost: project.cost ?? sourceCost)
+        }
+        let rawTokens = raw.reduce(0) { $0 + $1.tokens }
+        let rawCost = raw.reduce(0) { $0 + $1.cost }
+        let attributableTokens = min(heat.tokens, rawTokens)
+        var repositoryTokens: [String: (name: String, tokens: Double)] = [:]
+        var attributedTokens = 0.0
+        for (index, project) in projects.enumerated() {
+            let amount = raw[index]
+            let tokens = normalizedPart(
+                amount.tokens, alternate: amount.cost, rawTotal: rawTokens,
+                rawAlternateTotal: rawCost, target: attributableTokens)
+            guard tokens > 0 else { continue }
+            attributedTokens += tokens
+            let repository = repositoryIdentity(project)
+            let current = repositoryTokens[repository.id]?.tokens ?? 0
+            repositoryTokens[repository.id] = (repository.name, current + tokens)
+            heat.chatCount += (project.chats ?? []).count
+            heat.chatCount += (project.worktrees ?? []).reduce(0) {
+                $0 + ($1.chats ?? []).count
+            }
+        }
+        let unattributedTokens = max(0, heat.tokens - attributedTokens)
+        if unattributedTokens > 0 {
+            repositoryTokens["unattributed"] = ("Unattributed", unattributedTokens)
+        }
+        heat.projects = repositoryTokens.sorted { $0.value.tokens > $1.value.tokens }.map {
+            NamedValue(id: $0.key, name: $0.value.name, value: $0.value.tokens)
+        }
+        heat.projCount = heat.projects.count
+    }
+
+    private func activityPeak(_ day: DashUsage.Day, heat: inout HeatDay) {
+        let hours = Array((day.hours ?? []).prefix(24))
+        let tokens = hours.map { hour in
+            hour.tokens
+                ?? (hour.bySource ?? [:]).values.reduce(0) {
+                    $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.tokens ?? 0)
+                }
+        }
+        let costs = hours.map { hour in
+            hour.cost
+                ?? (hour.bySource ?? [:]).values.reduce(0) {
+                    $0 + (sourceAmount($1, model: "", useSourceTotal: true)?.cost ?? 0)
+                }
+        }
+        let totalTokens = tokens.reduce(0, +)
+        let totalCost = costs.reduce(0, +)
+        guard totalTokens > 0 || totalCost > 0 else { return }
+        var peakValue = 0.0
+        for index in hours.indices {
+            let value = totalTokens > 0 ? tokens[index] : costs[index]
+            if value > peakValue {
+                peakValue = value
+                heat.peakTokens = tokens[index]
+                heat.peakHour = index
+            }
+        }
+    }
+
+    private func projectScale(
+        _ project: DashUsage.Project, targetTokens: Double, targetCost: Double
+    ) -> DayScale {
+        let raw = rawUsage(project, scoped: true)
+        return DayScale(
+            rawTokens: raw.tokens, rawCost: raw.cost, dayTokens: targetTokens,
+            dayCost: targetCost)
     }
 
     private func rebuildChartData() {
@@ -1119,6 +1681,72 @@ final class DashboardModel: ObservableObject {
         chartData = next
     }
 
+    private struct RepositoryIdentity {
+        let id: String
+        let name: String
+        let url: String
+    }
+
+    private struct FolderIdentity {
+        let id: String
+        let name: String
+        let path: String
+        let machineName: String
+        let machineID: String
+    }
+
+    private func repositoryIdentity(_ project: DashUsage.Project) -> RepositoryIdentity {
+        let repositoryURL = nonempty(project.repositoryURL) ?? ""
+        let explicitID = nonempty(project.repositoryID)
+        let normalizedURL = normalizeRepositoryURL(repositoryURL)
+        let path = nonempty(project.path) ?? ""
+        let machine = nonempty(project.machineID) ?? nonempty(project.machineName) ?? ""
+        let fallbackName = nonempty(project.projectName) ?? "unknown"
+        let id =
+            explicitID.map {
+                $0.lowercased().hasPrefix("github.com/") ? $0.lowercased() : $0
+            }
+            ?? (normalizedURL.isEmpty
+                ? "folder:\(machine.lowercased()):\(path.lowercased()):\(fallbackName.lowercased())"
+                : "url:\(normalizedURL)")
+        let urlName =
+            normalizedURL.split(separator: "/").last.map(String.init)?
+            .replacingOccurrences(of: ".git", with: "")
+        let name = nonempty(project.repositoryName) ?? nonempty(urlName) ?? fallbackName
+        return RepositoryIdentity(id: id, name: name, url: repositoryURL)
+    }
+
+    private func folderIdentity(
+        _ project: DashUsage.Project, repository: RepositoryIdentity
+    ) -> FolderIdentity {
+        let path = nonempty(project.path) ?? ""
+        let machineName = nonempty(project.machineName) ?? ""
+        let machineID = nonempty(project.machineID) ?? ""
+        let last = path.isEmpty ? "" : URL(fileURLWithPath: path).lastPathComponent
+        let name =
+            nonempty(project.folderName) ?? nonempty(last) ?? nonempty(project.projectName)
+            ?? repository.name
+        let machineKey = machineID.isEmpty ? machineName.lowercased() : machineID.lowercased()
+        let location =
+            path.isEmpty || machineID.isEmpty ? (path.isEmpty ? name : path).lowercased() : path
+        return FolderIdentity(
+            id: "\(repository.id)|folder:\(machineKey):\(location)", name: name, path: path,
+            machineName: machineName, machineID: machineID)
+    }
+
+    private func nonempty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizeRepositoryURL(_ value: String) -> String {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while normalized.hasSuffix("/") { normalized.removeLast() }
+        if normalized.hasSuffix(".git") { normalized.removeLast(4) }
+        return normalized
+    }
+
     private struct ChatAcc {
         var title = ""
         var tokens = 0.0
@@ -1143,7 +1771,17 @@ final class DashboardModel: ObservableObject {
         var dur: Double { firstTs > 0 && lastTs > firstTs ? lastTs - firstTs : 0 }
     }
 
+    private struct RepoAccum {
+        let name: String
+        let url: String
+        var folders: [String: ProjAccum] = [:]
+    }
+
     private struct ProjAccum {
+        let name: String
+        let path: String
+        let machineName: String
+        let machineID: String
         var main: [String: ChatAcc] = [:]
         var wts: [String: [String: ChatAcc]] = [:]
         var fallbackTokens = 0.0
@@ -1175,10 +1813,16 @@ final class DashboardModel: ObservableObject {
             return (p.chats ?? []).contains(where: tokened)
                 || (p.worktrees ?? []).contains { ($0.chats ?? []).contains(where: tokened) }
         }
+
+        mutating func addFallback(_ amount: UsageAmount, period: String) {
+            fallbackTokens += amount.tokens
+            fallbackCost += amount.cost
+            fallbackDays.insert(period)
+        }
     }
 
     private func buildProjectTree(
-        _ agg: [String: ProjAccum], targetTokens: Double, targetCost: Double,
+        _ agg: [String: RepoAccum], targetTokens: Double, targetCost: Double,
         targetDays: Set<String>
     ) -> [ProjTreeRow] {
         let visible = { (c: ChatAcc) in c.source.isEmpty || self.selectedSources.contains(c.source)
@@ -1199,41 +1843,52 @@ final class DashboardModel: ObservableObject {
         func daysOf(_ chats: [ProjChat]) -> Set<String> {
             chats.reduce(into: Set<String>()) { $0.formUnion($1.daySet) }
         }
-
-        var rows: [ProjTreeRow] = []
-        for (name, a) in agg {
-            let mainChats = chatRows(a.main)
-            let worktrees: [ProjWorktree] = a.wts.compactMap { wtName, chatsAcc in
-                let chats = chatRows(chatsAcc)
+        func folderRow(_ id: String, _ accum: ProjAccum) -> ProjFolder? {
+            let mainChats = chatRows(accum.main)
+            let worktrees: [ProjWorktree] = accum.wts.compactMap { worktreeName, chatsAccum in
+                let chats = chatRows(chatsAccum)
                 guard !chats.isEmpty else { return nil }
                 return ProjWorktree(
-                    id: "wt:\(name)::\(wtName)", name: wtName,
+                    id: "\(id)|worktree:\(worktreeName)", name: worktreeName,
                     tokens: chats.reduce(0) { $0 + $1.tokens },
-                    cost: chats.reduce(0) { $0 + $1.cost },
-                    days: daysOf(chats).count,
+                    cost: chats.reduce(0) { $0 + $1.cost }, days: daysOf(chats).count,
                     dur: chats.reduce(0) { $0 + $1.dur },
-                    lastActive: chats.map(\.lastActive).max() ?? "",
-                    chats: chats)
+                    lastActive: chats.map(\.lastActive).max() ?? "", chats: chats)
             }
             .sorted { ($0.tokens, $1.name) > ($1.tokens, $0.name) }
-            guard !mainChats.isEmpty || !worktrees.isEmpty || a.fallbackTokens > 0 else {
-                continue
+            guard !mainChats.isEmpty || !worktrees.isEmpty || accum.fallbackTokens > 0 else {
+                return nil
             }
-            let allDays = daysOf(mainChats + worktrees.flatMap(\.chats)).union(a.fallbackDays)
+            let allDays =
+                daysOf(mainChats + worktrees.flatMap(\.chats)).union(accum.fallbackDays)
             let lastActive =
                 (mainChats.map(\.lastActive) + worktrees.map(\.lastActive)
-                + a.fallbackDays.sorted()).max() ?? ""
+                + accum.fallbackDays.sorted()).max() ?? ""
+            return ProjFolder(
+                id: id, name: accum.name, path: accum.path, machineName: accum.machineName,
+                machineID: accum.machineID,
+                tokens: mainChats.reduce(0) { $0 + $1.tokens }
+                    + worktrees.reduce(0) { $0 + $1.tokens } + accum.fallbackTokens,
+                cost: mainChats.reduce(0) { $0 + $1.cost }
+                    + worktrees.reduce(0) { $0 + $1.cost } + accum.fallbackCost,
+                daySet: allDays,
+                dur: mainChats.reduce(0) { $0 + $1.dur }
+                    + worktrees.reduce(0) { $0 + $1.dur },
+                lastActive: lastActive, chats: mainChats, worktrees: worktrees)
+        }
+
+        var rows: [ProjTreeRow] = []
+        for (repositoryID, accum) in agg {
+            let folders = accum.folders.compactMap(folderRow)
+            guard !folders.isEmpty else { continue }
+            let allDays = folders.reduce(into: Set<String>()) { $0.formUnion($1.daySet) }
             rows.append(
                 ProjTreeRow(
-                    id: "proj:\(name)", name: name,
-                    tokens: mainChats.reduce(0) { $0 + $1.tokens }
-                        + worktrees.reduce(0) { $0 + $1.tokens } + a.fallbackTokens,
-                    cost: mainChats.reduce(0) { $0 + $1.cost }
-                        + worktrees.reduce(0) { $0 + $1.cost } + a.fallbackCost,
-                    days: allDays.count,
-                    dur: mainChats.reduce(0) { $0 + $1.dur } + worktrees.reduce(0) { $0 + $1.dur },
-                    lastActive: lastActive,
-                    chats: mainChats, worktrees: worktrees))
+                    id: "repo:\(repositoryID)", name: accum.name, repositoryURL: accum.url,
+                    tokens: folders.reduce(0) { $0 + $1.tokens },
+                    cost: folders.reduce(0) { $0 + $1.cost }, days: allDays.count,
+                    dur: folders.reduce(0) { $0 + $1.dur },
+                    lastActive: folders.map(\.lastActive).max() ?? "", folders: folders))
         }
 
         rows = normalizeProjectRows(
@@ -1248,49 +1903,79 @@ final class DashboardModel: ObservableObject {
         guard targetTokens > 0 || targetCost > 0 else { return [] }
         let rawTokens = rows.reduce(0) { $0 + $1.tokens }
         let rawCost = rows.reduce(0) { $0 + $1.cost }
-        guard rawTokens > 0 || rawCost > 0 else {
-            return [
-                ProjTreeRow(
-                    id: "proj:__unattributed", name: "Unattributed", tokens: targetTokens,
-                    cost: targetCost, share: targetCost > 0 ? 1 : 0, days: targetDays.count,
-                    dur: 0, lastActive: targetDays.max() ?? "", chats: [], worktrees: [])
-            ]
-        }
-        func tokens(_ value: Double, _ cost: Double) -> Double {
-            normalizedPart(
-                value, alternate: cost, rawTotal: rawTokens, rawAlternateTotal: rawCost,
-                target: targetTokens)
-        }
-        func cost(_ value: Double, _ tokens: Double) -> Double {
-            normalizedPart(
-                value, alternate: tokens, rawTotal: rawCost, rawAlternateTotal: rawTokens,
-                target: targetCost)
+        let missingTokens = max(targetTokens - rawTokens, 0)
+        let missingCost = max(targetCost - rawCost, 0)
+        var completed = rows
+        if missingTokens > 0.000_001 || missingCost > 0.000_001 {
+            completed = addUnattributed(
+                to: completed, tokens: missingTokens, cost: missingCost, days: targetDays)
         }
         func chat(_ row: ProjChat) -> ProjChat {
-            let nextTokens = tokens(row.tokens, row.cost)
-            let nextCost = cost(row.cost, row.tokens)
             return ProjChat(
-                id: row.id, title: row.title, tokens: nextTokens, cost: nextCost,
-                share: targetCost > 0 ? nextCost / targetCost : 0, daySet: row.daySet,
+                id: row.id, title: row.title, tokens: row.tokens, cost: row.cost,
+                share: targetCost > 0 ? row.cost / targetCost : 0, daySet: row.daySet,
                 dur: row.dur, lastActive: row.lastActive, source: row.source)
         }
         func worktree(_ row: ProjWorktree) -> ProjWorktree {
-            let nextTokens = tokens(row.tokens, row.cost)
-            let nextCost = cost(row.cost, row.tokens)
             return ProjWorktree(
-                id: row.id, name: row.name, tokens: nextTokens, cost: nextCost,
-                share: targetCost > 0 ? nextCost / targetCost : 0, days: row.days, dur: row.dur,
+                id: row.id, name: row.name, tokens: row.tokens, cost: row.cost,
+                share: targetCost > 0 ? row.cost / targetCost : 0, days: row.days, dur: row.dur,
                 lastActive: row.lastActive, chats: row.chats.map(chat))
         }
-        return rows.map { row in
-            let nextTokens = tokens(row.tokens, row.cost)
-            let nextCost = cost(row.cost, row.tokens)
-            return ProjTreeRow(
-                id: row.id, name: row.name, tokens: nextTokens, cost: nextCost,
-                share: targetCost > 0 ? nextCost / targetCost : 0, days: row.days, dur: row.dur,
-                lastActive: row.lastActive, chats: row.chats.map(chat),
+        func folder(_ row: ProjFolder) -> ProjFolder {
+            return ProjFolder(
+                id: row.id, name: row.name, path: row.path, machineName: row.machineName,
+                machineID: row.machineID, tokens: row.tokens, cost: row.cost,
+                share: targetCost > 0 ? row.cost / targetCost : 0, daySet: row.daySet,
+                dur: row.dur, lastActive: row.lastActive, chats: row.chats.map(chat),
                 worktrees: row.worktrees.map(worktree))
         }
+        return completed.map { row in
+            return ProjTreeRow(
+                id: row.id, name: row.name, repositoryURL: row.repositoryURL, tokens: row.tokens,
+                cost: row.cost, share: targetCost > 0 ? row.cost / targetCost : 0,
+                days: row.days, dur: row.dur,
+                lastActive: row.lastActive, folders: row.folders.map(folder))
+        }
+    }
+
+    private func addUnattributed(
+        to rows: [ProjTreeRow], tokens: Double, cost: Double, days: Set<String>
+    ) -> [ProjTreeRow] {
+        var next = rows
+        let id = "repo:unattributed"
+        let folderID = "folder:unattributed"
+        let folder = ProjFolder(
+            id: folderID, name: "Unattributed", path: "", machineName: "", machineID: "",
+            tokens: tokens, cost: cost, daySet: days, dur: 0, lastActive: days.max() ?? "",
+            chats: [], worktrees: [])
+        guard let rowIndex = next.firstIndex(where: { $0.id == id }) else {
+            next.append(
+                ProjTreeRow(
+                    id: id, name: "Unattributed", repositoryURL: "", tokens: tokens, cost: cost,
+                    days: days.count, dur: 0, lastActive: days.max() ?? "", folders: [folder]))
+            return next
+        }
+        let row = next[rowIndex]
+        var folders = row.folders
+        if let folderIndex = folders.firstIndex(where: { $0.id == folderID }) {
+            let current = folders[folderIndex]
+            let allDays = current.daySet.union(days)
+            folders[folderIndex] = ProjFolder(
+                id: folderID, name: current.name, path: current.path,
+                machineName: current.machineName, machineID: current.machineID,
+                tokens: current.tokens + tokens, cost: current.cost + cost, daySet: allDays,
+                dur: current.dur, lastActive: max(current.lastActive, days.max() ?? ""),
+                chats: current.chats, worktrees: current.worktrees)
+        } else {
+            folders.append(folder)
+        }
+        let allDays = folders.reduce(into: Set<String>()) { $0.formUnion($1.daySet) }
+        next[rowIndex] = ProjTreeRow(
+            id: row.id, name: row.name, repositoryURL: row.repositoryURL,
+            tokens: row.tokens + tokens, cost: row.cost + cost, days: allDays.count, dur: row.dur,
+            lastActive: max(row.lastActive, days.max() ?? ""), folders: folders)
+        return next
     }
 
     func projLess(_ a: some ProjSortable, _ b: some ProjSortable) -> Bool {
@@ -1315,11 +2000,16 @@ final class DashboardModel: ObservableObject {
     private func sortTree(_ rows: [ProjTreeRow]) -> [ProjTreeRow] {
         rows.map { row in
             var r = row
-            r.chats = row.chats.sorted(by: projLess)
-            r.worktrees = row.worktrees.map { wt in
-                var w = wt
-                w.chats = wt.chats.sorted(by: projLess)
-                return w
+            r.folders = row.folders.map { folder in
+                var f = folder
+                f.chats = folder.chats.sorted(by: projLess)
+                f.worktrees = folder.worktrees.map { worktree in
+                    var w = worktree
+                    w.chats = worktree.chats.sorted(by: projLess)
+                    return w
+                }
+                .sorted(by: projLess)
+                return f
             }
             .sorted(by: projLess)
             return r
@@ -1351,7 +2041,7 @@ final class DashboardModel: ObservableObject {
         let output = rows.reduce(0) { $0 + $1.output }
         let cacheCreate = rows.reduce(0) { $0 + $1.cacheCreate }
         let cacheRate = (cacheRead + input) > 0 ? cacheRead / (cacheRead + input) : 0
-        let top = modelTotals.max { $0.cost < $1.cost }
+        let top = tokenBearingModelTotals.max { $0.tokens < $1.tokens }
 
         func share(_ v: Double) -> String {
             "\(DashFmt.pct(totalTokens > 0 ? v / totalTokens : 0)) of tokens"
@@ -1401,9 +2091,9 @@ final class DashboardModel: ObservableObject {
         if let top {
             out.append(
                 KPI(
-                    label: "Top model", value: DashFmt.shortModel(top.model),
-                    sub: "\(DashFmt.usd(top.cost)) · \(DashFmt.pct(top.share))",
-                    sensitiveSub: true))
+                    label: "Top model", value: modelLabel(top.model),
+                    sub: "\(DashFmt.tokens(top.tokens)) · \(DashFmt.pct(top.tokenShare)) of tokens",
+                    usageSub: true))
         }
         kpis = out
     }
@@ -1427,81 +2117,19 @@ final class DashboardModel: ObservableObject {
         meta = m
     }
 
-    private func buildCalendar(data: DashUsage) {
-        let today = cal.startOfDay(for: Date())
-        var detail: [String: HeatDay] = [:]
-        for dayRow in data.daily {
-            guard let d = parseYMD(dayRow.period) else { continue }
-            var h = HeatDay(date: d)
-            var modelTok: [String: Double] = [:]
-            var srcTok: [String: Double] = [:]
-            for (src, models) in dayRow.bySource ?? [:] {
-                for m in models {
-                    let name = m.modelName ?? "unknown"
-                    h.input += m.inputTokens ?? 0
-                    h.output += m.outputTokens ?? 0
-                    h.cacheCreate += m.cacheCreationTokens ?? 0
-                    h.cacheRead += m.cacheReadTokens ?? 0
-                    h.cost += m.cost ?? 0
-                    modelTok[name, default: 0] += m.tokens
-                    srcTok[src, default: 0] += m.tokens
-                }
-            }
-            h.tokens = h.input + h.output + h.cacheCreate + h.cacheRead
-            h.models = modelTok.sorted { $0.value > $1.value }.map {
-                NamedValue(id: $0.key, name: DashFmt.shortModel($0.key), value: $0.value)
-            }
-            h.sources = srcTok.sorted { $0.value > $1.value }.map {
-                NamedValue(id: $0.key, name: sourceLabel($0.key), value: $0.value)
-            }
-            var projTok: [String: Double] = [:]
-            var chats = 0
-            for p in dayRow.projects ?? [] {
-                let projectChats = (p.chats ?? []) + (p.worktrees ?? []).flatMap { $0.chats ?? [] }
-                let rawTokens = projectChats.reduce(0) { $0 + ($1.tokens ?? 0) }
-                if rawTokens > 0 {
-                    projTok[p.projectName ?? "unknown", default: 0] += rawTokens
-                } else if projectChats.isEmpty {
-                    projTok[p.projectName ?? "unknown", default: 0] += p.tokens ?? 0
-                }
-                chats += projectChats.count
-            }
-            let rawProjectTokens = projTok.values.reduce(0, +)
-            if rawProjectTokens > 0 {
-                projTok = projTok.mapValues { h.tokens * $0 / rawProjectTokens }
-            } else if h.tokens > 0 {
-                projTok = ["Unattributed": h.tokens]
-            }
-            h.projects = projTok.sorted { $0.value > $1.value }.map {
-                NamedValue(id: $0.key, name: $0.key, value: $0.value)
-            }
-            h.projCount = projTok.count
-            h.chatCount = chats
-            let rawPeakTotal = (dayRow.hours ?? []).prefix(24).reduce(0) {
-                $0 + ($1.tokens ?? 0)
-            }
-            for (i, hr) in (dayRow.hours ?? []).enumerated() where i < 24 {
-                let t = rawPeakTotal > 0 ? h.tokens * (hr.tokens ?? 0) / rawPeakTotal : 0
-                if t > h.peakTokens {
-                    h.peakTokens = t
-                    h.peakHour = i
-                }
-            }
-            detail[dayRow.period] = h
-        }
+    private func buildCalendar(detail: [String: HeatDay], from: Date, to: Date) {
         heatDetail = detail
-
-        var day = today
-        if let first = sortedPeriods.first, let firstDate = parseYMD(first) {
-            let start = cal.startOfDay(for: firstDate)
-            let dow = (cal.component(.weekday, from: start) + 5) % 7
-            day = cal.date(byAdding: .day, value: -dow, to: start) ?? start
-        }
+        let first = cal.startOfDay(for: min(from, to))
+        let last = cal.startOfDay(for: max(from, to))
+        let firstWeekday = (cal.component(.weekday, from: first) + 5) % 7
+        let lastWeekday = (cal.component(.weekday, from: last) + 5) % 7
+        var day = cal.date(byAdding: .day, value: -firstWeekday, to: first) ?? first
+        let end = cal.date(byAdding: .day, value: 6 - lastWeekday, to: last) ?? last
         var points: [DayPoint] = []
-        while day <= today {
+        while day <= end {
             let key = ymdStr(day)
             points.append(DayPoint(id: key, date: day, cost: detail[key]?.cost ?? 0))
-            day = cal.date(byAdding: .day, value: 1, to: day) ?? today.addingTimeInterval(1)
+            day = cal.date(byAdding: .day, value: 1, to: day) ?? end.addingTimeInterval(1)
         }
         calendarDays = points
     }
@@ -1518,10 +2146,7 @@ extension DateFormatter {
 
 enum DashFmt {
     static func tokens(_ v: Double) -> String {
-        if v >= 1_000_000_000 { return String(format: "%.2fB", v / 1_000_000_000) }
-        if v >= 1_000_000 { return String(format: "%.1fM", v / 1_000_000) }
-        if v >= 1000 { return String(format: "%.1fk", v / 1000) }
-        return String(format: "%.0f", v)
+        TokenFormatter.compact(v)
     }
     private static let tokensFullFmt: NumberFormatter = {
         let f = NumberFormatter()

@@ -40,6 +40,31 @@ private func exists(_ name: String, in root: URL) -> Bool {
     FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path)
 }
 
+private actor PausedFinderSearch {
+    private var started = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var resultWaiters: [CheckedContinuation<[RemoteFileEntry], Never>] = []
+
+    func run() async -> [RemoteFileEntry] {
+        started = true
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+        return await withCheckedContinuation { resultWaiters.append($0) }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func finish(with results: [RemoteFileEntry]) {
+        let waiters = resultWaiters
+        resultWaiters.removeAll()
+        for waiter in waiters { waiter.resume(returning: results) }
+    }
+}
+
 @Suite(.serialized) @MainActor struct FinderRenameTests {
     @Test func renamingAFileMovesItOnDisk() async throws {
         let (model, root) = try sandbox()
@@ -294,10 +319,9 @@ private func exists(_ name: String, in root: URL) -> Bool {
         await model.load()
 
         model.searchQuery = "needle"
-        model.searchQueryChanged()
+        await model.runSearch()
 
-        #expect(
-            await eventually { model.searchResults?.contains { $0.name == "needle.txt" } == true })
+        #expect(model.searchResults?.contains { $0.name == "needle.txt" } == true)
     }
 
     @Test func clearingTheSearchRestoresTheListing() async throws {
@@ -315,6 +339,37 @@ private func exists(_ name: String, in root: URL) -> Bool {
         model.searchQueryChanged()
         #expect(await eventually { model.searchResults == nil })
         #expect(model.visibleEntries.count == 2)
+    }
+
+    @Test func navigatingDiscardsResultsFromThePreviousFolder() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-finder-\(UUID().uuidString)")
+        let first = base.appendingPathComponent("first")
+        let second = base.appendingPathComponent("second")
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let pausedSearch = PausedFinderSearch()
+        let session = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let model = FinderModel(session: session, path: first.path) { _, _ in
+            await pausedSearch.run()
+        }
+        model.searchQuery = "needle"
+        let task = Task { await model.runSearch() }
+        await pausedSearch.waitUntilStarted()
+
+        model.navigate(to: second.path)
+        await pausedSearch.finish(
+            with: [
+                RemoteFileEntry(
+                    name: "needle.txt", path: first.appendingPathComponent("needle.txt").path,
+                    kind: .file, sizeBytes: 1)
+            ])
+        await task.value
+
+        #expect(model.path == second.path)
+        #expect(model.searchResults == nil)
     }
 }
 

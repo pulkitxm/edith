@@ -97,14 +97,12 @@ enum MainWindow {
         window = w
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if UserDefaults.standard.bool(forKey: fullScreenDefaultsKey),
+        if UserDefaults.standard.bool(forKey: AppStorageKeys.General.editMainWindowFullScreen),
             !w.styleMask.contains(.fullScreen)
         {
             w.toggleFullScreen(nil)
         }
     }
-
-    fileprivate static let fullScreenDefaultsKey = "EdithMainWindowFullScreen"
 
     static func forget() { window = nil }
 }
@@ -120,9 +118,9 @@ final class MainWindowDelegate: NSObject, NSWindowDelegate {
         MainWindow.forget()
     }
     func windowDidEnterFullScreen(_ notification: Notification) {
-        UserDefaults.standard.set(true, forKey: MainWindow.fullScreenDefaultsKey)
+        UserDefaults.standard.set(true, forKey: AppStorageKeys.General.editMainWindowFullScreen)
     }
     func windowDidExitFullScreen(_ notification: Notification) {
-        UserDefaults.standard.set(false, forKey: MainWindow.fullScreenDefaultsKey)
+        UserDefaults.standard.set(false, forKey: AppStorageKeys.General.editMainWindowFullScreen)
     }
 }

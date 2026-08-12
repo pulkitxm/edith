@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct FleetHomeView: View {
-    @ObservedObject var model: MachinesModel
+    let model: MachinesModel
     let onSelect: (UUID) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -203,7 +203,8 @@ private struct FleetMachineRow: View {
                     meter("MEM", percent: snapshot.memoryPercent, color: DashSkin.sage)
                     meter(
                         "DISK", percent: snapshot.diskPercent,
-                        color: snapshot.diskPercent > 90 ? DashSkin.danger : DashSkin.gold)
+                        color: snapshot.diskPercent > FleetMath.diskWarningPercent
+                            ? DashSkin.danger : DashSkin.gold)
                     Text("\(snapshot.cores) cores")
                         .font(DashSkin.mono(10))
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -260,39 +261,11 @@ struct FleetChip: View {
     let selected: Bool
     let dark: Bool
     let onSelect: () -> Void
-    @State private var hovering = false
 
     var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(title)
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                        .foregroundStyle(DashSkin.ink(dark))
-                    Text(subtitle)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            }
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(8))
-            .background(
-                selected ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(11))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(11))
-                    .strokeBorder(
-                        selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                        lineWidth: UIScale.pt(selected ? 1.4 : 1))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .pointerCursor()
-        .onHover { hovering = $0 }
+        SelectableChipRow(
+            icon: symbol, title: title, subtitle: subtitle, selected: selected, dark: dark,
+            onSelect: onSelect
+        ) { EmptyView() }
     }
 }

@@ -2,6 +2,7 @@ import AVKit
 import AppKit
 import EdithKit
 import MediaPlayer
+import Observation
 import SwiftUI
 
 struct NativeVideoPlayer: NSViewRepresentable {
@@ -23,11 +24,12 @@ struct NativeVideoPlayer: NSViewRepresentable {
 }
 
 @MainActor
-final class VideoPreviewSession: ObservableObject {
+@Observable
+final class VideoPreviewSession {
     let track: Track
     let player: AVPlayer
-    @Published private(set) var isPlaying = false
-    @Published private(set) var duration: TimeInterval = 0
+    private(set) var isPlaying = false
+    private(set) var duration: TimeInterval = 0
     private var statusObservation: NSKeyValueObservation?
 
     init(track: Track, startingAt seconds: TimeInterval) {
@@ -158,11 +160,11 @@ extension Track {
 }
 
 struct VideoStage: View {
-    @ObservedObject private var remote = MusicRemote.shared
-    @StateObject private var session: VideoPreviewSession
+    @State private var remote = MusicRemote.shared
+    @State private var session: VideoPreviewSession
 
     init(track: Track, startAt: TimeInterval) {
-        _session = StateObject(
+        _session = State(
             wrappedValue: VideoPreviewSession(track: track, startingAt: startAt))
     }
 

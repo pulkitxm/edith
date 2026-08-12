@@ -163,7 +163,7 @@ struct MetricCard: View {
 }
 
 struct MachineOverviewTab: View {
-    @ObservedObject var session: MachineSession
+    let session: MachineSession
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -312,7 +312,7 @@ struct MachineOverviewTab: View {
                     }
                     MeterBar(
                         fraction: disk.usedPercent / 100,
-                        color: disk.usedPercent > 90
+                        color: disk.usedPercent > FleetMath.diskWarningPercent
                             ? DashSkin.danger
                             : (disk.usedPercent > 75 ? DashSkin.warn : DashSkin.accent(dark)),
                         track: DashSkin.line(dark))

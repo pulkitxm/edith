@@ -498,7 +498,7 @@ struct OnboardingView: View {
     }
 
     private var hotKeyLabel: String {
-        SharedDefaults.store.string(forKey: "hotKeyLabel") ?? "⌥⌘E"
+        SharedDefaults.store.string(forKey: AppStorageKeys.General.hotKeyLabel) ?? "⌥⌘E"
     }
 
     private var continueLabel: String {

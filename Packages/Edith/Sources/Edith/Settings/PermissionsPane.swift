@@ -3,14 +3,18 @@ import EdithKit
 import SwiftUI
 
 struct PermissionsPane: View {
-    @AppStorage("permissionsFilter", store: SharedDefaults.store) private var filterRaw =
+    @AppStorage(AppStorageKeys.Permissions.filter, store: SharedDefaults.store) private
+        var filterRaw =
         PermissionFilter.mine.rawValue
-    @AppStorage("mainWindowSection", store: SharedDefaults.store) private var mainWindowSection =
+    @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
+        var mainWindowSection =
         MainDestination.home.rawValue
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @State private var usages: [PermissionUsage] = PermissionsStatus.usages
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var accent: Color { themeColor(themeName) }
 
@@ -72,16 +76,18 @@ struct PermissionsPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Permissions")
-        .onAppear(perform: refresh)
+        .onAppear {
+            if automaticActionsEnabled { refresh() }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
-            refresh()
+            if automaticActionsEnabled { refresh() }
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.permissionsRefreshed)
         ) { _ in
-            usages = PermissionsStatus.usages
+            if automaticActionsEnabled { usages = PermissionsStatus.usages }
         }
     }
 
@@ -93,8 +99,7 @@ struct PermissionsPane: View {
                 Text(
                     "Grant access here once and every extension that needs it works straight away, with no prompt mid-task."
                 )
-                .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(.secondary)
+                .settingsCaption()
                 .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -224,8 +229,7 @@ private struct PermissionCard: View {
                     action
                 }
                 Text(permission.firstUseExplanation ?? permission.reason)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                     .fixedSize(horizontal: false, vertical: true)
                 if !usage.users.isEmpty {
                     usedByRow

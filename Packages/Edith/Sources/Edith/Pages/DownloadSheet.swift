@@ -3,15 +3,17 @@ import EdithKit
 import SwiftUI
 
 struct DownloadSheet: View {
-    @ObservedObject private var downloader = YoutubeDownloader.shared
+    @State private var downloader = YoutubeDownloader.shared
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @Environment(\.colorScheme) private var scheme
     @State private var urlText = ""
     @State private var filenamePrefix = ""
     @State private var logItem: YoutubeDownloader.DownloadItem?
     @State private var confirmClearHistory = false
-    @AppStorage("musicDownloadKind", store: SharedDefaults.store) private var downloadKindRaw =
+    @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
+        var downloadKindRaw =
         DownloadKind.audio.rawValue
     @State private var estimate: DownloadEstimate?
     @State private var estimating = false

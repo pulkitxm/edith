@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct ClipboardPanelView: View {
-    @ObservedObject var store: ClipboardStore
+    var store: ClipboardStore
     var onDismiss: () -> Void
     var onHeightChange: (CGFloat) -> Void
 
@@ -16,9 +16,12 @@ struct ClipboardPanelView: View {
     @State private var rowFrames: [String: CGRect] = [:]
     @State private var listHeight: CGFloat = 0
     @FocusState private var searchFocused: Bool
-    @AppStorage("clipboardShowFooter", store: SharedDefaults.store) private var showFooter = true
-    @AppStorage("clipboardPinTo", store: SharedDefaults.store) private var pinTo = "top"
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.Clipboard.showFooter, store: SharedDefaults.store) private
+        var showFooter = true
+    @AppStorage(AppStorageKeys.Clipboard.pinTo, store: SharedDefaults.store) private var pinTo =
+        "top"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
 
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
@@ -31,7 +34,7 @@ struct ClipboardPanelView: View {
     }
 
     private static var footerEnabled: Bool {
-        SharedDefaults.store.object(forKey: "clipboardShowFooter") as? Bool ?? true
+        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.showFooter) as? Bool ?? true
     }
 
     private static func rowHeight(for entry: ClipboardEntry) -> CGFloat {
@@ -407,7 +410,7 @@ struct ClipboardPanelView: View {
     }
 
     private func openPreferences() {
-        SharedDefaults.store.set("settings", forKey: "mainWindowSection")
+        SharedDefaults.store.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
         SharedDefaults.store.set("clipboard", forKey: "settingsSection")
         MainApp.openDashboard()
         onDismiss()
@@ -431,7 +434,8 @@ private struct FooterRow: View {
     let shortcut: String
     let action: () -> Void
 
-    @AppStorage("theme", store: SharedDefaults.store) private var themeName = "accent"
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @State private var hovered = false
 
     var body: some View {

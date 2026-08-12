@@ -10,27 +10,28 @@ struct RangeStat: Identifiable {
 }
 
 @MainActor
-final class UsageStore: ObservableObject, FeatureModule {
-    @Published private(set) var session: LimitWindow?
-    @Published private(set) var week: LimitWindow?
-    @Published private(set) var codexSession: LimitWindow?
-    @Published private(set) var codexWeek: LimitWindow?
-    @Published private(set) var limitsError: String?
-    @Published private(set) var limitsUpdatedAt: Date?
-    @Published private(set) var refreshingLimits = false
+@Observable
+final class UsageStore: FeatureModule {
+    private(set) var session: LimitWindow?
+    private(set) var week: LimitWindow?
+    private(set) var codexSession: LimitWindow?
+    private(set) var codexWeek: LimitWindow?
+    private(set) var limitsError: String?
+    private(set) var limitsUpdatedAt: Date?
+    private(set) var refreshingLimits = false
 
-    @Published private(set) var stats: [RangeStat] = []
-    @Published private(set) var sources: [SourceInfo] = []
-    @Published var selectedSources: Set<String> = [] {
+    private(set) var stats: [RangeStat] = []
+    private(set) var sources: [SourceInfo] = []
+    var selectedSources: Set<String> = [] {
         didSet { recomputeStats() }
     }
-    @Published private(set) var statsGeneratedAt: Date?
-    @Published private(set) var statsError: String?
-    @Published private(set) var calendarDays: [DayPoint] = []
+    private(set) var statsGeneratedAt: Date?
+    private(set) var statsError: String?
+    private(set) var calendarDays: [DayPoint] = []
 
-    @Published private(set) var updating = false
-    @Published private(set) var log = ""
-    @Published private(set) var diagnostics = ""
+    private(set) var updating = false
+    private(set) var log = ""
+    private(set) var diagnostics = ""
 
     private var defaultSources: [String] = []
     private var knownSources: Set<String> = []
@@ -62,7 +63,7 @@ final class UsageStore: ObservableObject, FeatureModule {
     private var pendingMachineMerge = false
     let notifier = LimitNotifier()
     private var history = LimitsHistory()
-    @Published private(set) var limitPoints: [LimitPoint] = []
+    private(set) var limitPoints: [LimitPoint] = []
     private var historyMtime: Date?
     private var statusItem: LimitsStatusItem?
 
@@ -73,14 +74,22 @@ final class UsageStore: ObservableObject, FeatureModule {
     func limits(for provider: LimitProvider) -> ProviderLimits {
         switch provider {
         case .claude:
-            return ProviderLimits(provider: provider, session: session, week: week)
+            return ProviderLimits(
+                provider: provider, session: Self.fresh(session), week: Self.fresh(week))
         case .codex:
-            return ProviderLimits(provider: provider, session: codexSession, week: codexWeek)
+            return ProviderLimits(
+                provider: provider, session: Self.fresh(codexSession), week: Self.fresh(codexWeek))
         }
     }
 
+    private nonisolated static func fresh(_ window: LimitWindow?) -> LimitWindow? {
+        window.flatMap { ($0.resetsAt ?? .distantFuture) > Date() ? $0 : nil }
+    }
+
     func providerEnabled(_ provider: LimitProvider) -> Bool {
-        let key = provider == .claude ? "claudeLimitsEnabled" : "codexLimitsEnabled"
+        let key =
+            provider == .claude
+            ? AppStorageKeys.Limits.claudeEnabled : AppStorageKeys.Limits.codexEnabled
         return SharedDefaults.store.object(forKey: key) as? Bool ?? true
     }
 
@@ -169,18 +178,14 @@ final class UsageStore: ObservableObject, FeatureModule {
     }
 
     private func seedFromHistory() {
-        let now = Date()
-        let fresh = { (w: LimitWindow?) -> LimitWindow? in
-            w.flatMap { ($0.resetsAt ?? .distantFuture) > now ? $0 : nil }
-        }
         if let last = LimitsHistory.latest(provider: .claude) {
-            session = fresh(last.session)
-            week = fresh(last.week)
+            session = Self.fresh(last.session)
+            week = Self.fresh(last.week)
             limitsUpdatedAt = last.date
         }
         if let last = LimitsHistory.latest(provider: .codex) {
-            codexSession = fresh(last.session)
-            codexWeek = fresh(last.week)
+            codexSession = Self.fresh(last.session)
+            codexWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
         if let limitsUpdatedAt {
@@ -264,7 +269,8 @@ final class UsageStore: ObservableObject, FeatureModule {
 
     func syncStatusItem() {
         guard NSApp?.isRunning == true else { return }
-        let on = SharedDefaults.store.object(forKey: "limitsInMenuBar") as? Bool ?? true
+        let on =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
         if on, statusItem == nil {
             statusItem = LimitsStatusItem()
             updateStatusItem()

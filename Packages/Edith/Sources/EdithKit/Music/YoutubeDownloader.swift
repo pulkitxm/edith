@@ -1,8 +1,9 @@
 import AppKit
 import Foundation
+import Observation
 
 extension Notification.Name {
-    public static let musicFolderChanged = Notification.Name("musicFolderChanged")
+    public static let musicFolderChangedLocally = Notification.Name("musicFolderChanged")
 }
 
 public enum DownloadStatus: Equatable, Codable {
@@ -179,17 +180,18 @@ private struct SavedItem: Codable {
 }
 
 @MainActor
-public final class YoutubeDownloader: ObservableObject {
+@Observable
+public final class YoutubeDownloader {
     public static let shared = YoutubeDownloader()
 
-    @Published public private(set) var items: [DownloadItem] = []
-    @Published public private(set) var isRunning = false
-    @Published public private(set) var unavailableReason: String?
-    @Published public private(set) var ytdlpVersion: String?
-    @Published public private(set) var isUpdatingYTDLP = false
-    @Published public private(set) var ytdlpUpdateMessage: String?
-    @Published public private(set) var updateResult: Result<String, Error>? = nil
-    @Published public private(set) var estimates: [URL: DownloadEstimate] = [:]
+    public private(set) var items: [DownloadItem] = []
+    public private(set) var isRunning = false
+    public private(set) var unavailableReason: String?
+    public private(set) var ytdlpVersion: String?
+    public private(set) var isUpdatingYTDLP = false
+    public private(set) var ytdlpUpdateMessage: String?
+    public private(set) var updateResult: Result<String, Error>? = nil
+    public private(set) var estimates: [URL: DownloadEstimate] = [:]
 
     private var currentProcess: Process?
     private var currentItemID: UUID?
@@ -274,7 +276,7 @@ public final class YoutubeDownloader: ObservableObject {
         }
         if changed {
             save()
-            NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+            NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
         }
         queueObserver = IPC.observe(IPC.Name.downloadQueueChanged) { [weak self] in
@@ -605,7 +607,7 @@ public final class YoutubeDownloader: ObservableObject {
                     let label = files.isEmpty ? "done" : files.joined(separator: ", ")
                     self.items[index].status = .done(label)
                     self.save()
-                    NotificationCenter.default.post(name: .musicFolderChanged, object: nil)
+                    NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
                     IPC.post(IPC.Name.musicFolderChanged)
                 } else {
                     let msg = self.items[index].logs.trimmingCharacters(

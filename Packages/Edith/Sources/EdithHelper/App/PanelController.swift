@@ -33,7 +33,7 @@ final class PanelController: NSObject {
     func open() {
         guard !popover.isShown, let button = statusItem.button else { return }
         let host = NSHostingController(
-            rootView: AnyView(RootView().environmentObject(services)))
+            rootView: AnyView(RootView(services: services)))
         host.sizingOptions = [.preferredContentSize]
         popover.contentViewController = host
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
