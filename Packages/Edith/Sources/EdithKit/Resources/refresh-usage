@@ -253,8 +253,7 @@ FLEET='
       else . end
     | ($mid | ascii_downcase) as $stableID
     | (.sourceMeta // {}) as $meta
-    | def isCodexSource($s): (($s // "" | split(":") | .[-1]) == "codex");
-      def machinePrefix:
+    | def machinePrefix:
         if $stableID == "" then error("machine.id is required for source identity")
         else "machine:" + $stableID + ":" end;
       def sid($s): machinePrefix + $s;
@@ -262,7 +261,7 @@ FLEET='
       def detailTokens($map): ([ $map[].tokens // 0 ] | add // 0);
       def detailCost($map): ([ $map[].cost // 0 ] | add // 0);
       def qsourceMap:
-        reduce (to_entries[] | select(isCodexSource(.key) | not)) as $e
+        reduce to_entries[] as $e
           ({}; .[sid($e.key)] = $e.value);
       def qpathMap:
         reduce (to_entries[]) as $e ({};
@@ -324,12 +323,12 @@ FLEET='
                   cost: detailCost($sources),
                   bySource: $sources,
                   chats: [ ($project.chats // [])[]
-                    | select(isCodexSource(.source) | not)
+                    | select((.tokens // 0) > 0 or (.cost // 0) > 0)
                     | rechat ],
                   worktrees: [ ($project.worktrees // [])[]
                     | . as $worktree
                     | [ (.chats // [])[]
-                        | select(isCodexSource(.source) | not)
+                        | select((.tokens // 0) > 0 or (.cost // 0) > 0)
                         | rechat ] as $chats
                     | select(($chats | length) > 0)
                     | $worktree
@@ -418,7 +417,19 @@ VALIDATE='
     and ([ .daily[].period ] == ([ .daily[].period ] | sort))
     and ((.sources | length) == (.sources | unique | length))
     and all(.daily[];
-      ((.hours | type) == "array") and ((.hours | length) == 24)
+      . as $day
+      | ($day.bySource | with_entries(.value = {
+          tokens: ([.value[] | ((.inputTokens // 0) + (.outputTokens // 0)
+            + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0))] | add // 0),
+          cost: ([.value[].cost // 0] | add // 0)
+        })) as $authoritative
+      | ([ $day.projects[]?.bySource | to_entries[] ]
+          | group_by(.key)
+          | map({key: .[0].key, value: {
+              tokens: ([.[].value.tokens // 0] | add // 0),
+              cost: ([.[].value.cost // 0] | add // 0)
+            }}) | from_entries) as $detail
+      | ((.hours | type) == "array") and ((.hours | length) == 24)
       and ((.projects | type) == "array")
       and all(.hours[];
         detailNode
@@ -431,7 +442,11 @@ VALIDATE='
         and ((.path | type) == "string")
         and detailNode
         and ((.chats | type) == "array")
-        and ((.worktrees | type) == "array")))
+        and ((.worktrees | type) == "array"))
+      and all($detail | to_entries[];
+        .value.tokens <= ($authoritative[.key].tokens // 0)
+        and (.value.cost <= ($authoritative[.key].cost // 0)
+          or near(.value.cost; ($authoritative[.key].cost // 0)))))
     and all($rows[];
       all([.inputTokens, .outputTokens, .cacheCreationTokens, .cacheReadTokens, .cost][];
         nonnegativeNumber))
@@ -586,6 +601,16 @@ if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline >"$TMP/codex.ses
   exit 1
 fi
 include_source codex "$TMP/codex.daily.json" "$TMP/codex.session.json"
+: >"$TMP/codex.sessions-by-day.jsonl"
+while IFS= read -r codex_date; do
+  if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline \
+    --since "$codex_date" --until "$codex_date" >"$TMP/codex.session-day.json" 2>/dev/null; then
+    _error "codex repository detail collection failed; previous data preserved"
+    exit 1
+  fi
+  jq -c --arg date "$codex_date" '.sessions[] | . + {date: $date}' \
+    "$TMP/codex.session-day.json" >>"$TMP/codex.sessions-by-day.jsonl"
+done < <(jq -r '.daily[].date' "$TMP/codex.daily.json")
 
 for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw; do
   if ! ccu "$agent" daily --json --offline >"$TMP/$agent.daily.json" 2>/dev/null; then
@@ -692,17 +717,78 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     | ([ $L[] | select(.type == "session_meta") ] | .[0].payload) as $meta
     | (($meta.id // "") | tostring) as $sid
     | if $sid == "" then empty else
-        ($meta.cwd // "") as $cwd
-        | ({t: "meta", sid: $sid, cwd: $cwd, src: $src},
-          ($L[]
-            | if .type == "event_msg" and (.payload.type == "user_message") then
-                ((.payload.message // "") | tostring
-                  | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $x
-                | if $x != "" and ($x | startswith("<") | not) then
-                    {t: "text", sid: $sid, tms: (.timestamp // ""), text: $x[0:80]}
-                  else empty end
-              else empty end))
+        ({
+          t: "meta", sid: $sid, cwd: ($meta.cwd // ""), src: $src,
+          sessionFile: ((input_filename // "<stdin>")
+            | split("/")[-1] | sub("\\.jsonl$"; ""))
+        },
+        ($L[]
+          | if .type == "event_msg" and (.payload.type == "user_message") then
+              ((.payload.message // "") | tostring
+                | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $text
+              | if $text != "" and ($text | startswith("<") | not) then
+                  {t: "text", sid: $sid, tms: (.timestamp // ""), text: $text[0:80]}
+                else empty end
+            else empty end))
       end
+  '
+
+  CODEX_DETAILS='
+    def timestampMillis:
+      if type == "number" then if . > 100000000000 then . else . * 1000 end
+      elif type == "string" then
+        (try capture("\\.(?<fraction>[0-9]+)Z$").fraction catch "0") as $fraction
+        | (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000)
+          + (($fraction + "000")[0:3] | tonumber)
+      else 0 end;
+    ($metadata | map({(.sessionFile): .}) | add // {}) as $meta
+    | $sessions[]
+    | . as $session
+    | ($meta[($session.sessionFile // "")]
+      // $meta[($session.sessionId // "" | split("/")[-1])] // {}) as $sessionMeta
+    | ([($session.models // {}) | to_entries[]
+        | .value as $usage
+        | {
+            model: .key,
+            inp: ($usage.inputTokens // 0),
+            out: ($usage.outputTokens // 0),
+            cc: ($usage.cacheCreationTokens // 0),
+            cr: ($usage.cacheReadTokens // 0)
+          }
+        | . + {tok: (.inp + .out + .cc + .cr)}]
+      | if length > 0 then . else [{
+          model: "unknown",
+          inp: ($session.inputTokens // 0),
+          out: ($session.outputTokens // 0),
+          cc: ($session.cacheCreationTokens // 0),
+          cr: ($session.cacheReadTokens // 0),
+          tok: ($session.totalTokens // 0)
+        }] end) as $models
+    | ([ $models[].tok ] | add // 0) as $sessionTokens
+    | (($session.lastActivity // ($session.date + "T00:00:00Z")) | timestampMillis) as $ts
+    | $models[]
+    | select(.tok > 0)
+    | . as $model
+    | {
+        t: "rec",
+        id: (["codex", $session.date, ($session.sessionFile // $session.sessionId), $model.model]
+          | join(":")),
+        date: $session.date,
+        hour: (((($ts / 1000 | floor) + $off) / 3600 | floor) % 24),
+        ts: $ts,
+        model: $model.model,
+        cwd: ($sessionMeta.cwd // ""),
+        wt: null,
+        sid: ($sessionMeta.sid // $session.sessionId // ""),
+        src: "codex",
+        cost: (if $sessionTokens > 0 then
+          ($session.costUSD // 0) * $model.tok / $sessionTokens else 0 end),
+        inp: $model.inp,
+        out: $model.out,
+        cc: $model.cc,
+        cr: $model.cr,
+        tok: $model.tok
+      }
   '
 
   WALKPI='
@@ -783,6 +869,42 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   DEDUP='
     group_by(.id)
     | map(max_by([.tok, .ts]))
+  '
+
+  RECONCILE='
+    ($usage[0].daily
+      | map(. as $day
+          | (.bySource | to_entries[])
+          | ([.value[] | ((.inputTokens // 0) + (.outputTokens // 0)
+              + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0))] | add // 0) as $tokens
+          | {key: ($day.period + "|" + .key), value: {
+              tokens: $tokens,
+              cost: ([.value[].cost // 0] | add // 0)
+            }})
+      | from_entries) as $authoritative
+    | group_by(.date + "|" + .src)
+    | map(. as $records
+        | ($authoritative[($records[0].date + "|" + $records[0].src)]
+          // {tokens: 0, cost: 0}) as $limit
+        | (reduce ($records | sort_by(.ts, .id)[]) as $record
+            ({remaining: $limit.tokens, records: []};
+              ([$record.tok, .remaining] | min) as $tokens
+              | if $tokens <= 0 then . else
+                  ($tokens / $record.tok) as $ratio
+                  | .records += [$record
+                    | .inp *= $ratio
+                    | .out *= $ratio
+                    | .cc *= $ratio
+                    | .cr *= $ratio
+                    | .tok = $tokens
+                    | .cost *= $ratio]
+                  | .remaining -= $tokens
+                end)
+          | .records) as $capped
+        | ([ $capped[].cost ] | add // 0) as $cost
+        | (if $cost > $limit.cost and $cost > 0 then $limit.cost / $cost else 1 end) as $costRatio
+        | $capped | map(.cost *= $costRatio))
+    | add // []
   '
 
   DETAILS='
@@ -957,25 +1079,68 @@ if [ -s "$TMP/manifest.jsonl" ]; then
       }
     ' 2>/dev/null || true
   }
+  OPENCODE_MESSAGES="
+    select json_object(
+      'sid', m.session_id,
+      'ts', json_extract(m.data, '\$.time.created'),
+      'cwd', coalesce(nullif(json_extract(m.data, '\$.path.cwd'), ''), s.directory, ''),
+      'model', coalesce(json_extract(m.data, '\$.modelID'), 'unknown'),
+      'cost', coalesce(json_extract(m.data, '\$.cost'), 0),
+      'inp', coalesce(json_extract(m.data, '\$.tokens.input'), 0),
+      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0),
+      'cc', coalesce(json_extract(m.data, '\$.tokens.cache.write'), 0),
+      'cr', coalesce(json_extract(m.data, '\$.tokens.cache.read'), 0))
+    from message m
+    left join session s on s.id = m.session_id
+    where json_extract(m.data, '\$.role') = 'assistant'
+      and json_extract(m.data, '\$.time.created') is not null;
+  "
+  OPENCODE_MESSAGES_FALLBACK="
+    select json_object(
+      'sid', m.session_id,
+      'ts', json_extract(m.data, '\$.time.created'),
+      'cwd', coalesce(json_extract(m.data, '\$.path.cwd'), ''),
+      'model', coalesce(json_extract(m.data, '\$.modelID'), 'unknown'),
+      'cost', coalesce(json_extract(m.data, '\$.cost'), 0),
+      'inp', coalesce(json_extract(m.data, '\$.tokens.input'), 0),
+      'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0),
+      'cc', coalesce(json_extract(m.data, '\$.tokens.cache.write'), 0),
+      'cr', coalesce(json_extract(m.data, '\$.tokens.cache.read'), 0))
+    from message m
+    where json_extract(m.data, '\$.role') = 'assistant'
+      and json_extract(m.data, '\$.time.created') is not null;
+  "
+  OPENCODE_TITLES="
+    select json_object('sid', id, 'title', title)
+    from session where coalesce(title, '') != '';
+  "
+  opencode_sql() {
+    local db="$1" sql="$2"
+    if command -v bun >/dev/null 2>&1; then
+      EDITH_OPENCODE_DB="$db" EDITH_OPENCODE_SQL="$sql" bun -e '
+        import { Database } from "bun:sqlite";
+        const database = new Database(process.env.EDITH_OPENCODE_DB, { readonly: true });
+        for (const row of database.query(process.env.EDITH_OPENCODE_SQL).values()) {
+          if (row[0] != null) process.stdout.write(`${row[0]}\n`);
+        }
+      '
+    elif command -v sqlite3 >/dev/null 2>&1; then
+      sqlite3 -readonly "$db" "$sql"
+    else
+      return 1
+    fi
+  }
   walk_opencode() {
     local db="$HOME/.local/share/opencode/opencode.db"
     [ -f "$db" ] || return 0
-    command -v sqlite3 >/dev/null 2>&1 || return 0
-    sqlite3 -readonly "$db" "
-      select json_object(
-        'sid', m.session_id,
-        'ts', json_extract(m.data, '\$.time.created'),
-        'cwd', coalesce(json_extract(m.data, '\$.path.cwd'), ''),
-        'model', coalesce(json_extract(m.data, '\$.modelID'), 'unknown'),
-        'cost', coalesce(json_extract(m.data, '\$.cost'), 0),
-        'inp', coalesce(json_extract(m.data, '\$.tokens.input'), 0),
-        'out', coalesce(json_extract(m.data, '\$.tokens.output'), 0),
-        'cc', coalesce(json_extract(m.data, '\$.tokens.cache.write'), 0),
-        'cr', coalesce(json_extract(m.data, '\$.tokens.cache.read'), 0))
-      from message m
-      where json_extract(m.data, '\$.role') = 'assistant'
-        and json_extract(m.data, '\$.time.created') is not null;" 2>/dev/null \
-      | jq -c --argjson off "$OFF" --arg src opencode '
+    if ! command -v bun >/dev/null 2>&1 && ! command -v sqlite3 >/dev/null 2>&1; then
+      install_bun >/dev/null 2>&1 || return 0
+    fi
+    if ! opencode_sql "$db" "$OPENCODE_MESSAGES" >"$TMP/opencode.rows.jsonl" 2>/dev/null; then
+      opencode_sql "$db" "$OPENCODE_MESSAGES_FALLBACK" >"$TMP/opencode.rows.jsonl" 2>/dev/null \
+        || return 0
+    fi
+    jq -c --argjson off "$OFF" --arg src opencode '
         select(.inp + .out + .cc + .cr > 0)
         | (.ts / 1000 | floor) as $ep
         | ($ep + $off) as $loc
@@ -984,11 +1149,12 @@ if [ -s "$TMP/manifest.jsonl" ]; then
             ts: .ts, model: .model, cwd: .cwd, wt: null,
             sid: .sid, src: $src, cost: .cost,
             inp: .inp, out: .out, cc: .cc, cr: .cr,
-            tok: (.inp + .out + .cc + .cr) }' >>"$TMP/walk.jsonl" 2>/dev/null || true
-    sqlite3 -readonly "$db" "
-      select json_object('sid', id, 'title', title)
-      from session where coalesce(title, '') != '';" 2>/dev/null \
-      | jq -c '{t: "title", sid: .sid, title: .title}' >>"$TMP/walk.jsonl" 2>/dev/null || true
+            tok: (.inp + .out + .cc + .cr) }' "$TMP/opencode.rows.jsonl" \
+      >>"$TMP/walk.jsonl" 2>/dev/null || true
+    if opencode_sql "$db" "$OPENCODE_TITLES" >"$TMP/opencode.titles.jsonl" 2>/dev/null; then
+      jq -c '{t: "title", sid: .sid, title: .title}' "$TMP/opencode.titles.jsonl" \
+        >>"$TMP/walk.jsonl" 2>/dev/null || true
+    fi
   }
 
   NFILES=$(find "$PROJECTS_DIR" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ' || true)
@@ -1005,6 +1171,13 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"
   walk_dir "$CCODE_DIR" commandcode "$WALKCC"
   walk_opencode
+  jq -s 'map(select(.t == "meta" and .src == "codex"))' "$TMP/walk.jsonl" \
+    >"$TMP/codex.metadata.json"
+  jq -c -n --argjson off "$OFF" \
+    --slurpfile metadata "$TMP/codex.metadata.json" \
+    --slurpfile sessions "$TMP/codex.sessions-by-day.jsonl" \
+    '$metadata[0] as $metadata | $sessions as $sessions | '"$CODEX_DETAILS" \
+    >>"$TMP/walk.jsonl"
   jq -c 'select(.t == "rec") | del(.t)' "$TMP/walk.jsonl" >"$TMP/records.jsonl"
   jq -s '
     [ .[] | select(.t != "rec") ]
@@ -1029,6 +1202,12 @@ if [ -s "$TMP/manifest.jsonl" ]; then
           else (($r[0][.date][.model]) // 0) end)
        end)})' \
     "$TMP/records.jsonl" >"$TMP/recs.json"
+  if ! jq --slurpfile usage "$TMP/usage.json" "$RECONCILE" "$TMP/recs.json" \
+    >"$TMP/recs.reconciled.json"; then
+    _error "detail assembly failed; previous data preserved"
+    exit 1
+  fi
+  mv "$TMP/recs.reconciled.json" "$TMP/recs.json"
 
   CWDMAP_CACHE="$EDCACHE/.cwdmap.v5.jsonl"
   LEGACY_CWDMAP_CACHE="$EDCACHE/.cwdmap.v4.jsonl"
