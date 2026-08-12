@@ -44,6 +44,11 @@ public enum SSHConnectionError: LocalizedError {
     }
 }
 
+public enum SSHControlSocketMode: Equatable, Sendable {
+    case isolated
+    case shared
+}
+
 private final class ResumeGate: @unchecked Sendable {
     private let lock = NSLock()
     private var claimed = false
@@ -96,9 +101,10 @@ public actor SSHConnection {
     private let socketPath: String
     private let knownHostsArgument: String
 
-    public init(machine: Machine) {
+    public init(machine: Machine, controlSocketMode: SSHControlSocketMode = .isolated) {
         self.machine = machine
-        socketPath = MachinePaths.socketFile(for: machine.id).path
+        let connectionID = controlSocketMode == .isolated ? UUID() : nil
+        socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
         let userKnownHosts = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".ssh/known_hosts").path
         knownHostsArgument =

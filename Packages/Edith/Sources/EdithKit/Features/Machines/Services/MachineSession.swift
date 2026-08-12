@@ -70,7 +70,8 @@ public final class MachineSession {
     public init(machine: Machine, local: Bool = false, observesWakeRequests: Bool = true) {
         self.machine = machine
         isLocal = local
-        connection = local ? nil : SSHConnection(machine: machine)
+        connection =
+            local ? nil : SSHConnection(machine: machine, controlSocketMode: .shared)
         localSampler = local ? LocalMachineSampler() : nil
         if observesWakeRequests { observeWake() }
     }
