@@ -34,8 +34,14 @@ public enum MachinePaths {
         }
     }
 
-    public static func socketFile(for machineID: UUID) -> URL {
-        let hash = machineID.uuidString.replacingOccurrences(of: "-", with: "").prefix(10)
-        return socketsDir.appendingPathComponent("\(hash).sk")
+    public static func socketFile(for machineID: UUID, connectionID: UUID? = nil) -> URL {
+        let machineLength = connectionID == nil ? 10 : 8
+        let hash = machineID.uuidString.replacingOccurrences(of: "-", with: "").prefix(
+            machineLength)
+        let connection =
+            connectionID.map {
+                "-" + $0.uuidString.replacingOccurrences(of: "-", with: "").prefix(6)
+            } ?? ""
+        return socketsDir.appendingPathComponent("\(hash)\(connection).sk")
     }
 }

@@ -206,6 +206,7 @@ final class UsageStore: FeatureModule {
         timer = t
         Log.lifecycle.notice("usage polling started (every 300s)")
         Task { @MainActor in
+            runUpdate()
             await refreshLimits()
             await loadStats()
         }

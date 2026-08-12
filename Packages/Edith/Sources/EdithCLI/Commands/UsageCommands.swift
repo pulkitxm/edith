@@ -347,9 +347,18 @@ struct UsageRefreshCommand: AsyncParsableCommand {
     var follow = false
 
     @Flag(
-        inversion: .prefixedNo,
-        help: "Collect from the machines first. On by default for the ones that are stale.")
-    var machines = true
+        name: .customLong("machines"),
+        help: "Collect from every included machine, even when its usage is fresh.")
+    var forceMachines = false
+
+    @Flag(name: .customLong("no-machines"), help: "Skip machine usage collection.")
+    var skipMachines = false
+
+    mutating func validate() throws {
+        guard !(forceMachines && skipMachines) else {
+            throw ValidationError("--machines and --no-machines cannot be used together")
+        }
+    }
 
     func run() async throws {
         try await execute {
@@ -359,8 +368,9 @@ struct UsageRefreshCommand: AsyncParsableCommand {
 
             let driver = CLIEnvironment.usageRefresh
             progress.header("EDITH · refresh usage · " + UsageRefreshPrinter.stamp(Date()))
-            if machines, !follow {
-                await Self.topUpMachines(progress: progress, sink: sink)
+            if !skipMachines, !follow {
+                try await Self.topUpMachines(
+                    force: forceMachines, progress: progress, sink: sink)
             }
             do {
                 var followed = follow
@@ -400,16 +410,29 @@ struct UsageRefreshCommand: AsyncParsableCommand {
     }
 
     private static func topUpMachines(
-        progress: CLIProgress, sink: @escaping @Sendable (UsageRefreshEvent) -> Void
-    ) async {
-        let due = MachineUsageRound.due(force: false)
+        force: Bool, progress: CLIProgress,
+        sink: @escaping @Sendable (UsageRefreshEvent) -> Void
+    ) async throws {
+        let due = MachineUsageRound.due(force: force)
         guard !due.isEmpty else { return }
         progress.begin(due.count == 1 ? "reaching \(due[0].name)" : "reaching the machines")
         let round = await MachineUsageRound.collect(due, onEvent: sink)
         progress.end()
+        if force, let failure = forcedMachineCollectionFailure(round) { throw failure }
         if round.skippedBecauseBusy {
             progress.note("another collection is already running, leaving the machines to it")
         }
+    }
+
+    static func forcedMachineCollectionFailure(_ round: MachineUsageRoundResult) -> CLIFailure? {
+        if round.skippedBecauseBusy {
+            return .unavailable(
+                "machine usage collection is already running",
+                hint: "retry after the active collection finishes")
+        }
+        guard !round.failures.isEmpty else { return nil }
+        let detail = round.failures.map { "\($0.machine): \($0.reason)" }.joined(separator: "; ")
+        return .unavailable("machine usage collection failed", hint: detail)
     }
 
     private static func payload(result: UsageRefreshResult, followed: Bool) -> JSONValue {

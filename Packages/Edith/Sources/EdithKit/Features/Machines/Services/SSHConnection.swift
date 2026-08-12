@@ -44,6 +44,11 @@ public enum SSHConnectionError: LocalizedError {
     }
 }
 
+public enum SSHControlSocketMode: Equatable, Sendable {
+    case isolated
+    case shared
+}
+
 private final class ResumeGate: @unchecked Sendable {
     private let lock = NSLock()
     private var claimed = false
@@ -96,9 +101,10 @@ public actor SSHConnection {
     private let socketPath: String
     private let knownHostsArgument: String
 
-    public init(machine: Machine) {
+    public init(machine: Machine, controlSocketMode: SSHControlSocketMode = .isolated) {
         self.machine = machine
-        socketPath = MachinePaths.socketFile(for: machine.id).path
+        let connectionID = controlSocketMode == .isolated ? UUID() : nil
+        socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
         let userKnownHosts = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".ssh/known_hosts").path
         knownHostsArgument =
@@ -136,7 +142,7 @@ public actor SSHConnection {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(25))
         while clock.now < deadline {
-            if process.isRunning, FileManager.default.fileExists(atPath: socketPath) { return }
+            if FileManager.default.fileExists(atPath: socketPath), await masterIsAlive() { return }
             if !process.isRunning {
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 buffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())

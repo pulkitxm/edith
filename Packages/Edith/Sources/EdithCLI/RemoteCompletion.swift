@@ -65,7 +65,7 @@ public enum RemoteCompletion {
         let cursor = request.index - 2
         guard cursor >= 0 else { return [] }
         guard MachineDirectory.hasLiveControlSocket(machine) else { return [] }
-        let connection = SSHConnection(machine: machine)
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
         let remote: String
         if cursor == 0 {
             remote = commandNamesCommand(prefix: request.current)

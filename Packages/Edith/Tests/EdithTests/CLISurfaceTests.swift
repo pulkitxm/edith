@@ -152,6 +152,44 @@ import Testing
             #expect(result.stdoutLines == ["usage refreshed"])
         }
     }
+
+    @Test func refreshMachineFlagsDistinguishAutomaticAndForcedCollection() throws {
+        let automatic = try #require(
+            try EdRoot.parseAsRoot(["usage", "refresh"]) as? UsageRefreshCommand)
+        let forced = try #require(
+            try EdRoot.parseAsRoot(["usage", "refresh", "--machines"])
+                as? UsageRefreshCommand)
+        let skipped = try #require(
+            try EdRoot.parseAsRoot(["usage", "refresh", "--no-machines"])
+                as? UsageRefreshCommand)
+        #expect(!automatic.forceMachines)
+        #expect(!automatic.skipMachines)
+        #expect(forced.forceMachines)
+        #expect(!forced.skipMachines)
+        #expect(!skipped.forceMachines)
+        #expect(skipped.skipMachines)
+    }
+
+    @Test func refreshRejectsConflictingMachineFlags() async {
+        let result = await CLIProbe.run([
+            "usage", "refresh", "--machines", "--no-machines",
+        ])
+        #expect(result.code != 0)
+        #expect(result.stderr.contains("cannot be used together"))
+    }
+
+    @Test func forcedRefreshDoesNotHideMachineCollectionFailures() {
+        let busy = UsageRefreshCommand.forcedMachineCollectionFailure(
+            MachineUsageRoundResult(skippedBecauseBusy: true))
+        let failed = UsageRefreshCommand.forcedMachineCollectionFailure(
+            MachineUsageRoundResult(failures: [(machine: "TUF Wired", reason: "offline")]))
+        let succeeded = UsageRefreshCommand.forcedMachineCollectionFailure(
+            MachineUsageRoundResult())
+        #expect(busy?.kind == .unavailable)
+        #expect(failed?.kind == .unavailable)
+        #expect(failed?.hint == "TUF Wired: offline")
+        #expect(succeeded == nil)
+    }
 }
 
 @Suite struct CLICompletionSurfaceTests {

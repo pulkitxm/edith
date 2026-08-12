@@ -85,6 +85,7 @@ public enum MachineUsageRound {
                 result.failures.append((machine.name, reason))
                 onEvent(.note("\(machine.name): \(reason)"))
             }
+            await connection.disconnect()
         }
         MachineUsageStore.prune(keeping: registry.map(\.id))
         return result

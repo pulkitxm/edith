@@ -404,6 +404,18 @@ private actor ProcessReadProbe {
         #expect(connection.execArguments(command: "uptime").last == "uptime")
     }
 
+    @Test func independentConnectionsDoNotShareControlSockets() async {
+        let first = SSHConnection(machine: aliasMachine)
+        let second = SSHConnection(machine: aliasMachine)
+        #expect(first.controlSocketPath != second.controlSocketPath)
+        #expect(URL(fileURLWithPath: first.controlSocketPath).lastPathComponent.count == 18)
+    }
+
+    @Test func sharedConnectionsUseTheMachineControlSocket() async {
+        let connection = SSHConnection(machine: aliasMachine, controlSocketMode: .shared)
+        #expect(connection.controlSocketPath == MachinePaths.socketFile(for: aliasMachine.id).path)
+    }
+
     @Test func knownHostsPathsAreQuotedForSpaces() async {
         let connection = SSHConnection(machine: aliasMachine)
         let arguments = connection.masterArguments()
