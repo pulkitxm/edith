@@ -52,8 +52,16 @@ public enum MachineThermalControls {
     public static func setProfile(
         _ profile: String, duration: MachineProfileDuration, withSudoPassword: Bool
     ) -> String? {
+        setProfile(
+            profile, durationSeconds: duration.rawValue, withSudoPassword: withSudoPassword)
+    }
+
+    public static func setProfile(
+        _ profile: String, durationSeconds: Int, withSudoPassword: Bool
+    ) -> String? {
         guard validProfile(profile) else { return nil }
-        let seconds = duration.rawValue
+        guard durationSeconds >= 0 else { return nil }
+        let seconds = durationSeconds
         let path = ShellQuote.quote(profilePath)
         let state = ShellQuote.quote("/run/edith-platform-profile-original")
         let unit = ShellQuote.quote(revertUnit)

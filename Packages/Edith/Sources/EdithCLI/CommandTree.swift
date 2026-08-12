@@ -454,6 +454,17 @@ public enum CommandTree {
                                 arguments: [.machine]),
                         ]),
                     CommandNode(
+                        "thermal", "Inspect fan speeds and switch the platform thermal profile.",
+                        children: [
+                            CommandNode(
+                                "status", "Show the active and available thermal profiles.",
+                                options: common, arguments: [.machine]),
+                            CommandNode(
+                                "set", "Switch the thermal profile permanently or for a while.",
+                                options: ["--json", "--help", "--minutes"],
+                                arguments: [.machine, .free]),
+                        ]),
+                    CommandNode(
                         "workspace", "Saved multi-pane layouts.", aliases: ["workspaces"],
                         children: [
                             CommandNode(

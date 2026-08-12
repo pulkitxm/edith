@@ -162,6 +162,12 @@ enum UIParity {
             ["machines", "power", "shutdown", "box", "--yes"]),
         UICapability("Machine header", "wake the machine", ["machines", "power", "wake", "box"]),
         UICapability(
+            "Machine cooling", "inspect thermal profiles",
+            ["machines", "thermal", "status", "box"]),
+        UICapability(
+            "Machine cooling", "switch thermal profiles",
+            ["machines", "thermal", "set", "box", "performance"]),
+        UICapability(
             "Machine tools", "start a systemd unit",
             ["machines", "services", "start", "box", "nginx.service"]),
         UICapability(
