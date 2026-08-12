@@ -246,10 +246,11 @@ import Testing
     }
 
     @Test func decodesSlowWithOptionalSections() {
-        let base =
+        let prefix =
             "@EDITH@{\"t\":\"slow\",\"disks\":[{\"fs\":\"/dev/nvme0n1p2\",\"mount\":\"/\","
             + "\"totalKB\":500000000,\"usedKB\":250000000,\"availKB\":225000000}],"
-            + "\"temps\":[{\"label\":\"x86_pkg_temp\",\"c\":54.0}]}"
+            + "\"temps\":[{\"label\":\"x86_pkg_temp\",\"c\":54.0}]"
+        let base = prefix + ",\"fans\":[],\"platformProfile\":null}"
         guard case let .slow(slow)? = MachineMetricsDecoder.decode(line: base) else {
             Issue.record("expected slow record")
             return
@@ -259,8 +260,10 @@ import Testing
         #expect(slow.gpu == nil)
 
         let full =
-            String(base.dropLast())
-            + ",\"battery\":{\"percent\":87,\"status\":\"Discharging\"},"
+            prefix + ",\"fans\":[{\"label\":\"CPU fan\",\"rpm\":3600}],"
+            + "\"platformProfile\":{\"current\":\"balanced\","
+            + "\"choices\":[\"quiet\",\"balanced\",\"performance\"]},"
+            + "\"battery\":{\"percent\":87,\"status\":\"Discharging\"},"
             + "\"gpu\":{\"name\":\"RTX 4060\",\"util\":11,\"memUsedMB\":800,"
             + "\"memTotalMB\":8188,\"temp\":45}}"
         guard case let .slow(rich)? = MachineMetricsDecoder.decode(line: String(full)) else {
@@ -269,6 +272,8 @@ import Testing
         }
         #expect(rich.battery?.percent == 87)
         #expect(rich.gpu?.name == "RTX 4060")
+        #expect(rich.fans == [MachineFan(label: "CPU fan", rpm: 3600)])
+        #expect(rich.platformProfile?.current == "balanced")
     }
 
     @Test func collectorDrivesItsOwnLoopSoOutputIsNotBuffered() {
@@ -300,6 +305,48 @@ import Testing
         let text = String(decoding: script ?? Data(), as: UTF8.self)
         #expect(text.hasPrefix("#!/bin/sh"))
         #expect(text.contains("@EDITH@"))
+    }
+
+    @Test func collectorReadsFansAndPlatformProfilesFromSysfs() {
+        let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
+        #expect(text.contains("/fan\" j \"_input"))
+        #expect(text.contains("/sys/firmware/acpi/platform_profile_choices"))
+    }
+}
+
+@Suite struct MachineThermalControlsTests {
+    @Test func parsesAProfileStatus() {
+        let profile = MachineThermalControls.parseStatus(
+            "balanced\nquiet balanced performance\n")
+        #expect(profile?.current == "balanced")
+        #expect(profile?.choices == ["quiet", "balanced", "performance"])
+    }
+
+    @Test func rejectsInvalidAndIncompleteProfiles() {
+        #expect(MachineThermalControls.parseStatus("balanced\n") == nil)
+        #expect(
+            MachineThermalControls.setProfile(
+                "performance; reboot", duration: .untilChanged, withSudoPassword: false) == nil)
+    }
+
+    @Test func permanentProfilesCancelAnyPreviousReversion() throws {
+        let command = try #require(
+            MachineThermalControls.setProfile(
+                "balanced", duration: .untilChanged, withSudoPassword: false))
+        #expect(command.contains("systemctl stop"))
+        #expect(command.contains("rm -f"))
+        #expect(!command.contains("--on-active="))
+    }
+
+    @Test func timedProfilesKeepTheOriginalAndScheduleOneReversion() throws {
+        let command = try #require(
+            MachineThermalControls.setProfile(
+                "performance", duration: .thirtyMinutes, withSudoPassword: true))
+        #expect(command.hasPrefix("sudo -S -p ''"))
+        #expect(command.contains("--on-active=1800s"))
+        #expect(command.contains(MachineThermalControls.revertUnit))
+        #expect(command.contains("/run/edith-platform-profile-original"))
+        #expect(!command.contains("performance;"))
     }
 }
 
