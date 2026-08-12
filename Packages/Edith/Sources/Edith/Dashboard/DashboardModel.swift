@@ -454,6 +454,7 @@ final class DashboardModel {
     private(set) var hourlyUnattributedCost = 0.0
     private(set) var pathUnattributedTokens = 0.0
     private(set) var pathUnattributedCost = 0.0
+    private(set) var modelUnfilterableCost = 0.0
     private(set) var projects: [ProjectAgg] = []
     private(set) var projectTree: [ProjTreeRow] = []
     private(set) var meta = MetaLine()
