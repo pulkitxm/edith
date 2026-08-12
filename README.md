@@ -107,6 +107,7 @@ Thank you to everyone who has shipped a change in Edith.
   <tr>
     <td align="center"><a href="https://github.com/pulkitxm"><img src="https://avatars.githubusercontent.com/u/65671483?v=4&s=64" width="64" height="64" alt="pulkitxm" /><br /><sub>pulkitxm</sub></a></td>
     <td align="center"><a href="https://github.com/Vivek09Chahal"><img src="https://avatars.githubusercontent.com/u/103368320?v=4&s=64" width="64" height="64" alt="Vivek09Chahal" /><br /><sub>Vivek09Chahal</sub></a></td>
+    <td align="center"><a href="https://github.com/Sohan-Rout"><img src="https://avatars.githubusercontent.com/u/172136330?v=4&s=64" width="64" height="64" alt="Sohan-Rout" /><br /><sub>Sohan-Rout</sub></a></td>
   </tr>
 </table>
 
