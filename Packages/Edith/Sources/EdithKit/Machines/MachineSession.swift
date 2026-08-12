@@ -34,6 +34,8 @@ public final class MachineSession: ObservableObject {
     @Published public private(set) var mountHealth: MountHealth?
     @Published public private(set) var isRemounting = false
     @Published public private(set) var isLocal: Bool
+    @Published public private(set) var isApplyingPlatformProfile = false
+    @Published public private(set) var platformProfileRevertsAt: Date?
 
     public static let historyLength = 60
 
@@ -58,6 +60,7 @@ public final class MachineSession: ObservableObject {
     private var metricsFailures = 0
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
+    private var platformProfileTask: Task<Void, Never>?
     private var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
@@ -137,6 +140,8 @@ public final class MachineSession: ObservableObject {
         probeTask = nil
         mountTask?.cancel()
         mountTask = nil
+        platformProfileTask?.cancel()
+        platformProfileTask = nil
         metricsStream?.cancel()
         metricsStream = nil
     }
@@ -497,6 +502,56 @@ public final class MachineSession: ObservableObject {
         } catch {
             return .failure(error)
         }
+    }
+
+    public func setPlatformProfile(
+        _ profile: String, duration: MachineProfileDuration
+    ) async -> Result<String, Error> {
+        let stdin = SudoPassword.stdin(machineID: machine.id)
+        guard
+            let command = MachineThermalControls.setProfile(
+                profile, duration: duration, withSudoPassword: stdin != nil)
+        else {
+            return .failure(
+                SSHConnectionError.commandFailed(
+                    command: "platform profile", status: 1, stderr: "Invalid profile."))
+        }
+        isApplyingPlatformProfile = true
+        defer { isApplyingPlatformProfile = false }
+        let result = await runCommand(command, stdin: stdin, timeout: 30)
+        guard case let .success(output) = result else { return result }
+        applyPlatformProfile(profile)
+        platformProfileTask?.cancel()
+        guard duration != .untilChanged else {
+            platformProfileRevertsAt = nil
+            return .success(output)
+        }
+        let revertsAt = Date().addingTimeInterval(TimeInterval(duration.rawValue))
+        platformProfileRevertsAt = revertsAt
+        platformProfileTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(TimeInterval(duration.rawValue + 1)))
+            guard !Task.isCancelled, let self else { return }
+            platformProfileRevertsAt = nil
+            await refreshPlatformProfile()
+        }
+        return .success(output)
+    }
+
+    public func refreshPlatformProfile() async {
+        let result = await runCommand(MachineThermalControls.statusCommand, timeout: 10)
+        guard case let .success(output) = result,
+            let profile = MachineThermalControls.parseStatus(output)
+        else { return }
+        var next = slow ?? MachineSlow()
+        next.platformProfile = profile
+        slow = next
+    }
+
+    private func applyPlatformProfile(_ profile: String) {
+        guard var next = slow, var platformProfile = next.platformProfile else { return }
+        platformProfile.current = profile
+        next.platformProfile = platformProfile
+        slow = next
     }
 
     private func runLocalCommand(_ command: String) async -> Result<String, Error> {
