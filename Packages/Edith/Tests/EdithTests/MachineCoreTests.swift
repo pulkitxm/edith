@@ -408,6 +408,7 @@ private actor ProcessReadProbe {
         let first = SSHConnection(machine: aliasMachine)
         let second = SSHConnection(machine: aliasMachine)
         #expect(first.controlSocketPath != second.controlSocketPath)
+        #expect(URL(fileURLWithPath: first.controlSocketPath).lastPathComponent.count == 18)
     }
 
     @Test func sharedConnectionsUseTheMachineControlSocket() async {

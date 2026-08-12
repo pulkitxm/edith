@@ -142,7 +142,7 @@ public actor SSHConnection {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(25))
         while clock.now < deadline {
-            if process.isRunning, FileManager.default.fileExists(atPath: socketPath) { return }
+            if FileManager.default.fileExists(atPath: socketPath), await masterIsAlive() { return }
             if !process.isRunning {
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 buffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())

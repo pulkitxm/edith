@@ -369,7 +369,7 @@ struct UsageRefreshCommand: AsyncParsableCommand {
             let driver = CLIEnvironment.usageRefresh
             progress.header("EDITH · refresh usage · " + UsageRefreshPrinter.stamp(Date()))
             if !skipMachines, !follow {
-                await Self.topUpMachines(
+                try await Self.topUpMachines(
                     force: forceMachines, progress: progress, sink: sink)
             }
             do {
@@ -412,15 +412,27 @@ struct UsageRefreshCommand: AsyncParsableCommand {
     private static func topUpMachines(
         force: Bool, progress: CLIProgress,
         sink: @escaping @Sendable (UsageRefreshEvent) -> Void
-    ) async {
+    ) async throws {
         let due = MachineUsageRound.due(force: force)
         guard !due.isEmpty else { return }
         progress.begin(due.count == 1 ? "reaching \(due[0].name)" : "reaching the machines")
         let round = await MachineUsageRound.collect(due, onEvent: sink)
         progress.end()
+        if force, let failure = forcedMachineCollectionFailure(round) { throw failure }
         if round.skippedBecauseBusy {
             progress.note("another collection is already running, leaving the machines to it")
         }
+    }
+
+    static func forcedMachineCollectionFailure(_ round: MachineUsageRoundResult) -> CLIFailure? {
+        if round.skippedBecauseBusy {
+            return .unavailable(
+                "machine usage collection is already running",
+                hint: "retry after the active collection finishes")
+        }
+        guard !round.failures.isEmpty else { return nil }
+        let detail = round.failures.map { "\($0.machine): \($0.reason)" }.joined(separator: "; ")
+        return .unavailable("machine usage collection failed", hint: detail)
     }
 
     private static func payload(result: UsageRefreshResult, followed: Bool) -> JSONValue {

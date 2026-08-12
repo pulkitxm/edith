@@ -177,6 +177,19 @@ import Testing
         #expect(result.code != 0)
         #expect(result.stderr.contains("cannot be used together"))
     }
+
+    @Test func forcedRefreshDoesNotHideMachineCollectionFailures() {
+        let busy = UsageRefreshCommand.forcedMachineCollectionFailure(
+            MachineUsageRoundResult(skippedBecauseBusy: true))
+        let failed = UsageRefreshCommand.forcedMachineCollectionFailure(
+            MachineUsageRoundResult(failures: [(machine: "TUF Wired", reason: "offline")]))
+        let succeeded = UsageRefreshCommand.forcedMachineCollectionFailure(
+            MachineUsageRoundResult())
+        #expect(busy?.kind == .unavailable)
+        #expect(failed?.kind == .unavailable)
+        #expect(failed?.hint == "TUF Wired: offline")
+        #expect(succeeded == nil)
+    }
 }
 
 @Suite struct CLICompletionSurfaceTests {
