@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
   mkdirSync,
@@ -954,7 +954,9 @@ describe("WALKCC", () => {
 describe("OpenCode repository queries", () => {
   test("uses the session directory when the message has no cwd", () => {
     const database = new Database(":memory:");
-    database.run("create table session (id text primary key, directory text, title text)");
+    database.run(
+      "create table session (id text primary key, directory text, title text)",
+    );
     database.run("create table message (session_id text, data text)");
     database.run(
       "insert into session values (?, ?, ?)",
@@ -992,7 +994,9 @@ describe("OpenCode repository queries", () => {
 
   test("prefers message cwd and supports databases without a session table", () => {
     const modern = new Database(":memory:");
-    modern.run("create table session (id text primary key, directory text, title text)");
+    modern.run(
+      "create table session (id text primary key, directory text, title text)",
+    );
     modern.run("create table message (session_id text, data text)");
     const message = JSON.stringify({
       role: "assistant",
