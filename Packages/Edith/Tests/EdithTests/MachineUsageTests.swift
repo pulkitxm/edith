@@ -42,6 +42,64 @@ import Testing
     }
 }
 
+@Suite struct MachineUsageSourceIdentityTests {
+    private let machineID = "4303DCF1-52D8-4075-AE9B-C2FD86D3821A"
+
+    @Test func aMachineRenameKeepsTheSameSourceIdentity() {
+        let before = MachineUsageSourceIdentity.canonical(
+            machineID: machineID, source: "tuf:codex")
+        let after = MachineUsageSourceIdentity.canonical(
+            machineID: machineID.lowercased(), source: "gaming:codex")
+        #expect(before == "machine:\(machineID.lowercased()):codex")
+        #expect(after == before)
+    }
+
+    @Test func anAlreadyCanonicalSourceStaysCanonical() {
+        let source = "machine:\(machineID.lowercased()):cli"
+        #expect(
+            MachineUsageSourceIdentity.canonical(machineID: machineID, source: source) == source)
+    }
+
+    @Test func anAmbiguousSourceCannotGetAStableIdentity() {
+        #expect(MachineUsageSourceIdentity.canonical(machineID: "", source: "tuf:codex") == nil)
+        #expect(MachineUsageSourceIdentity.canonical(machineID: machineID, source: "") == nil)
+    }
+}
+
+@Suite struct MachineUsageFreshnessTests {
+    private let now = Date(timeIntervalSince1970: 1_780_000_000)
+
+    @Test func collectionStaysFreshThroughTheRefreshWindowAndTolerance() {
+        let freshness = MachineUsageFreshness(
+            collectedAt: now.addingTimeInterval(-(30 * 60 + 5 * 60)), now: now)
+        #expect(!freshness.isStale)
+        #expect(freshness.statusLabel == "collected 35m ago")
+    }
+
+    @Test func collectionBecomesStaleAfterTheTolerance() {
+        let freshness = MachineUsageFreshness(
+            collectedAt: now.addingTimeInterval(-(30 * 60 + 5 * 60 + 1)), now: now)
+        #expect(freshness.isStale)
+        #expect(freshness.statusLabel == "stale · collected 35m ago")
+    }
+
+    @Test func collectionAgeStaysCompactAndNeverGoesNegative() {
+        #expect(
+            MachineUsageFreshness(
+                collectedAt: now.addingTimeInterval(30), now: now
+            ).ageLabel == "just now")
+        #expect(
+            MachineUsageFreshness(
+                collectedAt: now.addingTimeInterval(-(2 * 3600 + 7 * 60)), now: now
+            ).ageLabel == "2h 7m ago")
+        #expect(
+            MachineUsageFreshness(
+                collectedAt: now.addingTimeInterval(-(3 * 86400 + 4 * 3600)), now: now
+            ).ageLabel == "3d 4h ago")
+    }
+
+}
+
 @Suite struct MachineUsageSelectionTests {
     private func store() -> UserDefaults {
         let suite = UserDefaults(suiteName: "machine-usage-\(UUID().uuidString)")!

@@ -11,7 +11,10 @@ const repoRoot = path.resolve(
 
 const docs = collect();
 const slugMap = new Map(docs.map((d) => [d.src, d.slug]));
-const dirMap = new Map([["docs/cli", "CLI"]]);
+const dirMap = new Map([
+  ["docs/cli", "CLI"],
+  ["docs", "Guides"],
+]);
 for (const doc of docs) {
   if (doc.isGroup) dirMap.set(path.posix.dirname(doc.src), doc.slug);
 }
@@ -33,8 +36,22 @@ function markdownUnder(dir) {
   return count;
 }
 
-test("every markdown file under docs/cli becomes a page", () => {
-  expect(docs.length).toBe(markdownUnder("docs/cli"));
+test("every markdown file under docs becomes a page", () => {
+  expect(docs.length).toBe(markdownUnder("docs"));
+});
+
+test("a top level doc becomes a guide page", () => {
+  const internals = docs.find((d) => d.src === "docs/homebrew-internals.md");
+  expect(internals.slug).toBe("Guides-Homebrew-Internals");
+  expect(internals.section).toBe("Guides");
+  expect(internals.depth).toBe(0);
+});
+
+test("guides link to each other by slug", () => {
+  expect(mapTarget("homebrew-internals.md", "docs", options)).toBe(
+    "Guides-Homebrew-Internals",
+  );
+  expect(mapTarget("homebrew.md", "docs", options)).toBe("Guides-Homebrew");
 });
 
 test("a command page nests under its group", () => {
@@ -139,6 +156,34 @@ test("the sidebar lists getting started before the machine pages", () => {
   expect(sidebar.indexOf("CLI-Getting-Started")).toBeLessThan(
     sidebar.indexOf("CLI-Machines-Docker"),
   );
+});
+
+test("the sidebar collapses a group behind its own link", () => {
+  const sidebar = buildPages().get("_Sidebar.md");
+  expect(sidebar).toContain(
+    '<summary><a href="CLI-Config">Config</a></summary>',
+  );
+  expect(sidebar).toContain("- [Ls](CLI-Config-Ls)");
+  expect(sidebar).toContain("- [Conventions](CLI-Conventions)");
+});
+
+test("the sidebar shows one row per group when collapsed", () => {
+  const sidebar = buildPages().get("_Sidebar.md");
+  const groups = docs.filter((d) => d.isGroup).length;
+  const commands = docs.filter((d) => d.depth === 1).length;
+  const opened = sidebar.match(/<details>/g) ?? [];
+  const closed = sidebar.match(/<\/details>/g) ?? [];
+  expect(opened.length).toBe(groups);
+  expect(closed.length).toBe(groups);
+  expect(commands).toBeGreaterThan(groups * 2);
+});
+
+test("home lists each group with its commands on one line", () => {
+  const home = buildPages().get("Home.md");
+  expect(home).toContain(
+    "- [Config](CLI-Config): [Ls](CLI-Config-Ls), [Get](CLI-Config-Get)",
+  );
+  expect(home.split("\n").length).toBeLessThan(docs.length);
 });
 
 test("every page ends with exactly one newline", () => {

@@ -7,6 +7,7 @@ struct MachineToolsTab: View {
     @ObservedObject var model: MachinesModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var newForwardLocal = ""
     @State private var newForwardRemote = ""
     @State private var newForwardHost = "localhost"
@@ -41,6 +42,7 @@ struct MachineToolsTab: View {
             .pageContent(compact)
         }
         .task {
+            guard connectionsEnabled else { return }
             await session.refreshServices()
             await session.restoreMount()
         }

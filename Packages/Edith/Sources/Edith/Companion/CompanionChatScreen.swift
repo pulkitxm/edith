@@ -154,6 +154,7 @@ struct CompanionChatScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @State private var caretDim = false
     @FocusState private var composerFocused: Bool
 
@@ -168,8 +169,10 @@ struct CompanionChatScreen: View {
             thread
         }
         .task {
-            await model.loadConversations()
-            await model.loadPersonas()
+            if requestsEnabled {
+                await model.loadConversations()
+                await model.loadPersonas()
+            }
         }
     }
 

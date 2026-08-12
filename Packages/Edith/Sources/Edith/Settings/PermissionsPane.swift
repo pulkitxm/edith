@@ -11,6 +11,7 @@ struct PermissionsPane: View {
     @State private var usages: [PermissionUsage] = PermissionsStatus.usages
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var accent: Color { themeColor(themeName) }
 
@@ -72,16 +73,18 @@ struct PermissionsPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Permissions")
-        .onAppear(perform: refresh)
+        .onAppear {
+            if automaticActionsEnabled { refresh() }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
         ) { _ in
-            refresh()
+            if automaticActionsEnabled { refresh() }
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.permissionsRefreshed)
         ) { _ in
-            usages = PermissionsStatus.usages
+            if automaticActionsEnabled { usages = PermissionsStatus.usages }
         }
     }
 

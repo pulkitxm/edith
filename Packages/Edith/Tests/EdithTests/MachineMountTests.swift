@@ -77,11 +77,37 @@ import Testing
     @Test func theSecondAttemptDropsTheOptionsOnlyMacFuseKnows() {
         let arguments = MachineMounts.mountArguments(
             machine: machine, remotePath: "/srv", mountPoint: "/mnt/tuf", readOnly: true,
-            minimal: true)
+            minimal: true, useFSKit: true)
         #expect(!arguments.contains("volname=tuf"))
         #expect(!arguments.contains("defer_permissions"))
+        #expect(!arguments.contains("backend=fskit"))
         #expect(arguments.contains("ControlMaster=no"))
         #expect(arguments.contains("ro"))
+    }
+
+    @Test func macOS26MountsUseFSKitWithoutMetadataWrites() {
+        let options = MachineMounts.options(
+            machine: machine, readOnly: false, useFSKit: true)
+        #expect(options.contains("backend=fskit"))
+        #expect(options.contains("noatime"))
+    }
+
+    @Test func earlierSystemsDoNotRequestFSKit() {
+        let options = MachineMounts.options(
+            machine: machine, readOnly: false, useFSKit: false)
+        #expect(!options.contains("backend=fskit"))
+    }
+
+    @Test func fuseTHelpersAreMatchedToTheExactMountPoint() {
+        let output = """
+            29352 /usr/local/bin/go-nfsv4 --volname tuf /Users/pulkit/Edith/tuf
+            40777 /usr/local/bin/go-nfsv4 /Users/pulkit/Edith/tuf-old
+            44073 /Library/Application Support/fuse-t/bin/go-nfsv4-1.2.7 /Users/pulkit/Edith/tuf
+            57020 /usr/bin/ssh tuf
+            """
+        #expect(
+            MachineMounts.fuseTHelperPIDs(in: output, mountedAt: "/Users/pulkit/Edith/tuf")
+                == [29352, 44073])
     }
 
     @Test func aManualMachineCarriesItsPortAndKey() {

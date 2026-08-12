@@ -248,6 +248,10 @@ func donutSlice(at value: Double, in slices: [DonutSlice]) -> DonutSlice? {
     return slices.last
 }
 
+func donutTotal(_ slices: [DonutSlice]) -> Double {
+    slices.reduce(0) { $0 + $1.value }
+}
+
 struct DonutChart: View {
     let slices: [DonutSlice]
     var height: CGFloat = 220
@@ -259,7 +263,8 @@ struct DonutChart: View {
     }
 
     var body: some View {
-        let total = max(slices.reduce(0) { $0 + $1.value }, 1)
+        let total = donutTotal(slices)
+        let percentageTotal = max(total, 1)
         Chart(slices) { s in
             SectorMark(
                 angle: .value("Tokens", s.value),
@@ -288,7 +293,7 @@ struct DonutChart: View {
                         .system(size: UIScale.pt(13), weight: .semibold)
                     )
                     .presenterBlur(blurTokens)
-                    Text(DashFmt.pct(s.value / total)).font(.system(size: UIScale.pt(9)))
+                    Text(DashFmt.pct(s.value / percentageTotal)).font(.system(size: UIScale.pt(9)))
                         .foregroundStyle(.tertiary)
                 } else {
                     Text(DashFmt.tokens(total)).font(

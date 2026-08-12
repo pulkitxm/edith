@@ -200,7 +200,7 @@ public enum Guide {
         ed usage summary --range week   cost and tokens for a window
         ed usage daily --range month
         ed usage models
-        ed usage projects
+        ed usage projects              repositories, with folders in JSON
         ed usage sources
         ed usage machines               machines counted with this Mac
         ed usage machines collect tuf   run the collector there, bring it back
@@ -208,9 +208,17 @@ public enum Guide {
         ed usage refresh --follow       watch a refresh that is already running
         ```
 
-        `--range` is one of today, week, month, all. `--source` filters to one agent
-        and repeats, `--machine` filters to one machine by name and repeats, and
-        `--machine local` is this Mac on its own.
+        `--range` is one of today, week, month, all. Week is the current calendar
+        week, from Monday through today. `--source` filters to one agent and repeats,
+        `--machine` filters to one machine by name and repeats, and `--machine local`
+        is this Mac on its own.
+
+        `ed usage projects` groups folders that share a GitHub remote into one
+        repository, including folders on different machines. The table shows only the
+        repository name, cost and tokens. JSON adds the repository identity, GitHub
+        URL and every folder with its path and machine. Repositories with the same
+        visible name stay separate by identity. Project detail is normalized per
+        source to the canonical totals, and unmatched usage appears as Unattributed.
 
         A machine keeps its agent history on its own disk, so `ed usage machines
         collect` pipes the collector over SSH and runs it there, installing what is

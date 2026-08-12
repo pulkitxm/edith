@@ -70,6 +70,9 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }
         CLIEnvironment.executableNamed = { _ in nil }
+        CLIEnvironment.resolveCompanionEndpoint = {
+            CompanionClient.endpoint(override: $0 ?? "http://127.0.0.1:1")
+        }
         CLIEnvironment.answer = { _ in nil }
         CLIEnvironment.permissionUsages = { [] }
         CLIEnvironment.deliver = { [weak self] name, info in
