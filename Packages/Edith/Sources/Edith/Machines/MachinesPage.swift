@@ -16,7 +16,8 @@ struct MachinesPage: View {
     @State private var model = MachinesModel.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @AppStorage(AppStorageKeys.Machines.tab, store: SharedDefaults.store) private var storedTab = MachineTab.overview.rawValue
+    @AppStorage(AppStorageKeys.Machines.tab, store: SharedDefaults.store) private var storedTab =
+        MachineTab.overview.rawValue
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @AppStorage(AppStorageKeys.Machines.selection, store: SharedDefaults.store) private
         var storedSelection = ""
