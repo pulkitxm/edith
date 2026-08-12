@@ -68,6 +68,7 @@ const CODEX_DETAILS = extractBlock("CODEX_DETAILS");
 const WALKPI = extractBlock("WALKPI");
 const WALKCC = extractBlock("WALKCC");
 const DEDUP = extractBlock("DEDUP");
+const RECONCILE = extractBlock("RECONCILE");
 const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
 const FLEET = extractBlock("FLEET");
@@ -420,6 +421,92 @@ describe("WALK", () => {
     expect(out[1].text).toBe("block text");
     expect(out.length).toBe(3);
     expect(out[2].text.length).toBe(80);
+  });
+});
+
+describe("RECONCILE", () => {
+  const record = (over = {}) => ({
+    id: "r1",
+    date: "2026-06-10",
+    hour: 12,
+    ts: 1,
+    model: "model",
+    cwd: "/repo",
+    wt: null,
+    sid: "session",
+    src: "cli",
+    cost: 0.8,
+    inp: 40,
+    out: 20,
+    cc: 0,
+    cr: 20,
+    tok: 80,
+    ...over,
+  });
+
+  const usage = {
+    daily: [
+      {
+        period: "2026-06-10",
+        bySource: {
+          cli: [
+            {
+              inputTokens: 50,
+              outputTokens: 20,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 30,
+              cost: 1,
+            },
+          ],
+          pi: [
+            {
+              inputTokens: 10,
+              outputTokens: 5,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 5,
+              cost: 0.2,
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  test("caps late transcript records at each source daily snapshot", () => {
+    const records = [
+      record(),
+      record({ id: "r2", ts: 2, tok: 40, inp: 20, out: 10, cr: 10 }),
+      record({
+        id: "p1",
+        src: "pi",
+        tok: 20,
+        inp: 10,
+        out: 5,
+        cr: 5,
+        cost: 0.2,
+      }),
+    ];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+    ]);
+    const cli = out.filter((item) => item.src === "cli");
+    const pi = out.filter((item) => item.src === "pi");
+    expect(cli.reduce((sum, item) => sum + item.tok, 0)).toBe(100);
+    expect(cli.reduce((sum, item) => sum + item.cost, 0)).toBeCloseTo(1);
+    expect(cli[1].tok).toBe(20);
+    expect(pi).toEqual([records[2]]);
+  });
+
+  test("does not inflate detail that is below the authoritative total", () => {
+    const records = [record({ tok: 40, inp: 20, out: 10, cr: 10 })];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+    ]);
+    expect(out).toEqual(records);
   });
 });
 
