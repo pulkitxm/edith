@@ -61,7 +61,7 @@ function main() {
     `\n${findings.length} UserDefaults key(s) spelled out independently in more than one file.`,
   );
   console.error(
-    "Add one constant to AppStorageKeys (Packages/Edith/Sources/EdithKit/Core/AppStorageKeys.swift) and reference it from every site instead.",
+    "Add one constant to AppStorageKeys (Packages/Edith/Sources/EdithKit/Core/Defaults/AppStorageKeys.swift) and reference it from every site instead.",
   );
   process.exit(1);
 }

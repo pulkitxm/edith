@@ -20,14 +20,14 @@ Duplicated literals and duplicated views are the two recurring rot patterns in t
 codebase. Both have a designated home; use it instead of retyping the value or the view.
 
 - `UserDefaults`/`SharedDefaults` keys: every key string lives once, in
-  `AppStorageKeys` (`Packages/Edith/Sources/EdithKit/Core/AppStorageKeys.swift`), grouped
+  `AppStorageKeys` (`Packages/Edith/Sources/EdithKit/Core/Defaults/AppStorageKeys.swift`), grouped
   by feature (`AppStorageKeys.Presenter.autoActive`, not `"presenterAutoActive"`
   retyped at every call site). `bun run check-duplicate-keys` fails CI when the same
   `forKey: "..."` literal shows up in more than one file; it does not know about a
   literal used only once, so give a new setting a constant as soon as a second file
   needs it, not before.
 - Bundle identifiers, the marketing site URL, and other single-instance app identity
-  strings live on `MainApp` (`Packages/Edith/Sources/EdithKit/Core/MainApp.swift`);
+  strings live on `MainApp` (`Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift`);
   default values that a SwiftUI `@AppStorage` and a plain `UserDefaults` fallback both
   need (clipboard limits, provider timeouts, retention defaults) live as a `static let`
   next to the logic that owns them (`ClipboardIndex.defaultMaxItems`,

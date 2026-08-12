@@ -17,10 +17,10 @@ explaining, improve the name or the structure instead of adding prose.
 ## Code standards: one source of truth, reused everywhere
 
 - `UserDefaults`/`SharedDefaults` keys live once in `AppStorageKeys`
-  (`Sources/EdithKit/Core/AppStorageKeys.swift`), grouped by feature. Reference the
+  (`Sources/EdithKit/Core/Defaults/AppStorageKeys.swift`), grouped by feature. Reference the
   constant; do not retype the key string at a second call site.
 - Bundle identifiers and other app-identity strings live on `MainApp`
-  (`Sources/EdithKit/Core/MainApp.swift`). A default value shared by an `@AppStorage`
+  (`Sources/EdithKit/Core/AppIdentity/MainApp.swift`). A default value shared by an `@AppStorage`
   property and a plain `UserDefaults` fallback lives as a `static let` next to the
   logic that owns it, not as two independently typed literals.
 - Shared, cross-feature SwiftUI views and modifiers live in `Sources/EdithKit/UI`.
