@@ -66,6 +66,21 @@ public enum MachineThermalControls {
         let state = ShellQuote.quote("/run/edith-platform-profile-original")
         let unit = ShellQuote.quote(revertUnit)
         let selected = ShellQuote.quote(profile)
+        let action: String
+        if seconds > 0 {
+            action = """
+                command -v systemd-run >/dev/null 2>&1 || { printf '%s\n' 'Timed profiles need systemd-run.' >&2; exit 4; }
+                if [ -r "$state" ]; then original=$(cat "$state"); else original=$(cat "$path"); fi
+                printf '%s\n' "$original" > "$state"
+                printf '%s\n' "$selected" > "$path"
+                systemd-run --quiet --unit="$unit" --on-active=\(seconds)s --property=Type=oneshot /bin/sh -c 'if [ "$(cat "$1")" = "$2" ]; then printf "%s\n" "$3" > "$1"; fi; rm -f "$4"' sh "$path" "$selected" "$original" "$state" || { printf '%s\n' "$original" > "$path"; rm -f "$state"; exit 1; }
+                """
+        } else {
+            action = """
+                rm -f "$state"
+                printf '%s\n' "$selected" > "$path"
+                """
+        }
         let script = """
             path=\(path)
             state=\(state)
@@ -75,16 +90,7 @@ public enum MachineThermalControls {
             [ -w "$path" ] || { printf '%s\n' 'Platform profile control needs sudo.' >&2; exit 1; }
             systemctl stop "$unit.timer" "$unit.service" >/dev/null 2>&1 || true
             systemctl reset-failed "$unit.timer" "$unit.service" >/dev/null 2>&1 || true
-            if [ \(seconds) -gt 0 ]; then
-              command -v systemd-run >/dev/null 2>&1 || { printf '%s\n' 'Timed profiles need systemd-run.' >&2; exit 4; }
-              if [ -r "$state" ]; then original=$(cat "$state"); else original=$(cat "$path"); fi
-              printf '%s\n' "$original" > "$state"
-              printf '%s\n' "$selected" > "$path"
-              systemd-run --quiet --unit="$unit" --on-active=\(seconds)s --property=Type=oneshot /bin/sh -c 'if [ "$(cat "$1")" = "$2" ]; then printf "%s\n" "$3" > "$1"; fi; rm -f "$4"' sh "$path" "$selected" "$original" "$state" || { printf '%s\n' "$original" > "$path"; rm -f "$state"; exit 1; }
-            else
-              rm -f "$state"
-              printf '%s\n' "$selected" > "$path"
-            fi
+            \(action)
             printf '%s\n' "$selected"
             """
         let quoted = ShellQuote.quote(script)
