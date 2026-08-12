@@ -336,8 +336,21 @@ function startCopyButtons() {
   }
 }
 
+function startHeaderScroll() {
+  const header = document.querySelector(".site-header");
+  if (!header) {
+    return;
+  }
+  const sync = () => {
+    header.classList.toggle("is-scrolled", window.scrollY > 16);
+  };
+  sync();
+  window.addEventListener("scroll", sync, { passive: true });
+}
+
 function start() {
   startPlatformDownload();
+  startHeaderScroll();
   startSystemActions();
   startCopyButtons();
   buildHeatmaps();

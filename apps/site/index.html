@@ -357,140 +357,261 @@
         </div>
       </section>
 
-      <section id="features" class="wrap" style="padding-block: 6rem">
+      <section id="features" class="wrap features">
         <div class="section-head" data-reveal-item>
-          <p class="eyebrow">The features</p>
-          <h2>Twelve menu bar utilities worth of tools. One native app.</h2>
-          <p class="lede">
-            Every feature in Edith is normally its own app. We built the whole shelf into a
-            single native binary that idles at twenty-two megabytes.
-          </p>
+          <p class="eyebrow">And the rest of the shelf</p>
+          <h2>Everything else you'd otherwise install one by one.</h2>
         </div>
-        <div class="feature-grid" data-reveal-group>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            </span>
-            <h3>AI usage &amp; rate limits</h3>
-            <p>Claude and Codex rings with live countdowns</p>
+        <div class="cards" data-reveal-group>
+          <div class="card card-color">
+            <div class="card-art">
+              <span class="loupe"></span>
+              <span class="pill mono is-accent swatch">
+                <i>#E08A6A</i><i>#6A8D9E</i><i>#7A9E83</i><i>#9E6A97</i>
+              </span>
+            </div>
+            <h4>Color picker</h4>
+            <p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="M7 15v-3M12 15V9M17 15v-5" />
-              </svg>
-            </span>
-            <h3>Menu bar stats</h3>
-            <p>Session and weekly %, tinted by a risk model</p>
+          <div class="card card-focus">
+            <div class="card-art">
+              <span class="win-ghost back"><i></i><i></i><i></i></span>
+              <span class="win-ghost front"><i></i><i></i><i></i></span>
+            </div>
+            <h4>Focus dim</h4>
+            <p>Dims everything behind your active app so one window is all you see.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" />
-                <path d="M10.5 20a2 2 0 0 0 3 0" />
-              </svg>
-            </span>
-            <h3>Usage alerts</h3>
-            <p>Threshold, ahead-of-pace, burn, back-to-green, pre-reset</p>
+          <div class="card card-notch">
+            <div class="card-art stack">
+              <span class="notch"></span>
+              <span class="file-row">
+                <span class="file"></span><span class="file"></span><span class="file"></span>
+              </span>
+            </div>
+            <h4>Notch shelf</h4>
+            <p>Park files under the notch mid-drag, then drop them wherever they belong.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 19V5M4 19h16" />
-                <path d="M8 16l3.5-5 3 3L20 7" />
-              </svg>
-            </span>
-            <h3>Analytics dashboard</h3>
-            <p>KPIs, per-day and per-model charts, sortable table</p>
+          <div class="card card-clip">
+            <div class="card-art stack">
+              <span class="clip-row">
+                <span class="ghost-line" style="width: 60%"></span>
+                <span class="key">⌘V</span>
+              </span>
+              <span class="card-row"><span class="ghost-line" style="width: 80%"></span></span>
+              <span class="card-row"><span class="ghost-line" style="width: 40%"></span></span>
+            </div>
+            <h4>Clipboard history</h4>
+            <p>Everything you copied, one shortcut away, with instant paste.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <path d="M7 9h2v2H7zM11 9h2v2h-2zM15 13h2v2h-2zM7 13h2v2H7z" />
-              </svg>
-            </span>
-            <h3>Spend heatmap</h3>
-            <p>GitHub-style daily calendar across your full history</p>
+          <div class="card card-calendar">
+            <div class="card-art stack">
+              <span class="card-row">
+                <i class="dot accent"></i>
+                <span class="card-label">10:00 Standup</span>
+                <span class="pill is-accent">Join</span>
+              </span>
+              <span class="card-row">
+                <i class="dot sage"></i>
+                <span class="card-label">1:30 Design</span>
+                <span class="pill is-accent">Join</span>
+              </span>
+            </div>
+            <h4>Calendar</h4>
+            <p>Today's schedule in the panel and the app, with one-tap join links.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M9 18V6l10-2v12" />
-                <circle cx="6.5" cy="18" r="2.5" />
-                <circle cx="16.5" cy="16" r="2.5" />
-              </svg>
-            </span>
-            <h3>Music player</h3>
-            <p>Thumbnails, drag-to-seek, fades, auto-advance, media keys</p>
+          <div class="card card-clocks">
+            <div class="card-art">
+              <span class="pill mono">SF 11:59</span>
+              <span class="pill mono">NY 2:29</span>
+              <span class="pill mono">LDN 7:29</span>
+            </div>
+            <h4>World clocks</h4>
+            <p>Local time plus the offices you care about, at a glance.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="9" y="3" width="12" height="14" rx="2" />
-                <path d="M15 21H5a2 2 0 0 1-2-2V7" />
-              </svg>
-            </span>
-            <h3>Clipboard history</h3>
-            <p>Everything you copied, instant paste on a hotkey</p>
+          <div class="card card-shortcut">
+            <div class="card-art">
+              <span class="key lg">⌥</span>
+              <span class="key lg">⌘</span>
+              <span class="key lg">E</span>
+            </div>
+            <h4>Global shortcut</h4>
+            <p>
+              Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.
+            </p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H13a1.5 1.5 0 0 1 0-3h3a5 5 0 0 0 5-5c0-3.3-4-6-9-6" />
-                <circle cx="8" cy="10" r="1.2" />
-                <circle cx="14" cy="7.5" r="1.2" />
-              </svg>
-            </span>
-            <h3>Color picker</h3>
-            <p>System loupe on a hotkey, sampled hex to your clipboard</p>
+          <div class="card card-local">
+            <div class="card-art">
+              <span class="lock"></span>
+              <span class="card-label">Stays on this Mac</span>
+            </div>
+            <h4>Local first</h4>
+            <p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="8" />
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-              </svg>
-            </span>
-            <h3>Focus &amp; system utilities</h3>
-            <p>Focus dim, prevent-sleep, keyboard-clean lock, notch shelf</p>
+          <div class="card card-mic">
+            <div class="card-art">
+              <span class="mic"></span>
+              <span class="pill mic-state">
+                <span class="mic-lbl mic-muted"><i class="dot danger"></i>All mics muted</span>
+                <span class="mic-lbl mic-live"><i class="dot sage"></i>Mic live</span>
+              </span>
+            </div>
+            <h4>Mic mute</h4>
+            <p>
+              Every microphone muted system-wide with one hotkey. The menu bar shows when you're
+              safe.
+            </p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M9 4a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z" />
-                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-                <path d="M4 4l16 16" />
-              </svg>
-            </span>
-            <h3>Mic mute</h3>
-            <p>Every microphone muted system-wide on one hotkey</p>
+          <div class="card card-mixer">
+            <div class="card-art stack">
+              <span class="card-row">
+                <span class="card-label fixed">Safari</span>
+                <span class="bar"><i></i></span>
+              </span>
+              <span class="card-row">
+                <span class="card-label fixed">Music</span>
+                <span class="bar"><i></i></span>
+              </span>
+              <span class="card-row">
+                <span class="card-label fixed">Zoom</span>
+                <span class="bar"><i></i></span>
+              </span>
+            </div>
+            <h4>Audio mixer</h4>
+            <p>Per-app volume from the panel. Quiet the browser, keep the music.</p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M11 5L6 9H3v6h3l5 4z" />
-                <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10" />
-              </svg>
-            </span>
-            <h3>Per-app volume</h3>
-            <p>Set each app's volume independently from the panel</p>
+          <div class="card card-alerts">
+            <div class="card-art stack">
+              <span class="notch"></span>
+              <span class="notch-alerts">
+                <span class="pill"><i class="dot sage"></i>AirPods connected</span>
+                <span class="pill"><i class="dot accent"></i>Charger connected</span>
+                <span class="pill"><i class="dot sage"></i>Output: Studio Display</span>
+              </span>
+            </div>
+            <h4>Notch alerts</h4>
+            <p>
+              Bluetooth, audio-output, and charger changes surface as small notices around the
+              notch.
+            </p>
           </div>
-          <div class="feature-cell">
-            <span class="feature-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 7h16" />
-                <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-                <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-              </svg>
-            </span>
-            <h3>Disk cleaner</h3>
-            <p>Junk scanner for build caches, package managers, and logs</p>
+          <div class="card card-stats">
+            <div class="card-art">
+              <span class="stat-strip">
+                <span class="stat-cpu"></span>
+                <span class="stat-mem"></span>
+                <span class="subtle">Wed 14:22</span>
+              </span>
+            </div>
+            <h4>CPU &amp; memory readout</h4>
+            <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
+          </div>
+          <div class="card card-junk">
+            <div class="card-art">
+              <span class="junk-items">
+                <span class="pill mono">Caches 8.2 GB</span>
+                <span class="pill mono">Logs 2.1 GB</span>
+                <span class="pill mono">Cargo 1.4 GB</span>
+              </span>
+              <span class="bin" aria-hidden="true">
+                <i class="bin-lid"></i>
+                <i class="bin-body"></i>
+              </span>
+            </div>
+            <h4>Junk cleaner</h4>
+            <p>
+              Scan build caches, package managers, and old logs. Reclaim gigabytes, restorable from
+              the Trash.
+            </p>
+          </div>
+          <div class="card card-apps">
+            <div class="card-art stack">
+              <span class="card-row row-chrome">
+                <span class="card-label">Chrome</span>
+                <span class="pill mono app-pct"></span>
+                <span class="quit">✕</span>
+              </span>
+              <span class="card-row row-node">
+                <span class="card-label">node</span>
+                <span class="pill mono app-pct"></span>
+                <span class="quit">✕</span>
+              </span>
+            </div>
+            <h4>Running apps</h4>
+            <p>Sort every open app by CPU or memory and quit the heavy ones in a click.</p>
+          </div>
+          <div class="card card-yt">
+            <div class="card-art stack">
+              <span class="pill mono" style="align-self: flex-start; max-width: 100%"
+                >youtube.com/watch?v=dQw4…</span
+              >
+              <span class="card-row">
+                <span class="bar"><i></i></span>
+                <span class="card-label mono dl-pct"></span>
+              </span>
+            </div>
+            <h4>YouTube audio</h4>
+            <p>
+              Paste links, get tagged audio files straight into your music folder, with live
+              progress.
+            </p>
+          </div>
+          <div class="card card-drill">
+            <div class="card-art stack">
+              <span class="card-row drill-parent">
+                <span class="drill-caret" aria-hidden="true">▸</span>
+                <span class="card-label">edith</span>
+                <span class="pill mono">$412</span>
+              </span>
+              <span class="drill-children">
+                <span class="drill-inner">
+                  <span class="card-row">
+                    <span class="card-label">notch-motion</span>
+                    <span class="pill mono">$268</span>
+                  </span>
+                </span>
+              </span>
+            </div>
+            <h4>Project drilldown</h4>
+            <p>
+              Spend by project, worktree, and chat, across Claude and Codex, so you know which repo
+              eats the budget.
+            </p>
+          </div>
+          <div class="card card-spotify">
+            <div class="card-art">
+              <span class="sp-art">
+                <img src="/music/cover-1.jpg" alt="" />
+                <img src="/music/cover-2.jpg" alt="" />
+                <img src="/music/cover-3.jpg" alt="" />
+              </span>
+              <span class="sp-body">
+                <span class="sp-track">
+                  <span><i class="dot sage"></i>Spotify · Weightless</span>
+                  <span><i class="dot accent"></i>Apple Music · Nightcall</span>
+                  <span><i class="dot sage"></i>Spotify · Teardrop</span>
+                </span>
+                <span class="bar"><i></i></span>
+                <span class="card-label mono sp-time"></span>
+              </span>
+            </div>
+            <h4>Spotify &amp; Apple Music</h4>
+            <p>
+              Whatever is already playing shows up in the player with full controls, next to your
+              local library.
+            </p>
+          </div>
+          <div class="card card-camera">
+            <div class="card-art">
+              <span class="camera">
+                <span class="camera-head"></span>
+                <span class="camera-flip">⟳</span>
+              </span>
+            </div>
+            <h4>Camera check</h4>
+            <p>
+              A quick mirror under the notch before the call, with a switcher for every connected
+              camera.
+            </p>
           </div>
         </div>
       </section>
@@ -883,270 +1004,7 @@
         </div>
       </section>
 
-      <section class="wrap" style="border-top: 1px solid var(--color-line); padding-block: 6rem">
-        <div class="section-head" style="margin-bottom: 3.5rem" data-reveal-item>
-          <p class="eyebrow">And the rest of the shelf</p>
-          <h2>Everything else you'd otherwise install one by one.</h2>
-        </div>
-        <div class="cards" data-reveal-group>
-          <div class="card card-color">
-            <div class="card-art">
-              <span class="loupe"></span>
-              <span class="pill mono is-accent swatch">
-                <i>#E08A6A</i><i>#6A8D9E</i><i>#7A9E83</i><i>#9E6A97</i>
-              </span>
-            </div>
-            <h4>Color picker</h4>
-            <p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p>
-          </div>
-          <div class="card card-focus">
-            <div class="card-art">
-              <span class="win-ghost back"><i></i><i></i><i></i></span>
-              <span class="win-ghost front"><i></i><i></i><i></i></span>
-            </div>
-            <h4>Focus dim</h4>
-            <p>Dims everything behind your active app so one window is all you see.</p>
-          </div>
-          <div class="card card-notch">
-            <div class="card-art stack">
-              <span class="notch"></span>
-              <span class="file-row">
-                <span class="file"></span><span class="file"></span><span class="file"></span>
-              </span>
-            </div>
-            <h4>Notch shelf</h4>
-            <p>Park files under the notch mid-drag, then drop them wherever they belong.</p>
-          </div>
-          <div class="card card-clip">
-            <div class="card-art stack">
-              <span class="clip-row">
-                <span class="ghost-line" style="width: 60%"></span>
-                <span class="key">⌘V</span>
-              </span>
-              <span class="card-row"><span class="ghost-line" style="width: 80%"></span></span>
-              <span class="card-row"><span class="ghost-line" style="width: 40%"></span></span>
-            </div>
-            <h4>Clipboard history</h4>
-            <p>Everything you copied, one shortcut away, with instant paste.</p>
-          </div>
-          <div class="card card-calendar">
-            <div class="card-art stack">
-              <span class="card-row">
-                <i class="dot accent"></i>
-                <span class="card-label">10:00 Standup</span>
-                <span class="pill is-accent">Join</span>
-              </span>
-              <span class="card-row">
-                <i class="dot sage"></i>
-                <span class="card-label">1:30 Design</span>
-                <span class="pill is-accent">Join</span>
-              </span>
-            </div>
-            <h4>Calendar</h4>
-            <p>Today's schedule in the panel and the app, with one-tap join links.</p>
-          </div>
-          <div class="card card-clocks">
-            <div class="card-art">
-              <span class="pill mono">SF 11:59</span>
-              <span class="pill mono">NY 2:29</span>
-              <span class="pill mono">LDN 7:29</span>
-            </div>
-            <h4>World clocks</h4>
-            <p>Local time plus the offices you care about, at a glance.</p>
-          </div>
-          <div class="card card-shortcut">
-            <div class="card-art">
-              <span class="key lg">⌥</span>
-              <span class="key lg">⌘</span>
-              <span class="key lg">E</span>
-            </div>
-            <h4>Global shortcut</h4>
-            <p>
-              Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.
-            </p>
-          </div>
-          <div class="card card-local">
-            <div class="card-art">
-              <span class="lock"></span>
-              <span class="card-label">Stays on this Mac</span>
-            </div>
-            <h4>Local first</h4>
-            <p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p>
-          </div>
-          <div class="card card-mic">
-            <div class="card-art">
-              <span class="mic"></span>
-              <span class="pill mic-state">
-                <span class="mic-lbl mic-muted"><i class="dot danger"></i>All mics muted</span>
-                <span class="mic-lbl mic-live"><i class="dot sage"></i>Mic live</span>
-              </span>
-            </div>
-            <h4>Mic mute</h4>
-            <p>
-              Every microphone muted system-wide with one hotkey. The menu bar shows when you're
-              safe.
-            </p>
-          </div>
-          <div class="card card-mixer">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label fixed">Safari</span>
-                <span class="bar"><i></i></span>
-              </span>
-              <span class="card-row">
-                <span class="card-label fixed">Music</span>
-                <span class="bar"><i></i></span>
-              </span>
-              <span class="card-row">
-                <span class="card-label fixed">Zoom</span>
-                <span class="bar"><i></i></span>
-              </span>
-            </div>
-            <h4>Audio mixer</h4>
-            <p>Per-app volume from the panel. Quiet the browser, keep the music.</p>
-          </div>
-          <div class="card card-alerts">
-            <div class="card-art stack">
-              <span class="notch"></span>
-              <span class="notch-alerts">
-                <span class="pill"><i class="dot sage"></i>AirPods connected</span>
-                <span class="pill"><i class="dot accent"></i>Charger connected</span>
-                <span class="pill"><i class="dot sage"></i>Output: Studio Display</span>
-              </span>
-            </div>
-            <h4>Notch alerts</h4>
-            <p>
-              Bluetooth, audio-output, and charger changes surface as small notices around the
-              notch.
-            </p>
-          </div>
-          <div class="card card-stats">
-            <div class="card-art">
-              <span class="stat-strip">
-                <span class="stat-cpu"></span>
-                <span class="stat-mem"></span>
-                <span class="subtle">Wed 14:22</span>
-              </span>
-            </div>
-            <h4>CPU &amp; memory readout</h4>
-            <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
-          </div>
-          <div class="card card-junk">
-            <div class="card-art">
-              <span class="junk-items">
-                <span class="pill mono">Caches 8.2 GB</span>
-                <span class="pill mono">Logs 2.1 GB</span>
-                <span class="pill mono">Cargo 1.4 GB</span>
-              </span>
-              <span class="bin" aria-hidden="true">
-                <i class="bin-lid"></i>
-                <i class="bin-body"></i>
-              </span>
-            </div>
-            <h4>Junk cleaner</h4>
-            <p>
-              Scan build caches, package managers, and old logs. Reclaim gigabytes, restorable from
-              the Trash.
-            </p>
-          </div>
-          <div class="card card-apps">
-            <div class="card-art stack">
-              <span class="card-row row-chrome">
-                <span class="card-label">Chrome</span>
-                <span class="pill mono app-pct"></span>
-                <span class="quit">✕</span>
-              </span>
-              <span class="card-row row-node">
-                <span class="card-label">node</span>
-                <span class="pill mono app-pct"></span>
-                <span class="quit">✕</span>
-              </span>
-            </div>
-            <h4>Running apps</h4>
-            <p>Sort every open app by CPU or memory and quit the heavy ones in a click.</p>
-          </div>
-          <div class="card card-yt">
-            <div class="card-art stack">
-              <span class="pill mono" style="align-self: flex-start; max-width: 100%"
-                >youtube.com/watch?v=dQw4…</span
-              >
-              <span class="card-row">
-                <span class="bar"><i></i></span>
-                <span class="card-label mono dl-pct"></span>
-              </span>
-            </div>
-            <h4>YouTube audio</h4>
-            <p>
-              Paste links, get tagged audio files straight into your music folder, with live
-              progress.
-            </p>
-          </div>
-          <div class="card card-drill">
-            <div class="card-art stack">
-              <span class="card-row drill-parent">
-                <span class="drill-caret" aria-hidden="true">▸</span>
-                <span class="card-label">edith</span>
-                <span class="pill mono">$412</span>
-              </span>
-              <span class="drill-children">
-                <span class="drill-inner">
-                  <span class="card-row">
-                    <span class="card-label">notch-motion</span>
-                    <span class="pill mono">$268</span>
-                  </span>
-                </span>
-              </span>
-            </div>
-            <h4>Project drilldown</h4>
-            <p>
-              Spend by project, worktree, and chat, across Claude and Codex, so you know which repo
-              eats the budget.
-            </p>
-          </div>
-          <div class="card card-spotify">
-            <div class="card-art">
-              <span class="sp-art">
-                <img src="/music/cover-1.jpg" alt="" />
-                <img src="/music/cover-2.jpg" alt="" />
-                <img src="/music/cover-3.jpg" alt="" />
-              </span>
-              <span class="sp-body">
-                <span class="sp-track">
-                  <span><i class="dot sage"></i>Spotify · Weightless</span>
-                  <span><i class="dot accent"></i>Apple Music · Nightcall</span>
-                  <span><i class="dot sage"></i>Spotify · Teardrop</span>
-                </span>
-                <span class="bar"><i></i></span>
-                <span class="card-label mono sp-time"></span>
-              </span>
-            </div>
-            <h4>Spotify &amp; Apple Music</h4>
-            <p>
-              Whatever is already playing shows up in the player with full controls, next to your
-              local library.
-            </p>
-          </div>
-          <div class="card card-camera">
-            <div class="card-art">
-              <span class="camera">
-                <span class="camera-head"></span>
-                <span class="camera-flip">⟳</span>
-              </span>
-            </div>
-            <h4>Camera check</h4>
-            <p>
-              A quick mirror under the notch before the call, with a switcher for every connected
-              camera.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="performance"
-        class="wrap perf"
-        style="border-top: 1px solid var(--color-line); padding-block: 6rem"
-      >
+      <section id="performance" class="wrap perf">
         <div class="pitch-grid perf-grid" data-reveal-group>
           <div>
             <p class="eyebrow">24/7, quietly</p>
@@ -1257,7 +1115,7 @@
       </section>
 
       <section id="faq" class="wrap faq">
-        <div class="section-head" style="margin-bottom: 3.5rem" data-reveal-item>
+        <div class="section-head" data-reveal-item>
           <p class="eyebrow">FAQ</p>
           <h2>Questions, answered.</h2>
         </div>
