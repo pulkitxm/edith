@@ -585,6 +585,16 @@ if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline >"$TMP/codex.ses
   exit 1
 fi
 include_source codex "$TMP/codex.daily.json" "$TMP/codex.session.json"
+: >"$TMP/codex.sessions-by-day.jsonl"
+while IFS= read -r codex_date; do
+  if ! CODEX_HOME="$CODEX_CFG" ccu codex session --json --offline \
+    --since "$codex_date" --until "$codex_date" >"$TMP/codex.session-day.json" 2>/dev/null; then
+    _error "codex repository detail collection failed; previous data preserved"
+    exit 1
+  fi
+  jq -c --arg date "$codex_date" '.sessions[] | . + {date: $date}' \
+    "$TMP/codex.session-day.json" >>"$TMP/codex.sessions-by-day.jsonl"
+done < <(jq -r '.daily[].date' "$TMP/codex.daily.json")
 
 for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw; do
   if ! ccu "$agent" daily --json --offline >"$TMP/$agent.daily.json" 2>/dev/null; then
@@ -687,89 +697,82 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   '
 
   WALKC='
-    def nonnegative: if . < 0 then 0 else . end;
-    def usageDelta($current; $previous):
-      {
-        input_tokens: (($current.input_tokens // 0) - ($previous.input_tokens // 0) | nonnegative),
-        cached_input_tokens: (($current.cached_input_tokens // 0)
-          - ($previous.cached_input_tokens // 0) | nonnegative),
-        cache_write_input_tokens: (($current.cache_write_input_tokens // 0)
-          - ($previous.cache_write_input_tokens // 0) | nonnegative),
-        output_tokens: (($current.output_tokens // 0) - ($previous.output_tokens // 0) | nonnegative)
-      };
-    def normalizedUsage:
-      ([.cached_input_tokens // 0, .input_tokens // 0] | min) as $cached
-      | {
-          inp: ((.input_tokens // 0) - $cached),
-          out: (.output_tokens // 0),
-          cc: (.cache_write_input_tokens // 0),
-          cr: $cached
-        }
-      | . + {tok: (.inp + .out + .cc + .cr)};
     [., inputs] as $L
     | ([ $L[] | select(.type == "session_meta") ] | .[0].payload) as $meta
     | (($meta.id // "") | tostring) as $sid
     | if $sid == "" then empty else
-        reduce $L[] as $entry (
-          {
-            cwd: ($meta.cwd // ""),
-            model: "unknown",
-            previous: null,
-            items: [{t: "meta", sid: $sid, cwd: ($meta.cwd // ""), src: $src}]
-          };
-          if $entry.type == "session_meta" then
-            .cwd = ($entry.payload.cwd // .cwd)
-          elif $entry.type == "turn_context" then
-            .cwd = ($entry.payload.cwd // .cwd)
-            | .model = ($entry.payload.model // .model)
-          elif $entry.type == "event_msg" and $entry.payload.type == "user_message" then
-            (($entry.payload.message // "") | tostring
-              | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $text
-            | if $text != "" and ($text | startswith("<") | not) then
-                .items += [{
-                  t: "text", sid: $sid, tms: ($entry.timestamp // ""), text: $text[0:80]
-                }]
-              else . end
-          elif $entry.type == "event_msg" and $entry.payload.type == "token_count" then
-            ($entry.payload.info // {}) as $info
-            | ($info.total_token_usage // null) as $total
-            | (($total == null) or (.previous != $total)) as $advanced
-            | (if $advanced then
-                ($info.last_token_usage
-                  // if $total == null then null else usageDelta($total; (.previous // {})) end)
-              else null end) as $raw
-            | if $total != null then .previous = $total else . end
-            | if $raw == null then . else
-                ($raw | normalizedUsage) as $usage
-                | ($entry.payload.model // $info.model // .model // "unknown") as $model
-                | .model = $model
-                | if $usage.tok == 0 or ($entry.timestamp // "") == "" then . else
-                    ($entry.timestamp | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) as $epoch
-                    | ($epoch + $off) as $local
-                    | .items += [{
-                        t: "rec",
-                        id: ([$src, $entry.timestamp, $model, $usage.inp, $usage.out,
-                          $usage.cc, $usage.cr] | map(tostring) | join(":")),
-                        date: ($local | strftime("%Y-%m-%d")),
-                        hour: (($local / 3600 | floor) % 24),
-                        ts: ($epoch * 1000),
-                        model: $model,
-                        cwd: .cwd,
-                        wt: null,
-                        sid: $sid,
-                        src: $src,
-                        inp: $usage.inp,
-                        out: $usage.out,
-                        cc: $usage.cc,
-                        cr: $usage.cr,
-                        tok: $usage.tok
-                      }]
-                  end
-              end
-          else . end
-        )
-        | .items[]
+        ({
+          t: "meta", sid: $sid, cwd: ($meta.cwd // ""), src: $src,
+          sessionFile: ((input_filename // "<stdin>")
+            | split("/")[-1] | sub("\\.jsonl$"; ""))
+        },
+        ($L[]
+          | if .type == "event_msg" and (.payload.type == "user_message") then
+              ((.payload.message // "") | tostring
+                | gsub("^\\s+"; "") | gsub("\\s+$"; "")) as $text
+              | if $text != "" and ($text | startswith("<") | not) then
+                  {t: "text", sid: $sid, tms: (.timestamp // ""), text: $text[0:80]}
+                else empty end
+            else empty end))
       end
+  '
+
+  CODEX_DETAILS='
+    def timestampMillis:
+      if type == "number" then if . > 100000000000 then . else . * 1000 end
+      elif type == "string" then
+        (try capture("\\.(?<fraction>[0-9]+)Z$").fraction catch "0") as $fraction
+        | (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 * 1000)
+          + (($fraction + "000")[0:3] | tonumber)
+      else 0 end;
+    ($metadata | map({(.sessionFile): .}) | add // {}) as $meta
+    | $sessions[]
+    | . as $session
+    | ($meta[($session.sessionFile // "")]
+      // $meta[($session.sessionId // "" | split("/")[-1])] // {}) as $sessionMeta
+    | ([($session.models // {}) | to_entries[]
+        | .value as $usage
+        | {
+            model: .key,
+            inp: ($usage.inputTokens // 0),
+            out: ($usage.outputTokens // 0),
+            cc: ($usage.cacheCreationTokens // 0),
+            cr: ($usage.cacheReadTokens // 0)
+          }
+        | . + {tok: (.inp + .out + .cc + .cr)}]
+      | if length > 0 then . else [{
+          model: "unknown",
+          inp: ($session.inputTokens // 0),
+          out: ($session.outputTokens // 0),
+          cc: ($session.cacheCreationTokens // 0),
+          cr: ($session.cacheReadTokens // 0),
+          tok: ($session.totalTokens // 0)
+        }] end) as $models
+    | ([ $models[].tok ] | add // 0) as $sessionTokens
+    | (($session.lastActivity // ($session.date + "T00:00:00Z")) | timestampMillis) as $ts
+    | $models[]
+    | select(.tok > 0)
+    | . as $model
+    | {
+        t: "rec",
+        id: (["codex", $session.date, ($session.sessionFile // $session.sessionId), $model.model]
+          | join(":")),
+        date: $session.date,
+        hour: (((($ts / 1000 | floor) + $off) / 3600 | floor) % 24),
+        ts: $ts,
+        model: $model.model,
+        cwd: ($sessionMeta.cwd // ""),
+        wt: null,
+        sid: ($sessionMeta.sid // $session.sessionId // ""),
+        src: "codex",
+        cost: (if $sessionTokens > 0 then
+          ($session.costUSD // 0) * $model.tok / $sessionTokens else 0 end),
+        inp: $model.inp,
+        out: $model.out,
+        cc: $model.cc,
+        cr: $model.cr,
+        tok: $model.tok
+      }
   '
 
   WALKPI='
@@ -1116,6 +1119,13 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"
   walk_dir "$CCODE_DIR" commandcode "$WALKCC"
   walk_opencode
+  jq -s 'map(select(.t == "meta" and .src == "codex"))' "$TMP/walk.jsonl" \
+    >"$TMP/codex.metadata.json"
+  jq -c -n --argjson off "$OFF" \
+    --slurpfile metadata "$TMP/codex.metadata.json" \
+    --slurpfile sessions "$TMP/codex.sessions-by-day.jsonl" \
+    '$metadata[0] as $metadata | $sessions as $sessions | '"$CODEX_DETAILS" \
+    >>"$TMP/walk.jsonl"
   jq -c 'select(.t == "rec") | del(.t)' "$TMP/walk.jsonl" >"$TMP/records.jsonl"
   jq -s '
     [ .[] | select(.t != "rec") ]

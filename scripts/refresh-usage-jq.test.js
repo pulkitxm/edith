@@ -64,6 +64,7 @@ const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
+const CODEX_DETAILS = extractBlock("CODEX_DETAILS");
 const WALKPI = extractBlock("WALKPI");
 const WALKCC = extractBlock("WALKCC");
 const DEDUP = extractBlock("DEDUP");
@@ -438,131 +439,18 @@ const sessionMeta = (over = {}) => ({
   payload: { id: "cx-1", cwd: "/repo/app", ...over },
 });
 
-const tokenCount = (usage = {}, over = {}, totalUsage = usage) => {
-  const defaults = {
-    input_tokens: 100,
-    cached_input_tokens: 60,
-    output_tokens: 20,
-    reasoning_output_tokens: 5,
-    total_tokens: 120,
-  };
-  return {
-    timestamp: "2026-06-10T12:30:00.123Z",
-    type: "event_msg",
-    payload: {
-      type: "token_count",
-      info: {
-        last_token_usage: { ...defaults, ...usage },
-        total_token_usage: { ...defaults, ...totalUsage },
-      },
-    },
-    ...over,
-  };
-};
-
-const secondCumulativeUsage = {
-  input_tokens: 200,
-  cached_input_tokens: 120,
-  output_tokens: 40,
-  reasoning_output_tokens: 10,
-  total_tokens: 240,
-};
-
 describe("WALKC", () => {
-  test("attributes incremental token usage to the active repository and model", () => {
-    const out = walkc([
-      sessionMeta(),
+  test("links a Codex session file to its repository metadata", () => {
+    const out = walkc([sessionMeta()]);
+    expect(out).toEqual([
       {
-        type: "turn_context",
-        payload: { model: "gpt-5.6-sol", cwd: "/repo/worktree" },
+        t: "meta",
+        sid: "cx-1",
+        cwd: "/repo/app",
+        src: "codex",
+        sessionFile: "<stdin>",
       },
-      tokenCount(),
-      tokenCount(
-        {},
-        { timestamp: "2026-06-10T13:30:00.123Z" },
-        secondCumulativeUsage,
-      ),
     ]);
-    expect(out[0]).toEqual({
-      t: "meta",
-      sid: "cx-1",
-      cwd: "/repo/app",
-      src: "codex",
-    });
-    expect(out.slice(1)).toHaveLength(2);
-    expect(out[1]).toMatchObject({
-      t: "rec",
-      date: "2026-06-10",
-      hour: 12,
-      model: "gpt-5.6-sol",
-      cwd: "/repo/worktree",
-      sid: "cx-1",
-      src: "codex",
-      inp: 40,
-      out: 20,
-      cc: 0,
-      cr: 60,
-      tok: 120,
-    });
-    expect(out[2]).toMatchObject({
-      hour: 13,
-      model: "gpt-5.6-sol",
-      cwd: "/repo/worktree",
-      tok: 120,
-    });
-  });
-
-  test("ignores repeated snapshots and follows model and cwd changes", () => {
-    const out = walkc([
-      sessionMeta(),
-      { type: "turn_context", payload: { model: "gpt-first" } },
-      tokenCount({}, { timestamp: "2026-06-10T12:30:00.123Z" }),
-      tokenCount({}, { timestamp: "2026-06-10T12:31:00.123Z" }),
-      {
-        type: "turn_context",
-        payload: { model: "gpt-second", cwd: "/repo/second" },
-      },
-      tokenCount(
-        {},
-        { timestamp: "2026-06-10T12:32:00.123Z" },
-        secondCumulativeUsage,
-      ),
-    ]);
-    const records = out.filter((record) => record.t === "rec");
-    expect(records).toHaveLength(2);
-    expect(records.map((record) => record.model)).toEqual([
-      "gpt-first",
-      "gpt-second",
-    ]);
-    expect(records.map((record) => record.cwd)).toEqual([
-      "/repo/app",
-      "/repo/second",
-    ]);
-  });
-
-  test("derives increments from cumulative totals when last usage is absent", () => {
-    const first = tokenCount();
-    const second = tokenCount(
-      {},
-      { timestamp: "2026-06-10T13:30:00.123Z" },
-      secondCumulativeUsage,
-    );
-    delete first.payload.info.last_token_usage;
-    delete second.payload.info.last_token_usage;
-    const records = walkc([sessionMeta(), first, second]).filter(
-      (record) => record.t === "rec",
-    );
-    expect(records).toHaveLength(2);
-    expect(records.map((record) => record.tok)).toEqual([120, 120]);
-    expect(records[1]).toMatchObject({ inp: 40, out: 20, cc: 0, cr: 60 });
-  });
-
-  test("uses a stable event identity across replayed session files", () => {
-    const first = walkc([sessionMeta({ id: "original" }), tokenCount()]);
-    const replay = walkc([sessionMeta({ id: "fork" }), tokenCount()]);
-    expect(first.find((record) => record.t === "rec").id).toBe(
-      replay.find((record) => record.t === "rec").id,
-    );
   });
 
   test("user_message becomes a text record, tag-prefixed and empty skipped", () => {
@@ -577,19 +465,131 @@ describe("WALKC", () => {
       msg("<environment_context>x"),
       msg(""),
     ]);
-    expect(out).toEqual([
-      { t: "meta", sid: "cx-1", cwd: "/repo/app", src: "codex" },
-      {
-        t: "text",
-        sid: "cx-1",
-        tms: "2026-06-10T12:01:00.000Z",
-        text: "fix the bug",
-      },
-    ]);
+    expect(out[0]).toMatchObject({
+      t: "meta",
+      sid: "cx-1",
+      cwd: "/repo/app",
+      src: "codex",
+    });
+    expect(out[1]).toEqual({
+      t: "text",
+      sid: "cx-1",
+      tms: "2026-06-10T12:01:00.000Z",
+      text: "fix the bug",
+    });
+    expect(out).toHaveLength(2);
   });
 
   test("files without session_meta emit nothing", () => {
-    expect(walkc([tokenCount()])).toEqual([]);
+    expect(
+      walkc([
+        {
+          timestamp: "2026-06-10T12:30:00.123Z",
+          type: "event_msg",
+          payload: { type: "token_count", info: {} },
+        },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("CODEX_DETAILS", () => {
+  const details = (metadata, sessions, off = 0) =>
+    jq(CODEX_DETAILS, "", [
+      "-n",
+      "--argjson",
+      "metadata",
+      JSON.stringify(metadata),
+      "--argjson",
+      "sessions",
+      JSON.stringify(sessions),
+      "--argjson",
+      "off",
+      String(off),
+    ]);
+
+  test("joins exact daily session and model totals to the repository", () => {
+    const records = details(
+      [
+        {
+          sessionFile: "rollout-1",
+          sid: "cx-1",
+          cwd: "/repo/app",
+        },
+      ],
+      [
+        {
+          date: "2026-06-10",
+          sessionFile: "rollout-1",
+          sessionId: "2026/06/10/rollout-1",
+          lastActivity: "2026-06-10T12:30:00.123Z",
+          costUSD: 1.2,
+          models: {
+            "gpt-a": {
+              inputTokens: 40,
+              outputTokens: 20,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 60,
+            },
+            "gpt-b": {
+              inputTokens: 10,
+              outputTokens: 5,
+              cacheCreationTokens: 1,
+              cacheReadTokens: 4,
+            },
+          },
+        },
+      ],
+    );
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      date: "2026-06-10",
+      hour: 12,
+      ts: 1_781_094_600_123,
+      model: "gpt-a",
+      cwd: "/repo/app",
+      sid: "cx-1",
+      src: "codex",
+      inp: 40,
+      out: 20,
+      cc: 0,
+      cr: 60,
+      tok: 120,
+    });
+    expect(records.reduce((sum, record) => sum + record.tok, 0)).toBe(140);
+    expect(records.reduce((sum, record) => sum + record.cost, 0)).toBeCloseTo(
+      1.2,
+    );
+  });
+
+  test("matches a basename fallback and preserves aggregate-only sessions", () => {
+    const [record] = details(
+      [{ sessionFile: "rollout-2", sid: "cx-2", cwd: "/repo/fallback" }],
+      [
+        {
+          date: "2026-06-10",
+          sessionId: "2026/06/10/rollout-2",
+          lastActivity: "2026-06-10T23:30:00.000Z",
+          inputTokens: 5,
+          outputTokens: 2,
+          cacheCreationTokens: 1,
+          cacheReadTokens: 4,
+          totalTokens: 12,
+          costUSD: 0.5,
+          models: {},
+        },
+      ],
+      7200,
+    );
+    expect(record).toMatchObject({
+      date: "2026-06-10",
+      hour: 1,
+      model: "unknown",
+      cwd: "/repo/fallback",
+      sid: "cx-2",
+      tok: 12,
+      cost: 0.5,
+    });
   });
 });
 
