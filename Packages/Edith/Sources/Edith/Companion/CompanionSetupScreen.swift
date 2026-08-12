@@ -75,6 +75,7 @@ struct CompanionSetupScreen: View {
     @Bindable var model: CompanionSetupModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -92,7 +93,7 @@ struct CompanionSetupScreen: View {
             }
             .pageContent(compact)
         }
-        .task { await model.refresh() }
+        .task { if requestsEnabled { await model.refresh() } }
     }
 
     private var addCard: some View {

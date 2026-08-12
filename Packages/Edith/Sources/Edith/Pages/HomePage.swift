@@ -24,6 +24,7 @@ struct HomePage: View {
         false
     @Environment(\.colorScheme) private var scheme
     @State private var usageCardHeight: CGFloat?
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var dark: Bool { scheme == .dark }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
@@ -84,7 +85,7 @@ struct HomePage: View {
         }
         .navigationTitle("Home")
         .task(id: usageEnabled) {
-            if usageEnabled { await model.load() }
+            if automaticActionsEnabled, usageEnabled { await model.load() }
         }
     }
 
@@ -873,6 +874,7 @@ private struct MusicCard: View {
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
         var presenterBlurMusic =
         true
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var theme: Color { themeColor(themeName) }
     private var blur: Bool { presenterState.active && presenterBlurMusic }
@@ -905,7 +907,9 @@ private struct MusicCard: View {
                 jumpLink("Open Music", to: .music, dark: dark)
             }
         }
-        .onAppear { remote.start() }
+        .onAppear {
+            if automaticActionsEnabled { remote.start() }
+        }
     }
 
     private var elapsedText: some View {

@@ -79,6 +79,7 @@ struct CompanionMindScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @State private var barsFilled = false
     @State private var detail: MindDetail?
     @State private var editingSection: String?
@@ -108,7 +109,7 @@ struct CompanionMindScreen: View {
             .pageContent(compact)
         }
         .task {
-            await model.refresh()
+            if requestsEnabled { await model.refresh() }
             withAnimation(Motion.animation(Motion.settle, reduceMotion: reduceMotion)) {
                 barsFilled = true
             }
@@ -440,6 +441,7 @@ private struct MindDetailSheet: View {
     let openEpisode: (String) -> Void
     let close: () -> Void
     @State private var episodeRefs: [(String, String)] = []
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -492,7 +494,7 @@ private struct MindDetailSheet: View {
         .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
         .background(DashSkin.paper(dark))
         .task {
-            await loadRefs()
+            if requestsEnabled { await loadRefs() }
         }
     }
 

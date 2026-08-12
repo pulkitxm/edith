@@ -87,6 +87,34 @@ import Testing
         #expect(byModel["gpt"]?.cost == 1.0)
     }
 
+    @Test func unattributedCostIsNotPresentedAsAModel() throws {
+        let document = """
+            {
+              "daily": [{
+                "period": "2026-08-07",
+                "bySource": {"codex": [
+                  {"modelName": "gpt-5.6-sol", "inputTokens": 100,
+                   "outputTokens": 0, "cacheCreationTokens": 0,
+                   "cacheReadTokens": 0, "cost": 0},
+                  {"modelName": "unattributed-cost", "inputTokens": 0,
+                   "outputTokens": 0, "cacheCreationTokens": 0,
+                   "cacheReadTokens": 0, "cost": 12},
+                  {"modelName": "unknown", "inputTokens": 0,
+                   "outputTokens": 0, "cacheCreationTokens": 0,
+                   "cacheReadTokens": 0, "cost": 3}
+                ]}
+              }]
+            }
+            """
+        let parsed = try JSONDecoder().decode(UsageDocument.self, from: Data(document.utf8))
+        let models = UsageAnalysis.byModel(parsed.daily, sources: nil)
+        let ordered = UsageAnalysis.orderedModels(models)
+        #expect(ordered.map(\.0) == ["gpt-5.6-sol", "unattributed-cost"])
+        #expect(ordered.last?.1.cost == 15)
+        #expect(UsageModelRow.displayName("unattributed-cost") == "Unattributed cost")
+        #expect(UsageModelRow.displayName("gpt-5.6-sol") == "gpt-5.6-sol")
+    }
+
     @Test func dailyRowsComeBackInDateOrder() throws {
         let days = UsageAnalysis.byDay(try Self.parsed().daily, sources: nil)
         #expect(days.map(\.0) == ["2026-08-06", "2026-08-07"])

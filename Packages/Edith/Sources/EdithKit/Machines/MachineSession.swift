@@ -67,12 +67,12 @@ public final class MachineSession {
     private var dockerRefreshRunning = false
     private var dockerInventoryRefreshRunning = false
 
-    public init(machine: Machine, local: Bool = false) {
+    public init(machine: Machine, local: Bool = false, observesWakeRequests: Bool = true) {
         self.machine = machine
         isLocal = local
         connection = local ? nil : SSHConnection(machine: machine)
         localSampler = local ? LocalMachineSampler() : nil
-        observeWake()
+        if observesWakeRequests { observeWake() }
     }
 
     deinit {

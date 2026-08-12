@@ -19,9 +19,11 @@ struct UsageMachinesPicker: View {
                 .padding(.horizontal, UIScale.pt(6))
             Divider().opacity(0.4)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    ForEach(model.machineGroups) { group in
-                        shownRow(group)
+                TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        ForEach(model.machineGroups) { group in
+                            shownRow(group, now: timeline.date)
+                        }
                     }
                 }
             }
@@ -48,10 +50,11 @@ struct UsageMachinesPicker: View {
         return shown == 1 ? "1 machine shown" : "\(shown) machines shown"
     }
 
-    private func shownRow(_ group: MachineGroup) -> some View {
+    private func shownRow(_ group: MachineGroup, now: Date) -> some View {
         let shown = model.machineIsShown(group)
         let partial = model.machineIsPartlyShown(group)
         let mark = shown ? "checkmark.circle.fill" : (partial ? "circle.lefthalf.filled" : "circle")
+        let freshness = freshness(group, now: now)
         return Button {
             if NSEvent.modifierFlags.contains(.option) {
                 model.showOnlyMachine(group)
@@ -75,6 +78,19 @@ struct UsageMachinesPicker: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
+                    if let freshness {
+                        HStack(spacing: UIScale.pt(4)) {
+                            if freshness.isStale {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: UIScale.pt(8)))
+                            }
+                            Text(freshness.statusLabel)
+                        }
+                        .font(DashSkin.mono(9.5))
+                        .foregroundStyle(
+                            freshness.isStale ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                        )
+                    }
                 }
                 Spacer(minLength: UIScale.pt(8))
                 Text(agentCount(group))
@@ -94,6 +110,9 @@ struct UsageMachinesPicker: View {
         group.sourceIDs.count == 1 ? "1 agent" : "\(group.sourceIDs.count) agents"
     }
 
+    private func freshness(_ group: MachineGroup, now: Date) -> MachineUsageFreshness? {
+        model.machineFreshness(group, now: now)
+    }
 }
 
 private struct MachineRowStyle: ButtonStyle {

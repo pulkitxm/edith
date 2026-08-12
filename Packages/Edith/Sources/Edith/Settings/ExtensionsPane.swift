@@ -74,6 +74,7 @@ struct ExtensionsPane: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
@@ -95,7 +96,9 @@ struct ExtensionsPane: View {
                         value: enabledEntries.map(\.id))
                 }
                 .scrollIndicators(.never)
-                .onAppear { handleDeepLink(using: proxy) }
+                .onAppear {
+                    if automaticActionsEnabled { handleDeepLink(using: proxy) }
+                }
             }
         }
         .navigationTitle("Extensions")
@@ -107,6 +110,7 @@ struct ExtensionsPane: View {
             enableRequestedExtensionIfReady()
         }
         .onAppear {
+            guard automaticActionsEnabled else { return }
             refreshPermissionState()
             IPC.post(IPC.Name.requestPermissionsRefresh)
             markEnabledExtensionsSeen()
@@ -115,7 +119,7 @@ struct ExtensionsPane: View {
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)
         ) { _ in
-            refreshPermissionState()
+            if automaticActionsEnabled { refreshPermissionState() }
         }
         .sheet(item: $selectedEntry) { entry in
             ExtensionSettingsSheet(entry: entry)

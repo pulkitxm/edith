@@ -33,16 +33,10 @@ final class CleanerModel {
         if let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String] {
             let kept = raw.filter { Self.pathIsAllowed($0, confirmed: confirmed) }
             driveSelection = Set(kept)
-            if kept != raw {
-                SharedDefaults.store.set(kept, forKey: "cleanerSelectedDrives")
-            }
         }
         if let raw = SharedDefaults.store.array(forKey: "cleanerCustomFolders") as? [String] {
             let kept = raw.filter { Self.pathIsAllowed($0, confirmed: confirmed) }
             customFolders = kept
-            if kept != raw {
-                SharedDefaults.store.set(kept, forKey: "cleanerCustomFolders")
-            }
         }
     }
 

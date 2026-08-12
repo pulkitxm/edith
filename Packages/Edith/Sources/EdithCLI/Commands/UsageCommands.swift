@@ -226,7 +226,7 @@ struct UsageModelsCommand: AsyncParsableCommand {
             let models = UsageAnalysis.byModel(
                 UsageAnalysis.days(document, range: range),
                 sources: try window.sources(in: document))
-            let ordered = models.sorted { $0.value.cost > $1.value.cost }
+            let ordered = UsageAnalysis.orderedModels(models)
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -236,7 +236,10 @@ struct UsageModelsCommand: AsyncParsableCommand {
                 return
             }
             let rows = ordered.map { name, totals in
-                [name, String(format: "%.2f", totals.cost), String(Int(totals.tokens))]
+                [
+                    UsageModelRow.displayName(name), String(format: "%.2f", totals.cost),
+                    String(Int(totals.tokens)),
+                ]
             }
             CLIOut.out(TextTable.render(headers: ["MODEL", "COST", "TOKENS"], rows: rows))
         }

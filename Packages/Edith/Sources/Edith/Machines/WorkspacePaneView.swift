@@ -85,6 +85,7 @@ struct WorkspacePaneView: View {
     let model: WorkspaceModel
     let machines: MachinesModel
     let dark: Bool
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     private var focused: Bool { model.layout.focused == pane.id }
 
@@ -132,7 +133,7 @@ struct WorkspacePaneView: View {
 
     @ViewBuilder
     private var content: some View {
-        if pane.tabs.isEmpty {
+        if !connectionsEnabled || pane.tabs.isEmpty {
             Color.clear
         } else {
             ZStack {

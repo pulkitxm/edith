@@ -2,6 +2,8 @@ import EdithKit
 import Foundation
 
 public struct UsageModelRow: Decodable, Sendable {
+    public static let unattributedCostName = "unattributed-cost"
+
     public let modelName: String?
     public let inputTokens: Double?
     public let outputTokens: Double?
@@ -15,6 +17,14 @@ public struct UsageModelRow: Decodable, Sendable {
     }
 
     public var name: String { modelName ?? "unknown" }
+
+    public var reportName: String {
+        tokens == 0 && (cost ?? 0) != 0 ? Self.unattributedCostName : name
+    }
+
+    public static func displayName(_ name: String) -> String {
+        name == unattributedCostName ? "Unattributed cost" : name
+    }
 }
 
 public struct UsageProjectChat: Decodable, Sendable {
@@ -294,10 +304,23 @@ public enum UsageAnalysis {
         var out: [String: UsageTotals] = [:]
         for day in days {
             for entry in day.rows(sources: sources) {
-                out[entry.row.name, default: UsageTotals()].add(entry.row)
+                out[entry.row.reportName, default: UsageTotals()].add(entry.row)
             }
         }
         return out
+    }
+
+    public static func orderedModels(_ models: [String: UsageTotals]) -> [(String, UsageTotals)] {
+        models.sorted { left, right in
+            let leftUnattributed = left.key == UsageModelRow.unattributedCostName
+            let rightUnattributed = right.key == UsageModelRow.unattributedCostName
+            if leftUnattributed != rightUnattributed { return !leftUnattributed }
+            if left.value.cost != right.value.cost { return left.value.cost > right.value.cost }
+            if left.value.tokens != right.value.tokens {
+                return left.value.tokens > right.value.tokens
+            }
+            return left.key < right.key
+        }
     }
 
     public static func byDay(_ days: [UsageDay], sources: Set<String>?) -> [(String, UsageTotals)] {

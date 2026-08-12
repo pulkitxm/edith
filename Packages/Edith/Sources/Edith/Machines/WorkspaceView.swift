@@ -140,6 +140,7 @@ struct WorkspaceView: View {
     let machines: MachinesModel
     @State private var model = WorkspaceModel.shared
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -158,7 +159,9 @@ struct WorkspaceView: View {
             }
         }
         .background(DashSkin.paper(dark))
-        .onAppear { machines.connectAll() }
+        .onAppear {
+            if connectionsEnabled { machines.connectAll() }
+        }
     }
 
     private var toolbar: some View {

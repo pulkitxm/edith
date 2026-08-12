@@ -739,8 +739,8 @@ describe("NORM", () => {
     expect(byName.a.cost).toBe(0);
     expect(byName.b.inputTokens).toBe(10);
     expect(byName.b.cost).toBe(0);
-    expect(byName.unknown).toEqual({
-      modelName: "unknown",
+    expect(byName["unattributed-cost"]).toEqual({
+      modelName: "unattributed-cost",
       inputTokens: 0,
       outputTokens: 0,
       cacheCreationTokens: 0,
@@ -783,7 +783,7 @@ describe("NORM", () => {
     ]);
   });
 
-  test("empty model shape keeps source cost under unknown", () => {
+  test("empty model shape keeps source cost unattributed", () => {
     const [day] = norm([
       {
         date: "2026-06-10",
@@ -793,7 +793,7 @@ describe("NORM", () => {
     ]);
     expect(day.breakdowns).toEqual([
       {
-        modelName: "unknown",
+        modelName: "unattributed-cost",
         inputTokens: 0,
         outputTokens: 0,
         cacheCreationTokens: 0,
@@ -821,6 +821,31 @@ describe("NORM", () => {
         cacheCreationTokens: 0,
         cacheReadTokens: 0,
         cost: 8,
+      },
+    ]);
+  });
+
+  test("missing model name remains unknown", () => {
+    const [day] = norm([
+      {
+        date: "2026-06-10",
+        modelBreakdowns: [
+          {
+            inputTokens: 12,
+            outputTokens: 3,
+            cost: 2,
+          },
+        ],
+      },
+    ]);
+    expect(day.breakdowns).toEqual([
+      {
+        modelName: "unknown",
+        inputTokens: 12,
+        outputTokens: 3,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 2,
       },
     ]);
   });
@@ -953,7 +978,7 @@ describe("usage pipeline", () => {
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 
-  test("mixed-model unknown cost row does not double source tokens", () => {
+  test("mixed-model unattributed cost row does not double source tokens", () => {
     const norm = jq(
       `${NORM} [.daily[] | normDay | .breakdowns |= dropSynthetic]`,
       JSON.stringify({
@@ -973,6 +998,14 @@ describe("usage pipeline", () => {
     expect(out.totals.tokens).toBe(40);
     expect(out.totals.cost).toBe(10);
     expect(out.daily[0].bySource.codex).toHaveLength(3);
+    expect(out.daily[0].bySource.codex).toContainEqual({
+      modelName: "unattributed-cost",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+      cost: 10,
+    });
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 

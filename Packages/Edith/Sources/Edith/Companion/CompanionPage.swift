@@ -4,6 +4,17 @@ import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct CompanionRequestsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var companionRequestsEnabled: Bool {
+        get { self[CompanionRequestsEnabledKey.self] }
+        set { self[CompanionRequestsEnabledKey.self] = newValue }
+    }
+}
+
 enum CompanionTab: String, CaseIterable, Identifiable {
     case chat
     case capture
@@ -79,6 +90,7 @@ struct CompanionPage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
 
     private var dark: Bool { scheme == .dark }
@@ -104,6 +116,7 @@ struct CompanionPage: View {
             return true
         }
         .task {
+            guard requestsEnabled else { return }
             while !Task.isCancelled {
                 await home.refresh()
                 try? await Task.sleep(for: .seconds(20))

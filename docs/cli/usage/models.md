@@ -1,7 +1,7 @@
 # `ed usage models`
 
-Cost and tokens per model, so you can see which model is actually spending the
-money.
+Tokens and attributable cost per model, plus any exact provider cost that cannot
+be assigned to one model.
 
 ```
 ed usage models [--range <range>] [--source <source>]... [--machine <machine>]... [--json]
@@ -18,7 +18,9 @@ ed usage models [--range <range>] [--source <source>]... [--machine <machine>]..
 
 ## `--json` shape
 
-A top-level array sorted by `totals.cost` descending.
+A top-level array with models sorted by `totals.cost` descending, followed by an
+`unattributed-cost` accounting row when a provider reports exact total cost but
+not a per-model cost split.
 
 ```json
 [
@@ -62,8 +64,9 @@ Reads only, mutates nothing, and needs no app. Same exit codes as
 `ed usage summary`.
 
 A row whose model name is missing from the file is grouped under the literal
-name `unknown` rather than dropped, so the model totals always add up to the
-summary totals for the same window and sources.
+name `unknown` rather than dropped. A zero-token `unattributed-cost` row keeps
+provider cost exact when that cost cannot be assigned to a model. The human
+table labels it `Unattributed cost` and places it after real models.
 
 ```
 $ ed usage models --range week

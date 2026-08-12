@@ -193,7 +193,7 @@ def normDay:
     | { period: .date,
         breakdowns: ($breakdowns
           + if ($models | length) != 1 and $cost != 0 then [{
-              modelName: "unknown",
+              modelName: "unattributed-cost",
               inputTokens: 0,
               outputTokens: 0,
               cacheCreationTokens: 0,

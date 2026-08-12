@@ -21,7 +21,6 @@ final class MachinesModel {
     private var machinesObserver: NSObjectProtocol?
 
     private init() {
-        MachinePaths.prepare()
         machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
             Task { @MainActor in
                 self?.store.reload()

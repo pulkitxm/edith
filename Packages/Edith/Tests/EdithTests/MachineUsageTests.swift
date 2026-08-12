@@ -66,6 +66,40 @@ import Testing
     }
 }
 
+@Suite struct MachineUsageFreshnessTests {
+    private let now = Date(timeIntervalSince1970: 1_780_000_000)
+
+    @Test func collectionStaysFreshThroughTheRefreshWindowAndTolerance() {
+        let freshness = MachineUsageFreshness(
+            collectedAt: now.addingTimeInterval(-(30 * 60 + 5 * 60)), now: now)
+        #expect(!freshness.isStale)
+        #expect(freshness.statusLabel == "collected 35m ago")
+    }
+
+    @Test func collectionBecomesStaleAfterTheTolerance() {
+        let freshness = MachineUsageFreshness(
+            collectedAt: now.addingTimeInterval(-(30 * 60 + 5 * 60 + 1)), now: now)
+        #expect(freshness.isStale)
+        #expect(freshness.statusLabel == "stale · collected 35m ago")
+    }
+
+    @Test func collectionAgeStaysCompactAndNeverGoesNegative() {
+        #expect(
+            MachineUsageFreshness(
+                collectedAt: now.addingTimeInterval(30), now: now
+            ).ageLabel == "just now")
+        #expect(
+            MachineUsageFreshness(
+                collectedAt: now.addingTimeInterval(-(2 * 3600 + 7 * 60)), now: now
+            ).ageLabel == "2h 7m ago")
+        #expect(
+            MachineUsageFreshness(
+                collectedAt: now.addingTimeInterval(-(3 * 86400 + 4 * 3600)), now: now
+            ).ageLabel == "3d 4h ago")
+    }
+
+}
+
 @Suite struct MachineUsageSelectionTests {
     private func store() -> UserDefaults {
         let suite = UserDefaults(suiteName: "machine-usage-\(UUID().uuidString)")!

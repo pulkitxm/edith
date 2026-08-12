@@ -1,12 +1,23 @@
 import EdithKit
 import SwiftUI
 
+private struct MachineConnectionsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var machineConnectionsEnabled: Bool {
+        get { self[MachineConnectionsEnabledKey.self] }
+        set { self[MachineConnectionsEnabledKey.self] = newValue }
+    }
+}
+
 struct MachinesPage: View {
     @State private var model = MachinesModel.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.Machines.tab, store: SharedDefaults.store) private var storedTab =
-        MachineTab.overview.rawValue
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @AppStorage(AppStorageKeys.Machines.selection, store: SharedDefaults.store) private
         var storedSelection = ""
     @AppStorage(AppStorageKeys.Machines.mode, store: SharedDefaults.store) private var modeRaw =
@@ -53,12 +64,14 @@ struct MachinesPage: View {
             )
         }
         .onAppear {
+            guard connectionsEnabled else { return }
             model.connectAll()
             model.restoreSelection(storedSelection)
             model.startSelected()
             reconcileTab()
         }
         .onChange(of: model.selection) { _, selection in
+            guard connectionsEnabled else { return }
             storedSelection = selection?.uuidString ?? ""
             model.startSelected()
             reconcileTab()
@@ -104,21 +117,23 @@ struct MachinesPage: View {
                     title: "Workspace", subtitle: "Split panes",
                     symbol: "rectangle.split.2x1", selected: mode == .workspace, dark: dark
                 ) { modeRaw = MachinesMode.workspace.rawValue }
-                ForEach(model.allMachines) { machine in
-                    MachineChip(
-                        machine: machine,
-                        session: model.session(for: machine.id),
-                        selected: mode == .machine && model.selection == machine.id,
-                        isLocal: model.isLocal(machine.id), dark: dark,
-                        onSelect: {
-                            modeRaw = MachinesMode.machine.rawValue
-                            model.selection = machine.id
-                        },
-                        onDetach: {
-                            MachineWindow.open(machineID: machine.id, title: machine.name)
-                        },
-                        onEdit: { editingMachine = machine },
-                        onRemove: { confirmRemoval = machine })
+                if connectionsEnabled {
+                    ForEach(model.allMachines) { machine in
+                        MachineChip(
+                            machine: machine,
+                            session: model.session(for: machine.id),
+                            selected: mode == .machine && model.selection == machine.id,
+                            isLocal: model.isLocal(machine.id), dark: dark,
+                            onSelect: {
+                                modeRaw = MachinesMode.machine.rawValue
+                                model.selection = machine.id
+                            },
+                            onDetach: {
+                                MachineWindow.open(machineID: machine.id, title: machine.name)
+                            },
+                            onEdit: { editingMachine = machine },
+                            onRemove: { confirmRemoval = machine })
+                    }
                 }
             }
             .padding(.vertical, UIScale.pt(2))
@@ -131,7 +146,9 @@ struct MachinesPage: View {
 
     @ViewBuilder
     private var content: some View {
-        if mode == .fleet {
+        if !connectionsEnabled {
+            Color.clear
+        } else if mode == .fleet {
             FleetHomeView(model: model) { id in
                 modeRaw = MachinesMode.machine.rawValue
                 model.selection = id

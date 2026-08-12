@@ -6,6 +6,7 @@ struct AboutPane: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @State private var contributors: [Contributor] = []
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var theme: Color { themeColor(themeName) }
 
@@ -89,6 +90,7 @@ struct AboutPane: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UIScale.pt(32))
         .task {
+            guard automaticActionsEnabled else { return }
             contributors = Contributors.cached()
             contributors = await Contributors.load()
         }

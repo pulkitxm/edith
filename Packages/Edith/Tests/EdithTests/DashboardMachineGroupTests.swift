@@ -140,6 +140,20 @@ import Testing
         #expect(!model.machineIsShown(try #require(model.machineGroups.first)))
     }
 
+    @Test func foldedCollectionTimeDrivesRemoteFreshness() throws {
+        let name = "DashboardMachineGroupTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = DashboardModel(preferences: defaults)
+        model.ingest(try usage())
+
+        let tuf = try #require(model.machineGroups.first { !$0.isLocal })
+        let now = try #require(EdithDate.parseISO("2026-08-11T19:00:01Z"))
+        let freshness = try #require(model.machineFreshness(tuf, now: now))
+        #expect(freshness.isStale)
+        #expect(freshness.statusLabel == "stale · collected 40m ago")
+    }
+
     private func usage() throws -> DashUsage {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -156,6 +170,9 @@ import Testing
                   "label": "Claude Code · tuf", "machine": "tuf", "machineID": "\(tufID)"
                 }
               },
+              "machines": [{
+                "id": "\(tufID)", "collectedAt": "2026-08-11T18:20:00Z"
+              }],
               "daily": [{
                 "period": "\(period)",
                 "bySource": {
