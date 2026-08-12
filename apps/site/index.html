@@ -12,6 +12,13 @@
     <link rel="canonical" href="https://edith.pulkit.page/" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
     <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <link
+      rel="preload"
+      href="/fonts/comfortaa-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/styles.css" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Edith" />
@@ -156,27 +163,21 @@
           <a href="#features">Features</a>
           <a href="#performance">Performance</a>
           <a href="#faq">FAQ</a>
-          <a href="https://github.com/pulkitxm/edith">GitHub</a>
         </nav>
-        <a
-          class="btn btn-solid btn-sm"
-          href="#download"
-          >Download</a
-        >
+        <a class="btn btn-solid btn-sm" data-download-auto href="#download">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 3a1.2 1.2 0 0 1 1.2 1.2v8.9l3.05-3.05a1.2 1.2 0 1 1 1.7 1.7l-5.1 5.1a1.2 1.2 0 0 1-1.7 0l-5.1-5.1a1.2 1.2 0 1 1 1.7-1.7l3.05 3.05V4.2A1.2 1.2 0 0 1 12 3zM5.2 18.6h13.6a1.2 1.2 0 0 1 0 2.4H5.2a1.2 1.2 0 0 1 0-2.4z"
+            />
+          </svg>
+          Download
+        </a>
       </div>
     </header>
 
     <main id="top">
       <section class="hero">
-        <div class="hero-glow" aria-hidden="true"></div>
         <div class="hero-inner">
-          <img
-            class="hero-icon"
-            src="/app-icon.png"
-            alt="Edith app icon"
-            width="88"
-            height="88"
-          />
           <p class="eyebrow hero-eyebrow">Native on macOS and Ubuntu</p>
           <h1>One control center<br />instead of twelve.</h1>
           <p class="hero-lede">
@@ -207,6 +208,14 @@
                 />
               </svg>
               Download for Ubuntu
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/pulkitxm/edith">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                />
+              </svg>
+              Star us on GitHub
             </a>
           </div>
           <p class="fineprint hero-note">
@@ -322,7 +331,12 @@
                   </div>
 
                   <div class="now-playing">
-                    <span class="art" data-art></span>
+                    <span class="np-art">
+                      <img class="art" src="/music/cover-1.jpg" alt="" data-art />
+                      <span class="np-eq" aria-hidden="true"
+                        ><i></i><i></i><i></i><i></i
+                      ></span>
+                    </span>
                     <div class="np-body">
                       <div class="np-title" data-title data-sensitive>Weightless</div>
                       <div class="np-artist" data-artist data-sensitive>Marconi Union</div>
@@ -342,72 +356,261 @@
         </div>
       </section>
 
-      <section class="wrap pitch">
-        <div class="pitch-grid" data-reveal-group>
-          <p class="eyebrow">The pitch</p>
-          <div>
-            <h2>Twelve menu bar utilities' worth of tools. One native app.</h2>
-            <p class="lede">
-              Every feature in Edith is normally its own app. We built the whole shelf into a
-              single native binary that idles at twenty-two megabytes.
+      <section id="features" class="wrap features">
+        <div class="section-head" data-reveal-item>
+          <p class="eyebrow">And the rest of the shelf</p>
+          <h2>Everything else you'd otherwise install one by one.</h2>
+        </div>
+        <div class="cards" data-reveal-group>
+          <div class="card card-color">
+            <div class="card-art">
+              <span class="loupe"></span>
+              <span class="pill mono is-accent swatch">
+                <i>#E08A6A</i><i>#6A8D9E</i><i>#7A9E83</i><i>#9E6A97</i>
+              </span>
+            </div>
+            <h4>Color picker</h4>
+            <p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p>
+          </div>
+          <div class="card card-focus">
+            <div class="card-art">
+              <span class="win-ghost back"><i></i><i></i><i></i></span>
+              <span class="win-ghost front"><i></i><i></i><i></i></span>
+            </div>
+            <h4>Focus dim</h4>
+            <p>Dims everything behind your active app so one window is all you see.</p>
+          </div>
+          <div class="card card-notch">
+            <div class="card-art stack">
+              <span class="notch"></span>
+              <span class="file-row">
+                <span class="file"></span><span class="file"></span><span class="file"></span>
+              </span>
+            </div>
+            <h4>Notch shelf</h4>
+            <p>Park files under the notch mid-drag, then drop them wherever they belong.</p>
+          </div>
+          <div class="card card-clip">
+            <div class="card-art stack">
+              <span class="clip-row">
+                <span class="ghost-line" style="width: 60%"></span>
+                <span class="key">⌘V</span>
+              </span>
+              <span class="card-row"><span class="ghost-line" style="width: 80%"></span></span>
+              <span class="card-row"><span class="ghost-line" style="width: 40%"></span></span>
+            </div>
+            <h4>Clipboard history</h4>
+            <p>Everything you copied, one shortcut away, with instant paste.</p>
+          </div>
+          <div class="card card-calendar">
+            <div class="card-art stack">
+              <span class="card-row">
+                <i class="dot accent"></i>
+                <span class="card-label">10:00 Standup</span>
+                <span class="pill is-accent">Join</span>
+              </span>
+              <span class="card-row">
+                <i class="dot sage"></i>
+                <span class="card-label">1:30 Design</span>
+                <span class="pill is-accent">Join</span>
+              </span>
+            </div>
+            <h4>Calendar</h4>
+            <p>Today's schedule in the panel and the app, with one-tap join links.</p>
+          </div>
+          <div class="card card-clocks">
+            <div class="card-art">
+              <span class="pill mono">SF 11:59</span>
+              <span class="pill mono">NY 2:29</span>
+              <span class="pill mono">LDN 7:29</span>
+            </div>
+            <h4>World clocks</h4>
+            <p>Local time plus the offices you care about, at a glance.</p>
+          </div>
+          <div class="card card-shortcut">
+            <div class="card-art">
+              <span class="key lg">⌥</span>
+              <span class="key lg">⌘</span>
+              <span class="key lg">E</span>
+            </div>
+            <h4>Global shortcut</h4>
+            <p>
+              Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.
             </p>
           </div>
-        </div>
-      </section>
-
-      <section id="features" class="wrap" style="padding-bottom: 6rem">
-        <div class="table" data-reveal-group>
-          <div class="table-row table-head">
-            <span>The feature</span>
-            <span>What you get in Edith</span>
+          <div class="card card-local">
+            <div class="card-art">
+              <span class="lock"></span>
+              <span class="card-label">Stays on this Mac</span>
+            </div>
+            <h4>Local first</h4>
+            <p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p>
           </div>
-          <div class="table-row">
-            <span>AI usage &amp; rate limits</span>
-            <span>Claude and Codex rings with live countdowns</span>
+          <div class="card card-mic">
+            <div class="card-art">
+              <span class="mic"></span>
+              <span class="pill mic-state">
+                <span class="mic-lbl mic-muted"><i class="dot danger"></i>All mics muted</span>
+                <span class="mic-lbl mic-live"><i class="dot sage"></i>Mic live</span>
+              </span>
+            </div>
+            <h4>Mic mute</h4>
+            <p>
+              Every microphone muted system-wide with one hotkey. The menu bar shows when you're
+              safe.
+            </p>
           </div>
-          <div class="table-row">
-            <span>Menu bar stats</span>
-            <span>Session and weekly %, tinted by a risk model</span>
+          <div class="card card-mixer">
+            <div class="card-art stack">
+              <span class="card-row">
+                <span class="card-label fixed">Safari</span>
+                <span class="bar"><i></i></span>
+              </span>
+              <span class="card-row">
+                <span class="card-label fixed">Music</span>
+                <span class="bar"><i></i></span>
+              </span>
+              <span class="card-row">
+                <span class="card-label fixed">Zoom</span>
+                <span class="bar"><i></i></span>
+              </span>
+            </div>
+            <h4>Audio mixer</h4>
+            <p>Per-app volume from the panel. Quiet the browser, keep the music.</p>
           </div>
-          <div class="table-row">
-            <span>Usage alerts</span>
-            <span>Threshold, ahead-of-pace, burn, back-to-green, pre-reset</span>
+          <div class="card card-alerts">
+            <div class="card-art stack">
+              <span class="notch"></span>
+              <span class="notch-alerts">
+                <span class="pill"><i class="dot sage"></i>AirPods connected</span>
+                <span class="pill"><i class="dot accent"></i>Charger connected</span>
+                <span class="pill"><i class="dot sage"></i>Output: Studio Display</span>
+              </span>
+            </div>
+            <h4>Notch alerts</h4>
+            <p>
+              Bluetooth, audio-output, and charger changes surface as small notices around the
+              notch.
+            </p>
           </div>
-          <div class="table-row">
-            <span>Analytics dashboard</span>
-            <span>KPIs, per-day and per-model charts, sortable table</span>
+          <div class="card card-stats">
+            <div class="card-art">
+              <span class="stat-strip">
+                <span class="stat-cpu"></span>
+                <span class="stat-mem"></span>
+                <span class="subtle">Wed 14:22</span>
+              </span>
+            </div>
+            <h4>CPU &amp; memory readout</h4>
+            <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
           </div>
-          <div class="table-row">
-            <span>Spend heatmap</span>
-            <span>GitHub-style daily calendar across your full history</span>
+          <div class="card card-junk">
+            <div class="card-art">
+              <span class="junk-items">
+                <span class="pill mono">Caches 8.2 GB</span>
+                <span class="pill mono">Logs 2.1 GB</span>
+                <span class="pill mono">Cargo 1.4 GB</span>
+              </span>
+              <span class="bin" aria-hidden="true">
+                <i class="bin-lid"></i>
+                <i class="bin-body"></i>
+              </span>
+            </div>
+            <h4>Junk cleaner</h4>
+            <p>
+              Scan build caches, package managers, and old logs. Reclaim gigabytes, restorable from
+              the Trash.
+            </p>
           </div>
-          <div class="table-row">
-            <span>Music player</span>
-            <span>Thumbnails, drag-to-seek, fades, auto-advance, media keys</span>
+          <div class="card card-apps">
+            <div class="card-art stack">
+              <span class="card-row row-chrome">
+                <span class="card-label">Chrome</span>
+                <span class="pill mono app-pct"></span>
+                <span class="quit">✕</span>
+              </span>
+              <span class="card-row row-node">
+                <span class="card-label">node</span>
+                <span class="pill mono app-pct"></span>
+                <span class="quit">✕</span>
+              </span>
+            </div>
+            <h4>Running apps</h4>
+            <p>Sort every open app by CPU or memory and quit the heavy ones in a click.</p>
           </div>
-          <div class="table-row">
-            <span>Clipboard history</span>
-            <span>Everything you copied, instant paste on a hotkey</span>
+          <div class="card card-yt">
+            <div class="card-art stack">
+              <span class="pill mono" style="align-self: flex-start; max-width: 100%"
+                >youtube.com/watch?v=dQw4…</span
+              >
+              <span class="card-row">
+                <span class="bar"><i></i></span>
+                <span class="card-label mono dl-pct"></span>
+              </span>
+            </div>
+            <h4>YouTube audio</h4>
+            <p>
+              Paste links, get tagged audio files straight into your music folder, with live
+              progress.
+            </p>
           </div>
-          <div class="table-row">
-            <span>Color picker</span>
-            <span>System loupe on a hotkey, sampled hex to your clipboard</span>
+          <div class="card card-drill">
+            <div class="card-art stack">
+              <span class="card-row drill-parent">
+                <span class="drill-caret" aria-hidden="true">▸</span>
+                <span class="card-label">edith</span>
+                <span class="pill mono">$412</span>
+              </span>
+              <span class="drill-children">
+                <span class="drill-inner">
+                  <span class="card-row">
+                    <span class="card-label">notch-motion</span>
+                    <span class="pill mono">$268</span>
+                  </span>
+                </span>
+              </span>
+            </div>
+            <h4>Project drilldown</h4>
+            <p>
+              Spend by project, worktree, and chat, across Claude and Codex, so you know which repo
+              eats the budget.
+            </p>
           </div>
-          <div class="table-row">
-            <span>Focus &amp; system utilities</span>
-            <span>Focus dim, prevent-sleep, keyboard-clean lock, notch shelf</span>
+          <div class="card card-spotify">
+            <div class="card-art">
+              <span class="sp-art">
+                <img src="/music/cover-1.jpg" alt="" />
+                <img src="/music/cover-2.jpg" alt="" />
+                <img src="/music/cover-3.jpg" alt="" />
+              </span>
+              <span class="sp-body">
+                <span class="sp-track">
+                  <span><i class="dot sage"></i>Spotify · Weightless</span>
+                  <span><i class="dot accent"></i>Apple Music · Nightcall</span>
+                  <span><i class="dot sage"></i>Spotify · Teardrop</span>
+                </span>
+                <span class="bar"><i></i></span>
+                <span class="card-label mono sp-time"></span>
+              </span>
+            </div>
+            <h4>Spotify &amp; Apple Music</h4>
+            <p>
+              Whatever is already playing shows up in the player with full controls, next to your
+              local library.
+            </p>
           </div>
-          <div class="table-row">
-            <span>Mic mute</span>
-            <span>Every microphone muted system-wide on one hotkey</span>
-          </div>
-          <div class="table-row">
-            <span>Per-app volume</span>
-            <span>Set each app's volume independently from the panel</span>
-          </div>
-          <div class="table-row">
-            <span>Disk cleaner</span>
-            <span>Junk scanner for build caches, package managers, and logs</span>
+          <div class="card card-camera">
+            <div class="card-art">
+              <span class="camera">
+                <span class="camera-head"></span>
+                <span class="camera-flip">⟳</span>
+              </span>
+            </div>
+            <h4>Camera check</h4>
+            <p>
+              A quick mirror under the notch before the call, with a switcher for every connected
+              camera.
+            </p>
           </div>
         </div>
       </section>
@@ -441,7 +644,7 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-live">
               <div class="panel-head">
                 <span>Rate limits</span>
                 <span class="mono">session, weekly</span>
@@ -456,10 +659,9 @@
                       cy="48"
                       r="38"
                       transform="rotate(-90 48 48)"
-                      style="stroke-dashoffset: 126.5"
                     />
                   </svg>
-                  <span class="ring-pct">47%</span>
+                  <span class="ring-pct"></span>
                   <span class="ring-label">Session (5h)</span>
                   <span class="ring-sub">resets 2h 47m</span>
                 </div>
@@ -472,10 +674,9 @@
                       cy="48"
                       r="38"
                       transform="rotate(-90 48 48)"
-                      style="stroke-dashoffset: 76.4"
                     />
                   </svg>
-                  <span class="ring-pct">68%</span>
+                  <span class="ring-pct"></span>
                   <span class="ring-label">Weekly</span>
                   <span class="ring-sub">resets 3d 6h</span>
                 </div>
@@ -490,7 +691,7 @@
       <section class="section">
         <div class="split reverse" data-reveal-group>
           <div class="split-copy">
-            <p class="eyebrow">Codex</p>
+            <p class="eyebrow">Code</p>
             <h3>Claude and Codex, side by side.</h3>
             <p class="lede">
               Edith tracks both agents. Switch the rate-limit rings between providers, filter the
@@ -499,21 +700,31 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-providers">
               <div class="panel-head">
                 <span>Providers</span>
                 <span class="mono">both tracked</span>
               </div>
               <div class="provider-stack">
-                <div class="provider-row">
-                  <span>Claude</span>
-                  <span class="mono">47% <span class="subtle">session</span></span>
-                  <span class="mono">68% <span class="subtle">week</span></span>
+                <div class="provider-row row-claude">
+                  <span class="provider-name">
+                    <img src="/logo/claude.png" alt="" width="22" height="22" />
+                    Claude
+                  </span>
+                  <span class="mono stat stat-session"
+                    ><span class="subtle">session</span></span
+                  >
+                  <span class="mono stat stat-week"><span class="subtle">week</span></span>
                 </div>
-                <div class="provider-row">
-                  <span>Codex</span>
-                  <span class="mono">12% <span class="subtle">session</span></span>
-                  <span class="mono">31% <span class="subtle">week</span></span>
+                <div class="provider-row row-codex">
+                  <span class="provider-name">
+                    <img src="/logo/codex.png" alt="" width="22" height="22" />
+                    Codex
+                  </span>
+                  <span class="mono stat stat-session"
+                    ><span class="subtle">session</span></span
+                  >
+                  <span class="mono stat stat-week"><span class="subtle">week</span></span>
                 </div>
               </div>
               <p class="panel-note">
@@ -535,19 +746,19 @@
             </p>
           </div>
           <div>
-            <div class="panel">
-              <div class="menubar">
-                <span>
-                  <span style="color: var(--color-sage)">38%</span>
+            <div class="panel panel-raised panel-menubar">
+              <div class="menubar menubar-live">
+                <span class="menubar-stats">
+                  <span class="mb-stat mb-a"></span>
                   <span class="subtle">·</span>
-                  <span style="color: var(--color-accent)">62%</span>
+                  <span class="mb-stat mb-b"></span>
                 </span>
                 <span class="subtle">Wed 14:22</span>
               </div>
-              <div class="legend">
-                <span><i class="dot sage"></i>Safe</span>
-                <span><i class="dot accent"></i>Close</span>
-                <span><i class="dot danger"></i>Over</span>
+              <div class="legend legend-live">
+                <span class="legend-safe"><i class="dot sage"></i>Safe</span>
+                <span class="legend-close"><i class="dot accent"></i>Close</span>
+                <span class="legend-over"><i class="dot danger"></i>Over</span>
               </div>
             </div>
           </div>
@@ -567,7 +778,7 @@
           <div>
             <div class="notif-stack">
               <div class="notif">
-                <span class="notif-icon"></span>
+                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
                 <div class="notif-body">
                   <div class="notif-top">
                     <b>Ahead of pace</b>
@@ -578,7 +789,7 @@
                 <i class="dot accent glow-accent"></i>
               </div>
               <div class="notif">
-                <span class="notif-icon"></span>
+                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
                 <div class="notif-body">
                   <div class="notif-top">
                     <b>Approaching weekly limit</b>
@@ -589,7 +800,7 @@
                 <i class="dot danger glow-danger"></i>
               </div>
               <div class="notif">
-                <span class="notif-icon"></span>
+                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
                 <div class="notif-body">
                   <div class="notif-top">
                     <b>Back in the green</b>
@@ -615,7 +826,7 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-heat">
               <div class="panel-head">
                 <span>Activity</span>
                 <span class="mono">$1,284 · 13 weeks</span>
@@ -647,56 +858,34 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-music" data-player>
               <div class="now-playing bare">
-                <span class="art"></span>
+                <span class="np-art">
+                  <img class="art" src="/music/cover-1.jpg" alt="" data-np-art />
+                  <span class="np-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                </span>
                 <div class="np-body">
-                  <div class="np-title">Weightless</div>
-                  <div class="np-artist">Marconi Union</div>
-                  <div class="progress"><span style="width: 42%"></span></div>
-                  <div class="np-times"><span>2:38</span><span>-3:34</span></div>
+                  <div class="np-title" data-np-title>Weightless</div>
+                  <div class="np-artist" data-np-artist>Marconi Union</div>
+                  <div class="progress"><span data-np-progress></span></div>
+                  <div class="np-times">
+                    <span data-np-elapsed>0:00</span><span data-np-remaining>-6:12</span>
+                  </div>
                 </div>
               </div>
-              <div class="tracklist" style="margin-top: 1rem">
+              <div class="tracklist" style="margin-top: 1rem" data-queue>
                 <div>
-                  <span
-                    class="track-art"
-                    style="
-                      background: linear-gradient(
-                        145deg,
-                        var(--color-art-blue),
-                        var(--color-art-navy)
-                      );
-                    "
-                  ></span>
+                  <img class="track-art" src="/music/cover-2.jpg" alt="" />
                   <span class="track-name">Clair de Lune · Debussy</span>
                   <span class="mono subtle">5:02</span>
                 </div>
                 <div>
-                  <span
-                    class="track-art"
-                    style="
-                      background: linear-gradient(
-                        145deg,
-                        var(--color-art-green),
-                        var(--color-art-forest)
-                      );
-                    "
-                  ></span>
+                  <img class="track-art" src="/music/cover-3.jpg" alt="" />
                   <span class="track-name">Time · Hans Zimmer</span>
                   <span class="mono subtle">4:35</span>
                 </div>
                 <div>
-                  <span
-                    class="track-art"
-                    style="
-                      background: linear-gradient(
-                        145deg,
-                        var(--color-art-purple),
-                        var(--color-art-plum)
-                      );
-                    "
-                  ></span>
+                  <img class="track-art" src="/music/cover-4.jpg" alt="" />
                   <span class="track-name">Intro · The xx</span>
                   <span class="mono subtle">2:07</span>
                 </div>
@@ -718,7 +907,11 @@
             </p>
           </div>
           <div>
-            <div class="panel" data-presenter-demo data-presenter-state="off">
+            <div
+              class="panel panel-raised panel-presenter"
+              data-presenter-demo
+              data-presenter-state="off"
+            >
               <div class="panel-head">
                 <span>Usage</span>
                 <span class="badge" data-pbadge>Presenter on</span>
@@ -738,7 +931,7 @@
                 </div>
                 <div class="kpi">
                   <div class="kpi-label">Top model</div>
-                  <div class="kpi-value">opus-4-8</div>
+                  <div class="kpi-value">Opus 4.8</div>
                 </div>
               </div>
               <p class="panel-note" data-pnote>Spend and track names hidden for the room.</p>
@@ -759,274 +952,58 @@
             </p>
           </div>
           <div>
-            <div class="panel">
+            <div class="panel panel-raised panel-system">
               <div class="panel-head"><span>Quick actions</span></div>
               <div class="action-grid">
-                <span class="action">
+                <button
+                  type="button"
+                  class="action"
+                  data-action
+                  aria-pressed="false"
+                  data-icon="⌨"
+                  data-explain="Locks the keyboard so you can wipe it down without firing shortcuts. Restores itself after 60 seconds."
+                >
                   <span class="action-icon">⌨</span>
                   <span>Clean keys</span>
                   <small>Lock the keyboard to wipe it</small>
-                </span>
-                <span class="action is-active">
+                </button>
+                <button
+                  type="button"
+                  class="action is-active"
+                  data-action
+                  aria-pressed="true"
+                  data-icon="☾"
+                  data-explain="Holds off sleep through a long build or download, even with the lid closed on power."
+                >
                   <span class="action-icon">☾</span>
                   <span>Keep awake</span>
                   <small>Stop this Mac from sleeping</small>
-                </span>
-                <span class="action">
+                </button>
+                <button
+                  type="button"
+                  class="action"
+                  data-action
+                  aria-pressed="false"
+                  data-icon="◍"
+                  data-explain="Blurs spend figures and track names so you can screen-share without exposing your bill."
+                >
                   <span class="action-icon">◍</span>
                   <span>Presenter</span>
                   <small>Blur sensitive values</small>
-                </span>
+                </button>
               </div>
-              <div class="hint">
-                <span>🔒</span>Keyboard relocks for 60s, then restores itself. No way to get
-                stuck.
+              <div class="hint" aria-live="polite">
+                <span data-action-icon>🔒</span>
+                <span data-swap="in" data-action-text
+                  >Tap any control to see what it does. Nothing here can lock you out.</span
+                >
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="wrap" style="border-top: 1px solid var(--color-line); padding-block: 6rem">
-        <div class="section-head" style="margin-bottom: 3.5rem" data-reveal-item>
-          <p class="eyebrow">And the rest of the shelf</p>
-          <h2>Everything else you'd otherwise install one by one.</h2>
-        </div>
-        <div class="cards" data-reveal-group>
-          <div class="card">
-            <div class="card-art">
-              <span class="loupe"></span>
-              <span class="pill mono is-accent">#F5A623</span>
-            </div>
-            <h4>Color picker</h4>
-            <p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="win-ghost back"></span>
-              <span class="win-ghost front"></span>
-            </div>
-            <h4>Focus dim</h4>
-            <p>Dims everything behind your active app so one window is all you see.</p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="notch"></span>
-              <span class="file-row">
-                <span class="file"></span><span class="file"></span><span class="file"></span>
-              </span>
-            </div>
-            <h4>Notch shelf</h4>
-            <p>Park files under the notch mid-drag, then drop them wherever they belong.</p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="clip-row">
-                <span class="ghost-line" style="width: 60%"></span>
-                <span class="key">⌘V</span>
-              </span>
-              <span class="card-row"><span class="ghost-line" style="width: 80%"></span></span>
-              <span class="card-row"><span class="ghost-line" style="width: 40%"></span></span>
-            </div>
-            <h4>Clipboard history</h4>
-            <p>Everything you copied, one shortcut away, with instant paste.</p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <i class="dot accent"></i>
-                <span class="card-label">10:00 Standup</span>
-                <span class="pill is-accent">Join</span>
-              </span>
-              <span class="card-row">
-                <i class="dot sage"></i>
-                <span class="card-label">1:30 Design review</span>
-              </span>
-            </div>
-            <h4>Calendar</h4>
-            <p>Today's schedule in the panel and the app, with one-tap join links.</p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="pill mono">SF 11:59</span>
-              <span class="pill mono">NY 2:29</span>
-              <span class="pill mono">LDN 7:29</span>
-            </div>
-            <h4>World clocks</h4>
-            <p>Local time plus the offices you care about, at a glance.</p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="key lg">⌥</span>
-              <span class="key lg">⌘</span>
-              <span class="key lg">E</span>
-            </div>
-            <h4>Global shortcut</h4>
-            <p>
-              Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="lock"></span>
-              <span class="card-label">Stays on this Mac</span>
-            </div>
-            <h4>Local first</h4>
-            <p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="mic"></span>
-              <span class="pill"><i class="dot danger"></i>All mics muted</span>
-            </div>
-            <h4>Mic mute</h4>
-            <p>
-              Every microphone muted system-wide with one hotkey. The menu bar shows when you're
-              safe.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label fixed">Safari</span>
-                <span class="bar"><i style="width: 35%"></i></span>
-              </span>
-              <span class="card-row">
-                <span class="card-label fixed">Music</span>
-                <span class="bar"><i style="width: 80%"></i></span>
-              </span>
-              <span class="card-row">
-                <span class="card-label fixed">Zoom</span>
-                <span class="bar"><i style="width: 55%"></i></span>
-              </span>
-            </div>
-            <h4>Audio mixer</h4>
-            <p>Per-app volume from the panel. Quiet the browser, keep the music.</p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="notch"></span>
-              <span class="pill" style="align-self: center"
-                ><i class="dot sage"></i>AirPods connected</span
-              >
-            </div>
-            <h4>Notch alerts</h4>
-            <p>
-              Bluetooth, audio-output, and charger changes surface as small notices around the
-              notch.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="stat-strip">CPU 3% · 6.2 GB<span class="subtle">Wed 14:22</span></span>
-            </div>
-            <h4>CPU &amp; memory readout</h4>
-            <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label">Build caches</span>
-                <span class="pill mono">8.2 GB</span>
-              </span>
-              <span class="card-row">
-                <span class="bar"><i style="width: 64%"></i></span>
-                <span class="card-label mono">12.4 GB found</span>
-              </span>
-            </div>
-            <h4>Junk cleaner</h4>
-            <p>
-              Scan build caches, package managers, and old logs. Reclaim gigabytes, restorable from
-              the Trash.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label">Chrome</span>
-                <span class="pill mono">42%</span>
-                <span class="quit">✕</span>
-              </span>
-              <span class="card-row">
-                <span class="card-label">node</span>
-                <span class="pill mono">31%</span>
-                <span class="quit">✕</span>
-              </span>
-            </div>
-            <h4>Running apps</h4>
-            <p>Sort every open app by CPU or memory and quit the heavy ones in a click.</p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="pill mono" style="align-self: flex-start; max-width: 100%"
-                >youtube.com/watch?v=dQw4…</span
-              >
-              <span class="card-row">
-                <span class="bar"><i style="width: 64%"></i></span>
-                <span class="card-label mono">64%</span>
-              </span>
-            </div>
-            <h4>YouTube audio</h4>
-            <p>
-              Paste links, get tagged audio files straight into your music folder, with live
-              progress.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label">▸ edith</span>
-                <span class="pill mono">$412</span>
-              </span>
-              <span class="card-row" style="padding-left: 1rem">
-                <span class="card-label">notch-motion</span>
-                <span class="pill mono">$268</span>
-              </span>
-            </div>
-            <h4>Project drilldown</h4>
-            <p>
-              Spend by project, worktree, and chat, across Claude and Codex, so you know which repo
-              eats the budget.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art stack">
-              <span class="card-row">
-                <i class="dot sage"></i>
-                <span class="card-label">Spotify · Weightless</span>
-              </span>
-              <span class="card-row">
-                <span class="bar"><i style="width: 42%"></i></span>
-                <span class="card-label mono">-3:34</span>
-              </span>
-            </div>
-            <h4>Spotify &amp; Apple Music</h4>
-            <p>
-              Whatever is already playing shows up in the player with full controls, next to your
-              local library.
-            </p>
-          </div>
-          <div class="card">
-            <div class="card-art">
-              <span class="camera">
-                <span class="camera-head"></span>
-                <span class="camera-flip">⟳</span>
-              </span>
-            </div>
-            <h4>Camera check</h4>
-            <p>
-              A quick mirror under the notch before the call, with a switcher for every connected
-              camera.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="performance"
-        class="wrap perf"
-        style="border-top: 1px solid var(--color-line); padding-block: 6rem"
-      >
+      <section id="performance" class="wrap perf">
         <div class="pitch-grid perf-grid" data-reveal-group>
           <div>
             <p class="eyebrow">24/7, quietly</p>
@@ -1062,90 +1039,6 @@
               <span>~40 MB</span>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section class="wrap centered" data-reveal-group>
-        <p class="eyebrow">Local first</p>
-        <h2>Your usage never leaves your Mac.</h2>
-        <p class="lede">
-          No account. No telemetry. Optional iCloud backup merges cleanly across machines so your
-          history follows you between a MacBook and a Mac mini.
-        </p>
-      </section>
-
-      <section id="faq" class="wrap faq">
-        <div class="section-head" style="margin-bottom: 3.5rem" data-reveal-item>
-          <p class="eyebrow">FAQ</p>
-          <h2>Questions, answered.</h2>
-        </div>
-        <div class="faq-list" data-reveal-group>
-          <details>
-            <summary>
-              How much does Edith cost?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Nothing. Edith is free and open source under the
-              <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0 licence</a>. Every
-              feature is in the one app, with no paid tier, no licence key, and no account. The
-              full source is on
-              <a href="https://github.com/pulkitxm/edith">GitHub</a>.
-            </p>
-          </details>
-          <details>
-            <summary>
-              Why can I not install Edith without the privacy and security warning?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Our Apple Developer account approval is still in progress, so builds are not yet
-              notarized by Apple. We are working closely with Apple and this will be resolved
-              soon. Until then, allow the app in System Settings under Privacy &amp; Security by
-              clicking Open Anyway. The video below walks through the exact steps.
-            </p>
-            <video
-              controls
-              playsinline
-              preload="none"
-              src="/install-guide.mp4"
-              poster="/install-guide-poster.jpg"
-              width="1728"
-              height="1118"
-              aria-label="Installing Edith past the macOS privacy warning"
-            ></video>
-          </details>
-          <details>
-            <summary>
-              Does Edith send my usage data anywhere?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              No. Usage stays on your device, with no account and no telemetry. Optional iCloud
-              backup merges your history across your own Macs.
-            </p>
-          </details>
-          <details>
-            <summary>
-              Which systems does Edith support?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              The full app runs on macOS 14 and later on Apple Silicon. The native Ubuntu
-              preview targets Ubuntu 24.04 LTS on amd64.
-            </p>
-          </details>
-          <details>
-            <summary>
-              Can I contribute?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Yes. The whole app is on
-              <a href="https://github.com/pulkitxm/edith">GitHub</a>. Issues and pull requests are
-              welcome, and the README covers building Edith from source.
-            </p>
-          </details>
         </div>
       </section>
 
@@ -1219,6 +1112,82 @@
           </article>
         </div>
       </section>
+
+      <section id="faq" class="wrap faq">
+        <div class="section-head" data-reveal-item>
+          <p class="eyebrow">FAQ</p>
+          <h2>Questions, answered.</h2>
+        </div>
+        <div class="faq-list" data-reveal-group>
+          <details>
+            <summary>
+              How much does Edith cost?
+              <span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              Nothing. Edith is free and open source under the
+              <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0 licence</a>. Every
+              feature is in the one app, with no paid tier, no licence key, and no account. The
+              full source is on
+              <a href="https://github.com/pulkitxm/edith">GitHub</a>.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Why can I not install Edith without the privacy and security warning?
+              <span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              Our Apple Developer account approval is still in progress, so builds are not yet
+              notarized by Apple. We are working closely with Apple and this will be resolved
+              soon. Until then, allow the app in System Settings under Privacy &amp; Security by
+              clicking Open Anyway. The video below walks through the exact steps.
+            </p>
+            <video
+              controls
+              playsinline
+              preload="none"
+              src="/install-guide.mp4"
+              poster="/install-guide-poster.jpg"
+              width="1728"
+              height="1118"
+              aria-label="Installing Edith past the macOS privacy warning"
+            ></video>
+          </details>
+          <details>
+            <summary>
+              Does Edith send my usage data anywhere?
+              <span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              No. Usage stays on your device, with no account and no telemetry. Optional iCloud
+              backup merges your history across your own Macs.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Which systems does Edith support?
+              <span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              The full app runs on macOS 14 and later on Apple Silicon. The native Ubuntu
+              preview targets Ubuntu 24.04 LTS on amd64.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Can I contribute?
+              <span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              Yes. The whole app is on
+              <a href="https://github.com/pulkitxm/edith">GitHub</a>. Issues and pull requests are
+              welcome, and the README covers building Edith from source.
+            </p>
+          </details>
+        </div>
+      </section>
+
     </main>
 
     <footer class="site-footer">
