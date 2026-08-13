@@ -590,7 +590,9 @@ enum JSONContract {
         let object = try? #require(result.object)
         #expect(
             Set(object?.keys ?? [:].keys)
-                == ["filesystems", "temperatures", "battery", "gpu"])
+                == [
+                    "filesystems", "temperatures", "fans", "platformProfile", "battery", "gpu",
+                ])
         let disks = object?["filesystems"] as? [[String: Any]] ?? []
         #expect(!disks.isEmpty)
         for disk in disks {
