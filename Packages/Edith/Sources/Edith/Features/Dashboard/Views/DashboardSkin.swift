@@ -24,6 +24,12 @@ enum DashSkin {
     private static let accentPair = (DashPalette.color("#d97757"), DashPalette.color("#e08a6a"))
     private static let accentDeepPair = (DashPalette.color("#b3543a"), DashPalette.color("#eea486"))
     private static let gridPair = (DashPalette.color("#ece5d8"), DashPalette.color("#2b2620"))
+    private static let heatSteps: [(NSColor, CGFloat)] = [
+        (.white, 0.55), (.white, 0.2), (.black, 0.05), (.black, 0.3),
+    ]
+    private static let heatStepsDark: [(NSColor, CGFloat)] = [
+        (.black, 0.45), (.black, 0.2), (.white, 0.05), (.white, 0.35),
+    ]
 
     static func paper(_ d: Bool) -> Color { d ? paperPair.1 : paperPair.0 }
     static func paper2(_ d: Bool) -> Color { d ? paper2Pair.1 : paper2Pair.0 }
@@ -41,6 +47,10 @@ enum DashSkin {
         return shifted(themeColor(themeName), toward: d ? .white : .black, by: d ? 0.3 : 0.25)
     }
     static func grid(_ d: Bool) -> Color { d ? gridPair.1 : gridPair.0 }
+    static func heat(_ level: Int, _ d: Bool) -> Color {
+        let (target, fraction) = (d ? heatStepsDark : heatSteps)[max(0, min(level, 3))]
+        return shifted(accent(d), toward: target, by: fraction)
+    }
     static let gold = DashPalette.color("#c89b3c")
     static let sage = DashPalette.color("#6a8d73")
     static let ok = DashPalette.color("#34C759")

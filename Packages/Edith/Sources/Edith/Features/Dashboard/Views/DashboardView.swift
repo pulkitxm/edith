@@ -865,9 +865,9 @@ struct ActivityHeatmap: View {
 
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
         if cost <= 0 { return DashSkin.grid(dark) }
-        if cost <= cuts[0] { return DashPalette.color("#008000") }
-        if cost <= cuts[1] { return DashPalette.color("#006400") }
-        if cost <= cuts[2] { return DashPalette.color("#004700") }
-        return DashPalette.color("#002B00")
+        if cost <= cuts[0] { return DashSkin.heat(0, dark) }
+        if cost <= cuts[1] { return DashSkin.heat(1, dark) }
+        if cost <= cuts[2] { return DashSkin.heat(2, dark) }
+        return DashSkin.heat(3, dark)
     }
 }
