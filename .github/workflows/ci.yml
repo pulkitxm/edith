@@ -107,6 +107,9 @@ jobs:
       - name: No disallowed comments
         if: needs.changes.outputs.source == 'true'
         run: make ci-comments
+      - name: No duplicate UserDefaults keys
+        if: needs.changes.outputs.swift == 'true'
+        run: make ci-duplicate-keys
       - name: Lint (Biome)
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
         run: make ci-lint

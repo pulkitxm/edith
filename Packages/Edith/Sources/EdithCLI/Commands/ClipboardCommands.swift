@@ -29,7 +29,8 @@ enum ClipboardBridge {
         let all = entries()
         guard !all.isEmpty else {
             let recording =
-                CLIEnvironment.sharedDefaults.object(forKey: "clipboardEnabled") as? Bool ?? true
+                CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.Clipboard.enabled)
+                as? Bool ?? true
             throw CLIFailure.unavailable(
                 "the clipboard history is empty",
                 hint: recording

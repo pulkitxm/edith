@@ -1,5 +1,5 @@
-import Combine
 import Foundation
+import Observation
 import Testing
 
 @testable import EdithKit
@@ -444,12 +444,15 @@ import Testing
         #expect(history.last == 79)
     }
 
-    @Test func oneSamplePublishesOneMetricsUpdate() {
+    @Test func oneSamplePublishesAMetricsUpdate() {
         let session = session()
         var updates = 0
-        let observation = session.objectWillChange.sink { updates += 1 }
+        withObservationTracking {
+            _ = session.sample
+        } onChange: {
+            updates += 1
+        }
         session.apply(sample: sample(10))
-        withExtendedLifetime(observation) {}
         #expect(updates == 1)
     }
 

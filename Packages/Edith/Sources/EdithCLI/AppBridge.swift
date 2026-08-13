@@ -3,9 +3,9 @@ import EdithKit
 import Foundation
 
 public enum AppBridge {
-    public static let helperBundleID = "com.pulkit.edith.statusbar"
-    public static let mainBundleID = "com.pulkit.edith"
-    public static let filesBundleID = "com.pulkit.edith.files"
+    public static let helperBundleID = MainApp.statusBarBundleIdentifier
+    public static let mainBundleID = MainApp.bundleIdentifier
+    public static let filesBundleID = MainApp.filesBundleIdentifier
     public static let filesBundlePath = "Contents/Library/Applications/Edith Files.app"
 
     public static var helperIsRunning: Bool { CLIEnvironment.isHelperRunning() }

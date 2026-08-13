@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
@@ -50,6 +51,12 @@ function extractBlock(name) {
   return m[1];
 }
 
+function extractDoubleBlock(name) {
+  const m = script.match(new RegExp(`\\n\\s*${name}="([\\s\\S]*?)\\n\\s*"`));
+  expect(m).not.toBeNull();
+  return m[1].replaceAll("\\$", "$");
+}
+
 const NORM = extractBlock("NORM");
 const GITHUB = extractBlock("GITHUB");
 const CWD_CACHE = extractBlock("CWD_CACHE");
@@ -57,11 +64,19 @@ const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
+const CODEX_DETAILS = extractBlock("CODEX_DETAILS");
+const WALKPI = extractBlock("WALKPI");
 const WALKCC = extractBlock("WALKCC");
 const DEDUP = extractBlock("DEDUP");
+const RECONCILE = extractBlock("RECONCILE");
 const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
 const FLEET = extractBlock("FLEET");
+const OPENCODE_MESSAGES = extractDoubleBlock("OPENCODE_MESSAGES");
+const OPENCODE_MESSAGES_FALLBACK = extractDoubleBlock(
+  "OPENCODE_MESSAGES_FALLBACK",
+);
+const OPENCODE_TITLES = extractDoubleBlock("OPENCODE_TITLES");
 
 function jq(program, input, args = []) {
   const proc = Bun.spawnSync(["jq", "-c", ...args, program], {
@@ -409,6 +424,92 @@ describe("WALK", () => {
   });
 });
 
+describe("RECONCILE", () => {
+  const record = (over = {}) => ({
+    id: "r1",
+    date: "2026-06-10",
+    hour: 12,
+    ts: 1,
+    model: "model",
+    cwd: "/repo",
+    wt: null,
+    sid: "session",
+    src: "cli",
+    cost: 0.8,
+    inp: 40,
+    out: 20,
+    cc: 0,
+    cr: 20,
+    tok: 80,
+    ...over,
+  });
+
+  const usage = {
+    daily: [
+      {
+        period: "2026-06-10",
+        bySource: {
+          cli: [
+            {
+              inputTokens: 50,
+              outputTokens: 20,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 30,
+              cost: 1,
+            },
+          ],
+          pi: [
+            {
+              inputTokens: 10,
+              outputTokens: 5,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 5,
+              cost: 0.2,
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  test("caps late transcript records at each source daily snapshot", () => {
+    const records = [
+      record(),
+      record({ id: "r2", ts: 2, tok: 40, inp: 20, out: 10, cr: 10 }),
+      record({
+        id: "p1",
+        src: "pi",
+        tok: 20,
+        inp: 10,
+        out: 5,
+        cr: 5,
+        cost: 0.2,
+      }),
+    ];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+    ]);
+    const cli = out.filter((item) => item.src === "cli");
+    const pi = out.filter((item) => item.src === "pi");
+    expect(cli.reduce((sum, item) => sum + item.tok, 0)).toBe(100);
+    expect(cli.reduce((sum, item) => sum + item.cost, 0)).toBeCloseTo(1);
+    expect(cli[1].tok).toBe(20);
+    expect(pi).toEqual([records[2]]);
+  });
+
+  test("does not inflate detail that is below the authoritative total", () => {
+    const records = [record({ tok: 40, inp: 20, out: 10, cr: 10 })];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+    ]);
+    expect(out).toEqual(records);
+  });
+});
+
 const walkc = (lines, src = "codex", off = 0) =>
   jq(WALKC, lines.map((l) => JSON.stringify(l)).join("\n"), [
     "--argjson",
@@ -425,83 +526,18 @@ const sessionMeta = (over = {}) => ({
   payload: { id: "cx-1", cwd: "/repo/app", ...over },
 });
 
-const tokenCount = (usage = {}, over = {}, totalUsage = usage) => {
-  const defaults = {
-    input_tokens: 100,
-    cached_input_tokens: 60,
-    output_tokens: 20,
-    reasoning_output_tokens: 5,
-    total_tokens: 120,
-  };
-  return {
-    timestamp: "2026-06-10T12:30:00.123Z",
-    type: "event_msg",
-    payload: {
-      type: "token_count",
-      info: {
-        last_token_usage: { ...defaults, ...usage },
-        total_token_usage: { ...defaults, ...totalUsage },
-      },
-    },
-    ...over,
-  };
-};
-
-const secondCumulativeUsage = {
-  input_tokens: 200,
-  cached_input_tokens: 120,
-  output_tokens: 40,
-  reasoning_output_tokens: 10,
-  total_tokens: 240,
-};
-
 describe("WALKC", () => {
-  test("session metadata is retained while token snapshots emit no detail", () => {
-    const out = walkc([
-      sessionMeta(),
-      { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
-      tokenCount(),
-      tokenCount(
-        {},
-        { timestamp: "2026-06-10T13:30:00.123Z" },
-        secondCumulativeUsage,
-      ),
-    ]);
+  test("links a Codex session file to its repository metadata", () => {
+    const out = walkc([sessionMeta()]);
     expect(out).toEqual([
-      { t: "meta", sid: "cx-1", cwd: "/repo/app", src: "codex" },
+      {
+        t: "meta",
+        sid: "cx-1",
+        cwd: "/repo/app",
+        src: "codex",
+        sessionFile: "<stdin>",
+      },
     ]);
-  });
-
-  test("fork replay, model switches, repeats, and cumulative resets stay unattributed", () => {
-    const resetUsage = {
-      input_tokens: 40,
-      cached_input_tokens: 20,
-      output_tokens: 10,
-      reasoning_output_tokens: 2,
-      total_tokens: 50,
-    };
-    const out = walkc([
-      sessionMeta(),
-      { type: "turn_context", payload: { model: "gpt-first" } },
-      tokenCount({}, { timestamp: "2026-06-10T12:30:00.123Z" }),
-      tokenCount({}, { timestamp: "2026-06-10T12:31:00.123Z" }),
-      { type: "turn_context", payload: { model: "gpt-second" } },
-      tokenCount(
-        {},
-        { timestamp: "2026-06-10T12:32:00.123Z" },
-        secondCumulativeUsage,
-      ),
-      tokenCount({}, { timestamp: "2026-06-10T12:33:00.123Z" }, resetUsage),
-      tokenCount(
-        {},
-        { timestamp: "2026-06-10T12:34:00.123Z" },
-        secondCumulativeUsage,
-      ),
-    ]);
-    expect(out).toEqual([
-      { t: "meta", sid: "cx-1", cwd: "/repo/app", src: "codex" },
-    ]);
-    expect(out.some((record) => record.t === "rec")).toBeFalse();
   });
 
   test("user_message becomes a text record, tag-prefixed and empty skipped", () => {
@@ -516,19 +552,283 @@ describe("WALKC", () => {
       msg("<environment_context>x"),
       msg(""),
     ]);
-    expect(out).toEqual([
-      { t: "meta", sid: "cx-1", cwd: "/repo/app", src: "codex" },
-      {
-        t: "text",
-        sid: "cx-1",
-        tms: "2026-06-10T12:01:00.000Z",
-        text: "fix the bug",
-      },
-    ]);
+    expect(out[0]).toMatchObject({
+      t: "meta",
+      sid: "cx-1",
+      cwd: "/repo/app",
+      src: "codex",
+    });
+    expect(out[1]).toEqual({
+      t: "text",
+      sid: "cx-1",
+      tms: "2026-06-10T12:01:00.000Z",
+      text: "fix the bug",
+    });
+    expect(out).toHaveLength(2);
   });
 
   test("files without session_meta emit nothing", () => {
-    expect(walkc([tokenCount()])).toEqual([]);
+    expect(
+      walkc([
+        {
+          timestamp: "2026-06-10T12:30:00.123Z",
+          type: "event_msg",
+          payload: { type: "token_count", info: {} },
+        },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("CODEX_DETAILS", () => {
+  const details = (metadata, sessions, off = 0) =>
+    jq(CODEX_DETAILS, "", [
+      "-n",
+      "--argjson",
+      "metadata",
+      JSON.stringify(metadata),
+      "--argjson",
+      "sessions",
+      JSON.stringify(sessions),
+      "--argjson",
+      "off",
+      String(off),
+    ]);
+
+  test("joins exact daily session and model totals to the repository", () => {
+    const records = details(
+      [
+        {
+          sessionFile: "rollout-1",
+          sid: "cx-1",
+          cwd: "/repo/app",
+        },
+      ],
+      [
+        {
+          date: "2026-06-10",
+          sessionFile: "rollout-1",
+          sessionId: "2026/06/10/rollout-1",
+          lastActivity: "2026-06-10T12:30:00.123Z",
+          costUSD: 1.2,
+          models: {
+            "gpt-a": {
+              inputTokens: 40,
+              outputTokens: 20,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 60,
+            },
+            "gpt-b": {
+              inputTokens: 10,
+              outputTokens: 5,
+              cacheCreationTokens: 1,
+              cacheReadTokens: 4,
+            },
+          },
+        },
+      ],
+    );
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      date: "2026-06-10",
+      hour: 12,
+      ts: 1_781_094_600_123,
+      model: "gpt-a",
+      cwd: "/repo/app",
+      sid: "cx-1",
+      src: "codex",
+      inp: 40,
+      out: 20,
+      cc: 0,
+      cr: 60,
+      tok: 120,
+    });
+    expect(records.reduce((sum, record) => sum + record.tok, 0)).toBe(140);
+    expect(records.reduce((sum, record) => sum + record.cost, 0)).toBeCloseTo(
+      1.2,
+    );
+  });
+
+  test("matches a basename fallback and preserves aggregate-only sessions", () => {
+    const [record] = details(
+      [{ sessionFile: "rollout-2", sid: "cx-2", cwd: "/repo/fallback" }],
+      [
+        {
+          date: "2026-06-10",
+          sessionId: "2026/06/10/rollout-2",
+          lastActivity: "2026-06-10T23:30:00.000Z",
+          inputTokens: 5,
+          outputTokens: 2,
+          cacheCreationTokens: 1,
+          cacheReadTokens: 4,
+          totalTokens: 12,
+          costUSD: 0.5,
+          models: {},
+        },
+      ],
+      7200,
+    );
+    expect(record).toMatchObject({
+      date: "2026-06-10",
+      hour: 1,
+      model: "unknown",
+      cwd: "/repo/fallback",
+      sid: "cx-2",
+      tok: 12,
+      cost: 0.5,
+    });
+  });
+});
+
+const walkpi = (lines, src = "pi", off = 0) =>
+  jq(WALKPI, lines.map((l) => JSON.stringify(l)).join("\n"), [
+    "--argjson",
+    "off",
+    String(off),
+    "--arg",
+    "src",
+    src,
+  ]);
+
+const piSession = (over = {}) => ({
+  type: "session",
+  version: 3,
+  id: "pi-session-1",
+  timestamp: "2026-06-10T12:00:00.000Z",
+  cwd: "/repo/pi-app",
+  ...over,
+});
+
+const piUsage = (over = {}) => ({
+  input: 100,
+  output: 20,
+  cacheRead: 60,
+  cacheWrite: 5,
+  totalTokens: 185,
+  cost: {
+    input: 0.1,
+    output: 0.1,
+    cacheRead: 0.02,
+    cacheWrite: 0.03,
+    total: 0.25,
+  },
+  ...over,
+});
+
+const piMessage = (role, over = {}) => ({
+  type: "message",
+  id: `${role}-1`,
+  parentId: null,
+  timestamp: "2026-06-10T12:30:00.123Z",
+  message: {
+    role,
+    model: role === "assistant" ? "claude-sonnet-4-5" : undefined,
+    usage: role === "user" ? undefined : piUsage(),
+    content: role === "user" ? [{ type: "text", text: "fix pi usage" }] : [],
+  },
+  ...over,
+});
+
+describe("WALKPI", () => {
+  test("assistant, tool, and summary usage become exact detail records", () => {
+    const out = walkpi([
+      piSession(),
+      piMessage("assistant"),
+      piMessage("toolResult", { id: "tool-1" }),
+      {
+        type: "compaction",
+        id: "compact-1",
+        timestamp: "2026-06-10T13:30:00.123Z",
+        usage: piUsage({ input: 10, output: 2, cacheRead: 0, cacheWrite: 0 }),
+      },
+      {
+        type: "branch_summary",
+        id: "summary-1",
+        timestamp: "2026-06-10T14:30:00.123Z",
+        usage: piUsage({ input: 8, output: 3, cacheRead: 0, cacheWrite: 0 }),
+      },
+    ]);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toMatchObject({
+      t: "rec",
+      id: "pi:pi-session-1:assistant-1",
+      sid: "pi-session-1",
+      cwd: "/repo/pi-app",
+      model: "claude-sonnet-4-5",
+      src: "pi",
+      inp: 100,
+      out: 20,
+      cr: 60,
+      cc: 5,
+      tok: 185,
+      cost: 0.25,
+      date: "2026-06-10",
+      hour: 12,
+      ts: Date.parse("2026-06-10T12:30:00Z"),
+      wt: null,
+    });
+    expect(out[1].model).toBe("unknown");
+    expect(out[2]).toMatchObject({
+      id: "pi:pi-session-1:compact-1",
+      inp: 10,
+      out: 2,
+    });
+    expect(out[3]).toMatchObject({
+      id: "pi:pi-session-1:summary-1",
+      inp: 8,
+      out: 3,
+    });
+  });
+
+  test("user text and explicit session names provide chat titles", () => {
+    const out = walkpi([
+      piSession(),
+      piMessage("user"),
+      { type: "session_info", id: "name-1", name: "  Pi coverage  " },
+    ]);
+    expect(out).toEqual([
+      {
+        t: "text",
+        sid: "pi-session-1",
+        tms: "2026-06-10T12:30:00.123Z",
+        text: "fix pi usage",
+      },
+      { t: "title", sid: "pi-session-1", title: "Pi coverage" },
+    ]);
+  });
+
+  test("zero-token usage and files without a session header emit nothing", () => {
+    expect(
+      walkpi([
+        piSession(),
+        piMessage("assistant", {
+          message: {
+            role: "assistant",
+            model: "model",
+            usage: piUsage({
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            }),
+          },
+        }),
+      ]),
+    ).toEqual([]);
+    expect(walkpi([piMessage("assistant")])).toEqual([]);
+  });
+
+  test("timezone offset shifts the local date and hour", () => {
+    const [rec] = walkpi(
+      [
+        piSession(),
+        piMessage("assistant", { timestamp: "2026-06-10T23:30:00.000Z" }),
+      ],
+      "pi",
+      3600 * 2,
+    );
+    expect(rec.date).toBe("2026-06-11");
+    expect(rec.hour).toBe(1);
   });
 });
 
@@ -648,6 +948,83 @@ describe("WALKCC", () => {
     );
     expect(rec.date).toBe("2026-06-11");
     expect(rec.hour).toBe(1);
+  });
+});
+
+describe("OpenCode repository queries", () => {
+  test("uses the session directory when the message has no cwd", () => {
+    const database = new Database(":memory:");
+    database.run(
+      "create table session (id text primary key, directory text, title text)",
+    );
+    database.run("create table message (session_id text, data text)");
+    database.run(
+      "insert into session values (?, ?, ?)",
+      "session-1",
+      "/repo/from-session",
+      "OpenCode chat",
+    );
+    database.run(
+      "insert into message values (?, ?)",
+      "session-1",
+      JSON.stringify({
+        role: "assistant",
+        time: { created: 1_786_000_000_000 },
+        modelID: "gpt-5",
+        cost: 0.5,
+        tokens: { input: 10, output: 2, cache: { write: 1, read: 4 } },
+      }),
+    );
+    const row = JSON.parse(database.query(OPENCODE_MESSAGES).values()[0][0]);
+    expect(row).toEqual({
+      sid: "session-1",
+      ts: 1_786_000_000_000,
+      cwd: "/repo/from-session",
+      model: "gpt-5",
+      cost: 0.5,
+      inp: 10,
+      out: 2,
+      cc: 1,
+      cr: 4,
+    });
+    const title = JSON.parse(database.query(OPENCODE_TITLES).values()[0][0]);
+    expect(title).toEqual({ sid: "session-1", title: "OpenCode chat" });
+    database.close();
+  });
+
+  test("prefers message cwd and supports databases without a session table", () => {
+    const modern = new Database(":memory:");
+    modern.run(
+      "create table session (id text primary key, directory text, title text)",
+    );
+    modern.run("create table message (session_id text, data text)");
+    const message = JSON.stringify({
+      role: "assistant",
+      time: { created: 1_786_000_000_000 },
+      path: { cwd: "/repo/from-message" },
+      tokens: { input: 1, output: 1 },
+    });
+    modern.run(
+      "insert into session values (?, ?, ?)",
+      "session-2",
+      "/repo/from-session",
+      "",
+    );
+    modern.run("insert into message values (?, ?)", "session-2", message);
+    const modernRow = JSON.parse(
+      modern.query(OPENCODE_MESSAGES).values()[0][0],
+    );
+    expect(modernRow.cwd).toBe("/repo/from-message");
+    modern.close();
+
+    const legacy = new Database(":memory:");
+    legacy.run("create table message (session_id text, data text)");
+    legacy.run("insert into message values (?, ?)", "session-2", message);
+    const legacyRow = JSON.parse(
+      legacy.query(OPENCODE_MESSAGES_FALLBACK).values()[0][0],
+    );
+    expect(legacyRow.cwd).toBe("/repo/from-message");
+    legacy.close();
   });
 });
 
@@ -908,7 +1285,7 @@ describe("usage pipeline", () => {
         JSON.stringify([[{ sessions }]]),
       ],
     )[0];
-    out.schemaVersion = 7;
+    out.schemaVersion = 8;
     for (const day of out.daily) {
       day.hours = Array.from({ length: 24 }, () => ({
         tokens: 0,
@@ -1062,7 +1439,7 @@ describe("usage pipeline", () => {
       (value) => value.daily.push(structuredClone(value.daily[0])),
       (value) => value.sources.push("codex"),
       (value) => value.defaultSources.push("missing"),
-      (value) => (value.schemaVersion = 6),
+      (value) => (value.schemaVersion = 7),
       (value) => value.daily[0].hours.pop(),
       (value) => delete value.daily[0].hours[0].byPath,
       (value) => delete value.daily[0].projects,
@@ -1508,7 +1885,7 @@ describe("repository and detail attribution", () => {
       "cm",
       JSON.stringify([mappings]),
     ]);
-    expect(out.schemaVersion).toBe(7);
+    expect(out.schemaVersion).toBe(8);
     expect(out.daily[0].projects).toHaveLength(2);
     expect(
       out.daily[0].projects.map((project) => project.repositoryID),
@@ -1592,6 +1969,7 @@ describe("FLEET", () => {
     expect(out.defaultSources).toEqual(["cli", tufCLI, tufCodex]);
     expect(out.sourceMeta[tufCLI].label).toBe("Claude Code · tuf");
     expect(out.sourceMeta[tufCLI].machine).toBe("tuf");
+    expect(out.sourceMeta[tufCLI].machineHost).toBe("tuf.local");
     expect(out.sourceMeta.cli.label).toBe("Claude Code");
   });
 
@@ -1751,7 +2129,7 @@ describe("FLEET", () => {
     expect(Object.keys(projects[1].bySource)).toEqual([tufCLI]);
   });
 
-  test("stored remote Codex detail stays unavailable", () => {
+  test("stored remote Codex detail is machine-qualified and retained", () => {
     const doc = machineDoc();
     doc.daily[0].bySource.codex = [
       {
@@ -1803,17 +2181,20 @@ describe("FLEET", () => {
     const out = fleet([localDoc(), doc]);
     const remoteDay = out.daily[0];
     expect(remoteDay.bySource[tufCodex][0].inputTokens).toBe(5);
-    expect(remoteDay.hours[0].tokens).toBe(103);
-    expect(remoteDay.hours[0].bySource[tufCodex]).toBeUndefined();
-    expect(
-      remoteDay.hours[0].byPath[`${tufPrefix}/home/p/codex`],
-    ).toBeUndefined();
+    expect(remoteDay.hours[0].tokens).toBe(108);
+    expect(remoteDay.hours[0].bySource[tufCodex].tokens).toBe(5);
+    expect(remoteDay.hours[0].byPath[`${tufPrefix}/home/p/codex`].tokens).toBe(
+      5,
+    );
     expect(remoteDay.projects.map((project) => project.projectName)).toEqual([
       "edith",
       "edith",
+      "codex-only",
     ]);
     expect(remoteDay.projects[1].tokens).toBe(3);
     expect(remoteDay.projects[1].worktrees).toEqual([]);
+    expect(remoteDay.projects[2].bySource[tufCodex].tokens).toBe(5);
+    expect(remoteDay.projects[2].chats[0].source).toBe(tufCodex);
     expect(out.totals.tokens).toBe(108);
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
@@ -1996,6 +2377,9 @@ describe("collector configuration", () => {
     );
     expect(script).not.toContain(
       "for agent in codex opencode amp droid codebuff hermes pi goose kilo",
+    );
+    expect(script).toContain(
+      'walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"',
     );
   });
 

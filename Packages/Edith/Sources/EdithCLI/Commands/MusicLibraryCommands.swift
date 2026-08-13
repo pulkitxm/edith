@@ -409,7 +409,8 @@ struct MusicShuffleCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await MusicToggleState.apply(
-            key: "musicShuffling", action: "shuffle", label: "shuffle", state: state, json: json)
+            key: AppStorageKeys.Music.shuffling, action: "shuffle", label: "shuffle", state: state,
+            json: json)
     }
 }
 
@@ -425,7 +426,8 @@ struct MusicRepeatCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await MusicToggleState.apply(
-            key: "musicLooping", action: "loop", label: "repeat", state: state, json: json)
+            key: AppStorageKeys.Music.looping, action: "loop", label: "repeat", state: state,
+            json: json)
     }
 }
 

@@ -83,6 +83,15 @@ import Testing
         }
     }
 
+    @Test func backedKeysHasNoDuplicateEntries() {
+        var seen: Set<String> = []
+        var duplicates: Set<String> = []
+        for key in SettingsBackup.backedKeys where !seen.insert(key).inserted {
+            duplicates.insert(key)
+        }
+        #expect(duplicates.isEmpty, "backedKeys repeats: \(duplicates)")
+    }
+
     @Test func iCloudBackupIsOnOutOfTheBox() {
         let defaults = UserDefaults(suiteName: "test.icloud.default")!
         defaults.removePersistentDomain(forName: "test.icloud.default")

@@ -75,6 +75,10 @@ extension View {
         }
     }
 
+    public func settingsCaption() -> some View {
+        font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+    }
+
     @ViewBuilder
     public func card() -> some View {
         if #available(macOS 26.0, *) {
@@ -126,6 +130,23 @@ public func eyebrow(_ text: String) -> some View {
         .font(.system(size: UIScale.pt(10), weight: .semibold))
         .tracking(UIScale.pt(1.4))
         .foregroundStyle(.tertiary)
+}
+
+public struct EmptyStateText: View {
+    let text: String
+
+    public init(_ text: String) {
+        self.text = text
+    }
+
+    public var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.vertical, 28)
+            .frame(maxWidth: .infinity)
+    }
 }
 
 public struct TerminalLogView: View {

@@ -36,7 +36,8 @@ struct CalendarListCommand: AsyncParsableCommand {
                     trigger: { AppBridge.post(IPC.Name.requestCalendarEvents) })
             else {
                 throw AppBridge.silence(
-                    "the calendar", extensionKey: "tabCalendarEnabled", permission: "calendar")
+                    "the calendar", extensionKey: AppStorageKeys.Tabs.calendarEnabled,
+                    permission: "calendar")
             }
             switch reply[CalendarEventBridge.statusKey] as? String {
             case "extensionOff":

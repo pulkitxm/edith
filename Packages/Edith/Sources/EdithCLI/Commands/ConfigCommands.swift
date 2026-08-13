@@ -258,7 +258,7 @@ struct ConfigImportCommand: AsyncParsableCommand {
             } else {
                 guard
                     let contents = try? Data(
-                        contentsOf: URL(fileURLWithPath: (file as NSString).expandingTildeInPath))
+                        contentsOf: URL(fileURLWithPath: file.expandingTilde()))
                 else {
                     throw CLIFailure.notFound("could not read \(file)")
                 }
