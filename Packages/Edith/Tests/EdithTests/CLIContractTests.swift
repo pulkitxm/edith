@@ -296,6 +296,12 @@ enum JSONContract {
             ["machines", "power", "shutdown", "nowhere-at-all", "--json"]),
         JSONCase(
             "ed machines power wake", ["machines", "power", "wake", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines thermal status",
+            ["machines", "thermal", "status", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines thermal set",
+            ["machines", "thermal", "set", "nowhere-at-all", "balanced", "--json"]),
         JSONCase("ed machines kill", ["machines", "kill", "nowhere-at-all", "42", "--json"]),
         JSONCase(
             "ed machines services ls", ["machines", "services", "ls", "nowhere-at-all", "--json"]),
@@ -584,7 +590,9 @@ enum JSONContract {
         let object = try? #require(result.object)
         #expect(
             Set(object?.keys ?? [:].keys)
-                == ["filesystems", "temperatures", "battery", "gpu"])
+                == [
+                    "filesystems", "temperatures", "fans", "platformProfile", "battery", "gpu",
+                ])
         let disks = object?["filesystems"] as? [[String: Any]] ?? []
         #expect(!disks.isEmpty)
         for disk in disks {

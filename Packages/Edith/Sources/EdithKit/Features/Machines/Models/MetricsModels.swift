@@ -215,6 +215,28 @@ public struct MachineTemperature: Codable, Equatable, Sendable {
     }
 }
 
+public struct MachineFan: Codable, Equatable, Identifiable, Sendable {
+    public var label: String
+    public var rpm: Int
+
+    public var id: String { label }
+
+    public init(label: String, rpm: Int) {
+        self.label = label
+        self.rpm = rpm
+    }
+}
+
+public struct MachinePlatformProfile: Codable, Equatable, Sendable {
+    public var current: String
+    public var choices: [String]
+
+    public init(current: String, choices: [String]) {
+        self.current = current
+        self.choices = choices
+    }
+}
+
 public struct MachineBattery: Codable, Equatable, Sendable {
     public var percent: Int
     public var status: String
@@ -244,15 +266,20 @@ public struct MachineGPU: Codable, Equatable, Sendable {
 public struct MachineSlow: Codable, Equatable, Sendable {
     public var disks: [MachineFilesystem]
     public var temps: [MachineTemperature]
+    public var fans: [MachineFan]
+    public var platformProfile: MachinePlatformProfile?
     public var battery: MachineBattery?
     public var gpu: MachineGPU?
 
     public init(
         disks: [MachineFilesystem] = [], temps: [MachineTemperature] = [],
+        fans: [MachineFan] = [], platformProfile: MachinePlatformProfile? = nil,
         battery: MachineBattery? = nil, gpu: MachineGPU? = nil
     ) {
         self.disks = disks
         self.temps = temps
+        self.fans = fans
+        self.platformProfile = platformProfile
         self.battery = battery
         self.gpu = gpu
     }
