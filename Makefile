@@ -1,8 +1,9 @@
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 PKG := Packages/Edith
-SIGN_OVERRIDES := CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+SIGN_OVERRIDES := CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
 XCODEBUILD := xcodebuild -project edth.xcodeproj -derivedDataPath build -quiet \
-  -onlyUsePackageVersionsFromResolvedFile COMPILER_INDEX_STORE_ENABLE=NO
+	-destination 'platform=macOS,arch=arm64' \
+	-onlyUsePackageVersionsFromResolvedFile COMPILER_INDEX_STORE_ENABLE=NO
 
 SELECTED_DEV_DIR := $(shell xcode-select -p 2>/dev/null)
 ifneq ($(wildcard $(SELECTED_DEV_DIR)/usr/bin/xcodebuild),)

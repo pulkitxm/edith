@@ -124,9 +124,11 @@ TEAM_ID=""
 DERIVED=build
 xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" \
+  -destination 'platform=macOS,arch=arm64' \
   -quiet \
   -onlyUsePackageVersionsFromResolvedFile \
   COMPILER_INDEX_STORE_ENABLE=NO \
+  CODE_SIGNING_ALLOWED=NO \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
@@ -178,6 +180,7 @@ sign_tool() {
 
 sign_tool "$APP/Contents/MacOS/ed"
 sign_tool "$APP/Contents/MacOS/edh"
+sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$FILES_APP"
 sign "$APP"
