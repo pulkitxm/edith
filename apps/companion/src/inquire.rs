@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn the_budget_is_small_enough_to_force_a_choice() {
-        assert!(DAILY_BUDGET <= 3);
+        const { assert!(DAILY_BUDGET <= 3) };
     }
 
     #[test]
