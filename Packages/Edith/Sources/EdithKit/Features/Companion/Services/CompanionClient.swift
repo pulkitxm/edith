@@ -449,7 +449,7 @@ public struct CompanionClient: Sendable {
         var request = URLRequest(url: url(for: "index"))
         request.httpMethod = "POST"
         request.httpBody = Data()
-        return try await self.request(request)
+        return try await self.request(request, timeout: CompanionClient.longRequestTimeout)
     }
 
     public func ingest(files: [CompanionIngestFile]) async throws -> [CompanionIngestOutcome] {
@@ -461,7 +461,7 @@ public struct CompanionClient: Sendable {
         } catch {
             throw CompanionClientError.unreachable(error.localizedDescription)
         }
-        return try await self.request(request)
+        return try await self.request(request, timeout: CompanionClient.longRequestTimeout)
     }
 
     public func runs(limit: Int) async throws -> [CompanionRun] {
