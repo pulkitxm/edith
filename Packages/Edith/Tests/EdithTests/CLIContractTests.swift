@@ -78,6 +78,22 @@ enum JSONContract {
         JSONCase("ed shelf rm", ["shelf", "rm", "1", "--json"]),
         JSONCase("ed shelf clear", ["shelf", "clear", "--json"]),
         JSONCase("ed companion status", ["companion", "status", "--json"]),
+        JSONCase("ed companion hosts", ["companion", "hosts", "--json"]),
+        JSONCase(
+            "ed companion deploy", ["companion", "deploy", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion stack status", ["companion", "stack", "status", "--json"]),
+        JSONCase(
+            "ed companion stack up", ["companion", "stack", "up", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion stack down", ["companion", "stack", "down", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion stack restart", ["companion", "stack", "restart", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion stack logs", ["companion", "stack", "logs", "--json"]),
+        JSONCase("ed companion stack env", ["companion", "stack", "env", "--json"]),
         JSONCase("ed companion doctor", ["companion", "doctor", "--json"]),
         JSONCase("ed companion search", ["companion", "search", "warden", "--json"]),
         JSONCase(

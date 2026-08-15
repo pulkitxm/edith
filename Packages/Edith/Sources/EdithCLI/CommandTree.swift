@@ -910,6 +910,29 @@ public enum CommandTree {
                                 "test", "Round-trip one tiny completion through the reasoner.",
                                 options: common + ["--endpoint"]),
                         ]),
+                    CommandNode(
+                        "hosts", "Machines that could run the companion, and what each needs.",
+                        options: common + ["--machine"]),
+                    CommandNode(
+                        "deploy", "Choose the machine that runs the companion.",
+                        options: common + ["--directory", "--port", "--adopt", "--build"],
+                        arguments: [.machine]),
+                    CommandNode(
+                        "stack", "Start, stop and inspect the companion stack on its host.",
+                        children: [
+                            CommandNode(
+                                "status", "Which host runs the stack, and what is up.",
+                                options: common),
+                            CommandNode("up", "Start the stack.", options: common + ["--build"]),
+                            CommandNode("down", "Stop the stack.", options: common + ["--wipe"]),
+                            CommandNode("restart", "Restart the stack.", options: common),
+                            CommandNode(
+                                "logs", "Read the stack's logs.", options: common + ["--tail"],
+                                arguments: [.free]),
+                            CommandNode(
+                                "env", "Print the environment the stack would be given.",
+                                options: common + ["--reveal"]),
+                        ]),
                 ]),
         ])
 

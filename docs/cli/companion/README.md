@@ -51,6 +51,9 @@ For the machinery behind these commands, start at
 | `ed companion eval` | Scores the friend layer against the cases it should fail. |
 | `ed companion standup <file>` | Records a standup and checks it against the record. |
 | `ed companion machines` | Where the stack runs, and what each machine can do. |
+| `ed companion hosts` | Machines that could run the companion, and what each one needs. |
+| `ed companion deploy` | Choose the machine that runs it, and bring it up there. |
+| `ed companion stack` | Start, stop, restart, log and inspect the stack on its host. |
 | `ed companion baselines` | Your own delivery baselines, which every signal is measured against. |
 | `ed companion connectors` | Tokens for GitHub and Notion, and imports for calendar, music and YouTube. |
 | `ed companion facts` | What was true, and what it believed at the time. |
@@ -60,6 +63,9 @@ For the machinery behind these commands, start at
 
 ## Commands
 
+- [`ed companion hosts`](./hosts.md)
+- [`ed companion deploy`](./deploy.md)
+- [`ed companion stack`](./stack.md)
 - [`ed companion status`](./status.md)
 - [`ed companion doctor`](./doctor.md)
 - [`ed companion search`](./search.md)
