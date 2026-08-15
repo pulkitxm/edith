@@ -68,6 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pool = PgPoolOptions::new().connect(&database_url).await?;
     migrate::run_migrations(&pool).await?;
+    if env::args().any(|argument| argument == "--migrate-only") {
+        println!("{} migrations applied", migrate::migration_count());
+        return Ok(());
+    }
     let redis = redis::Client::open(redis_url)?;
     let reason_config = settings::reason_config(&pool).await;
     let connector_tokens = settings::connector_tokens(&pool).await;
