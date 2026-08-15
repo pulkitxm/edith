@@ -23,6 +23,8 @@ final class CompanionCaptureModel {
     var note = ""
     private(set) var noteOutcome: String?
     private(set) var savingNote = false
+    private(set) var waiting: [CompanionOutboxItem] = []
+    private(set) var draining = false
 
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
@@ -186,8 +188,40 @@ final class CompanionCaptureModel {
             phase = .idle
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            guard let kept = CompanionOutbox.keep(fileURL) else {
+                self.error = error.localizedDescription
+                return
+            }
+            self.fileURL = nil
+            transcript = ""
+            duration = 0
+            phase = .idle
+            self.error = nil
+            refreshWaiting()
+            outcome =
+                "Saved. It'll be remembered when the companion is back. "
+                + "\(waiting.count) waiting."
+            _ = kept
         }
+    }
+
+    func refreshWaiting() {
+        waiting = CompanionOutbox.waiting()
+    }
+
+    func drainOutbox() async {
+        guard !draining, !waiting.isEmpty else { return }
+        draining = true
+        defer { draining = false }
+        let client = client
+        let result = await CompanionOutbox.drain { item, data in
+            try await client.ingestAudio(
+                name: item.name, data: data, mtime: Self.iso(item.recordedAt)
+            ).status
+        }
+        refreshWaiting()
+        guard !result.isEmpty else { return }
+        outcome = result.summary
     }
 
     func rememberNote() async {
@@ -217,7 +251,11 @@ final class CompanionCaptureModel {
     }
 
     private static func isoNow() -> String {
-        ISO8601DateFormatter().string(from: Date())
+        iso(Date())
+    }
+
+    private static func iso(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
     }
 
     private static func rms(_ buffer: AVAudioPCMBuffer) -> Double {
@@ -238,17 +276,53 @@ struct CompanionCaptureScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.companionGeneration) private var generation
     @State private var pulsing = false
 
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            speakCard
-            writeCard
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            if !model.waiting.isEmpty {
+                waitingBanner
+            }
+            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                speakCard
+                writeCard
+            }
         }
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task(id: generation) {
+            model.refreshWaiting()
+            if home.reachable { await model.drainOutbox() }
+        }
+    }
+
+    private var waitingBanner: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "tray.full")
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.accent(dark))
+            Text(
+                model.waiting.count == 1
+                    ? "1 recording is waiting for the companion"
+                    : "\(model.waiting.count) recordings are waiting for the companion"
+            )
+            .font(.system(size: UIScale.pt(11.5)))
+            .foregroundStyle(DashSkin.inkSoft(dark))
+            Spacer(minLength: 0)
+            CompanionAsyncButton(
+                model.draining ? "Sending…" : "Send now",
+                disabled: model.draining || !home.reachable
+            ) {
+                await model.drainOutbox()
+            }
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(8))
+        .background(DashSkin.paper2(dark))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
     private var speakCard: some View {
