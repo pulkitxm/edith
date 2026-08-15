@@ -447,8 +447,8 @@ enum CompanionBridge {
         case let .unreachable(detail):
             return CLIFailure.unavailable(
                 "the companion backend at \(endpoint.absoluteString) is unavailable",
-                hint: "\(detail); start it with `ed companion up`, or point at another "
-                    + "endpoint with --endpoint or EDITH_COMPANION_URL")
+                hint: "\(detail); start the stack on the machine that hosts it, or point at "
+                    + "another endpoint with --endpoint or EDITH_COMPANION_URL")
         case let .badResponse(status, detail):
             return CLIFailure(
                 "the companion returned HTTP \(status)",
