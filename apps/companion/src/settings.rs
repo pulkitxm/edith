@@ -93,7 +93,13 @@ pub async fn remove(pool: &PgPool, key: &str) -> Result<(), sqlx::Error> {
 }
 
 pub fn reason_config_from(env: ReasonConfig, stored: &HashMap<String, String>) -> ReasonConfig {
-    let pick = |key: &str, fallback: String| stored.get(key).cloned().unwrap_or(fallback);
+    let pick = |key: &str, fallback: String| {
+        stored
+            .get(key)
+            .cloned()
+            .filter(|value| !value.is_empty())
+            .unwrap_or(fallback)
+    };
     ReasonConfig {
         provider: pick(REASON_PROVIDER, env.provider),
         url: pick(REASON_URL, env.url),
@@ -197,6 +203,22 @@ mod tests {
         let merged = connector_tokens_from(env, &stored);
         assert_eq!(merged.github, "gho_from_settings");
         assert!(merged.notion.is_empty());
+    }
+
+    #[test]
+    fn a_blank_stored_value_does_not_mask_the_environment() {
+        let env = ReasonConfig {
+            provider: "anthropic".to_owned(),
+            url: String::new(),
+            model: "claude-sonnet-5".to_owned(),
+            api_key: "sk-env".to_owned(),
+        };
+        let mut stored = HashMap::new();
+        stored.insert(REASON_API_KEY.to_owned(), String::new());
+        stored.insert(REASON_MODEL.to_owned(), String::new());
+        let merged = reason_config_from(env, &stored);
+        assert_eq!(merged.api_key, "sk-env");
+        assert_eq!(merged.model, "claude-sonnet-5");
     }
 
     #[test]

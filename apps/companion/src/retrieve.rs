@@ -86,10 +86,10 @@ pub fn recency_score(occurred_at: DateTime<Utc>, now: DateTime<Utc>) -> f32 {
     (1.0 / (1.0 + days / 180.0)) as f32
 }
 
-fn window_start(policy: &RetrievalPolicy, now: DateTime<Utc>) -> DateTime<Utc> {
+fn window_start(policy: &RetrievalPolicy, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
     match policy.window_days {
-        Some(days) if days > 0 => now - Duration::days(days),
-        _ => DateTime::<Utc>::MIN_UTC,
+        Some(days) if days > 0 => Some(now - Duration::days(days)),
+        _ => None,
     }
 }
 
@@ -128,11 +128,11 @@ async fn vector_channel(
     embed: &EmbedClient,
     query: &str,
     policy: &RetrievalPolicy,
-    since: DateTime<Utc>,
+    since: Option<DateTime<Utc>>,
 ) -> Result<Vec<ChunkRow>, Box<dyn Error + Send + Sync>> {
     let embedding = halfvec_literal(&embed.embed(&[query.to_owned()]).await?.remove(0));
     let rows = sqlx::query_as::<_, ChunkRow>(
-        "SELECT c.id, c.episode_id, c.text_original, c.text_en, e.title, e.occurred_at, c.t_start_s, c.t_end_s, c.salience FROM chunks c JOIN episodes e ON e.id = c.episode_id WHERE c.embedding IS NOT NULL AND e.occurred_at >= $2 AND ($3::text[] = '{}' OR e.kind = ANY($3)) ORDER BY c.embedding <=> $1::halfvec LIMIT $4",
+        "SELECT c.id, c.episode_id, c.text_original, c.text_en, e.title, e.occurred_at, c.t_start_s, c.t_end_s, c.salience FROM chunks c JOIN episodes e ON e.id = c.episode_id WHERE c.embedding IS NOT NULL AND ($2::timestamptz IS NULL OR e.occurred_at >= $2) AND ($3::text[] = '{}' OR e.kind = ANY($3)) ORDER BY c.embedding <=> $1::halfvec LIMIT $4",
     )
     .bind(&embedding)
     .bind(since)
@@ -147,10 +147,10 @@ async fn text_channel(
     pool: &PgPool,
     query: &str,
     policy: &RetrievalPolicy,
-    since: DateTime<Utc>,
+    since: Option<DateTime<Utc>>,
 ) -> Result<Vec<ChunkRow>, sqlx::Error> {
     sqlx::query_as::<_, ChunkRow>(
-        "SELECT c.id, c.episode_id, c.text_original, c.text_en, e.title, e.occurred_at, c.t_start_s, c.t_end_s, c.salience FROM chunks c JOIN episodes e ON e.id = c.episode_id WHERE (c.tsv @@ websearch_to_tsquery('english', $1) OR c.text_original ILIKE '%' || $1 || '%') AND e.occurred_at >= $2 AND ($3::text[] = '{}' OR e.kind = ANY($3)) ORDER BY ts_rank_cd(c.tsv, websearch_to_tsquery('english', $1)) DESC LIMIT $4",
+        "SELECT c.id, c.episode_id, c.text_original, c.text_en, e.title, e.occurred_at, c.t_start_s, c.t_end_s, c.salience FROM chunks c JOIN episodes e ON e.id = c.episode_id WHERE (c.tsv @@ websearch_to_tsquery('english', $1) OR c.text_original ILIKE '%' || $1 || '%') AND ($2::timestamptz IS NULL OR e.occurred_at >= $2) AND ($3::text[] = '{}' OR e.kind = ANY($3)) ORDER BY ts_rank_cd(c.tsv, websearch_to_tsquery('english', $1)) DESC LIMIT $4",
     )
     .bind(query)
     .bind(since)
@@ -163,10 +163,10 @@ async fn text_channel(
 async fn graph_channel(
     pool: &PgPool,
     query: &str,
-    since: DateTime<Utc>,
+    since: Option<DateTime<Utc>>,
 ) -> Result<Vec<ChunkRow>, sqlx::Error> {
     sqlx::query_as::<_, ChunkRow>(
-        "SELECT DISTINCT c.id, c.episode_id, c.text_original, c.text_en, e.title, e.occurred_at, c.t_start_s, c.t_end_s, c.salience FROM entities en JOIN entity_mentions m ON m.entity_id = en.id JOIN episodes e ON e.id = m.episode_id JOIN chunks c ON c.episode_id = e.id WHERE (en.canonical_name ILIKE '%' || $1 || '%' OR EXISTS (SELECT 1 FROM unnest(en.aliases) alias WHERE $1 ILIKE '%' || alias || '%' OR alias ILIKE '%' || $1 || '%')) AND e.occurred_at >= $2 ORDER BY e.occurred_at DESC LIMIT $3",
+        "SELECT DISTINCT c.id, c.episode_id, c.text_original, c.text_en, e.title, e.occurred_at, c.t_start_s, c.t_end_s, c.salience FROM entities en JOIN entity_mentions m ON m.entity_id = en.id JOIN episodes e ON e.id = m.episode_id JOIN chunks c ON c.episode_id = e.id WHERE (en.canonical_name ILIKE '%' || $1 || '%' OR EXISTS (SELECT 1 FROM unnest(en.aliases) alias WHERE $1 ILIKE '%' || alias || '%' OR alias ILIKE '%' || $1 || '%')) AND ($2::timestamptz IS NULL OR e.occurred_at >= $2) ORDER BY e.occurred_at DESC LIMIT $3",
     )
     .bind(query)
     .bind(since)
@@ -259,7 +259,7 @@ pub async fn observation_channel(
     let since = window_start(policy, now);
     type Row = (Uuid, String, String, DateTime<Utc>, Value);
     let rows = sqlx::query_as::<_, Row>(
-        "SELECT id, source, kind, observed_at, payload FROM observations WHERE observed_at >= $1 AND ($2::text[] = '{}' OR source = ANY($2)) AND ($3 = '' OR payload::text ILIKE '%' || $3 || '%') ORDER BY observed_at DESC LIMIT 12",
+        "SELECT id, source, kind, observed_at, payload FROM observations WHERE ($1::timestamptz IS NULL OR observed_at >= $1) AND ($2::text[] = '{}' OR source = ANY($2)) AND ($3 = '' OR payload::text ILIKE '%' || $3 || '%') ORDER BY observed_at DESC LIMIT 12",
     )
     .bind(since)
     .bind(&policy.sources)
@@ -279,7 +279,7 @@ pub async fn observation_channel(
             .collect());
     }
     let recent = sqlx::query_as::<_, Row>(
-        "SELECT id, source, kind, observed_at, payload FROM observations WHERE observed_at >= $1 AND ($2::text[] = '{}' OR source = ANY($2)) ORDER BY observed_at DESC LIMIT 8",
+        "SELECT id, source, kind, observed_at, payload FROM observations WHERE ($1::timestamptz IS NULL OR observed_at >= $1) AND ($2::text[] = '{}' OR source = ANY($2)) ORDER BY observed_at DESC LIMIT 8",
     )
     .bind(since)
     .bind(&policy.sources)
@@ -474,7 +474,7 @@ pub fn evidence_block(
 
 #[cfg(test)]
 mod tests {
-    use super::{longest_word, recency_score, reciprocal_rank};
+    use super::{RetrievalPolicy, longest_word, recency_score, reciprocal_rank, window_start};
     use chrono::{Duration, Utc};
 
     #[test]
@@ -496,5 +496,26 @@ mod tests {
     fn the_longest_word_is_what_filters_observations() {
         assert_eq!(longest_word("how is warden going"), "warden");
         assert_eq!(longest_word("is it ok"), "");
+    }
+
+    #[test]
+    fn an_unbounded_window_binds_no_lower_bound() {
+        let now = Utc::now();
+        assert_eq!(window_start(&RetrievalPolicy::default(), now), None);
+        let zero = RetrievalPolicy {
+            window_days: Some(0),
+            ..RetrievalPolicy::default()
+        };
+        assert_eq!(window_start(&zero, now), None);
+    }
+
+    #[test]
+    fn a_bounded_window_counts_back_from_now() {
+        let now = Utc::now();
+        let policy = RetrievalPolicy {
+            window_days: Some(30),
+            ..RetrievalPolicy::default()
+        };
+        assert_eq!(window_start(&policy, now), Some(now - Duration::days(30)));
     }
 }
