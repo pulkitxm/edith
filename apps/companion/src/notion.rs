@@ -1,4 +1,3 @@
-use std::env;
 use std::error::Error;
 
 use chrono::{DateTime, Utc};
@@ -104,10 +103,6 @@ pub fn front_matter(page_id: &str, title: &str, edited: &str, url: &str) -> Stri
 }
 
 impl NotionConnector {
-    pub fn from_env() -> Self {
-        Self::with_token(&env::var("NOTION_TOKEN").unwrap_or_default())
-    }
-
     pub fn with_token(token: &str) -> Self {
         Self {
             client: Client::new(),

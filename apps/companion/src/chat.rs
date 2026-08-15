@@ -305,7 +305,6 @@ async fn run(
         }
     };
     reason.stream_chat(&system, &messages, &mut emit).await?;
-    drop(emit);
 
     let (leftover, parsed) = filter.finish();
     if !leftover.is_empty() {

@@ -152,7 +152,7 @@ pub async fn extract(
             let valid_from = candidate
                 .get("validFrom")
                 .and_then(Value::as_str)
-                .and_then(|value| crate::ingest::parse_file_date(value))
+                .and_then(crate::ingest::parse_file_date)
                 .unwrap_or(occurred_at);
             let confidence = candidate
                 .get("confidence")

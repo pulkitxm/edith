@@ -1,4 +1,3 @@
-use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
@@ -40,10 +39,6 @@ struct PendingObservation {
 }
 
 impl GithubConnector {
-    pub fn from_env() -> Self {
-        Self::with_token(&env::var("GITHUB_TOKEN").unwrap_or_default())
-    }
-
     pub fn with_token(token: &str) -> Self {
         Self {
             client: Client::new(),
