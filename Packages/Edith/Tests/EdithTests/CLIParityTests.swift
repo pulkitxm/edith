@@ -138,6 +138,18 @@ enum UIParity {
         UICapability(
             "Companion settings", "test the reasoner", ["companion", "reason", "test"]),
         UICapability(
+            "Companion backend", "start the stack on its host",
+            ["companion", "stack", "up"]),
+        UICapability(
+            "Companion backend", "stop the stack on its host",
+            ["companion", "stack", "down"]),
+        UICapability(
+            "Companion backend", "restart the stack on its host",
+            ["companion", "stack", "restart"]),
+        UICapability(
+            "Companion backend", "choose the machine that runs the companion",
+            ["companion", "deploy"]),
+        UICapability(
             "Companion settings", "point at another companion",
             ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
         UICapability("Machines", "add a machine", ["machines", "add", "box", "--host", "h"]),

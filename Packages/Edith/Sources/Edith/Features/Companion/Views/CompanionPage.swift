@@ -41,7 +41,7 @@ enum CompanionTab: String, CaseIterable, Identifiable {
         case .desk: return "Desk"
         case .library: return "Library"
         case .mind: return "Mind"
-        case .setup: return "Setup"
+        case .setup: return "Backend"
         case .settings: return "Settings"
         }
     }
@@ -66,7 +66,7 @@ struct CompanionPage: View {
     @State private var library = CompanionLibraryModel()
     @State private var mind = CompanionMindModel()
     @State private var desk = CompanionDeskModel()
-    @State private var setup = CompanionSetupModel()
+    @State private var backend = CompanionBackendModel()
     @State private var reason = CompanionSettingsModel()
     @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
@@ -158,7 +158,7 @@ struct CompanionPage: View {
 
     private var healthHelp: String {
         guard home.reachable else {
-            return "The companion backend is not reachable. Open Setup to choose where it runs."
+            return "The companion backend is not reachable. Open Backend to choose where it runs."
         }
         let failing = home.failing
         guard !failing.isEmpty else {
@@ -288,7 +288,7 @@ struct CompanionPage: View {
                 })
         case .capture: CompanionCaptureScreen(model: capture, home: home)
         case .desk: CompanionDeskScreen(model: desk)
-        case .setup: CompanionSetupScreen(model: setup)
+        case .setup: CompanionBackendScreen(model: backend)
         case .library: CompanionLibraryScreen(model: library, home: home)
         case .mind:
             CompanionMindScreen(
