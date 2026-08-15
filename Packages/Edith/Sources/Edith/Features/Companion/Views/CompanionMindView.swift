@@ -80,6 +80,7 @@ struct CompanionMindScreen: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
     @State private var barsFilled = false
     @State private var detail: MindDetail?
     @State private var editingSection: String?
@@ -108,7 +109,7 @@ struct CompanionMindScreen: View {
             }
             .pageContent(compact)
         }
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await model.refresh() }
             withAnimation(Motion.animation(Motion.settle, reduceMotion: reduceMotion)) {
                 barsFilled = true
@@ -442,6 +443,7 @@ private struct MindDetailSheet: View {
     let close: () -> Void
     @State private var episodeRefs: [(String, String)] = []
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -493,7 +495,7 @@ private struct MindDetailSheet: View {
         .padding(UIScale.pt(20))
         .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
         .background(DashSkin.paper(dark))
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await loadRefs() }
         }
     }

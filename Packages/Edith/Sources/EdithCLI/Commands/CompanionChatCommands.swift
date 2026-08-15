@@ -48,10 +48,10 @@ struct CompanionChatCommand: AsyncParsableCommand {
                     }
                 }
             } catch let error as CompanionClientError {
-                throw CLIFailure.unavailable(
-                    "the companion backend at \(resolved.absoluteString) is unavailable",
-                    hint: "\(error.localizedDescription); run `docker compose up` in "
-                        + "apps/companion or `ed machines forwards on tuf 2`")
+                throw CompanionBridge.failure(error, endpoint: resolved)
+            } catch let error as URLError {
+                throw CompanionBridge.failure(
+                    .unreachable(error.localizedDescription), endpoint: resolved)
             }
             guard !answer.isEmpty else {
                 throw CLIFailure.unavailable(

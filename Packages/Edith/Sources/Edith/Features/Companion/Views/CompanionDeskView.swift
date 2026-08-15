@@ -123,6 +123,7 @@ struct CompanionDeskScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
     @State private var overrideTarget: CompanionDiscrepancy?
     @State private var overrideNote = ""
 
@@ -145,7 +146,7 @@ struct CompanionDeskScreen: View {
             }
             .pageContent(compact)
         }
-        .task { if requestsEnabled { await model.refresh() } }
+        .task(id: generation) { if requestsEnabled { await model.refresh() } }
         .sheet(item: $overrideTarget) { discrepancy in
             overrideSheet(discrepancy)
         }

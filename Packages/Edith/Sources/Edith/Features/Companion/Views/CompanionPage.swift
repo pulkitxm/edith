@@ -7,10 +7,19 @@ private struct CompanionRequestsEnabledKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct CompanionGenerationKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
 extension EnvironmentValues {
     var companionRequestsEnabled: Bool {
         get { self[CompanionRequestsEnabledKey.self] }
         set { self[CompanionRequestsEnabledKey.self] = newValue }
+    }
+
+    var companionGeneration: Int {
+        get { self[CompanionGenerationKey.self] }
+        set { self[CompanionGenerationKey.self] = newValue }
     }
 }
 
@@ -171,6 +180,7 @@ struct CompanionPage: View {
                 dropOverlay
             }
         }
+        .environment(\.companionGeneration, home.generation)
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
             value: library.dropTargeted)

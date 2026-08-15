@@ -175,6 +175,7 @@ struct CompanionSettingsScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
     @FocusState private var keyFocused: Bool
 
     private var dark: Bool { scheme == .dark }
@@ -198,7 +199,7 @@ struct CompanionSettingsScreen: View {
             }
             .pageContent(compact)
         }
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await model.load() }
         }
     }

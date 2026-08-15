@@ -123,35 +123,87 @@ final class CompanionLibraryModel: CompanionRefreshable {
         var ingested = 0
         var duplicates = 0
         var skipped = 0
-        do {
-            let client = client
-            for url in urls {
-                let markdown = try CompanionScan.markdownFiles(at: url)
-                let audio = try CompanionScan.audioFiles(at: url)
-                let pdfs = try CompanionScan.pdfFiles(at: url)
-                skipped += markdown.skipped.count + audio.skipped.count + pdfs.skipped.count
-                if !markdown.files.isEmpty {
-                    let outcomes = try await client.ingest(files: markdown.files)
+        var failed: [String] = []
+        let client = client
+        for url in urls {
+            guard let scanned = scan(url, skipped: &skipped, failed: &failed) else { continue }
+            if !scanned.markdown.isEmpty {
+                do {
+                    let outcomes = try await client.ingest(files: scanned.markdown)
                     ingested += outcomes.filter { $0.status == "ingested" }.count
                     duplicates += outcomes.filter { $0.status == "duplicate" }.count
-                }
-                for file in audio.files {
-                    let outcome = try await client.ingestAudio(
-                        name: file.name, data: file.data, mtime: file.mtime)
-                    if outcome.status == "ingested" { ingested += 1 } else { duplicates += 1 }
-                }
-                for file in pdfs.files {
-                    let outcome = try await client.ingestPdf(
-                        name: file.name, data: file.data, mtime: file.mtime)
-                    if outcome.status == "ingested" { ingested += 1 } else { duplicates += 1 }
+                } catch {
+                    failed.append(url.lastPathComponent)
                 }
             }
-            ingestSummary = "\(ingested) ingested, \(duplicates) duplicates, \(skipped) skipped"
-            error = nil
-            await refresh()
-        } catch {
-            self.error = error.localizedDescription
+            for file in scanned.binaries {
+                do {
+                    let outcome = try await file.send(client)
+                    if outcome.status == "ingested" { ingested += 1 } else { duplicates += 1 }
+                } catch {
+                    failed.append(file.name)
+                }
+            }
         }
+        ingestSummary = summary(
+            ingested: ingested, duplicates: duplicates, skipped: skipped, failed: failed)
+        error = failed.isEmpty ? nil : "Could not ingest \(failed.joined(separator: ", "))"
+        await refresh()
+    }
+
+    private struct BinaryIngest {
+        let name: String
+        let data: Data
+        let mtime: String?
+        let kind: Kind
+
+        enum Kind { case audio, pdf, image, video }
+
+        func send(_ client: CompanionClient) async throws -> CompanionIngestOutcome {
+            switch kind {
+            case .audio: try await client.ingestAudio(name: name, data: data, mtime: mtime)
+            case .pdf: try await client.ingestPdf(name: name, data: data, mtime: mtime)
+            case .image: try await client.ingestImage(name: name, data: data, mtime: mtime)
+            case .video: try await client.ingestVideo(name: name, data: data, mtime: mtime)
+            }
+        }
+    }
+
+    private func scan(
+        _ url: URL, skipped: inout Int, failed: inout [String]
+    ) -> (markdown: [CompanionIngestFile], binaries: [BinaryIngest])? {
+        do {
+            let markdown = try CompanionScan.markdownFiles(at: url)
+            let audio = try CompanionScan.audioFiles(at: url)
+            let pdfs = try CompanionScan.pdfFiles(at: url)
+            let images = try CompanionScan.imageFiles(at: url)
+            let videos = try CompanionScan.videoFiles(at: url)
+            skipped +=
+                markdown.skipped.count + audio.skipped.count + pdfs.skipped.count
+                + images.skipped.count + videos.skipped.count
+            var binaries = audio.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .audio)
+            }
+            binaries += pdfs.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .pdf)
+            }
+            binaries += images.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .image)
+            }
+            binaries += videos.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .video)
+            }
+            return (markdown.files, binaries)
+        } catch {
+            failed.append(url.lastPathComponent)
+            return nil
+        }
+    }
+
+    private func summary(ingested: Int, duplicates: Int, skipped: Int, failed: [String]) -> String {
+        var parts = ["\(ingested) ingested", "\(duplicates) duplicates", "\(skipped) skipped"]
+        if !failed.isEmpty { parts.append("\(failed.count) failed") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -216,6 +268,7 @@ struct CompanionLibraryScreen: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
 
     private var dark: Bool { scheme == .dark }
 
@@ -236,7 +289,7 @@ struct CompanionLibraryScreen: View {
         }
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await model.refresh() }
         }
         .onChange(of: model.query) {

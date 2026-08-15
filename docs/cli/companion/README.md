@@ -127,7 +127,7 @@ For the machinery behind these commands, start at
 
 `--endpoint` wins over `EDITH_COMPANION_URL`, which wins over
 `http://127.0.0.1:4820`. A saved machine forward can put a remote companion on
-that local address: run `ed machines forwards on tuf 2`, then
+that local address: run `ed machines forwards on <machine> <n>`, then
 `ed companion status`.
 
 Each Markdown file must be no larger than 2MB, recordings, photos and PDFs no

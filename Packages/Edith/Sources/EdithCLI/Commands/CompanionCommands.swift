@@ -10,8 +10,8 @@ struct CompanionCommand: AsyncParsableCommand {
             The backend runs with docker compose from apps/companion. Pass --endpoint or
             set EDITH_COMPANION_URL to point at it; the default is http://127.0.0.1:4820.
 
-            For a remote backend, run `ed machines forwards on tuf 2`, then
-            `ed companion status`.
+            For a backend on one of your machines, forward its port with
+            `ed machines forwards on <machine> <n>`, then `ed companion status`.
             """,
         subcommands: [
             CompanionStatusCommand.self, CompanionDoctorCommand.self,
@@ -438,10 +438,21 @@ enum CompanionBridge {
         do {
             return try await operation(CompanionClient(baseURL: resolved))
         } catch let error as CompanionClientError {
-            throw CLIFailure.unavailable(
-                "the companion backend at \(resolved.absoluteString) is unavailable",
-                hint: "\(error.localizedDescription); run `docker compose up` in "
-                    + "apps/companion or `ed machines forwards on tuf 2`")
+            throw failure(error, endpoint: resolved)
+        }
+    }
+
+    static func failure(_ error: CompanionClientError, endpoint: URL) -> CLIFailure {
+        switch error {
+        case let .unreachable(detail):
+            return CLIFailure.unavailable(
+                "the companion backend at \(endpoint.absoluteString) is unavailable",
+                hint: "\(detail); start it with `ed companion up`, or point at another "
+                    + "endpoint with --endpoint or EDITH_COMPANION_URL")
+        case let .badResponse(status, detail):
+            return CLIFailure(
+                "the companion returned HTTP \(status)",
+                hint: detail.isEmpty ? nil : detail)
         }
     }
 
@@ -456,10 +467,7 @@ enum CompanionBridge {
                 "the Ollama embedding service is unavailable",
                 hint: detail.isEmpty ? "check the Ollama service and embedding model" : detail)
         } catch let error as CompanionClientError {
-            throw CLIFailure.unavailable(
-                "the companion backend at \(resolved.absoluteString) is unavailable",
-                hint: "\(error.localizedDescription); run `docker compose up` in "
-                    + "apps/companion or `ed machines forwards on tuf 2`")
+            throw failure(error, endpoint: resolved)
         }
     }
 

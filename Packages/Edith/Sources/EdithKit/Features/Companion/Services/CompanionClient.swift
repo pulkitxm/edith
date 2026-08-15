@@ -258,6 +258,14 @@ struct JSONValueBox: Decodable, CustomStringConvertible {
                 .joined(separator: ", ")
         } else if let text = try? container.decode(String.self) {
             description = text
+        } else if let number = try? container.decode(Double.self) {
+            description = number == number.rounded() ? String(Int(number)) : String(number)
+        } else if let flag = try? container.decode(Bool.self) {
+            description = flag ? "yes" : "no"
+        } else if let object = try? container.decode([String: String].self) {
+            description = object.sorted { $0.key < $1.key }
+                .map { "\($0.key) \($0.value)" }
+                .joined(separator: ", ")
         } else {
             description = ""
         }
@@ -368,6 +376,18 @@ public struct CompanionBelief: Codable, Equatable, Sendable {
     }
 }
 
+public struct CompanionWriteAck: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let id: String?
+    public let section: String?
+
+    public init(ok: Bool, id: String? = nil, section: String? = nil) {
+        self.ok = ok
+        self.id = id
+        self.section = section
+    }
+}
+
 public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
     case unreachable(String)
     case badResponse(Int, String)
@@ -377,13 +397,14 @@ public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
         case let .unreachable(detail):
             return detail
         case let .badResponse(status, detail):
-            return detail.isEmpty ? "HTTP \(status)" : "HTTP \(status): \(detail)"
+            return detail.isEmpty ? "HTTP \(status)" : detail
         }
     }
 }
 
 public struct CompanionClient: Sendable {
     public static let defaultEndpointString = "http://127.0.0.1:4820"
+    public static let defaultTimeout: TimeInterval = 20
     public static let longRequestTimeout: TimeInterval = 300
 
     public let baseURL: URL
@@ -612,7 +633,7 @@ public struct CompanionClient: Sendable {
         try await get("core")
     }
 
-    public func writeCore(section: String, content: String) async throws -> [String: String] {
+    public func writeCore(section: String, content: String) async throws -> CompanionWriteAck {
         try await post("core", body: CoreWriteRequest(section: section, content: content))
     }
 
@@ -636,7 +657,7 @@ public struct CompanionClient: Sendable {
         try await get("discrepancies", query: ["limit": String(limit)])
     }
 
-    public func overrideDiscrepancy(id: String, real: String) async throws -> [String: String] {
+    public func overrideDiscrepancy(id: String, real: String) async throws -> CompanionWriteAck {
         try await post("discrepancies/\(id)/override", body: OverrideRequest(real: real))
     }
 
@@ -781,7 +802,7 @@ public struct CompanionClient: Sendable {
     }
 
     func request<T: Decodable>(
-        _ request: URLRequest, allowing: Set<Int> = [], timeout: TimeInterval = 5
+        _ request: URLRequest, allowing: Set<Int> = [], timeout: TimeInterval = defaultTimeout
     ) async throws
         -> T
     {
@@ -812,8 +833,17 @@ public struct CompanionClient: Sendable {
     }
 
     private func responseText(_ data: Data) -> String {
-        String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        if let envelope = try? JSONDecoder().decode(ServerError.self, from: data),
+            !envelope.error.isEmpty
+        {
+            return envelope.error
+        }
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+private struct ServerError: Decodable {
+    let error: String
 }
 
 private struct IngestRequest: Encodable {
