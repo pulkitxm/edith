@@ -650,11 +650,13 @@ struct CompanionDoctorCommand: AsyncParsableCommand {
                 CLIOut.json(
                     .object([
                         "ok": .bool(health.ok),
+                        "degraded": .bool(health.degraded ?? !health.failing.isEmpty),
                         "checks": .array(
                             health.checks.map { check in
                                 .object([
                                     "name": .string(check.name),
                                     "ok": .bool(check.ok),
+                                    "severity": .string(check.severityKind.rawValue),
                                     "detail": .string(check.detail),
                                 ])
                             }),
@@ -662,8 +664,14 @@ struct CompanionDoctorCommand: AsyncParsableCommand {
                 return
             }
             for check in health.checks {
-                let state = check.ok ? "ok" : "fail"
+                let state = check.ok ? "ok" : check.severityKind == .blocker ? "FAIL" : "off"
                 CLIOut.out("\(check.name)  \(state)  \(TextTable.oneLine(check.detail))")
+            }
+            let blocking = health.blocking
+            if !blocking.isEmpty {
+                CLIOut.note(
+                    "\(blocking.count) blocking: "
+                        + blocking.map(\.name).joined(separator: ", "))
             }
         }
     }

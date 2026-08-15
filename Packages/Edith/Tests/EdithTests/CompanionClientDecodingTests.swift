@@ -50,4 +50,47 @@ import Testing
         #expect(CompanionClient.defaultTimeout >= 20)
         #expect(CompanionClient.longRequestTimeout > CompanionClient.defaultTimeout)
     }
+
+    @Test func healthDecodesSeverityAndSeparatesBlockingFromOptional() throws {
+        let health = try decode(
+            CompanionHealth.self,
+            """
+            {"ok":true,"degraded":true,"checks":[
+              {"name":"postgres","ok":true,"severity":"blocker","detail":"connected"},
+              {"name":"reranker","ok":false,"severity":"optional","detail":"not configured"},
+              {"name":"stt","ok":false,"severity":"degraded","detail":"unreachable"}
+            ]}
+            """)
+        #expect(health.ok)
+        #expect(health.degraded == true)
+        #expect(health.failing.map(\.name) == ["reranker", "stt"])
+        #expect(health.blocking.isEmpty)
+    }
+
+    @Test func aFailingBlockerIsReportedAsBlocking() throws {
+        let health = try decode(
+            CompanionHealth.self,
+            """
+            {"ok":false,"degraded":true,"checks":[
+              {"name":"reasoning","ok":false,"severity":"blocker","detail":"no provider"}
+            ]}
+            """)
+        #expect(!health.ok)
+        #expect(health.blocking.map(\.name) == ["reasoning"])
+    }
+
+    @Test func aBackendWithoutSeverityStillDecodes() throws {
+        let health = try decode(
+            CompanionHealth.self,
+            #"{"ok":true,"checks":[{"name":"postgres","ok":true,"detail":"connected"}]}"#)
+        #expect(health.degraded == nil)
+        #expect(health.checks[0].severityKind == .blocker)
+    }
+
+    @Test func anUnknownSeverityIsTreatedAsBlockingRatherThanIgnored() throws {
+        let check = try decode(
+            CompanionCheck.self,
+            #"{"name":"future","ok":false,"severity":"catastrophic","detail":"x"}"#)
+        #expect(check.severityKind == .blocker)
+    }
 }

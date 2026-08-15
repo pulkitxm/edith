@@ -100,8 +100,13 @@ struct CompanionPage: View {
         }
         .task {
             guard requestsEnabled else { return }
+            var first = true
             while !Task.isCancelled {
                 await home.refresh()
+                if first {
+                    first = false
+                    if !home.reachable { select(.setup) }
+                }
                 try? await Task.sleep(for: .seconds(20))
             }
         }
@@ -111,15 +116,22 @@ struct CompanionPage: View {
         PageHeader(
             "Companion",
             trailing: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Circle()
-                        .fill(home.healthy ? Color.green : Color.orange)
-                        .frame(width: UIScale.pt(8), height: UIScale.pt(8))
-                    Text(home.healthy ? "healthy" : "degraded")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                Button {
+                    select(.setup)
+                } label: {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Circle()
+                            .fill(healthTint)
+                            .frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                        Text(home.state.label)
+                            .font(.system(size: UIScale.pt(11.5)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                    .contentShape(Rectangle())
                 }
-                .help(home.checks.map { "\($0.name): \($0.detail)" }.joined(separator: "\n"))
+                .buttonStyle(.plain)
+                .pointerCursor()
+                .help(healthHelp)
             },
             accessory: {
                 if let status = home.status {
@@ -133,6 +145,27 @@ struct CompanionPage: View {
             }
         )
         .pageGutter(compact)
+    }
+
+    private var healthTint: Color {
+        switch home.state {
+        case .unreachable: DashSkin.inkFaint(dark)
+        case .blocked: .orange
+        case .degraded: .yellow
+        case .ready: .green
+        }
+    }
+
+    private var healthHelp: String {
+        guard home.reachable else {
+            return "The companion backend is not reachable. Open Setup to choose where it runs."
+        }
+        let failing = home.failing
+        guard !failing.isEmpty else {
+            return home.checks.map { "\($0.name): \($0.detail)" }.joined(separator: "\n")
+        }
+        return failing.map { "\($0.name) (\($0.severityKind.rawValue)): \($0.detail)" }
+            .joined(separator: "\n")
     }
 
     private var tabBar: some View {

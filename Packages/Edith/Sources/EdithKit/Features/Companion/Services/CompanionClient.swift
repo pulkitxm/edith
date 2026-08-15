@@ -2,23 +2,46 @@ import Foundation
 
 public struct CompanionHealth: Codable, Equatable, Sendable {
     public let ok: Bool
+    public let degraded: Bool?
     public let checks: [CompanionCheck]
 
-    public init(ok: Bool, checks: [CompanionCheck]) {
+    public init(ok: Bool, degraded: Bool? = nil, checks: [CompanionCheck]) {
         self.ok = ok
+        self.degraded = degraded
         self.checks = checks
     }
+
+    public var failing: [CompanionCheck] { checks.filter { !$0.ok } }
+
+    public var blocking: [CompanionCheck] {
+        failing.filter { $0.severityKind == .blocker }
+    }
+}
+
+public enum CompanionCheckSeverity: String, Codable, Equatable, Sendable {
+    case blocker
+    case degraded
+    case optional
 }
 
 public struct CompanionCheck: Codable, Equatable, Sendable {
     public let name: String
     public let ok: Bool
+    public let severity: String?
     public let detail: String
 
-    public init(name: String, ok: Bool, detail: String) {
+    public init(name: String, ok: Bool, severity: String? = nil, detail: String) {
         self.name = name
         self.ok = ok
+        self.severity = severity
         self.detail = detail
+    }
+
+    public var severityKind: CompanionCheckSeverity {
+        guard let severity, let parsed = CompanionCheckSeverity(rawValue: severity) else {
+            return .blocker
+        }
+        return parsed
     }
 }
 
