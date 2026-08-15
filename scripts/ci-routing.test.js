@@ -74,3 +74,14 @@ test("manual production workflows require main", () => {
   expect(wikiWorkflow).toContain("Require main for manual sync");
   expect(wikiWorkflow).toContain('test "$GITHUB_REF" = refs/heads/main');
 });
+
+test("backend changes run the companion job", () => {
+  expect(ciWorkflow).toContain("area companion '^apps/companion/'");
+  expect(ciWorkflow).toContain("needs.changes.outputs.companion == 'true'");
+  expect(ciWorkflow).toContain("pgvector/pgvector:pg18");
+  expect(ciWorkflow).toContain("cargo test --locked");
+  expect(ciWorkflow).toContain(
+    "cargo clippy --all-targets --locked -- -D warnings",
+  );
+  expect(ciWorkflow).toContain("--migrate-only");
+});

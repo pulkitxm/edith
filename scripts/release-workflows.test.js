@@ -15,7 +15,7 @@ const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
 
 test("CI gates the reusable release only on relevant checks", () => {
   expect(ciWorkflow).toContain(
-    "needs: [changes, checks, ubuntu, swift-build, swift-test]",
+    "needs: [changes, checks, ubuntu, swift-build, swift-test, companion]",
   );
   expect(releaseJob).not.toContain("promo-video");
   expect(releaseJob).toContain("always()");
