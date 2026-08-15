@@ -181,6 +181,11 @@ private struct FleetMachineRow: View {
     let onOpen: () -> Void
     @State private var hovering = false
 
+    private var hostsCompanion: Bool {
+        guard let deployment = CompanionDeploymentStore.load() else { return false }
+        return deployment.isLocal ? snapshot.isLocal : deployment.machineID == snapshot.id
+    }
+
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: UIScale.pt(12)) {
@@ -189,9 +194,17 @@ private struct FleetMachineRow: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(width: UIScale.pt(18))
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(snapshot.name)
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                        .foregroundStyle(DashSkin.ink(dark))
+                    HStack(spacing: UIScale.pt(5)) {
+                        Text(snapshot.name)
+                            .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                            .foregroundStyle(DashSkin.ink(dark))
+                        if hostsCompanion {
+                            Image(systemName: "brain.head.profile")
+                                .font(.system(size: UIScale.pt(9.5)))
+                                .foregroundStyle(DashSkin.accent(dark))
+                                .help("Runs the companion")
+                        }
+                    }
                     Text(snapshot.online ? snapshot.os : "Not connected")
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))

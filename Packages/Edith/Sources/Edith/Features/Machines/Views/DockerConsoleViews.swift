@@ -29,7 +29,8 @@ struct DockerContainerList: View {
 
     private var groups: [(project: String?, containers: [DockerContainer])] {
         let grouped = Dictionary(grouping: filtered) { $0.composeProject }
-        let projects = grouped.keys.compactMap { $0 }.sorted()
+        let projects = grouped.keys.compactMap { $0 }
+            .sorted(by: DockerProjectOrder.before)
         var result: [(String?, [DockerContainer])] = projects.map { project in
             (project, (grouped[project] ?? []).sorted { $0.displayName < $1.displayName })
         }
@@ -64,10 +65,19 @@ struct DockerContainerList: View {
                         }
                     } header: {
                         HStack(spacing: UIScale.pt(6)) {
-                            Image(systemName: group.project == nil ? "cube" : "square.stack")
+                            Image(systemName: DockerProjectOrder.symbol(group.project))
                                 .font(.system(size: UIScale.pt(10)))
-                            Text(group.project ?? "Standalone")
+                            Text(DockerProjectOrder.title(group.project))
                                 .font(.system(size: UIScale.pt(11), weight: .semibold))
+                            if DockerProjectOrder.isCompanion(group.project) {
+                                Text("Edith")
+                                    .font(DashSkin.mono(9))
+                                    .padding(.horizontal, UIScale.pt(5))
+                                    .padding(.vertical, UIScale.pt(1))
+                                    .background(DashSkin.accent(dark).opacity(0.18))
+                                    .clipShape(Capsule())
+                                    .foregroundStyle(DashSkin.accent(dark))
+                            }
                             Text("\(group.containers.count)")
                                 .font(DashSkin.mono(10))
                                 .foregroundStyle(DashSkin.inkFaint(dark))

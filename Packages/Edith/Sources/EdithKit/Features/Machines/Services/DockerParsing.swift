@@ -257,3 +257,26 @@ public enum DockerParsing {
         return DockerAvailability(status: .missing)
     }
 }
+
+public enum DockerProjectOrder {
+    public static let companionProject = "edith-companion"
+
+    public static func isCompanion(_ project: String?) -> Bool {
+        project == companionProject
+    }
+
+    public static func before(_ left: String, _ right: String) -> Bool {
+        if isCompanion(left) != isCompanion(right) { return isCompanion(left) }
+        return left.localizedStandardCompare(right) == .orderedAscending
+    }
+
+    public static func title(_ project: String?) -> String {
+        guard let project else { return "Standalone" }
+        return isCompanion(project) ? "Companion" : project
+    }
+
+    public static func symbol(_ project: String?) -> String {
+        guard let project else { return "cube" }
+        return isCompanion(project) ? "brain.head.profile" : "square.stack"
+    }
+}
