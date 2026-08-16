@@ -32,6 +32,7 @@ const expectedActions = new Map([
     "github/codeql-action/upload-sarif",
     "ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd",
   ],
+  ["gitleaks/gitleaks-action", "e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e"],
   ["lycheeverse/lychee-action", "e7477775783ea5526144ba13e8db5eec57747ce8"],
   ["ossf/scorecard-action", "2d1146689b8cda280b9bc96326124645441f03bc"],
   ["oven-sh/setup-bun", "0c5077e51419868618aeaa5fe8019c62421857d6"],
