@@ -343,7 +343,7 @@ enum PasteQueueHotKey {
 
     static func register() {
         let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
-        let queueOn = SharedDefaults.store.bool(forKey: "pasteQueueEnabled")
+        let queueOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pasteQueueEnabled)
         guard clipboardOn, queueOn else {
             unregister()
             return

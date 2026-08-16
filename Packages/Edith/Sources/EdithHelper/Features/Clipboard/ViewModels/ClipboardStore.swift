@@ -183,7 +183,7 @@ final class ClipboardStore: FeatureModule {
         adopt(ClipboardActions.arrange(entries + [entry]))
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
-        if SharedDefaults.store.bool(forKey: "pasteQueueEnabled") {
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pasteQueueEnabled) {
             pasteQueue.enqueue(entry.id)
         }
     }
