@@ -118,6 +118,12 @@ public enum CommandTree {
                     CommandNode(
                         "clear-updates", "Forget the record of past update checks.",
                         options: common),
+                    CommandNode(
+                        "reveal", "Show a section of the main window.",
+                        options: ["--json", "--help", "--tab"]),
+                    CommandNode(
+                        "snapshot", "Capture the open windows as PNG files.",
+                        options: ["--json", "--help", "--dir"]),
                 ]),
             CommandNode(
                 "extensions", "Turn Edith's extensions on and off.",

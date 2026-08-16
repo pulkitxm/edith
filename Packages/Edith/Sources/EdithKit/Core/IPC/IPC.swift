@@ -83,6 +83,12 @@ public enum IPC {
         public static let requestCalendarEvents = Notification.Name(
             "com.pulkit.edith.requestCalendarEvents")
         public static let calendarEvents = Notification.Name("com.pulkit.edith.calendarEvents")
+        public static let requestReveal = Notification.Name("com.pulkit.edith.requestReveal")
+        public static let revealResult = Notification.Name("com.pulkit.edith.revealResult")
+        public static let requestWindowSnapshot = Notification.Name(
+            "com.pulkit.edith.requestWindowSnapshot")
+        public static let windowSnapshotResult = Notification.Name(
+            "com.pulkit.edith.windowSnapshotResult")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {

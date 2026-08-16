@@ -293,6 +293,8 @@ public enum Guide {
         ed app check-updates            ask Sparkle to look now
         ed app updates                  the checks already made
         ed app quit                     quit the main window, leave the menu bar
+        ed app reveal companion --tab chat  show a section, and a tab inside it
+        ed app snapshot                 the open windows as PNGs, no screen recording
         ```
 
         ## Completions
