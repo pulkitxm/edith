@@ -82,10 +82,13 @@
             "description": "A free, open source native control center for macOS and Ubuntu with usage analytics, local music, and system tools.",
             "featureList": [
               "Claude and Codex rate-limit tracking with live countdowns",
-              "Menu bar session and weekly usage readout",
+              "Selectable Claude, Codex, and Fable limit windows in the menu bar",
               "Usage alerts and notifications",
               "Usage analytics dashboard with per-model charts",
               "Daily spend heatmap",
+              "Self-hosted Companion memory and evidence-backed chat",
+              "SSH machine monitoring, terminals, files, containers, power, and cooling",
+              "Closed-lid operation on battery with timed safety policies",
               "Local music player with Spotify and Apple Music control",
               "Clipboard history with instant paste",
               "Color picker",
@@ -98,7 +101,7 @@
           {
             "@type": "VideoObject",
             "name": "Edith announcement film",
-            "description": "A two-minute tour of every feature in Edith, the macOS menu bar app.",
+            "description": "A two-minute tour of Edith's native macOS app.",
             "contentUrl": "https://edith.pulkit.page/announcement.mp4",
             "thumbnailUrl": "https://edith.pulkit.page/announcement-poster.jpg",
             "uploadDate": "2026-07-16"
@@ -124,10 +127,10 @@
               },
               {
                 "@type": "Question",
-                "name": "Why can I not install Edith without the privacy and security warning?",
+                "name": "Why might macOS show a privacy and security warning?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Our Apple Developer account approval is still in progress, so builds are not yet notarized by Apple. Until then, allow the app in System Settings under Privacy & Security by clicking Open Anyway, as shown in the install video on this page."
+                  "text": "The release workflow always signs Edith and notarizes it when the Apple notarization credentials are configured. If Gatekeeper blocks a build that was published without notarization, verify that it came from the official GitHub release, then use Open Anyway in System Settings under Privacy & Security."
                 }
               },
               {
@@ -572,8 +575,8 @@
             </div>
             <h4>Project drilldown</h4>
             <p>
-              Spend by project, worktree, and chat, across Claude and Codex, so you know which repo
-              eats the budget.
+              Activity by project, worktree, and chat across Claude, Codex, and pi, so you know
+              which repository is consuming the budget.
             </p>
           </div>
           <div class="card card-spotify">
@@ -612,13 +615,46 @@
               camera.
             </p>
           </div>
+          <div class="card card-local">
+            <div class="card-art stack">
+              <span class="card-row"><span class="card-label">Chat with citations</span></span>
+              <span class="card-row"><span class="card-label">Notes, audio, PDFs</span></span>
+            </div>
+            <h4>Private Companion</h4>
+            <p>
+              A self-hosted memory on this Mac or an SSH machine, with evidence-backed chat,
+              exports, imports, and complete erasure controls.
+            </p>
+          </div>
+          <div class="card card-stats">
+            <div class="card-art stack">
+              <span class="card-row"><span class="card-label">buildbox</span><span class="pill mono">42% CPU</span></span>
+              <span class="card-row"><span class="card-label">studio</span><span class="pill mono">6.2 GB</span></span>
+            </div>
+            <h4>Remote machines</h4>
+            <p>
+              Monitor SSH hosts, open terminals, browse files, run containers, control power,
+              and switch supported Linux thermal profiles.
+            </p>
+          </div>
+          <div class="card card-shortcut">
+            <div class="card-art">
+              <span class="key lg">☾</span>
+              <span class="pill mono">30 min</span>
+            </div>
+            <h4>Lid Awake</h4>
+            <p>
+              Keep an unplugged Mac working with the lid shut, with timers, lid-cycle sessions,
+              battery floors, and automatic sleep restoration.
+            </p>
+          </div>
         </div>
       </section>
 
       <section id="film" class="wrap film" data-reveal-group>
         <div class="section-head">
           <p class="eyebrow">The film</p>
-          <h2>See the whole app in two minutes.</h2>
+          <h2>See Edith in two minutes.</h2>
         </div>
         <video
           controls
@@ -628,7 +664,7 @@
           poster="/announcement-poster.jpg"
           width="1920"
           height="1080"
-          aria-label="Edith announcement film: a two-minute tour of every feature"
+          aria-label="Edith announcement film: a two-minute tour of the macOS app"
         ></video>
       </section>
 
@@ -692,11 +728,11 @@
         <div class="split reverse" data-reveal-group>
           <div class="split-copy">
             <p class="eyebrow">Code</p>
-            <h3>Claude and Codex, side by side.</h3>
+            <h3>Your coding agents, attributed correctly.</h3>
             <p class="lede">
-              Edith tracks both agents. Switch the rate-limit rings between providers, filter the
-              dashboard by source, and see Codex chats right in the project drilldown next to
-              your Claude sessions.
+              Claude and Codex supply live limit windows. Their activity, plus pi usage, is
+              attributed by machine, repository, worktree, and chat so filters and project
+              drilldowns stay accurate.
             </p>
           </div>
           <div>
@@ -739,10 +775,11 @@
         <div class="split" data-reveal-group>
           <div class="split-copy">
             <p class="eyebrow">Menu bar</p>
-            <h3>Two numbers in your menu bar.</h3>
+            <h3>The limit windows you want in your menu bar.</h3>
             <p class="lede">
-              Session and weekly percentages, tinted by a time-aware risk model. Green when you
-              have room. Amber when you're close. Red when the next prompt could push you over.
+              Choose Claude session, week, and Fable or Codex session and week, then pick a compact
+              or roomy layout. A time-aware risk tint shows when the next prompt could push you
+              over.
             </p>
           </div>
           <div>
@@ -946,9 +983,9 @@
             <p class="eyebrow">System</p>
             <h3>Prevent sleep. Lock the keyboard.</h3>
             <p class="lede">
-              Keep your Mac awake for a long build, even with the lid closed on power. Lock the
-              keyboard to wipe it down without triggering shortcuts. Auto-restores in sixty
-              seconds so you can't lock yourself out.
+              Keep your Mac awake for a long build, even unplugged with the lid closed. Choose a
+              time limit, stop when the lid reopens, or pause at a battery floor. Lock the keyboard
+              to wipe it down without triggering shortcuts; it restores in sixty seconds.
             </p>
           </div>
           <div>
@@ -973,7 +1010,7 @@
                   data-action
                   aria-pressed="true"
                   data-icon="☾"
-                  data-explain="Holds off sleep through a long build or download, even with the lid closed on power."
+                  data-explain="Keeps this Mac running through a long build or download, even unplugged with the lid closed."
                 >
                   <span class="action-icon">☾</span>
                   <span>Keep awake</span>
@@ -1134,14 +1171,15 @@
           </details>
           <details>
             <summary>
-              Why can I not install Edith without the privacy and security warning?
+              Why might macOS show a privacy and security warning?
               <span aria-hidden="true">+</span>
             </summary>
             <p>
-              Our Apple Developer account approval is still in progress, so builds are not yet
-              notarized by Apple. We are working closely with Apple and this will be resolved
-              soon. Until then, allow the app in System Settings under Privacy &amp; Security by
-              clicking Open Anyway. The video below walks through the exact steps.
+              The release workflow always signs Edith and notarizes it when the Apple notarization
+              credentials are configured. If Gatekeeper blocks a build published without
+              notarization, verify that it came from the official GitHub release, then use Open
+              Anyway in System Settings under Privacy &amp; Security. The video below shows the
+              relevant control.
             </p>
             <video
               controls
