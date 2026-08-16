@@ -49,6 +49,30 @@ public enum CompanionSource {
 
 public typealias CompanionCommandRunner = (String, Data?, TimeInterval) async throws -> String
 
+public enum CompanionDeployStage: String, CaseIterable, Sendable {
+    case prepare
+    case source
+    case files
+    case env
+    case start
+    case tunnel
+    case health
+
+    public var title: String {
+        switch self {
+        case .prepare: "Prepare the directory"
+        case .source: "Sync the companion source"
+        case .files: "Write the compose files"
+        case .env: "Write the environment"
+        case .start: "Build and start the services"
+        case .tunnel: "Open the port forward"
+        case .health: "Run the health checks"
+        }
+    }
+}
+
+public typealias CompanionDeployProgress = @Sendable (CompanionDeployStage, String) -> Void
+
 public enum CompanionInstaller {
     @MainActor
     public static func install(
@@ -56,6 +80,7 @@ public enum CompanionInstaller {
         config: CompanionStackConfig,
         secrets: CompanionSecretValues,
         runner: CompanionCommandRunner? = nil,
+        progress: CompanionDeployProgress? = nil,
         log: @escaping @Sendable (String) -> Void
     ) async throws {
         let run: CompanionCommandRunner =
@@ -65,10 +90,12 @@ public enum CompanionInstaller {
                     command, on: deployment, stdin: stdin, timeout: timeout)
             }
         let directory = deployment.directory
+        progress?(.prepare, "creating \(directory)")
         log("Preparing \(directory) on \(deployment.machineName)")
         _ = try await run("mkdir -p \(quoted(directory))", nil, 30)
 
         if let source = CompanionSource.locate() {
+            progress?(.source, "from \(source.path)")
             log("Syncing the companion source from \(source.path)")
             let tarball = try CompanionSource.tarball(of: source)
             _ = try await run("tar -xzf - -C \(quoted(directory))", tarball, 300)
@@ -78,9 +105,11 @@ public enum CompanionInstaller {
                 "\(directory) has no companion source and none was found on this Mac; "
                     + "set \(CompanionSource.environmentKey) to the apps/companion checkout")
         } else {
+            progress?(.source, "already on \(deployment.machineName)")
             log("Keeping the source already on \(deployment.machineName)")
         }
 
+        progress?(.files, CompanionRuntimeFiles.all.map(\.name).joined(separator: ", "))
         for file in CompanionRuntimeFiles.all {
             log("Writing \(file.name)")
             _ = try await run(
@@ -88,6 +117,7 @@ public enum CompanionInstaller {
                 Data(file.content.utf8), 30)
         }
 
+        progress?(.env, "ports, models and Keychain secrets")
         log("Writing .env")
         let env = config.envFile(secrets: secrets)
         _ = try await run(

@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct CompanionBackendScreen: View {
     @Bindable var model: CompanionBackendModel
+    var openSetup: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
@@ -89,6 +90,12 @@ struct CompanionBackendScreen: View {
                         title: "Re-check", busy: model.probing, busyTitle: "Probing…"
                     ) {
                         Task { await model.probeHosts() }
+                    }
+                    CompanionLinkButton(
+                        title: "Guided setup…",
+                        help: "Walk through picking a machine and setting it up, step by step"
+                    ) {
+                        openSetup()
                     }
                     Spacer(minLength: 0)
                 }

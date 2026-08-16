@@ -70,6 +70,7 @@ public enum CompanionStackControl {
     @MainActor
     public static func deploy(
         host: CompanionHost, config: CompanionStackConfig,
+        progress: CompanionDeployProgress? = nil,
         log: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws -> CompanionDeployment {
         let tier = host.tier ?? .cpu
@@ -80,7 +81,8 @@ public enum CompanionStackControl {
             localPort: config.apiPort)
         try await CompanionInstaller.install(
             deployment: deployment, config: config, secrets: CompanionSecrets.all(),
-            log: log)
+            progress: progress, log: log)
+        progress?(.start, "compose up, first builds take minutes")
         log("Starting the stack, building the image when it changed")
         _ = try await run(
             CompanionStackCommands.up(
@@ -88,10 +90,26 @@ public enum CompanionStackControl {
             on: deployment, timeout: 1800)
         let saved = CompanionDeploymentStore.save(deployment)
         if deployment.machineID != nil {
+            progress?(.tunnel, "localhost:\(deployment.localPort)")
             log("Opening the port forward so this Mac can reach it")
             _ = await CompanionTunnel.ensure(saved)
+        } else {
+            progress?(.tunnel, "local, nothing to forward")
         }
+        progress?(.health, "waiting for the doctor")
+        _ = await waitForHealth(saved)
         return saved
+    }
+
+    @MainActor
+    public static func waitForHealth(
+        _ deployment: CompanionDeployment, attempts: Int = 30
+    ) async -> Bool {
+        for _ in 0..<attempts {
+            if await CompanionTunnel.endpointAnswers(deployment) { return true }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        return false
     }
 
     @MainActor

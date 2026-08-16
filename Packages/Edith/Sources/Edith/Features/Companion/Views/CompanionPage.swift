@@ -76,6 +76,8 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
     @State private var refreshTick = 0
+    @State private var showingSetup = false
+    @State private var setupModel: CompanionSetupModel?
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
@@ -89,6 +91,11 @@ struct CompanionPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(pageBackground)
+        .sheet(isPresented: $showingSetup) {
+            if let setupModel {
+                CompanionSetupSheet(model: setupModel, home: home)
+            }
+        }
         .onDrop(of: [.fileURL], isTargeted: $library.dropTargeted) { providers in
             Task {
                 let urls = await CompanionDrop.urls(from: providers)
@@ -116,7 +123,11 @@ struct CompanionPage: View {
                 }
                 if first {
                     first = false
-                    if !home.reachable { select(.setup) }
+                    if CompanionDeploymentStore.load() == nil, !home.reachable {
+                        openSetup()
+                    } else if !home.reachable {
+                        select(.setup)
+                    }
                 }
                 try? await Task.sleep(for: .seconds(20))
             }
@@ -325,7 +336,8 @@ struct CompanionPage: View {
                 })
         case .capture: CompanionCaptureScreen(model: capture, home: home)
         case .desk: CompanionDeskScreen(model: desk)
-        case .setup: CompanionBackendScreen(model: backend)
+        case .setup:
+            CompanionBackendScreen(model: backend, openSetup: { openSetup() })
         case .library: CompanionLibraryScreen(model: library, home: home)
         case .mind:
             CompanionMindScreen(
@@ -336,6 +348,17 @@ struct CompanionPage: View {
                 })
         case .settings: CompanionSettingsScreen(model: reason, home: home)
         }
+    }
+
+    private func openSetup() {
+        let model = CompanionSetupModel(onFinish: {
+            showingSetup = false
+            refreshTick += 1
+            Task { await home.refresh() }
+        })
+        model.begin(home: home, reasonerConfigured: reason.current?.configured == true)
+        setupModel = model
+        showingSetup = true
     }
 
     private func select(_ item: CompanionTab) {
