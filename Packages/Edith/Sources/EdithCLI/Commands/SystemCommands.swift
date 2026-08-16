@@ -176,7 +176,7 @@ enum AgentProcessCatalog {
 
 struct SystemAgentsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List Claude and other agent processes.", aliases: ["list"])
+        commandName: "ls", abstract: "List recognized agent processes.", aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -226,13 +226,13 @@ struct SystemAgentsKillCommand: AsyncParsableCommand {
                 AgentProcessFilter.isAgentProcess(name: name)
             else {
                 throw CLIFailure.notFound(
-                    "pid (pid) is not a known agent process",
+                    "pid \(pid) is not a known agent process",
                     hint: "run `ed system agents ls` to see eligible processes")
             }
             let signal = force ? SIGKILL : SIGTERM
             guard Darwin.kill(target, signal) == 0 else {
                 throw CLIFailure(
-                    "could not stop (name) (pid (pid)): (String(cString: strerror(errno)))")
+                    "could not stop \(name) (pid \(pid)): \(String(cString: strerror(errno)))")
             }
             guard !json else {
                 CLIOut.json(

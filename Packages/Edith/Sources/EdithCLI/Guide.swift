@@ -13,7 +13,8 @@ public enum Guide {
 
         ```
         ed <command> ...          Edith itself.  Config, extensions, usage, limits,
-                                  system metrics, music, calendar, permissions.
+                                  system metrics, music, calendar, permissions,
+                                  clipboard queue and scratchpad.
                                   ed config set, ed usage limits, ed system stats
 
         ed <machine> <cmd...>     A configured machine, over SSH.  Everything after
@@ -34,6 +35,8 @@ public enum Guide {
         ed config ls                every setting, with its current value
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
+        ed system agents ls          recognized agent processes
+        ed scratchpad "2 + 2"        arithmetic and unit conversions
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed usage sources            the agents that produced your usage history
@@ -248,6 +251,8 @@ public enum Guide {
         ed system stats                 one sample of this Mac
         ed system stats --follow        keep sampling
         ed system disks
+        ed system agents ls             recognized agent processes
+        ed system agents kill <pid>     stop one agent process
         ed music status                 whatever is playing, on whichever player
         ed music play|pause|stop|toggle|next|previous
         ed music volume 0.4
@@ -291,6 +296,10 @@ public enum Guide {
         ed clipboard copy 3             put it back on the pasteboard
         ed clipboard pin 3 | unpin 3
         ed clipboard rm 3 | clear
+        ed clipboard queue ls           queued clipboard entries
+        ed clipboard queue next         paste the oldest queued entry
+        ed clipboard queue clear        empty the in-memory queue
+        ed scratchpad "10 km to mi"     convert units
         ed color ls --format hex        the colours you picked
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
@@ -367,6 +376,10 @@ public enum Guide {
           pipeline the app's dashboard does, so never re-derive token or cost numbers
           from raw logs.
         - `ed system stats --json` samples this Mac; add `--follow` to stream.
+        - `ed system agents ls --json` lists eligible agent processes, and
+          `ed system agents kill <pid>` stops one.
+        - `ed clipboard queue` controls the queue held by the running helper.
+        - `ed scratchpad <expression>` evaluates arithmetic or a unit conversion.
 
         Do not shell out to `ssh` directly for a configured machine; `ed` reuses the
         app's connection and its known-hosts pinning.

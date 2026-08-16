@@ -374,9 +374,10 @@ enum ClipboardQueueBridge {
         var info: [String: Any] = ["action": action]
         if let id { info["id"] = id }
         let requestInfo = info
-        guard let reply = await AppBridge.awaitReply(
-            IPC.Name.pasteQueueResult, timeout: 5,
-            trigger: { AppBridge.post(IPC.Name.requestPasteQueue, userInfo: requestInfo) })
+        guard
+            let reply = await AppBridge.awaitReply(
+                IPC.Name.pasteQueueResult, timeout: 5,
+                trigger: { AppBridge.post(IPC.Name.requestPasteQueue, userInfo: requestInfo) })
         else {
             throw AppBridge.silence(
                 "the paste queue", extensionKey: AppStorageKeys.Clipboard.enabled)
@@ -455,10 +456,12 @@ struct ClipboardQueueAddCommand: AsyncParsableCommand {
             _ = try await ClipboardQueueBridge.request(action: "add", id: found.entry.id)
             guard !json else {
                 CLIOut.json(
-                    .object(["index": .int(index), "id": .string(found.entry.id), "added": .bool(true)]))
+                    .object([
+                        "index": .int(index), "id": .string(found.entry.id), "added": .bool(true),
+                    ]))
                 return
             }
-            CLIOut.out("queued clipboard entry (index)")
+            CLIOut.out("queued clipboard entry \(index)")
         }
     }
 }
@@ -480,7 +483,7 @@ struct ClipboardQueueRemoveCommand: AsyncParsableCommand {
                 CLIOut.json(.object(["id": .string(id), "removed": .bool(true)]))
                 return
             }
-            CLIOut.out("removed (id) from the paste queue")
+            CLIOut.out("removed \(id) from the paste queue")
         }
     }
 }
@@ -528,7 +531,7 @@ struct ClipboardQueueClearCommand: AsyncParsableCommand {
                 CLIOut.json(.object(["removed": .int(removed)]))
                 return
             }
-            CLIOut.out("cleared (removed) queued entries")
+            CLIOut.out("cleared \(removed) queued entries")
         }
     }
 }

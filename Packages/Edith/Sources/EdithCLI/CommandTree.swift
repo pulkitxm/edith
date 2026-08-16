@@ -223,7 +223,20 @@ public enum CommandTree {
                         "stats", "Sample CPU, memory, load and network.",
                         options: ["--json", "--follow", "--interval", "--processes"]),
                     CommandNode("disks", "Mounted volumes and their free space.", options: common),
+                    CommandNode(
+                        "agents", "List or stop agent processes.",
+                        children: [
+                            CommandNode(
+                                "ls", "List Claude and other agent processes.",
+                                aliases: ["list"], options: ["--json", "--help", "--limit"]),
+                            CommandNode(
+                                "kill", "Stop one agent process.",
+                                options: ["--json", "--help", "--force"], arguments: [.free]),
+                        ]),
                 ]),
+            CommandNode(
+                "scratchpad", "Evaluate arithmetic and unit conversions.",
+                options: ["--json", "--help"], arguments: [.free]),
             CommandNode(
                 "music", "Whatever is playing, and playback control.",
                 aliases: ["nowplaying", "np"], options: playback,
@@ -354,6 +367,25 @@ public enum CommandTree {
                     CommandNode(
                         "clear", "Forget the whole history.",
                         options: ["--json", "--help", "--keep-pinned"]),
+                    CommandNode(
+                        "queue", "Inspect and control the paste queue.",
+                        children: [
+                            CommandNode(
+                                "ls", "List queued clipboard entries.", aliases: ["list"],
+                                options: common),
+                            CommandNode(
+                                "add", "Add a clipboard history entry to the queue.",
+                                options: common, arguments: [.historyIndex]),
+                            CommandNode(
+                                "rm", "Remove an entry from the paste queue.",
+                                options: common, arguments: [.free]),
+                            CommandNode(
+                                "next", "Paste the oldest queued clipboard entry.",
+                                options: common),
+                            CommandNode(
+                                "clear", "Remove every entry from the paste queue.",
+                                options: common),
+                        ]),
                 ]),
             CommandNode(
                 "color", "The colours picked with the colour picker.", aliases: ["colour"],

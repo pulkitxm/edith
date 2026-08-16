@@ -22,7 +22,7 @@ struct ScratchpadCommand: AsyncParsableCommand {
             }
             guard let result = QuickCalc.evaluate(input) else {
                 throw CLIFailure.usage(
-                    "could not evaluate (input)",
+                    "could not evaluate \(input)",
                     hint: "use arithmetic or a conversion such as `10 km to mi`")
             }
             guard !json else {
