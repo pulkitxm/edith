@@ -206,14 +206,15 @@ import Testing
 
     @Test func decodesHello() {
         let line =
-            "@EDITH@{\"t\":\"hello\",\"v\":1,\"os\":\"Ubuntu 24.04\",\"osID\":\"ubuntu\","
-            + "\"kernel\":\"6.8.0\",\"arch\":\"x86_64\",\"host\":\"tuf\",\"cpuModel\":\"AMD\","
-            + "\"cores\":16,\"memTotalKB\":16000000,\"virtual\":false}"
+            "@EDITH@{\"t\":\"hello\",\"v\":1,\"os\":\"macOS 26.0\",\"osID\":\"macos\","
+            + "\"kernel\":\"25.0.0\",\"arch\":\"arm64\",\"host\":\"studio\","
+            + "\"cpuModel\":\"Apple M4 Max\",\"cores\":16,\"memTotalKB\":16000000,"
+            + "\"virtual\":false}"
         guard case let .hello(hello)? = MachineMetricsDecoder.decode(line: line) else {
             Issue.record("expected hello record")
             return
         }
-        #expect(hello.os == "Ubuntu 24.04")
+        #expect(hello.os == "macOS 26.0")
         #expect(hello.cores == 16)
         #expect(!hello.virtual)
     }
@@ -226,9 +227,9 @@ import Testing
             + "\"buffcacheKB\":2000000,\"swapTotalKB\":1000000,\"swapUsedKB\":0},"
             + "\"load\":[0.52,0.40,0.31],\"tasks\":{\"runnable\":2,\"total\":345},"
             + "\"uptime\":86400,"
-            + "\"disk\":{\"devices\":[{\"n\":\"nvme0n1\",\"readBps\":1024,\"writeBps\":2048,"
+            + "\"disk\":{\"devices\":[{\"n\":\"disk3\",\"readBps\":1024,\"writeBps\":2048,"
             + "\"busy\":3.5}],\"readBps\":1024,\"writeBps\":2048},"
-            + "\"net\":{\"ifaces\":[{\"n\":\"wlan0\",\"rxBps\":5000,\"txBps\":900,"
+            + "\"net\":{\"ifaces\":[{\"n\":\"en0\",\"rxBps\":5000,\"txBps\":900,"
             + "\"virtual\":false}],\"rxBps\":5000,\"txBps\":900},"
             + "\"procs\":[{\"pid\":1234,\"user\":\"pulkit\",\"cpu\":42.0,\"mem\":1.5,"
             + "\"rssKB\":245760,\"name\":\"node\",\"cmd\":\"node server.js\"}]}"
@@ -240,14 +241,14 @@ import Testing
         #expect(sample.cpu.cores == [10.0, 15.0])
         #expect(sample.mem.usedPercent == 50.0)
         #expect(sample.load == [0.52, 0.40, 0.31])
-        #expect(sample.disk.devices.first?.n == "nvme0n1")
+        #expect(sample.disk.devices.first?.n == "disk3")
         #expect(sample.net.rxBps == 5000)
         #expect(sample.procs.first?.name == "node")
     }
 
     @Test func decodesSlowWithOptionalSections() {
         let prefix =
-            "@EDITH@{\"t\":\"slow\",\"disks\":[{\"fs\":\"/dev/nvme0n1p2\",\"mount\":\"/\","
+            "@EDITH@{\"t\":\"slow\",\"disks\":[{\"fs\":\"/dev/disk3s1s1\",\"mount\":\"/\","
             + "\"totalKB\":500000000,\"usedKB\":250000000,\"availKB\":225000000}],"
             + "\"temps\":[{\"label\":\"x86_pkg_temp\",\"c\":54.0}]"
         let base = prefix + ",\"fans\":[]}"
@@ -261,39 +262,22 @@ import Testing
 
         let full =
             prefix + ",\"fans\":[{\"label\":\"CPU fan\",\"rpm\":3600}],"
-            + "\"battery\":{\"percent\":87,\"status\":\"Discharging\"},"
-            + "\"gpu\":{\"name\":\"RTX 4060\",\"util\":11,\"memUsedMB\":800,"
-            + "\"memTotalMB\":8188,\"temp\":45}}"
+            + "\"battery\":{\"percent\":87,\"status\":\"Discharging\"}}"
         guard case let .slow(rich)? = MachineMetricsDecoder.decode(line: String(full)) else {
             Issue.record("expected slow record")
             return
         }
         #expect(rich.battery?.percent == 87)
-        #expect(rich.gpu?.name == "RTX 4060")
+        #expect(rich.gpu == nil)
         #expect(rich.fans == [MachineFan(label: "CPU fan", rpm: 3600)])
     }
 
-    @Test func collectorDrivesItsOwnLoopSoOutputIsNotBuffered() {
+    @Test func collectorUsesMacMetricsCommands() {
         let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
-        #expect(text.contains("exec awk"))
-        #expect(text.contains("system(\"sleep "))
-        #expect(text.contains("fflush()"))
-        #expect(!text.contains("feeder |"))
-        #expect(!text.contains("fflush(\"\")"))
-    }
-
-    @Test func collectorBatchesProcessCommandLinesIntoOneProcessSnapshot() {
-        let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
-        #expect(text.contains("ps -ww -eo pid=,args="))
-        #expect(text.contains("pidCommand[pid]"))
-        #expect(!text.contains("tr \\\"\\\\000\\\""))
-    }
-
-    @Test func collectorCachesPhysicalBlockDevicesInsteadOfSpawningPerDisk() {
-        let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
-        #expect(text.contains("readBlockDevices()"))
-        #expect(text.contains("name in blockDevices"))
-        #expect(!text.contains("system(\"[ -e /sys/block/"))
+        #expect(text.contains("sw_vers"))
+        #expect(text.contains("sysctl"))
+        #expect(text.contains("vm_stat"))
+        #expect(text.contains("top -l 1"))
     }
 
     @Test func collectorScriptResourceExists() {
@@ -304,10 +288,6 @@ import Testing
         #expect(text.contains("@EDITH@"))
     }
 
-    @Test func collectorReadsFans() {
-        let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
-        #expect(text.contains("/fan\" j \"_input"))
-    }
 }
 
 @Suite struct MachineResourcePolicyTests {

@@ -213,7 +213,7 @@ import Testing
             MachineRegistry.addForward(
                 PortForward(machineID: other.id, localPort: 9090, remotePort: 90))
             MachineRegistry.addSnippet(
-                CommandSnippet(machineID: target.id, title: "logs", command: "journalctl"))
+                CommandSnippet(machineID: target.id, title: "logs", command: "log show --last 5m"))
 
             let result = await CLIProbe.capture(["machines", "rm", "builder", "--yes", "--json"])
             #expect(result.code == 0)
@@ -273,7 +273,7 @@ import Testing
                 "machines", "snippets", "add", "--shared", "builder", "disk", "df", "-h",
             ])
             _ = await CLIProbe.capture([
-                "machines", "snippets", "add", "builder", "logs", "journalctl", "-xe",
+                "machines", "snippets", "add", "builder", "logs", "log", "show", "--last", "5m",
             ])
             let mine = await CLIProbe.capture(["machines", "snippets", "ls", "builder", "--json"])
             let theirs = await CLIProbe.capture(["machines", "snippets", "ls", "other", "--json"])

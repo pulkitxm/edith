@@ -16,27 +16,15 @@ public enum MachineFacts {
     public static let whoCommand = "who 2>/dev/null | head -20"
 
     public static let macAddressCommand = """
-        wireless=
-        for iface in /sys/class/net/*; do
-          [ -e "$iface/device" ] || continue
-          address=$(cat "$iface/address" 2>/dev/null)
-          case "$address" in ""|00:00:00:00:00:00) continue ;; esac
-          if [ -d "$iface/wireless" ] || [ -e "$iface/phy80211" ]; then
-            [ -n "$wireless" ] || wireless=$address
-          else
-            echo "$address"
-            exit 0
-          fi
-        done
-        if [ -n "$wireless" ]; then echo "$wireless"; fi
+        networksetup -listallhardwareports 2>/dev/null | awk '
+          /^Hardware Port: (Ethernet|Wi-Fi)$/ { wanted=1; next }
+          wanted && /^Ethernet Address:/ { print $3; exit }
+          /^Hardware Port:/ { wanted=0 }
+        '
         """
 
     public static let updatesCommand = """
-        if command -v apt-get >/dev/null 2>&1; then \
-        apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep -c '^Inst'; \
-        elif command -v dnf >/dev/null 2>&1; then dnf -q check-update 2>/dev/null | grep -c '^[a-zA-Z]'; \
-        elif command -v pacman >/dev/null 2>&1; then pacman -Qu 2>/dev/null | wc -l; \
-        else echo -1; fi
+        softwareupdate -l 2>/dev/null | awk '/^[[:space:]]*\\* Label:/ { count++ } END { print count + 0 }'
         """
 
     public static func parseWho(_ output: String) -> [String] {
@@ -64,41 +52,18 @@ public enum MachineFacts {
     }
 }
 
-public enum ServiceCommands {
-    public static func list() -> String {
-        "systemctl list-units --type=service --all --no-pager --no-legend --plain 2>/dev/null"
-            + " | head -200"
-    }
-
-    public static func action(_ action: String, unit: String, withSudoPassword: Bool = false)
-        -> String
-    {
-        guard withSudoPassword else {
-            return "systemctl \(action) \(ShellQuote.quote(unit)) 2>&1 || "
-                + "sudo -n systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
-        }
-        return "sudo -S -p '' systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
-    }
-
-    public static func journal(unit: String, lines: Int, follow: Bool) -> String {
-        var command = "journalctl -u \(ShellQuote.quote(unit)) -n \(lines) --no-pager"
-        if follow { command += " -f" }
-        return command + " 2>&1"
-    }
-
+public enum PowerCommands {
     public static func reboot(withSudoPassword: Bool = false) -> String {
         withSudoPassword
-            ? "sudo -S -p '' systemctl reboot 2>&1"
-            : "sudo -n systemctl reboot 2>&1 || systemctl reboot 2>&1"
+            ? "sudo -S -p '' shutdown -r now 2>&1"
+            : "sudo -n shutdown -r now 2>&1"
     }
 
     public static func shutdown(withSudoPassword: Bool = false) -> String {
         withSudoPassword
-            ? "sudo -S -p '' systemctl poweroff 2>&1"
-            : "sudo -n systemctl poweroff 2>&1 || systemctl poweroff 2>&1"
+            ? "sudo -S -p '' shutdown -h now 2>&1"
+            : "sudo -n shutdown -h now 2>&1"
     }
-
-    public static let actions = ["start", "stop", "restart"]
 }
 
 public enum ProcessCommands {
@@ -107,7 +72,7 @@ public enum ProcessCommands {
     public static let goneMarker = "@EDITH-PROCESS-GONE@"
 
     public static func kill(pid: Int, signal: String) -> String {
-        "if kill -0 \(pid) 2>/dev/null || [ -d /proc/\(pid) ]; then "
+        "if kill -0 \(pid) 2>/dev/null; then "
             + "kill -\(signal) \(pid) 2>&1; else echo \(goneMarker); fi"
     }
 
@@ -163,49 +128,7 @@ public enum PowerOutcome {
         }
         guard needsPrivilege(detail) else { return detail }
         return detail
-            + " Save this account's sudo password in the machine's settings, or give it"
-            + " passwordless sudo for systemctl."
-    }
-}
-
-public struct SystemdService: Identifiable, Equatable, Sendable {
-    public var unit: String
-    public var load: String
-    public var active: String
-    public var sub: String
-    public var describes: String
-
-    public var id: String { unit }
-
-    public init(unit: String, load: String, active: String, sub: String, describes: String) {
-        self.unit = unit
-        self.load = load
-        self.active = active
-        self.sub = sub
-        self.describes = describes
-    }
-
-    public var isRunning: Bool { sub == "running" }
-    public var isFailed: Bool { active == "failed" || sub == "failed" }
-
-    public var displayName: String {
-        unit.hasSuffix(".service") ? String(unit.dropLast(8)) : unit
-    }
-}
-
-extension ServiceCommands {
-    public static func parse(_ output: String) -> [SystemdService] {
-        output.split(separator: "\n").compactMap { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("●") else { return nil }
-            let parts = trimmed.split(
-                separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
-            guard parts.count >= 4, parts[0].hasSuffix(".service") else { return nil }
-            return SystemdService(
-                unit: String(parts[0]), load: String(parts[1]), active: String(parts[2]),
-                sub: String(parts[3]),
-                describes: parts.count > 4 ? String(parts[4]) : "")
-        }
+            + " Save this account's sudo password in the machine's settings."
     }
 }
 

@@ -29,7 +29,6 @@ public final class MachineSession {
     public private(set) var volumes: [DockerVolume] = []
     public private(set) var diskUsage: [DockerDiskUsage] = []
     public private(set) var networks: [DockerNetwork] = []
-    public private(set) var services: [SystemdService] = []
     public private(set) var facts = MachineSessionSummary()
     public private(set) var activeForwards: Set<UUID> = []
     public private(set) var mount: MachineMount?
@@ -525,14 +524,6 @@ public final class MachineSession {
             }
             return .success(text)
         }.value
-    }
-
-    public func refreshServices() async {
-        guard !isLocal, let connection else { return }
-        guard let result = try? await connection.run(ServiceCommands.list(), timeout: 30) else {
-            return
-        }
-        services = ServiceCommands.parse(result.stdoutText)
     }
 
     private func loadFacts() async {

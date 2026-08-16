@@ -7,8 +7,8 @@ struct MachinesPowerCommand: AsyncParsableCommand {
         commandName: "power",
         abstract: "Restart, shut down or wake a machine.",
         discussion: """
-            Restart and shut down go through systemd and need privilege on the far side:
-            `ed` tries `sudo -n` first and falls back to plain systemctl. A machine that
+            Restart and shut down use the remote Mac's shutdown command and need privilege:
+            `ed` tries `sudo -n` unless a sudo password is saved. A machine that
             asks for a password or for interactive authentication is reported as refusing,
             rather than being called done.
 
@@ -72,8 +72,8 @@ enum PowerBridge {
             let stdin = SudoPassword.stdin(machineID: target.id)
             let command =
                 action == "reboot"
-                ? ServiceCommands.reboot(withSudoPassword: stdin != nil)
-                : ServiceCommands.shutdown(withSudoPassword: stdin != nil)
+                ? PowerCommands.reboot(withSudoPassword: stdin != nil)
+                : PowerCommands.shutdown(withSudoPassword: stdin != nil)
             guard yes else {
                 guard !json else {
                     CLIOut.json(
@@ -210,103 +210,6 @@ struct MachinesWakeCommand: AsyncParsableCommand {
             }
             CLIOut.out("sent a wake packet to \(mac)")
         }
-    }
-}
-
-struct MachinesServicesCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "services",
-        abstract: "systemd units on a machine.",
-        subcommands: [
-            MachinesServicesListCommand.self, MachinesServiceStartCommand.self,
-            MachinesServiceStopCommand.self, MachinesServiceRestartCommand.self,
-        ],
-        defaultSubcommand: MachinesServicesListCommand.self)
-}
-
-enum ServiceBridge {
-    static func apply(_ action: String, machine name: String, unit: String, json: Bool)
-        async throws
-    {
-        try await execute {
-            let runner = try await MachineResolver.runner(name)
-            let stdin = SudoPassword.stdin(machineID: runner.machine.id)
-            let result = try await runner.run(
-                ServiceCommands.action(action, unit: unit, withSudoPassword: stdin != nil),
-                stdin: stdin, timeout: 60)
-            let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded, !PowerOutcome.needsPrivilege(detail) else {
-                throw CLIFailure(
-                    "could not \(action) \(unit) on \(runner.machine.name)"
-                        + (detail.isEmpty ? "" : ": \(detail)"),
-                    hint: SudoPassword.hint(forRefusal: detail))
-            }
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "machine": .string(runner.machine.name),
-                        "unit": .string(unit),
-                        "action": .string(action),
-                        "applied": .bool(true),
-                    ]))
-                return
-            }
-            CLIOut.out("\(action)ed \(unit) on \(runner.machine.name)")
-        }
-    }
-}
-
-struct MachinesServiceStartCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "start", abstract: "Start a unit.")
-
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
-
-    @Argument(help: "Machine name, ssh alias or id.")
-    var machine: String
-
-    @Argument(help: "Unit name, for example nginx.service.")
-    var unit: String
-
-    func run() async throws {
-        try await ServiceBridge.apply("start", machine: machine, unit: unit, json: json)
-    }
-}
-
-struct MachinesServiceStopCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "stop", abstract: "Stop a unit.")
-
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
-
-    @Argument(help: "Machine name, ssh alias or id.")
-    var machine: String
-
-    @Argument(help: "Unit name, for example nginx.service.")
-    var unit: String
-
-    func run() async throws {
-        try await ServiceBridge.apply("stop", machine: machine, unit: unit, json: json)
-    }
-}
-
-struct MachinesServiceRestartCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "restart", abstract: "Restart a unit.")
-
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
-
-    @Argument(help: "Machine name, ssh alias or id.")
-    var machine: String
-
-    @Argument(help: "Unit name, for example nginx.service.")
-    var unit: String
-
-    func run() async throws {
-        try await ServiceBridge.apply("restart", machine: machine, unit: unit, json: json)
     }
 }
 

@@ -148,7 +148,7 @@ import Testing
 
     @Test func ignoresNonJSONNoise() {
         let output = """
-            Welcome to Ubuntu 24.04 LTS
+            Last login: Sun Aug 16 19:20:00 on ttys001
             {"ID":"abc","Repository":"nginx","Tag":"latest","Size":"1MB","CreatedSince":"now"}
             """
         #expect(DockerParsing.images(output).count == 1)
@@ -368,56 +368,21 @@ import Testing
     }
 }
 
-@Suite struct ServiceCommandsTests {
-    @Test func parsesSystemctlUnits() {
-        let output = """
-            docker.service loaded active running Docker Application Container Engine
-            ssh.service    loaded active running OpenBSD Secure Shell server
-            broken.service loaded failed failed  Some Broken Unit
-            dev-sda.device loaded active plugged ignored
-            """
-        let services = ServiceCommands.parse(output)
-        #expect(services.count == 3)
-        #expect(services[0].displayName == "docker")
-        #expect(services[0].isRunning)
-        #expect(services[2].isFailed)
+@Suite struct PowerCommandsTests {
+    @Test func macPowerCommandsUseShutdown() {
+        #expect(PowerCommands.reboot().contains("shutdown -r now"))
+        #expect(PowerCommands.shutdown().contains("shutdown -h now"))
     }
 
-    @Test func fallsBackToSudoForActions() {
-        let command = ServiceCommands.action("restart", unit: "docker.service")
-        #expect(command.contains("systemctl restart docker.service"))
-        #expect(command.contains("sudo -n systemctl restart docker.service"))
-    }
-
-    @Test func aStoredSudoPasswordReplacesTheGuessworkWithOneAttempt() {
-        let unit = ServiceCommands.action(
-            "restart", unit: "docker.service", withSudoPassword: true)
-        #expect(unit == "sudo -S -p '' systemctl restart docker.service 2>&1")
-        #expect(!unit.contains("sudo -n"))
-        #expect(
-            ServiceCommands.reboot(withSudoPassword: true)
-                == "sudo -S -p '' systemctl reboot 2>&1")
-        #expect(
-            ServiceCommands.shutdown(withSudoPassword: true)
-                == "sudo -S -p '' systemctl poweroff 2>&1")
-    }
-
-    @Test func theSudoPasswordIsNeverPutOnTheCommandLine() {
+    @Test func aStoredSudoPasswordUsesStandardInput() {
         let commands = [
-            ServiceCommands.action("start", unit: "a.service", withSudoPassword: true),
-            ServiceCommands.reboot(withSudoPassword: true),
-            ServiceCommands.shutdown(withSudoPassword: true),
+            PowerCommands.reboot(withSudoPassword: true),
+            PowerCommands.shutdown(withSudoPassword: true),
         ]
         for command in commands {
-            #expect(command.contains("-S"))
+            #expect(command.contains("sudo -S"))
             #expect(command.contains("-p ''"))
         }
-    }
-
-    @Test func journalCommandSupportsFollow() {
-        #expect(
-            ServiceCommands.journal(unit: "ssh.service", lines: 300, follow: true)
-                == "journalctl -u ssh.service -n 300 --no-pager -f 2>&1")
     }
 }
 
@@ -766,7 +731,6 @@ import Testing
     @Test func theKillLineChecksTheProcessIsStillThereBeforeSignallingIt() {
         let command = ProcessCommands.kill(pid: 42, signal: "TERM")
         #expect(command.contains("kill -0 42 2>/dev/null"))
-        #expect(command.contains("[ -d /proc/42 ]"))
         #expect(command.contains("kill -TERM 42 2>&1"))
         #expect(command.contains("echo \(ProcessCommands.goneMarker)"))
     }

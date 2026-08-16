@@ -6,7 +6,6 @@ enum MachineAlert: Equatable, Sendable {
     case unreachable(machine: String)
     case recovered(machine: String)
     case diskFull(machine: String, mount: String, percent: Double)
-    case filesystemStalled(machine: String, stuckProcesses: Int)
 
     var identifier: String {
         switch self {
@@ -14,8 +13,6 @@ enum MachineAlert: Equatable, Sendable {
             return "machine.reachability.\(machine)"
         case let .diskFull(machine, mount, _):
             return "machine.disk.\(machine).\(mount)"
-        case let .filesystemStalled(machine, _):
-            return "machine.filesystem.\(machine)"
         }
     }
 
@@ -24,7 +21,6 @@ enum MachineAlert: Equatable, Sendable {
         case let .unreachable(machine): return "\(machine) is offline"
         case let .recovered(machine): return "\(machine) is back"
         case let .diskFull(machine, _, _): return "\(machine) is running out of space"
-        case let .filesystemStalled(machine, _): return "\(machine) has a stalled filesystem"
         }
     }
 
@@ -34,11 +30,6 @@ enum MachineAlert: Equatable, Sendable {
         case .recovered: return "The SSH connection works again."
         case let .diskFull(_, mount, percent):
             return String(format: "%@ is %.0f%% full.", mount, percent)
-        case let .filesystemStalled(_, stuck):
-            let processes = stuck == 1 ? "process is" : "processes are"
-            return
-                "\(stuck) \(processes) stuck in uninterruptible sleep. They cannot be killed, "
-                + "so the machine needs a restart."
         }
     }
 }
@@ -46,12 +37,10 @@ enum MachineAlert: Equatable, Sendable {
 struct MachineHealth: Equatable, Sendable, Codable {
     var reachable: Bool
     var fullMounts: Set<String>
-    var stalledProcesses: Int
 
-    init(reachable: Bool = true, fullMounts: Set<String> = [], stalledProcesses: Int = 0) {
+    init(reachable: Bool = true, fullMounts: Set<String> = []) {
         self.reachable = reachable
         self.fullMounts = fullMounts
-        self.stalledProcesses = stalledProcesses
     }
 }
 
@@ -93,12 +82,6 @@ enum MachineMonitorLogic {
         for mount in current.fullMounts.subtracting(previous.fullMounts).sorted() {
             let percent = disks.first { $0.mount == mount }?.usedPercent ?? threshold
             alerts.append(.diskFull(machine: machineName, mount: mount, percent: percent))
-        }
-        let stalledLimit = MachineMonitor.stalledProcessThreshold
-        if current.stalledProcesses >= stalledLimit, previous.stalledProcesses < stalledLimit {
-            alerts.append(
-                .filesystemStalled(
-                    machine: machineName, stuckProcesses: current.stalledProcesses))
         }
         return alerts
     }
@@ -173,8 +156,7 @@ final class MachineMonitor: FeatureModule {
             disks = MachineMonitor.parseDisks(result.stdoutText)
             current = MachineHealth(
                 reachable: true,
-                fullMounts: MachineMonitorLogic.fullMounts(disks: disks, threshold: threshold),
-                stalledProcesses: MachineMonitor.parseStalledProcesses(result.stdoutText))
+                fullMounts: MachineMonitorLogic.fullMounts(disks: disks, threshold: threshold))
         } catch {
             current = MachineHealth(reachable: false, fullMounts: [])
         }
@@ -189,44 +171,15 @@ final class MachineMonitor: FeatureModule {
     }
 
     nonisolated static let mountsMarker = "@@EDITH-MOUNTS@@"
-    nonisolated static let stalledMarker = "@@EDITH-STALLED@@"
-
-    nonisolated static let localFilesystemTypes = [
-        "ext4", "ext3", "ext2", "xfs", "btrfs", "zfs", "f2fs", "vfat", "exfat", "ntfs",
-        "ntfs3", "overlay",
-    ]
-
-    nonisolated static let stalledProcessThreshold = 3
-
     nonisolated static let diskCommand = """
-        if [ -r /proc/mounts ]; then
-        df -Pk \(localFilesystemTypes.map { "-t \($0)" }.joined(separator: " ")) 2>/dev/null
-        else
         df -Pk 2>/dev/null
-        fi
         echo '\(mountsMarker)'
         mount 2>/dev/null
-        echo '\(stalledMarker)'
-        if [ -d /proc ]; then
-        awk '{ n = index($0, ") "); if (n > 0 && substr($0, n + 2, 1) == "D") c++ } END { print c + 0 }' /proc/[0-9]*/stat 2>/dev/null
-        fi
         """
-
-    nonisolated static func parseStalledProcesses(_ output: String) -> Int {
-        let sections = output.components(separatedBy: stalledMarker)
-        guard sections.count > 1 else { return 0 }
-        for line in sections[1].split(separator: "\n") {
-            let text = line.trimmingCharacters(in: .whitespaces)
-            if let count = Int(text) { return count }
-        }
-        return 0
-    }
 
     nonisolated static func parseDisks(_ output: String) -> [MachineFilesystem] {
         let sections = output.components(separatedBy: mountsMarker)
-        let afterDf = sections.count > 1 ? sections[1] : ""
-        let mountText = afterDf.components(separatedBy: stalledMarker)[0]
-        let readOnly = sections.count > 1 ? readOnlyMounts(mountText) : []
+        let readOnly = sections.count > 1 ? readOnlyMounts(sections[1]) : []
         return sections[0].split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
             guard parts.count == 6, parts[0].hasPrefix("/"), let total = Int64(parts[1]),
@@ -246,9 +199,7 @@ final class MachineMonitor: FeatureModule {
             let text = String(line)
             guard let onRange = text.range(of: " on ") else { continue }
             let rest = text[onRange.upperBound...]
-            let mountEnd =
-                rest.range(of: " type ", options: .backwards)?.lowerBound
-                ?? rest.range(of: " (", options: .backwards)?.lowerBound
+            let mountEnd = rest.range(of: " (", options: .backwards)?.lowerBound
             guard let mountEnd else { continue }
             guard let open = text.range(of: "(", options: .backwards),
                 let close = text.range(of: ")", options: .backwards),

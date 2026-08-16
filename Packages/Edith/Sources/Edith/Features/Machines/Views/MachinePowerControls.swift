@@ -143,8 +143,8 @@ struct MachinePowerControls: View {
             let stdin = SudoPassword.stdin(machineID: session.machine.id)
             let command =
                 action == "reboot"
-                ? ServiceCommands.reboot(withSudoPassword: stdin != nil)
-                : ServiceCommands.shutdown(withSudoPassword: stdin != nil)
+                ? PowerCommands.reboot(withSudoPassword: stdin != nil)
+                : PowerCommands.shutdown(withSudoPassword: stdin != nil)
             let underway = action == "reboot" ? "Restarting…" : "Shutting down…"
             switch await session.runCommand(command, stdin: stdin, timeout: 20) {
             case .success:

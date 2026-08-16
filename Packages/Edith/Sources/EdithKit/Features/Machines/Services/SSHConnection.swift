@@ -114,7 +114,10 @@ public actor SSHConnection {
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
 
     public func connect() async throws {
-        if await masterIsAlive() { return }
+        if await masterIsAlive() {
+            try await validatePlatform()
+            return
+        }
         MachinePaths.prepare()
         try? FileManager.default.removeItem(atPath: socketPath)
         masterProcess?.terminate()
@@ -142,7 +145,10 @@ public actor SSHConnection {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(25))
         while clock.now < deadline {
-            if FileManager.default.fileExists(atPath: socketPath), await masterIsAlive() { return }
+            if FileManager.default.fileExists(atPath: socketPath), await masterIsAlive() {
+                try await validatePlatform()
+                return
+            }
             if !process.isRunning {
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 buffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
@@ -161,6 +167,17 @@ public actor SSHConnection {
             pending.isEmpty
                 ? SSHConnectFailure(message: "Timed out while connecting.", isRecoverable: true)
                 : Self.friendlyConnectError(pending))
+    }
+
+    private func validatePlatform() async throws {
+        let result = try await run("uname -s", timeout: 10)
+        let name = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.succeeded, name == "Darwin" else {
+            await disconnect()
+            throw SSHConnectionError.connectFailed(
+                SSHConnectFailure(
+                    message: "Edith connects to remote Macs only.", isRecoverable: false))
+        }
     }
 
     public func disconnect() async {

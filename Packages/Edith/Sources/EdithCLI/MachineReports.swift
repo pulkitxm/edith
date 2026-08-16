@@ -184,18 +184,6 @@ public enum MachineReports {
         ])
     }
 
-    public static func service(_ value: SystemdService) -> JSONValue {
-        .object([
-            "unit": .string(value.unit),
-            "load": .string(value.load),
-            "active": .string(value.active),
-            "sub": .string(value.sub),
-            "description": .string(value.describes),
-            "running": .bool(value.isRunning),
-            "failed": .bool(value.isFailed),
-        ])
-    }
-
     public static func availability(_ value: DockerAvailability) -> JSONValue {
         switch value.status {
         case .unknown:

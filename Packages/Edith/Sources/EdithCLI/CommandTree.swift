@@ -655,22 +655,6 @@ public enum CommandTree {
                                 ]),
                         ]),
                     CommandNode(
-                        "services", "systemd units on a machine.",
-                        children: [
-                            CommandNode(
-                                "ls", "List systemd units.", aliases: ["list"],
-                                options: ["--json", "--failed"], arguments: [.machine]),
-                            CommandNode(
-                                "start", "Start a unit.", options: common,
-                                arguments: [.machine, .free]),
-                            CommandNode(
-                                "stop", "Stop a unit.", options: common,
-                                arguments: [.machine, .free]),
-                            CommandNode(
-                                "restart", "Restart a unit.", options: common,
-                                arguments: [.machine, .free]),
-                        ]),
-                    CommandNode(
                         "connect", "Open the shared SSH connection.", options: ["--json"],
                         arguments: [.machine]),
                     CommandNode(

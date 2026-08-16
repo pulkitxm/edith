@@ -107,9 +107,8 @@ public enum Guide {
         ed machines tuf uptime                  run a command there
         ed tuf uptime                           the same thing, shorter
         ed machines tuf files ls /var/log
-        ed machines tuf files get /etc/os-release ./os-release
+        ed machines tuf files get /System/Library/CoreServices/SystemVersion.plist ./SystemVersion.plist
         ed machines tuf files put ./deploy.sh /tmp/deploy.sh
-        ed machines tuf services
         ed machines tuf disconnect
         ```
 
@@ -133,21 +132,20 @@ public enum Guide {
         Edith immediately.
 
         ```
-        ed machines add box --host 10.0.0.4 --user pi
+        ed machines add studio --host 10.0.0.4 --user pulkit
         ed machines edit box --name shed --key ~/.ssh/id_ed25519
         ed machines rm shed --yes               with its forwards, snippets and secrets
         ed machines forwards add box --local 8080 --remote 80
-        ed machines snippets add box logs journalctl -xe
+        ed machines snippets add box logs log show --last 5m
         ```
 
-        Power, units and processes. Restart and shut down need --yes, and report
+        Power and processes. Restart and shut down need --yes, and report
         the machine's own refusal rather than claiming success.
 
         ```
         ed machines power status box            up? wakeable? rebootable?
         ed machines power reboot box --yes
         ed machines power wake box              works while it is off
-        ed machines services restart box nginx.service
         ed machines kill box 4213 --signal KILL
         ```
 
@@ -171,7 +169,7 @@ public enum Guide {
         ```
 
         `ed <machine> <anything>` is the general escape hatch, and it is not limited to
-        docker: `ed tuf systemctl status nginx`, `ed tuf tail -f /var/log/syslog`, `ed
+        docker: `ed tuf launchctl print system`, `ed tuf tail -f /var/log/system.log`, `ed
         tuf 'ls -la | head'`. Stdin is forwarded, so pipes work in both directions.
 
         `cd` sticks, so the commands after it run where you left off. The directory
@@ -369,7 +367,7 @@ public enum Guide {
         - `ed extensions ls` and `ed extensions enable|disable <id>` toggle features.
         - `ed machines ls --json` lists configured machines. `ed <machine> <command>`
           runs a command there over the app's shared SSH ControlMaster, preserving the
-          exit code and both streams: `ed tuf docker ps`, `ed tuf systemctl status`.
+          exit code and both streams: `ed tuf docker ps`, `ed tuf launchctl print system`.
         - `ed usage limits --json` and `ed usage summary --json` read the same usage
           pipeline the app's dashboard does, so never re-derive token or cost numbers
           from raw logs.

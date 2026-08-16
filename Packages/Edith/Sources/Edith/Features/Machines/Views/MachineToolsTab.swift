@@ -16,7 +16,6 @@ struct MachineToolsTab: View {
     @State private var snippetOutput = ""
     @State private var runningSnippet = false
     @State private var message: String?
-    @State private var serviceFilter = ""
     @State private var mounting = false
 
     private var dark: Bool { scheme == .dark }
@@ -37,13 +36,11 @@ struct MachineToolsTab: View {
                 diskCard
                 forwardsCard
                 snippetsCard
-                servicesCard
             }
             .pageContent(compact)
         }
         .task {
             guard connectionsEnabled else { return }
-            await session.refreshServices()
             await session.restoreMount()
         }
     }
@@ -282,55 +279,6 @@ struct MachineToolsTab: View {
         }
     }
 
-    private var filteredServices: [SystemdService] {
-        let trimmed = serviceFilter.trimmingCharacters(in: .whitespaces)
-        let base = session.services
-        guard !trimmed.isEmpty else { return Array(base.prefix(40)) }
-        return base.filter { $0.unit.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private var servicesCard: some View {
-        SkinCard(
-            title: "Services", note: session.services.isEmpty ? "systemd not detected" : nil,
-            dark: dark
-        ) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                if !session.services.isEmpty {
-                    SearchField(placeholder: "Filter services", text: $serviceFilter)
-                        .frame(maxWidth: UIScale.pt(240))
-                }
-                ForEach(filteredServices) { service in
-                    HStack(spacing: UIScale.pt(10)) {
-                        Circle()
-                            .fill(
-                                service.isFailed
-                                    ? DashSkin.danger
-                                    : (service.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
-                            )
-                            .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                        Text(service.displayName)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                        Text(service.describes)
-                            .font(.system(size: UIScale.pt(10.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        Button("Restart") { runService("restart", unit: service.unit) }
-                            .pointerCursor()
-                            .font(.system(size: UIScale.pt(11)))
-                        Button(service.isRunning ? "Stop" : "Start") {
-                            runService(service.isRunning ? "stop" : "start", unit: service.unit)
-                        }
-                        .pointerCursor()
-                        .font(.system(size: UIScale.pt(11)))
-                    }
-                }
-            }
-        }
-    }
-
     private func addForward() {
         guard let local = Int(newForwardLocal), let remote = Int(newForwardRemote) else { return }
         let host = newForwardHost.trimmingCharacters(in: .whitespaces)
@@ -380,19 +328,4 @@ struct MachineToolsTab: View {
         }
     }
 
-    private func runService(_ action: String, unit: String) {
-        Task {
-            let machineID = session.machine.id
-            let stdin = SudoPassword.stdin(machineID: machineID)
-            let result = await session.runCommand(
-                ServiceCommands.action(action, unit: unit, withSudoPassword: stdin != nil),
-                stdin: stdin, timeout: 60)
-            if case let .failure(error) = result {
-                message = PowerOutcome.explain(error)
-            } else {
-                message = "\(unit) \(action)ed."
-            }
-            await session.refreshServices()
-        }
-    }
 }

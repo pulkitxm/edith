@@ -83,15 +83,15 @@ import Testing
     @Test func aFailureCarryingRemoteOutputLabelsEveryLineItPrints() async {
         let run = await CLIProbe.isolate {
             throw CLIFailure(
-                "Asus TUF 7 did not reboot: sudo: a password is required\n"
+                "Studio Mac did not reboot: sudo: a password is required\n"
                     + "Call to Reboot failed: Interactive authentication required.",
-                hint: "give this account passwordless sudo for systemctl on Asus TUF 7")
+                hint: "save the sudo password for Studio Mac with ed machines edit")
         }
         #expect(
             run.stderr == """
-                error: Asus TUF 7 did not reboot: sudo: a password is required
+                error: Studio Mac did not reboot: sudo: a password is required
                        Call to Reboot failed: Interactive authentication required.
-                hint: give this account passwordless sudo for systemctl on Asus TUF 7
+                hint: save the sudo password for Studio Mac with ed machines edit
 
                 """)
         #expect(run.code == 1)
