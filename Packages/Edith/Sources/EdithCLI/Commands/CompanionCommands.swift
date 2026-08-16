@@ -36,7 +36,9 @@ struct CompanionCommand: AsyncParsableCommand {
             CompanionFactsCommand.self, CompanionForgetBeliefCommand.self,
             CompanionWeeklyCommand.self, CompanionDbCommand.self,
             CompanionHostsCommand.self, CompanionStackCommand.self,
-            CompanionDeployCommand.self,
+            CompanionDeployCommand.self, CompanionExportCommand.self,
+            CompanionImportCommand.self, CompanionEraseCommand.self,
+            CompanionWipeCommand.self,
         ],
         defaultSubcommand: CompanionStatusCommand.self)
 }

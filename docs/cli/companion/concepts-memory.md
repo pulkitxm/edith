@@ -19,7 +19,8 @@ That split has practical consequences:
 
 - You can inspect everything. Every remembered fact is a row you can query
   and a file you can open. Nothing is hidden inside model weights.
-- Deleting or exporting memory is a database operation, not a retraining.
+- Deleting or exporting memory is a database operation, not a retraining:
+  `ed companion export`, `import`, `erase` and `wipe` are those operations.
 - Swapping the language model (the "reasoner") changes how well the companion
   talks about your memory, but never changes the memory itself.
 
@@ -77,11 +78,18 @@ Nothing in memory is ever edited in place:
 - Episodes are immutable. There is no update endpoint and no update SQL.
 - If you edit a note on disk and drop it again, its text hashes differently,
   so it becomes a brand-new source and episode. The old version stays.
-- Beliefs are never deleted. When the companion changes its mind, the old
-  belief is marked `superseded` and linked to its replacement, so you can see
-  what it used to think and when.
+- Beliefs are never deleted by the companion itself. When it changes its mind,
+  the old belief is marked `superseded` and linked to its replacement, so you
+  can see what it used to think and when.
 - Conversations can be deleted (`ed companion forget`), because chat history
   is your convenience data, not the memory of record.
+
+Append-only is a rule for the companion, not a cage for you. The memory is
+yours, so deletion is always yours to order: `ed companion erase` removes one
+episode and everything derived from it, and `ed companion wipe` empties the
+whole store. `ed companion export` writes everything into a bundle that
+`ed companion import` restores, so leaving, backing up, or moving machines
+never needs database surgery.
 
 Why build it this way? Because the companion's job is to remember what you
 wrote **then**, not what you later wished you had written. A diary you can

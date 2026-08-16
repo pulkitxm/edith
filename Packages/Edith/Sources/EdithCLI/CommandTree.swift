@@ -939,6 +939,19 @@ public enum CommandTree {
                                 "env", "Print the environment the stack would be given.",
                                 options: common + ["--reveal"]),
                         ]),
+                    CommandNode(
+                        "export", "Save everything remembered as a restorable bundle.",
+                        options: common + ["--endpoint", "--include-media"],
+                        arguments: [.localPath]),
+                    CommandNode(
+                        "import", "Restore a bundle written by export.",
+                        options: common + ["--endpoint"], arguments: [.localPath]),
+                    CommandNode(
+                        "erase", "Delete one episode and everything derived from it.",
+                        options: common + ["--endpoint", "--yes"], arguments: [.free]),
+                    CommandNode(
+                        "wipe", "Delete the companion's entire memory.",
+                        options: common + ["--endpoint", "--yes"]),
                 ]),
         ])
 

@@ -33,6 +33,10 @@ For the machinery behind these commands, start at
 | `ed companion chat <message>` | Talks with the companion, streamed as it thinks. |
 | `ed companion conversations` | Lists chats, or replays one by id. |
 | `ed companion forget <id>` | Deletes a conversation and its messages. |
+| `ed companion export <dir>` | Saves everything remembered as a restorable bundle, media included. |
+| `ed companion import <path>` | Restores a bundle, merging and skipping what already exists. |
+| `ed companion erase <id>` | Deletes one episode and everything derived from it. |
+| `ed companion wipe` | Deletes the entire memory; the stack and its settings survive. |
 | `ed companion nightly` | Runs the nightly learning pipeline right now. |
 | `ed companion reason` | Shows or changes the reasoning provider, model and API key. |
 | `ed companion ask <question>` | Answers from your own memory, through one lens. |
@@ -84,6 +88,10 @@ For the machinery behind these commands, start at
 - [`ed companion chat`](./chat.md)
 - [`ed companion conversations`](./conversations.md)
 - [`ed companion forget`](./forget.md)
+- [`ed companion export`](./export.md)
+- [`ed companion import`](./import.md)
+- [`ed companion erase`](./erase.md)
+- [`ed companion wipe`](./wipe.md)
 - [`ed companion episode`](./episode.md)
 - [`ed companion nightly`](./nightly.md)
 - [`ed companion reason`](./reason.md)

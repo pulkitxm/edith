@@ -97,6 +97,18 @@ enum JSONContract {
         JSONCase("ed companion stack logs", ["companion", "stack", "logs", "--json"]),
         JSONCase("ed companion stack env", ["companion", "stack", "env", "--json"]),
         JSONCase("ed companion doctor", ["companion", "doctor", "--json"]),
+        JSONCase(
+            "ed companion export", ["companion", "export", "/tmp/ed-export-test", "--json"]),
+        JSONCase(
+            "ed companion import", ["companion", "import", "/tmp/ed-export-test", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion erase",
+            ["companion", "erase", "00000000-0000-0000-0000-000000000000", "--yes", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion wipe", ["companion", "wipe", "--yes", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed companion search", ["companion", "search", "warden", "--json"]),
         JSONCase(
             "ed companion index", ["companion", "index", "--json"],
