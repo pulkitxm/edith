@@ -7,11 +7,12 @@ struct CompanionCommand: AsyncParsableCommand {
         commandName: "companion",
         abstract: "The companion memory backend.",
         discussion: """
-            The backend runs with docker compose from apps/companion. Pass --endpoint or
-            set EDITH_COMPANION_URL to point at it; the default is http://127.0.0.1:4820.
+            Run `ed companion hosts` to inspect capable machines, `ed companion deploy`
+            to install and remember the stack, and `ed companion stack` to control it.
+            Edith creates and maintains the saved port forward for a remote deployment.
 
-            For a backend on one of your machines, forward its port with
-            `ed machines forwards on <machine> <n>`, then `ed companion status`.
+            Pass --endpoint or set EDITH_COMPANION_URL to use another backend. The
+            default endpoint is http://127.0.0.1:4820.
             """,
         subcommands: [
             CompanionStatusCommand.self, CompanionDoctorCommand.self,
