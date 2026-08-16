@@ -17,7 +17,9 @@ is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
 scheme, which builds and embeds `EdithHelper` (the always-on menu bar
 companion, nested at `Contents/Library/LoginItems` and shipped as
 `Edith.app`), `EdithFiles` (nested at `Contents/Library/Applications`), and
-the `ed`/`edh` CLI tools (`Contents/MacOS`).
+the `ed`/`edh` CLI tools (`Contents/MacOS`). Its final embed phase also builds
+`EdithLidAwakeHelper` with SwiftPM and places the signed executable and launchd
+property list inside the menu bar companion.
 
 All Swift code lives in one SwiftPM package, `Packages/Edith`. The Xcode
 targets are folder-synchronized onto `Packages/Edith/Sources/*`, so a file
@@ -58,13 +60,26 @@ It also deletes the `Frameworks` directory Xcode embeds inside the nested
 both that exactly one `Sparkle.framework` ships and that the path the rpath
 resolves to exists.
 
+The main source tree is organized by role after the feature-folder restructure:
+
+| Path | Responsibility |
+| --- | --- |
+| `Packages/Edith/Sources/Edith/Core` | App lifecycle, navigation and windows for the main app. |
+| `Packages/Edith/Sources/Edith/Features` | Main-app screens, grouped by feature and then model, view model, view or service. |
+| `Packages/Edith/Sources/Edith/Shared` | Main-app views shared by more than one feature. |
+| `Packages/Edith/Sources/EdithHelper/Core` | Lifecycle, navigation and panel control for the menu bar companion. |
+| `Packages/Edith/Sources/EdithHelper/Features` | Always-on macOS integrations and their menu bar UI. |
+| `Packages/Edith/Sources/EdithKit/Core` | Shared macOS defaults, IPC, paths, processes, resources and update support. |
+| `Packages/Edith/Sources/EdithKit/Features` | Reusable macOS domain models and services. |
+| `Packages/Edith/Sources/EdithCore` | Portable code compiled on both macOS and Linux. |
+
 `AppIcon.icns` and the helper's `MenuBar.png` are checked in, generated from
 `Packages/Edith/Sources/Edith/Resources/appicon.png`. Run `make icon` after
 changing the artwork.
 
 ### Ubuntu
 
-Ubuntu 24.04 development uses Swift 6.3.2 and GTK 4. The shortest local loop is:
+Ubuntu 24.04 development uses Swift 6.3.3 and GTK 4. The shortest local loop is:
 
 ```bash
 make linux-test
@@ -77,9 +92,31 @@ build the Debian package. The complete toolchain setup, packaging workflow,
 project layout, and cross-platform extension rules are in the
 [Ubuntu development guide](docs/ubuntu-development.md).
 
+### Companion backend
+
+`apps/companion` is a Rust 2024 Axum service backed by PostgreSQL with pgvector,
+Redis, Ollama and Whisper. The app's guided setup packages the runtime files and
+deploys the stack to this Mac or a registered SSH machine. It selects the Apple
+Metal, GPU or CPU Compose overlay from the host it probes.
+
+For backend-only work, install stable Rust with Clippy and use:
+
+```bash
+cd apps/companion
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
+```
+
+Migration tests also need a pgvector PostgreSQL 18 instance. CI supplies one and
+runs `cargo run --locked -- --migrate-only` with `DATABASE_URL` set. The complete
+end-user deployment and data model are in the
+[Companion guide](docs/companion.md).
+
 ## Checks
 
-Run `make ci` before pushing; the pre-push hook runs the same gates.
+Run `make ci` before pushing. The pre-push hook runs the applicable macOS, site,
+script and policy gates in parallel. Linux and Companion changes have additional
+commands below and dedicated CI jobs.
 
 | Target | What it does |
 | --- | --- |
@@ -96,6 +133,10 @@ Run `make ci` before pushing; the pre-push hook runs the same gates.
 | `make ci-swift-check` | The three above. They share nothing, so CI and the pre-push hook run them in parallel. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
+
+For Ubuntu changes, run `make linux-check`. For Companion backend changes, run the
+Clippy and Cargo tests shown above. CI also applies every migration to a real
+pgvector database. These checks are not part of `make ci` or the pre-push hook.
 
 Other targets: `make build`, `make install`, `make reset`, `make reinstall`,
 `make icon`, `make site-dev` (serves `apps/site` on port 8000), `make loc`,
