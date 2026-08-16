@@ -15,11 +15,16 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage("scratchpadEnabled", store: SharedDefaults.store) private var scratchpadEnabled =
+        false
+    @AppStorage("pasteQueueEnabled", store: SharedDefaults.store) private var pasteQueueEnabled =
+        false
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            clipboard: clipboardEnabled, focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled)
+            clipboard: clipboardEnabled, pasteQueue: pasteQueueEnabled, focusDim: focusDimEnabled,
+            presenter: presenterEnabled, colorPicker: colorPickerEnabled,
+            scratchpad: scratchpadEnabled)
     }
 
     var body: some View {
@@ -101,6 +106,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",
                 keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
+        case .pasteQueue:
+            shortcutRow(
+                "Paste next in queue", subtitle: "Pastes the oldest queued clipboard item",
+                keyPrefix: "pasteQueueHotKey", defaultLabel: "⇧⌥⌘V")
         case .focusDim:
             shortcutRow(
                 "Focus dim", subtitle: "Toggles background-window dimming",
@@ -113,6 +122,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Pick a color", subtitle: "Summons the color picker loupe",
                 keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+        case .scratchpad:
+            shortcutRow(
+                "Scratchpad", subtitle: "Opens the quick calculator and note field",
+                keyPrefix: "scratchpadHotKey", defaultLabel: "⇧⌥⌘Space")
         }
     }
 }

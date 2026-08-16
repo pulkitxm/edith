@@ -19,6 +19,8 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
+        "hyperKeyEnabled",
+        "scratchpadEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -82,6 +84,8 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
+            "hyperKey": [.accessibility],
+            "scratchpad": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "usage": [.notifications],
@@ -98,6 +102,8 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
+            "hyperKey": [],
+            "scratchpad": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

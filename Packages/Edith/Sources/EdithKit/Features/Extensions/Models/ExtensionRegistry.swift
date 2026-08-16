@@ -104,6 +104,7 @@ public extension ExtensionRegistryEntry {
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]
+        case "hyperKey": [.accessibility]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         default: []
         }

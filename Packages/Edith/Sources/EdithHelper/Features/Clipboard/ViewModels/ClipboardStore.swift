@@ -8,6 +8,7 @@ final class ClipboardStore: FeatureModule {
     private(set) var entries: [ClipboardEntry] = []
     private(set) var revision = 0
     private(set) var skippedOversizeAt: Date?
+    private(set) var pasteQueue = PasteQueue()
 
     private var loaded = false
     private var timer: DispatchSourceTimer?
@@ -182,6 +183,9 @@ final class ClipboardStore: FeatureModule {
         adopt(ClipboardActions.arrange(entries + [entry]))
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
+        if SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pasteQueueEnabled) {
+            pasteQueue.enqueue(entry.id)
+        }
     }
 
     private static let senderID =
@@ -229,12 +233,14 @@ final class ClipboardStore: FeatureModule {
     }
 
     func clear(includingPinned: Bool = false) {
+        if includingPinned { pasteQueue.clear() }
         mutateOnDisk(requireChange: false) {
             try ClipboardActions.clear(keepingPinned: !includingPinned)
         }
     }
 
     func delete(_ id: String) {
+        pasteQueue.remove(id)
         mutateOnDisk(scheduleBackup: false) { try ClipboardActions.delete(ids: [id]) }
     }
 
@@ -253,6 +259,21 @@ final class ClipboardStore: FeatureModule {
                 self.postChanged()
             }
         }
+    }
+
+    @discardableResult
+    func pasteNextFromQueue() -> Bool {
+        while let id = pasteQueue.dequeue() {
+            guard let entry = entries.first(where: { $0.id == id }) else { continue }
+            let plain = SharedDefaults.store.bool(forKey: "clipboardPastePlainText")
+            guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { continue }
+            lastChangeCount = NSPasteboard.general.changeCount
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                ClipboardPasteSynth.synthesizeCommandV()
+            }
+            return true
+        }
+        return false
     }
 
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {

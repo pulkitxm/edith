@@ -47,6 +47,7 @@ public enum AppStorageKeys {
         public static let maxItemBytes = "clipboardMaxItemBytes"
         public static let maxItems = "clipboardMaxItems"
         public static let pastePlainText = "clipboardPastePlainText"
+        public static let pasteQueueEnabled = "pasteQueueEnabled"
         public static let pinTo = "clipboardPinTo"
         public static let popupAt = "clipboardPopupAt"
         public static let saveFiles = "clipboardSaveFiles"

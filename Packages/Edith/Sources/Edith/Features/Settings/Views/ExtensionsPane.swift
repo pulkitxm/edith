@@ -53,6 +53,11 @@ struct ExtensionsPane: View {
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
         var clipboardEnabled =
         false
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
+        var preventSleep = false
+    @AppStorage("hyperKeyEnabled", store: SharedDefaults.store) private var hyperKeyEnabled = false
+    @AppStorage("scratchpadEnabled", store: SharedDefaults.store) private var scratchpadEnabled =
+        false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
@@ -65,8 +70,6 @@ struct ExtensionsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
-    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
-        var preventSleep = false
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -252,6 +255,8 @@ struct ExtensionsPane: View {
         case AppStorageKeys.Presenter.enabled: $presenterEnabled
         case AppStorageKeys.ColorPicker.enabled: $colorPickerEnabled
         case LidAwakeState.enabledKey: $lidAwakeEnabled
+        case "hyperKeyEnabled": $hyperKeyEnabled
+        case "scratchpadEnabled": $scratchpadEnabled
         default: .constant(false)
         }
     }
@@ -1095,6 +1100,10 @@ private struct MicMuteRows: View {
         false
     @AppStorage(AppStorageKeys.Mic.muteInMenuBar, store: SharedDefaults.store) private
         var inMenuBar = true
+    @AppStorage("pushToTalkEnabled", store: SharedDefaults.store) private var pushToTalkEnabled =
+        false
+    @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
+    private var accessibilityGranted = false
 
     var body: some View {
         Section {
@@ -1102,6 +1111,37 @@ private struct MicMuteRows: View {
                 .pointerCursor()
             Text("The menu bar icon shows the current mute state and toggles it on click.")
                 .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        Section {
+            Toggle(
+                isOn: Binding(
+                    get: { pushToTalkEnabled },
+                    set: { newValue in
+                        pushToTalkEnabled = newValue
+                        if newValue, !accessibilityGranted {
+                            IPC.post(IPC.Name.grantAccessibility)
+                        }
+                    })
+            ) {
+                HStack(spacing: UIScale.pt(6)) {
+                    Text("Push to talk")
+                    InfoDot(
+                        "Hold this key to unmute; release to mute again. Separate from the mute toggle above. Needs Accessibility."
+                    )
+                }
+            }
+            .pointerCursor()
+            LabeledContent {
+                HotKeyRecorderControl(keyPrefix: "pushToTalkHotKey", defaultLabel: "⌃⌥M")
+            } label: {
+                Text("Hold to talk")
+            }
+            .disabled(!pushToTalkEnabled)
+            .opacity(pushToTalkEnabled ? 1 : 0.5)
+        } header: {
+            Text("Push to talk")
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

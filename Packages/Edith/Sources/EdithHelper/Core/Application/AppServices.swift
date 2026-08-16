@@ -17,6 +17,8 @@ final class AppServices {
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
+    private(set) var hyperKey: HyperKeyEngine?
+    private(set) var pushToTalk: PushToTalkEngine?
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -106,8 +108,10 @@ final class AppServices {
                 clipboard = ClipboardStore()
             }
             ClipboardHotKey.register()
+            PasteQueueHotKey.register()
         } else {
             ClipboardHotKey.unregister()
+            PasteQueueHotKey.unregister()
             if let store = clipboard {
                 store.shutdown()
                 clipboard = nil
@@ -158,6 +162,12 @@ final class AppServices {
             lidAwake = nil
         }
         notchShelf?.attachLidAwake(lidAwake)
+        let pushToTalkOn = micOn && Self.extensionEnabled("pushToTalkEnabled")
+        if pushToTalkOn, pushToTalk == nil { pushToTalk = PushToTalkEngine() }
+        if !pushToTalkOn, let engine = pushToTalk {
+            engine.shutdown()
+            pushToTalk = nil
+        }
 
         let statsOn = Self.extensionEnabled(AppStorageKeys.MenuBar.systemStats)
         if statsOn, systemStats == nil { systemStats = SystemStatsStatusItem() }
@@ -165,6 +175,15 @@ final class AppServices {
             stats.shutdown()
             systemStats = nil
         }
+
+        let hyperOn = Self.extensionEnabled("hyperKeyEnabled")
+        if hyperOn, hyperKey == nil { hyperKey = HyperKeyEngine() }
+        if !hyperOn, let engine = hyperKey {
+            engine.shutdown()
+            hyperKey = nil
+        }
+
+        ScratchpadHotKey.register()
 
         usage?.syncStatusItem()
         usage?.refreshMenuBarItem()

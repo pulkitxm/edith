@@ -69,4 +69,20 @@ import Testing
             #expect(ClipboardHotKey.label == "⌃⌥V")
         }
     }
+
+    @Test func pasteQueueHotKeyDefaults() {
+        withCleanKeys("pasteQueueHotKey") {
+            #expect(PasteQueueHotKey.code == kVK_ANSI_V)
+            #expect(PasteQueueHotKey.mods == cmdKey | optionKey | shiftKey)
+            #expect(PasteQueueHotKey.label == "⇧⌥⌘V")
+        }
+    }
+
+    @Test func scratchpadHotKeyDefaults() {
+        withCleanKeys("scratchpadHotKey") {
+            #expect(ScratchpadHotKey.code == kVK_Space)
+            #expect(ScratchpadHotKey.mods == cmdKey | optionKey | shiftKey)
+            #expect(ScratchpadHotKey.label == "⇧⌥⌘Space")
+        }
+    }
 }

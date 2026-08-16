@@ -98,8 +98,9 @@ final class RunningAppsModel {
             seen.insert(snap.pid)
             var cpu = 0.0
             if let prev = previous[snap.pid] {
-                let dt = now.timeIntervalSince(prev.at)
-                if dt > 0 { cpu = Double(usage.cpuNS &- prev.time) / (dt * 1e9) * 100 }
+                cpu = ProcessUsage.cpuPercent(
+                    nowNS: usage.cpuNS, previousNS: prev.time,
+                    elapsed: now.timeIntervalSince(prev.at))
             }
             nextCPU[snap.pid] = (usage.cpuNS, now)
             memTotal += usage.memMB
@@ -113,23 +114,8 @@ final class RunningAppsModel {
         apps = sorted(rows)
     }
 
-    private nonisolated static let timebase: mach_timebase_info_data_t = {
-        var tb = mach_timebase_info_data_t()
-        mach_timebase_info(&tb)
-        return tb
-    }()
-
     nonisolated static func usage(pid: pid_t) -> (cpuNS: UInt64, memMB: Double) {
-        var info = rusage_info_current()
-        let result = withUnsafeMutablePointer(to: &info) { pointer in
-            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
-                proc_pid_rusage(pid, RUSAGE_INFO_CURRENT, $0)
-            }
-        }
-        guard result == 0 else { return (0, 0) }
-        let ticks = info.ri_user_time &+ info.ri_system_time
-        let nanos = ticks &* UInt64(timebase.numer) / UInt64(timebase.denom)
-        return (nanos, Double(info.ri_phys_footprint) / 1_048_576)
+        ProcessUsage.sample(pid: pid)
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {

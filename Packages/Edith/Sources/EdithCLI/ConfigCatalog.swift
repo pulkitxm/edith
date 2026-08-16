@@ -46,7 +46,8 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "usage", "limits", "menubar", "alerts", "budget", "dashboard",
         "machines", "companion", "finder", "system", "cleaner", "music", "calendar", "clipboard",
-        "notch", "focusdim", "presenter", "colorpicker", "micmute", "backup", "permissions",
+        "notch", "focusdim", "presenter", "colorpicker", "utilities", "micmute", "backup",
+        "permissions",
         "terminal",
     ]
 
@@ -54,7 +55,7 @@ public enum ConfigCatalog {
         appearance + panel + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + companion + finder + system + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
-        + backup + permissions + terminal
+        + utilities + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
 
@@ -597,6 +598,17 @@ public enum ConfigCatalog {
         SettingDefinition(
             "clipboardWindowPositionY", .number, group: "clipboard",
             summary: "Last clipboard panel y position."),
+    ]
+
+    private static let utilities: [SettingDefinition] = [
+        SettingDefinition(
+            "hyperKeyEnabled", .bool, group: "utilities",
+            summary: "Hyper Key extension: turn Caps Lock into a global modifier key.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            "scratchpadEnabled", .bool, group: "utilities",
+            summary: "Scratchpad extension: quick notes with inline math and unit conversion.",
+            fallback: .bool(false)),
     ]
 
     private static let notch: [SettingDefinition] = [
