@@ -1,7 +1,7 @@
 # `ed app actions`
 
-Lists the five one-shot actions with the process each one needs and whether that
-process is running.
+Lists the seven one-shot actions with the process each one needs and whether
+that process is running.
 
 ```
 ed app actions [--json]
@@ -47,12 +47,24 @@ ed app actions [--json]
     "available": false,
     "needs": "mainApp",
     "summary": "Ask Sparkle to check for an update now."
+  },
+  {
+    "action": "reveal",
+    "available": false,
+    "needs": "mainApp",
+    "summary": "Show a section of the main window."
+  },
+  {
+    "action": "snapshot",
+    "available": false,
+    "needs": "mainApp",
+    "summary": "Capture the open windows as PNG files."
   }
 ]
 ```
 
 `needs` is `menuBar` or `mainApp`, never anything else. `available` is the live
-answer for that one process, so the two `mainApp` rows can be false while the
+answer for that one process, so the four `mainApp` rows can be false while the
 three `menuBar` rows are true.
 
 Examples:
@@ -76,6 +88,8 @@ test-notification  menu bar  ready  Send a test notification.
 open               menu bar  ready  Open the Edith panel.
 quit               main app  ready  Quit the Edith main window.
 check-updates      main app  ready  Ask Sparkle to check for an update now.
+reveal             main app  ready  Show a section of the main window.
+snapshot           main app  ready  Capture the open windows as PNG files.
 ```
 
 The human table writes `needs` as `menu bar` or `main app`, and `STATE` as
