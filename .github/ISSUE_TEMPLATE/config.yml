@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and usage help
+    url: https://github.com/pulkitxm/edith/discussions
+    about: Ask for help, share examples, or discuss an idea before proposing it.
+  - name: Report a vulnerability privately
+    url: https://github.com/pulkitxm/edith/security/advisories/new
+    about: Send suspected security vulnerabilities directly to the maintainer.

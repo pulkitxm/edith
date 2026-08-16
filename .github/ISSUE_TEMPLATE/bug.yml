@@ -1,0 +1,43 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Include expected and observed behavior.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: Provide exact steps and a minimal example when possible.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Edith version
+      placeholder: v0.0.100
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: macOS version and Mac model
+      placeholder: macOS 26.0 on MacBook Pro with M4 Pro
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Installation method
+      options:
+        - GitHub Release
+        - Homebrew
+        - Built from source
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Relevant output
+      description: Remove credentials, personal data, usage history, and private file paths.
+      render: shell

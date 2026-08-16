@@ -1,6 +1,15 @@
 # Contributing to Edith
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome. Bug reports, design feedback,
+documentation, tests, and code all help.
+
+## Before You Start
+
+- Search existing issues and pull requests before opening a duplicate.
+- Use GitHub Discussions for usage questions and early ideas.
+- Open an issue before a substantial feature, privacy change, or architectural change.
+- Keep pull requests focused and separate unrelated changes.
+- Never include credentials, personal data, private repository contents, usage history, or generated build artifacts.
 
 ## Build and run
 
@@ -129,6 +138,25 @@ and `make wiki`.
 
 This repo is kept comment-free and CI enforces it. Run `bun run strip-comments`
 if one slips in. Write names and structure that do not need prose.
+
+## Pull Requests
+
+A pull request description is one line that states what changed and why. Use
+checkpoint commits for logical changes, add tests for changed behavior, and run
+the relevant checks before requesting review. After verification is complete,
+post one short evidence comment that shows the end result through a screenshot,
+recording, or clean terminal output when the change has something meaningful to
+demonstrate.
+
+Maintainers may request changes before merge. By contributing, you agree that
+your contribution is licensed under the repository's GNU General Public License
+v3.0.
+
+## Reporting Security Issues
+
+Do not publish exploitable security issues in a public issue. Follow
+[SECURITY.md](SECURITY.md) and use GitHub's private vulnerability reporting
+form instead.
 
 ## Releases
 

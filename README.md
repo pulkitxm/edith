@@ -21,6 +21,8 @@ Homebrew to fetch a newer release. Full command list:
 
 [edith.pulkit.page](https://edith.pulkit.page)
 · [Wiki](https://github.com/pulkitxm/edith/wiki)
+· [Support](SUPPORT.md)
+· [Security](SECURITY.md)
 
 Edith requires macOS 14 or later on Apple Silicon.
 
@@ -143,7 +145,9 @@ Thank you to everyone who has shipped a change in Edith.
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
-building from source, the test suite, and how releases are cut.
+building from source, the test suite, and how releases are cut. Participation is
+governed by the [Code of Conduct](CODE_OF_CONDUCT.md), and larger decisions follow
+the process in [GOVERNANCE.md](GOVERNANCE.md).
 
 ## Licence
 
