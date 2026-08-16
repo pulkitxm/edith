@@ -35,7 +35,7 @@ closed.
 | `ed usage machines enable` | Counts a machine on every later refresh |
 | `ed usage machines disable` | Stops collecting from a machine, keeping what it already gave |
 | `ed usage machines forget` | Drops what a machine gave and stops counting it |
-| `ed usage refresh` | Re-collects usage data from every agent on this Mac |
+| `ed usage refresh` | Re-collects local usage and tops up counted machines that are stale |
 
 ## Commands
 
@@ -95,6 +95,30 @@ closed.
   verbs keep working against whatever was collected before that, so
   `ed usage limits` goes on printing a silenced provider's last row until it
   scrolls out of the 8 KB tail.
+
+## Attribution model
+
+The daily and model rows are the authoritative accounting totals. The collector
+discovers Claude Code, Cowork, Codex, OpenCode, Amp, Droid, Codebuff, Hermes,
+Pi, Goose, Kilo, Copilot, Gemini, Kimi, Qwen, OpenClaw and Command Code when
+their local stores contain usage. A source appears in `ed usage sources` only
+when it contributed data, so this list is collector coverage rather than a
+promise that every id is present on every Mac.
+
+Repository detail comes from the session stores that expose it: Claude and
+Cowork transcripts, Codex daily sessions and metadata, Pi session logs, Command
+Code projects and the OpenCode database. Those measurements are reconciled per
+day and source to the authoritative totals. Detail is scaled down when it would
+exceed the total, and any remaining source or model total with no reliable
+folder is emitted under the `Unattributed` repository. That is why
+`ed usage projects` adds back to `summary` without pretending every provider
+cost belongs to a known folder.
+
+Machine sources use the stable id
+`machine:<lowercase-machine-uuid>:<agent>`, not the machine's editable name or
+slug. Renaming a machine therefore preserves filters and attribution. Remote
+paths use the same prefix, while GitHub repository ids remain shared across
+machines so the same repository still groups into one row.
 
 ## Where to go next
 

@@ -19,7 +19,8 @@ watching a run that someone else started.
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--follow` | flag | off | Attach to a refresh that is already running instead of starting one, and fail when there is nothing to watch |
-| `--machines` / `--no-machines` | flag | on | Collect from the machines that have gone stale before collecting this Mac |
+| `--machines` | flag | off | Force every counted machine to collect first; fail before the local pipeline if any machine is busy or fails |
+| `--no-machines` | flag | off | Skip machine collection and merge the machine snapshots already on disk |
 | `--json` | flag | off | Emit JSON on stdout |
 
 ## `--json` shape
@@ -48,7 +49,7 @@ watching a run that someone else started.
   "seconds": 9.98,
   "summary": {
     "machines": "Asus TUF 7",
-    "sources": "cli, codex, commandcode, asus-tuf-7:cli",
+    "sources": "cli, codex, commandcode, machine:0b481f65-f946-4636-ab36-e4508eb67e6a:cli",
     "spend": "$10876.85 · 378 sessions · 401 KB",
     "window": "2026-07-08 to 2026-08-08 · 27 days · 7 models"
   }
@@ -99,6 +100,12 @@ reported becomes the message, exit 4, hinted at `data/refresh.log`, which is
 where the same transcript is written line by line while the run happens. A run
 that was attached to and then stopped without finishing fails the same way.
 
+The default stale-machine top-up is best effort. A machine that is offline,
+busy, or fails collection does not prevent this Mac from refreshing and merging
+the last snapshot on disk. `--machines` is strict instead: it forces every
+counted machine regardless of freshness, and any busy or failed machine exits 4
+before the local pipeline starts. Passing both machine flags is invalid.
+
 ```
 $ ed usage refresh
 
@@ -116,7 +123,7 @@ $ ed usage refresh
   ▸ merge      hours + projects merged            1.32s
   ▸ machines   1 folded in                        0.05s
   ────────────────────────────────────────────────────
-  ✓ sources   cli, codex, commandcode, asus-tuf-7:cli
+  ✓ sources   cli, codex, commandcode, machine:0b481f65-f946-4636-ab36-e4508eb67e6a:cli
   ✓ machines  Asus TUF 7
   ✓ window    2026-07-08 to 2026-08-08 · 27 days · 7 models
   ✓ spend     $10876.85 · 378 sessions · 401 KB
