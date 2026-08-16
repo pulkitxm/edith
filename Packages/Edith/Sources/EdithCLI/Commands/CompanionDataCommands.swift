@@ -80,11 +80,13 @@ struct CompanionExportCommand: AsyncParsableCommand {
             if includeMedia {
                 CLIOut.out("media files saved: \(mediaSaved)")
                 if !mediaFailed.isEmpty {
-                    CLIOut.note("media that would not download: \(mediaFailed.joined(separator: ", "))")
+                    CLIOut.note(
+                        "media that would not download: \(mediaFailed.joined(separator: ", "))")
                 }
             } else if !manifest.media.isEmpty {
                 CLIOut.note(
-                    "\(manifest.media.count) media file(s) stayed on the companion; add --include-media to bring them too")
+                    "\(manifest.media.count) media file(s) stayed on the companion; add --include-media to bring them too"
+                )
             }
         }
     }
@@ -185,12 +187,14 @@ struct CompanionImportCommand: AsyncParsableCommand {
             if mediaRestored > 0 || !mediaFailed.isEmpty {
                 CLIOut.out("media restored: \(mediaRestored)")
                 if !mediaFailed.isEmpty {
-                    CLIOut.note("media that would not restore: \(mediaFailed.joined(separator: ", "))")
+                    CLIOut.note(
+                        "media that would not restore: \(mediaFailed.joined(separator: ", "))")
                 }
             }
             if outcome.pendingEpisodes > 0 {
                 CLIOut.out(
-                    "\(outcome.pendingEpisodes) episode(s) queued for embedding; the companion is indexing them now")
+                    "\(outcome.pendingEpisodes) episode(s) queued for embedding; the companion is indexing them now"
+                )
             }
         }
     }
@@ -218,7 +222,8 @@ struct CompanionEraseCommand: AsyncParsableCommand {
             guard yes else {
                 throw CLIFailure.usage(
                     "erasing an episode cannot be undone",
-                    hint: "run `ed companion episode \(id)` to read it first, then repeat with --yes")
+                    hint:
+                        "run `ed companion episode \(id)` to read it first, then repeat with --yes")
             }
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.deleteEpisode(id: id)
