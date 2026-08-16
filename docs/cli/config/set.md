@@ -48,7 +48,7 @@ ed config set cleanerSelectedDrives /,/Volumes/Data
 ```
 
 Validation happens before the write, so a rejected value leaves the stored value
-alone and exits 1. The 22 read-only keys are refused the same way, also exit 1,
+alone and exits 1. The 23 read-only keys are refused the same way, also exit 1,
 before anything is touched:
 
 ```
