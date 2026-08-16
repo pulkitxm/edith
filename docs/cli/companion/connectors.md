@@ -11,7 +11,9 @@ Usage:
 ```
 ed companion connectors [show] [--json] [--endpoint <url>]
 ed companion connectors set [--github <token>] [--notion <token>] [--json]
+                            [--endpoint <url>]
 ed companion connectors import <calendar|music|youtube> <file.json> [--json]
+                               [--endpoint <url>]
 ```
 
 `ed companion connectors show` (also the bare default) says which connectors have a
@@ -22,6 +24,11 @@ returned.
 table as the reasoner key, and hot-swaps it into the running service. Nothing is
 written to this Mac and no restart or `.env` edit is needed. Pass an empty value to
 clear one. The same fields are in the app under Settings.
+
+`set` requires at least one of `--github` or `--notion`. In a shell, clearing
+means passing an explicit empty argument such as `--github ''`; omitting an
+option leaves that token unchanged. `--json` returns the masked detail strings,
+not either token.
 
 | Connector | What it gives you |
 | --- | --- |
@@ -35,6 +42,11 @@ clear one. The same fields are in the app under Settings.
 Calendar and music can be exported from whatever you use, YouTube comes from Google
 Takeout, and each import is idempotent, so re-running against a fresh dump only adds
 what is new.
+
+The import file must be readable local JSON. Human output reports entries read,
+new observations and skipped entries. JSON output is
+`{source,entriesRead,observationsInserted,skipped}`. Unsupported source names
+and malformed export shapes are rejected by the backend.
 
 On music specifically, only measurements are stored: which track, when, how often.
 No valence, no energy, no mood. "Sad songs means sad" is a weak inference, and a

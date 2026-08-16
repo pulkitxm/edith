@@ -33,7 +33,11 @@ $ ed companion corroborate
 checked 2 claims: 1 corroborated, 0 contradicted, 1 unclear
 ```
 
-Behaviour: up to ten unchecked `progress`, `commitment` and `fact` claims are compared against the observations within four days of their assertion. The verdict is `corroborated`, `contradicted` or `unclear` with a one-line note; missing records always read as `unclear`, never as contradiction. Needs a reasoning provider; exit 4 without one.
+Behaviour: up to ten unchecked `progress`, `commitment` and `fact` claims are
+compared against observations within four days of their assertion. The verdict
+is `corroborated`, `contradicted` or `unclear` with a one-line note; missing
+records always read as `unclear`, never as contradiction. A missing reasoning
+provider is a backend failure and exits 1. An unreachable endpoint exits 4.
 
 ## Where to go next
 

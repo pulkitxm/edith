@@ -32,6 +32,12 @@ with `no such episode`. This is the one-record cousin of
 [`ed companion wipe`](./wipe.md); for a conversation rather than an episode,
 [`ed companion forget`](./forget.md) is the right verb.
 
+`--json` is
+`{erased,claimsDeleted,chunksDeleted,sourceDeleted,vaultFileRemoved}`.
+`sourceDeleted` and `vaultFileRemoved` are false when another episode still
+uses the same source. Export the memory, including media, before erasing if the
+episode might be needed later.
+
 ## Where to go next
 
 - [`ed companion episode`](./episode.md), read it before erasing it

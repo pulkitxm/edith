@@ -8,7 +8,7 @@ Usage:
 ed companion forget <id> [--json] [--endpoint <url>]
 ```
 
-`--json` shape: `{"deleted": "<conversation id>"}`. Unknown ids exit `4` with
+`--json` shape: `{"deleted": "<conversation id>"}`. Unknown ids exit `1` with
 the backend's `no such conversation` detail.
 
 ## Where to go next

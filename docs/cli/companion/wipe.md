@@ -32,6 +32,16 @@ differs from `ed companion stack down --wipe` in what survives: `stack down
 running and configured. After a wipe, [`ed companion import`](./import.md) of
 an export brings the memory back.
 
+The API requires the literal confirmation `everything`; the CLI sends it only
+after `--yes` passes. `--json` is
+`{episodesDropped,sourcesDropped,observationsDropped,conversationsDropped,
+beliefsDropped,vaultCleared}`. `vaultCleared: false` means at least one vault
+directory could not be removed even though the database tables were already
+truncated. Treat that result as a partial wipe and inspect the vault volume.
+
+This command does not delete the export you made on this Mac. Verify that the
+backup's `mediaFailed` array is empty before relying on it for recovery.
+
 ## Where to go next
 
 - [`ed companion export`](./export.md), do this first
