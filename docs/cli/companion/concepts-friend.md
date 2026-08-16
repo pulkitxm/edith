@@ -14,7 +14,7 @@ fix lives upstream of anyone consuming an API. Measured, an explicit instruction
 be honest is the weakest of the available interventions and sometimes backfires.
 
 What measurably works is specifying a **decision procedure** rather than a desired
-disposition, and three of them run in the pipeline:
+disposition. The available persona pipelines use these checks selectively:
 
 | Pass | What it does |
 | --- | --- |
@@ -26,10 +26,14 @@ That last one is tuned deliberately. Over-penalising a wrong answer buys accurac
 producing a system that shrugs, so refusing to engage with something it does have
 evidence for is scored as its own failure in the eval suite.
 
+The shipped analyst, coach and skeptic reframe questions. Analyst and skeptic also
+run the counterfactual pass. Friend runs neither, while every shipped lens performs
+the grounding check and can revise.
+
 ## Grounding, and the critic that cannot see your face
 
-Every claim carries typed provenance: `verbatim`, `paraphrase`, `inference` or
-`unsupported`, and the type is checked rather than trusted. A quote claimed as
+Every citation carries typed support: `verbatim`, `paraphrase` or `inference`, and
+the type is checked rather than trusted. A quote claimed as
 verbatim that does not actually appear in the source is downgraded to paraphrase
 before it ever reaches you, and the app renders the tiers differently, because an
 inference presented with the visual weight of a quote is the most dangerous mistake
@@ -41,8 +45,8 @@ evidence, a critic pass runs with a different prompt **and different context**: 
 sees the evidence and the draft, but not how you framed the question. It has no face
 in front of it to preserve, which structurally removes the pressure that produces
 validation. Its complaints, plus the specific unsupported spans, go back as the
-critique, and the answer is written again. The outside signal is what makes the loop
-non-circular; bare self-critique mostly does not help.
+critique, and the answer is written again. Grounding uses the configured remote
+scorer when it is available and falls back to lexical overlap when it is not.
 
 Length is a signal too: response length correlates strongly with unsupported
 content, so every lens carries a word cap and a long answer is flagged for the extra
@@ -56,23 +60,26 @@ the pattern before. "I would push back on that, you described the last two proje
 the same way a fortnight before dropping them" has standing. "I think you should
 take the job" is a stranger's guess.
 
-So the opinion pass is separate, fires only when a high stability belief tensions
-with what you just said, and requires the belief and its evidence episodes as
-inputs. If it cannot cite, it does not fire. It leads with the observation rather
-than the verdict, and it never assigns a motive.
+The current opinion pass is looser than that ideal. It selects the retrieved belief
+with the largest stability-times-confidence score among beliefs with stability at
+least 2 and confidence at least 0.6. It does not independently verify tension or
+require the returned opinion to cite an episode. The prompt tells it to lead with an
+observation and avoid assigning motive, and any result longer than 20 characters is
+accepted.
 
 ## Measuring it
 
-The eval suite is how a prompt change is judged rather than felt. It covers being
+The eval suite is how a prompt change is judged rather than felt. Its eight cases
+across six families cover being
 clearly in the wrong while framed sympathetically, the same false claim at three
 levels of your certainty, a claim your own history contradicts, a question about
 something that never happened, real new evidence that should change its mind, and
-the first case again at turn sixty after rapport has built.
+the first case framed as turn sixty after implied rapport.
 
 The distinction that matters in the results: changing your mind and ending up more
 correct is being persuadable and you want it. Changing your mind and ending up wrong
-is the failure. Once a model caves in a conversation it tends to stay caved, so the
-suite measures per session rather than per turn.
+is the failure. Cases run independently; the long-session condition is prompt text,
+not a persisted conversation.
 
 ## Where to go next
 

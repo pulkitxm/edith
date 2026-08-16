@@ -39,17 +39,19 @@ cheap. This also defines identity: the companion does not care about
 filenames or paths, only content. The same note under two names is one
 memory; the same name with edited content is two.
 
-Each new file is processed inside its own database transaction: the vault
-write, the `sources` row and the `episodes` row all land together or not at
-all, so a failure mid-batch can never leave half a memory behind.
+Each new file gets its own database transaction for the `sources` and
+`episodes` rows, so a database failure cannot commit half a memory. The vault
+is a filesystem rather than part of that transaction. Its content-addressed,
+create-once path makes retries safe, though a database failure after the file
+write can leave an unreferenced vault object.
 
 ## Step two: preserve the original
 
 Before any parsing, the exact bytes go into the vault at a path derived from
 the fingerprint (`/vault/objects/<xx>/<sha256>/<name>`). Parsing and
 transcription are lossy; the vault write means the ground truth is safe
-before anything lossy happens, and it is what the app later streams back for
-PDF previews and audio playback.
+before anything lossy happens, and it is what the app or CLI later downloads
+for opening and playback.
 
 ## Step three: turn the file into an episode
 

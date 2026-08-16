@@ -68,8 +68,10 @@ Two pipelines carry everything:
 
 - Claims: assertions extracted from your episodes, typed (fact, intention,
   commitment, progress, and so on) with a `testable` flag.
-- Observations: external records only, today GitHub events, deduped by key.
-  They exist so corroboration checks against things you cannot author.
+- Observations: independent records from GitHub, imported calendars, music and
+  video history, plus Edith usage, deduped by key. Notion stays on the authored
+  side and becomes episodes instead. Observations exist so corroboration can
+  check against records you did not write as companion memory.
 - Corroboration judges testable claims against observations within 96 hours
   either side; no records means `unclear`, never `contradicted`.
 - Reflection distills beliefs from recent episodes; embedding similarity

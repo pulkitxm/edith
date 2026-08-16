@@ -77,7 +77,8 @@ answer, citations, persona, grounding report, abstention flag, stages and any
 reframed question or separated opinion.
 
 **Chat** (`ed companion chat`, `POST /v1/chat`) is conversational and
-streams. The model writes its reply as natural prose and then, on its own
+streams. It defaults to the `friend` persona, and `--persona` can select any
+other loaded lens. The model writes its reply as natural prose and then, on its own
 line, a marker `@@CITATIONS@@` followed by the citations as JSON. You watch
 the prose arrive word by word; the marker and everything after it never
 reach your screen, because the server captures that tail and processes it as
@@ -155,8 +156,8 @@ evaluating and tuning retrieval later.
 
 Two deliberate absences complete the picture. The companion's replies are
 never ingested back as memory, so it learns only from you, never from
-itself; a wrong answer cannot become tomorrow's evidence. And ask writes
-nothing at all: it is a pure read.
+itself; a wrong answer cannot become tomorrow's evidence. And ask writes no
+conversation or memory records. It only writes retrieval telemetry.
 
 ## Reading on
 
