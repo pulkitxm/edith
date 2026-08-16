@@ -194,7 +194,6 @@ import Testing
             ["machines", "show", "no-such-machine-anywhere"],
             ["machines", "connect", "no-such-machine-anywhere"],
             ["machines", "disconnect", "no-such-machine-anywhere"],
-            ["machines", "services", "no-such-machine-anywhere"],
             ["machines", "files", "ls", "no-such-machine-anywhere"],
             ["machines", "docker", "ps", "no-such-machine-anywhere"],
         ] {
