@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import EdithKit
 import Foundation
 
@@ -8,6 +9,7 @@ final class ClipboardStore: FeatureModule {
     private(set) var entries: [ClipboardEntry] = []
     private(set) var revision = 0
     private(set) var skippedOversizeAt: Date?
+    private(set) var queuedItems: [ClipboardQueueItem] = []
 
     private var loaded = false
     private var timer: DispatchSourceTimer?
@@ -18,6 +20,7 @@ final class ClipboardStore: FeatureModule {
     private var wakeObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var clipboardChangedObserver: NSObjectProtocol?
+    private var pasteQueue = ClipboardPasteQueue()
 
     private static let diskQueue = DispatchQueue(
         label: "com.edith.clipboard.disk", qos: .userInitiated)
@@ -180,6 +183,12 @@ final class ClipboardStore: FeatureModule {
             size: captured.data.count, preview: captured.preview,
             pinned: existing?.pinned ?? false)
         adopt(ClipboardActions.arrange(entries + [entry]))
+        if existing == nil,
+            SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pasteQueueEnabled)
+        {
+            pasteQueue.add(entry)
+            queuedItems = pasteQueue.items
+        }
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
     }
@@ -193,7 +202,81 @@ final class ClipboardStore: FeatureModule {
 
     private func adopt(_ updated: [ClipboardEntry]) {
         entries = ClipboardActions.arrange(updated)
+        pasteQueue.retain(entryIDs: Set(entries.map(\.id)))
+        queuedItems = pasteQueue.items
         revision += 1
+    }
+
+    func handleQueueRequest(_ info: [AnyHashable: Any]) -> ClipboardQueueResponse {
+        guard let rawAction = info[ClipboardQueueBridge.actionKey] as? String,
+            let action = ClipboardQueueAction(rawValue: rawAction)
+        else {
+            return ClipboardQueueResponse(status: .entryNotFound, items: pasteQueue.items)
+        }
+        switch action {
+        case .list:
+            return ClipboardQueueResponse(status: .ok, items: pasteQueue.items)
+        case .add:
+            guard let id = info[ClipboardQueueBridge.entryIDKey] as? String,
+                let entry = entries.first(where: { $0.id == id })
+            else {
+                return ClipboardQueueResponse(status: .entryNotFound, items: pasteQueue.items)
+            }
+            let item = pasteQueue.add(entry)
+            queuedItems = pasteQueue.items
+            revision += 1
+            return ClipboardQueueResponse(
+                status: .ok, items: pasteQueue.items, item: item, changed: 1)
+        case .remove:
+            guard let id = info[ClipboardQueueBridge.entryIDKey] as? String,
+                let item = pasteQueue.remove(id: id)
+            else {
+                return ClipboardQueueResponse(status: .entryNotFound, items: pasteQueue.items)
+            }
+            queuedItems = pasteQueue.items
+            revision += 1
+            return ClipboardQueueResponse(
+                status: .ok, items: pasteQueue.items, item: item, changed: 1)
+        case .clear:
+            let removed = pasteQueue.clear()
+            queuedItems = pasteQueue.items
+            revision += 1
+            return ClipboardQueueResponse(
+                status: .ok, items: pasteQueue.items, changed: removed.count)
+        case .next:
+            return pasteNextQueuedItem()
+        }
+    }
+
+    private func pasteNextQueuedItem() -> ClipboardQueueResponse {
+        guard let item = pasteQueue.items.first else {
+            return ClipboardQueueResponse(status: .empty, items: pasteQueue.items)
+        }
+        guard AXIsProcessTrusted() else {
+            return ClipboardQueueResponse(
+                status: .accessibilityRequired, items: pasteQueue.items, item: item)
+        }
+        guard ClipboardRepository.copyToPasteboard(item.entry, asPlainText: false) else {
+            return ClipboardQueueResponse(
+                status: .blobMissing, items: pasteQueue.items, item: item)
+        }
+        lastChangeCount = NSPasteboard.general.changeCount
+        pasteQueue.removeNext()
+        queuedItems = pasteQueue.items
+        revision += 1
+        if let index = entries.firstIndex(where: { $0.id == item.id }) {
+            var updated = entries
+            updated[index].lastCopiedAt = Date()
+            adopt(updated)
+            Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: item.id) }
+            SettingsBackup.shared.scheduleClipboardBackup()
+            postChanged()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            ClipboardPasteSynth.synthesizeCommandV()
+        }
+        return ClipboardQueueResponse(
+            status: .ok, items: pasteQueue.items, item: item, changed: 1)
     }
 
     private func persistAndTrim(appending appended: ClipboardEntry? = nil) {

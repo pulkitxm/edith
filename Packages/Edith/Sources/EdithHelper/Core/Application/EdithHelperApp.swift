@@ -164,6 +164,21 @@ struct EdithApp: App {
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
         }
+        _ = IPC.observe(
+            IPC.Name.requestClipboardQueue,
+            info: { info in
+                guard let requestID = info[ClipboardQueueBridge.requestIDKey] as? String else {
+                    return
+                }
+                let response =
+                    services.clipboard?.handleQueueRequest(info)
+                    ?? ClipboardQueueResponse(status: .extensionOff)
+                IPC.post(
+                    ClipboardQueueBridge.responseName(requestID: requestID),
+                    userInfo: [
+                        ClipboardQueueBridge.responseKey: ClipboardQueueBridge.encode(response)
+                    ])
+            })
         PermissionsModel.shared.startIPCBridge()
         PermissionsModel.shared.refresh()
 
