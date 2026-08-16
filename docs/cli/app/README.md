@@ -3,7 +3,8 @@
 `ed app` holds the one-shot verbs the Edith app performs. These are things the
 app does once when asked, rather than switches `ed config set` can flip: lock
 the keyboard for cleaning, send the test notification, open or quit the window,
-ask Sparkle to look for an update, and relaunch after granting a permission.
+ask Sparkle to look for an update, reveal a screen, capture its windows, and
+relaunch after granting a permission.
 
 Edith is two processes with two bundle ids: the menu bar helper,
 `com.pulkit.edith.statusbar`, and the main window, `com.pulkit.edith`. Each verb

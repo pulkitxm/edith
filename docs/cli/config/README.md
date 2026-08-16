@@ -92,6 +92,7 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `tabUsageEnabled` | bool | `true` | shared | Agent Usage extension: Claude and Codex limits, stats and alerts. |
+| `usageMachines` | stringList | none | shared | Ids of the machines whose agent usage is collected over SSH. |
 
 ### `limits`
 
@@ -183,6 +184,14 @@ not here cannot be set, and `import` skips it.
 | `machinesNotifyDown` | bool | none | shared | Notify when a machine stops responding. |
 | `machinesNotifyDiskFull` | bool | none | shared | Notify when a machine's disk crosses the threshold, or a filesystem stops responding. |
 | `machinesDiskThreshold` | number | `90` | shared | Disk usage percentage that triggers the disk alert. |
+
+### `companion`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `tabCompanionEnabled` | bool | `false` | shared | Show the Companion page. |
+| `companionEndpoint` | string | `http://127.0.0.1:4820` | shared | Companion API base URL the app and CLI talk to. |
+| `companionTab` | string: `chat`, `capture`, `desk`, `library`, `mind`, `setup`, `settings` | `chat` | shared | Companion screen shown on open. |
 
 ### `finder`
 
@@ -429,9 +438,10 @@ player, `ed config set musicVolume 0.4` does not.
 maintains and `ed` reports: the `perm*Granted` mirror of macOS permission state,
 the `last*BackupAt` timestamps, the four `notifSession*` and `notifWeekly*`
 records of which alert already fired, `musicFolderStale`, the `musicLast*` and
-`musicWasPlaying` resume state, the `presenterAuto*` share detection, and
-`micMuted`. They show up in `ls`, `get` and `describe`, are refused by `set` and
-`unset` with exit 1, and are left out of `export` and skipped by `import`.
+`musicWasPlaying` resume state, the `presenterAuto*` share detection,
+`lidAwakeActive`, and `micMuted`. They show up in `ls`, `get` and `describe`, are
+refused by `set` and `unset` with exit 1, and are left out of `export` and
+skipped by `import`.
 
 **A missing default is not the same as `false`.** Where the catalogue declares
 no default, the setting reads blank in the table and `null` in `--json` until
@@ -454,20 +464,30 @@ as writable objects, so a document that validates against the schema can still
 contain a key `import` will skip.
 
 **`ed schema` is the machine-readable half of this page.** It prints a JSON
-Schema for the `import` document: the 179 writable keys as properties,
-`additionalProperties: false`, the `enum` for each of the 16 keys with an
+Schema for the `import` document: the 190 writable keys as properties,
+`additionalProperties: false`, the `enum` for each of the 19 keys with an
 allowed list, the default where the catalogue declares one, and `x-group`,
 `x-scope` and `x-format` annotations. A `csv` setting is typed as a string with
 `"x-format": "comma-separated"`; a `stringList` is an array of strings.
 
 **Extensions are settings, with better manners.** `tabUsageEnabled`,
-`tabSystemEnabled`, `tabMachinesEnabled`, `menuBarSystemStats`,
-`micMuteEnabled`, `tabMusicEnabled`, `tabCalendarEnabled`, `notchShelfEnabled`,
-`clipboardEnabled`, `focusDimEnabled`, `presenterEnabled` and
-`colorPickerEnabled` are the same switches `ed extensions enable` and
+`tabSystemEnabled`, `tabMachinesEnabled`, `tabCompanionEnabled`,
+`menuBarSystemStats`, `micMuteEnabled`, `lidAwakeEnabled`, `tabMusicEnabled`,
+`tabCalendarEnabled`, `notchShelfEnabled`, `clipboardEnabled`,
+`focusDimEnabled`, `presenterEnabled` and `colorPickerEnabled` are the same
+switches `ed extensions enable` and
 `ed extensions disable` flip. Prefer those verbs: they know which macOS
 permission the extension needs and say which one is missing, where
 `ed config set` just writes the bool.
+
+**Menu bar limit windows are comma-separated selections.**
+`menuBarClaudeWindows` accepts `session`, `week` and `fable`, while
+`menuBarCodexWindows` accepts `session` and `week`. The menu bar always restores
+canonical order, drops unknown names, ignores `fable` for Codex, and hides a
+provider whose stored selection is empty. `ed config set` validates these as
+ordinary strings, so a typo is stored successfully and then ignored by the menu
+bar. Unsetting either key restores all windows for that provider. The defaults
+are `session,week,fable` for Claude and `session,week` for Codex.
 
 **Values are matched exactly, keys are matched exactly.** An allowed value is
 compared case-sensitively, so `ed config set appearance Dark` exits 1 while

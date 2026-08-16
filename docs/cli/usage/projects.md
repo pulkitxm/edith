@@ -54,7 +54,7 @@ folder breakdown.
       },
       {
         "folderName": "edith",
-        "path": "/home/pulkit/code/edith",
+        "path": "machine:0b481f65-f946-4636-ab36-e4508eb67e6a:/home/pulkit/code/edith",
         "machineName": "Asus TUF 7",
         "machineID": "0B481F65-F946-4636-AB36-E4508EB67E6A",
         "cost": 530.539043018298,
@@ -81,10 +81,18 @@ different machines. A repository's visible name is its final GitHub path
 component. Repositories with the same visible name remain separate because
 `repositoryID`, not the display name, is the grouping key. Repositories without
 a GitHub remote use a folder identity and are not merged across unrelated paths.
+Local folder paths remain absolute. A remote folder path is prefixed with
+`machine:<lowercase-machine-uuid>:` so it cannot collide with a local path.
+GitHub-backed `repositoryID` values stay unprefixed, which is what lets the same
+repository merge across machines.
 
-For each day and source, project values are normalized to that source's
-canonical cost and token totals. Usage with no matching folder detail appears
-under `Unattributed`, so repository totals still reconcile with the summary.
+For each day and source, cost and tokens are normalized independently to that
+source's canonical totals. Per-source data, including its per-model split, is
+preferred when it exists; chats and worktrees are the fallback. When measured
+cost is zero the split follows tokens, and when measured tokens are zero it
+follows cost. Usage with no matching folder detail appears under `Unattributed`
+for that source and model, so repository totals still reconcile with the
+summary.
 
 The command reads only, mutates nothing, and needs no app. It exits 4 with no
 `usage.json`, 1 on a file that will not decode, 3 on a bad `--range`, and 2 on

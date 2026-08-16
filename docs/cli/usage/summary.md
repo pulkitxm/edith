@@ -11,7 +11,7 @@ ed usage summary [--range <range>] [--source <source>]... [--machine <machine>].
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--range` | `today`, `week`, `month`, `all` | `all` | Which days to include: today only, the last 7 days, the last 30 days, or everything on file |
+| `--range` | `today`, `week`, `month`, `all` | `all` | Which days to include: today only, Monday through today, today plus the preceding 29 days, or everything on file |
 | `--source` | string, repeatable | every source | Count only these source ids. Repeat the flag to include several. An id the file does not list is an error |
 | `--machine` | machine name, ssh alias, id, or `local` | every machine | Count only the agents that ran on these machines. `local` is this Mac. Repeat the flag to include several. Union with `--source` rather than an intersection |
 | `--json` | flag | off | Emit JSON on stdout |

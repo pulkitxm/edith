@@ -11,7 +11,7 @@ ed companion eval [ls] [--limit <n>] [--json] [--endpoint <url>]
 ed companion eval run [--persona <id>] [--json] [--endpoint <url>]
 ```
 
-The suite covers six failures:
+The suite contains eight independent cases across six failure families:
 
 | Case | What it catches |
 | --- | --- |
@@ -20,7 +20,7 @@ The suite covers six failures:
 | Memory contradiction | You assert something your own history contradicts. Does it surface the specific thing? |
 | Fabrication bait | You ask about something that never happened. Does it abstain? |
 | Genuine evidence | You push back with real new information. Does it update? This one you want it to. |
-| Long session drift | The first case again, at turn sixty, after rapport has built. |
+| Long session drift | A prompt framed as turn sixty, to probe the effect of implied rapport. |
 
 Refusing to engage with something it does have evidence for scores as a failure, not
 as a safe default. An over-penalised wrong answer produces a system that shrugs.
@@ -30,7 +30,16 @@ stores the run. `--json` shape: `{suite, persona, model, cases, passed, results:
 [{id, kind, passed, reason, abstained, grounding, words}]}`.
 
 `ed companion eval ls` lists past runs, which is how you see a prompt change land
-rather than tuning by feel.
+rather than tuning by feel. It defaults to 10 runs and requires a positive
+`--limit`. Its JSON shape is an array of `{id, suite, ranAt, model, cases, passed}`.
+
+Running the suite requires a configured reasoning provider. Omitting `--persona`
+uses `friend`; an unknown persona is refused. A run stores its summary only after all
+cases and their judge passes finish successfully, though a failed run can leave the
+turn and retrieval telemetry written by cases that already completed.
+
+Cases are independent calls. The long-session case describes prior rapport in its
+prompt; it does not create or replay a persisted 60-turn conversation.
 
 ## Where to go next
 

@@ -1,7 +1,8 @@
 # <img src="Packages/Edith/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
 
-A native SwiftUI menu bar app for the Mac: a dark, minimal control center that
-replaces a shelf of single-purpose utilities and idles at about 22 MB.
+A native desktop control center for macOS, with an early Ubuntu preview. The
+complete Mac app replaces a shelf of single-purpose utilities and idles at about
+22 MB.
 
 Free and open source under the [GPL-3.0](LICENSE). Every feature is in the one
 app. No licence key, no account, no paid tier.
@@ -30,15 +31,36 @@ current platform scope.
 
 ## Features
 
-**Claude and Codex usage**
+**Agent usage**
 
-- **Rate-limit rings** - session (5h) and weekly usage as live gauges with second-by-second countdowns and a 24h history spark.
-- **Menu bar readout** - session and weekly percentages in the menu bar, tinted by a time-aware risk model.
+- **Local accounting** - Claude, Codex and pi activity is attributed to the right machine, repository, worktree and chat without sending the history anywhere.
+- **Rate-limit rings** - Claude and Codex session and weekly usage as live gauges with second-by-second countdowns and history; Claude's scoped Fable window is tracked too.
+- **Menu bar readout** - choose which Claude and Codex windows appear, with compact or roomy layouts and a time-aware risk tint.
 - **Alerts** - threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset notifications, all optional.
 - **Dashboard** - KPIs with per-day, model, source, project and hourly charts, plus a sortable model table.
 - **Activity heatmap** - GitHub-style daily spend calendar across your full history.
-- **Project drilldown** - spend by project, worktree and chat, across both agents.
+- **Project drilldown** - spend by project, worktree and chat, across every collected agent.
 - **Fleet usage** - the same collector runs on your SSH machines and folds their agents in as their own sources, so the totals cover every box you code on.
+
+**Companion**
+
+- **Private memory** - deploy the multi-container backend on this Mac or an SSH machine, then reach it through a localhost tunnel.
+- **Capture and library** - give it notes, recordings, images, video and PDFs; failed recordings wait in a local outbox instead of disappearing.
+- **Evidence-backed chat** - ask questions over your own history, inspect citations, or ask three independent lenses for a second opinion.
+- **Your data, your exit** - export or import the memory, erase individual episodes, wipe everything, move the deployment, and inspect its health and logs from Edith.
+
+See the [Companion guide](docs/companion.md) for hosting requirements, data flow,
+model choices and recovery.
+
+**Machines**
+
+- **One fleet view** - add the local Mac and SSH hosts, monitor live CPU, memory, disks, temperatures, GPUs and running processes, and detach any machine into its own window.
+- **Terminal, files and workspaces** - keep terminal tabs, browse and transfer files, preview remote content, and arrange saved split-pane workspaces.
+- **Containers** - inspect Docker Compose groups, resources, configuration and logs, then start, stop, restart or remove containers.
+- **Power and cooling** - wake, restart or shut down hosts; read fan speeds and temporarily switch supported Linux platform profiles with automatic rollback.
+
+See the [remote machines guide](docs/remote-machines.md) for connection, privilege
+and platform details.
 
 **Everything else on the shelf**
 
@@ -51,7 +73,7 @@ current platform scope.
 - **Mic mute** - system-wide microphone kill switch with a menu bar indicator.
 - **Focus dim** - dims every screen except the window you are working in.
 - **System tools** - prevent-sleep toggle, CPU and memory readout, and a keyboard-cleaning lock that auto-restores after 60s.
-- **Lid awake** - keeps the Mac running with the lid shut, on battery and unplugged.
+- **Lid awake** - keeps the Mac running with the lid shut and unplugged, with timed or lid-cycle sessions, battery floors and automatic sleep restoration.
 - **Disk cleaner** - scans build caches, package managers and old logs.
 - **Global shortcut** - toggle the panel from anywhere, ⌥⌘E by default and re-recordable.
 
@@ -75,11 +97,19 @@ Full reference: **[docs/cli](docs/cli/README.md)**, one page per command group,
 also published to the [wiki](https://github.com/pulkitxm/edith/wiki). `ed guide`
 prints the same material as a built-in manual.
 
+Lid Awake needs one-time approval for Edith's background helper. Read the
+[Lid Awake guide](docs/lid-awake.md) before using it in a closed bag or on battery.
+
 ## Privacy
 
 Usage data never leaves your Mac. There is no account and no telemetry.
-Rate-limit checks go directly from your machine to your AI provider. Optional
-iCloud backup merges your history across your own Macs and nowhere else.
+Rate-limit checks go directly from your machine to your provider. Optional iCloud
+backup merges selected app data across your own Macs and nowhere else.
+
+The optional Companion stores its memory on the machine you choose. Local
+embedding, vision and speech models run there. Reasoning can stay on that host or
+use a provider you configure, in which case the requested context goes directly
+from your host to that provider. Edith operates no data service in between.
 
 **Presenter mode** blurs spend figures, track names and calendar entries for
 screen sharing, and detects screen shares automatically.

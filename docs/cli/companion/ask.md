@@ -5,7 +5,7 @@ Answers a question from your own memory, citing the episodes the answer rests on
 Usage:
 
 ```
-ed companion ask <question> [--json] [--endpoint <url>]
+ed companion ask <question> [--persona <id>] [--json] [--endpoint <url>]
 ```
 
 Arguments:
@@ -19,14 +19,16 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
+| `--persona` | persona id | `analyst` | Chooses the retrieval, evidence, reasoning and output policy. |
 
 `--json` shape:
 
 ```json
 {
+  "abstained": false,
   "answer": "The auth refactor shipped in March, and it felt slower than it should have.",
-  "chunksConsidered": 8,
+  "chunksConsidered": 10,
   "citations": [
     {
       "episodeId": "ade45706-c7e0-480c-9125-11503509bef2",
@@ -36,11 +38,30 @@ Options:
       "title": "Warden retro"
     }
   ],
-  "model": "anthropic, model claude-sonnet-5"
+  "grounding": {
+    "score": 0.81,
+    "scorer": "lexical",
+    "unsupported": []
+  },
+  "model": "openai-compatible at http://ollama:11434/v1, model qwen3:1.7b",
+  "opinion": null,
+  "persona": "analyst",
+  "reframed": "What does the record show about the auth refactor's outcome and pace?",
+  "stages": ["reframe_question", "retrieve", "counterfactual", "draft", "ground_check", "revise"]
 }
 ```
 
-`answer` is the grounded reply, `citations` the episodes it rests on, `chunksConsidered` how many memory chunks were retrieved, and `model` the reasoner that answered. `support` types each citation: `verbatim` is checked structurally, the quote must actually appear in the cited text or the label demotes to `paraphrase`; `inference` marks the reasoner reading between the lines and renders that way.
+`answer` is the reply, `citations` names its source episodes,
+`chunksConsidered` is the persona's final chunk count, and `model` is the active
+reasoner. `persona` and `stages` make the policy explicit. `reframed` records a
+better evidence-seeking form of the question when that stage ran. `grounding`
+holds the score, scorer and unsupported sentences. `abstained` says the score
+fell below the persona's threshold. `opinion` is a clearly separated judgment
+when the selected pipeline produced one.
+
+`support` types each citation. A claimed `verbatim` quote must actually occur
+in the cited chunk or it is demoted to `paraphrase`; `inference` marks the
+reasoner reading between the lines and renders that way.
 
 Examples:
 
@@ -51,7 +72,15 @@ The auth refactor shipped in March, and it felt slower than it should have.
     "Shipped the auth refactor this week. Felt slower than it should have been."
 ```
 
-Behaviour: the companion retrieves the eight nearest chunks by embedding, hands them to the reasoner tagged by episode id, and drops any citation that names an episode the reasoner was not shown, so an answer can only cite what it actually read. When the memory holds nothing relevant the answer says so. Needs a reasoning provider like `ed companion reflect`; exit 4 without one.
+Behaviour: the default analyst searches the last 365 days and asks for 10
+chunks. Retrieval fuses vector, keyword and entity-graph candidates, then also
+loads relevant beliefs and independent observations. The selected persona can
+reframe the question, seek counter-evidence, draft, ground-check and revise.
+The server drops citations to episodes it did not retrieve. When evidence is
+too weak, the persona abstains instead of forcing an answer. An unknown persona
+is rejected by the backend. This command needs a configured reasoning provider;
+backend failures, including no provider, exit 1, while an unreachable endpoint
+exits 4.
 
 ## Where to go next
 

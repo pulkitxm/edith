@@ -5,10 +5,11 @@ Counts the agents running on your SSH machines alongside the ones on this Mac.
 
 The collector Edith runs here is piped to the machine and run against that
 machine's home directory, and the numbers come back into the same `usage.json`
-the dashboard reads. Each agent on a machine arrives as its own source, named
-`<machine-slug>:<agent>`, so `ed usage summary` counts the fleet, `--source
-asus-tuf-7:cli` narrows to one agent on one machine, and `--machine` narrows to
-everything one machine ran.
+the dashboard reads. The collected file keeps local source names such as `cli`
+and `codex`. When the refresh pipeline folds it into the fleet document, each
+one becomes `machine:<lowercase-machine-uuid>:<agent>`. The UUID is stable
+across a rename, so `ed usage summary` does not double count a renamed machine
+and `--machine` keeps selecting the same agents.
 
 Whatever the collector needs and cannot find there, jq, bun and ccusage, is
 installed under `~/.cache/edith` on that machine. That is why collecting waits
@@ -40,7 +41,7 @@ it has ever been collected:
     "host": "asus-tuf-7",
     "id": "1F0A9C22-4E64-4C63-9E0B-2F5A1E7D2C10",
     "machine": "Asus TUF 7",
-    "sources": ["asus-tuf-7:cli"],
+    "sources": ["cli"],
     "tokens": 321812580
   }
 ]
@@ -95,8 +96,8 @@ ed usage machines collect [<machine>] [--once] [--verbose] [--timeout <seconds>]
 }
 ```
 
-`sources` names the agents as that machine knows them, so `cli` there is the
-source `asus-tuf-7:cli` once it has been folded in.
+`sources` names the agents as that machine knows them, so `cli` there becomes
+`machine:1f0a9c22-4e64-4c63-9e0b-2f5a1e7d2c10:cli` once it has been folded in.
 
 `merged` says whether the numbers reached `usage.json`. The command runs the
 merge itself, in this process, so it does not need the app; it is `false` only
@@ -129,6 +130,11 @@ is counted towards usage yet`. A `--timeout` of zero or less exits 2.
 
 Collecting also prunes stored usage for machines that are no longer in the
 directory, so removing a machine and collecting again forgets it.
+
+The merge canonicalizes both current UUID-based ids and older slug-based ids.
+When history contains a renamed machine or a replaced machine with the same
+agent sessions, the current record wins instead of both histories being added.
+Unrelated machine UUIDs remain independent.
 
 ## `ed usage machines enable`
 

@@ -10,18 +10,15 @@ Usage:
 ed companion calibration [--json] [--endpoint <url>]
 ```
 
-Directions are `overstated`, `understated`, `worry_unrealized`, `signal_dismissed`
-and `accurate`. Domains are `work_estimates`, `self_assessment`, `risk` and
-`general`.
+Directions are `overstated`, `understated`, `signal_dismissed` and `accurate`.
+Domains are `work_estimates`, `self_assessment`, `risk` and `general`.
 
 `--json` shape: an array of `{domain, direction, samples, averageMagnitude}`.
 
-The last two directions are the ones worth having. Anyone can point out that you are
-behind schedule. Noticing that you keep mentioning something you insist does not
-matter, or that a risk you have flagged five times has materialised once, is a
-different order of attention. This profile feeds the lenses as a prior: when the
-skeptic decides whether to push, "his self-criticism runs harsher than the record
-supports" is exactly the input it needs.
+The less obvious directions matter too. `understated` records when the record is
+better than your account, while `signal_dismissed` records an override where the
+available observations missed real work. This command reports the aggregate;
+the current ask and chat retrieval paths do not inject it directly as a lens prior.
 
 ## Where to go next
 

@@ -11,7 +11,9 @@ argument parser. There is no `--json` flag because the output is already a JSON
 document, always pretty printed with two-space indentation and sorted object
 keys.
 
-Shape, with one property per writable setting. Three real ones shown:
+Shape, with one property per writable setting. The current catalogue has 213
+settings: 190 properties appear here and the 23 read-only settings are omitted.
+Three real properties are shown:
 
 ```json
 {

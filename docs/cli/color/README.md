@@ -28,8 +28,6 @@ is the same command as `ed color ls`.
 
 ## Commands
 
-## Commands
-
 - [`ed color ls`](./ls.md)
 - [`ed color clear`](./clear.md)
 

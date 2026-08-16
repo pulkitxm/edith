@@ -10,7 +10,7 @@ with worked examples and every term explained from scratch:
 | Page | What it explains |
 | --- | --- |
 | [Memory](./concepts-memory.md) | The data ladder, the vault, content hashing, append-only design, where every byte lives |
-| [Ingestion](./concepts-ingestion.md) | Dropped file to episode: dedupe, front matter, dates, PDF extraction, voice transcription, signals |
+| [Ingestion](./concepts-ingestion.md) | Dropped file to episode: dedupe, dates, PDF extraction, speech transcription, vision captions and signals |
 | [Chunks, embeddings and search](./concepts-search.md) | How text becomes numbers and how nearest-neighbour search finds meaning, from first principles |
 | [Asking and chatting](./concepts-chat.md) | Retrieval, prompting, streaming, the stream filter, and how citations are policed |
 | [The learning loop](./concepts-learning.md) | Claims, observations, corroboration verdicts, belief life-cycles and the nightly run |
@@ -19,9 +19,9 @@ with worked examples and every term explained from scratch:
 
 Two pipelines carry everything:
 
-- Every file: md, pdf or voice → SHA-256 dedupe → vault → episode → chunks →
+- Every file: Markdown, PDF, voice, image or video → SHA-256 dedupe → vault → episode → chunks →
   embeddings → searchable.
-- Every night at 02:00: sync GitHub → index → rescore baselines → extract claims →
+- Every night at 02:00: sync GitHub and Notion → index → rescore baselines → extract claims →
   resolve entities → corroborate → track commitments → score calibration → reflect
   into beliefs → resolve predictions → form theories → rewrite the standing summary
   → rewrite the lens notes → rank the questions worth asking.
@@ -30,8 +30,8 @@ Two pipelines carry everything:
 
 - One Rust server on port 4820; Postgres with pgvector holds every table,
   Ollama embeds, whisper.cpp transcribes, Redis is only pinged. No SQLite.
-- The reasoner is a swappable LLM client: Anthropic (`claude-sonnet-5`) or any
-  OpenAI-compatible URL (`qwen3:1.7b`); settings hot-swap it with no restart.
+- The reasoner is a swappable language-model client. An OpenAI-compatible URL
+  can run a local model such as `qwen3:1.7b`; settings hot-swap it with no restart.
 - The data ladder: `sources` → `episodes` → `chunks` → `claims` and
   `observations` → `beliefs`. Each rung adds interpretation.
 
@@ -45,12 +45,17 @@ Two pipelines carry everything:
 - Embeddings: `qwen3-embedding:0.6b`, truncated to 512 dims (Matryoshka),
   stored as `halfvec` under an HNSW cosine index. Beliefs get one too.
 - No file watcher: "needs indexing" simply means an episode with zero chunks.
-- Voice also yields signals: pauses, words per minute, speech ratio.
+- Voice and video also yield signals: pauses, words per minute, speech ratio.
+- Photos become vision captions with capture metadata. Videos combine speech
+  transcripts with timestamped captions of scene-change keyframes.
 
 ## Recalling
 
-- Retrieval is pure vector search, always the 8 nearest chunks. No keyword
-  search or reranking yet; a `tsvector` column waits for a hybrid ranker.
+- Retrieval fuses up to 50 candidates each from vector similarity and keyword
+  search, plus entity-graph candidates. Reciprocal-rank fusion is adjusted by
+  salience and recency, then an optional reranker can reorder the final pool.
+- The answer context can include retrieved chunks, matching active beliefs and
+  independent observations. A persona can narrow source kinds or time windows.
 - Ask is one-shot JSON; chat streams SSE with the last 12 messages of
   history, prose first, then a `@@CITATIONS@@` trailer the server strips.
 - A stream filter drops `<think>` blocks and half-streamed markers.
@@ -63,15 +68,18 @@ Two pipelines carry everything:
 
 - Claims: assertions extracted from your episodes, typed (fact, intention,
   commitment, progress, and so on) with a `testable` flag.
-- Observations: external records only, today GitHub events, deduped by key.
-  They exist so corroboration checks against things you cannot author.
+- Observations: independent records from GitHub, imported calendars, music and
+  video history, plus Edith usage, deduped by key. Notion stays on the authored
+  side and becomes episodes instead. Observations exist so corroboration can
+  check against records you did not write as companion memory.
 - Corroboration judges testable claims against observations within 96 hours
   either side; no records means `unclear`, never `contradicted`.
 - Reflection distills beliefs from recent episodes; embedding similarity
   drives their life-cycle: 0.90 strengthens, 0.80 supersedes, else new.
   Beliefs are never deleted, only superseded.
-- The nightly run executes the five steps at 02:00, skipping any step whose
-  prerequisite (token, key) is missing; `ed companion runs` shows the log.
+- The nightly run records each connector, indexing and learning step at 02:00.
+  Missing connector tokens are logged as skipped. Without a reasoning provider,
+  it stops after sync, index and baselines; `ed companion runs` shows the log.
 
 ## The numbers
 
@@ -80,6 +88,7 @@ Two pipelines carry everything:
 | Chunk size | 1600 chars, 0 overlap |
 | Embedding dims | 512, HNSW cosine |
 | Retrieval k | 8 |
+| Retrieval candidates | 50 per vector and keyword channel, 25 graph |
 | Chat history | 12 messages |
 | Claim extraction | 10 episodes, 1500 chars each |
 | Corroboration | 96 h window, 40 observations max |

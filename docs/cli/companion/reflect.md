@@ -13,7 +13,7 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 `--json` shape:
 
@@ -21,7 +21,7 @@ Options:
 {
   "beliefsFormed": 2,
   "episodesConsidered": 7,
-  "model": "anthropic, model claude-sonnet-5"
+  "model": "openai-compatible at http://ollama:11434/v1, model qwen3:1.7b"
 }
 ```
 
@@ -31,10 +31,15 @@ Examples:
 
 ```
 $ ed companion reflect
-considered 7 episodes, formed 2 beliefs (anthropic, model claude-sonnet-5)
+considered 7 episodes, formed 2 beliefs (openai-compatible at http://ollama:11434/v1, model qwen3:1.7b)
 ```
 
-Behaviour: the companion reads its most recent episodes and asks the configured reasoner for two to five higher-order beliefs, each citing the episode ids it rests on. Candidates that cite unknown episodes, cite nothing, or restate an existing active belief are dropped. The provider is Anthropic when `ANTHROPIC_API_KEY` is set on the companion, or any OpenAI-compatible endpoint via `REASON_PROVIDER=openai` and `REASON_URL`; with neither configured the command fails with exit 4.
+Behaviour: the companion reads its most recent episodes and asks the configured
+reasoner for two to five higher-order beliefs, each citing the episode ids it
+rests on. Candidates that cite unknown episodes, cite nothing, or restate an
+existing active belief are dropped. An OpenAI-compatible endpoint is selected
+with `REASON_PROVIDER=openai` and `REASON_URL`. Without a configured provider,
+the backend rejects the request and the CLI exits 1.
 
 ## Where to go next
 

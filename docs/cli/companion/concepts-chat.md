@@ -10,8 +10,8 @@ things up.
 ## The reasoner has no memory of you
 
 The language model behind chat, called the **reasoner**, is a general text
-model: Claude through the Anthropic API, or a local model like `qwen3:1.7b`
-through Ollama. It was trained long before it met you, knows nothing about
+model, often a local model like `qwen3:1.7b` through Ollama. It was trained
+long before it met you, knows nothing about
 your notes, and retains nothing between requests. Every single question is
 answered by a model that starts blank and is handed a briefing.
 
@@ -24,12 +24,19 @@ is bad, it is worth asking which half failed.
 
 ## Step one: pick the memories
 
-Your message is embedded with the same model that embedded every chunk (see
-[chunks, embeddings and search](./concepts-search.md)), and the 8 nearest
-chunks by meaning are fetched. Always exactly 8, for ask and chat alike: no
-more for hard questions, no fewer for easy ones. Claims, beliefs and
-observations are **not** retrieved; answers are grounded in your own words,
-not in the companion's derived conclusions.
+Your message enters the hybrid retrieval pipeline described in
+[chunks, embeddings and search](./concepts-search.md). Vector, keyword and
+entity-graph results are fused, adjusted for salience and recency, and
+optionally reranked. The selected persona decides the time window, final chunk
+count and whether graph, belief and observation channels participate. The
+built-in policies request 10 analyst or coach chunks, 12 friend chunks, or 20
+skeptic chunks.
+
+Relevant active beliefs and connector observations can be loaded beside the
+chunks. They are clearly labeled as derived conclusions and independent
+records, not presented as your original words. The friend lens deliberately
+omits observations; the coach omits graph expansion; the skeptic also includes
+contested beliefs and gives observations more weight than self-report.
 
 If the memory is completely empty, chat is briefed with a literal note that
 the memory is empty, and ask returns a canned "there is nothing in the
@@ -45,11 +52,11 @@ episode 3f7f7a68-... (2026-03-14) Warden retro
 Shipped the auth refactor this week. Felt slower than it should have been.
 ```
 
-All 8 render into one "Excerpts" block. The episode ids are the load-bearing
+The selected chunks render into an "Excerpts" block. The episode ids are the load-bearing
 part: they are how the model can say **which memory** an answer rests on,
-and how the server later checks it. There is no token budgeting; 8 chunks of
-at most 1600 characters is the built-in ceiling, roughly 13k characters of
-memory per question.
+and how the server later checks it. Beliefs and observations render in their
+own labeled blocks. There is no separate token budget beyond the persona's
+chunk count and the 1600-character chunk cap.
 
 Chat adds two more things. A short standing instruction (the "system
 prompt") tells the model who it is: a thoughtful confidant who knows one
@@ -62,13 +69,16 @@ simply fall off; there is no summarising of long conversations yet.
 
 The two endpoints brief the same way but answer differently.
 
-**Ask** (`ed companion ask`, `POST /v1/ask`) is one-shot and strict: the
-model must reply with pure JSON, an `answer` string plus a `citations`
-array, nothing else. No history, no persona, no streaming. It is the
-scriptable form: one question in, one structured document out.
+**Ask** (`ed companion ask`, `POST /v1/ask`) is one-shot and structured. It
+runs the selected persona's stages, which can reframe, retrieve, seek
+counter-evidence, draft, ground-check and revise. The default is `analyst`.
+There is no chat history or streaming. The returned object includes the
+answer, citations, persona, grounding report, abstention flag, stages and any
+reframed question or separated opinion.
 
 **Chat** (`ed companion chat`, `POST /v1/chat`) is conversational and
-streams. The model writes its reply as natural prose and then, on its own
+streams. It defaults to the `friend` persona, and `--persona` can select any
+other loaded lens. The model writes its reply as natural prose and then, on its own
 line, a marker `@@CITATIONS@@` followed by the citations as JSON. You watch
 the prose arrive word by word; the marker and everything after it never
 reach your screen, because the server captures that tail and processes it as
@@ -105,7 +115,7 @@ episode, and here is the quote". Models are eager to please and will cite
 confidently even when wrong, so the server verifies every citation
 mechanically before you see it. Two rules:
 
-**Grounding.** A citation must name one of the 8 episodes the model was
+**Grounding.** A citation must name one of the episodes the model was
 actually shown. Any other id, plausible or not, is silently dropped. An
 answer can only cite what it read; it cannot launder invented sources into
 the record.
@@ -138,20 +148,20 @@ cut from the first message, at most 60 characters, preferring a word
 boundary. History survives restarts, `ed companion conversations` replays
 it, and `ed companion forget` deletes a conversation with its messages.
 
-Separately, every search, ask and chat logs telemetry: a `turns` row for
-the query, model and latency, plus one `retrievals` row per retrieved chunk
-recording its rank and whether it ended up cited. That "was this retrieved
-chunk actually useful?" trail is the raw material for evaluating and tuning
-retrieval later.
+Separately, every search, ask and chat logs telemetry: a `turns` row for the
+query, model, persona, prompt version, grounding score, abstention and latency,
+plus one `retrievals` row per retrieved chunk recording channel scores, final
+rank and whether it ended up cited. That trail is the raw material for
+evaluating and tuning retrieval later.
 
 Two deliberate absences complete the picture. The companion's replies are
 never ingested back as memory, so it learns only from you, never from
-itself; a wrong answer cannot become tomorrow's evidence. And ask writes
-nothing at all: it is a pure read.
+itself; a wrong answer cannot become tomorrow's evidence. And ask writes no
+conversation or memory records. It only writes retrieval telemetry.
 
 ## Reading on
 
-- [Chunks, embeddings and search](./concepts-search.md): how the 8 chunks
-  are chosen in the first place.
+- [Chunks, embeddings and search](./concepts-search.md): how the persona's
+  chunks are chosen in the first place.
 - [The learning loop](./concepts-learning.md): the slower path where the
   reasoner works on your memory overnight.

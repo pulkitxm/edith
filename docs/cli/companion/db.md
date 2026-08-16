@@ -26,8 +26,16 @@ memory again with the current prompts. This is your "I improved the extraction
 prompt" button, and it is only cheap because nothing above the episodes was ever the
 original.
 
-`--json` shape for `rebuild-derived`: `{chunksDropped, beliefsRetired, factsExpired,
-episodesKept}`.
+Both `reindex` and `rebuild-derived` are destructive maintenance operations.
+They do not touch episodes or vault originals, but search is incomplete until
+indexing finishes. `rebuild-derived` also retires active, contested and already
+superseded beliefs, and expires every open fact. Export first when you need an
+easy rollback of derived state.
+
+Every JSON response includes `action`. The remaining keys are nullable strings:
+`{action,chunksDropped,beliefsRetired,factsExpired,episodesKept}`. `migrate`
+returns all four count fields as null. `reindex` sets only `chunksDropped`.
+`rebuild-derived` sets all four counts.
 
 ## Where to go next
 

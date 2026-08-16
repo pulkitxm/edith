@@ -28,7 +28,7 @@ limitsProvider
 ```
 
 The `allowed` line appears only when the setting has an allowed list, and a
-final `read only` line appears only for the 22 keys the app owns. `--json` emits
+final `read only` line appears only for the 23 keys the app owns. `--json` emits
 the same object `ls` and `get` emit, which always carries every field:
 
 ```json

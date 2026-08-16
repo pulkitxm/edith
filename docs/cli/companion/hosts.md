@@ -36,8 +36,24 @@ runtimes are installed and whether their daemon is running, and which of the
 ports the stack needs are already taken. A machine that already hosts the stack
 is not blocked by its own ports.
 
-`--json` gives every fact plus a `blockers` array, each with a `headline` and
-the `fix` that clears it.
+A host is ready only when it is reachable, has at least 12,000 MB free, has a
+running Docker-compatible runtime with Compose, and ports 4820, 5432, 6379 and
+11434 are free. Docker, Podman and Colima are probed; Apple Container is
+reported but cannot satisfy the Compose requirement. Installed-but-stopped
+runtimes and missing Compose are blockers. GPU presence only selects the GPU
+tier after those readiness checks pass.
+
+`--machine` limits remote probes by case-insensitive full name, name prefix, or
+exact host. `local` and a prefix of `this mac` select this Mac. The local row is
+still included when a remote filter is supplied, so `--machine server` displays
+this Mac plus the matching remote. An unmatched remote filter displays only
+this Mac rather than producing a usage error.
+
+`--json` is `{hosts, deployment}`. Each host includes `id`, `name`, `target`,
+`isLocal`, `reachable`, `hostsTheStack`, `canHostTheStack`, `tier`, `summary`,
+`blockers` and nullable `facts`. Each blocker has a `headline` and `fix`.
+Runtime facts include `kind`, `version`, `daemonRunning`, `composeVersion` and
+`canRunTheStack`. `deployment` is null until a deployment has been saved.
 
 ## Where to go next
 

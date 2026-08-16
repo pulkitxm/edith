@@ -14,7 +14,7 @@ Options:
 | --- | --- | --- | --- |
 | `--limit` | positive integer | `20` | Asks for this many recent episodes. The API caps it at 200. |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 `--json` shape:
 
@@ -30,8 +30,13 @@ Options:
 ]
 ```
 
-Each item has its episode `id`, ISO 8601 `occurredAt`, source `kind`, display
+Each item has its episode `id`, ISO 8601 `occurredAt`, episode `kind`, display
 `title`, and the source content hash in `sha256`.
+
+Direct file ingestion produces `md`, `pdf`, `voice`, `image` and `video`.
+Notion pages use `md` because live sync renders and ingests them as Markdown.
+Other workflows can add kinds such as `standup` and `inquiry`, and a restored
+bundle preserves the episode kind it exported.
 
 Examples:
 

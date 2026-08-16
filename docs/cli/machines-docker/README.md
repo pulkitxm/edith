@@ -67,8 +67,6 @@ nothing, and exit 0.
 
 ## Commands
 
-## Commands
-
 - [`ed machines docker ps`](./ps.md)
 - [`ed machines docker images`](./images.md)
 - [`ed machines docker volumes`](./volumes.md)

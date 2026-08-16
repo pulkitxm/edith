@@ -8,7 +8,7 @@ is append-only. No machine-learning background is assumed.
 ## Memory is a database, not a brain
 
 When the companion "remembers" something, no model is being trained and
-nothing is being memorised by an AI. Memory is ordinary data in an ordinary
+nothing is being memorised by the language model. Memory is ordinary data in an ordinary
 database: rows in Postgres and files on disk. The intelligence only shows up
 later, at read time, when a language model is handed a small selection of
 those rows and asked to answer with them. This is the single most useful
@@ -34,7 +34,7 @@ and each rung adds a layer of interpretation:
 | 1 | `sources` | A unique file you gave it, identified by fingerprint | Ingestion |
 | 2 | `episodes` | One memory event: the readable body of that file, with a time | Ingestion |
 | 3 | `chunks` | Small searchable pieces of an episode, each with an embedding | Indexing |
-| 4 | `claims`, `observations` | Things you asserted, and things the world recorded | The nightly loop |
+| 4 | `claims`, `observations` | Things you asserted, and things the record observed | Learning passes and connectors |
 | 5 | `beliefs` | Durable conclusions about how you work | Reflection |
 
 Walk one note up the ladder. Say you drop `goa-trip.md` containing a journal
@@ -48,8 +48,9 @@ reflection may form the `beliefs` row "wants long unstructured mornings
 before screen time" (rung 5). The original words are never altered by any of
 this; higher rungs only ever point back down with ids.
 
-Chat and ask answer from rung 3. The Mind tab and `ed companion beliefs`,
-`claims` and `observations` show rungs 4 and 5.
+Chat and ask retrieve rung 3, then can also add matching beliefs and
+observations from rungs 4 and 5 to their evidence. The Mind tab and
+`ed companion beliefs`, `claims` and `observations` expose the derived rungs.
 
 ## Sources versus episodes
 
@@ -61,19 +62,24 @@ preserved original in the vault, and the byte count. The fingerprint column
 is unique, which is the whole deduplication mechanism.
 
 An **episode** answers "what happened, and when?". It stores the readable
-text (`body_original`), the kind (`md`, `pdf` or `voice`), a title, the
-language, and two timestamps: `occurred_at`, when the content happened in
+text (`body_original`), a kind, a title, the language, and two timestamps:
+`occurred_at`, when the content happened in
 your life, and `ingested_at`, when the companion received it. Search,
 chunking, claims and reflection all operate on episodes; they never go back
 to the raw file.
+
+Direct file ingestion uses `md`, `pdf`, `voice`, `image` and `video` kinds.
+Other paths add kinds such as `standup` and `inquiry`, and import preserves
+the kind stored in the bundle.
 
 Today the relationship is one-to-one, but keeping them separate means one
 source could later produce several episodes (say, one per journal heading)
 without changing the model.
 
-## Append-only, on purpose
+## Append-only originals, revisable conclusions
 
-Nothing in memory is ever edited in place:
+Sources and episodes are append-only. Derived conclusions can change status
+or be superseded as new evidence arrives:
 
 - Episodes are immutable. There is no update endpoint and no update SQL.
 - If you edit a note on disk and drop it again, its text hashes differently,
@@ -106,7 +112,8 @@ always produces the same output, and any change to the input, even one
 character, produces a completely different output. Finding two different
 inputs with the same output is computationally out of reach, so in practice
 the hash is a unique fingerprint of the content. The companion hashes the
-text of Markdown files and the raw bytes of PDF and audio files, and treats
+text of Markdown files and the raw bytes of PDF, audio, image and video files,
+and treats
 "same fingerprint" as "same memory".
 
 ## The vault: originals, kept forever
@@ -122,20 +129,23 @@ fingerprint, a scheme called content-addressed storage:
 The two-character prefix just spreads files across subdirectories so no
 single directory grows huge. Because the path is the fingerprint, writing is
 naturally idempotent: if the path already exists, the content is already
-there, byte for byte, and the write is skipped. Nothing in the vault is ever
-overwritten or deleted.
+there, byte for byte, and the write is skipped. Nothing in the vault is
+overwritten. User-directed `erase` and `wipe` operations remove the
+corresponding originals.
 
-The vault matters for two reasons. First, honesty: the episode body for a PDF
-or a voice memo is an extraction or a transcription, in other words a lossy
+The vault matters for two reasons. First, honesty: the episode body for a PDF,
+voice memo, image or video is an extraction, transcription or caption, in
+other words a lossy
 copy, and the vault keeps the ground truth it came from. Second, playback:
 `GET /v1/episodes/{id}/media` streams the vault file back out, which is how
-the app shows a real PDF page and plays your actual recording rather than
-just its transcript.
+the app shows the original PDF, photo or video and plays your actual recording
+rather than only showing derived text.
 
 ## Where every byte physically lives
 
-The backend runs as five containers, and all state sits in named volumes on
-that machine:
+The base backend runs as five containers, and its durable runtime state sits
+in named volumes on that machine. GPU profiles can add a reranker service and
+cache volume.
 
 | What | Where | Volume |
 | --- | --- | --- |
@@ -144,10 +154,11 @@ that machine:
 | The embedding model | Ollama's model cache | `companion-ollama` |
 | The speech-to-text model | whisper.cpp's model dir | `companion-whisper` |
 
-On your Mac the companion stores exactly one thing: the endpoint URL, in the
-shared defaults suite. No notes, no keys, no memory. The API key for the
-reasoner lives in the `settings` table on the backend, and the server only
-ever returns its last four characters as a hint.
+The client Mac stores the app's endpoint, the CLI's deployment and stack
+configuration, a small upload outbox, and any stack secrets saved in Keychain.
+The remembered episodes, observations, beliefs and conversations remain on
+the deployed backend. A reasoning key set through `ed companion reason` lives
+in the backend `settings` table, and the server returns only a masked hint.
 
 Two footnotes about the container stack. Redis is present and health-checked
 but nothing uses it yet; it is capacity for future queues, not a load-bearing
@@ -162,14 +173,14 @@ typed columns, and you query it with SQL. pgvector is an extension that adds
 a vector column type, so a row can carry a list of numbers (an embedding,
 explained properly in [chunks, embeddings and search](./concepts-search.md))
 and be queried by "which rows are nearest to this vector?". Using one
-database for both ordinary rows and vector search keeps every memory
-operation transactional: an episode and its chunks either all commit or none
-do.
+database for both ordinary rows and vector search lets indexing commit all of
+one episode's chunks in a transaction. If embedding fails, that episode keeps
+zero chunks and remains pending for a later pass.
 
 ## Reading on
 
 - [Ingestion](./concepts-ingestion.md): the exact path from a dropped file to
-  an episode, for all three media.
+  an episode, for all five media.
 - [Chunks, embeddings and search](./concepts-search.md): how text becomes
   numbers and how nearest-neighbour search works.
 - [Asking and chatting](./concepts-chat.md): how memory turns into grounded

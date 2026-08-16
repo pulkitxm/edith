@@ -8,7 +8,7 @@ ed extensions disable <id> [--json]
 
 | Argument | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `id` | one of the twelve ids, or a defaults key | required | The extension to turn off |
+| `id` | one of the fourteen ids, or a defaults key | required | The extension to turn off |
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |

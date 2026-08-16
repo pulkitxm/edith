@@ -34,10 +34,10 @@ walks, and its order is the order `ls` prints. Sixteen entries, in this order:
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
-| `companion` | Companion | Agent | Notes, voice memos and activity, remembered and searchable |
+| `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
-| `lidAwake` | Lid Awake | System | Keep running with the lid shut, with timed and battery-aware sessions |
+| `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `music` | Music | Media | Plays your local music folder, with media keys |
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
@@ -70,6 +70,27 @@ five the welcome tour shows before you ask it for all of them.
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none |
 | `hyperKey` | `hyperKeyEnabled` | no | `accessibility` | none | none |
 | `scratchpad` | `scratchpadEnabled` | no | none | none | none |
+
+The JSON form also exposes the platform capability registry. Capabilities are
+not permission ids. They say which implementation an extension requires from
+the current platform, and which missing implementations merely degrade it:
+
+| ID | Required capabilities | Optional capabilities |
+| --- | --- | --- |
+| `usage` | `usageCollection` | `notifications` |
+| `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
+| `machines` | `machineManagement` | `notifications` |
+| `companion` | `companionService` | none |
+| `systemStats` | `systemMetrics` | none |
+| `micMute` | `microphoneControl` | `globalShortcuts` |
+| `lidAwake` | `preventSleep` | none |
+| `music` | `localMusicPlayback` | `mediaControls` |
+| `calendar` | `calendarEvents` | none |
+| `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
+| `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
+| `focusDim` | `windowDimming` | none |
+| `presenter` | `screenShareDetection` | none |
+| `colorPicker` | `screenColorSampling` | `globalShortcuts` |
 
 An id is matched exactly and case-insensitively against the `ID` column first,
 then against the `Key` column, so `ed extensions info clipboard`,

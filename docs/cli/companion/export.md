@@ -27,6 +27,21 @@ ed companion export ~/backups/companion --include-media
 ed companion export /tmp/before-wipe --json
 ```
 
+`--json` shape:
+
+```json
+{
+  "counts": {
+    "beliefs": 17,
+    "episodes": 42,
+    "observations": 64
+  },
+  "directory": "/Users/me/backups/companion",
+  "mediaFailed": [],
+  "mediaSaved": 39
+}
+```
+
 Tokens and API keys never leave the companion: the bundle carries the reasoner
 provider, URL and model, but not its key and not the connector tokens. Without
 `--include-media` the bundle still lists every media file it left behind, and
@@ -35,6 +50,14 @@ the backup. The bundle restores with
 [`ed companion import`](./import.md), and importing is idempotent, so exporting
 before a risky operation is cheap insurance. Media files land as
 `media/<sha256>-<name>`, which is exactly the layout import expects.
+
+The destination directory may already exist. `bundle.json` and media files
+with matching names are overwritten; unrelated or stale files are not removed.
+Export validates that the API response decodes as a companion manifest before
+writing it. A media download failure does not discard the bundle or fail the
+whole command: failed basenames appear in `mediaFailed` and in a stderr note.
+For a complete backup, require that `mediaFailed` is empty and compare
+`mediaSaved` with the length of the `media` manifest in `bundle.json`.
 
 ## Where to go next
 

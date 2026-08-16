@@ -85,8 +85,6 @@ Permissions pane opens with, and is writable.
 
 ## Commands
 
-## Commands
-
 - [`ed permissions ls`](./ls.md)
 - [`ed permissions request`](./request.md)
 - [`ed permissions refresh`](./refresh.md)

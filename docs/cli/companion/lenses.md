@@ -1,9 +1,8 @@
 # `ed companion lenses`
 
-Prints what each lens has learned about being useful to you in its role. Not what it
-knows about you: the shared memory holds that, and fragmenting memory per lens would
-be a mistake. This is the note that records when you take a nudge and when you ignore
-one, when you want to be left alone, and what kind of pushback lands.
+Prints each lens's short nightly note about how to be useful in its role. Shared
+memory still holds what the companion knows about you; lens notes do not fragment
+that memory.
 
 Usage:
 
@@ -13,11 +12,11 @@ ed companion lenses [--json] [--endpoint <url>]
 
 `--json` shape: an array of `{persona, content, updatedAt, updatedBy}`.
 
-Who writes these matters. The nightly agent does, from the conversation episodes,
-exactly like every other derived memory. A lens never edits its own note mid
-conversation, for the same reason the chat agent cannot write to beliefs: your worst
-moments should be recorded, and should not get to rewrite the model of who you are
-without a cooler pass over them.
+The nightly pass writes these from up to 25 turns with that lens in the previous
+seven days. For each turn it sees your query, grounding score, abstention flag and
+date, but not the answer or an explicit reaction from you. It needs at least three
+turns before writing and trims the result to 90 words. A lens never edits its own
+note mid conversation.
 
 ## Where to go next
 

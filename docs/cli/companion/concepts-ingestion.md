@@ -3,12 +3,12 @@
 Part of [how the companion works](./concepts.md), under
 [`ed companion`](./README.md) in [the CLI reference](../README.md). This page
 follows a file through the front door: how it is fingerprinted, deduplicated,
-preserved, read, dated and titled, for each of the three media the companion
+preserved, read, dated and titled, for each of the five media the companion
 accepts.
 
 ## The ways in
 
-Everything enters through three HTTP routes, and every client funnels into
+Everything enters through five HTTP routes, and every client funnels into
 them:
 
 | Route | Accepts | Used by |
@@ -16,18 +16,20 @@ them:
 | `POST /v1/ingest` | Markdown text, up to 200 files per call | `ed companion ingest`, drops on the app, the Capture screen's typed notes |
 | `POST /v1/ingest/pdf` | One PDF as base64 bytes | drops and `ed companion ingest` on `.pdf` files |
 | `POST /v1/ingest/audio` | One recording as base64 bytes | drops, `ed companion ingest` on audio, the Capture screen's voice notes |
+| `POST /v1/ingest/image` | One photo as base64 bytes | drops and `ed companion ingest` on supported images |
+| `POST /v1/ingest/video` | One video as base64 bytes | drops and `ed companion ingest` on supported videos |
 
-The size limits are enforced on both sides: Markdown files up to 2 MB each,
-PDF and audio up to 48 MB each. The CLI's folder scan walks recursively,
-skips hidden files, keeps names relative to the folder you pointed it at, and
-batches Markdown 200 at a time while sending PDFs and audio one by one.
+The CLI rejects Markdown over 2 MB, audio, PDF and image files over 48 MB, and
+video over 768 MB before a request. Its folder scan walks recursively, skips
+hidden files, keeps names relative to the selected folder, batches Markdown
+200 at a time, and sends every binary file one by one.
 
 ## Step one, always: the fingerprint
 
 The first thing the server does with any file is compute its SHA-256 hash
 (a content fingerprint, see [memory](./concepts-memory.md) for the one
-paragraph version). For Markdown the hash covers the text; for PDF and audio
-it covers the raw bytes.
+paragraph version). For Markdown the hash covers the text; for every binary
+format it covers the raw bytes.
 
 The `sources` table has a uniqueness rule on that fingerprint, so the check
 is one lookup: if a source with this hash already exists, the answer is
@@ -37,21 +39,23 @@ cheap. This also defines identity: the companion does not care about
 filenames or paths, only content. The same note under two names is one
 memory; the same name with edited content is two.
 
-Each new file is processed inside its own database transaction: the vault
-write, the `sources` row and the `episodes` row all land together or not at
-all, so a failure mid-batch can never leave half a memory behind.
+Each new file gets its own database transaction for the `sources` and
+`episodes` rows, so a database failure cannot commit half a memory. The vault
+is a filesystem rather than part of that transaction. Its content-addressed,
+create-once path makes retries safe, though a database failure after the file
+write can leave an unreferenced vault object.
 
 ## Step two: preserve the original
 
 Before any parsing, the exact bytes go into the vault at a path derived from
 the fingerprint (`/vault/objects/<xx>/<sha256>/<name>`). Parsing and
 transcription are lossy; the vault write means the ground truth is safe
-before anything lossy happens, and it is what the app later streams back for
-PDF previews and audio playback.
+before anything lossy happens, and it is what the app or CLI later downloads
+for opening and playback.
 
 ## Step three: turn the file into an episode
 
-From here the three media diverge.
+From here the five media diverge.
 
 ### Markdown
 
@@ -123,9 +127,37 @@ as the scanned PDF: a memory with no findable text is worse than a clean
 failure. Transcription failures surface as HTTP 502, "the helper service
 failed", distinct from 422, "your file is unusable".
 
-## Step four, voice only: signals
+### Photos
 
-Right after a voice episode commits, the companion computes **signals**,
+JPEG, PNG, HEIC, HEIF, WebP and GIF files go to the configured vision model.
+The episode body is the model's caption followed by a plain-text line of
+capture details. When `exiftool` is installed, those details can include the
+original capture time, GPS coordinates and camera model; the parent folder is
+also kept as an album hint. EXIF capture time wins over file mtime for
+`occurred_at`. The original image remains in the vault and `media_ref` marks
+it as retrievable.
+
+A missing or unresponsive vision model makes image ingestion fail rather than
+inventing an empty caption. `ed companion doctor` checks that the configured
+vision model is actually pulled, not merely that the endpoint answers.
+
+### Video
+
+MP4, MOV, M4V, MKV, WebM and AVI files use `ffmpeg` and `ffprobe`. The backend
+extracts mono 16 kHz audio and transcribes it when speech exists. Separately,
+it detects scene changes, keeps frames at least 10 seconds apart up to a cap of
+200, and asks the vision model to caption those frames. The episode body joins
+the transcript with timestamped visual captions. A silent video explicitly
+says that no speech could be transcribed, rather than failing.
+
+The video duration, speech segments and keyframe captions live in episode
+metadata. The same delivery signals used for voice are computed when segments
+exist. Video is the heaviest ingest path and can run for up to 15 minutes from
+the CLI before timing out.
+
+## Step four, spoken media: signals
+
+Right after a voice or video episode commits, the companion computes **signals**,
 simple numeric observations about the delivery of your speech, straight from
 the segment timings, no ML involved:
 
@@ -161,7 +193,7 @@ closes the gap by hand.
 | `ingested` | New memory, episode created, indexing nudged |
 | `duplicate` | Content already known, nothing written |
 | HTTP 422 | The file itself is unusable: empty text, scanned PDF |
-| HTTP 502 | A helper service failed: whisper unreachable, transcription error |
+| HTTP 502 | A helper failed: speech-to-text, vision, `ffmpeg`, or another media dependency |
 | Exit 4 from `ed` | The backend itself is unreachable |
 
 ## Reading on

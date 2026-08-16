@@ -11,8 +11,14 @@ ed companion facts [--as-of <date>] [--timeline valid|believed] [--limit <n>]
                    [--json] [--endpoint <url>]
 ```
 
-Without `--as-of` you get everything, newest first. With it, the two timelines answer
+`--timeline` defaults to `valid`, `--limit` defaults to 30 and must be positive, and
+any value other than `valid` or `believed` is refused. Without `--as-of` you get the
+newest records without an as-of filter. With it, the two timelines answer
 genuinely different questions:
+
+`--as-of` accepts `YYYY-MM-DD` or a full RFC 3339 timestamp. The backend currently
+treats an unparseable value as though the option were omitted, so validate scripted
+input before relying on an as-of result.
 
 | Timeline | Question it answers |
 | --- | --- |

@@ -95,7 +95,7 @@ also the belief life-cycle in [the learning loop](./concepts-learning.md),
 is this one operation: embed something, find the arrows with the smallest
 angle to it.
 
-## Step four: finding the nearest arrows fast
+## Step four: finding vector candidates fast
 
 Comparing the question against every chunk works, but grows linearly: at a
 hundred thousand chunks every search touches a hundred thousand vectors. The
@@ -120,7 +120,35 @@ halving storage and index size again. Embedding coordinates do not need many
 digits of precision; direction is what carries the meaning. Chunks have an
 HNSW index over their vectors, and so do beliefs.
 
-## Step five: when indexing runs
+## Step five: fuse the retrieval channels
+
+Vector similarity is only one channel now. A search builds a candidate pool
+from three independent views of the same memory:
+
+1. The vector channel asks HNSW for up to 50 semantically nearest chunks.
+2. The keyword channel asks Postgres full-text search, with a literal substring
+   fallback, for up to 50 lexical matches.
+3. The graph channel follows entity names and aliases to mentioned episodes,
+   then takes up to 25 recent chunks from them.
+
+Each list contributes reciprocal-rank points, which reward appearing near the
+top without pretending scores from different channels are directly comparable.
+The graph contribution is weighted at 0.7. The combined score is then adjusted
+by chunk salience and a gentle recency curve whose half-life is roughly 180
+days. Old memory can still win; age never makes its score zero.
+
+If `RERANK_URL` is configured and there are more candidates than requested,
+the companion sends the fused pool to the configured reranker, default model
+`qwen3-reranker:0.6b`, and uses those relevance scores for final order. A
+missing reranker is an optional doctor check and leaves the fused order intact.
+A reranker failure also falls back to fusion rather than failing the search.
+
+Persona policies can constrain source kinds and time windows, change salience
+weighting, include contested beliefs, or disable the graph, belief and
+observation channels. The plain `ed companion search` command uses the default
+policy: all episode kinds, no time cutoff, graph enabled, 8 final chunks.
+
+## Step six: when indexing runs
 
 Chunking plus embedding is called **indexing**, and its trigger model is
 unusually simple. There is no file watcher, no change detection, no queue.
@@ -155,12 +183,12 @@ remain pending and are retried by the next pass.
 3. Return each chunk with its episode title, date, kind, a snippet, and the
    similarity score.
 
-Two honest footnotes. First, retrieval is **vector-only** today: every chunk
-also carries a `tsvector`, Postgres's classic keyword-search structure, with
-a matching index, and the telemetry tables even reserve a column for a text
-score, but nothing queries them yet. The plumbing for hybrid search (meaning
-plus keywords, fused) is laid and dry. Second, there is no recency weighting
-and no reranking model; the 8 nearest by meaning win, whatever their age.
+The returned `score` is the optional reranker score when reranking ran,
+otherwise the fused score. Search telemetry records the candidate channels,
+their component scores and final ranks. The current public search response
+still labels every result `kind: "chunk"` and sets `ord` to `0`; use
+`episodeId` and `chunkId` as the stable identities rather than treating those
+two compatibility fields as source metadata.
 
 ## Reading on
 

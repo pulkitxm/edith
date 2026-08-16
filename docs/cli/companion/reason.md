@@ -9,6 +9,7 @@ Usage:
 ```
 ed companion reason [show] [--json] [--endpoint <url>]
 ed companion reason set [--provider <p>] [--model <m>] [--url <u>] [--api-key <k>]
+                        [--json] [--endpoint <url>]
 ed companion reason test [--json] [--endpoint <url>]
 ```
 
@@ -16,10 +17,15 @@ Options for `ed companion reason set`:
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--provider` | `anthropic` or `openai` | unchanged | Which API shape to speak; `openai` covers any OpenAI-compatible server such as Ollama. |
+| `--provider` | supported provider id | unchanged | Which API shape to speak; `openai` covers any OpenAI-compatible server such as Ollama. |
 | `--model` | model name | unchanged | Model to request; empty resets to the provider default. |
 | `--url` | URL | unchanged | Base URL for the OpenAI-compatible provider. |
-| `--api-key` | secret | unchanged | Stored in the backend's settings table, never on this Mac; empty clears it. |
+| `--api-key` | secret | unchanged | Stored in the backend's settings table, not the CLI config; empty clears it. |
+
+At least one setting option is required. Empty values remove that saved
+override and expose the provider's environment or built-in default again.
+`--json` returns the same masked settings object as `show`; it never echoes the
+key supplied on the command line.
 
 `ed companion reason show` (also the bare default) prints the active provider,
 model, URL, whether a key is set with its last-four hint, and whether the
@@ -29,7 +35,8 @@ returned.
 
 `ed companion reason test` sends one tiny completion through the active
 provider and reports the round-trip: `{ok, model, latencyMs}` under `--json`,
-exit `4` with the provider's error when the call fails.
+exit `1` with the provider's error when the backend reports failure. Failure to
+reach the companion API itself exits `4`.
 
 ## Where to go next
 

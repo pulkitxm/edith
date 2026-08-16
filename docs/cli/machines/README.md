@@ -132,8 +132,6 @@ reads and writes.
 
 ## Commands
 
-## Commands
-
 - [`ed machines ls`](./ls.md)
 - [`ed machines show`](./show.md)
 - [`ed machines add`](./add.md)

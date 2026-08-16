@@ -13,9 +13,9 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 | `--limit` | 1 to 200 | 20 | How many observations to list. |
-| `--kind` | `commit`, `pull_request`, `issue`, `review` | all | Only this observation kind. |
+| `--kind` | stored kind string | all | Only this exact observation kind. |
 
 `--json` shape:
 
@@ -31,7 +31,11 @@ Options:
 ]
 ```
 
-Each item is one observed action: `source` names the connector, `kind` the action type, `summary` a one-line rendering, and `observedAt` when it happened. Newest first.
+Each item is one observed action: `source` names the connector, `kind` the
+action type, `summary` a one-line rendering, and `observedAt` when it happened.
+Newest comes first. GitHub produces `commit`, `pull_request`, `issue` and
+`review`; file imports add `meeting`, `meeting_moved`, `play` and `watch`;
+Edith usage can add its own exact kind strings.
 
 Examples:
 
@@ -41,7 +45,11 @@ $ ed companion observations --kind commit --limit 3
 1  commit  pulkitxm/edith 72d2aeb Route audio files ...  2026-08-09T09:12:44Z
 ```
 
-Behaviour: read-only; an empty record prints a quiet line. Observations are what corroboration will check your claims against, so they never come from anything you wrote for the companion.
+Behaviour: read-only; an empty record prints `no observations yet`.
+Observations are what corroboration checks claims against, so they come from
+connectors and usage records, not from notes ingested as episodes. Notion live
+sync is the exception among connectors in storage shape: it writes Markdown
+episodes, not observation rows.
 
 ## Where to go next
 

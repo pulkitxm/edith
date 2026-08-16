@@ -3,6 +3,17 @@
 `ed machines thermal set <machine> <profile>` changes the Linux platform
 profile. With no duration it stays selected until another profile is applied.
 
+```
+ed machines thermal set <machine> <profile> [--minutes <count>] [--json]
+```
+
+| Name | Type / values | Default | What it does |
+| --- | --- | --- | --- |
+| `<machine>` | machine name, SSH alias, UUID or unambiguous prefix | required | Which machine to change. |
+| `<profile>` | an exact choice reported by the machine | required | Profile to apply. Names are case-sensitive. |
+| `--minutes` | integer from `0` through `10080` | `0` | Revert after this many minutes. Zero keeps the profile until changed. |
+| `--json` | flag | off | Emit one result object on stdout. |
+
 ```sh
 ed machines thermal set tuf performance
 ed machines tuf thermal set performance --minutes 30
@@ -19,9 +30,29 @@ profile that is not in that list. A permanent change cancels a pending timed
 reversion. A second temporary change replaces the timer while preserving the
 original destination.
 
-JSON returns `machine`, `profile`, `temporary` and `minutes`. A privilege error
-exits 1 with a hint explaining how to store a sudo password. An unknown profile
-exits 3 and lists the machine's valid choices. Missing platform profile support
-or `systemd-run` exits 4.
+JSON returns `machine`, `profile`, `temporary` and `minutes`:
+
+```json
+{
+  "machine": "Asus TUF 7",
+  "minutes": 30,
+  "profile": "performance",
+  "temporary": true
+}
+```
+
+The command first performs the same 15-second read as `status`, then gives the
+write 30 seconds. `--minutes` outside the accepted range exits 2 before the
+machine is resolved. An unknown profile exits 3 and lists the machine's valid
+choices. An unknown or ambiguous machine also exits 3. An unreachable machine
+or missing readable platform profile support exits 4.
+
+After validation, any remote write failure exits 1. This includes a refused
+sudo password, missing write privilege, `systemd-run` missing for a temporary
+profile, timer creation failure, or platform support disappearing between the
+read and write. Privilege failures include a hint to store or replace the sudo
+password. If timer creation fails after the profile write, the remote script
+restores the original profile and removes its saved state before reporting the
+failure.
 
 [Back to `ed machines thermal`](./README.md) or [all CLI commands](../README.md).

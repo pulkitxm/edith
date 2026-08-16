@@ -57,8 +57,8 @@ companion. You can tell it you shipped; only the record can show it. That
 separation is the entire point, because it gives corroboration something you
 cannot accidentally, or conveniently, author yourself.
 
-Today the one connector is GitHub. A sync (nightly, or `ed companion sync`)
-pulls up to 300 of your recent public events and keeps four kinds:
+GitHub live sync pulls up to 300 recent authenticated-user events and keeps
+four kinds:
 
 | Kind | From | Dedupe key |
 | --- | --- | --- |
@@ -69,8 +69,10 @@ pulls up to 300 of your recent public events and keeps four kinds:
 
 Every observation carries a dedupe key with a uniqueness rule behind it, so
 syncing is idempotent: running it twice never double-counts a commit. The
-same shape (source, kind, timestamp, payload, dedupe key) is ready for
-future connectors like calendars or health data.
+same shape also holds imported calendar meetings, reschedules, music plays and
+video watches, plus Edith usage records. Notion live sync follows a different
+path: it renders pages as Markdown and ingests them as episodes because a page
+is authored memory, not independent behavioral evidence.
 
 ## Corroboration: claims meet reality
 
@@ -133,17 +135,16 @@ A scheduler starts with the server and fires once a day at
 `COMPANION_REFLECT_AT`, default 02:00 in the server's local timezone (a
 seconds-based interval override exists for testing, and the schedule is read
 once at boot, so changing it needs a restart). The steps run in dependency
-order:
+order: sync GitHub, sync Notion, index, rescore baselines, extract claims,
+resolve entities, extract temporal facts, corroborate, track commitments,
+score calibration, reflect, resolve due predictions, form hypotheses, rewrite
+core memory, rewrite lens notes and rank questions.
 
-1. `sync_github`: fetch fresh observations.
-2. `index`: chunk and embed any pending episodes.
-3. `extract_claims`: mine new episodes for assertions.
-4. `corroborate`: judge testable claims against observations.
-5. `reflect`: distill and reconcile beliefs.
-
-A step whose prerequisite is missing (no GitHub token, no reasoner
-configured) records itself as **skipped** rather than failing the run, so a
-half-configured companion still indexes every night. Each run stores its
+Missing connector tokens record successful skipped sync steps. A missing
+reasoner records a successful `reasoning` skip after baselines and ends the run
+there, so a partly configured companion still syncs and indexes every night.
+Other failures are recorded per step and make the overall run unsuccessful,
+while later independent steps still get a chance to run. Each run stores its
 start, finish, overall result and per-step outcomes in `nightly_runs`;
 `ed companion runs` lists them and the Mind tab renders the latest run as
 step chips. `ed companion nightly` runs the identical pipeline on demand and

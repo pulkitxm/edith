@@ -1,6 +1,7 @@
 # `ed companion ingest`
 
-Scans Markdown, audio recordings and PDFs and posts them to the companion.
+Scans Markdown, audio recordings, PDFs, photos and videos and posts them to the
+companion.
 
 Usage:
 
@@ -12,14 +13,14 @@ Arguments:
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<path>` | `.md`, audio or `.pdf` file, or a directory | required | Reads one file or recursively finds Markdown, audio (`.wav`, `.m4a`, `.mp3`, `.ogg`, `.flac`, `.aiff`) and PDFs below a folder. |
+| `<path>` | supported file or directory | required | Reads one file or recursively finds supported files below a folder. |
 
 Options:
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 `--json` shape:
 
@@ -68,16 +69,29 @@ $ ed companion ingest ./notes --json
 }
 ```
 
-Behaviour: a directory walk is recursive, skips hidden files, and sorts names
-before upload. The file modification time is sent as a fallback event time.
-Markdown larger than 2MB and audio larger than 48MB are skipped with a note on
-stderr. No matching file is a usage error. Markdown is posted in batches of at
-most 200; audio uploads one file at a time and waits while the companion
-transcribes it with whisper.cpp, so a long recording takes a while. The
-transcript becomes the episode body with kind `voice`, the detected language,
-the duration, and per-segment timings kept in the episode metadata. PDFs upload
-one at a time and land as kind `pdf` with their extracted text as the body;
-scanned PDFs without a text layer are rejected with a clear error.
+Supported extensions are:
+
+| Kind | Extensions | Limit | Episode body |
+| --- | --- | --- | --- |
+| Markdown | `.md` | 2 MB | Original text, including front matter. |
+| Audio | `.wav`, `.m4a`, `.mp3`, `.ogg`, `.flac`, `.aiff` | 48 MB | whisper.cpp transcript, with language, duration and timed segments in metadata. |
+| PDF | `.pdf` | 48 MB | Extracted text. Image-only PDFs are rejected because there is no OCR path. |
+| Photo | `.jpg`, `.jpeg`, `.png`, `.heic`, `.heif`, `.webp`, `.gif` | 48 MB | Vision caption plus available EXIF capture details. |
+| Video | `.mp4`, `.mov`, `.m4v`, `.mkv`, `.webm`, `.avi` | 768 MB | Speech transcript plus captions from scene-change keyframes. |
+
+Behaviour: a directory walk is recursive, skips hidden files, and sorts each
+kind by relative name before upload. The file modification time is sent as a
+fallback event time. Oversized files are skipped before any request and named
+on stderr. No supported file is a usage error. Markdown is posted in batches
+of at most 200; every binary file is uploaded individually.
+
+Audio waits for speech-to-text. Photos wait for the configured vision model.
+Video requires `ffmpeg` and `ffprobe`, extracts mono audio when possible,
+transcribes it, detects scene changes, spaces retained keyframes by at least 10
+seconds, caps them at 200, and captions them with the vision model. A video can
+still be stored when no speech is found. `exiftool` is optional for capture
+metadata. All original bytes stay in the vault and all new episodes are queued
+for background indexing.
 
 ## Where to go next
 

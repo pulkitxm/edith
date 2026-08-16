@@ -152,7 +152,13 @@ public enum Guide {
         ed machines power wake box              works while it is off
         ed machines services restart box nginx.service
         ed machines kill box 4213 --signal KILL
+        ed machines thermal status box          active platform profile and choices
+        ed machines thermal set box performance --minutes 30
         ```
+
+        Thermal controls use the Linux platform profile exposed by the machine.
+        A timed profile change schedules its reversion on that machine, so it still
+        restores the previous profile if Edith closes or the SSH connection drops.
 
         The machine name comes first, subject then verb. The older order with the
         machine last still parses, so `ed machines docker ps tuf` keeps working. A
@@ -190,24 +196,31 @@ public enum Guide {
 
         ## Companion memory
 
-        The companion stores Markdown notes as append-only episodes. Run its stack
-        from apps/companion, or point the CLI at a forwarded backend.
+        The companion stores Markdown notes as append-only episodes. `ed` can choose
+        a capable machine, deploy the stack there, keep its port forward open, and
+        use that deployment for every memory command.
 
         ```
+        ed companion hosts                      machines that can run the stack
+        ed companion deploy tuf                 install, start and remember its host
+        ed companion stack status               host, tier, services and ports
         ed companion status                     counts and latest ingest
         ed companion doctor                     postgres, redis and vault checks
         ed companion search "launch plan"        search indexed memory
         ed companion ingest ./notes --json      ingest a Markdown tree
-        ed companion chat "how was my week"      streamed chat with citations
+        ed companion chat "how was my week" --persona analyst
         ed companion conversations              list chats, replay one by id
         ed companion episode <id>               read one episode in full
         ed companion reason set --api-key sk-x  configure the reasoner in place
         ed companion nightly                    run the learning pipeline now
-        ed companion export ~/backup            everything, as a restorable bundle
+        ed companion export ~/backup --include-media
         ed companion import ~/backup            put a bundle back, idempotently
         ed companion erase <id> --yes           delete one episode for good
         ed companion wipe --yes                 delete the whole memory
         ```
+
+        `ed companion stack down` keeps memory by default. `--wipe` removes the
+        stack volumes, so export a restorable bundle before using it.
 
         ## Usage and limits
 

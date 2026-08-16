@@ -47,7 +47,7 @@ that id, and an agent that ran on this Mac carries no machine at all.
   },
   {
     "default": true,
-    "id": "asus-tuf-7:cli",
+    "id": "machine:4303dcf1-52d8-4075-ae9b-c2fd86d3821a:cli",
     "label": "Claude Code · Asus TUF 7",
     "machine": "Asus TUF 7",
     "machineID": "4303DCF1-52D8-4075-AE9B-C2FD86D3821A",
@@ -75,6 +75,11 @@ that id, and an agent that ran on this Mac carries no machine at all.
 `default` says whether the id is in the file's `defaultSources`, which is the
 set the dashboard pre-selects. It is not a filter `ed` applies anywhere: every
 read command counts every source unless you pass `--source`.
+
+A machine source id is `machine:<lowercase-machine-uuid>:<agent>`. Its readable
+machine name is metadata, not identity, so renaming or reconnecting a machine
+does not change the source id. `--machine` is usually easier than spelling this
+id: it resolves a configured machine and selects every source with that UUID.
 
 ## Examples
 
@@ -104,7 +109,7 @@ ID              LABEL                     TOOL          MACHINE
 cli             Claude Code               Claude Code   this Mac
 codex           Codex                     Codex         this Mac
 commandcode     Command Code              Command Code  this Mac
-asus-tuf-7:cli  Claude Code · Asus TUF 7  Claude Code   Asus TUF 7
+machine:4303dcf1-52d8-4075-ae9b-c2fd86d3821a:cli  Claude Code · Asus TUF 7  Claude Code   Asus TUF 7
 opencode        OpenCode                  OpenCode      this Mac
 cowork          Cowork                    Claude Code   this Mac
 ```

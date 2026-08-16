@@ -28,8 +28,6 @@ request to the app.
 
 ## Commands
 
-## Commands
-
 - [`ed machines exec`](./exec.md)
 - [`ed <machine> <command...>`](./machine-command.md)
 - [`ed <machine> cd [<directory>]`](./machine-cd-directory.md)

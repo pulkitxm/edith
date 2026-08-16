@@ -14,7 +14,7 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 `--json` shape:
 
@@ -30,7 +30,8 @@ Options:
 }
 ```
 
-`sources` counts unique note bodies, `episodes` counts appended memory events,
+`sources` counts unique ingested contents across notes and binary media,
+`episodes` counts appended memory events,
 and `claims` and `observations` count derived records. `chunks` counts embedded
 search chunks, and `pendingEpisodes` counts episodes that have no chunks yet.
 `latestIngestedAt` is the most recent ingest time as an ISO 8601 string, or

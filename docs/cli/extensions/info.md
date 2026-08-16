@@ -8,7 +8,7 @@ ed extensions info <id> [--json]
 
 | Argument | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `id` | one of the twelve ids, or a defaults key | required | The extension to describe |
+| `id` | one of the fourteen ids, or a defaults key | required | The extension to describe |
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |
@@ -53,7 +53,13 @@ accepts (`inputMonitoring`, `screenRecording`).
   "id": "music",
   "key": "tabMusicEnabled",
   "missingRequiredPermissions": [],
+  "optionalCapabilities": [
+    "mediaControls"
+  ],
   "optionalPermissions": [],
+  "requiredCapabilities": [
+    "localMusicPlayback"
+  ],
   "requiredPermissions": [],
   "requiredTools": [
     "yt-dlp"
@@ -70,6 +76,8 @@ ed extensions info tabMachinesEnabled
 ```
 
 `info` is a pure read: no key is written and no notification is posted.
+The human form does not print capabilities or required tools. Use `--json` when
+you need those fields.
 
 ## Where to go next
 

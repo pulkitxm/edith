@@ -554,8 +554,8 @@ The whole file, from `Casks/edith.rb` in this repository:
 
 ```ruby
 cask "edith" do
-  version "0.0.76"
-  sha256 "add4ed7de0324e27b67f961a4b2f87dae67dc268b982218c2c85b66e0484e38b"
+  version "0.0.98"
+  sha256 "338f7aaad4714ad10e31e25174793d63f9e9415fa55e96ff2b5310cc2699e04d"
 
   url "https://github.com/pulkitxm/edith/releases/download/v#{version}/Edith.dmg",
       verified: "github.com/pulkitxm/edith/"
@@ -604,9 +604,9 @@ is the single most common way a tap breaks, and automating the pair together mak
 that failure impossible rather than merely unlikely.
 
 **`url`** interpolates `version` back into the release download path, so
-`0.0.76` produces
-`https://github.com/pulkitxm/edith/releases/download/v0.0.76/Edith.dmg`. Note the
-`v` prefix outside the interpolation: tags are `v0.0.76`, versions are `0.0.76`, and
+`0.0.98` produces
+`https://github.com/pulkitxm/edith/releases/download/v0.0.98/Edith.dmg`. Note the
+`v` prefix outside the interpolation: tags are `v0.0.98`, versions are `0.0.98`, and
 the cask holds the version, not the tag. The `verified:` parameter pins the host and
 path prefix so a redirect elsewhere fails.
 
@@ -646,15 +646,18 @@ consequential line in the file, for reasons in section 15.
 They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
 `com.pulkit.edith.statusbar` is `Resources/HelperInfo.plist`, and
 `com.pulkit.edith.files` is the Files helper, named in
+`Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift` and used by
 `Packages/Edith/Sources/EdithCLI/AppBridge.swift`.
 
 **`zap trash:`** covers the eight locations Edith writes outside its bundle. The
-support directory and cache come from `AppDirectories.swift`
+support directory and cache come from
+`Packages/Edith/Sources/EdithCore/AppDirectories.swift`
 (`~/Library/Application Support/Edith`, `~/Library/Caches/Edith`). The three
 preference domains are the three bundles plus the shared suite from
-`SharedDefaults.swift` (`com.pulkit.edith.shared`). `HTTPStorages`, the Sparkle
-cache under `com.pulkit.edith`, and saved application state are the standard
-macOS-side leftovers any Cocoa app accumulates.
+`Packages/Edith/Sources/EdithKit/Core/Defaults/SharedDefaults.swift`
+(`com.pulkit.edith.shared`). `HTTPStorages`, the Sparkle cache under
+`com.pulkit.edith`, and saved application state are the standard macOS-side
+leftovers any Cocoa app accumulates.
 
 ---
 
@@ -670,11 +673,12 @@ every push to `main`. Its `changes` job works out which areas a commit touched, 
 check jobs run for the areas that moved, and a final `release` job calls
 `.github/workflows/release.yml` as a reusable workflow.
 
-That `release` job is gated on four things at once: the event is a push to `main`,
-no needed job failed or was cancelled, and the commit touched the app or its Linux
-packaging. Checks and release are therefore the same run, and the release cannot
-start until every check that applies has gone green. There is no second workflow
-watching for a tag, and no tag trigger anywhere.
+That `release` job requires a push to `main`, a successful routing and policy job,
+no applicable job failure or cancellation, and a change to the macOS app or Linux
+package. The Ubuntu package, macOS build, Swift tests and Companion backend are each
+required when their routed area changed. Checks and release are therefore the same
+run, and the release cannot start until every applicable check has gone green.
+There is no second workflow watching for a tag, and no tag trigger anywhere.
 
 `ci.yml` skips itself when the head commit message starts with `Release v` or
 `Refresh the contributor list`, which is what stops the pipeline's own commits from
@@ -722,27 +726,36 @@ on `main`, where it used to cost two. And nothing is written until both builds h
 passed, so a failed build leaves no tag, no bumped version, and no cask pointing at a
 release that does not exist. The next merge simply tries the same version again.
 
-To rebuild a release that was published but whose assets need replacing, run the
-workflow by hand with `rebuild` set to the tag. That path builds from the tag and
-re-uploads the assets, and skips every step that writes to `main` or the tap.
+To rebuild the current release when its assets need replacing, run the Release
+workflow by hand from `main` with its required `rebuild` input set to that tag. The
+workflow builds from the tag, replaces the three release assets, commits a changed
+DMG checksum to `main` when necessary, and mirrors the cask to the tap. It refuses
+older tags. This path does not create a new version or move the existing tag.
+
+A new release cannot be cut from the Release workflow's manual entry point. To
+recover an automatic release that CI skipped, dispatch the CI workflow from `main`
+with its `release` input enabled. CI runs every routed product check and calls the
+reusable Release workflow with `cut_release: true` only after they pass.
 
 ---
 
 ## 13. The cask bump
 
-The cask rewrite, from the `publish` job in `.github/workflows/release.yml`:
+The `publish` job computes the disk image checksum and hands release-state updates
+to `scripts/publish-release-state.sh`:
 
-```yaml
-          SHA256="$(sha256sum release-assets/Edith.dmg | cut -d' ' -f1)"
-          sed -i \
-            -e "s/^  version \".*\"$/  version \"$RELEASE_VERSION\"/" \
-            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" \
-            Casks/edith.rb
-          grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
-            || { echo "release blocked: the cask version was not rewritten" >&2; exit 1; }
-          grep -qx "  sha256 \"$SHA256\"" Casks/edith.rb \
-            || { echo "release blocked: the cask sha256 was not rewritten" >&2; exit 1; }
+```bash
+RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
+export RELEASE_SHA256
+export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
+../scripts/publish-release-state.sh cut
 ```
+
+For a rebuild it exports the newly computed checksum and invokes the same script
+with `rebuild`. The script validates the tag, version and checksum; rewrites the
+cask through a temporary file; verifies both fields; and owns the appropriate git
+commit and push. Keeping those rules in a tested script lets CI exercise the cut
+and rebuild behavior without duplicating shell logic in the workflow.
 
 Design notes on the parts that are not obvious.
 
@@ -776,26 +789,20 @@ failure. A `sed` expression that matches nothing exits successfully, which is
 exactly the sort of thing that produces a tap pinned to an old version for months
 without anyone noticing.
 
-The commit step:
+The cut path in `publish-release-state.sh`:
 
-```yaml
-          for attempt in 1 2 3; do
-            git fetch origin main --tags
-            git reset --hard origin/main
-
-            cp release-plists/Info.plist Resources/Info.plist
-            cp release-plists/HelperInfo.plist Resources/HelperInfo.plist
-            # ... rewrite Casks/edith.rb ...
-
-            git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
-            git commit -m "Release ${RELEASE_TAG}"
-            git tag "$RELEASE_TAG"
-
-            if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
-              exit 0
-            fi
-            git tag -d "$RELEASE_TAG"
-          done
+```bash
+git fetch origin main --tags
+[[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]
+[[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]
+cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
+cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
+rewrite_cask
+verify_cask
+git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+git commit -m "Release ${RELEASE_TAG}"
+git tag "$RELEASE_TAG"
+git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
 ```
 
 **One commit.** The plists and the cask move together, so a release is a single
@@ -803,10 +810,11 @@ The commit step:
 plists are copied from the `dmg` job's artifact, so they are the same bytes that were
 built rather than a re-derived edit that could drift.
 
-**Reset and retry, not rebase.** `main` can move between checkout and push, since a
-release takes minutes. Each attempt resets to the current `origin/main` and reapplies
-the same files, which is deterministic in a way a rebase of an already made commit is
-not. Three attempts cover the realistic race without an unbounded loop.
+**Refuse a moving base.** `main` can move while a release builds. The script verifies
+that both its checkout and the latest `origin/main` still equal the commit CI built.
+If another change landed, the release stops before writing anything instead of
+combining checked artifacts with a different source revision. The next CI run can
+release the new head.
 
 **Atomic.** `git push --atomic` sends the branch and the tag as one update. Either
 both land or neither does, so there is no window in which `main` carries a version
@@ -823,11 +831,9 @@ The mirror step:
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
-          test -n "$TAP_PUSH_TOKEN" \
-            || { echo "cask mirror blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
           git clone --depth 1 \
             "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
-          cp Casks/edith.rb tap/Casks/edith.rb
+          cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
             echo "the tap already carries $RELEASE_TAG"
@@ -845,12 +851,11 @@ cannot push to a different repository, so a cross-repository push needs a creden
 of its own: a fine-grained personal access token scoped to `pulkitxm/homebrew-tap`
 with read and write access to contents, stored as `TAP_PUSH_TOKEN`.
 
-**Fail rather than skip.** The step refuses to run without the token instead of
-warning and continuing. A silent skip means the release is published, the cask in
-this repository is bumped, and the tap that users actually install from still points
-at the previous version, with nothing red anywhere to say so. Loud failure after
-publication is the better trade: the release is out, and the job that failed names
-exactly what is missing.
+**Fail rather than skip.** The version job refuses to start without the token, and
+the mirror step fails on any clone or push error. A silent skip could publish a
+release while leaving the tap that users install from on the previous version.
+Blocking before the build when the secret is absent, and failing loudly on a later
+transport error, keeps that drift visible.
 
 ---
 
@@ -964,9 +969,10 @@ the docs guard the cask.
 ### Cut a release
 
 Nothing Homebrew-specific to do. Merge to `main` and let CI call the release
-workflow after every required check passes. To rebuild an existing release, run
-the Release workflow manually with `rebuild` set to its tag. The `publish` job
-updates this repository and mirrors the cask to the tap.
+workflow after every required check passes. To rebuild the current release, run
+the Release workflow manually from `main` with `rebuild` set to its tag. The
+`publish` job refreshes the release assets, updates this repository if the checksum
+changed, and mirrors the cask to the tap.
 
 Confirm afterwards:
 
@@ -1065,14 +1071,15 @@ about which claims are tested and which are structural.
 **Verified directly:**
 
 - The cask is syntactically valid Ruby (`ruby -c Casks/edith.rb`).
-- The checksum in the cask is the SHA-256 of the published `Edith.dmg` for v0.0.76,
+- The checksum in the cask is the SHA-256 of the published `Edith.dmg` for v0.0.98,
   computed from the downloaded asset.
 - The URL the cask interpolates resolves to that published asset.
 - The tap repository clones and contains `Casks/edith.rb`, which is exactly what
   `ensure_installed!` does during an install.
 - The bundle identifiers in `uninstall quit:` match `Resources/Info.plist`,
-  `Resources/HelperInfo.plist` and `AppBridge.swift`.
-- The zap paths match `AppDirectories.swift` and `SharedDefaults.swift`.
+  `Resources/HelperInfo.plist`, `MainApp.swift` and `AppBridge.swift`.
+- The zap paths match `EdithCore/AppDirectories.swift` and
+  `EdithKit/Core/Defaults/SharedDefaults.swift`.
 - `ed` and `edh` exist at the linked paths inside the built bundle, asserted by
   `make verify-bundle`.
 - Homebrew's name resolution rules, quoted in sections 4 and 5, from

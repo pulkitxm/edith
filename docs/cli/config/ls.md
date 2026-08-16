@@ -12,7 +12,7 @@ ed config ls [<prefix>] [--group <group>] [--changed] [--json]
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--group` | one of `appearance`, `panel`, `usage`, `limits`, `menubar`, `alerts`, `budget`, `dashboard`, `machines`, `finder`, `system`, `cleaner`, `music`, `calendar`, `clipboard`, `notch`, `focusdim`, `presenter`, `colorpicker`, `micmute`, `backup`, `permissions`, `terminal` | none | Only settings in this group |
+| `--group` | one of `appearance`, `panel`, `usage`, `limits`, `menubar`, `alerts`, `budget`, `dashboard`, `machines`, `companion`, `finder`, `system`, `cleaner`, `music`, `calendar`, `clipboard`, `notch`, `focusdim`, `presenter`, `colorpicker`, `micmute`, `backup`, `permissions`, `terminal` | none | Only settings in this group |
 | `--changed` | flag | `false` | Only settings that differ from their default |
 | `--json` | flag | `false` | Emit JSON on stdout |
 
@@ -61,7 +61,7 @@ ed config ls clipboardHotKey
 ed config ls --changed --json
 ```
 
-Reading changes nothing and needs nothing. A group that is not one of the 23
+Reading changes nothing and needs nothing. A group that is not one of the 24
 exits 3 and lists them all. A prefix that matches no key exits 3, unless the
 prefix is the name of a sibling subcommand, which exits 2 instead of pretending
 you meant a setting:

@@ -23,6 +23,11 @@ or behind the record.
 `--json` shape for `report`: `{standups, commitmentsResolved, metRate, medianSlipDays,
 overstated, understated, invisibleWork, dueSoon}`.
 
+Record JSON is `{episodeId,occurredAt,verified,claims}`. Each claim is
+`{id,statement,claimType,testable,verdict,note}`; verdict and note are null
+without verification or when the evidence is unclear. The file must be UTF-8
+and nonempty after trimming. `-` reads stdin to end-of-file.
+
 Read it as a calibration mirror rather than a lie detector. Almost all standup
 inflation is optimism, not deception, and optimism bias is the more actionable finding
 because it is fixable and it is not shameful. When work happened somewhere the

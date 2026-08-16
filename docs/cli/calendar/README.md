@@ -21,8 +21,6 @@ was.
 
 ## Commands
 
-## Commands
-
 - [`ed calendar ls`](./ls.md)
 
 ## Exit codes

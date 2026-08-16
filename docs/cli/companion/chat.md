@@ -16,9 +16,14 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--conversation` | conversation id | new conversation | Continues that conversation with its history in context. |
-| `--persona` | persona id | the default lens | Answers through that lens; [`ed companion personas`](./personas.md) lists them. |
+| `--persona` | persona id | `friend` | Answers through that lens; [`ed companion personas`](./personas.md) lists them. |
 | `--json` | flag | off | Suppresses streaming and emits one JSON document at the end. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
+
+Before starting the stream, `--persona` is checked against the live persona
+list when that list can be fetched. An unknown id exits 1 and names the known
+ids. If the persona list itself cannot be fetched, the chat request still gets
+a chance to report the backend error.
 
 `--json` shape:
 
@@ -37,7 +42,7 @@ Options:
   ],
   "conversationId": "e3b6d2a4-27c8-4f7c-9b7e-3e2b1a0c9d8f",
   "latencyMs": 1874,
-  "model": "anthropic, model claude-sonnet-5"
+  "model": "openai-compatible at http://ollama:11434/v1, model qwen3:1.7b"
 }
 ```
 
@@ -45,7 +50,8 @@ The conversation id prints on stderr after a plain-text chat; pass it back with
 `--conversation` to keep talking in the same thread.
 
 Behaviour: requires a configured reasoning provider (`ed companion reason`);
-without one the backend answers 412 and the command exits `4`.
+without one the backend answers 412 and the command exits `1`. A transport
+failure, including no server at the endpoint, exits `4`.
 
 ## Where to go next
 

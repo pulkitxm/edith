@@ -8,7 +8,7 @@ ed extensions enable <id> [--json]
 
 | Argument | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `id` | one of the twelve ids, or a defaults key | required | The extension to turn on |
+| `id` | one of the fourteen ids, or a defaults key | required | The extension to turn on |
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |
@@ -46,7 +46,11 @@ and prints no note at all: the missing permissions are in
   "missingRequiredPermissions": [
     "screenRecording"
   ],
+  "optionalCapabilities": [],
   "optionalPermissions": [],
+  "requiredCapabilities": [
+    "windowDimming"
+  ],
   "requiredPermissions": [
     "screenRecording"
   ],
@@ -69,7 +73,7 @@ known id as the hint:
 ```
 $ ed extensions enable clipbored
 error: no extension named clipbored
-hint: known ids: usage, system, machines, systemStats, micMute, music, calendar, notchShelf, clipboard, focusDim, presenter, colorPicker
+hint: known ids: usage, system, machines, companion, systemStats, micMute, lidAwake, music, calendar, notchShelf, clipboard, focusDim, presenter, colorPicker
 ```
 
 Enabling never asks for a permission and never installs a tool. `music` wants

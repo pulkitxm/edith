@@ -21,6 +21,11 @@ Options:
 With no machine argument it uses the one that already hosts the stack, or the
 best candidate that can run it.
 
+An explicit machine argument selects a remote registered machine by exact
+case-insensitive name, UUID, or text contained in its SSH target. It does not
+accept name prefixes and cannot explicitly select this Mac; omit the argument
+when the local host is the recommended candidate.
+
 Examples:
 
 ```
@@ -35,14 +40,33 @@ A machine that cannot run it yet is refused with the reason and the fix, so
 nothing half-starts. The tier is derived from what the host actually has: a GPU
 box gets the GPU overlay, a Mac gets the Apple one, everything else gets CPU.
 
-Deploying installs everything it needs on the way: the directory is created,
-the compose files and Dockerfile the CLI carries are written into it, the
-companion source is copied over when the directory does not have it yet (from
-`EDITH_COMPANION_SOURCE` or a local checkout), and a `.env` is written from
-the saved configuration and the Keychain secrets. The stack then starts with
-`--build`, so a changed source or compose file is rebuilt and an unchanged one
-starts instantly. For a remote machine the port forward is saved and opened
-too, so `ed companion status` works the moment deploy returns.
+Deploying creates the directory and looks for companion source in
+`EDITH_COMPANION_SOURCE`, `~/Desktop/Edith/apps/companion`, then
+`~/edith/apps/companion`. When found, it streams a tarball that excludes
+`target` and `.git` into the destination on every deploy. When no local source
+is found, an existing destination must already contain `Cargo.toml` or deploy
+fails before Compose starts.
+
+The CLI then overwrites its carried Compose files and Dockerfile, writes `.env`
+with mode controlled by `umask 077`, and includes the current configuration and
+Keychain secrets. `--port` must be positive and is written as the API port as
+well as saved for endpoint resolution. The stack starts with `up -d --build`.
+The deployment record is saved only after that command succeeds.
+
+For a remote host, deploy reuses or creates a forward from the chosen local
+port to the same remote port. A tunnel failure is a note, not a failed deploy,
+so run `ed machines forwards on <machine>` yourself if status cannot connect.
+The CLI does not wait for `/v1/health` before returning; use
+[`ed companion doctor`](./doctor.md) to verify the completed startup.
+
+`--adopt` skips installation, `.env` writes, Compose startup and tunnel setup.
+It only saves the selected host, directory, tier and port. Before adopting, the
+CLI accepts either a host that passes readiness or one whose Compose service
+list is already nonempty. It does not verify API health.
+
+`--json` emits the saved deployment object:
+`{machineName,isLocal,directory,tier,localPort,endpoint,deployedAt}`. Progress
+notes from a real deploy remain on stderr.
 
 ## Where to go next
 

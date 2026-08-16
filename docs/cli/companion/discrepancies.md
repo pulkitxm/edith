@@ -24,12 +24,18 @@ first, each with the claim it came from and whether you have already set it stra
 
 `ed companion discrepancies override` is the one tap correction for work the
 connectors could not see: pairing, design, review, thinking, another machine, an
-unpushed branch. It reopens the commitment as met, marks the calibration as a
-dismissed signal rather than a miss, and teaches the aggregate which of your work
-types are systematically invisible. Without it the aggregates are junk.
+unpushed branch. It changes a linked commitment from `missed` to `met`; commitments
+in other states keep that state. It also marks the calibration as a dismissed signal
+rather than a miss, stores your text as both the discrepancy response and commitment
+override, changes the discrepancy kind to `invisible_work`, and marks it dismissed.
 
 `--json` shape for `ls`: an array of `{id, claim, kind, magnitude, detectedAt,
 dismissed, userResponse}`.
+
+`override` requires `--real`. Its JSON shape is `{id, ok}`. An unknown id, an id that
+is not a discrepancy, or an empty correction is refused.
+
+`ls --limit` defaults to 20 and must be positive.
 
 ## Where to go next
 

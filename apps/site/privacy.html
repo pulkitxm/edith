@@ -7,7 +7,7 @@
     <title>Privacy Policy · Edith</title>
     <meta
       name="description"
-      content="Edith's privacy policy. Local-first by design: no accounts, no usage telemetry, your data stays on your Mac."
+      content="Edith's privacy policy. Local-first by design: no accounts, no usage telemetry, and explicit controls for optional self-hosted Companion data."
     />
     <link rel="canonical" href="https://edith.pulkit.page/privacy.html" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
@@ -25,7 +25,7 @@
     <meta property="og:title" content="Privacy Policy · Edith" />
     <meta
       property="og:description"
-      content="Local-first by design: no accounts, no licence key, no telemetry. Your usage never leaves your Mac."
+      content="Local-first by design: no accounts, no licence key, no telemetry, and a self-hosted optional Companion."
     />
     <meta property="og:url" content="https://edith.pulkit.page/privacy.html" />
     <meta property="og:image" content="https://edith.pulkit.page/og-privacy.png" />
@@ -34,13 +34,13 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Edith privacy: your usage never leaves your Mac. Local first, no tracking."
+      content="Edith privacy: local usage, no tracking, and clear controls for optional services."
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Privacy Policy · Edith" />
     <meta
       name="twitter:description"
-      content="Local-first by design: no accounts, no licence key, no telemetry. Your usage never leaves your Mac."
+      content="Local-first by design: no accounts, no licence key, no telemetry, and a self-hosted optional Companion."
     />
     <meta name="twitter:image" content="https://edith.pulkit.page/og-privacy.png" />
   </head>
@@ -66,27 +66,59 @@
 
     <main class="prose">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated: August 2, 2026</p>
+      <p class="updated">Last updated: August 16, 2026</p>
 
       <p>
-        Edith is built local-first and is free and open source. The short version: the app has no
-        accounts, collects no telemetry, and your data stays on your Mac unless you explicitly turn
-        on iCloud backup, which stores it in your own iCloud Drive. We operate no servers and
-        receive no data from you at all.
+        Edith is built local-first and is free and open source. The app has no accounts and
+        collects no telemetry. Usage and ordinary app data stay on your device unless you enable
+        iCloud backup. The optional Companion stores its memory on a Mac or SSH machine you choose
+        and only calls an external model or connector when you configure one. We operate no Edith
+        data service and receive no app data from you.
       </p>
 
       <h2>What the app stores, and where</h2>
       <ul>
         <li>
           Usage analytics (tokens, costs, rate-limit history) are computed on your Mac from local
-          files that your AI tools already write, and are stored in the app's local data folder.
+          files that your coding tools already write, and are stored in the app's local data
+          folder.
         </li>
         <li>Clipboard history, shelf files, music, and settings are stored locally on your Mac.</li>
+        <li>
+          SSH machine definitions are stored in Edith's application data. Login passwords,
+          passphrases, sudo passwords, and Companion deployment secrets use the macOS Keychain.
+          Deploying Companion writes its required secrets into a permission-restricted
+          <code>.env</code> file on the selected host.
+        </li>
         <li>
           None of the above is transmitted to us. We run no servers that receive, process, or store
           your data.
         </li>
       </ul>
+
+      <h2>Optional Companion</h2>
+      <p>
+        Companion is a self-hosted memory backend. Its PostgreSQL database, plain-file vault,
+        models, recordings, and derived memory live in container volumes on the host you select.
+        A remote deployment is reached through an SSH tunnel to localhost. Edith's iCloud backup
+        does not copy the Companion database or vault.
+      </p>
+      <p>
+        Embedding, vision, and speech-to-text models run on that host. Reasoning can also run there,
+        or you can configure an external provider. If you choose an external provider, the request
+        and the context needed to answer it go directly from your Companion host to that provider
+        under its privacy terms. GitHub and Notion sync likewise contact those services only after
+        you provide a token and request a sync. Companion settings let you export the memory, erase
+        derived data, or wipe the database and vault.
+      </p>
+
+      <h2>Remote machines</h2>
+      <p>
+        Machine monitoring, terminals, file operations, container control, power actions, and
+        remote usage collection travel directly between your Mac and the SSH host you configured.
+        We do not relay those connections. Actions you run can change files, services, power state,
+        or thermal settings on that host, just as the equivalent SSH command would.
+      </p>
 
       <h2>Rate-limit checks</h2>
       <p>
@@ -97,10 +129,11 @@
 
       <h2>Optional iCloud backup</h2>
       <p>
-        If you enable iCloud backup, the app copies selected data (settings, usage history, music,
-        clipboard history, at your choice) into your own iCloud Drive so it can merge across your
-        Macs. That data is governed by your Apple account and Apple's privacy terms. Turn the
-        toggle off and the app stops syncing.
+        If you enable iCloud backup, the app copies the categories you select, including settings,
+        usage history, rate-limit history, music, and clipboard history, into your own iCloud Drive
+        so it can merge across your Macs. That data is governed by your Apple account and Apple's
+        privacy terms. Turn the toggle off and the app stops syncing. Companion memory and remote
+        machine secrets are not included.
       </p>
 
       <h2>No accounts, no telemetry, no licence</h2>
@@ -113,8 +146,8 @@
 
       <h2>Software updates</h2>
       <p>
-        The app checks for new versions by fetching a file from this project's GitHub Releases
-        page. That request goes from your Mac to GitHub and is subject to
+        The macOS app checks for new versions by fetching a file from this project's GitHub
+        Releases page. That request goes from your Mac to GitHub and is subject to
         <a href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement"
           >GitHub's privacy statement</a
         >; like any web request it exposes your IP address to GitHub. No identifier of any kind is
@@ -146,7 +179,7 @@
       <div class="footer-inner">
         <div class="footer-brand">
           <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" />
-          <span>Edith. Made for macOS.</span>
+          <span>Edith. Native on macOS and Ubuntu.</span>
         </div>
         <div class="footer-links">
           <a href="/#features">Features</a>

@@ -1,13 +1,20 @@
 # `ed companion machines`
 
-Where the companion stack runs. Every machine is asked what it is rather than assumed
-to be anything, a capability tier is derived from the answer, and you can override it.
+The companion backend's own machine inventory and multi-host placement planner.
+Every machine is asked what it is rather than assumed to be anything, a
+capability tier is derived from the answer, and you can override it.
+
+This registry is stored in the companion database. It is separate from Edith's
+`ed machines` fleet, [`ed companion hosts`](./hosts.md), the locally saved
+deployment record, and [`ed companion deploy`](./deploy.md). These commands
+plan topology but do not start, stop or move the currently deployed stack.
 
 Usage:
 
 ```
 ed companion machines [ls] [--json] [--endpoint <url>]
 ed companion machines add <name> [--transport local|ssh|context] [--at <endpoint>]
+                          [--json] [--endpoint <url>]
 ed companion machines probe <name> [--json] [--endpoint <url>]
 ed companion machines plan [--json] [--endpoint <url>]
 ed companion machines profile <name> <tier> [--json] [--endpoint <url>]
@@ -15,6 +22,11 @@ ed companion machines profile <name> <tier> [--json] [--endpoint <url>]
 
 `ed companion machines ls` (also the bare default) lists every machine registered,
 its derived tier and what the probe found, in plain language.
+
+`add` defaults to the `local` transport. For `ssh`, `--at` is `user@host`; for
+`context`, it is a Docker context name. Omitting `--at` sends an empty endpoint
+and lets the backend validate or use the transport default. JSON output confirms
+only `{name,transport}`.
 
 `ed companion machines probe` runs a small detection script over the transport and
 records OS, architecture, container runtime and Compose versions, GPU vendor and
@@ -43,6 +55,12 @@ database to a private or WireGuard address, never to a public interface.
 
 `--json` shape for `plan`: `{compose, warnings, placements: [{machine, service, role,
 enabled, notes}]}`.
+
+List and probe JSON represent optional numeric machine facts such as `vramMb`,
+`cpuCores`, `ramMb` and `diskFreeMb` as strings when present. `profile` is the
+effective tier after any override. `profile` accepts only `gpu-large`,
+`gpu-small`, `apple-metal` or `cpu-only`; it changes planning metadata and does
+not redeploy containers.
 
 ## Where to go next
 
