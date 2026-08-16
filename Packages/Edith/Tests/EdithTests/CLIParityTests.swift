@@ -34,6 +34,10 @@ enum UIParity {
         "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
         "ed completions install": "shell completion has no UI at all",
         "ed config import": "the app restores from iCloud rather than from a JSON file",
+        "ed clipboard queue add": "the ordered paste queue is managed only through the CLI",
+        "ed clipboard queue next": "the ordered paste queue is advanced only through the CLI",
+        "ed clipboard queue rm": "the ordered paste queue is edited only through the CLI",
+        "ed clipboard queue clear": "the ordered paste queue is cleared only through the CLI",
         "ed machines docker compose up":
             "the Docker window groups by project but never runs compose",
         "ed machines docker compose down":
