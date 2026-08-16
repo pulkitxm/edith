@@ -31,6 +31,7 @@ the UI would act on.
 | `ed clipboard unpin <index>` | Let one entry age out again |
 | `ed clipboard rm <index>` | Forget one entry and delete its blob |
 | `ed clipboard clear` | Forget the whole history |
+| `ed clipboard queue` | Collect history entries and paste them in first-in, first-out order |
 
 A bare `ed clipboard` runs `ls`. `ls` also answers to `list`, and `stats` also
 answers to `size`.
@@ -45,6 +46,7 @@ answers to `size`.
 - [`ed clipboard unpin`](./unpin.md)
 - [`ed clipboard rm`](./rm.md)
 - [`ed clipboard clear`](./clear.md)
+- [`ed clipboard queue`](./queue.md)
 
 ## Exit codes
 
@@ -53,8 +55,8 @@ answers to `size`.
 | 0 | The command did what it says, including `--help`, an empty `ls`, and pinning something that was already pinned |
 | 1 | `get` on an entry that is not text: `error: entry png is not text` |
 | 2 | `--limit` below zero, or a command line ArgumentParser cannot parse, such as a non-numeric index or an unknown flag |
-| 3 | No entry with that number, or the blob behind an entry is missing |
-| 4 | The history is empty and you named a number |
+| 3 | No history or queue entry with that number or ID, an empty `queue next`, or a missing blob |
+| 4 | The history is empty and you named a number, or a queue command cannot reach the enabled helper or required Accessibility access |
 
 The empty case is the one that surprises people. Every verb that takes a number
 goes through the same lookup, and that lookup calls an empty history
@@ -117,11 +119,13 @@ hint: pass 0 or more
   new entries. `ed extensions enable clipboard` turns capture on, and
   `ed config ls --group clipboard` lists the retention, hotkey, ignore-list and
   capture switches that shape what ends up here.
+- **The paste queue lives in the menu bar helper.** Queue commands need Edith to
+  be running, and restarting the helper clears the queue. Set
+  `pasteQueueEnabled` to `true` to add newly captured entries automatically.
 - **`preview` is a preview.** It is capped at 500 characters, so it is a search
   target and a display string, not the content. Use `get` for the content.
-- **Everything works with the app closed.** Nothing in this group waits on
-  Edith, and none of it can exit 4 for a missing app. The only 4 it produces is
-  the empty history.
+- **History commands work with the app closed.** Queue commands are the
+  exception because their state belongs to the running helper.
 
 ## Where to go next
 

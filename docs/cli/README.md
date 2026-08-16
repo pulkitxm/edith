@@ -33,7 +33,7 @@ key.
 | [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
-| [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
+| [`ed clipboard`](./clipboard/README.md) | Clipboard history and an ordered paste queue |
 | [`ed color`](./color/README.md) | The colour picker's swatch history |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
