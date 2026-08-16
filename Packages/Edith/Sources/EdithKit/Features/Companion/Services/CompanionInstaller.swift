@@ -83,6 +83,7 @@ public enum CompanionInstaller {
         progress: CompanionDeployProgress? = nil,
         log: @escaping @Sendable (String) -> Void
     ) async throws {
+        signal(SIGPIPE, SIG_IGN)
         let run: CompanionCommandRunner =
             runner
             ?? { command, stdin, timeout in
@@ -134,6 +135,7 @@ public enum CompanionInstaller {
     }
 
     private static func quoted(_ path: String) -> String {
+        if path == "~" { return "\"$HOME\"" }
         guard path.hasPrefix("~/") else {
             return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
         }

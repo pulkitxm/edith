@@ -51,9 +51,9 @@ final class CompanionSetupModel: Identifiable {
     private(set) var verifyResult: String?
     private(set) var verifyPassed = false
     private(set) var savingReason = false
-    let onFinish: () -> Void
+    let onFinish: (Bool) -> Void
 
-    init(onFinish: @escaping () -> Void) {
+    init(onFinish: @escaping (Bool) -> Void) {
         self.onFinish = onFinish
     }
 
@@ -94,7 +94,13 @@ final class CompanionSetupModel: Identifiable {
     }
 
     func runDeploy() async {
-        guard !deploying, let host = selectedHost else { return }
+        guard !deploying else { return }
+        if selectedHost == nil { await probeHosts() }
+        guard let host = selectedHost else {
+            deployError =
+                "No machine answered the probe; go back a step, wake one up, and probe again."
+            return
+        }
         deploying = true
         deployError = nil
         stages = [:]
@@ -629,7 +635,7 @@ struct CompanionSetupSheet: View {
                 }
             } else if model.step != .done {
                 CompanionLinkButton(title: "Not now") {
-                    model.onFinish()
+                    model.onFinish(false)
                 }
             }
             Spacer()
@@ -678,7 +684,7 @@ struct CompanionSetupSheet: View {
         case .intelligence:
             model.step = .done
         case .done:
-            model.onFinish()
+            model.onFinish(true)
         }
     }
 }

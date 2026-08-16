@@ -88,8 +88,11 @@ struct CompanionImportCommand: AsyncParsableCommand {
                         throw CLIFailure.notFound(
                             error.errorDescription ?? "no bundle.json there",
                             hint: "point at a directory written by `ed companion export`")
-                    case .unreadable:
-                        throw CLIFailure.notFound(error.errorDescription ?? "nothing there")
+                    case let .unreadable(path, detail):
+                        if detail == "nothing there" {
+                            throw CLIFailure.notFound("nothing at \(path)")
+                        }
+                        throw CLIFailure("could not read \(path)", hint: detail)
                     default:
                         throw CLIFailure(error.errorDescription ?? "the import failed")
                     }

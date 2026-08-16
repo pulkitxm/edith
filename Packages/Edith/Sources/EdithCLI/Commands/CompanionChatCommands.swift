@@ -25,6 +25,13 @@ struct CompanionChatCommand: AsyncParsableCommand {
         try await execute {
             let resolved = CLIEnvironment.resolveCompanionEndpoint(endpoint)
             let client = CompanionClient(baseURL: resolved)
+            if let persona, let known = try? await client.personas(),
+                !known.contains(where: { $0.id == persona })
+            {
+                throw CLIFailure.notFound(
+                    "no persona called \(persona)",
+                    hint: "personas: " + known.map(\.id).joined(separator: ", "))
+            }
             var conversationId = conversation
             var model: String?
             var answer = ""

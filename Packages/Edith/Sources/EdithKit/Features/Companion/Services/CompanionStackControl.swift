@@ -97,7 +97,12 @@ public enum CompanionStackControl {
             progress?(.tunnel, "local, nothing to forward")
         }
         progress?(.health, "waiting for the doctor")
-        _ = await waitForHealth(saved)
+        guard await waitForHealth(saved) else {
+            throw CompanionStackError.commandFailed(
+                "health",
+                "the services started but the companion never answered on "
+                    + "localhost:\(saved.localPort); check `ed companion stack logs api`")
+        }
         return saved
     }
 
@@ -163,7 +168,8 @@ public enum CompanionStackControl {
         timeout: TimeInterval
     ) async throws -> String {
         guard let machineID = deployment.machineID else {
-            let outcome = await CompanionShell.runChecked(command, stdin: stdin)
+            let outcome = await CompanionShell.runChecked(
+                command, stdin: stdin, timeout: timeout)
             switch outcome {
             case let .success(output):
                 return output
@@ -190,10 +196,11 @@ public enum CompanionShell {
     }
 
     public static func runChecked(
-        _ script: String, stdin: Data? = nil
+        _ script: String, stdin: Data? = nil, timeout: TimeInterval = 600
     ) async -> Result<String, CompanionShellFailure> {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
+                signal(SIGPIPE, SIG_IGN)
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/bin/sh")
                 process.arguments = ["-c", script]
@@ -203,9 +210,19 @@ public enum CompanionShell {
                 process.standardError = errors
                 let input = Pipe()
                 process.standardInput = input
+                let stdoutBuffer = CompanionPipeBuffer()
+                let stderrBuffer = CompanionPipeBuffer()
+                output.fileHandleForReading.readabilityHandler = { handle in
+                    stdoutBuffer.append(handle.availableData)
+                }
+                errors.fileHandleForReading.readabilityHandler = { handle in
+                    stderrBuffer.append(handle.availableData)
+                }
                 do {
                     try process.run()
                 } catch {
+                    output.fileHandleForReading.readabilityHandler = nil
+                    errors.fileHandleForReading.readabilityHandler = nil
                     continuation.resume(
                         returning: .failure(
                             CompanionShellFailure(detail: error.localizedDescription)))
@@ -215,23 +232,55 @@ public enum CompanionShell {
                     try? input.fileHandleForWriting.write(contentsOf: stdin)
                 }
                 try? input.fileHandleForWriting.close()
-                let stdout = output.fileHandleForReading.readDataToEndOfFile()
-                let stderr = errors.fileHandleForReading.readDataToEndOfFile()
+                let deadline = DispatchWorkItem {
+                    guard process.isRunning else { return }
+                    process.terminate()
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                    }
+                }
+                DispatchQueue.global().asyncAfter(
+                    deadline: .now() + max(1, timeout), execute: deadline)
                 process.waitUntilExit()
-                let text = String(decoding: stdout, as: UTF8.self)
+                deadline.cancel()
+                output.fileHandleForReading.readabilityHandler = nil
+                errors.fileHandleForReading.readabilityHandler = nil
+                stdoutBuffer.append(output.fileHandleForReading.readDataToEndOfFile())
+                stderrBuffer.append(errors.fileHandleForReading.readDataToEndOfFile())
+                let text = String(decoding: stdoutBuffer.snapshot(), as: UTF8.self)
                 guard process.terminationStatus == 0 else {
-                    let detail = String(decoding: stderr, as: UTF8.self)
+                    let stderrText = String(decoding: stderrBuffer.snapshot(), as: UTF8.self)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let detail =
+                        stderrText.isEmpty
+                        ? "exited \(process.terminationStatus) after possibly hitting the "
+                            + "\(Int(timeout))s limit"
+                        : stderrText
                     continuation.resume(
-                        returning: .failure(
-                            CompanionShellFailure(
-                                detail: detail.isEmpty
-                                    ? "exited \(process.terminationStatus)" : detail)))
+                        returning: .failure(CompanionShellFailure(detail: detail)))
                     return
                 }
                 continuation.resume(returning: .success(text))
             }
         }
+    }
+}
+
+final class CompanionPipeBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ chunk: Data) {
+        guard !chunk.isEmpty else { return }
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    func snapshot() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return data
     }
 }
 

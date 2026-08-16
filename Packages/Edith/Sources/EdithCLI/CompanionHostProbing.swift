@@ -104,7 +104,8 @@ enum CompanionStackRunner {
         timeout: TimeInterval
     ) async throws -> String {
         guard let machineID = deployment.machineID else {
-            let outcome = await CompanionShell.runChecked(command, stdin: stdin)
+            let outcome = await CompanionShell.runChecked(
+                command, stdin: stdin, timeout: timeout)
             switch outcome {
             case let .success(output):
                 return output

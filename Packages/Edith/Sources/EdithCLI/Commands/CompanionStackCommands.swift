@@ -327,12 +327,13 @@ struct CompanionDeployCommand: AsyncParsableCommand {
                     machine.map { "no machine called \($0)" } ?? "no machine can run it yet",
                     hint: "run `ed companion hosts` to see what each one needs")
             }
+            let chosenPort = try ArgumentChecks.positive(port, "--port")
             let deployment = CompanionDeployment(
                 machineID: chosen.isLocal ? nil : chosen.id,
                 machineName: chosen.name,
                 directory: directory,
                 tier: (chosen.tier ?? .cpu).rawValue,
-                localPort: try ArgumentChecks.positive(port, "--port"))
+                localPort: chosenPort)
             let alreadyThere = await CompanionStackRunner.services(deployment)
             guard chosen.canHostTheStack || !alreadyThere.isEmpty else {
                 throw CLIFailure(
@@ -341,7 +342,8 @@ struct CompanionDeployCommand: AsyncParsableCommand {
                         .joined(separator: "; "))
             }
             if !adopt {
-                let config = CompanionConfigStore.load()
+                var config = CompanionConfigStore.load()
+                config.apiPort = chosenPort
                 try await CompanionInstaller.install(
                     deployment: deployment, config: config, secrets: CompanionSecrets.all(),
                     runner: { command, stdin, timeout in
@@ -368,8 +370,13 @@ struct CompanionDeployCommand: AsyncParsableCommand {
     }
 
     private func pick(from hosts: [CompanionHost]) -> CompanionHost? {
-        if machine != nil { return hosts.first { !$0.isLocal } ?? hosts.first }
-        return CompanionHostList.recommended(hosts)
+        guard let machine else { return CompanionHostList.recommended(hosts) }
+        let wanted = machine.lowercased()
+        return hosts.first {
+            !$0.isLocal
+                && ($0.name.lowercased() == wanted || $0.target.lowercased().contains(wanted)
+                    || $0.id.uuidString.lowercased() == wanted)
+        }
     }
 
     @MainActor

@@ -35,9 +35,14 @@ final class CompanionBackendModel: CompanionRefreshable {
         await refreshServices()
     }
 
+    private var configPrimed = false
+
     func load() {
         deployment = CompanionDeploymentStore.load()
-        config = CompanionConfigStore.load()
+        if !configPrimed {
+            config = CompanionConfigStore.load()
+            configPrimed = true
+        }
         selectedHostID = selectedHostID ?? deployment.flatMap { $0.machineID }
     }
 
@@ -119,6 +124,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     }
 
     func saveConfig() {
+        configPrimed = true
         let problems = config.validated()
         guard problems.isEmpty else {
             configStatus = problems.joined(separator: "; ")

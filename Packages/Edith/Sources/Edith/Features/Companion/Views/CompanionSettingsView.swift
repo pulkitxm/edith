@@ -46,7 +46,7 @@ final class CompanionSettingsModel {
     func load() async {
         do {
             let settings = try await client.reasonSettings()
-            apply(settings)
+            apply(settings, refreshDrafts: !loaded)
             connectors = try? await client.connectorSettings()
             loaded = true
             error = nil
@@ -143,8 +143,9 @@ final class CompanionSettingsModel {
         }
     }
 
-    private func apply(_ settings: CompanionReasonSettings) {
+    private func apply(_ settings: CompanionReasonSettings, refreshDrafts: Bool = true) {
         current = settings
+        guard refreshDrafts else { return }
         provider = settings.provider == "openai" ? "openai" : "anthropic"
         model = settings.model
         url = settings.url
@@ -355,6 +356,7 @@ struct CompanionSettingsScreen: View {
         }
     }
 
+    @ViewBuilder
     private func unreachableCard(_ error: String) -> some View {
         SkinCard(title: "Settings", note: "companion unreachable", dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -367,6 +369,7 @@ struct CompanionSettingsScreen: View {
                 }
             }
         }
+        connectionCard
     }
 
     private var reasonerCard: some View {
@@ -585,8 +588,9 @@ struct CompanionSettingsScreen: View {
                 } else {
                     Text(
                         endpointDraft == endpoint
-                            ? "Where this Mac reaches the companion. Press Return to apply a change."
-                            : "Press Return to switch to \(endpointDraft)."
+                            ? "Where this Mac reaches the companion. A change applies when "
+                                + "you press Return or leave the field."
+                            : "Applies to \(endpointDraft) on Return, or when you leave the field."
                     )
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))

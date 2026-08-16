@@ -77,6 +77,8 @@ struct CompanionPage: View {
     @Namespace private var tabGlow
     @State private var refreshTick = 0
     @State private var setupModel: CompanionSetupModel?
+    @AppStorage(AppStorageKeys.Companion.setupDeclined, store: SharedDefaults.store)
+    private var setupDeclined = false
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
@@ -120,7 +122,9 @@ struct CompanionPage: View {
                 }
                 if first {
                     first = false
-                    if CompanionDeploymentStore.load() == nil, !home.reachable {
+                    if CompanionDeploymentStore.load() == nil, !home.reachable,
+                        !setupDeclined
+                    {
                         openSetup()
                     } else if !home.reachable {
                         select(.setup)
@@ -326,7 +330,7 @@ struct CompanionPage: View {
         switch item {
         case .chat:
             CompanionChatScreen(
-                model: chat, home: home,
+                model: chat, home: home, isActive: tab == .chat,
                 openEpisode: { id in
                     select(.library)
                     Task { await library.select(id) }
@@ -348,7 +352,9 @@ struct CompanionPage: View {
     }
 
     private func openSetup() {
-        let model = CompanionSetupModel(onFinish: {
+        setupDeclined = false
+        let model = CompanionSetupModel(onFinish: { finished in
+            if !finished { setupDeclined = true }
             setupModel = nil
             refreshTick += 1
             Task { await home.refresh() }
@@ -358,7 +364,6 @@ struct CompanionPage: View {
     }
 
     private func select(_ item: CompanionTab) {
-        if item.rawValue != tabRaw { refreshTick += 1 }
         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
             tabRaw = item.rawValue
         }

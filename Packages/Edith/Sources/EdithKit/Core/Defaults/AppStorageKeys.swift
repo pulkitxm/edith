@@ -66,6 +66,7 @@ public enum AppStorageKeys {
     public enum Companion {
         public static let endpoint = "companionEndpoint"
         public static let tab = "companionTab"
+        public static let setupDeclined = "companionSetupDeclined"
     }
 
     public enum FocusDim {

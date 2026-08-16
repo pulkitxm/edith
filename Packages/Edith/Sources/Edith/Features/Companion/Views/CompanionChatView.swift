@@ -92,6 +92,7 @@ final class CompanionChatModel {
     }
 
     func open(_ id: String) async {
+        if streaming { stop() }
         activeConversationId = id
         do {
             let detail = try await client.conversation(id: id)
@@ -246,6 +247,7 @@ final class CompanionChatModel {
 struct CompanionChatScreen: View {
     @Bindable var model: CompanionChatModel
     let home: CompanionHomeModel
+    var isActive = true
     var openEpisode: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -272,8 +274,11 @@ struct CompanionChatScreen: View {
                 await model.loadPersonas()
             }
         }
-        .onAppear { composerFocused = true }
-        .onChange(of: model.focusTick) { composerFocused = true }
+        .onAppear { if isActive { composerFocused = true } }
+        .onChange(of: isActive) { _, active in
+            if active { composerFocused = true } else { composerFocused = false }
+        }
+        .onChange(of: model.focusTick) { if isActive { composerFocused = true } }
     }
 
     private var rail: some View {
@@ -300,13 +305,17 @@ struct CompanionChatScreen: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .disabled(model.streaming)
-            .keyboardShortcut("n", modifiers: .command)
+            .disabled(model.streaming || !isActive)
+            .modifier(ActiveShortcut(active: isActive, key: "n", modifiers: .command))
             .help("Start a fresh conversation (⌘N)")
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     if !model.loaded, model.loadError == nil {
                         ListRowsSkeleton(rows: 5, showsLeadingDot: false, dark: dark)
+                    } else if let loadError = model.loadError, model.conversations.isEmpty {
+                        CompanionStatusLine(text: loadError, tone: .error)
+                            .padding(.horizontal, UIScale.pt(10))
+                            .padding(.top, UIScale.pt(8))
                     } else if model.conversations.isEmpty {
                         Text("Nothing yet. The first chat starts the record.")
                             .font(.system(size: UIScale.pt(11)))
@@ -762,7 +771,7 @@ struct CompanionChatScreen: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .keyboardShortcut(.escape, modifiers: [])
+            .modifier(ActiveEscapeShortcut(active: isActive))
             .help("Stop generating (Esc)")
         } else {
             Button {
@@ -782,6 +791,32 @@ struct CompanionChatScreen: View {
 
     private var draftEmpty: Bool {
         model.draft.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+}
+
+struct ActiveShortcut: ViewModifier {
+    let active: Bool
+    let key: KeyEquivalent
+    let modifiers: EventModifiers
+
+    func body(content: Content) -> some View {
+        if active {
+            content.keyboardShortcut(key, modifiers: modifiers)
+        } else {
+            content
+        }
+    }
+}
+
+struct ActiveEscapeShortcut: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.keyboardShortcut(.escape, modifiers: [])
+        } else {
+            content
+        }
     }
 }
 
