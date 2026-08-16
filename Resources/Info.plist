@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Edith</string>
+	<key>CFBundleExecutable</key>
+	<string>Edith</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.pulkit.edith</string>
+	<key>CFBundleName</key>
+	<string>Edith</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.97</string>
+	<key>CFBundleVersion</key>
+	<string>108</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Edith controls playback in Spotify and Apple Music from the notch.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Edith shows a notch alert when a Bluetooth device connects or disconnects.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Edith shows your upcoming calendar events in the app.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Edith shows a camera preview in the notch so you can check yourself before a call.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Edith records voice memories in the Companion capture screen.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Edith needs this to scan an external drive you pick in the Cleaner.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Edith shows a live transcription while you record a voice memory.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>qz/e9EfPlNiHqJC9JA9RazcXGgnH2wxwpS+uw+x9qBM=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+</dict>
+</plist>

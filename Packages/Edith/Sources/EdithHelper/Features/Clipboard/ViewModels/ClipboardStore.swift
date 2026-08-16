@@ -1,0 +1,303 @@
+import AppKit
+import EdithKit
+import Foundation
+
+@MainActor
+@Observable
+final class ClipboardStore: FeatureModule {
+    private(set) var entries: [ClipboardEntry] = []
+    private(set) var revision = 0
+    private(set) var skippedOversizeAt: Date?
+    private(set) var pasteQueue = PasteQueue()
+
+    private var loaded = false
+    private var timer: DispatchSourceTimer?
+    private var lastChangeCount = NSPasteboard.general.changeCount
+    private var locked = false
+    private var lockObservers: [NSObjectProtocol] = []
+    private var sleepObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
+    private var clipboardChangedObserver: NSObjectProtocol?
+
+    private static let diskQueue = DispatchQueue(
+        label: "com.edith.clipboard.disk", qos: .userInitiated)
+
+    init() {
+        reloadFromDisk(initial: true)
+
+        let dnc = DistributedNotificationCenter.default()
+        lockObservers = [
+            dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) {
+                [weak self] _ in
+                Task { @MainActor in
+                    self?.locked = true
+                    self?.stopTimer()
+                }
+            },
+            dnc.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main)
+            { [weak self] _ in
+                Task { @MainActor in
+                    self?.locked = false
+                    self?.startTimer()
+                }
+            },
+        ]
+        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.stopTimer() }
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.locked else { return }
+                self.startTimer()
+            }
+        }
+        settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            Task { @MainActor in self?.restartTimerIfIntervalChanged() }
+        }
+        clipboardChangedObserver = IPC.observe(
+            IPC.Name.clipboardChanged,
+            info: { [weak self] info in
+                guard info["sender"] as? String != Self.senderID else { return }
+                Task { @MainActor in self?.reloadFromDisk() }
+            })
+
+        startTimer()
+    }
+
+    func shutdown() {
+        stopTimer()
+        for token in lockObservers { DistributedNotificationCenter.default().removeObserver(token) }
+        lockObservers = []
+        if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        if let settingsObserver { IPC.stopObserving(settingsObserver) }
+        if let clipboardChangedObserver { IPC.stopObserving(clipboardChangedObserver) }
+        sleepObserver = nil
+        wakeObserver = nil
+        settingsObserver = nil
+        clipboardChangedObserver = nil
+    }
+
+    private func reloadFromDisk(initial: Bool = false) {
+        Self.diskQueue.async { [weak self] in
+            let loaded = ClipboardRepository.loadEntries()
+            Task { @MainActor in
+                guard let self else { return }
+                if initial { self.loaded = true }
+                self.adopt(loaded)
+            }
+        }
+    }
+
+    private var interval: Double {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.checkInterval) as? Double
+            ?? ClipboardIndex.defaultCheckInterval
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
+        let t = DispatchSource.makeTimerSource(queue: .main)
+        t.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(200))
+        t.setEventHandler { [weak self] in self?.tick() }
+        t.resume()
+        timer = t
+    }
+
+    private func stopTimer() {
+        timer?.cancel()
+        timer = nil
+    }
+
+    private func restartTimerIfIntervalChanged() {
+        guard timer != nil else { return }
+        stopTimer()
+        startTimer()
+    }
+
+    private func tick() {
+        guard loaded else { return }
+        let pb = NSPasteboard.general
+        guard pb.changeCount != lastChangeCount else { return }
+        lastChangeCount = pb.changeCount
+        capture(from: pb)
+    }
+
+    private func capture(from pb: NSPasteboard) {
+        let rawTypes = (pb.types ?? []).map(\.rawValue)
+        guard !ClipboardPasteboardFilter.shouldSkip(types: rawTypes) else { return }
+
+        let frontApp = NSWorkspace.shared.frontmostApplication
+        let bundleID = frontApp?.bundleIdentifier
+        let ignoreList = ClipboardIgnore.parseUserList(
+            SharedDefaults.store.string(forKey: AppStorageKeys.Clipboard.ignoredApps) ?? "")
+        guard !ClipboardIgnore.isIgnored(bundleID: bundleID, userList: ignoreList) else { return }
+
+        let defaults = SharedDefaults.store
+        let options = ClipboardCaptureOptions(
+            saveFiles: defaults.object(forKey: AppStorageKeys.Clipboard.saveFiles) as? Bool ?? true,
+            saveImages: defaults.object(forKey: AppStorageKeys.Clipboard.saveImages) as? Bool
+                ?? true,
+            saveText: defaults.object(forKey: AppStorageKeys.Clipboard.saveText) as? Bool ?? true)
+        guard let captured = ClipboardPayloadExtractor.extract(from: pb, options: options) else {
+            return
+        }
+
+        let maxBytes =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItemBytes) as? Int
+            ?? ClipboardIndex.defaultMaxItemBytes
+        guard captured.data.count <= maxBytes else {
+            skippedOversizeAt = Date()
+            return
+        }
+
+        let sourceApp = frontApp?.localizedName
+        Self.diskQueue.async { [weak self] in
+            let sha = ClipboardRepository.sha256Hex(captured.data)
+            try? ClipboardRepository.writeBlob(captured.data, sha256: sha, ext: captured.ext)
+            Task { @MainActor in
+                self?.absorb(
+                    captured, sha: sha, sourceApp: sourceApp, sourceBundleID: bundleID)
+            }
+        }
+    }
+
+    private func absorb(
+        _ captured: ClipboardPayload, sha: String, sourceApp: String?, sourceBundleID: String?
+    ) {
+        let existing = entries.first { $0.sha256 == sha && $0.ext == captured.ext }
+        if let existing {
+            entries.removeAll { $0.id == existing.id }
+        }
+        let entry = ClipboardEntry(
+            id: existing?.id ?? UUID().uuidString,
+            sha256: sha, types: captured.types, ext: captured.ext,
+            sourceApp: sourceApp, sourceBundleID: sourceBundleID,
+            lastCopiedAt: Date(),
+            size: captured.data.count, preview: captured.preview,
+            pinned: existing?.pinned ?? false)
+        adopt(ClipboardActions.arrange(entries + [entry]))
+        persistAndTrim(appending: existing == nil ? entry : nil)
+        SettingsBackup.shared.scheduleClipboardBackup()
+        if SharedDefaults.store.bool(forKey: "pasteQueueEnabled") {
+            pasteQueue.enqueue(entry.id)
+        }
+    }
+
+    private static let senderID =
+        "clipboardStore-\(ProcessInfo.processInfo.processIdentifier)"
+
+    private func postChanged() {
+        IPC.post(IPC.Name.clipboardChanged, userInfo: ["sender": Self.senderID])
+    }
+
+    private func adopt(_ updated: [ClipboardEntry]) {
+        entries = ClipboardActions.arrange(updated)
+        revision += 1
+    }
+
+    private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
+        let beforeRetention = entries.count
+        let maxItems =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int
+            ?? ClipboardIndex.defaultMaxItems
+        let maxAgeDays =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
+        let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil
+        entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
+        revision += 1
+        let removedAny = entries.count != beforeRetention
+        let snapshot = entries
+        Self.diskQueue.async {
+            ClipboardRepository.withIndexLock {
+                let appendedFastPath =
+                    appended != nil && !removedAny
+                    && ClipboardRepository.appendEntry(appended!)
+                if !appendedFastPath {
+                    try? ClipboardRepository.saveEntries(snapshot)
+                }
+            }
+            if removedAny {
+                ClipboardRepository.pruneOrphanBlobs(keeping: snapshot)
+            }
+        }
+        postChanged()
+    }
+
+    func togglePin(_ id: String) {
+        mutateOnDisk { try ClipboardActions.togglePin(ids: [id]) }
+    }
+
+    func clear(includingPinned: Bool = false) {
+        if includingPinned { pasteQueue.clear() }
+        mutateOnDisk(requireChange: false) {
+            try ClipboardActions.clear(keepingPinned: !includingPinned)
+        }
+    }
+
+    func delete(_ id: String) {
+        pasteQueue.remove(id)
+        mutateOnDisk(scheduleBackup: false) { try ClipboardActions.delete(ids: [id]) }
+    }
+
+    private func mutateOnDisk(
+        requireChange: Bool = true, scheduleBackup: Bool = true,
+        _ action: @escaping @Sendable () throws -> ClipboardActions.Outcome
+    ) {
+        Self.diskQueue.async { [weak self] in
+            guard let outcome = try? action(), outcome.changed > 0 || !requireChange else {
+                return
+            }
+            Task { @MainActor in
+                guard let self else { return }
+                self.adopt(outcome.entries)
+                if scheduleBackup { SettingsBackup.shared.scheduleClipboardBackup() }
+                self.postChanged()
+            }
+        }
+    }
+
+    @discardableResult
+    func pasteNextFromQueue() -> Bool {
+        while let id = pasteQueue.dequeue() {
+            guard let entry = entries.first(where: { $0.id == id }) else { continue }
+            let plain = SharedDefaults.store.bool(forKey: "clipboardPastePlainText")
+            guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { continue }
+            lastChangeCount = NSPasteboard.general.changeCount
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                ClipboardPasteSynth.synthesizeCommandV()
+            }
+            return true
+        }
+        return false
+    }
+
+    func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {
+        let plain =
+            forcePlainText
+            || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
+        guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { return }
+        lastChangeCount = NSPasteboard.general.changeCount
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            var updated = entries
+            updated[index].lastCopiedAt = Date()
+            adopt(updated)
+            let id = entry.id
+            Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: id) }
+            SettingsBackup.shared.scheduleClipboardBackup()
+            postChanged()
+        }
+
+        let autoPaste =
+            SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.autoPaste)
+            && SharedDefaults.store.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        guard autoPaste else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            ClipboardPasteSynth.synthesizeCommandV()
+        }
+    }
+}

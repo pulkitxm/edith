@@ -6,6 +6,9 @@ pre-push:
       run: make ci-comments
     secrets:
       run: make ci-secrets
+    duplicate-keys:
+      glob: "Packages/**/*.swift"
+      run: make ci-duplicate-keys
     lint:
       glob: "{scripts/**,apps/site/**}"
       run: make ci-lint
@@ -15,6 +18,12 @@ pre-push:
     promo-video:
       glob: "apps/promo-video/**"
       run: make ci-promo
-    swift:
-      glob: "apps/macos/**"
-      run: make ci-swift-check
+    swift-lint:
+      glob: "{Packages/**,Resources/**,edth.xcodeproj/**,docs/**,build.sh}"
+      run: make ci-swift-lint
+    swift-build:
+      glob: "{Packages/**,Resources/**,edth.xcodeproj/**,docs/**,build.sh}"
+      run: make ci-swift-build
+    swift-test:
+      glob: "{Packages/**,Resources/**,edth.xcodeproj/**,docs/**,build.sh}"
+      run: make ci-swift-test

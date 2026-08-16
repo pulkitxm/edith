@@ -1,11 +1,49 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const script = readFileSync(
-  join(import.meta.dir, "..", "apps", "macos", "Resources", "refresh-usage"),
-  "utf8",
+const inheritedGitVariables = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_CONFIG",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_DIR",
+  "GIT_GRAFT_FILE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_PREFIX",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_SHALLOW_FILE",
+  "GIT_WORK_TREE",
+];
+const isolatedGitEnvironment = { ...process.env };
+for (const variable of inheritedGitVariables) {
+  delete isolatedGitEnvironment[variable];
+}
+
+const scriptPath = join(
+  import.meta.dir,
+  "..",
+  "Packages",
+  "Edith",
+  "Sources",
+  "EdithKit",
+  "Resources",
+  "refresh-usage",
 );
+const script = readFileSync(scriptPath, "utf8");
 
 function extractBlock(name) {
   const m = script.match(new RegExp(`\\n\\s*${name}='([\\s\\S]*?)\\n\\s*'`));
@@ -13,13 +51,32 @@ function extractBlock(name) {
   return m[1];
 }
 
+function extractDoubleBlock(name) {
+  const m = script.match(new RegExp(`\\n\\s*${name}="([\\s\\S]*?)\\n\\s*"`));
+  expect(m).not.toBeNull();
+  return m[1].replaceAll("\\$", "$");
+}
+
 const NORM = extractBlock("NORM");
+const GITHUB = extractBlock("GITHUB");
+const CWD_CACHE = extractBlock("CWD_CACHE");
 const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
+const CODEX_DETAILS = extractBlock("CODEX_DETAILS");
+const WALKPI = extractBlock("WALKPI");
 const WALKCC = extractBlock("WALKCC");
+const DEDUP = extractBlock("DEDUP");
+const RECONCILE = extractBlock("RECONCILE");
+const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
+const FLEET = extractBlock("FLEET");
+const OPENCODE_MESSAGES = extractDoubleBlock("OPENCODE_MESSAGES");
+const OPENCODE_MESSAGES_FALLBACK = extractDoubleBlock(
+  "OPENCODE_MESSAGES_FALLBACK",
+);
+const OPENCODE_TITLES = extractDoubleBlock("OPENCODE_TITLES");
 
 function jq(program, input, args = []) {
   const proc = Bun.spawnSync(["jq", "-c", ...args, program], {
@@ -38,6 +95,170 @@ function jqExit(program, input, args = []) {
   return Bun.spawnSync(["jq", "-e", ...args, program], {
     stdin: Buffer.from(input),
   }).exitCode;
+}
+
+function runCollectorFixture({
+  hasLocalUsage,
+  machineJSON,
+  failDetails,
+  failClaudeDaily = false,
+  malformedClaudeDaily = false,
+  failNormalization = false,
+  legacyDeletedWorktree = false,
+  deletedWorktreeBaseRepository = false,
+}) {
+  const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
+  const home = join(root, "home");
+  const cache = join(root, "cache");
+  const output = join(root, "output");
+  const bin = join(home, ".local", "bin");
+  const ccusage = join(cache, ".ccusage", "node_modules", ".bin");
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(ccusage, { recursive: true });
+  mkdirSync(output, { recursive: true });
+  let deletedCwd = join(root, "deleted-worktree");
+  if (deletedWorktreeBaseRepository) {
+    const baseRepository = join(root, "repository");
+    mkdirSync(baseRepository, { recursive: true });
+    expect(
+      Bun.spawnSync(["git", "init", baseRepository], {
+        env: isolatedGitEnvironment,
+      }).exitCode,
+    ).toBe(0);
+    expect(
+      Bun.spawnSync(
+        [
+          "git",
+          "-C",
+          baseRepository,
+          "remote",
+          "add",
+          "origin",
+          "git@github.com:owner/repository.git",
+        ],
+        { env: isolatedGitEnvironment },
+      ).exitCode,
+    ).toBe(0);
+    deletedCwd = join(
+      baseRepository,
+      ".claude",
+      "worktrees",
+      "deleted",
+      "subfolder",
+    );
+  }
+  if (legacyDeletedWorktree || deletedWorktreeBaseRepository) {
+    const projects = join(home, ".claude", "projects");
+    mkdirSync(projects, { recursive: true });
+    writeFileSync(
+      join(projects, "session.jsonl"),
+      `${JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-08-07T12:00:00.000Z",
+        sessionId: "legacy-session",
+        cwd: deletedCwd,
+        requestId: "legacy-request",
+        message: {
+          id: "legacy-message",
+          model: "opus",
+          usage: { input_tokens: 1 },
+        },
+      })}\n`,
+    );
+    if (legacyDeletedWorktree) {
+      writeFileSync(
+        join(cache, ".cwdmap.v4.jsonl"),
+        `${JSON.stringify({
+          cwd: deletedCwd,
+          name: "repository",
+          root: deletedCwd,
+          repositoryID: "github.com/owner/repository",
+          repositoryName: "repository",
+          repositoryURL: "https://github.com/owner/repository",
+          folderName: "deleted-worktree",
+        })}\n`,
+      );
+    }
+  }
+  const existing = '{"sentinel":"preserved"}\n';
+  writeFileSync(join(output, "usage.json"), existing);
+  if (machineJSON !== undefined) {
+    const machines = join(output, "machines");
+    mkdirSync(machines, { recursive: true });
+    writeFileSync(join(machines, "machine.json"), machineJSON);
+  }
+  const bunPath = join(bin, "bun");
+  writeFileSync(bunPath, '#!/bin/sh\nexec "$@"\n');
+  chmodSync(bunPath, 0o755);
+  const ccusagePath = join(ccusage, "ccusage");
+  writeFileSync(
+    ccusagePath,
+    `#!/bin/sh
+if [ "\${1:-}" = "--version" ]; then
+  printf 'ccusage 20.0.19\\n'
+elif [ "\${2:-}" = "daily" ]; then
+  if [ "\${1:-}" = "claude" ] && [ "\${FAIL_CLAUDE_DAILY:-0}" = "1" ]; then
+    exit 72
+  elif [ "\${1:-}" = "claude" ] && [ "\${MALFORMED_CLAUDE_DAILY:-0}" = "1" ]; then
+    printf '{"daily":'
+  elif [ "\${1:-}" = "claude" ] && [ "\${FAIL_NORMALIZATION:-0}" = "1" ]; then
+    printf '%s\\n' '{"daily":[{"date":"2026-08-07","models":{"broken":42}}]}'
+  elif [ "\${1:-}" = "claude" ] && [ "\${FAKE_LOCAL_USAGE:-0}" = "1" ]; then
+    printf '%s\\n' '{"daily":[{"date":"2026-08-07","modelBreakdowns":[{"modelName":"opus","inputTokens":1,"outputTokens":0,"cacheCreationTokens":0,"cacheReadTokens":0,"cost":1}]}]}'
+  else
+    printf '%s\\n' '{"daily":[]}'
+  fi
+elif [ "\${2:-}" = "session" ]; then
+  printf '%s\\n' '{"sessions":[]}'
+else
+  exit 1
+fi
+`,
+  );
+  chmodSync(ccusagePath, 0o755);
+  if (failDetails) {
+    const realJQ = Bun.which("jq");
+    expect(realJQ).not.toBeNull();
+    const jqPath = join(bin, "jq");
+    writeFileSync(
+      jqPath,
+      `#!/bin/sh
+has_usage=0
+has_records=0
+for argument in "$@"; do
+  [ "$argument" = "usage" ] && has_usage=1
+  case "$argument" in
+    */recs.json) has_records=1 ;;
+  esac
+done
+[ "$has_usage" = "1" ] && [ "$has_records" = "1" ] && exit 86
+exec "$REAL_JQ" "$@"
+`,
+    );
+    chmodSync(jqPath, 0o755);
+  }
+  const process = Bun.spawnSync(["bash", scriptPath, output], {
+    env: {
+      ...isolatedGitEnvironment,
+      HOME: home,
+      EDITH_CACHE_DIR: cache,
+      FAKE_LOCAL_USAGE: hasLocalUsage ? "1" : "0",
+      FAIL_CLAUDE_DAILY: failClaudeDaily ? "1" : "0",
+      MALFORMED_CLAUDE_DAILY: malformedClaudeDaily ? "1" : "0",
+      FAIL_NORMALIZATION: failNormalization ? "1" : "0",
+      REAL_JQ: Bun.which("jq") ?? "jq",
+    },
+  });
+  const result = {
+    exitCode: process.exitCode,
+    stdout: process.stdout.toString(),
+    stderr: process.stderr.toString(),
+    output: readFileSync(join(output, "usage.json"), "utf8"),
+    existing,
+    deletedCwd,
+  };
+  rmSync(root, { recursive: true, force: true });
+  return result;
 }
 
 const walk = (lines, src = "cli", off = 0) =>
@@ -80,6 +301,49 @@ describe("WALK", () => {
     expect(rec.src).toBe("cli");
     expect(rec.sid).toBe("sess-1");
     expect(rec.wt).toBeNull();
+  });
+
+  test("nested cache creation tiers win when the top-level total is zero", () => {
+    const value = assistant();
+    value.message.usage.cache_creation_input_tokens = 0;
+    value.message.usage.cache_creation = {
+      ephemeral_5m_input_tokens: 31,
+      ephemeral_1h_input_tokens: 47,
+    };
+    const [rec] = walk([value]);
+    expect(rec.cc).toBe(78);
+    expect(rec.tok).toBe(148);
+  });
+
+  test("the final streaming usage record wins during deduplication", () => {
+    const first = assistant({ timestamp: "2026-06-10T12:30:00.000Z" });
+    first.message.usage.output_tokens = 5;
+    const final = assistant({ timestamp: "2026-06-10T12:30:02.000Z" });
+    final.message.usage.output_tokens = 207;
+    const records = walk([first, final]);
+    const [deduped] = jq(
+      DEDUP,
+      records.map((record) => JSON.stringify(record)).join("\n"),
+      ["-s"],
+    );
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].out).toBe(207);
+    expect(deduped[0].tok).toBe(287);
+  });
+
+  test("a later lower-token streaming duplicate cannot replace the complete record", () => {
+    const complete = assistant({ timestamp: "2026-06-10T12:30:00.000Z" });
+    complete.message.usage.output_tokens = 207;
+    const partial = assistant({ timestamp: "2026-06-10T12:30:02.000Z" });
+    partial.message.usage.output_tokens = 5;
+    const records = walk([complete, partial]);
+    const [deduped] = jq(
+      DEDUP,
+      records.map((record) => JSON.stringify(record)).join("\n"),
+      ["-s"],
+    );
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].out).toBe(207);
   });
 
   test("timezone offset shifts date and hour", () => {
@@ -160,6 +424,92 @@ describe("WALK", () => {
   });
 });
 
+describe("RECONCILE", () => {
+  const record = (over = {}) => ({
+    id: "r1",
+    date: "2026-06-10",
+    hour: 12,
+    ts: 1,
+    model: "model",
+    cwd: "/repo",
+    wt: null,
+    sid: "session",
+    src: "cli",
+    cost: 0.8,
+    inp: 40,
+    out: 20,
+    cc: 0,
+    cr: 20,
+    tok: 80,
+    ...over,
+  });
+
+  const usage = {
+    daily: [
+      {
+        period: "2026-06-10",
+        bySource: {
+          cli: [
+            {
+              inputTokens: 50,
+              outputTokens: 20,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 30,
+              cost: 1,
+            },
+          ],
+          pi: [
+            {
+              inputTokens: 10,
+              outputTokens: 5,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 5,
+              cost: 0.2,
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  test("caps late transcript records at each source daily snapshot", () => {
+    const records = [
+      record(),
+      record({ id: "r2", ts: 2, tok: 40, inp: 20, out: 10, cr: 10 }),
+      record({
+        id: "p1",
+        src: "pi",
+        tok: 20,
+        inp: 10,
+        out: 5,
+        cr: 5,
+        cost: 0.2,
+      }),
+    ];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+    ]);
+    const cli = out.filter((item) => item.src === "cli");
+    const pi = out.filter((item) => item.src === "pi");
+    expect(cli.reduce((sum, item) => sum + item.tok, 0)).toBe(100);
+    expect(cli.reduce((sum, item) => sum + item.cost, 0)).toBeCloseTo(1);
+    expect(cli[1].tok).toBe(20);
+    expect(pi).toEqual([records[2]]);
+  });
+
+  test("does not inflate detail that is below the authoritative total", () => {
+    const records = [record({ tok: 40, inp: 20, out: 10, cr: 10 })];
+    const [out] = jq(RECONCILE, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+    ]);
+    expect(out).toEqual(records);
+  });
+});
+
 const walkc = (lines, src = "codex", off = 0) =>
   jq(WALKC, lines.map((l) => JSON.stringify(l)).join("\n"), [
     "--argjson",
@@ -176,49 +526,18 @@ const sessionMeta = (over = {}) => ({
   payload: { id: "cx-1", cwd: "/repo/app", ...over },
 });
 
-const tokenCount = (usage = {}, over = {}) => ({
-  timestamp: "2026-06-10T12:30:00.123Z",
-  type: "event_msg",
-  payload: {
-    type: "token_count",
-    info: {
-      last_token_usage: {
-        input_tokens: 100,
-        cached_input_tokens: 60,
-        output_tokens: 20,
-        reasoning_output_tokens: 5,
-        total_tokens: 120,
-        ...usage,
-      },
-    },
-  },
-  ...over,
-});
-
 describe("WALKC", () => {
-  test("token_count becomes a rec carrying session meta, model, and source", () => {
-    const out = walkc([
-      sessionMeta(),
-      { type: "turn_context", payload: { model: "gpt-5.6-sol" } },
-      tokenCount(),
-      tokenCount({}, { timestamp: "2026-06-10T13:30:00.123Z" }),
+  test("links a Codex session file to its repository metadata", () => {
+    const out = walkc([sessionMeta()]);
+    expect(out).toEqual([
+      {
+        t: "meta",
+        sid: "cx-1",
+        cwd: "/repo/app",
+        src: "codex",
+        sessionFile: "<stdin>",
+      },
     ]);
-    expect(out.length).toBe(2);
-    const [a, b] = out;
-    expect(a.t).toBe("rec");
-    expect(a.sid).toBe("cx-1");
-    expect(a.cwd).toBe("/repo/app");
-    expect(a.model).toBe("gpt-5.6-sol");
-    expect(a.src).toBe("codex");
-    expect(a.tok).toBe(120);
-    expect(a.inp).toBe(40);
-    expect(a.cr).toBe(60);
-    expect(a.out).toBe(20);
-    expect(a.date).toBe("2026-06-10");
-    expect(a.hour).toBe(12);
-    expect(a.ts).toBe(Date.parse("2026-06-10T12:30:00Z"));
-    expect(a.wt).toBeNull();
-    expect(a.id).not.toBe(b.id);
   });
 
   test("user_message becomes a text record, tag-prefixed and empty skipped", () => {
@@ -233,19 +552,283 @@ describe("WALKC", () => {
       msg("<environment_context>x"),
       msg(""),
     ]);
+    expect(out[0]).toMatchObject({
+      t: "meta",
+      sid: "cx-1",
+      cwd: "/repo/app",
+      src: "codex",
+    });
+    expect(out[1]).toEqual({
+      t: "text",
+      sid: "cx-1",
+      tms: "2026-06-10T12:01:00.000Z",
+      text: "fix the bug",
+    });
+    expect(out).toHaveLength(2);
+  });
+
+  test("files without session_meta emit nothing", () => {
+    expect(
+      walkc([
+        {
+          timestamp: "2026-06-10T12:30:00.123Z",
+          type: "event_msg",
+          payload: { type: "token_count", info: {} },
+        },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("CODEX_DETAILS", () => {
+  const details = (metadata, sessions, off = 0) =>
+    jq(CODEX_DETAILS, "", [
+      "-n",
+      "--argjson",
+      "metadata",
+      JSON.stringify(metadata),
+      "--argjson",
+      "sessions",
+      JSON.stringify(sessions),
+      "--argjson",
+      "off",
+      String(off),
+    ]);
+
+  test("joins exact daily session and model totals to the repository", () => {
+    const records = details(
+      [
+        {
+          sessionFile: "rollout-1",
+          sid: "cx-1",
+          cwd: "/repo/app",
+        },
+      ],
+      [
+        {
+          date: "2026-06-10",
+          sessionFile: "rollout-1",
+          sessionId: "2026/06/10/rollout-1",
+          lastActivity: "2026-06-10T12:30:00.123Z",
+          costUSD: 1.2,
+          models: {
+            "gpt-a": {
+              inputTokens: 40,
+              outputTokens: 20,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 60,
+            },
+            "gpt-b": {
+              inputTokens: 10,
+              outputTokens: 5,
+              cacheCreationTokens: 1,
+              cacheReadTokens: 4,
+            },
+          },
+        },
+      ],
+    );
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      date: "2026-06-10",
+      hour: 12,
+      ts: 1_781_094_600_123,
+      model: "gpt-a",
+      cwd: "/repo/app",
+      sid: "cx-1",
+      src: "codex",
+      inp: 40,
+      out: 20,
+      cc: 0,
+      cr: 60,
+      tok: 120,
+    });
+    expect(records.reduce((sum, record) => sum + record.tok, 0)).toBe(140);
+    expect(records.reduce((sum, record) => sum + record.cost, 0)).toBeCloseTo(
+      1.2,
+    );
+  });
+
+  test("matches a basename fallback and preserves aggregate-only sessions", () => {
+    const [record] = details(
+      [{ sessionFile: "rollout-2", sid: "cx-2", cwd: "/repo/fallback" }],
+      [
+        {
+          date: "2026-06-10",
+          sessionId: "2026/06/10/rollout-2",
+          lastActivity: "2026-06-10T23:30:00.000Z",
+          inputTokens: 5,
+          outputTokens: 2,
+          cacheCreationTokens: 1,
+          cacheReadTokens: 4,
+          totalTokens: 12,
+          costUSD: 0.5,
+          models: {},
+        },
+      ],
+      7200,
+    );
+    expect(record).toMatchObject({
+      date: "2026-06-10",
+      hour: 1,
+      model: "unknown",
+      cwd: "/repo/fallback",
+      sid: "cx-2",
+      tok: 12,
+      cost: 0.5,
+    });
+  });
+});
+
+const walkpi = (lines, src = "pi", off = 0) =>
+  jq(WALKPI, lines.map((l) => JSON.stringify(l)).join("\n"), [
+    "--argjson",
+    "off",
+    String(off),
+    "--arg",
+    "src",
+    src,
+  ]);
+
+const piSession = (over = {}) => ({
+  type: "session",
+  version: 3,
+  id: "pi-session-1",
+  timestamp: "2026-06-10T12:00:00.000Z",
+  cwd: "/repo/pi-app",
+  ...over,
+});
+
+const piUsage = (over = {}) => ({
+  input: 100,
+  output: 20,
+  cacheRead: 60,
+  cacheWrite: 5,
+  totalTokens: 185,
+  cost: {
+    input: 0.1,
+    output: 0.1,
+    cacheRead: 0.02,
+    cacheWrite: 0.03,
+    total: 0.25,
+  },
+  ...over,
+});
+
+const piMessage = (role, over = {}) => ({
+  type: "message",
+  id: `${role}-1`,
+  parentId: null,
+  timestamp: "2026-06-10T12:30:00.123Z",
+  message: {
+    role,
+    model: role === "assistant" ? "claude-sonnet-4-5" : undefined,
+    usage: role === "user" ? undefined : piUsage(),
+    content: role === "user" ? [{ type: "text", text: "fix pi usage" }] : [],
+  },
+  ...over,
+});
+
+describe("WALKPI", () => {
+  test("assistant, tool, and summary usage become exact detail records", () => {
+    const out = walkpi([
+      piSession(),
+      piMessage("assistant"),
+      piMessage("toolResult", { id: "tool-1" }),
+      {
+        type: "compaction",
+        id: "compact-1",
+        timestamp: "2026-06-10T13:30:00.123Z",
+        usage: piUsage({ input: 10, output: 2, cacheRead: 0, cacheWrite: 0 }),
+      },
+      {
+        type: "branch_summary",
+        id: "summary-1",
+        timestamp: "2026-06-10T14:30:00.123Z",
+        usage: piUsage({ input: 8, output: 3, cacheRead: 0, cacheWrite: 0 }),
+      },
+    ]);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toMatchObject({
+      t: "rec",
+      id: "pi:pi-session-1:assistant-1",
+      sid: "pi-session-1",
+      cwd: "/repo/pi-app",
+      model: "claude-sonnet-4-5",
+      src: "pi",
+      inp: 100,
+      out: 20,
+      cr: 60,
+      cc: 5,
+      tok: 185,
+      cost: 0.25,
+      date: "2026-06-10",
+      hour: 12,
+      ts: Date.parse("2026-06-10T12:30:00Z"),
+      wt: null,
+    });
+    expect(out[1].model).toBe("unknown");
+    expect(out[2]).toMatchObject({
+      id: "pi:pi-session-1:compact-1",
+      inp: 10,
+      out: 2,
+    });
+    expect(out[3]).toMatchObject({
+      id: "pi:pi-session-1:summary-1",
+      inp: 8,
+      out: 3,
+    });
+  });
+
+  test("user text and explicit session names provide chat titles", () => {
+    const out = walkpi([
+      piSession(),
+      piMessage("user"),
+      { type: "session_info", id: "name-1", name: "  Pi coverage  " },
+    ]);
     expect(out).toEqual([
       {
         t: "text",
-        sid: "cx-1",
-        tms: "2026-06-10T12:01:00.000Z",
-        text: "fix the bug",
+        sid: "pi-session-1",
+        tms: "2026-06-10T12:30:00.123Z",
+        text: "fix pi usage",
       },
+      { t: "title", sid: "pi-session-1", title: "Pi coverage" },
     ]);
   });
 
-  test("zero-token counts and files without session_meta emit nothing", () => {
-    expect(walkc([sessionMeta(), tokenCount({ total_tokens: 0 })])).toEqual([]);
-    expect(walkc([tokenCount()])).toEqual([]);
+  test("zero-token usage and files without a session header emit nothing", () => {
+    expect(
+      walkpi([
+        piSession(),
+        piMessage("assistant", {
+          message: {
+            role: "assistant",
+            model: "model",
+            usage: piUsage({
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            }),
+          },
+        }),
+      ]),
+    ).toEqual([]);
+    expect(walkpi([piMessage("assistant")])).toEqual([]);
+  });
+
+  test("timezone offset shifts the local date and hour", () => {
+    const [rec] = walkpi(
+      [
+        piSession(),
+        piMessage("assistant", { timestamp: "2026-06-10T23:30:00.000Z" }),
+      ],
+      "pi",
+      3600 * 2,
+    );
+    expect(rec.date).toBe("2026-06-11");
+    expect(rec.hour).toBe(1);
   });
 });
 
@@ -368,6 +951,83 @@ describe("WALKCC", () => {
   });
 });
 
+describe("OpenCode repository queries", () => {
+  test("uses the session directory when the message has no cwd", () => {
+    const database = new Database(":memory:");
+    database.run(
+      "create table session (id text primary key, directory text, title text)",
+    );
+    database.run("create table message (session_id text, data text)");
+    database.run(
+      "insert into session values (?, ?, ?)",
+      "session-1",
+      "/repo/from-session",
+      "OpenCode chat",
+    );
+    database.run(
+      "insert into message values (?, ?)",
+      "session-1",
+      JSON.stringify({
+        role: "assistant",
+        time: { created: 1_786_000_000_000 },
+        modelID: "gpt-5",
+        cost: 0.5,
+        tokens: { input: 10, output: 2, cache: { write: 1, read: 4 } },
+      }),
+    );
+    const row = JSON.parse(database.query(OPENCODE_MESSAGES).values()[0][0]);
+    expect(row).toEqual({
+      sid: "session-1",
+      ts: 1_786_000_000_000,
+      cwd: "/repo/from-session",
+      model: "gpt-5",
+      cost: 0.5,
+      inp: 10,
+      out: 2,
+      cc: 1,
+      cr: 4,
+    });
+    const title = JSON.parse(database.query(OPENCODE_TITLES).values()[0][0]);
+    expect(title).toEqual({ sid: "session-1", title: "OpenCode chat" });
+    database.close();
+  });
+
+  test("prefers message cwd and supports databases without a session table", () => {
+    const modern = new Database(":memory:");
+    modern.run(
+      "create table session (id text primary key, directory text, title text)",
+    );
+    modern.run("create table message (session_id text, data text)");
+    const message = JSON.stringify({
+      role: "assistant",
+      time: { created: 1_786_000_000_000 },
+      path: { cwd: "/repo/from-message" },
+      tokens: { input: 1, output: 1 },
+    });
+    modern.run(
+      "insert into session values (?, ?, ?)",
+      "session-2",
+      "/repo/from-session",
+      "",
+    );
+    modern.run("insert into message values (?, ?)", "session-2", message);
+    const modernRow = JSON.parse(
+      modern.query(OPENCODE_MESSAGES).values()[0][0],
+    );
+    expect(modernRow.cwd).toBe("/repo/from-message");
+    modern.close();
+
+    const legacy = new Database(":memory:");
+    legacy.run("create table message (session_id text, data text)");
+    legacy.run("insert into message values (?, ?)", "session-2", message);
+    const legacyRow = JSON.parse(
+      legacy.query(OPENCODE_MESSAGES_FALLBACK).values()[0][0],
+    );
+    expect(legacyRow.cwd).toBe("/repo/from-message");
+    legacy.close();
+  });
+});
+
 describe("CCDAILY", () => {
   const ccdaily = (lines, off = 0) =>
     jq(CCDAILY, lines.map((l) => JSON.stringify(l)).join("\n"), [
@@ -438,7 +1098,7 @@ describe("NORM", () => {
     expect(day.breakdowns[0].cost).toBe(9);
   });
 
-  test("codex shape splits row cost by token share", () => {
+  test("mixed-model shape keeps model tokens and marks cost unavailable", () => {
     const [day] = norm([
       {
         date: "2026-06-10",
@@ -452,11 +1112,75 @@ describe("NORM", () => {
     const byName = Object.fromEntries(
       day.breakdowns.map((b) => [b.modelName, b]),
     );
-    expect(byName.a.cost).toBeCloseTo(7.5);
-    expect(byName.b.cost).toBeCloseTo(2.5);
+    expect(byName.a.inputTokens).toBe(30);
+    expect(byName.a.cost).toBe(0);
+    expect(byName.b.inputTokens).toBe(10);
+    expect(byName.b.cost).toBe(0);
+    expect(byName["unattributed-cost"]).toEqual({
+      modelName: "unattributed-cost",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+      cost: 10,
+    });
+    expect(
+      day.breakdowns.reduce(
+        (sum, row) =>
+          sum +
+          row.inputTokens +
+          row.outputTokens +
+          row.cacheCreationTokens +
+          row.cacheReadTokens,
+        0,
+      ),
+    ).toBe(40);
+    expect(day.breakdowns.reduce((sum, row) => sum + row.cost, 0)).toBe(10);
   });
 
-  test("opencode shape splits row evenly across modelsUsed", () => {
+  test("single-model shape assigns the exact source cost", () => {
+    const [day] = norm([
+      {
+        date: "2026-06-10",
+        costUSD: 10,
+        models: {
+          a: { inputTokens: 30, outputTokens: 10 },
+        },
+      },
+    ]);
+    expect(day.breakdowns).toEqual([
+      {
+        modelName: "a",
+        inputTokens: 30,
+        outputTokens: 10,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 10,
+      },
+    ]);
+  });
+
+  test("empty model shape keeps source cost unattributed", () => {
+    const [day] = norm([
+      {
+        date: "2026-06-10",
+        costUSD: 10,
+        models: {},
+      },
+    ]);
+    expect(day.breakdowns).toEqual([
+      {
+        modelName: "unattributed-cost",
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 10,
+      },
+    ]);
+  });
+
+  test("aggregate multi-model shape keeps exact totals under unknown", () => {
     const [day] = norm([
       {
         date: "2026-06-10",
@@ -466,9 +1190,55 @@ describe("NORM", () => {
         modelsUsed: ["a", "b"],
       },
     ]);
-    expect(day.breakdowns.length).toBe(2);
-    expect(day.breakdowns[0].inputTokens).toBe(50);
-    expect(day.breakdowns[0].cost).toBe(4);
+    expect(day.breakdowns).toEqual([
+      {
+        modelName: "unknown",
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 8,
+      },
+    ]);
+  });
+
+  test("missing model name remains unknown", () => {
+    const [day] = norm([
+      {
+        date: "2026-06-10",
+        modelBreakdowns: [
+          {
+            inputTokens: 12,
+            outputTokens: 3,
+            cost: 2,
+          },
+        ],
+      },
+    ]);
+    expect(day.breakdowns).toEqual([
+      {
+        modelName: "unknown",
+        inputTokens: 12,
+        outputTokens: 3,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 2,
+      },
+    ]);
+  });
+
+  test("aggregate single-model shape retains the available model name", () => {
+    const [day] = norm([
+      {
+        date: "2026-06-10",
+        totalCost: 8,
+        inputTokens: 100,
+        outputTokens: 20,
+        modelsUsed: ["one-model"],
+      },
+    ]);
+    expect(day.breakdowns[0].modelName).toBe("one-model");
+    expect(day.breakdowns[0].inputTokens).toBe(100);
   });
 
   test("zero-token zero-cost synthetic rows dropped, tokened ones kept", () => {
@@ -501,16 +1271,32 @@ describe("NORM", () => {
 });
 
 describe("usage pipeline", () => {
-  const assemble = (sources, sessions = []) =>
-    jq(ASSEMBLE, sources.map((source) => JSON.stringify(source)).join("\n"), [
-      "-s",
-      "--arg",
-      "now",
-      "2026-07-15T12:00:00Z",
-      "--argjson",
-      "ss",
-      JSON.stringify([[{ sessions }]]),
-    ])[0];
+  const assemble = (sources, sessions = []) => {
+    const out = jq(
+      ASSEMBLE,
+      sources.map((source) => JSON.stringify(source)).join("\n"),
+      [
+        "-s",
+        "--arg",
+        "now",
+        "2026-07-15T12:00:00Z",
+        "--argjson",
+        "ss",
+        JSON.stringify([[{ sessions }]]),
+      ],
+    )[0];
+    out.schemaVersion = 8;
+    for (const day of out.daily) {
+      day.hours = Array.from({ length: 24 }, () => ({
+        tokens: 0,
+        cost: 0,
+        bySource: {},
+        byPath: {},
+      }));
+      day.projects = [];
+    }
+    return out;
+  };
 
   test("large multi-agent totals survive normalization and assembly exactly", () => {
     const normalized = (source, label, daily) => ({
@@ -569,6 +1355,37 @@ describe("usage pipeline", () => {
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 
+  test("mixed-model unattributed cost row does not double source tokens", () => {
+    const norm = jq(
+      `${NORM} [.daily[] | normDay | .breakdowns |= dropSynthetic]`,
+      JSON.stringify({
+        daily: [
+          {
+            date: "2026-07-15",
+            costUSD: 10,
+            models: {
+              a: { inputTokens: 30 },
+              b: { outputTokens: 10 },
+            },
+          },
+        ],
+      }),
+    )[0];
+    const out = assemble([{ source: "codex", label: "Codex", norm }]);
+    expect(out.totals.tokens).toBe(40);
+    expect(out.totals.cost).toBe(10);
+    expect(out.daily[0].bySource.codex).toHaveLength(3);
+    expect(out.daily[0].bySource.codex).toContainEqual({
+      modelName: "unattributed-cost",
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+      cost: 10,
+    });
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
   test("empty tokens and sessions produce rigid zero totals", () => {
     const out = assemble([
       {
@@ -589,7 +1406,7 @@ describe("usage pipeline", () => {
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
 
-  test("validation rejects every inconsistent token invariant", () => {
+  test("validation rejects inconsistent token and cost invariants", () => {
     const valid = assemble([
       {
         source: "codex",
@@ -613,6 +1430,7 @@ describe("usage pipeline", () => {
     ]);
     const corruptions = [
       (value) => value.totals.tokens++,
+      (value) => (value.totals.cost += 1),
       (value) => value.totals.inputTokens++,
       (value) => value.totals.outputTokens++,
       (value) => value.totals.cacheCreationTokens++,
@@ -621,11 +1439,985 @@ describe("usage pipeline", () => {
       (value) => value.daily.push(structuredClone(value.daily[0])),
       (value) => value.sources.push("codex"),
       (value) => value.defaultSources.push("missing"),
+      (value) => (value.schemaVersion = 7),
+      (value) => value.daily[0].hours.pop(),
+      (value) => delete value.daily[0].hours[0].byPath,
+      (value) => delete value.daily[0].projects,
     ];
     for (const corrupt of corruptions) {
       const value = structuredClone(valid);
       corrupt(value);
       expect(jqExit(VALIDATE, JSON.stringify(value))).toBe(1);
+    }
+    const withinTolerance = structuredClone(valid);
+    withinTolerance.totals.cost += 0.0000005;
+    expect(jqExit(VALIDATE, JSON.stringify(withinTolerance))).toBe(0);
+  });
+});
+
+const localDoc = (over = {}) => ({
+  schemaVersion: 7,
+  generatedAt: "2026-08-08T10:00:00Z",
+  sources: ["cli"],
+  defaultSources: ["cli"],
+  sourceMeta: { cli: { label: "Claude Code", tool: "Claude Code" } },
+  totals: {
+    cost: 1,
+    tokens: 100,
+    inputTokens: 10,
+    outputTokens: 20,
+    cacheCreationTokens: 30,
+    cacheReadTokens: 40,
+  },
+  sessions: [{ id: "s1", source: "cli" }],
+  daily: [
+    {
+      period: "2026-08-07",
+      bySource: {
+        cli: [
+          {
+            modelName: "opus",
+            inputTokens: 10,
+            outputTokens: 20,
+            cacheCreationTokens: 30,
+            cacheReadTokens: 40,
+            cost: 1,
+          },
+        ],
+      },
+      hours: [
+        {
+          tokens: 100,
+          cost: 1,
+          bySource: {
+            cli: {
+              tokens: 100,
+              cost: 1,
+              byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+          byPath: {
+            "/Users/p/edith": {
+              tokens: 100,
+              cost: 1,
+              bySource: {
+                cli: {
+                  tokens: 100,
+                  cost: 1,
+                  byModel: { opus: { tokens: 100, cost: 1 } },
+                },
+              },
+            },
+          },
+        },
+      ],
+      projects: [
+        {
+          projectName: "edith",
+          repositoryID: "github.com/pulkitxm/edith",
+          repositoryName: "edith",
+          repositoryURL: "https://github.com/pulkitxm/edith",
+          folderName: "edith-local",
+          path: "/Users/p/edith",
+          tokens: 100,
+          cost: 1,
+          bySource: {
+            cli: {
+              tokens: 100,
+              cost: 1,
+              byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+          chats: [
+            {
+              id: "c1",
+              path: "/Users/p/edith",
+              source: "cli",
+              tokens: 100,
+              cost: 1,
+            },
+          ],
+          worktrees: [],
+        },
+      ],
+    },
+  ],
+  ...over,
+});
+
+const machineDoc = (over = {}) => ({
+  schemaVersion: 7,
+  generatedAt: "2026-08-08T09:00:00Z",
+  sources: ["cli", "codex"],
+  defaultSources: ["cli", "codex"],
+  sourceMeta: {
+    cli: { label: "Claude Code", tool: "Claude Code" },
+    codex: { label: "Codex", tool: "Codex" },
+  },
+  machine: {
+    id: "11111111-1111-1111-1111-111111111111",
+    name: "tuf",
+    slug: "tuf",
+    host: "tuf.local",
+    collectedAt: "2026-08-08T09:05:00Z",
+  },
+  sessions: [{ id: "s9", source: "cli" }],
+  daily: [
+    {
+      period: "2026-08-07",
+      bySource: {
+        cli: [
+          {
+            modelName: "opus",
+            inputTokens: 1,
+            outputTokens: 2,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            cost: 2,
+          },
+        ],
+      },
+      hours: [
+        {
+          tokens: 3,
+          cost: 2,
+          bySource: {
+            cli: {
+              tokens: 3,
+              cost: 2,
+              byModel: { opus: { tokens: 3, cost: 2 } },
+            },
+          },
+          byPath: {
+            "/home/p/edith/.claude/worktrees/wt/sub": {
+              tokens: 3,
+              cost: 2,
+              bySource: {
+                cli: {
+                  tokens: 3,
+                  cost: 2,
+                  byModel: { opus: { tokens: 3, cost: 2 } },
+                },
+              },
+            },
+          },
+        },
+      ],
+      projects: [
+        {
+          projectName: "edith",
+          repositoryID: "github.com/pulkitxm/edith",
+          repositoryName: "edith",
+          repositoryURL: "https://github.com/pulkitxm/edith",
+          folderName: "edith-tuf",
+          path: "/home/p/edith",
+          tokens: 3,
+          cost: 2,
+          bySource: {
+            cli: {
+              tokens: 3,
+              cost: 2,
+              byModel: { opus: { tokens: 3, cost: 2 } },
+            },
+          },
+          chats: [
+            {
+              id: "c9",
+              path: "/home/p/edith",
+              source: "cli",
+              tokens: 3,
+              cost: 2,
+            },
+          ],
+          worktrees: [
+            {
+              name: "wt",
+              chats: [{ id: "c8", source: "codex", tokens: 0, cost: 0 }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  ...over,
+});
+
+describe("repository and detail attribution", () => {
+  test("cached fallback identities are revalidated for GitHub promotion", () => {
+    const kept = jq(
+      CWD_CACHE,
+      [
+        { cwd: "/repo/fallback", repositoryID: "folder:/repo/fallback" },
+        {
+          cwd: "/repo/stable",
+          repositoryID: "github.com/owner/stable",
+          repositoryFingerprint: "stable-fingerprint",
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n"),
+      [
+        "--arg",
+        "want",
+        "/repo/fallback\n/repo/stable\n",
+        "--argjson",
+        "fingerprints",
+        '[{"/repo/fallback":{"verified":false,"fingerprint":""},"/repo/stable":{"verified":true,"fingerprint":"stable-fingerprint"}}]',
+      ],
+    );
+    expect(kept).toEqual([
+      {
+        cwd: "/repo/stable",
+        repositoryID: "github.com/owner/stable",
+        repositoryFingerprint: "stable-fingerprint",
+      },
+    ]);
+    expect(script).toContain('cp "$TMP/cwdmap.jsonl" "$CWDMAP_CACHE"');
+  });
+
+  test("cached GitHub identity is discarded when the current origin changes", () => {
+    const kept = jq(
+      CWD_CACHE,
+      JSON.stringify({
+        cwd: "/repo/app",
+        repositoryID: "github.com/old/fork",
+        repositoryFingerprint: "old-remotes",
+      }),
+      [
+        "--arg",
+        "want",
+        "/repo/app\n",
+        "--argjson",
+        "fingerprints",
+        '[{"/repo/app":{"verified":true,"fingerprint":"current-remotes"}}]',
+      ],
+    );
+    expect(kept).toEqual([]);
+    const [currentID] = jq(
+      `${GITHUB} githubRepositoryID`,
+      JSON.stringify("git@github.com:current/origin.git"),
+    );
+    expect(currentID).toBe("github.com/current/origin");
+    expect(script).toContain('CWDMAP_CACHE="$EDCACHE/.cwdmap.v5.jsonl"');
+    expect(script).toContain(
+      "git_quick -C \"$git_probe\" config --get-regexp '^remote\\..*\\.url$'",
+    );
+  });
+
+  test("deleted worktree retains its cached GitHub identity", () => {
+    const cached = {
+      cwd: "/repo/deleted-worktree",
+      repositoryID: "github.com/owner/repository",
+      repositoryName: "repository",
+    };
+    const kept = jq(CWD_CACHE, JSON.stringify(cached), [
+      "--arg",
+      "want",
+      "/repo/deleted-worktree\n",
+      "--argjson",
+      "fingerprints",
+      '[{"/repo/deleted-worktree":{"verified":false,"fingerprint":""}}]',
+    ]);
+    expect(kept).toEqual([cached]);
+    expect(script).toContain('cp "$LEGACY_CWDMAP_CACHE" "$CWDMAP_CACHE"');
+  });
+
+  test("existing non-Git folder discards its stale GitHub identity", () => {
+    const kept = jq(
+      CWD_CACHE,
+      JSON.stringify({
+        cwd: "/repo/plain-folder",
+        repositoryID: "github.com/owner/old-repository",
+      }),
+      [
+        "--arg",
+        "want",
+        "/repo/plain-folder\n",
+        "--argjson",
+        "fingerprints",
+        '[{"/repo/plain-folder":{"verified":true,"fingerprint":"plain-folder"}}]',
+      ],
+    );
+    expect(kept).toEqual([]);
+  });
+
+  test("first v5 refresh imports a deleted worktree identity from v4", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      legacyDeletedWorktree: true,
+    });
+    expect(result.exitCode).toBe(0);
+    const report = JSON.parse(result.output);
+    expect(report.daily[0].projects).toHaveLength(1);
+    expect(report.daily[0].projects[0].repositoryID).toBe(
+      "github.com/owner/repository",
+    );
+    expect(report.daily[0].projects[0].path).toBe(result.deletedCwd);
+  }, 15_000);
+
+  test("deleted worktree resolves through its live base repository", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      deletedWorktreeBaseRepository: true,
+    });
+    expect(result.exitCode).toBe(0);
+    const report = JSON.parse(result.output);
+    const project = report.daily[0].projects[0];
+    expect(project.repositoryID).toBe("github.com/owner/repository");
+    expect(project.repositoryURL).toBe("https://github.com/owner/repository");
+    expect(project.path).toBe(
+      result.deletedCwd.split("/.claude/worktrees/")[0],
+    );
+  }, 15_000);
+
+  test("normalizes common GitHub remote forms to one stable ID", () => {
+    const [ids] = jq(
+      `${GITHUB} map(githubRepositoryID)`,
+      JSON.stringify([
+        "git@github.com:PulkitXM/Edith.git",
+        "ssh://git@github.com/PulkitXM/Edith.git",
+        "https://github.com/PulkitXM/Edith.git",
+        "https://token@github.com/PulkitXM/Edith.git",
+        "git://github.com/PulkitXM/Edith.git",
+        "https://gitlab.com/PulkitXM/Edith.git",
+      ]),
+    );
+    expect(ids).toEqual([
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+      "",
+    ]);
+  });
+
+  test("keeps same-repository folders flat with exact source and model detail", () => {
+    const usage = localDoc({
+      sources: ["cli", "commandcode", "codex", "amp"],
+      defaultSources: ["cli", "commandcode", "codex", "amp"],
+      daily: [
+        {
+          period: "2026-08-07",
+          bySource: { cli: [], commandcode: [], codex: [], amp: [] },
+        },
+      ],
+    });
+    const mappings = {
+      "/laptop/edith": {
+        cwd: "/laptop/edith",
+        root: "/laptop/edith",
+        repositoryID: "github.com/pulkitxm/edith",
+        repositoryName: "edith",
+        repositoryURL: "https://github.com/pulkitxm/edith",
+        folderName: "laptop-clone",
+      },
+      "/tuf/edith": {
+        cwd: "/tuf/edith",
+        root: "/tuf/edith",
+        repositoryID: "github.com/pulkitxm/edith",
+        repositoryName: "edith",
+        repositoryURL: "https://github.com/pulkitxm/edith",
+        folderName: "tuf-clone",
+      },
+      "/laptop/edith/.claude/worktrees/feature/src": {
+        cwd: "/laptop/edith/.claude/worktrees/feature/src",
+        root: "/laptop/edith",
+        repositoryID: "github.com/pulkitxm/edith",
+        repositoryName: "edith",
+        repositoryURL: "https://github.com/pulkitxm/edith",
+        folderName: "laptop-clone",
+      },
+    };
+    const record = (over) => ({
+      id: over.sid,
+      date: "2026-08-07",
+      hour: 9,
+      ts: 1,
+      model: "opus",
+      cwd: "/laptop/edith",
+      wt: null,
+      sid: "s1",
+      src: "cli",
+      inp: 0,
+      out: 0,
+      cc: 0,
+      cr: 0,
+      tok: 10,
+      cost: 1,
+      ...over,
+    });
+    const records = [
+      record({ sid: "s1" }),
+      record({
+        sid: "s2",
+        src: "commandcode",
+        model: "deepseek",
+        tok: 20,
+        cost: 2,
+      }),
+      record({
+        sid: "s3",
+        cwd: "/tuf/edith",
+        hour: 10,
+        model: "sonnet",
+        tok: 30,
+        cost: 3,
+      }),
+      record({
+        sid: "s4",
+        cwd: "/laptop/edith/.claude/worktrees/feature/src",
+        wt: "feature",
+        hour: 11,
+        model: "haiku",
+        tok: 5,
+        cost: 0.5,
+      }),
+    ];
+    const [out] = jq(DETAILS, JSON.stringify(records), [
+      "--argjson",
+      "usage",
+      JSON.stringify([usage]),
+      "--argjson",
+      "titles",
+      JSON.stringify([{}]),
+      "--argjson",
+      "cm",
+      JSON.stringify([mappings]),
+    ]);
+    expect(out.schemaVersion).toBe(8);
+    expect(out.daily[0].projects).toHaveLength(2);
+    expect(
+      out.daily[0].projects.map((project) => project.repositoryID),
+    ).toEqual(["github.com/pulkitxm/edith", "github.com/pulkitxm/edith"]);
+    const laptop = out.daily[0].projects.find(
+      (project) => project.folderName === "laptop-clone",
+    );
+    expect(laptop.bySource.cli).toEqual({
+      tokens: 15,
+      cost: 1.5,
+      byModel: {
+        haiku: { tokens: 5, cost: 0.5 },
+        opus: { tokens: 10, cost: 1 },
+      },
+    });
+    expect(laptop.bySource.commandcode.byModel.deepseek).toEqual({
+      tokens: 20,
+      cost: 2,
+    });
+    expect(out.daily[0].hours).toHaveLength(24);
+    expect(out.daily[0].hours[9].tokens).toBe(30);
+    expect(out.daily[0].hours[9].bySource.cli.byModel.opus).toEqual({
+      tokens: 10,
+      cost: 1,
+    });
+    expect(out.daily[0].hours[9].bySource.commandcode.byModel.deepseek).toEqual(
+      { tokens: 20, cost: 2 },
+    );
+    expect(out.daily[0].hours[9].byPath["/laptop/edith"]).toEqual({
+      tokens: 30,
+      cost: 3,
+      bySource: {
+        cli: {
+          tokens: 10,
+          cost: 1,
+          byModel: { opus: { tokens: 10, cost: 1 } },
+        },
+        commandcode: {
+          tokens: 20,
+          cost: 2,
+          byModel: { deepseek: { tokens: 20, cost: 2 } },
+        },
+      },
+    });
+    expect(out.daily[0].hours[10].byPath["/tuf/edith"].tokens).toBe(30);
+    const nestedPath = "/laptop/edith/.claude/worktrees/feature/src";
+    expect(out.daily[0].hours[11].byPath[nestedPath]).toEqual({
+      tokens: 5,
+      cost: 0.5,
+      bySource: {
+        cli: {
+          tokens: 5,
+          cost: 0.5,
+          byModel: { haiku: { tokens: 5, cost: 0.5 } },
+        },
+      },
+    });
+    expect(
+      out.daily[0].hours.some(
+        (hour) =>
+          Object.hasOwn(hour.bySource, "amp") ||
+          Object.hasOwn(hour.bySource, "codex"),
+      ),
+    ).toBeFalse();
+  });
+});
+
+const fleet = (docs) =>
+  jq(FLEET, docs.map((d) => JSON.stringify(d)).join("\n"), ["-s"])[0];
+
+const tufPrefix = "machine:11111111-1111-1111-1111-111111111111:";
+const tufCLI = "machine:11111111-1111-1111-1111-111111111111:cli";
+const tufCodex = "machine:11111111-1111-1111-1111-111111111111:codex";
+const piPrefix = "machine:22222222-2222-2222-2222-222222222222:";
+const piCLI = "machine:22222222-2222-2222-2222-222222222222:cli";
+
+describe("FLEET", () => {
+  test("machine sources are namespaced and labelled with the machine", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    expect(out.sources).toEqual(["cli", tufCLI, tufCodex]);
+    expect(out.defaultSources).toEqual(["cli", tufCLI, tufCodex]);
+    expect(out.sourceMeta[tufCLI].label).toBe("Claude Code · tuf");
+    expect(out.sourceMeta[tufCLI].machine).toBe("tuf");
+    expect(out.sourceMeta[tufCLI].machineHost).toBe("tuf.local");
+    expect(out.sourceMeta.cli.label).toBe("Claude Code");
+  });
+
+  test("machine source identity survives a machine rename", () => {
+    const renamed = machineDoc({
+      machine: {
+        id: "11111111-1111-1111-1111-111111111111",
+        name: "studio",
+        slug: "studio",
+        host: "studio.local",
+        collectedAt: "2026-08-08T09:05:00Z",
+      },
+    });
+    const out = fleet([localDoc(), renamed]);
+    expect(out.sources).toEqual(["cli", tufCLI, tufCodex]);
+    expect(out.sourceMeta[tufCLI].label).toBe("Claude Code · studio");
+    expect(out.sourceMeta[tufCLI].machineID).toBe(
+      "11111111-1111-1111-1111-111111111111",
+    );
+    expect(out.daily[0].projects[1].path).toBe(`${tufPrefix}/home/p/edith`);
+  });
+
+  test("same-name machines keep distinct source identities", () => {
+    const other = machineDoc({
+      machine: {
+        id: "22222222-2222-2222-2222-222222222222",
+        name: "tuf",
+        slug: "tuf",
+        host: "other.local",
+        collectedAt: "2026-08-08T09:06:00Z",
+      },
+    });
+    const out = fleet([localDoc(), machineDoc(), other]);
+    expect(out.sources).toContain(tufCLI);
+    expect(out.sources).toContain(piCLI);
+    expect(tufCLI).not.toBe(piCLI);
+    expect(Object.keys(out.daily[0].hours[0].byPath)).toContain(
+      `${tufPrefix}/home/p/edith/.claude/worktrees/wt/sub`,
+    );
+    expect(Object.keys(out.daily[0].hours[0].byPath)).toContain(
+      `${piPrefix}/home/p/edith/.claude/worktrees/wt/sub`,
+    );
+  });
+
+  test("machine sources without a machine ID are rejected", () => {
+    const doc = machineDoc();
+    doc.machine.id = "";
+    expect(
+      jqExit(
+        FLEET,
+        [localDoc(), doc].map((value) => JSON.stringify(value)).join("\n"),
+        ["-s"],
+      ),
+    ).not.toBe(0);
+  });
+
+  test("empty machine snapshot without a machine ID is rejected", () => {
+    const doc = machineDoc({
+      sources: [],
+      defaultSources: [],
+      daily: [],
+      sessions: [],
+    });
+    doc.machine.id = "";
+    expect(
+      jqExit(
+        FLEET,
+        [localDoc(), doc].map((value) => JSON.stringify(value)).join("\n"),
+        ["-s"],
+      ),
+    ).not.toBe(0);
+  });
+
+  test("numeric machine ID is rejected before fleet output", () => {
+    const doc = machineDoc();
+    doc.machine.id = 123;
+    expect(
+      jqExit(
+        FLEET,
+        [localDoc(), doc].map((value) => JSON.stringify(value)).join("\n"),
+        ["-s"],
+      ),
+    ).not.toBe(0);
+  });
+
+  test("a day seen on both sides keeps one row with both sides' sources", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    expect(out.daily).toHaveLength(1);
+    expect(Object.keys(out.daily[0].bySource).sort()).toEqual(["cli", tufCLI]);
+    expect(out.daily[0].hours).toHaveLength(24);
+    expect(out.daily[0].hours[0]).toEqual({
+      tokens: 103,
+      cost: 3,
+      bySource: {
+        cli: {
+          tokens: 100,
+          cost: 1,
+          byModel: { opus: { tokens: 100, cost: 1 } },
+        },
+        [tufCLI]: {
+          tokens: 3,
+          cost: 2,
+          byModel: { opus: { tokens: 3, cost: 2 } },
+        },
+      },
+      byPath: {
+        "/Users/p/edith": {
+          tokens: 100,
+          cost: 1,
+          bySource: {
+            cli: {
+              tokens: 100,
+              cost: 1,
+              byModel: { opus: { tokens: 100, cost: 1 } },
+            },
+          },
+        },
+        [`${tufPrefix}/home/p/edith/.claude/worktrees/wt/sub`]: {
+          tokens: 3,
+          cost: 2,
+          bySource: {
+            [tufCLI]: {
+              tokens: 3,
+              cost: 2,
+              byModel: { opus: { tokens: 3, cost: 2 } },
+            },
+          },
+        },
+      },
+    });
+    expect(Object.keys(out.daily[0].hours[0].byPath).sort()).toEqual([
+      "/Users/p/edith",
+      `${tufPrefix}/home/p/edith/.claude/worktrees/wt/sub`,
+    ]);
+    expect(
+      out.daily[0].hours[0].byPath[
+        `${tufPrefix}/home/p/edith/.claude/worktrees/wt/sub`
+      ].bySource[tufCLI].byModel.opus.tokens,
+    ).toBe(3);
+  });
+
+  test("machine projects and chats stay separable from the local ones", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    const projects = out.daily[0].projects;
+    expect(projects.map((p) => p.projectName)).toEqual(["edith", "edith"]);
+    expect(projects.map((p) => p.repositoryID)).toEqual([
+      "github.com/pulkitxm/edith",
+      "github.com/pulkitxm/edith",
+    ]);
+    expect(projects[1].folderName).toBe("edith-tuf");
+    expect(projects[1].path).toBe(`${tufPrefix}/home/p/edith`);
+    expect(projects[1].machineName).toBe("tuf");
+    expect(projects[1].machineID).toBe("11111111-1111-1111-1111-111111111111");
+    expect(projects[1].chats[0].path).toBe(`${tufPrefix}/home/p/edith`);
+    expect(projects[1].chats[0].source).toBe(tufCLI);
+    expect(projects[1].worktrees).toEqual([]);
+    expect(Object.keys(projects[1].bySource)).toEqual([tufCLI]);
+  });
+
+  test("stored remote Codex detail is machine-qualified and retained", () => {
+    const doc = machineDoc();
+    doc.daily[0].bySource.codex = [
+      {
+        modelName: "gpt",
+        inputTokens: 5,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        cost: 1,
+      },
+    ];
+    doc.daily[0].hours[0].tokens += 5;
+    doc.daily[0].hours[0].cost += 1;
+    doc.daily[0].hours[0].bySource.codex = {
+      tokens: 5,
+      cost: 1,
+      byModel: { gpt: { tokens: 5, cost: 1 } },
+    };
+    doc.daily[0].hours[0].byPath["/home/p/codex"] = {
+      tokens: 5,
+      cost: 1,
+      bySource: {
+        codex: {
+          tokens: 5,
+          cost: 1,
+          byModel: { gpt: { tokens: 5, cost: 1 } },
+        },
+      },
+    };
+    doc.daily[0].projects.push({
+      projectName: "codex-only",
+      repositoryID: "github.com/owner/codex-only",
+      repositoryName: "codex-only",
+      repositoryURL: "https://github.com/owner/codex-only",
+      folderName: "codex-only",
+      path: "/home/p/codex",
+      tokens: 5,
+      cost: 1,
+      bySource: {
+        codex: {
+          tokens: 5,
+          cost: 1,
+          byModel: { gpt: { tokens: 5, cost: 1 } },
+        },
+      },
+      chats: [{ id: "c10", source: "codex", tokens: 5, cost: 1 }],
+      worktrees: [],
+    });
+    const out = fleet([localDoc(), doc]);
+    const remoteDay = out.daily[0];
+    expect(remoteDay.bySource[tufCodex][0].inputTokens).toBe(5);
+    expect(remoteDay.hours[0].tokens).toBe(108);
+    expect(remoteDay.hours[0].bySource[tufCodex].tokens).toBe(5);
+    expect(remoteDay.hours[0].byPath[`${tufPrefix}/home/p/codex`].tokens).toBe(
+      5,
+    );
+    expect(remoteDay.projects.map((project) => project.projectName)).toEqual([
+      "edith",
+      "edith",
+      "codex-only",
+    ]);
+    expect(remoteDay.projects[1].tokens).toBe(3);
+    expect(remoteDay.projects[1].worktrees).toEqual([]);
+    expect(remoteDay.projects[2].bySource[tufCodex].tokens).toBe(5);
+    expect(remoteDay.projects[2].chats[0].source).toBe(tufCodex);
+    expect(out.totals.tokens).toBe(108);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("machine-qualifies fallback folder repository IDs", () => {
+    const doc = machineDoc();
+    delete doc.daily[0].projects[0].repositoryID;
+    delete doc.daily[0].projects[0].repositoryName;
+    delete doc.daily[0].projects[0].repositoryURL;
+    const out = fleet([localDoc(), doc]);
+    expect(out.daily[0].projects[1].repositoryID).toBe(
+      `${tufPrefix}folder:/home/p/edith`,
+    );
+  });
+
+  test("totals are recomputed over the merged rows and pass validation", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    expect(out.totals.cost).toBe(3);
+    expect(out.totals.tokens).toBe(103);
+    expect(out.totals.inputTokens).toBe(11);
+    expect(out.machines).toEqual([
+      {
+        id: "11111111-1111-1111-1111-111111111111",
+        name: "tuf",
+        slug: "tuf",
+        host: "tuf.local",
+        collectedAt: "2026-08-08T09:05:00Z",
+        sources: [tufCLI, tufCodex],
+      },
+    ]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("validation rejects an inconsistent hour total", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    out.daily[0].hours[0].tokens += 1;
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
+  test("validation rejects an inconsistent path total", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    out.daily[0].hours[0].byPath["/Users/p/edith"].cost += 1;
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
+  test("validation rejects an inconsistent project total", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    out.daily[0].projects[0].tokens += 1;
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
+  test("validation rejects a negative nested model total", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    out.daily[0].hours[0].bySource.cli.byModel.opus.tokens = -1;
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
+  test("validation rejects an inconsistent nested source cost", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    out.daily[0].projects[0].bySource.cli.cost += 1;
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
+  test("two machines never collide, and days only one of them has survive", () => {
+    const other = machineDoc({
+      machine: {
+        id: "22222222-2222-2222-2222-222222222222",
+        name: "pi",
+        slug: "pi",
+        host: "pi.local",
+        collectedAt: "2026-08-08T09:06:00Z",
+      },
+      daily: [
+        {
+          period: "2026-08-06",
+          bySource: {
+            cli: [
+              {
+                modelName: "opus",
+                inputTokens: 4,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0,
+                cost: 5,
+              },
+            ],
+          },
+          hours: [],
+          projects: [],
+        },
+      ],
+    });
+    const out = fleet([localDoc(), machineDoc(), other]);
+    expect(out.daily.map((d) => d.period)).toEqual([
+      "2026-08-06",
+      "2026-08-07",
+    ]);
+    expect(Object.keys(out.daily[0].bySource)).toEqual([piCLI]);
+    expect(out.totals.cost).toBe(8);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("a machine with no usage adds nothing but still reports itself", () => {
+    const out = fleet([
+      localDoc(),
+      machineDoc({ sources: [], defaultSources: [], daily: [], sessions: [] }),
+    ]);
+    expect(out.sources).toEqual(["cli"]);
+    expect(out.totals.tokens).toBe(100);
+    expect(out.machines[0].sources).toEqual([]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+});
+
+describe("collector failure handling", () => {
+  test("nonzero Claude daily collection preserves the existing report", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      failClaudeDaily: true,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("cli daily collection failed");
+    expect(result.output).toBe(result.existing);
+  }, 15_000);
+
+  test("malformed Claude daily collection preserves the existing report", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      malformedClaudeDaily: true,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("cli daily usage is malformed");
+    expect(result.output).toBe(result.existing);
+  }, 15_000);
+
+  test("normalization failure preserves the existing report", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      failNormalization: true,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("cli usage normalization failed");
+    expect(result.output).toBe(result.existing);
+  }, 15_000);
+
+  test("malformed machine JSON preserves the existing report", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: false,
+      machineJSON: '{"machine":',
+      failDetails: false,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("machine snapshot assembly failed");
+    expect(result.output).toBe(result.existing);
+  }, 15_000);
+
+  test("detail assembly failure preserves the existing report", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      failDetails: true,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("detail assembly failed");
+    expect(result.output).toBe(result.existing);
+  }, 15_000);
+});
+
+describe("collector configuration", () => {
+  test("uses one pinned ccusage version for bun and npx", () => {
+    expect(script).toContain('CCUSAGE_VERSION="20.0.19"');
+    expect(script).toContain('bun add --exact "ccusage@$CCUSAGE_VERSION"');
+    expect(script).toContain('npx -y "ccusage@$CCUSAGE_VERSION"');
+  });
+
+  test("limits Codex discovery to sessions and archived sessions", () => {
+    expect(script).toContain('CODEX_CFG="$TMP/codex-home"');
+    expect(script).toContain("for dir in sessions archived_sessions; do");
+    expect(script).toContain(
+      'CODEX_HOME="$CODEX_CFG" ccu codex daily --json --offline',
+    );
+    expect(script).not.toContain(
+      "for agent in codex opencode amp droid codebuff hermes pi goose kilo",
+    );
+    expect(script).toContain(
+      'walk_dir "$HOME/.pi/agent/sessions" pi "$WALKPI"',
+    );
+  });
+
+  test("resolves repository remotes and physical worktree roots deterministically", () => {
+    expect(script).toContain(
+      "for remote in origin upstream $(printf '%s\\n' \"$remaining_remotes\" | LC_ALL=C sort); do",
+    );
+    expect(script).not.toContain(
+      "for remote in upstream origin $(printf '%s\\n' \"$remaining_remotes\" | LC_ALL=C sort); do",
+    );
+    expect(script).toContain(
+      'git_root=$(git_quick -C "$git_probe" rev-parse --path-format=absolute --show-toplevel',
+    );
+    expect(script).not.toContain("--git-common-dir");
+  });
+
+  test("provides readable labels for every discovered provider", () => {
+    const labels = {
+      cli: "Claude Code",
+      cowork: "Cowork",
+      codex: "Codex",
+      opencode: "OpenCode",
+      commandcode: "Command Code",
+      amp: "Amp",
+      droid: "Droid",
+      codebuff: "Codebuff",
+      hermes: "Hermes",
+      pi: "pi-agent",
+      goose: "Goose",
+      kilo: "Kilo",
+      copilot: "GitHub Copilot",
+      gemini: "Gemini",
+      kimi: "Kimi",
+      qwen: "Qwen",
+      openclaw: "OpenClaw",
+    };
+    for (const [source, label] of Object.entries(labels)) {
+      expect(script).toContain(`${source}) echo "${label}" ;;`);
     }
   });
 });

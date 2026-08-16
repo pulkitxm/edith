@@ -1,0 +1,3 @@
+import Edith
+
+EdithFilesApp.main()

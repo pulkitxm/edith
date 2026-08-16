@@ -1,0 +1,987 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		086A0082815C2A9D91ECFD02 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
+		0C791FBC581A5F863D63D46F /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
+		2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 0F4B21C7A5E94D3B8C1D6E22 /* Edith */; };
+		2EB6B8EDF10E0970CD570532 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
+		3C9E55FAD81C604EBF209135 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 1A7C33D8B6FA4E2C9D0E7F13 /* Edith */; };
+		3EE67C3597AF4232B0A60A7E /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5729B458450B4A17A4E43121 /* Sparkle */; };
+		55E29D247B2AF1C7EE207A52 /* edh in Embed CLI Tools */ = {isa = PBXBuildFile; fileRef = 63ECAD9E47BEB05D6F5FE706 /* edh */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		5806BA00CEAD40AE831B94B2 /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4BF07CFCBD4C4C2BB2F631D3 /* EdithKit */; };
+		5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = D09B7FAF0E894B2E88306846 /* Highlighter */; };
+		77BA436F11A366B6EB38F5A6 /* EdithCLI in Frameworks */ = {isa = PBXBuildFile; productRef = 85207CCF2D3033EE450F487B /* EdithCLI */; };
+		80DDCC13085E0499BB00E422 /* EdithCLI in Frameworks */ = {isa = PBXBuildFile; productRef = B1ED96385BD98F48940FD77E /* EdithCLI */; };
+		83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 50E40C33BF204D7FBD48418B /* Sparkle */; };
+		8D470AF01797472FBC96341E /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = 913CAC95E41B423F9FF20D41 /* Highlighter */; };
+		9158E2CD1C3E9F209ADBEA16 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
+		A191C1CE3CD44753BB045A59 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		A32E72901AF888B4A1E13D0F /* ed in Embed CLI Tools */ = {isa = PBXBuildFile; fileRef = 6687BAF8A3552A0AA85404C5 /* ed */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		AE432717A8BA5DF0A8AE3C81 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
+		B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = CCC83B99D6204A92B3072609 /* SwiftTerm */; };
+		D16E8B788F6F0018D8246F52 /* EdithFiles.app in Embed Applications */ = {isa = PBXBuildFile; fileRef = B58D5576268A68555AD2FCF2 /* EdithFiles.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D948A502324B5C4B9D9AF49B /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
+		E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
+		EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
+		F52F2ACA3C74115D1EADA87B /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithKit */; };
+		FEAA353692304612B813A1EE /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = DCE8E48CB51E47BABB61A582 /* SwiftTerm */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		132756E19FD5EEAFFC092447 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2CD9CE73028F1FD00967D47 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 928FBDE8E0B675FA0798C568;
+			remoteInfo = ed;
+		};
+		60C313AF39C5178EA880860F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2CD9CE73028F1FD00967D47 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E6FB46C2C3D655B81AA33EC7;
+			remoteInfo = edh;
+		};
+		81ACEDC319309B3F77F6864F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2CD9CE73028F1FD00967D47 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C9B259C066BE025893390012;
+			remoteInfo = EdithFiles;
+		};
+		8289017D7F203CCE007B3A02 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2CD9CE73028F1FD00967D47 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DE3B40F1143969143503A487;
+			remoteInfo = EdithHelper;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		1C869EB7BA6F352ED934A6B5 /* Embed CLI Tools */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				A32E72901AF888B4A1E13D0F /* ed in Embed CLI Tools */,
+				55E29D247B2AF1C7EE207A52 /* edh in Embed CLI Tools */,
+			);
+			name = "Embed CLI Tools";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3F35960FE95F460299BF1E2F /* Embed Applications */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/Applications;
+			dstSubfolderSpec = 1;
+			files = (
+				D16E8B788F6F0018D8246F52 /* EdithFiles.app in Embed Applications */,
+			);
+			name = "Embed Applications";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		10C5E37D0A600FE4AA48E586 /* EdithHelper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdithHelper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		63ECAD9E47BEB05D6F5FE706 /* edh */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = edh; sourceTree = BUILT_PRODUCTS_DIR; };
+		6687BAF8A3552A0AA85404C5 /* ed */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = ed; sourceTree = BUILT_PRODUCTS_DIR; };
+		79153EBC5647B887B9985B8D /* AppIcon.icns */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		B58D5576268A68555AD2FCF2 /* EdithFiles.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = EdithFiles.app; path = "Edith Files.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C42196203122A2922205077A /* EdithMain.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = EdithMain.app; path = Edith.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F7FD5DA1D56566638BEC52FB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/EdithMain;
+			sourceTree = "<group>";
+		};
+		6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/EdithHelper;
+			sourceTree = "<group>";
+		};
+		7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/EdithFiles;
+			sourceTree = "<group>";
+		};
+		8AE367B9762B44338D71F604 /* Packages/Edith/Sources/Edith */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/Edith;
+			sourceTree = "<group>";
+		};
+		8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/ed;
+			sourceTree = "<group>";
+		};
+		9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/edh;
+			sourceTree = "<group>";
+		};
+		F1B30D0164D945738D174DAF /* Packages/Edith/Sources/EdithKit */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/Edith/Sources/EdithKit;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		189B8529CEBE0803EDE192B5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */,
+				F52F2ACA3C74115D1EADA87B /* EdithKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7C05086770AD5D1FE987D286 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2EB6B8EDF10E0970CD570532 /* Cocoa.framework in Frameworks */,
+				80DDCC13085E0499BB00E422 /* EdithCLI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B5ED6242B5E464C4D043D674 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				086A0082815C2A9D91ECFD02 /* Cocoa.framework in Frameworks */,
+				77BA436F11A366B6EB38F5A6 /* EdithCLI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BCE4CF349D09F719D58442C9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D948A502324B5C4B9D9AF49B /* Cocoa.framework in Frameworks */,
+				3C9E55FAD81C604EBF209135 /* Edith in Frameworks */,
+				5806BA00CEAD40AE831B94B2 /* EdithKit in Frameworks */,
+				8D470AF01797472FBC96341E /* Highlighter in Frameworks */,
+				3EE67C3597AF4232B0A60A7E /* Sparkle in Frameworks */,
+				FEAA353692304612B813A1EE /* SwiftTerm in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F7E174DC5FA459FC21F0F72F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9158E2CD1C3E9F209ADBEA16 /* Cocoa.framework in Frameworks */,
+				2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */,
+				A191C1CE3CD44753BB045A59 /* (null) in Frameworks */,
+				5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */,
+				83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */,
+				B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AD6FCC0125837D4EF697860C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F7FD5DA1D56566638BEC52FB /* Cocoa.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		BE70DD1236948E5F07A8971D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				79153EBC5647B887B9985B8D /* AppIcon.icns */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		E2CD9CE63028F1FD00967D47 = {
+			isa = PBXGroup;
+			children = (
+				5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */,
+				6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */,
+				7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */,
+				8AE367B9762B44338D71F604 /* Packages/Edith/Sources/Edith */,
+				F1B30D0164D945738D174DAF /* Packages/Edith/Sources/EdithKit */,
+				8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */,
+				9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */,
+				BE70DD1236948E5F07A8971D /* Resources */,
+				AD6FCC0125837D4EF697860C /* Frameworks */,
+				E2CD9CF03028F1FD00967D47 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E2CD9CF03028F1FD00967D47 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C42196203122A2922205077A /* EdithMain.app */,
+				10C5E37D0A600FE4AA48E586 /* EdithHelper.app */,
+				B58D5576268A68555AD2FCF2 /* EdithFiles.app */,
+				6687BAF8A3552A0AA85404C5 /* ed */,
+				63ECAD9E47BEB05D6F5FE706 /* edh */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		928FBDE8E0B675FA0798C568 /* ed */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5906C6F1A38729A961F70EB7 /* Build configuration list for PBXNativeTarget "ed" */;
+			buildPhases = (
+				B024D53F0FB1F5755035EF3D /* Sources */,
+				B5ED6242B5E464C4D043D674 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8B4DAAEF03615B2CD475648A /* Packages/Edith/Sources/ed */,
+			);
+			name = ed;
+			packageProductDependencies = (
+				85207CCF2D3033EE450F487B /* EdithCLI */,
+			);
+			productName = ed;
+			productReference = 6687BAF8A3552A0AA85404C5 /* ed */;
+			productType = "com.apple.product-type.tool";
+		};
+		9E41503E3A9738BFE160D1F8 /* EdithMain */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7F6660014C5FF54A13221A3F /* Build configuration list for PBXNativeTarget "EdithMain" */;
+			buildPhases = (
+				A75A04546DAD6894543DC788 /* Sources */,
+				F7E174DC5FA459FC21F0F72F /* Frameworks */,
+				75E6FBC5AB873DCBE015D82E /* Resources */,
+				3F35960FE95F460299BF1E2F /* Embed Applications */,
+				1C869EB7BA6F352ED934A6B5 /* Embed CLI Tools */,
+				894E33B83968A6646E7A6B4F /* Embed Login Item Helper */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				552E2BEE97435C5606A3B52E /* PBXTargetDependency */,
+				3EA622D2238B0A011B91D598 /* PBXTargetDependency */,
+				A9B3DEA154B6AACB43EB6321 /* PBXTargetDependency */,
+				433AD7B7D4E5BEFBAB0DE22A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5E1A77BCD03E829FA1423157 /* Packages/Edith/Sources/EdithMain */,
+			);
+			name = EdithMain;
+			packageProductDependencies = (
+				0F4B21C7A5E94D3B8C1D6E22 /* Edith */,
+				D09B7FAF0E894B2E88306846 /* Highlighter */,
+				50E40C33BF204D7FBD48418B /* Sparkle */,
+				CCC83B99D6204A92B3072609 /* SwiftTerm */,
+			);
+			productName = EdithMain;
+			productReference = C42196203122A2922205077A /* EdithMain.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C9B259C066BE025893390012 /* EdithFiles */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1D81F973F93977C6F322DCFF /* Build configuration list for PBXNativeTarget "EdithFiles" */;
+			buildPhases = (
+				A5AD862B1B1E05DEEFAB9817 /* Sources */,
+				BCE4CF349D09F719D58442C9 /* Frameworks */,
+				2E9053424C3E9223DEC88F63 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A3C99DEF2504A1BC3645379 /* Packages/Edith/Sources/EdithFiles */,
+			);
+			name = EdithFiles;
+			packageProductDependencies = (
+				1A7C33D8B6FA4E2C9D0E7F13 /* Edith */,
+				4BF07CFCBD4C4C2BB2F631D3 /* EdithKit */,
+				913CAC95E41B423F9FF20D41 /* Highlighter */,
+				5729B458450B4A17A4E43121 /* Sparkle */,
+				DCE8E48CB51E47BABB61A582 /* SwiftTerm */,
+			);
+			productName = EdithFiles;
+			productReference = B58D5576268A68555AD2FCF2 /* EdithFiles.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DE3B40F1143969143503A487 /* EdithHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E4ACE9FBE01145D983D300F /* Build configuration list for PBXNativeTarget "EdithHelper" */;
+			buildPhases = (
+				F75144C449AA14A5A9921E59 /* Sources */,
+				189B8529CEBE0803EDE192B5 /* Frameworks */,
+				23FA516CE748E60818CAB54D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6F2B88CDE14F930AB2534268 /* Packages/Edith/Sources/EdithHelper */,
+			);
+			name = EdithHelper;
+			packageProductDependencies = (
+				92CD22FFF15A7E58164A819B /* EdithKit */,
+			);
+			productName = EdithHelper;
+			productReference = 10C5E37D0A600FE4AA48E586 /* EdithHelper.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E6FB46C2C3D655B81AA33EC7 /* edh */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1148CA945999DCCE932549E1 /* Build configuration list for PBXNativeTarget "edh" */;
+			buildPhases = (
+				C2029C02757CABFD93BB6D93 /* Sources */,
+				7C05086770AD5D1FE987D286 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9C5EBBF014726C3DE586759B /* Packages/Edith/Sources/edh */,
+			);
+			name = edh;
+			packageProductDependencies = (
+				B1ED96385BD98F48940FD77E /* EdithCLI */,
+			);
+			productName = edh;
+			productReference = 63ECAD9E47BEB05D6F5FE706 /* edh */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E2CD9CE73028F1FD00967D47 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+			};
+			buildConfigurationList = E2CD9CEA3028F1FD00967D47 /* Build configuration list for PBXProject "edth" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E2CD9CE63028F1FD00967D47;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */,
+				81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E2CD9CF03028F1FD00967D47 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9E41503E3A9738BFE160D1F8 /* EdithMain */,
+				DE3B40F1143969143503A487 /* EdithHelper */,
+				C9B259C066BE025893390012 /* EdithFiles */,
+				928FBDE8E0B675FA0798C568 /* ed */,
+				E6FB46C2C3D655B81AA33EC7 /* edh */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		23FA516CE748E60818CAB54D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AE432717A8BA5DF0A8AE3C81 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2E9053424C3E9223DEC88F63 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C791FBC581A5F863D63D46F /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		75E6FBC5AB873DCBE015D82E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		894E33B83968A6646E7A6B4F /* Embed Login Item Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${BUILT_PRODUCTS_DIR}/EdithHelper.app",
+			);
+			name = "Embed Login Item Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nDEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app\"\nrm -rf \"$DEST\"\nmkdir -p \"$(dirname \"$DEST\")\"\nditto \"${BUILT_PRODUCTS_DIR}/EdithHelper.app\" \"$DEST\"\nmv \"$DEST/Contents/MacOS/EdithHelper\" \"$DEST/Contents/MacOS/Edith\"\n/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' \"$DEST/Contents/Info.plist\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$DEST\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A5AD862B1B1E05DEEFAB9817 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A75A04546DAD6894543DC788 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B024D53F0FB1F5755035EF3D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C2029C02757CABFD93BB6D93 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F75144C449AA14A5A9921E59 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3EA622D2238B0A011B91D598 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = EdithFiles;
+			target = C9B259C066BE025893390012 /* EdithFiles */;
+			targetProxy = 81ACEDC319309B3F77F6864F /* PBXContainerItemProxy */;
+		};
+		433AD7B7D4E5BEFBAB0DE22A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = edh;
+			target = E6FB46C2C3D655B81AA33EC7 /* edh */;
+			targetProxy = 60C313AF39C5178EA880860F /* PBXContainerItemProxy */;
+		};
+		552E2BEE97435C5606A3B52E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = EdithHelper;
+			target = DE3B40F1143969143503A487 /* EdithHelper */;
+			targetProxy = 8289017D7F203CCE007B3A02 /* PBXContainerItemProxy */;
+		};
+		A9B3DEA154B6AACB43EB6321 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ed;
+			target = 928FBDE8E0B675FA0798C568 /* ed */;
+			targetProxy = 132756E19FD5EEAFFC092447 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3DE4370D78B752920D17BAD9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/FilesInfo.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.files;
+				PRODUCT_NAME = EdithFiles;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_NAME = "Edith Files.$(WRAPPER_EXTENSION)";
+			};
+			name = Debug;
+		};
+		6048AAB4B6D510D4BC99B831 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/FilesInfo.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.files;
+				PRODUCT_NAME = EdithFiles;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_NAME = "Edith Files.$(WRAPPER_EXTENSION)";
+			};
+			name = Release;
+		};
+		711B177C581C9D9E8B66C390 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = edh;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		748FC771D2CA367DCA07720F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = ed;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		8DC8EE8E093CD96D6C04EC44 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/HelperInfo.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.statusbar;
+				PRODUCT_NAME = EdithHelper;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		907E7791959B5D4A249C0E6E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/HelperInfo.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.statusbar;
+				PRODUCT_NAME = EdithHelper;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A1657D7923CB3A7823D80C82 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = edh;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A216E5145A1E22A2F78147A4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith;
+				PRODUCT_MODULE_NAME = EdithMainApp;
+				PRODUCT_NAME = Edith;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CE156A139C6782DE24984317 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = ed;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E2CD9CF83028F1FF00967D47 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = X5PUMWNFN8;
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E2CD9CF93028F1FF00967D47 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = X5PUMWNFN8;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		F1112F416AA379CB1771BA0D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith;
+				PRODUCT_MODULE_NAME = EdithMainApp;
+				PRODUCT_NAME = Edith;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1148CA945999DCCE932549E1 /* Build configuration list for PBXNativeTarget "edh" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1657D7923CB3A7823D80C82 /* Release */,
+				711B177C581C9D9E8B66C390 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1D81F973F93977C6F322DCFF /* Build configuration list for PBXNativeTarget "EdithFiles" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6048AAB4B6D510D4BC99B831 /* Release */,
+				3DE4370D78B752920D17BAD9 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2E4ACE9FBE01145D983D300F /* Build configuration list for PBXNativeTarget "EdithHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8DC8EE8E093CD96D6C04EC44 /* Release */,
+				907E7791959B5D4A249C0E6E /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5906C6F1A38729A961F70EB7 /* Build configuration list for PBXNativeTarget "ed" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				748FC771D2CA367DCA07720F /* Release */,
+				CE156A139C6782DE24984317 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7F6660014C5FF54A13221A3F /* Build configuration list for PBXNativeTarget "EdithMain" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F1112F416AA379CB1771BA0D /* Release */,
+				A216E5145A1E22A2F78147A4 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E2CD9CEA3028F1FD00967D47 /* Build configuration list for PBXProject "edth" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E2CD9CF83028F1FF00967D47 /* Debug */,
+				E2CD9CF93028F1FF00967D47 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Edith;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+		B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.15.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0F4B21C7A5E94D3B8C1D6E22 /* Edith */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = Edith;
+		};
+		1A7C33D8B6FA4E2C9D0E7F13 /* Edith */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = Edith;
+		};
+		4BF07CFCBD4C4C2BB2F631D3 /* EdithKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = EdithKit;
+		};
+		50E40C33BF204D7FBD48418B /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		5729B458450B4A17A4E43121 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		85207CCF2D3033EE450F487B /* EdithCLI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = EdithCLI;
+		};
+		913CAC95E41B423F9FF20D41 /* Highlighter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = Highlighter;
+		};
+		92CD22FFF15A7E58164A819B /* EdithKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = EdithKit;
+		};
+		B1ED96385BD98F48940FD77E /* EdithCLI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = EdithCLI;
+		};
+		CCC83B99D6204A92B3072609 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+		D09B7FAF0E894B2E88306846 /* Highlighter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = Highlighter;
+		};
+		DCE8E48CB51E47BABB61A582 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E2CD9CE73028F1FD00967D47 /* Project object */;
+}

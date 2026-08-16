@@ -1,0 +1,25 @@
+id: coach
+label: Coach
+retrieval:
+  sources: []
+  window_days: 30
+  k: 10
+  prefer: commitments
+  salience_weight: 0.1
+  beliefs: true
+  observations: true
+  graph: false
+evidence:
+  self_report_weight: 0.6
+  observation_weight: 1.0
+  require_corroboration: false
+pipeline:
+  - reframe_question
+  - retrieve
+  - draft
+  - ground_check
+  - revise
+output: action
+abstain_below: 0.45
+max_words: 160
+voice: coach.md

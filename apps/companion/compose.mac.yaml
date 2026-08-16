@@ -1,0 +1,19 @@
+services:
+  ollama:
+    profiles: ["never"]
+  whisper:
+    profiles: ["never"]
+  api:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      EMBED_URL: ${COMPANION_EMBED_URL:-http://host.docker.internal:11434}
+      VLM_URL: ${COMPANION_VLM_URL:-http://host.docker.internal:11434}
+      STT_URL: ${COMPANION_STT_URL:-http://host.docker.internal:8081}
+      STT_QUALITY_URL: ${COMPANION_STT_QUALITY_URL:-http://host.docker.internal:8082}
+      RERANK_URL: ${COMPANION_RERANK_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

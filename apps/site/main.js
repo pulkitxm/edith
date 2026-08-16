@@ -1,33 +1,29 @@
-const tracks = [
+import { currentDesktopPlatform } from "./platform.js";
+
+const library = [
   {
     title: "Weightless",
     artist: "Marconi Union",
-    from: "var(--color-art-coral)",
-    to: "var(--color-art-rust)",
+    cover: "/music/cover-1.jpg",
+    seconds: 372,
   },
   {
-    title: "Nightcall",
-    artist: "Kavinsky",
-    from: "var(--color-art-blue)",
-    to: "var(--color-art-navy)",
+    title: "Clair de Lune",
+    artist: "Debussy",
+    cover: "/music/cover-2.jpg",
+    seconds: 302,
   },
   {
-    title: "Strobe",
-    artist: "deadmau5",
-    from: "var(--color-art-green)",
-    to: "var(--color-art-forest)",
-  },
-  {
-    title: "Teardrop",
-    artist: "Massive Attack",
-    from: "var(--color-art-purple)",
-    to: "var(--color-art-plum)",
+    title: "Time",
+    artist: "Hans Zimmer",
+    cover: "/music/cover-3.jpg",
+    seconds: 275,
   },
   {
     title: "Intro",
     artist: "The xx",
-    from: "var(--color-track-gold)",
-    to: "var(--color-track-ochre)",
+    cover: "/music/cover-4.jpg",
+    seconds: 127,
   },
 ];
 
@@ -77,20 +73,103 @@ function startNowPlaying() {
   let trackIndex = 0;
   let progress = 18;
   const paint = () => {
-    const track = tracks[trackIndex];
+    const track = library[trackIndex];
     titleElement.textContent = track.title;
     artistElement.textContent = track.artist;
-    artElement.style.background = `linear-gradient(145deg, ${track.from}, ${track.to})`;
+    artElement.src = track.cover;
   };
   paint();
   window.setInterval(() => {
     progress += 100 / 60;
     if (progress >= 100) {
       progress = 0;
-      trackIndex = (trackIndex + 1) % tracks.length;
+      trackIndex = (trackIndex + 1) % library.length;
       paint();
     }
     progressElement.style.width = `${progress}%`;
+  }, 100);
+}
+
+function clock(seconds) {
+  const whole = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(whole / 60);
+  return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function startPlayer() {
+  const root = document.querySelector("[data-player]");
+  if (!root) {
+    return;
+  }
+  const art = root.querySelector("[data-np-art]");
+  const title = root.querySelector("[data-np-title]");
+  const artist = root.querySelector("[data-np-artist]");
+  const bar = root.querySelector("[data-np-progress]");
+  const elapsedText = root.querySelector("[data-np-elapsed]");
+  const remainingText = root.querySelector("[data-np-remaining]");
+  const queueElement = root.querySelector("[data-queue]");
+  if (!art || !title || !bar || !queueElement) {
+    return;
+  }
+
+  const queue = library.slice();
+  const secondsPerTick = 1.6;
+  let elapsed = 0;
+
+  const renderQueue = () => {
+    queueElement.textContent = "";
+    for (const track of queue.slice(1)) {
+      const row = document.createElement("div");
+      const cover = document.createElement("img");
+      cover.className = "track-art";
+      cover.src = track.cover;
+      cover.alt = "";
+      const name = document.createElement("span");
+      name.className = "track-name";
+      name.textContent = `${track.title} · ${track.artist}`;
+      const length = document.createElement("span");
+      length.className = "mono subtle";
+      length.textContent = clock(track.seconds);
+      row.append(cover, name, length);
+      queueElement.appendChild(row);
+    }
+  };
+
+  const paint = () => {
+    const track = queue[0];
+    art.src = track.cover;
+    title.textContent = track.title;
+    if (artist) {
+      artist.textContent = track.artist;
+    }
+    renderQueue();
+  };
+
+  const advance = () => {
+    queue.push(queue.shift());
+    elapsed = 0;
+    queueElement.dataset.shifting = "true";
+    paint();
+    window.setTimeout(() => {
+      delete queueElement.dataset.shifting;
+    }, 460);
+  };
+
+  paint();
+  window.setInterval(() => {
+    const track = queue[0];
+    elapsed += secondsPerTick;
+    if (elapsed >= track.seconds) {
+      advance();
+      return;
+    }
+    bar.style.width = `${(elapsed / track.seconds) * 100}%`;
+    if (elapsedText) {
+      elapsedText.textContent = clock(elapsed);
+    }
+    if (remainingText) {
+      remainingText.textContent = `-${clock(track.seconds - elapsed)}`;
+    }
   }, 100);
 }
 
@@ -138,24 +217,146 @@ function startPresenterDemo() {
   if (!badge || !note) {
     return;
   }
+  const swapText = (element, text) => {
+    if (element.textContent === text) {
+      return;
+    }
+    element.dataset.swap = "out";
+    window.setTimeout(() => {
+      element.textContent = text;
+      element.dataset.swap = "in";
+    }, 200);
+  };
+
   const flip = () => {
     const enabled = demo.dataset.presenterState !== "on";
     demo.dataset.presenterState = enabled ? "on" : "off";
-    badge.textContent = enabled ? "Presenter on" : "Presenter off";
-    badge.style.opacity = enabled ? "1" : "0.5";
-    note.textContent = enabled
-      ? "Spend and track names hidden for the room."
-      : "Everything visible to you.";
+    swapText(badge, enabled ? "Presenter on" : "Presenter off");
+    swapText(
+      note,
+      enabled
+        ? "Spend and track names hidden for the room."
+        : "Everything visible to you.",
+    );
   };
   demo.dataset.presenterState = "off";
+  badge.dataset.swap = "in";
+  note.dataset.swap = "in";
   flip();
-  window.setInterval(flip, 2200);
+  window.setInterval(flip, 3600);
+}
+
+const downloadUrls = {
+  macos: "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
+  linux: "https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb",
+};
+
+const downloadLabels = {
+  macos: "Download Edith for macOS",
+  linux: "Download Edith for Ubuntu",
+};
+
+function startPlatformDownload() {
+  const platform = currentDesktopPlatform();
+  if (!platform) {
+    return;
+  }
+  for (const button of document.querySelectorAll("[data-download-auto]")) {
+    button.href = downloadUrls[platform];
+    button.setAttribute("aria-label", downloadLabels[platform]);
+  }
+  const buttons = document.querySelectorAll("[data-download-os]");
+  for (const button of buttons) {
+    const matches = button.dataset.downloadOs === platform;
+    button.hidden = !matches;
+    button.classList.toggle("btn-solid", matches);
+    button.classList.toggle("btn-outline", !matches);
+  }
+  const note = document.querySelector(".hero-note");
+  if (note) {
+    note.textContent =
+      platform === "macos"
+        ? "Free forever. Requires macOS Sonoma (v14)+ on Apple Silicon."
+        : "Free forever. Ubuntu 24.04 LTS on amd64. Native preview.";
+  }
+  const otherDownloads = document.querySelector("[data-other-downloads]");
+  if (otherDownloads) {
+    otherDownloads.hidden = false;
+  }
+}
+
+function startSystemActions() {
+  const buttons = document.querySelectorAll("[data-action]");
+  const text = document.querySelector("[data-action-text]");
+  const icon = document.querySelector("[data-action-icon]");
+  if (!buttons.length || !text || !icon) {
+    return;
+  }
+  const idle =
+    "Tap any control to see what it does. Nothing here can lock you out.";
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      const pressed = button.getAttribute("aria-pressed") === "true";
+      for (const other of buttons) {
+        other.setAttribute("aria-pressed", "false");
+        other.classList.remove("is-active");
+      }
+      if (!pressed) {
+        button.setAttribute("aria-pressed", "true");
+        button.classList.add("is-active");
+      }
+      const message = pressed ? idle : button.dataset.explain;
+      if (text.textContent === message) {
+        return;
+      }
+      text.dataset.swap = "out";
+      window.setTimeout(() => {
+        text.textContent = message;
+        icon.textContent = pressed ? "🔒" : button.dataset.icon;
+        text.dataset.swap = "in";
+      }, 180);
+    });
+  }
+}
+
+function startCopyButtons() {
+  for (const button of document.querySelectorAll("[data-copy]")) {
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy);
+      } catch {
+        return;
+      }
+      const label = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = label;
+      }, 1500);
+    });
+  }
+}
+
+function startHeaderScroll() {
+  const header = document.querySelector(".site-header");
+  if (!header) {
+    return;
+  }
+  const sync = () => {
+    header.classList.toggle("is-scrolled", window.scrollY > 16);
+  };
+  sync();
+  window.addEventListener("scroll", sync, { passive: true });
 }
 
 function start() {
+  startPlatformDownload();
+  startHeaderScroll();
+  startSystemActions();
+  startCopyButtons();
   buildHeatmaps();
   buildSparks();
   startNowPlaying();
+  startPlayer();
   startReveals();
   startPresenterDemo();
 }

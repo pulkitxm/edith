@@ -15,7 +15,8 @@
       "includes": ["apps/site/styles.css"],
       "linter": {
         "rules": {
-          "style": { "noDescendingSpecificity": "off" }
+          "style": { "noDescendingSpecificity": "off" },
+          "complexity": { "noImportantStyles": "off" }
         }
       }
     }

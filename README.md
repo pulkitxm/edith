@@ -1,219 +1,127 @@
-# <img src="apps/macos/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
+# <img src="Packages/Edith/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
 
-A native SwiftUI menu bar app for the Mac - a dark, minimal personal control
-center built to run 24/7 on near-zero resources.
+A native SwiftUI menu bar app for the Mac: a dark, minimal control center that
+replaces a shelf of single-purpose utilities and idles at about 22 MB.
 
 Free and open source under the [GPL-3.0](LICENSE). Every feature is in the one
-app: no licence key, no account, no paid tier.
+app. No licence key, no account, no paid tier.
 
-**[Download the latest release](https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg)**
+**[Download for macOS](https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg)**
+or install it with Homebrew:
+
+```
+brew install --cask pulkitxm/tap/edith
+```
+
+That taps, installs the app and puts `ed` and `edh` on your `PATH`. Edith updates itself
+through Sparkle, so `brew upgrade --cask --greedy edith` is the way to force
+Homebrew to fetch a newer release. Full command list:
+[docs/homebrew.md](docs/homebrew.md), and
+[how it all works](docs/homebrew-internals.md).
+
+**[Download the Ubuntu preview](https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb)**
 · [edith.pulkit.page](https://edith.pulkit.page)
+· [Wiki](https://github.com/pulkitxm/edith/wiki)
 
-Requires macOS 14 or later on Apple Silicon.
+The macOS app requires macOS 14 or later on Apple Silicon. The Ubuntu preview
+targets Ubuntu 24.04 LTS on `amd64`; see the
+[Ubuntu development guide](docs/ubuntu-development.md) for source builds and the
+current platform scope.
 
 ## Features
 
-- **Rate-limit rings** - session (5h) and weekly usage as live animated gauges with second-by-second countdowns and a 24h history spark.
-- **Menu-bar limits** - optional second menu bar readout of session + weekly %, tinted by a time-aware risk model.
-- **Smart notifications** - threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset alerts, all optional, with a self-diagnosing test button.
+**Claude and Codex usage**
+
+- **Rate-limit rings** - session (5h) and weekly usage as live gauges with second-by-second countdowns and a 24h history spark.
+- **Menu bar readout** - session and weekly percentages in the menu bar, tinted by a time-aware risk model.
+- **Alerts** - threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset notifications, all optional.
+- **Dashboard** - KPIs with per-day, model, source, project and hourly charts, plus a sortable model table.
 - **Activity heatmap** - GitHub-style daily spend calendar across your full history.
-- **Token & cost stats** - today / week / billing cycle, filterable by agent (Claude Code, Codex, OpenCode…).
-- **Full dashboard** - a native window with KPIs, per-day / model / source / project / hourly charts, a sortable model table and an activity heatmap, all interactive; refreshed by a self-contained collector bundled in the app.
-- **Notch shelf** - the notch becomes a hover-to-open shelf with drag-and-drop file staging, now-playing controls, a camera check tab and morphing inline alerts.
-- **Clipboard history** - a global paste panel with search and synthesized paste-in-place.
-- **Color picker** - system-wide eyedropper on a global hotkey, with swatch history.
-- **Music player** - plays your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also picks up Spotify / Apple Music playback.
+- **Project drilldown** - spend by project, worktree and chat, across both agents.
+- **Fleet usage** - the same collector runs on your SSH machines and folds their agents in as their own sources, so the totals cover every box you code on.
+
+**Everything else on the shelf**
+
+- **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
+- **Clipboard history** - a global paste panel with search and paste-in-place.
+- **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
+- **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.
+- **Calendar** - your agenda grouped by day, with one-tap join links.
 - **Audio mixer** - per-app volume control.
-- **Mic mute** - system-wide microphone kill switch with hotkey and menu bar indicator.
+- **Mic mute** - system-wide microphone kill switch with a menu bar indicator.
 - **Focus dim** - dims every screen except the window you are working in.
-- **Calendar** - EventKit agenda grouped by day, blur-aware in presenter mode.
-- **System tools** - prevent-sleep toggle, system stats readout and a keyboard-cleaning lock with a 60s auto-restore.
-- **Presenter mode** - blurs track names, calendar entries and spend figures for screen sharing, with automatic screen-share detection.
-- **Global shortcut** - toggle the panel from anywhere (default ⌥⌘E), re-recordable.
-- **Local-first** - usage data never leaves your Mac; optional iCloud backup that merges across machines.
+- **System tools** - prevent-sleep toggle, CPU and memory readout, and a keyboard-cleaning lock that auto-restores after 60s.
+- **Disk cleaner** - scans build caches, package managers and old logs.
+- **Global shortcut** - toggle the panel from anywhere, ⌥⌘E by default and re-recordable.
 
-## Benchmarks
+## Command line
 
-Built to idle cheaply. Measured on an Apple M4 Pro - CPU as a share of one core
-(the convention Activity Monitor uses), memory as physical footprint:
+Installing Edith installs `ed`, a first-class CLI that reaches everything the UI
+does. `edh` and `edith` are the same binary.
+
+```
+ed config set preventSleep true     every setting the UI exposes, applied live
+ed usage limits --json              the same numbers the rings show
+ed machines ls                      the computers Edith can reach over SSH
+ed tuf docker ps                    run anything on one of them
+```
+
+Every read command takes `--json`, stdout is exactly one document, logs go to
+stderr, and exit codes are reliable, so an agent can drive Edith headlessly.
+
+Full reference: **[docs/cli](docs/cli/README.md)**, one page per command group,
+also published to the [wiki](https://github.com/pulkitxm/edith/wiki). `ed guide`
+prints the same material as a built-in manual.
+
+## Privacy
+
+Usage data never leaves your Mac. There is no account and no telemetry.
+Rate-limit checks go directly from your machine to your AI provider. Optional
+iCloud backup merges your history across your own Macs and nowhere else.
+
+**Presenter mode** blurs spend figures, track names and calendar entries for
+screen sharing, and detects screen shares automatically.
+
+## Performance
+
+Built to sit in the menu bar all day. Measured on an Apple M4 Pro, CPU as a
+share of one core:
 
 | State | CPU | Memory |
 | --- | --- | --- |
 | Idle, panel closed | ~0% | ~22 MB |
 | Music playing, panel closed | ~1% | ~40 MB |
-| Music playing, panel open (visualizer on screen) | ~29% | ~42 MB |
 | Paused | <1% | ~40 MB |
 
-Numbers from the 2026-07 optimization pass (`ps -o %cpu,rss,cputime` sampled
-once per second for 180s per state, comparing cputime deltas):
+Disabling a tab tears down its timers and background jobs entirely, per-frame UI
+only redraws while the panel is open, and the usage collector caches parses so a
+refresh only touches files that changed.
 
-| Metric | Before | After |
-| --- | --- | --- |
-| Menu bar process, idle | 2.22% CPU / 121 MB | ~0.0% CPU / 89 MB |
-| Main window process, idle | 0.23% CPU / 131 MB | ~0.0% CPU / 108 MB |
-| Music playing (window visible) | 20-40% CPU | 0.7-1.6% CPU |
-| Music paused or window hidden | up to 17% CPU | 0.0% CPU |
-| Usage collector walk phase | ~75s per 5-min run | incremental cache, sub-second when unchanged |
+## Contributors
 
-How it stays there: disabling a tab tears down its timers, observers and
-background jobs entirely; per-frame UI (the music visualizer and scrubber) only
-redraws while the panel is open and playing; and the usage collector caches
-per-transcript parses so a refresh only touches files that changed.
+Thank you to everyone who has shipped a change in Edith.
 
-## Build & install
+<!-- contributors:start -->
 
-```bash
-cd apps/macos
-./build.sh            # build + run from dist/
-./build.sh --install  # build + copy to /Applications + launch
-./test.sh             # run the Swift test suite
-```
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/pulkitxm"><img src="https://avatars.githubusercontent.com/u/65671483?v=4&s=64" width="64" height="64" alt="pulkitxm" /><br /><sub>pulkitxm</sub></a></td>
+    <td align="center"><a href="https://github.com/Vivek09Chahal"><img src="https://avatars.githubusercontent.com/u/103368320?v=4&s=64" width="64" height="64" alt="Vivek09Chahal" /><br /><sub>Vivek09Chahal</sub></a></td>
+    <td align="center"><a href="https://github.com/Sohan-Rout"><img src="https://avatars.githubusercontent.com/u/172136330?v=4&s=64" width="64" height="64" alt="Sohan-Rout" /><br /><sub>Sohan-Rout</sub></a></td>
+  </tr>
+</table>
 
-Needs only Xcode Command Line Tools (Swift 6).
-
-`build.sh` also assembles a small `Edith.app` login item nested inside the main
-`Edith.app` (`Contents/Library/LoginItems`) - the always-on menu bar
-companion that will keep running after the main app quits. Both bundles are
-signed ad-hoc by default. Ad-hoc signatures change on every rebuild, which
-resets TCC permission grants (Accessibility, Screen Recording, ...) and can
-duplicate login-item registrations. To avoid that, create a self-signed
-code-signing certificate once - Keychain Access → menu bar → Certificate
-Assistant → Create a Certificate…, name it "Edith Dev", Identity Type
-"Self Signed Root", Certificate Type "Code Signing" - then build with:
-
-```bash
-EDITH_SIGN_IDENTITY="Edith Dev" ./build.sh --install
-```
-
-## Makefile commands
-
-<details>
-<summary>All <code>make</code> targets, explained</summary>
-
-### CI
-
-| Target | What it does |
-| --- | --- |
-| `make ci` | Full local CI: `bun install --frozen-lockfile`, then comments, secrets, lint, script tests, promo-video and Swift checks. |
-| `make ci-comments` | Self-tests the comment stripper, then fails on any disallowed comment in tracked source. |
-| `make ci-secrets` | Scans every tracked file for leaked secrets. |
-| `make ci-lint` | Biome format + lint for the JS/CSS surface. |
-| `make ci-scripts` | Runs the `bun test` suite for `scripts/`. |
-| `make ci-promo` | `npm ci` + type check for the Remotion promo video. |
-| `make ci-swift-check` | `swift format lint --strict`, `swift build` and the test suite in `apps/macos`. |
-| `make ci-swift` | `ci-swift-check` plus a full `build.sh` run with bundle-layout and codesign assertions on the produced app. |
-
-### macOS app
-
-| Target | What it does |
-| --- | --- |
-| `make build` | Builds the app and runs it from `dist/`. Accepts `PR=<n>` or `BRANCH=<name>` to build that ref. |
-| `make install` | Builds and copies to `/Applications`, then launches. Same `PR` / `BRANCH` flags. |
-| `make reset` | Runs `reset.sh`: clears app state for a clean-slate run. |
-| `make reinstall` | `reset` followed by `install`. |
-| `make release V=1.8.0` | Full release: bumps plist versions, commits, tags, builds the DMG and Sparkle appcast, pushes and creates the GitHub release. Blocks unless `gh` is authenticated and the Sparkle key is set. |
-
-### Website
-
-| Target | What it does |
-| --- | --- |
-| `make site-dev` | Serves the static site in `apps/site` on `localhost:8000`. No build step. |
-
-### Misc
-
-| Target | What it does |
-| --- | --- |
-| `make loc` | Lines-of-code report for tracked files via `cloc`. |
-
-</details>
-
-## Release & updates
-
-Bump `CFBundleShortVersionString` in `apps/macos/Resources/Info.plist` and
-`HelperInfo.plist`, then push a matching tag:
-
-```bash
-git tag v1.8.0 && git push origin v1.8.0
-```
-
-The Release workflow builds `Edith.dmg` (drag-to-Applications layout) and
-attaches it to the GitHub release. The name is stable so that
-`releases/latest/download/Edith.dmg` always resolves to the newest build, which
-is what the website's download button uses.
-
-`make release V=1.8.0` automates the whole sequence, including the Sparkle
-appcast. Sparkle reads the feed from
-`releases/latest/download/appcast.xml`, so updates need no server: the appcast
-is published as a release asset and its enclosure points straight at the DMG in
-that release.
-
-### Signing the release (so permissions survive reinstalls)
-
-macOS ties each permission grant (Screen Recording, Accessibility, Calendar,
-...) to the app's code-signing designated requirement. A grant survives a
-reinstall only if the new build still satisfies it. An ad-hoc signature's
-requirement is pinned to the binary hash, which changes every build, so an
-ad-hoc DMG resets every permission on each reinstall. Signing with a stable
-Apple identity gives a requirement that is identical across versions, so grants
-persist just like any app you update normally.
-
-`build.sh` signs with the first available of a "Developer ID Application",
-self-signed "Edith Dev", or "Apple Development" identity, so local builds,
-`--install` reinstalls, and the released DMG all sign the same way.
-
-By default `codesign` writes a requirement that names the exact leaf
-certificate, so grants still evaporate when that certificate is re-issued or
-when you swap an "Apple Development" identity for the "Developer ID
-Application" one used to notarize. When the identity carries a team id,
-`build.sh` instead pins the requirement to bundle id + team id:
-
-```
-identifier "com.pulkit.edith" and anchor apple generic
-  and certificate leaf[subject.OU] = "<team id>"
-```
-
-Every certificate your team owns satisfies that, so grants survive certificate
-renewals and the move to Developer ID. Because macOS stores the requirement at
-the moment a permission is granted, grants made by an older build keep the old
-certificate-specific requirement; reset them once after installing a build made
-with this change so the durable requirement is what gets recorded:
-
-```bash
-tccutil reset All com.pulkit.edith
-tccutil reset All com.pulkit.edith.statusbar
-```
-
-For the DMG
-to match your local builds, CI must sign with the same certificate. Export the
-identity you sign with locally and store it as two repository secrets:
-
-```bash
-security export -k ~/Library/Keychains/login.keychain-db -t identities \
-  -f pkcs12 -P "<pick-a-password>" -o cert.p12
-gh secret set MACOS_CERT_P12 < <(base64 -i cert.p12)
-printf %s "<pick-a-password>" | gh secret set MACOS_CERT_PASSWORD
-```
-
-- `MACOS_CERT_P12` - base64 of the exported `.p12` (certificate + private key).
-- `MACOS_CERT_PASSWORD` - the password set on that `.p12`.
-
-With the secrets present the Release workflow imports the certificate into a
-temporary keychain and `build.sh` signs with it automatically; without them it
-still builds an ad-hoc DMG. An "Apple Development" identity is not notarized, so
-the first launch of a freshly downloaded DMG needs a right-click -> Open (or
-`xattr -dr com.apple.quarantine Edith.app`); permission grants still persist
-across every reinstall after that.
+<!-- contributors:end -->
 
 ## Contributing
 
-Issues and pull requests are welcome. Before pushing, run `make ci` locally; the
-pre-push hook runs the same gates. The repo is kept comment-free, so use
-`bun run strip-comments` if a stray comment slips in.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+building from source, the test suite, and how releases are cut.
 
 ## Licence
 
 Edith is free software licensed under the [GNU General Public License v3.0](LICENSE).
-You may use, study, modify, and redistribute it; any version you distribute must
+You may use, study, modify and redistribute it; any version you distribute must
 also be released under the GPL-3.0 with its source available.
 
 Sparkle, used for in-app updates, is distributed under the MIT licence.

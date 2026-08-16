@@ -1,0 +1,153 @@
+:root {
+  --color-bg: oklch(0.14 0.005 265);
+  --color-fg: oklch(0.98 0.003 265);
+  --color-muted: oklch(0.68 0.012 265);
+  --color-subtle: oklch(0.52 0.012 265);
+  --color-accent: oklch(0.72 0.14 47);
+  --color-line: oklch(1 0 0 / 8%);
+  --color-line-2: oklch(1 0 0 / 14%);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  width: 1200px;
+  height: 630px;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 72px;
+}
+
+.glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      58% 62% at 18% 4%,
+      color-mix(in oklab, var(--color-accent) 26%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      46% 54% at 88% 92%,
+      color-mix(in oklab, var(--color-accent) 12%, transparent),
+      transparent 70%
+    );
+}
+
+.rule {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--color-line);
+  border-left: 6px solid var(--color-accent);
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 22%;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 8%),
+    0 18px 44px -16px rgb(0 0 0 / 80%);
+}
+
+.wordmark {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.body {
+  position: relative;
+}
+
+.eyebrow {
+  margin-bottom: 20px;
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+h1 {
+  max-width: 15ch;
+  font-size: 82px;
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+h1.small {
+  font-size: 68px;
+  max-width: 18ch;
+}
+
+.lede {
+  margin-top: 26px;
+  max-width: 44ch;
+  font-size: 26px;
+  line-height: 1.42;
+  color: var(--color-muted);
+}
+
+.foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tags {
+  display: flex;
+  gap: 12px;
+}
+
+.tag {
+  border-radius: 999px;
+  border: 1px solid var(--color-line-2);
+  padding: 9px 20px;
+  font-size: 19px;
+  color: var(--color-muted);
+}
+
+.tag.accent {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+}
+
+.domain {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  color: var(--color-subtle);
+}

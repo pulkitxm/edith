@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Edith
+Comment=Native control center for usage, machines, media, and utilities
+Exec=edith-linux
+Icon=com.pulkit.Edith
+Terminal=false
+Categories=Utility;
+StartupNotify=true

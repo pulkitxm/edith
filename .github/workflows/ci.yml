@@ -4,78 +4,162 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Run every product check, then cut a release from main."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ci-${{ github.ref }}-${{
+      github.event_name == 'workflow_dispatch' && github.run_id
+      || (github.event_name == 'push'
+      && (startsWith(github.event.head_commit.message, 'Release v')
+      || startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      && github.sha)
+      || 'active'
+    }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
-  comments:
+  changes:
+    if: >-
+      github.event_name != 'push'
+      || (!startsWith(github.event.head_commit.message, 'Release v')
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
     runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.areas.outputs.swift }}
+      docs: ${{ steps.areas.outputs.docs }}
+      linux: ${{ steps.areas.outputs.linux }}
+      workflows: ${{ steps.areas.outputs.workflows }}
+      promo: ${{ steps.areas.outputs.promo }}
+      site: ${{ steps.areas.outputs.site }}
+      scripts: ${{ steps.areas.outputs.scripts }}
+      source: ${{ steps.areas.outputs.source }}
+      companion: ${{ steps.areas.outputs.companion }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - name: Comment-stripper self-test
-        run: bun scripts/strip-comments.mjs --selftest
-      - name: No disallowed comments
-        run: bun scripts/strip-comments.mjs --check
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - id: areas
+        name: Work out which areas changed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            base="$(git merge-base "origin/$BASE_REF" HEAD)"
+          elif [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
+            && git merge-base --is-ancestor "$BEFORE" HEAD 2>/dev/null; then
+            base="$BEFORE"
+          else
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            changed="$(git diff --name-only "$base" HEAD)"
+            printf 'changed since %s:\n%s\n\n' "$base" "$changed"
+          else
+            changed=""
+            echo "no comparable base commit, running every area"
+          fi
+          area() {
+            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -qE "$2"; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+              echo "$1: run"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+              echo "$1: skip"
+            fi
+          }
+          area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area docs '^docs/'
+          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$)'
+          area workflows '^\.github/workflows/'
+          area promo '^apps/promo-video/'
+          area site '^apps/site/'
+          area scripts '^(scripts/|Casks/|package\.json$|bun\.lock$|biome\.json$)'
+          area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
+          area companion '^apps/companion/'
 
-  secrets:
+  checks:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-go@v7
+        if: needs.changes.outputs.workflows == 'true'
+        with:
+          go-version: "1.26.x"
+          cache: false
       - run: bun install --frozen-lockfile
+      - name: Validate workflows
+        if: needs.changes.outputs.workflows == 'true'
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: No committed secrets
-        run: bun run check-secrets
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
+        run: make ci-secrets
+      - name: No disallowed comments
+        if: needs.changes.outputs.source == 'true'
+        run: make ci-comments
+      - name: No duplicate UserDefaults keys
+        if: needs.changes.outputs.swift == 'true'
+        run: make ci-duplicate-keys
       - name: Lint (Biome)
-        run: bun run lint
-
-  scripts:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - name: Tests
-        run: bun test ./scripts
-
-  site:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
+        run: make ci-lint
+      - name: Script tests
+        if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'
+        run: make ci-scripts
       - name: Site is self-contained
+        if: needs.changes.outputs.site == 'true' || needs.changes.outputs.workflows == 'true'
+        run: make ci-site
+
+  ubuntu:
+    needs: changes
+    if: needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-24.04
+    container: swift:6.3.3-noble
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install native dependencies
+        run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
+      - name: Test portable core
+        run: make linux-test
+      - name: Validate desktop metadata
+        run: make linux-metadata
+      - name: Build Debian package
+        run: make linux-package
+      - name: Verify Debian package
         run: |
-          test -f apps/site/index.html
-          test -f apps/site/CNAME
-          grep -qx edith.pulkit.page apps/site/CNAME
-          ! grep -rhoE '(src|href)="https?://[^"]+' apps/site/*.html \
-            | grep -vE 'https://(github\.com|www\.gnu\.org|docs\.github\.com|edith\.pulkit\.page)' \
-            || { echo "site references an unexpected external origin" >&2; exit 1; }
-      - name: No dead internal links
-        run: |
-          cd apps/site
-          rc=0
-          for ref in $(grep -rhoE '(src|href)="/[^"#]*' ./*.html | cut -d'"' -f2); do
-            test -e ".${ref}" || { echo "missing: ${ref}" >&2; rc=1; }
-          done
-          exit $rc
+          dpkg-deb --info dist/linux/*.deb
+          dpkg-deb --contents dist/linux/*.deb
+          apt-get install -y ./dist/linux/*.deb
+          edith-linux --diagnose
+      - uses: actions/upload-artifact@v7
+        with:
+          name: edith-ubuntu-amd64
+          path: dist/linux/*.deb
+          if-no-files-found: error
 
   promo-video:
+    needs: changes
+    if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: apps/promo-video/package-lock.json
       - name: Install
         run: npm ci
         working-directory: apps/promo-video
@@ -83,36 +167,117 @@ jobs:
         run: npx tsc --noEmit
         working-directory: apps/promo-video
 
-  swift:
+  swift-build:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
-    defaults:
-      run:
-        working-directory: apps/macos
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
-      - name: Type-check
-        run: swift build
-      - name: Tests
-        run: swift test
-      - name: Build .app bundle (smoke test)
+        working-directory: Packages/Edith
+      - name: Cache resolved packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: spm-xcode-${{ runner.os }}-${{ hashFiles('edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/Edith/Package.resolved') }}
+          restore-keys: spm-xcode-${{ runner.os }}-
+      - name: Build the .app bundle
         run: ./build.sh --no-open
-      - name: Verify nested helper bundle and signing
-        run: |
-          test -f dist/Edith.app/Contents/MacOS/Edith
-          test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/claude.svg
-          test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/codex.svg
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/claude.svg
-          test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/codex.svg
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx Edith
-          test -z "$(find dist/Edith.app -print | grep Helper)"
-          for plist in dist/Edith.app/Contents/Info.plist dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist; do
-            for field in CFBundleName CFBundleDisplayName; do
-              ! /usr/libexec/PlistBuddy -c "Print :$field" "$plist" | grep -q Helper
-            done
-          done
-          codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
-          codesign --verify dist/Edith.app
+      - name: Verify nested bundles and signing
+        run: make verify-bundle
+
+  swift-test:
+    needs: changes
+    if: >-
+      needs.changes.outputs.swift == 'true'
+      || needs.changes.outputs.docs == 'true'
+      || needs.changes.outputs.workflows == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache resolved packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            Packages/Edith/.build/checkouts
+            Packages/Edith/.build/artifacts
+            Packages/Edith/.build/repositories
+          key: spm-swiftpm-${{ runner.os }}-${{ hashFiles('Packages/Edith/Package.resolved') }}
+          restore-keys: spm-swiftpm-${{ runner.os }}-
+      - name: Tests
+        run: ./test.sh
+        working-directory: Packages/Edith
+
+  companion:
+    needs: changes
+    if: >-
+      needs.changes.outputs.companion == 'true'
+      || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: companion
+          POSTGRES_USER: companion
+          POSTGRES_PASSWORD: companion-dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U companion -d companion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the toolchain
+        run: rustup toolchain install stable --profile minimal --component clippy
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/companion/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('apps/companion/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: apps/companion
+      - name: Tests
+        run: cargo test --locked
+        working-directory: apps/companion
+      - name: Migrations apply to a real pgvector database
+        env:
+          DATABASE_URL: postgres://companion:companion-dev@127.0.0.1:5432/companion
+        run: cargo run --locked -- --migrate-only
+        working-directory: apps/companion
+
+  release:
+    needs: [changes, checks, ubuntu, swift-build, swift-test, companion]
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && needs.changes.result == 'success'
+      && needs.checks.result == 'success'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+      && ((needs.changes.outputs.linux != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.ubuntu.result == 'success')
+      && ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
+      && ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.docs != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
+      && ((needs.changes.outputs.companion != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
+      && ((github.event_name == 'push'
+      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true'))
+      || (github.event_name == 'workflow_dispatch' && inputs.release))
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      cut_release: true
+    secrets: inherit

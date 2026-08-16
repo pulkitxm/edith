@@ -636,7 +636,8 @@ function main() {
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((f) => !/(^|\/)package-lock\.json$/.test(f));
+    .filter((f) => !/(^|\/)package-lock\.json$/.test(f))
+    .filter((f) => !/^Packages\/Edith\/Vendor\//.test(f));
 
   let changedFiles = 0;
   let totalRemoved = 0;
