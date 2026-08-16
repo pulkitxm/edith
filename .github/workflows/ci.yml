@@ -44,6 +44,7 @@ jobs:
       scripts: ${{ steps.areas.outputs.scripts }}
       source: ${{ steps.areas.outputs.source }}
       companion: ${{ steps.areas.outputs.companion }}
+      companion_runtime: ${{ steps.areas.outputs.companion_runtime }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -80,14 +81,15 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$)'
+          area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
           area docs '^docs/'
           area workflows '^\.github/workflows/'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
-          area scripts '^(scripts/|Casks/|package\.json$|bun\.lock$|biome\.json$)'
+          area scripts '^(scripts/|Casks/|README\.md$|Makefile$|lefthook\.yml$|package\.json$|bun\.lock$|biome\.json$)'
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
+          area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
 
   checks:
     name: checks
@@ -176,6 +178,7 @@ jobs:
       needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.docs == 'true'
       || needs.changes.outputs.workflows == 'true'
+      || needs.changes.outputs.companion_runtime == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -250,7 +253,8 @@ jobs:
       && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
       && ((needs.changes.outputs.swift != 'true'
       && needs.changes.outputs.docs != 'true'
-      && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
+      && needs.changes.outputs.workflows != 'true'
+      && needs.changes.outputs.companion_runtime != 'true') || needs.swift-test.result == 'success')
       && ((needs.changes.outputs.companion != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
       && ((github.event_name == 'push'
