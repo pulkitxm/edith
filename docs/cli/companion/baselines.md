@@ -1,7 +1,7 @@
 # `ed companion baselines`
 
-Your own delivery baselines: the median and spread of every measured signal, bucketed
-by recording context and language, which every deviation is scored against.
+Your own delivery baselines: the median and spread of stored signals, bucketed by
+recording context and language.
 
 Usage:
 
@@ -23,6 +23,12 @@ baseline in Hindi, so signals are compared only within their own bucket.
 Until about twenty hours of audio have accumulated, deviations are suppressed
 entirely and this command says so. Showing deviations against four recordings would be
 noise wearing a number.
+
+After that global gate, a kind and context bucket still needs at least 20 samples
+before it receives deviation scores. The scorer currently recognizes `wpm`,
+`pause_s`, `f0_median`, `f0_range`, `rms` and `filler_rate`; the command also lists
+other stored signal kinds. `audioSeconds` sums every episode with a duration,
+including timed video episodes.
 
 `--json` shape: `{audioSeconds, coldStart, baselines: [{kind, contextBucket, median,
 iqr, samples}]}`.

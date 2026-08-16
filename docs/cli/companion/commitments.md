@@ -17,6 +17,8 @@ different fact from not doing it.
 `--json` shape: an array of `{id, claim, statedAt, dueBy, status, resolvedAt,
 userOverride}`.
 
+`--limit` defaults to 20, must be positive, and is capped at 500 by the backend.
+
 One instance is noise. Two hundred is a calibration curve, and that is the point:
 see [`ed companion standup report`](./standup.md) for what they add up to.
 

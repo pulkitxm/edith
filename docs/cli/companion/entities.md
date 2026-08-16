@@ -1,8 +1,8 @@
 # `ed companion entities`
 
-The people, projects, places and organisations the companion has named, each with
-every spelling it has seen. Embeddings smear proper nouns, so entities are what keep
-one person from becoming two.
+The people, projects, places, organisations and other named things the companion has
+resolved, each with every spelling it has seen. Embeddings smear proper nouns, so
+entities are what keep one person from becoming two.
 
 Usage:
 
@@ -17,6 +17,9 @@ graph, so it is done at extraction time.
 
 `--json` shape: an array of `{id, kind, canonicalName, aliases, mentionCount,
 firstSeen, lastSeen}`.
+
+Kinds are `person`, `project`, `place`, `organisation` and `thing`. `--limit`
+defaults to 30 and must be positive.
 
 Entities are also a retrieval channel: a question that names one walks from the
 entity to the episodes that mention it, alongside vector and keyword search.

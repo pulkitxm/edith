@@ -22,6 +22,12 @@ Three things happen:
 
 `--json` shape: `{beliefsExamined, linksMade, contestedReopened, retired}`.
 
+The pass requires a configured reasoning provider and mutates links and belief
+statuses without confirmation. It examines at most 40 active or contested beliefs
+for relationships. With fewer than two it returns early and does not run retirement.
+Otherwise retirement applies globally to active beliefs older than 30 days with no
+recorded retrieval.
+
 ## Where to go next
 
 - [`ed companion nightly`](./nightly.md), the pass that runs every night

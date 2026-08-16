@@ -14,10 +14,10 @@ ed companion why <id> [--json] [--endpoint <url>]
 The id can name a belief, a hypothesis or a claim, and the output follows what it
 found:
 
-- a **belief** prints confidence, how many times it was revised, its corroboration
-  level, the episodes it rests on and the episodes that argue against it
-- a **hypothesis** prints its mechanism, the alternatives it was required to name,
-  every posterior it has held and every prediction it made
+- a **belief** prints confidence, stability, corroboration, the episodes it rests on
+  and the episodes that argue against it
+- a **hypothesis** prints its mechanism, alternatives and recorded posterior
+  revisions; the current CLI does not include its predictions
 - a **claim** prints when you said it and every verdict the record returned
 
 No claim is allowed to bottom out at "the system concluded this". Every chain runs
@@ -26,6 +26,11 @@ down to something you actually said or something a connector actually saw.
 `--json` shape: `{kind, id, statement, status, confidence, stability, corroboration,
 promptVersion, mechanism, prior, posterior, alternatives, evidence, counterEvidence,
 episode, revisions, verdicts}`, with the fields that do not apply left null.
+The top-level confidence, stability, prior and posterior values are formatted as
+four-decimal strings when present; revision posteriors remain JSON numbers.
+Fields that do not apply are null for scalar values and empty arrays for list values.
+The API has additional belief links and dates, hypothesis test and prediction data,
+and claim metadata that the current CLI client does not expose.
 
 ## Where to go next
 

@@ -16,6 +16,10 @@ any value other than `valid` or `believed` is refused. Without `--as-of` you get
 newest records without an as-of filter. With it, the two timelines answer
 genuinely different questions:
 
+`--as-of` accepts `YYYY-MM-DD` or a full RFC 3339 timestamp. The backend currently
+treats an unparseable value as though the option were omitted, so validate scripted
+input before relying on an as-of result.
+
 | Timeline | Question it answers |
 | --- | --- |
 | `valid` | What was actually true then. |
