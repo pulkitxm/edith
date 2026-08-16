@@ -195,7 +195,9 @@ jobs:
           brew install postgresql@18 pgvector
           brew services start postgresql@18
           until pg_isready; do sleep 1; done
-          createdb companion
+          createuser companion
+          psql postgres -c "ALTER ROLE companion WITH PASSWORD 'companion-dev'"
+          createdb --owner=companion companion
       - name: Cache cargo
         uses: actions/cache@v6
         with:
@@ -213,7 +215,7 @@ jobs:
         working-directory: apps/companion
       - name: Migrations apply to a real pgvector database
         env:
-          DATABASE_URL: postgres://127.0.0.1/companion
+          DATABASE_URL: postgres://companion:companion-dev@127.0.0.1:5432/companion
         run: cargo run --locked -- --migrate-only
         working-directory: apps/companion
 
