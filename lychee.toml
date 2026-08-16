@@ -1,0 +1,6 @@
+no_progress = true
+max_retries = 3
+timeout = 20
+accept = ["200..=206", "429"]
+exclude_path = [".wiki-build", ".wiki-clone", "build", "Packages/Edith/.build", "apps/macos/.build", "apps/companion/target", "apps/promo-video/node_modules", "node_modules"]
+exclude = ["^http://127\\.0\\.0\\.1", "^http://localhost", "^https://github\\.com/pulkitxm/edith/discussions$"]

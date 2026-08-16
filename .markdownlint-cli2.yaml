@@ -1,0 +1,26 @@
+config:
+  default: true
+  MD013: false
+  MD024:
+    siblings_only: true
+  MD033:
+    allowed_elements: [img, br, details, summary, kbd, div, p, table, tr, td, sub, a]
+  MD036: false
+  MD040: false
+  MD041: false
+  MD038: false
+  MD051: false
+  MD060: false
+
+globs:
+  - "**/*.md"
+
+ignores:
+  - Packages/Edith/Vendor/**
+  - "**/.build/**"
+  - .wiki-build/**
+  - .wiki-clone/**
+  - build/**
+  - apps/companion/target/**
+  - apps/promo-video/node_modules/**
+  - node_modules/**

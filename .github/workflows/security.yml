@@ -1,0 +1,220 @@
+name: Security
+
+on:
+  schedule:
+    - cron: "15 5 * * 1"
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  advisories:
+    name: Rust advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+        working-directory: apps/companion
+
+  osv:
+    name: OSV scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780
+        with:
+          tool: osv-scanner
+      - run: osv-scanner scan source --recursive .
+
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780
+        with:
+          tool: gitleaks
+      - run: gitleaks dir --redact --no-banner .
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: >-
+          pipx run semgrep scan --error
+          --config p/rust
+          --config p/swift
+          --config p/secrets
+          --config p/github-actions
+          .
+
+  trivy:
+    name: Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+  sbom:
+    name: SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          format: cyclonedx
+          output: sbom.cdx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          comment-summary-in-pr: on-failure
+          fail-on-severity: high
+
+  codeql-javascript:
+    name: CodeQL JavaScript
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+
+  codeql-rust:
+    name: CodeQL Rust
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+        with:
+          languages: rust
+          build-mode: manual
+          queries: security-and-quality
+      - run: cargo check --locked
+        working-directory: apps/companion
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+
+  codeql-swift:
+    name: CodeQL Swift
+    if: github.event_name != 'merge_group'
+    runs-on: macos-26
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+        with:
+          languages: swift
+          build-mode: manual
+          queries: security-and-quality
+      - run: swift build --disable-sandbox
+        working-directory: Packages/Edith
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+
+  scorecard:
+    name: OpenSSF Scorecard
+    if: github.event_name == 'schedule' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: false
+      - uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+        with:
+          sarif_file: scorecard.sarif
+
+  security:
+    name: Security
+    if: always()
+    needs:
+      - advisories
+      - osv
+      - gitleaks
+      - semgrep
+      - trivy
+      - sbom
+      - dependency-review
+      - codeql-javascript
+      - codeql-rust
+      - codeql-swift
+      - scorecard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail when a check failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "security checks are clean"

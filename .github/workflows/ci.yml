@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   changes:
+    name: changes
     if: >-
       github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
@@ -44,10 +45,11 @@ jobs:
       source: ${{ steps.areas.outputs.source }}
       companion: ${{ steps.areas.outputs.companion }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - id: areas
         name: Work out which areas changed
         env:
@@ -88,12 +90,15 @@ jobs:
           area companion '^apps/companion/'
 
   checks:
+    name: checks
     needs: changes
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         if: needs.changes.outputs.workflows == 'true'
         with:
           go-version: "1.26.x"
@@ -121,12 +126,15 @@ jobs:
         run: make ci-site
 
   promo-video:
+    name: promo-video
     needs: changes
     if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           cache: npm
@@ -139,16 +147,19 @@ jobs:
         working-directory: apps/promo-video
 
   swift-build:
+    name: swift-build
     needs: changes
     if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
         working-directory: Packages/Edith
       - name: Cache resolved packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: build/SourcePackages
           key: spm-xcode-${{ runner.os }}-${{ hashFiles('edth.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/Edith/Package.resolved') }}
@@ -159,6 +170,7 @@ jobs:
         run: make verify-bundle
 
   swift-test:
+    name: swift-test
     needs: changes
     if: >-
       needs.changes.outputs.swift == 'true'
@@ -166,9 +178,11 @@ jobs:
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Cache resolved packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             Packages/Edith/.build/checkouts
@@ -181,13 +195,16 @@ jobs:
         working-directory: Packages/Edith
 
   companion:
+    name: companion
     needs: changes
     if: >-
       needs.changes.outputs.companion == 'true'
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Install the toolchain
         run: rustup toolchain install stable --profile minimal --component clippy
       - name: Start the database
@@ -199,7 +216,7 @@ jobs:
           psql postgres -c "ALTER ROLE companion WITH PASSWORD 'companion-dev'"
           createdb --owner=companion companion
       - name: Cache cargo
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ~/.cargo/registry
@@ -220,6 +237,7 @@ jobs:
         working-directory: apps/companion
 
   release:
+    name: release
     needs: [changes, checks, swift-build, swift-test, companion]
     if: >-
       always()
@@ -243,4 +261,12 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       cut_release: true
-    secrets: inherit
+    secrets:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+      TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      NOTARY_KEY: ${{ secrets.NOTARY_KEY }}

@@ -1,0 +1,23 @@
+extends: default
+
+ignore: |
+  .wiki-build/**
+  .wiki-clone/**
+  **/.build/**
+  apps/companion/target/**
+  apps/promo-video/node_modules/**
+  build/**
+  node_modules/**
+
+rules:
+  document-start: disable
+  line-length: disable
+  truthy:
+    check-keys: false
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+  indentation:
+    spaces: 2
+    indent-sequences: consistent

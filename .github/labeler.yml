@@ -1,0 +1,28 @@
+swift:
+  - changed-files:
+      - any-glob-to-any-file: ["Packages/Edith/**", "Resources/**", "edth.xcodeproj/**"]
+companion:
+  - changed-files:
+      - any-glob-to-any-file: ["apps/companion/**"]
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]
+website:
+  - changed-files:
+      - any-glob-to-any-file: ["apps/site/**"]
+promo-video:
+  - changed-files:
+      - any-glob-to-any-file: ["apps/promo-video/**"]
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", "Makefile", "lefthook.yml"]
+cli:
+  - changed-files:
+      - any-glob-to-any-file: ["Packages/Edith/Sources/EdithCLI/**", "docs/cli/**"]
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Package.resolved"
+          - "**/Cargo.lock"
+          - "**/package-lock.json"
+          - bun.lock

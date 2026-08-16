@@ -1,0 +1,37 @@
+name: Label pull requests
+
+on: pull_request
+
+permissions:
+  contents: read
+
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  area:
+    name: Area labels
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13
+        with:
+          sync-labels: true
+
+  size:
+    name: Size label
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: pascalgn/size-label-action@56b489b027932ec0cf60438a1a5f1a19c8fc71ff
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IGNORED: |
+            bun.lock
+            apps/companion/Cargo.lock
+            apps/promo-video/package-lock.json

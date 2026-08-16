@@ -1,0 +1,35 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stale
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    name: Sweep
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93
+        with:
+          days-before-stale: 45
+          days-before-close: 14
+          exempt-issue-labels: pinned,security
+          exempt-pr-labels: pinned,security
+          stale-issue-message: >-
+            This issue has had no activity for 45 days. Comment to keep it open,
+            otherwise it closes in 14 days.
+          stale-pr-message: >-
+            This pull request has had no activity for 45 days. Comment or push to
+            keep it open, otherwise it closes in 14 days.
+          operations-per-run: 100

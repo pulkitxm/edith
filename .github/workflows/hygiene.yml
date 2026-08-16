@@ -1,0 +1,100 @@
+name: Hygiene
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  community:
+    name: Community health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Required files are present
+        run: >-
+          test -s LICENSE
+          && test -s README.md
+          && test -s ARCHITECTURE.md
+          && test -s CODE_OF_CONDUCT.md
+          && test -s CONTRIBUTING.md
+          && test -s GOVERNANCE.md
+          && test -s SECURITY.md
+          && test -s SUPPORT.md
+          && test -s .github/CODEOWNERS
+          && test -s .github/pull_request_template.md
+          && test -s .github/ISSUE_TEMPLATE/bug.yml
+          && test -s .github/ISSUE_TEMPLATE/feature.yml
+          && test -s .github/ISSUE_TEMPLATE/config.yml
+
+  yaml:
+    name: YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: pipx run yamllint --strict .
+
+  markdown:
+    name: Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff
+
+  actions:
+    name: Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780
+        with:
+          tool: zizmor
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: "1.26.x"
+          cache: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+      - run: >-
+          zizmor --persona=pedantic --min-severity=high --format=plain
+          .github/workflows
+
+  links:
+    name: Links
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8
+        with:
+          args: --config lychee.toml './**/*.md'
+          fail: true
+
+  hygiene:
+    name: Hygiene
+    if: always()
+    needs: [community, yaml, markdown, actions, links]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail when a check failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "hygiene is clean"
