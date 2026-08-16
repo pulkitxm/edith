@@ -63,6 +63,10 @@ ed config set lidAwakeRestoreOnQuit true
 `lidAwakeActive` is read only because changing a preference cannot change the
 system power state. Use `ed lid-awake on` and `ed lid-awake off` for that.
 
+## Commands
+
+- [`ed lid-awake status`](./status.md)
+
 ## Exit codes
 
 | Code | Meaning |

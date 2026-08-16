@@ -27,13 +27,14 @@ launches. Nothing in this group waits on the app, and nothing in it can exit 4.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Thirteen entries, in this order:
+walks, and its order is the order `ls` prints. Sixteen entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
+| `companion` | Companion | Agent | Notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
 | `lidAwake` | Lid Awake | System | Keep running with the lid shut, with timed and battery-aware sessions |
@@ -44,8 +45,10 @@ walks, and its order is the order `ls` prints. Thirteen entries, in this order:
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
+| `hyperKey` | Hyper Key | System | Caps Lock becomes a four-modifier key while held |
+| `scratchpad` | Scratchpad | Utilities | Quick notes with inline math and unit conversion |
 
-The same thirteen, with what each one is made of. `Key` is the preference the app
+The same sixteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 five the welcome tour shows before you ask it for all of them.
 
@@ -54,6 +57,7 @@ five the welcome tour shows before you ask it for all of them.
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` |
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none |
+| `companion` | `tabCompanionEnabled` | no | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none |
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none |
@@ -64,14 +68,14 @@ five the welcome tour shows before you ask it for all of them.
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none |
+| `hyperKey` | `hyperKeyEnabled` | no | `accessibility` | none | none |
+| `scratchpad` | `scratchpadEnabled` | no | none | none | none |
 
 An id is matched exactly and case-insensitively against the `ID` column first,
 then against the `Key` column, so `ed extensions info clipboard`,
 `ed extensions info CLIPBOARD` and `ed extensions info clipboardEnabled` are the
 same command. There is no prefix matching here: unlike a machine name, `clip`
 fails with the full list of ids rather than guessing.
-
-## Commands
 
 ## Commands
 
@@ -98,7 +102,7 @@ failure mode between "the id exists" and "the boolean is written".
   question from the catalogue's fallback instead, which is `true` for
   `tabUsageEnabled` and `tabSystemEnabled`, so on a Mac where Edith has never
   run those two disagree. Upgrading from an older Edith writes a concrete value
-  for all thirteen keys on the next launch and they agree again; a fresh install
+  for all sixteen keys on the next launch and they agree again; a fresh install
   only writes the keys you turn on, so an untouched `tabUsageEnabled` keeps
   disagreeing until something writes it.
 - Every extension is also an ordinary `ed config` boolean, and both paths write
@@ -106,8 +110,9 @@ failure mode between "the id exists" and "the boolean is written".
   `ed config set clipboardEnabled true` and `ed extensions enable clipboard`
   leave identical state; only the second one knows to mention Accessibility.
   Related settings sit in that extension's own config group, so
-  `ed config ls --group clipboard` and `--group notch`, `--group focusdim` or
-  `--group colorpicker` give you the rest of the knobs.
+  `ed config ls --group clipboard`, `--group utilities`, `--group micmute` and
+  `--group notch`, `--group focusdim` or `--group colorpicker` give you the rest
+  of the knobs.
 - The permission check reads what the app last mirrored into preferences, not
   live TCC state, because a command line process cannot read another
   application's grants. If a note names a permission you know you have already

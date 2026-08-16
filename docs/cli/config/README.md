@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 201 settings in 23
+reads, and `ed config` is that surface from the command line: 226 settings in 25
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -25,8 +25,6 @@ next time it launches.
 
 `ls` is the default subcommand, so a bare `ed config` lists everything, and
 `ed config list` is an accepted spelling of `ls`.
-
-## Commands
 
 ## Commands
 
@@ -55,7 +53,7 @@ not here cannot be set, and `import` skips it.
   read, so a write there reaches Edith. `standard` is whichever process's own
   domain is reading, which for `ed` is `ed`, not the app: those 15 keys are the
   ones to read through their own command instead.
-- **read only** marks the 22 keys the app owns and maintains. `ed` reports them
+- **read only** marks the 23 keys the app owns and maintains. `ed` reports them
   and refuses to write them, exit 1.
 
 ### `appearance`
@@ -253,6 +251,10 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `clipboardEnabled` | bool | `false` | shared | Clipboard extension: history with instant paste. |
+| `pasteQueueEnabled` | bool | `false` | shared | Queue new clipboard entries for sequential pasting. |
+| `pasteQueueHotKeyCode` | int | none | shared | Virtual key code of the paste queue next shortcut. |
+| `pasteQueueHotKeyMods` | int | none | shared | Carbon modifier mask of the paste queue next shortcut. |
+| `pasteQueueHotKeyLabel` | string | none | shared | Printable label for the paste queue next shortcut. |
 | `clipboardHotKeyCode` | int | none | shared | Virtual key code of the clipboard panel shortcut. |
 | `clipboardHotKeyMods` | int | none | shared | Carbon modifier mask of the clipboard panel shortcut. |
 | `clipboardHotKeyLabel` | string | none | shared | Printable label for the clipboard panel shortcut. |
@@ -350,6 +352,20 @@ not here cannot be set, and `import` skips it.
 | `micHotKeyCode` | int | none | shared | Virtual key code of the mic mute shortcut. |
 | `micHotKeyMods` | int | none | shared | Carbon modifier mask of the mic mute shortcut. |
 | `micHotKeyLabel` | string | none | shared | Printable label for the mic mute shortcut. |
+| `pushToTalkEnabled` | bool | `false` | shared | Hold a shortcut to unmute while it is held, then mute on release. |
+| `pushToTalkHotKeyCode` | int | none | shared | Virtual key code of the push-to-talk shortcut. |
+| `pushToTalkHotKeyMods` | int | none | shared | Carbon modifier mask of the push-to-talk shortcut. |
+| `pushToTalkHotKeyLabel` | string | none | shared | Printable label for the push-to-talk shortcut. |
+
+### `utilities`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `hyperKeyEnabled` | bool | `false` | shared | Hyper Key extension: turn Caps Lock into a global modifier key. |
+| `scratchpadEnabled` | bool | `false` | shared | Scratchpad extension: quick notes with inline math and unit conversion. |
+| `scratchpadHotKeyCode` | int | none | shared | Virtual key code of the scratchpad shortcut. |
+| `scratchpadHotKeyMods` | int | none | shared | Carbon modifier mask of the scratchpad shortcut. |
+| `scratchpadHotKeyLabel` | string | none | shared | Printable label for the scratchpad shortcut. |
 
 ### `backup`
 
@@ -409,7 +425,7 @@ one of them changes what `ed` sees, not what the app does, so drive the live
 ones through the command that owns them: `ed music volume 0.4` reaches the
 player, `ed config set musicVolume 0.4` does not.
 
-**Read only means the app writes it.** The 22 read-only keys are state the app
+**Read only means the app writes it.** The 23 read-only keys are state the app
 maintains and `ed` reports: the `perm*Granted` mirror of macOS permission state,
 the `last*BackupAt` timestamps, the four `notifSession*` and `notifWeekly*`
 records of which alert already fired, `musicFolderStale`, the `musicLast*` and

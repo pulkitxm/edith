@@ -8,11 +8,9 @@ that landed on the pasteboard.
 
 The history is a file on disk, `index.jsonl` under
 `~/Library/Application Support/Edith/clipboard`, with the bytes behind the
-entries in `blobs/` beside it. Nothing here asks the running app for its
-answer, so every verb works whether or not Edith is running. Mutations post the
-`clipboardChanged` notification afterwards, which is what makes an open panel
-redraw; when nothing is listening the post is a no-op and the write still
-stands.
+entries in `blobs/` beside it. History verbs work whether or not Edith is
+running. Paste queue verbs are the exception: the queue belongs to the running
+menu bar helper and exits 4 when that helper is unavailable.
 
 Entries are numbered from 1 in the same order the panel shows them: pinned
 first, then most recently copied, honouring `clipboardPinTo`. That number is
@@ -31,11 +29,10 @@ the UI would act on.
 | `ed clipboard unpin <index>` | Let one entry age out again |
 | `ed clipboard rm <index>` | Forget one entry and delete its blob |
 | `ed clipboard clear` | Forget the whole history |
+| `ed clipboard queue` | Inspect or control the in-memory paste queue |
 
 A bare `ed clipboard` runs `ls`. `ls` also answers to `list`, and `stats` also
 answers to `size`.
-
-## Commands
 
 ## Commands
 
@@ -47,6 +44,7 @@ answers to `size`.
 - [`ed clipboard unpin`](./unpin.md)
 - [`ed clipboard rm`](./rm.md)
 - [`ed clipboard clear`](./clear.md)
+- [`ed clipboard queue`](./queue.md)
 
 ## Exit codes
 
@@ -56,7 +54,7 @@ answers to `size`.
 | 1 | `get` on an entry that is not text: `error: entry png is not text` |
 | 2 | `--limit` below zero, or a command line ArgumentParser cannot parse, such as a non-numeric index or an unknown flag |
 | 3 | No entry with that number, or the blob behind an entry is missing |
-| 4 | The history is empty and you named a number |
+| 4 | The history is empty and you named a number, or the paste queue needs the menu bar helper |
 
 The empty case is the one that surprises people. Every verb that takes a number
 goes through the same lookup, and that lookup calls an empty history
@@ -119,6 +117,11 @@ hint: pass 0 or more
   new entries. `ed extensions enable clipboard` turns capture on, and
   `ed config ls --group clipboard` lists the retention, hotkey, ignore-list and
   capture switches that shape what ends up here.
+- **The paste queue is in memory.** New captures join it while `pasteQueueEnabled`
+  is on. `ed clipboard queue add <index>` can add an existing history entry,
+  `queue next` pastes the oldest item, `queue rm <id>` removes an id from the
+  JSON listing, and `queue clear` drops everything. Restarting the helper drops
+  the queue; the clipboard history remains on disk.
 - **`preview` is a preview.** It is capped at 500 characters, so it is a search
   target and a display string, not the content. Use `get` for the content.
 - **Everything works with the app closed.** Nothing in this group waits on

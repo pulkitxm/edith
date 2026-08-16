@@ -58,8 +58,9 @@ than from Foundation, which is never used on the output path:
 
 The top level is not always an object. Anything that is a list is a list:
 `ed usage limits`, `ed usage projects`, `ed usage sources`, `ed permissions
-refresh`, `ed calendar ls`, `ed clipboard ls`, `ed download ls`, `ed machines
-ls`, `ed extensions ls` and `ed app actions` all emit a top-level array. Others,
+refresh`, `ed calendar ls`, `ed clipboard ls`, `ed clipboard queue ls`,
+`ed system agents ls`, `ed download ls`, `ed machines ls`, `ed extensions ls` and
+`ed app actions` all emit a top-level array. Others,
 `ed version`, `ed permissions ls`, `ed usage summary` and `ed install` among
 them, emit an object.
 
@@ -430,7 +431,9 @@ is a local question that needs no permission and no round trip.
 | `ed usage machines ls`, `enable`, `disable` | no | the machine directory and one defaults key |
 | `ed usage machines collect`, `forget` | no | the collector runs over SSH from this process, and the fold back into `usage.json` is the same in-process pipeline `ed usage refresh` runs |
 | `ed system stats`, `ed system disks` | no | the same sampler, run in this process |
+| `ed system agents`, `ed scratchpad` | no | local process inspection and the shared calculation engine |
 | `ed clipboard`, `ed color`, `ed shelf`, `ed download`, `ed cleaner` | no | stores under Application Support and the shared defaults suite |
+| `ed clipboard queue` | menu bar | the running helper owns the in-memory queue and paste action |
 | `ed apps ls`, `ed tools ls`, `ed app actions`, `ed app updates`, `ed app clear-updates` | no | the process table, `PATH`, and a log file |
 | `ed tools install` | no | it fetches and installs the tool itself, then checks the tool landed on `PATH` |
 | `ed music ls`, `mkdir`, `mv`, `rename`, `rm`, `rescan`, `shuffle`, `repeat`, `status`, `players` | no | the library is a folder of files and two defaults keys |

@@ -1,11 +1,12 @@
 # `ed system`
 
 `ed system` reports on the Mac you are typing on: a live CPU, memory, load and
-network sample, and the volumes that are mounted. It reads the machine directly
-through `sysctl`, the Mach host statistics, `/bin/ps` and `pmset`, so nothing
-here talks to the Edith app and nothing here needs it running. Reach for it when
-you want the numbers the app's This Mac view shows without opening a window, or
-when you want them on stdout as JSON.
+network sample, the volumes that are mounted, and the agent processes Edith
+recognizes. It reads the machine directly through `sysctl`, the Mach host
+statistics, `/bin/ps` and `pmset`, so nothing here talks to the Edith app and
+nothing here needs it running. Reach for it when you want the numbers the app's
+This Mac view shows without opening a window, or when you want them on stdout as
+JSON.
 
 It is the local half of a pair. `ed machines metrics <machine>` is the same
 report for a machine over SSH, in the same shape, so a script can treat both the
@@ -17,23 +18,25 @@ same way.
 | --- | --- |
 | `ed system stats` | Samples CPU, memory, load, uptime, network and optionally the top processes. Streams with `--follow`. Runs when you type `ed system` with no subcommand. |
 | `ed system disks` | Lists the mounted volumes with their size, free space and use, plus battery, temperature and GPU fields in JSON. |
-
-## Commands
+| `ed system agents` | Lists recognized agent processes. `kill` stops one by PID. |
 
 ## Commands
 
 - [`ed system stats`](./stats.md)
 - [`ed system disks`](./disks.md)
+- [`ed system agents`](./agents.md)
 
 ## Exit codes
 
 | Code | When |
 | --- | --- |
 | 0 | The sample or the volume list was printed. `--help` and `--version` also exit 0. |
-| 2 | `--interval` was zero, negative or not finite; `--processes` was negative; or the command line was wrong in the ordinary way, an unknown flag, a missing value, or a value that is not a number. |
+| 1 | An agent process could not be stopped. |
+| 2 | `--interval` was zero, negative or not finite; `--processes` was negative; `--limit` was negative; or the command line was wrong in the ordinary way. |
 
-Neither command looks anything up by name and neither talks to the app, so 3 and
-4 cannot happen here. Code 1 is the catch-all for an unexpected error escaping
+Stats and disks do not look anything up by name and cannot produce 3 or 4.
+Agents returns 3 for a PID outside the recognized list and 1 when macOS refuses
+the signal. Code 1 is also the catch-all for an unexpected error escaping
 `ed system stats`, and nothing on the local sampling path throws one.
 
 ## Notes and gotchas
@@ -74,6 +77,12 @@ Neither command looks anything up by name and neither talks to the app, so 3 and
   samples every two seconds and refreshes its volume and battery half on every
   fifteenth tick, about every thirty seconds; `ed system disks` reads it fresh
   on every call.
+- `agents ls` samples recognized processes twice over 250 milliseconds so its
+  CPU percentage is a short interval measurement. It reads the process name
+  directly and includes `claude`, `node`, `bun`, `npm`, `npx`, `deno`, `python`,
+  `python3`, `tsx` and `ts-node`.
+- `agents kill` accepts only those recognized process names and sends SIGTERM by
+  default. Pass `--force` for SIGKILL. It never targets the `ed` process itself.
 - The `systemStats` extension, the CPU and memory readout in the menu bar, is
   unrelated to these commands. `ed system` never consults it, and both commands
   work with every extension turned off.

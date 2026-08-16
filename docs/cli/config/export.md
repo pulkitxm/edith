@@ -35,8 +35,8 @@ ed config export | jq 'keys | length'
 ```
 
 Read-only keys and the two `map` settings are never exported, with or without
-`--defaults`, because neither can be imported: that leaves 177 exportable keys
-of the 201. Without `--defaults` you get only the ones carrying a value of their
+`--defaults`, because neither can be imported: that leaves 201 exportable keys
+of the 226. Without `--defaults` you get only the ones carrying a value of their
 own, which is a much shorter list and is the one worth moving between Macs.
 
 ## Where to go next

@@ -30,10 +30,11 @@ key.
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
 | [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, per-day, per-model and per-project |
-| [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
+| [`ed system`](./system/README.md) | CPU, memory, load, network, mounted volumes and agent processes |
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
+| [`ed scratchpad`](./scratchpad/README.md) | Arithmetic and unit conversion from the command line |
 | [`ed color`](./color/README.md) | The colour picker's swatch history |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
