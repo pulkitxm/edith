@@ -288,6 +288,8 @@ final class ClipboardStore: FeatureModule {
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil
         entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
+        pasteQueue.retain(entryIDs: Set(entries.map(\.id)))
+        queuedItems = pasteQueue.items
         revision += 1
         let removedAny = entries.count != beforeRetention
         let snapshot = entries
