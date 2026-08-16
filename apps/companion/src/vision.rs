@@ -142,16 +142,36 @@ impl VisionClient {
     pub async fn probe(&self) -> Result<String, VisionError> {
         let response = self
             .client
-            .get(format!("{}/api/version", self.base_url))
+            .get(format!("{}/api/tags", self.base_url))
             .send()
             .await
             .map_err(|error| VisionError(format!("Vision probe failed: {error}")))?;
-        if response.status().is_success() {
+        if !response.status().is_success() {
+            return Err(VisionError(format!(
+                "Vision endpoint returned {}",
+                response.status()
+            )));
+        }
+        let listing = response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|error| VisionError(format!("Vision probe unreadable: {error}")))?;
+        let present = listing["models"]
+            .as_array()
+            .map(|models| {
+                models.iter().any(|entry| {
+                    entry["name"]
+                        .as_str()
+                        .is_some_and(|name| name == self.model || name.starts_with(&self.model))
+                })
+            })
+            .unwrap_or(false);
+        if present {
             Ok(self.describe())
         } else {
             Err(VisionError(format!(
-                "Vision endpoint returned {}",
-                response.status()
+                "model {} is not pulled on the vision endpoint",
+                self.model
             )))
         }
     }

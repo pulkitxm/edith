@@ -147,11 +147,18 @@ async fn vault_check(vault_dir: &Path) -> Result<String, String> {
 }
 
 async fn embeddings_check(embed: &EmbedClient) -> Result<String, String> {
-    embed
+    let version = embed
         .version_probe()
         .await
-        .map(|version| format!("ollama {version}, model {}", embed.model()))
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    embed
+        .embed(&["health probe".to_owned()])
+        .await
+        .map_err(|error| format!("model {} is not answering: {error}", embed.model()))?;
+    Ok(format!(
+        "ollama {version}, model {} loaded",
+        embed.model()
+    ))
 }
 
 async fn stt_check(stt: &SttRouter) -> Result<String, String> {
