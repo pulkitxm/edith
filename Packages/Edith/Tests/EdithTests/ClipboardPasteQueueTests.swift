@@ -7,7 +7,7 @@ import Testing
     private func entry(_ id: String, copiedAt: Date = Date()) -> ClipboardEntry {
         ClipboardEntry(
             id: id, sha256: id, types: ["public.utf8-plain-text"], ext: "txt",
-            sourceApp: "Tests", lastCopiedAt: copiedAt, size: id.count,
+            sourceApp: "Tests", sourceBundleID: "test.app", lastCopiedAt: copiedAt, size: id.count,
             preview: id)
     }
 
