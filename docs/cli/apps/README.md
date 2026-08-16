@@ -20,8 +20,6 @@ exits 4 when Edith is closed.
 
 ## Commands
 
-## Commands
-
 - [`ed apps ls`](./ls.md)
 - [`ed apps quit`](./quit.md)
 

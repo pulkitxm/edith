@@ -65,8 +65,6 @@ rather than from a link is the part that matters, for the reason in
 
 ## Commands
 
-## Commands
-
 - [`ed install`](./install.md)
 - [`ed uninstall`](./uninstall.md)
 - [`ed guide`](./guide.md)

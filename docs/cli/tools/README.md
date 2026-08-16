@@ -89,8 +89,6 @@ read Codex limits, so what `ed tools ls` reports is what the app will find.
 
 ## Commands
 
-## Commands
-
 - [`ed tools ls`](./ls.md)
 - [`ed tools install`](./install.md)
 

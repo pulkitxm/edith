@@ -70,8 +70,6 @@ Files window opens where the shell in that terminal left off.
 
 ## Commands
 
-## Commands
-
 - [`ed machines files ls`](./ls.md)
 - [`ed machines files get`](./get.md)
 - [`ed machines files put`](./put.md)

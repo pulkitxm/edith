@@ -25,11 +25,11 @@ key.
 | Page | What it covers |
 | --- | --- |
 | [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
-| [`ed app`](./app/README.md) | One-shot actions the app performs: open, quit, relaunch, update checks |
+| [`ed app`](./app/README.md) | One-shot app actions, section reveal, and PNG window snapshots |
 | [`ed extensions`](./extensions/README.md) | Turning Edith's features on and off |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
-| [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, per-day, per-model and per-project |
+| [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, projects, sources, and machine attribution |
 | [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
@@ -51,7 +51,7 @@ key.
 | [`ed machines docker`](./machines-docker/README.md) | Containers, images, volumes, networks and compose projects |
 | [`ed machines files`](./machines-files/README.md) | Browsing, transferring and editing files over SSH, and the undo model |
 | [`ed machines power`](./machines-power/README.md) | Power state, processes and system services |
-| [`ed machines thermal`](./machines-thermal/README.md) | Fan speeds and temporary or persistent thermal profiles |
+| [`ed machines thermal`](./machines-thermal/README.md) | Thermal readings and temporary or persistent performance profiles |
 | [`ed machines workspace`](./machines-workspace/README.md) | Workspaces and panes |
 
 ## The short version
@@ -66,9 +66,10 @@ ed machines ls                   the computers Edith can reach
 ed tuf docker ps                 run anything on one of them
 ```
 
-Every read command takes `--json` and prints exactly one document on stdout.
-Errors, hints and notes go to stderr. Exit codes are part of the contract, so
-an agent can drive Edith headlessly. See
+Every reporting command that advertises `--json` prints exactly one document on
+stdout, except the two documented streaming modes. Errors, hints and notes go
+to stderr. Exit codes are part of the contract, so an agent can drive Edith
+headlessly. See
 [conventions and contracts](./conventions.md) for the details.
 
 These pages are mirrored to the [wiki](https://github.com/pulkitxm/edith/wiki)

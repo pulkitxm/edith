@@ -71,8 +71,6 @@ candidates in the hint, and never guesses.
 
 ## Commands
 
-## Commands
-
 - [`ed machines power status`](./power-status.md)
 - [`ed machines power reboot`](./power-reboot.md)
 - [`ed machines power shutdown`](./power-shutdown.md)

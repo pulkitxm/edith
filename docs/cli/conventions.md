@@ -308,11 +308,11 @@ declared, and there are only three: `-f` for `--follow` on `ed system stats`,
 logs`; `-a` for `--all` on `ed machines docker ps` and `ed machines files ls`;
 and `-t` for `--tty` on `ed machines exec`.
 
-Boolean flags are presence only. There are no `--no-` inversions anywhere, so a
-flag is either passed or not. The words `on`, `off`, `true`, `false`, `yes`,
-`no`, `1`, `0`, `enabled` and `disabled` are parsed as setting values, by
-`ed config set` and by `ed music shuffle` and `ed music repeat`, and never as
-flag values.
+Boolean flags are presence only. `--no-machines` on `ed usage refresh` is the
+one negative flag: it is independent from `--machines`, and passing both is a
+usage error. The words `on`, `off`, `true`, `false`, `yes`, `no`, `1`, `0`,
+`enabled` and `disabled` are parsed as setting values, by `ed config set` and by
+`ed music shuffle` and `ed music repeat`, and never as flag values.
 
 Options that repeat collect their values: `--source` and `--machine` on `ed
 usage summary`, `daily` and `models` narrow to several agents, and `--root` on
@@ -415,7 +415,7 @@ is a local question that needs no permission and no round trip.
 | Command | Needs | Why |
 | --- | --- | --- |
 | `ed app clean-keys`, `ed app test-notification`, `ed app open` | menu bar | the helper owns the panel, the keyboard lock and notifications |
-| `ed app quit`, `ed app check-updates` | main window | both act on the window, and the updater lives in it |
+| `ed app quit`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it |
 | `ed calendar ls` | menu bar | the calendar grant belongs to the Edith bundle, not to `ed` |
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
 | `ed usage limits --refresh` | menu bar | only the app polls the providers again; without `--refresh`, `limits` reads the file |
@@ -468,6 +468,8 @@ than checking. The deadlines are per command:
 ed calendar ls                 4 seconds
 ed usage limits --refresh      20 seconds
 ed app check-updates           60 seconds, or 0.1 with --no-wait
+ed app reveal                  10 seconds
+ed app snapshot                15 seconds
 ed machines files undo         20 seconds
 ed music status                2 seconds, for Edith's own player
 ```

@@ -33,8 +33,6 @@ nothing after it runs `ls`, including its flags: `ed shelf --json` is
 
 ## Commands
 
-## Commands
-
 - [`ed shelf ls`](./ls.md)
 - [`ed shelf path`](./path.md)
 - [`ed shelf add`](./add.md)

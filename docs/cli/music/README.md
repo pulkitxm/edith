@@ -97,8 +97,6 @@ they drive the library queue rather than a generic transport.
 
 ## Commands
 
-## Commands
-
 - [`ed music status`](./status.md)
 - [`ed music play`](./play.md)
 - [`ed music pause`](./pause.md)

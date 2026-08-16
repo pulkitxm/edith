@@ -75,8 +75,6 @@ Finder until then.
 
 ## Commands
 
-## Commands
-
 - [`ed cleaner scan`](./scan.md)
 - [`ed cleaner categories`](./categories.md)
 - [`ed cleaner clean`](./clean.md)

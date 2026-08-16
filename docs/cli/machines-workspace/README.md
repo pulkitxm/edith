@@ -87,8 +87,6 @@ instead, and `new` takes none because it is making one.
 
 ## Commands
 
-## Commands
-
 - [`ed machines workspace ls`](./ls.md)
 - [`ed machines workspace use`](./use.md)
 - [`ed machines workspace new`](./new.md)

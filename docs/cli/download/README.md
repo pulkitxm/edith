@@ -33,8 +33,6 @@ The one binary `ed` runs itself is the yt-dlp that `ed download tool` reports on
 
 ## Commands
 
-## Commands
-
 - [`ed download ls`](./ls.md)
 - [`ed download add`](./add.md)
 - [`ed download retry`](./retry.md)

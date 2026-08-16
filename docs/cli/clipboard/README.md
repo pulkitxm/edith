@@ -37,8 +37,6 @@ answers to `size`.
 
 ## Commands
 
-## Commands
-
 - [`ed clipboard ls`](./ls.md)
 - [`ed clipboard stats`](./stats.md)
 - [`ed clipboard get`](./get.md)

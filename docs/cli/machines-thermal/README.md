@@ -27,11 +27,12 @@ machine-first form also works: `ed machines tuf thermal status`.
 
 ## Privilege and safety
 
-Reading profile state and fan speeds needs no privilege on a normal Linux
-installation. Writing the profile usually needs root. `ed` uses the sudo
-password stored by `ed machines edit <machine> --sudo-password-stdin`, or
-passwordless sudo when no password is stored. The password goes on standard
-input and is never placed in the command line.
+Reading profile state needs no privilege on a normal Linux installation. The
+Machines overview's separate hardware fan readings are unprivileged too.
+Writing the profile usually needs root. `ed` uses the sudo password stored by
+`ed machines edit <machine> --sudo-password-stdin`, or passwordless sudo when no
+password is stored. The password goes on standard input and is never placed in
+the command line.
 
 Profile names are accepted only when the machine reports them as a choice. The
 command also restricts names to letters, digits, hyphens and underscores before
