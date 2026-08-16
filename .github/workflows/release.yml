@@ -240,52 +240,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  deb:
-    needs: version
-    runs-on: ubuntu-24.04
-    container: swift:6.3.3-noble
-    env:
-      RELEASE_VERSION: ${{ needs.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.version.outputs.sha }}
-          persist-credentials: false
-
-      - name: Install native dependencies
-        run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
-
-      - name: Test portable core
-        run: make linux-test
-
-      - name: Validate desktop metadata
-        run: make linux-metadata
-
-      - name: Build Debian package
-        run: VERSION="$RELEASE_VERSION" make linux-package
-
-      - name: Verify and install Debian package
-        run: |
-          DEB="$(find dist/linux -maxdepth 1 -name 'edith_*.deb' -print -quit)"
-          test -n "$DEB" || { echo "release blocked: Debian package is missing" >&2; exit 1; }
-          test "$(dpkg-deb -f "$DEB" Version)" = "$RELEASE_VERSION" \
-            || { echo "release blocked: Debian package has the wrong version" >&2; exit 1; }
-          dpkg-deb --info "$DEB"
-          dpkg-deb --contents "$DEB"
-          apt-get install -y "./$DEB"
-          edith-linux --diagnose
-          mkdir release-linux
-          cp "$DEB" release-linux/Edith.deb
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: release-linux
-          path: release-linux/Edith.deb
-          if-no-files-found: error
-          retention-days: 1
-
   publish:
-    needs: [version, dmg, deb]
+    needs: [version, dmg]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -314,18 +270,12 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: release-linux
-          path: release-assets
-
-      - uses: actions/download-artifact@v8
-        with:
           name: release-plists
           path: release-plists
 
       - name: Verify release assets
         run: |
           test -f release-assets/Edith.dmg
-          test -f release-assets/Edith.deb
           test -f release-assets/appcast.xml
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
@@ -358,10 +308,10 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" --clobber \
-              release-assets/Edith.dmg release-assets/Edith.deb release-assets/appcast.xml
+              release-assets/Edith.dmg release-assets/appcast.xml
           else
             gh release create "$RELEASE_TAG" --title "Edith $RELEASE_TAG" --generate-notes \
-              release-assets/Edith.dmg release-assets/Edith.deb release-assets/appcast.xml
+              release-assets/Edith.dmg release-assets/appcast.xml
           fi
 
       - name: Mirror the cask to the tap repository

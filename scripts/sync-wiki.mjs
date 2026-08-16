@@ -46,7 +46,6 @@ const READING_ORDER = [
   "machines-workspace",
   "homebrew",
   "homebrew-internals",
-  "ubuntu-development",
 ];
 
 const SMALL = new Set([

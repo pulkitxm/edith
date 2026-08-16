@@ -15,7 +15,7 @@ const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
 
 test("CI gates the reusable release only on relevant checks", () => {
   expect(ciWorkflow).toContain(
-    "needs: [changes, checks, ubuntu, swift-build, swift-test, companion]",
+    "needs: [changes, checks, swift-build, swift-test, companion]",
   );
   expect(releaseJob).not.toContain("promo-video");
   expect(releaseJob).toContain("always()");
@@ -27,9 +27,6 @@ test("CI gates the reusable release only on relevant checks", () => {
   expect(releaseJob).toContain("needs.checks.result == 'success'");
   expect(releaseJob).toContain("!contains(needs.*.result, 'failure')");
   expect(releaseJob).toContain("!contains(needs.*.result, 'cancelled')");
-  expect(releaseJob).toContain(
-    "needs.changes.outputs.workflows != 'true') || needs.ubuntu.result == 'success'",
-  );
   expect(releaseJob).toContain(
     "needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success'",
   );
@@ -63,15 +60,12 @@ test("automated commits do not re-run CI", () => {
   expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
 
-test("release waits for and publishes every platform asset", () => {
-  expect(releaseWorkflow).toContain("needs: [version, dmg, deb]");
+test("release waits for and publishes the macOS assets", () => {
+  expect(releaseWorkflow).toContain("needs: [version, dmg]");
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
-  expect(releaseWorkflow).toContain("release-assets/Edith.deb");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
-  expect(releaseWorkflow).toContain("-name 'edith_*.deb'");
   expect(releaseWorkflow).toContain("gh release create");
   expect(releaseWorkflow).toContain("gh release upload");
-  expect(releaseWorkflow).toContain('apt-get install -y "./$DEB"');
 });
 
 test("macOS notarization is conditional on its optional credentials", () => {
@@ -93,9 +87,9 @@ test("the publisher uses a token that clears the ruleset", () => {
 test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain("permissions:\n  contents: read");
   expect(releaseWorkflow).toContain(
-    "publish:\n    needs: [version, dmg, deb]\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
+    "publish:\n    needs: [version, dmg]\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
   );
-  expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(4);
+  expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);
 });
 

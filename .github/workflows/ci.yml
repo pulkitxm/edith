@@ -37,7 +37,6 @@ jobs:
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
       docs: ${{ steps.areas.outputs.docs }}
-      linux: ${{ steps.areas.outputs.linux }}
       workflows: ${{ steps.areas.outputs.workflows }}
       promo: ${{ steps.areas.outputs.promo }}
       site: ${{ steps.areas.outputs.site }}
@@ -81,7 +80,6 @@ jobs:
           }
           area swift '^(Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$)'
           area docs '^docs/'
-          area linux '^(Packages/Edith/|Resources/|packaging/|Makefile$)'
           area workflows '^\.github/workflows/'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
@@ -121,33 +119,6 @@ jobs:
       - name: Site is self-contained
         if: needs.changes.outputs.site == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-site
-
-  ubuntu:
-    needs: changes
-    if: needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'
-    runs-on: ubuntu-24.04
-    container: swift:6.3.3-noble
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install native dependencies
-        run: apt-get update && apt-get install -y libgtk-4-dev desktop-file-utils appstream dpkg-dev make
-      - name: Test portable core
-        run: make linux-test
-      - name: Validate desktop metadata
-        run: make linux-metadata
-      - name: Build Debian package
-        run: make linux-package
-      - name: Verify Debian package
-        run: |
-          dpkg-deb --info dist/linux/*.deb
-          dpkg-deb --contents dist/linux/*.deb
-          apt-get install -y ./dist/linux/*.deb
-          edith-linux --diagnose
-      - uses: actions/upload-artifact@v7
-        with:
-          name: edith-ubuntu-amd64
-          path: dist/linux/*.deb
-          if-no-files-found: error
 
   promo-video:
     needs: changes
@@ -255,7 +226,7 @@ jobs:
         working-directory: apps/companion
 
   release:
-    needs: [changes, checks, ubuntu, swift-build, swift-test, companion]
+    needs: [changes, checks, swift-build, swift-test, companion]
     if: >-
       always()
       && github.ref == 'refs/heads/main'
@@ -263,8 +234,6 @@ jobs:
       && needs.checks.result == 'success'
       && !contains(needs.*.result, 'failure')
       && !contains(needs.*.result, 'cancelled')
-      && ((needs.changes.outputs.linux != 'true'
-      && needs.changes.outputs.workflows != 'true') || needs.ubuntu.result == 'success')
       && ((needs.changes.outputs.swift != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
       && ((needs.changes.outputs.swift != 'true'
@@ -273,7 +242,7 @@ jobs:
       && ((needs.changes.outputs.companion != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
       && ((github.event_name == 'push'
-      && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true'))
+      && needs.changes.outputs.swift == 'true')
       || (github.event_name == 'workflow_dispatch' && inputs.release))
     permissions:
       contents: write

@@ -1,39 +1,14 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
-const linuxOutput = ["$", "{{ steps.areas.outputs.linux }}"].join("");
-
-test("Linux validation uses the shared changed-area router", () => {
-  expect(ciWorkflow).toContain(`linux: ${linuxOutput}`);
-  expect(ciWorkflow).toContain("area linux '");
-  expect(ciWorkflow).toContain("needs.changes.outputs.linux == 'true'");
-  expect(ciWorkflow).toContain("make linux-package");
-  expect(existsSync(".github/workflows/linux.yml")).toBeFalse();
-});
-
 test("a pull request is compared against its base, not its last push", () => {
   const baseFirst = ciWorkflow.indexOf('if [ -n "$BASE_REF" ]');
   const beforeFallback = ciWorkflow.indexOf('elif [ -n "$BEFORE" ]');
   expect(baseFirst).toBeGreaterThan(-1);
   expect(beforeFallback).toBeGreaterThan(baseFirst);
-});
-
-test("Linux inputs and workflow changes select Ubuntu validation", () => {
-  for (const path of [
-    "Packages/Edith/",
-    "Resources/",
-    "packaging/",
-    "Makefile$",
-    ".github/workflows/",
-  ]) {
-    expect(ciWorkflow).toContain(path);
-  }
-  expect(ciWorkflow).toContain(
-    "needs.changes.outputs.linux == 'true' || needs.changes.outputs.workflows == 'true'",
-  );
 });
 
 test("every workflow change runs the runtime guard", () => {
