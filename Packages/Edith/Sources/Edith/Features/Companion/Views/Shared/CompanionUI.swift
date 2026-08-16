@@ -209,6 +209,29 @@ struct CompanionSecureField: View {
     }
 }
 
+struct AnswerField: View {
+    let placeholder: String
+    @Binding var text: String
+    var submit: (() -> Void)? = nil
+
+    @Environment(\.colorScheme) private var scheme
+    @FocusState private var focused: Bool
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        TextField(placeholder, text: $text, axis: .vertical)
+            .textFieldStyle(.plain)
+            .lineLimit(2...6)
+            .font(.system(size: UIScale.pt(12.5)))
+            .foregroundStyle(DashSkin.ink(dark))
+            .focused($focused)
+            .focusEffectDisabled()
+            .onSubmit { submit?() }
+            .edithFieldSurface(focused: focused)
+    }
+}
+
 struct CompanionStatusLine: View {
     enum Tone {
         case ok

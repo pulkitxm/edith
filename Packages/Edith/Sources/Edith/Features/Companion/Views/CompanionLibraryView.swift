@@ -284,7 +284,7 @@ struct CompanionLibraryScreen: View {
             if let error = model.error {
                 Text(error)
                     .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.warn)
             }
         }
         .pageContent(compact)
@@ -320,7 +320,7 @@ struct CompanionLibraryScreen: View {
     private func statTile(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text(value)
-                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+                .font(DashSkin.serif(17, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Text(label.uppercased())
@@ -341,7 +341,7 @@ struct CompanionLibraryScreen: View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text("\(pending)")
-                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+                .font(DashSkin.serif(17, weight: .semibold))
                 .foregroundStyle(pending > 0 ? .orange : DashSkin.ink(dark))
             HStack(spacing: UIScale.pt(5)) {
                 Text("PENDING")
@@ -366,7 +366,7 @@ struct CompanionLibraryScreen: View {
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(10))
-                .strokeBorder(pending > 0 ? Color.orange.opacity(0.6) : DashSkin.line(dark))
+                .strokeBorder(pending > 0 ? DashSkin.warn.opacity(0.6) : DashSkin.line(dark))
         }
     }
 

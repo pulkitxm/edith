@@ -249,7 +249,7 @@ struct CompanionChatScreen: View {
             if let error = model.error {
                 Text(error)
                     .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.warn)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, PageMetrics.gutter(compact))
                     .padding(.top, UIScale.pt(6))
@@ -264,7 +264,7 @@ struct CompanionChatScreen: View {
         VStack(spacing: UIScale.pt(12)) {
             Spacer()
             Text("What do you want to remember?")
-                .font(DashSkin.serif(UIScale.pt(22), weight: .semibold))
+                .font(DashSkin.serif(22, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             HStack(spacing: UIScale.pt(8)) {
                 ForEach(
@@ -527,7 +527,7 @@ private struct CitationChip: View {
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(citation.title)
-                    .font(DashSkin.serif(UIScale.pt(15), weight: .semibold))
+                    .font(DashSkin.serif(15, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("\(String(citation.occurredAt.prefix(10))) · \(supportLabel)")
                     .font(.system(size: UIScale.pt(10.5)))
@@ -612,7 +612,7 @@ struct FlowChips<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(spacing: spacing) {
+        WrapHStack(spacing: spacing, lineSpacing: spacing) {
             content
         }
     }

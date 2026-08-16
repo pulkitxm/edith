@@ -94,7 +94,7 @@ struct CompanionMindScreen: View {
                 if let error = model.error {
                     Text(error)
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DashSkin.warn)
                 }
                 HStack(alignment: .top, spacing: UIScale.pt(12)) {
                     beliefsCard
@@ -556,7 +556,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func beliefDetail(_ belief: CompanionBelief) -> some View {
         Text(belief.statement)
-            .font(DashSkin.serif(UIScale.pt(18), weight: .semibold))
+            .font(DashSkin.serif(18, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
@@ -582,7 +582,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func claimDetail(_ claim: CompanionClaim) -> some View {
         Text(claim.statement)
-            .font(DashSkin.serif(UIScale.pt(18), weight: .semibold))
+            .font(DashSkin.serif(18, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
@@ -625,7 +625,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func observationDetail(_ observation: CompanionObservation) -> some View {
         Text(observation.summary)
-            .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+            .font(DashSkin.serif(17, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
