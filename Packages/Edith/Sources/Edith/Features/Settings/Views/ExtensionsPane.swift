@@ -702,6 +702,12 @@ private struct UsageRows: View {
     @AppStorage(AppStorageKeys.MenuBar.colorMode, store: SharedDefaults.store) private
         var menuBarColorMode =
         "auto"
+    @AppStorage(AppStorageKeys.MenuBar.claudeWindows, store: SharedDefaults.store) private
+        var claudeWindowsRaw = "session,week,fable"
+    @AppStorage(AppStorageKeys.MenuBar.codexWindows, store: SharedDefaults.store) private
+        var codexWindowsRaw = "session,week"
+    @AppStorage(AppStorageKeys.MenuBar.limitsStyle, store: SharedDefaults.store) private
+        var limitsStyleRaw = "stacked"
     @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
         var smartColor = true
     @AppStorage(AppStorageKeys.MenuBar.subColorHex, store: SharedDefaults.store) private
@@ -777,6 +783,21 @@ private struct UsageRows: View {
                     .pointerCursor()
 
                 if limitsInMenuBar {
+                    if claudeEnabled {
+                        LimitWindowChipsRow(
+                            title: "Claude shows", provider: .claude, raw: $claudeWindowsRaw)
+                    }
+                    if codexEnabled {
+                        LimitWindowChipsRow(
+                            title: "Codex shows", provider: .codex, raw: $codexWindowsRaw)
+                    }
+                    Picker("Style", selection: $limitsStyleRaw) {
+                        Text("Stacked").tag("stacked")
+                        Text("Tagged").tag("tagged")
+                        Text("Slashes").tag("slash")
+                    }
+                    .pointerCursor()
+
                     Picker("Color", selection: colorModeBinding) {
                         Text("White").tag("white")
                         Text("Black").tag("black")
@@ -1147,5 +1168,34 @@ private struct SystemRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct LimitWindowChipsRow: View {
+    let title: String
+    let provider: LimitProvider
+    @Binding var raw: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            ForEach(MenuBarLimits.slots(for: provider), id: \.self) { slot in
+                Toggle(slot.settingsLabel, isOn: binding(for: slot))
+                    .toggleStyle(.button)
+                    .pointerCursor()
+            }
+        }
+    }
+
+    private func binding(for slot: LimitWindowSlot) -> Binding<Bool> {
+        Binding(
+            get: { MenuBarLimits.parseSelection(raw, provider: provider).contains(slot) },
+            set: { on in
+                var current = Set(MenuBarLimits.parseSelection(raw, provider: provider))
+                if on { current.insert(slot) } else { current.remove(slot) }
+                raw = MenuBarLimits.encodeSelection(
+                    MenuBarLimits.slots(for: provider).filter(current.contains))
+            })
     }
 }

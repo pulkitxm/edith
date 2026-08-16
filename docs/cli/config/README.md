@@ -111,6 +111,9 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `limitsInMenuBar` | bool | `true` | shared | Show session and weekly percentages in the menu bar. |
+| `menuBarClaudeWindows` | string | `session,week,fable` | shared | Claude windows shown in the menu bar, comma-separated (session, week, fable). |
+| `menuBarCodexWindows` | string | `session,week` | shared | Codex windows shown in the menu bar, comma-separated (session, week). |
+| `menuBarLimitsStyle` | string: `stacked`, `tagged`, `slash` | `stacked` | shared | Layout of the menu bar limits readout. |
 | `menuBarColorMode` | string: `auto`, `white`, `custom` | `auto` | shared | How the menu bar readout is tinted. |
 | `smartColor` | bool | none | shared | Tint the menu bar readout by a time-aware risk model. |
 | `menuBarSubColorHex` | string | none | shared | Hex colour of the menu bar subtitle text. |

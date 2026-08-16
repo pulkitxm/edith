@@ -184,6 +184,19 @@ public enum ConfigCatalog {
             summary: "Show session and weekly percentages in the menu bar.",
             fallback: .bool(true)),
         SettingDefinition(
+            AppStorageKeys.MenuBar.claudeWindows, .string, group: "menubar",
+            summary: "Claude windows shown in the menu bar, comma-separated"
+                + " (session, week, fable).",
+            fallback: .string("session,week,fable")),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.codexWindows, .string, group: "menubar",
+            summary: "Codex windows shown in the menu bar, comma-separated (session, week).",
+            fallback: .string("session,week")),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.limitsStyle, .string, group: "menubar",
+            summary: "Layout of the menu bar limits readout.",
+            allowed: ["stacked", "tagged", "slash"], fallback: .string("stacked")),
+        SettingDefinition(
             AppStorageKeys.MenuBar.colorMode, .string, group: "menubar",
             summary: "How the menu bar readout is tinted.",
             allowed: ["auto", "white", "custom"], fallback: .string("auto")),
