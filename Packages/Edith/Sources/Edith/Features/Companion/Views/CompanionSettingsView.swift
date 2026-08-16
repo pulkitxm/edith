@@ -299,27 +299,38 @@ struct CompanionSettingsScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                if !model.loaded {
-                    if let error = model.error {
-                        unreachableCard(error)
+        GeometryReader { proxy in
+            ScrollView {
+                Group {
+                    if !model.loaded {
+                        if let error = model.error {
+                            unreachableCard(error)
+                                .frame(
+                                    maxWidth: CompanionMetrics.columnWidth,
+                                    alignment: .leading)
+                        } else {
+                            CompanionGrid(width: proxy.size.width) {
+                                CompanionCardSkeleton(rows: 3, dark: dark)
+                            } secondary: {
+                                CompanionCardSkeleton(rows: 2, dark: dark)
+                            } full: {
+                            }
+                        }
                     } else {
-                        CompanionCardSkeleton(rows: 3, dark: dark)
-                        CompanionCardSkeleton(rows: 2, dark: dark)
+                        CompanionGrid(width: proxy.size.width) {
+                            reasonerCard
+                            connectorsCard
+                            dataCard
+                        } secondary: {
+                            healthCard
+                            connectionCard
+                            dangerCard
+                        } full: {
+                        }
                     }
-                } else {
-                    reasonerCard
-                    healthCard
-                    connectorsCard
-                    connectionCard
-                    dataCard
-                    dangerCard
                 }
+                .pageContent(compact)
             }
-            .frame(maxWidth: CompanionMetrics.columnWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .pageContent(compact)
         }
         .task(id: generation) {
             if requestsEnabled { await model.load() }

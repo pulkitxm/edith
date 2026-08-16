@@ -15,17 +15,19 @@ struct CompanionBackendScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                whereItRunsCard
-                if model.deployment != nil { servicesCard }
-                configurationCard
-                secretsCard
-                if !model.lastLog.isEmpty { logCard }
+        GeometryReader { proxy in
+            ScrollView {
+                CompanionGrid(width: proxy.size.width) {
+                    whereItRunsCard
+                    configurationCard
+                } secondary: {
+                    if model.deployment != nil { servicesCard }
+                    secretsCard
+                } full: {
+                    if !model.lastLog.isEmpty { logCard }
+                }
+                .pageContent(compact)
             }
-            .frame(maxWidth: CompanionMetrics.columnWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .pageContent(compact)
         }
         .task(id: generation) { if requestsEnabled { await model.refresh() } }
         .fileExporter(
