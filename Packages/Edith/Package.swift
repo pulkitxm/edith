@@ -11,9 +11,9 @@ let products: [Product] = [
 ]
 
 let dependencies: [Package.Dependency] = [
-    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.15.0"),
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.5"),
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.18.0"),
+    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
 ]
 
 let targets: [Target] = [
