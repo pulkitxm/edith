@@ -1,6 +1,7 @@
 # `ed companion sync`
 
-Pulls a connector's recent activity into the observations table.
+Pulls recent data from a live connector. GitHub writes independent activity
+observations; Notion renders authored pages and ingests them as episodes.
 
 Usage:
 
@@ -19,7 +20,7 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 | `--full` | flag | off | For Notion, ignores the saved watermark and reconciles every page. GitHub ignores this flag. |
 
 GitHub `--json` shape:

@@ -13,11 +13,12 @@ ed companion lenses [--json] [--endpoint <url>]
 
 `--json` shape: an array of `{persona, content, updatedAt, updatedBy}`.
 
-Who writes these matters. The nightly agent does, from the conversation episodes,
-exactly like every other derived memory. A lens never edits its own note mid
-conversation, for the same reason the chat agent cannot write to beliefs: your worst
-moments should be recorded, and should not get to rewrite the model of who you are
-without a cooler pass over them.
+Who writes these matters. The nightly pass does, from up to 25 turns with that lens
+in the previous seven days. It needs at least three turns before it writes anything,
+and the note is kept short. A lens never edits its own note mid conversation, for the
+same reason the chat path cannot write to beliefs: your worst moments should be
+recorded, and should not get to rewrite the model of who you are without a cooler
+pass over them.
 
 ## Where to go next
 

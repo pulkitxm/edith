@@ -22,6 +22,12 @@ Find the id with [`ed companion beliefs`](./beliefs.md), and read the evidence b
 it with [`ed companion why`](./why.md) before you decide. Sometimes the belief is
 right and the surprise is the point.
 
+At least one of `--retire` or `--edit` is required. An edit must contain more
+than five non-whitespace characters because the backend embeds the replacement.
+If both flags are passed with a valid edit, the edit takes precedence and the
+old belief is superseded rather than retired. JSON output is
+`{id,status,statement}`; for an edit, `id` is the new replacement belief.
+
 ## Where to go next
 
 - [`ed companion beliefs`](./beliefs.md), what it currently holds

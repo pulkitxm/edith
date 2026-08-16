@@ -33,6 +33,17 @@ the ones that land badly if the system has not earned them.
 `--json` shape for `ls`: `{askedToday, dailyBudget, muted, questions: [{id, question,
 motive, topic, status, expectedGain, resolution}]}`.
 
+The other JSON shapes are:
+
+- `next`: `{id, question, motive, topic, expectedGain, sensitivity}`, or
+  `{question: null}` when nothing is available
+- `answer`: `{question, episodeId, resolution, askedToday}`
+- `skip`: `{id, status}`, where `status` is `skipped`
+- `mute`: `{topic, suppressed}`
+
+`--explain` affects plain output only. `ls --limit` defaults to 20 and must be
+positive. Answering or skipping an unknown question is refused.
+
 ## Where to go next
 
 - [`ed companion beliefs`](./beliefs.md), the contested ones these questions target

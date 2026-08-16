@@ -1,10 +1,10 @@
 # `ed companion connectors`
 
-The behavioural connectors are different in kind from everything you write down:
-they are traces of what you actually did, produced without you deciding to record
-anything. That makes them the only evidence in the whole corpus that does not come
-from you describing yourself, which is what the corroboration and calibration work
-rests on.
+Companion connectors bring in two kinds of material. GitHub and the file imports
+produce observations: traces of what you did that do not come from you describing
+yourself. Notion is authored memory, so its pages go through ordinary Markdown
+ingestion and become episodes instead. Corroboration and calibration rely on the
+observation side of that boundary.
 
 Usage:
 
@@ -22,8 +22,8 @@ returned.
 
 `ed companion connectors set` stores a token on the companion, in the same settings
 table as the reasoner key, and hot-swaps it into the running service. Nothing is
-written to this Mac and no restart or `.env` edit is needed. Pass an empty value to
-clear one. The same fields are in the app under Settings.
+written to the CLI's local configuration and no restart or `.env` edit is needed.
+Pass an empty value to clear one. The same fields are in the app under Settings.
 
 `set` requires at least one of `--github` or `--notion`. In a shell, clearing
 means passing an explicit empty argument such as `--github ''`; omitting an

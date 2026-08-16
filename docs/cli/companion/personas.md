@@ -25,10 +25,14 @@ The four that ship:
 selfReportWeight, observationWeight, k, windowDays}`.
 
 Adding a lens is data, never code: drop a YAML spec and a voice prompt into the
-directory named by `PERSONA_DIR` on the backend and it appears here.
+directory named by `PERSONA_DIR` on the backend. Files are `<id>.yaml` and the
+optional matching `<id>.md`; custom ids replace built-ins with the same id.
+Malformed specs and unknown pipeline stages are skipped and written to backend
+stderr. The returned list is sorted by id.
 
 Pass any of these to [`ed companion ask`](./ask.md) with `--persona`, or ask several
-at once with [`ed companion council`](./council.md).
+at once with [`ed companion council`](./council.md). Chat also accepts
+`--persona` and defaults to `friend`; ask defaults to `analyst`.
 
 ## Where to go next
 

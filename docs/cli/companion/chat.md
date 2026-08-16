@@ -18,7 +18,7 @@ Options:
 | `--conversation` | conversation id | new conversation | Continues that conversation with its history in context. |
 | `--persona` | persona id | `friend` | Answers through that lens; [`ed companion personas`](./personas.md) lists them. |
 | `--json` | flag | off | Suppresses streaming and emits one JSON document at the end. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 Before starting the stream, `--persona` is checked against the live persona
 list when that list can be fetched. An unknown id exits 1 and names the known

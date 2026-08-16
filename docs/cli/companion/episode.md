@@ -16,7 +16,7 @@ Options:
 | `--body` | flag | off | Prints only the body text, for piping. |
 | `--open` | flag | off | Downloads the original file from the vault and opens it with the default app. |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 `--json` shape: `{id, occurredAt, ingestedAt, kind, title, body, bodyEn, langs,
 durationS, mediaRef, sha256, bytes, chunks}`. `durationS` can be present for

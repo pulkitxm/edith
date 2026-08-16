@@ -24,6 +24,8 @@ nightly rewrite can see that a human wrote it. Keeping this editable is not a
 convenience: if the system forms a wrong idea of you and you cannot correct it, every
 later answer inherits the error.
 
+`ed companion core set --json` returns `{section, ok}`.
+
 ## Where to go next
 
 - [`ed companion beliefs`](./beliefs.md), what the summary is distilled from

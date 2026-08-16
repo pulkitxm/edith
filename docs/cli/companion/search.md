@@ -20,7 +20,7 @@ Options:
 | --- | --- | --- | --- |
 | `--limit` | integer from `1` to `50` | `8` | Asks for this many ranked hits. |
 | `--json` | flag | off | Emits one JSON array on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 `--json` shape:
 

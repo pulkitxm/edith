@@ -14,7 +14,7 @@ Options:
 | --- | --- | --- | --- |
 | `--limit` | positive integer | `20` | How many conversations to list. |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 
 Without an id the JSON is an array of
 `{id, title, createdAt, lastActiveAt, messageCount, lastMessage}`; with an id it

@@ -19,7 +19,7 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
-| `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
+| `--endpoint` | URL | resolution order | Uses this Companion API base URL. |
 | `--persona` | persona id | `analyst` | Chooses the retrieval, evidence, reasoning and output policy. |
 
 `--json` shape:

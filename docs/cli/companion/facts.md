@@ -11,7 +11,9 @@ ed companion facts [--as-of <date>] [--timeline valid|believed] [--limit <n>]
                    [--json] [--endpoint <url>]
 ```
 
-Without `--as-of` you get everything, newest first. With it, the two timelines answer
+`--timeline` defaults to `valid`, `--limit` defaults to 30 and must be positive, and
+any value other than `valid` or `believed` is refused. Without `--as-of` you get the
+newest records without an as-of filter. With it, the two timelines answer
 genuinely different questions:
 
 | Timeline | Question it answers |

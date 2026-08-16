@@ -31,6 +31,9 @@ types are systematically invisible. Without it the aggregates are junk.
 `--json` shape for `ls`: an array of `{id, claim, kind, magnitude, detectedAt,
 dismissed, userResponse}`.
 
+`override` requires `--real`. Its JSON shape is `{id, ok}`. An unknown id, an id that
+is not a discrepancy, or an empty correction is refused.
+
 ## Where to go next
 
 - [`ed companion calibration`](./calibration.md), the same evidence read in both directions

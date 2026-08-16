@@ -20,7 +20,7 @@ Options for `ed companion reason set`:
 | `--provider` | supported provider id | unchanged | Which API shape to speak; `openai` covers any OpenAI-compatible server such as Ollama. |
 | `--model` | model name | unchanged | Model to request; empty resets to the provider default. |
 | `--url` | URL | unchanged | Base URL for the OpenAI-compatible provider. |
-| `--api-key` | secret | unchanged | Stored in the backend's settings table, never on this Mac; empty clears it. |
+| `--api-key` | secret | unchanged | Stored in the backend's settings table, not the CLI config; empty clears it. |
 
 At least one setting option is required. Empty values remove that saved
 override and expose the provider's environment or built-in default again.

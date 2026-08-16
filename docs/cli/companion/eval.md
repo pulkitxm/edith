@@ -30,7 +30,12 @@ stores the run. `--json` shape: `{suite, persona, model, cases, passed, results:
 [{id, kind, passed, reason, abstained, grounding, words}]}`.
 
 `ed companion eval ls` lists past runs, which is how you see a prompt change land
-rather than tuning by feel.
+rather than tuning by feel. It defaults to 10 runs and requires a positive
+`--limit`. Its JSON shape is an array of `{id, suite, ranAt, model, cases, passed}`.
+
+Running the suite requires a configured reasoning provider. Omitting `--persona`
+uses `friend`; an unknown persona is refused. A run stores its outcome only after all
+cases and their judge passes finish successfully.
 
 ## Where to go next
 
