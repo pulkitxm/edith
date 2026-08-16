@@ -75,6 +75,7 @@ struct CompanionPage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
+    @State private var refreshTick = 0
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
@@ -87,7 +88,7 @@ struct CompanionPage: View {
             screens
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(pageBackground)
         .onDrop(of: [.fileURL], isTargeted: $library.dropTargeted) { providers in
             Task {
                 let urls = await CompanionDrop.urls(from: providers)
@@ -112,26 +113,52 @@ struct CompanionPage: View {
         }
     }
 
+    private var pageBackground: some View {
+        DashSkin.paper(dark)
+            .overlay(alignment: .topTrailing) {
+                RadialGradient(
+                    colors: [DashSkin.accent(dark).opacity(0.08), .clear], center: .topTrailing,
+                    startRadius: 0, endRadius: 620
+                )
+                .ignoresSafeArea(edges: .vertical)
+            }
+            .ignoresSafeArea(edges: .vertical)
+    }
+
     private var header: some View {
         PageHeader(
             "Companion",
             trailing: {
-                Button {
-                    select(.setup)
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Circle()
-                            .fill(healthTint)
-                            .frame(width: UIScale.pt(8), height: UIScale.pt(8))
-                        Text(home.state.label)
-                            .font(.system(size: UIScale.pt(11.5)))
+                HStack(spacing: UIScale.pt(10)) {
+                    Button {
+                        refreshTick += 1
+                        Task { await home.refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
                             .foregroundStyle(DashSkin.inkFaint(dark))
+                            .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help("Refresh this screen")
+                    Button {
+                        select(.setup)
+                    } label: {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Circle()
+                                .fill(healthTint)
+                                .frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                            Text(home.state.label)
+                                .font(.system(size: UIScale.pt(11.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help(healthHelp)
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
-                .help(healthHelp)
             },
             accessory: {
                 if let status = home.status {
@@ -150,9 +177,9 @@ struct CompanionPage: View {
     private var healthTint: Color {
         switch home.state {
         case .unreachable: DashSkin.inkFaint(dark)
-        case .blocked: .orange
-        case .degraded: .yellow
-        case .ready: .green
+        case .blocked: DashSkin.warn
+        case .degraded: DashSkin.gold
+        case .ready: DashSkin.ok
         }
     }
 
@@ -213,7 +240,7 @@ struct CompanionPage: View {
                 dropOverlay
             }
         }
-        .environment(\.companionGeneration, home.generation)
+        .environment(\.companionGeneration, home.generation &+ refreshTick)
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
             value: library.dropTargeted)
@@ -302,6 +329,7 @@ struct CompanionPage: View {
     }
 
     private func select(_ item: CompanionTab) {
+        if item.rawValue != tabRaw { refreshTick += 1 }
         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
             tabRaw = item.rawValue
         }

@@ -13,6 +13,7 @@ final class CompanionDeskModel: CompanionRefreshable {
     private(set) var hypotheses: [CompanionHypothesis] = []
     private(set) var lastResolution: String?
     private(set) var busy = false
+    private(set) var loaded = false
     private(set) var error: String?
     var draft = ""
 
@@ -37,6 +38,7 @@ final class CompanionDeskModel: CompanionRefreshable {
             hypotheses = try await client.hypotheses(limit: 8)
             let queued = try await client.questions(limit: 5)
             budget = (queued.askedToday, queued.dailyBudget)
+            loaded = true
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -131,18 +133,23 @@ struct CompanionDeskScreen: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
                 if let error = model.error {
                     Text(error)
                         .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(DashSkin.warn)
                 }
-                questionCard
-                HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    beliefsCard
-                    predictionsCard
+                if !model.loaded, model.error == nil {
+                    CompanionCardSkeleton(rows: 2, dark: dark)
+                    CompanionCardSkeleton(rows: 2, dark: dark)
+                } else {
+                    questionCard
+                    HStack(alignment: .top, spacing: CompanionMetrics.cardSpacing) {
+                        beliefsCard
+                        predictionsCard
+                    }
+                    discrepanciesCard
                 }
-                discrepanciesCard
             }
             .pageContent(compact)
         }
