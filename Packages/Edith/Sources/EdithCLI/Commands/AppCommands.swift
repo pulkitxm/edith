@@ -339,11 +339,11 @@ struct AppRevealCommand: AsyncParsableCommand {
 
     @Argument(
         help: ArgumentHelp(
-            "The section to show.",
+            "The section to show; without it the window comes up where it was.",
             discussion:
                 "One of home, dashboard, music, calendar, system, machines, companion, "
                 + "extensions, settings, about."))
-    var section: String
+    var section: String?
 
     @Option(help: "A tab inside the section; companion and settings have them.")
     var tab: String?
@@ -355,11 +355,19 @@ struct AppRevealCommand: AsyncParsableCommand {
         try await execute {
             let action = try AppActions.named("reveal")
             try AppActions.require(action)
+            if tab != nil, section == nil {
+                throw CLIFailure.usage(
+                    "--tab needs a section to go with it",
+                    hint: "ed app reveal companion --tab chat")
+            }
             let payload: [String: Any]
-            if let tab, !tab.isEmpty {
+            switch (section, tab) {
+            case let (.some(section), .some(tab)) where !tab.isEmpty:
                 payload = ["section": section, "tab": tab]
-            } else {
+            case let (.some(section), _):
                 payload = ["section": section]
+            default:
+                payload = [:]
             }
             let reply = await AppBridge.awaitReply(IPC.Name.revealResult, timeout: 10) {
                 AppBridge.post(IPC.Name.requestReveal, userInfo: payload)
@@ -373,7 +381,7 @@ struct AppRevealCommand: AsyncParsableCommand {
                     reply["error"] as? String ?? "the app refused the reveal",
                     hint: "run `ed app reveal --help` for the section and tab names")
             }
-            let shown = reply["section"] as? String ?? section
+            let shown = reply["section"] as? String ?? section ?? "the window"
             let shownTab = reply["tab"] as? String
             guard !json else {
                 CLIOut.json(

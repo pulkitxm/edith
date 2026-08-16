@@ -23,6 +23,14 @@ enum CLIWindowBridge {
 
     private static func reveal(_ info: [AnyHashable: Any]) {
         let sectionRaw = info["section"] as? String ?? ""
+        guard !sectionRaw.isEmpty else {
+            MainWindow.open()
+            let current =
+                SharedDefaults.store.string(forKey: AppStorageKeys.General.mainWindowSection)
+                ?? MainDestination.home.rawValue
+            IPC.post(IPC.Name.revealResult, userInfo: ["ok": true, "section": current])
+            return
+        }
         guard let section = MainDestination(rawValue: sectionRaw) else {
             fail(
                 "no section named \(sectionRaw); sections: "

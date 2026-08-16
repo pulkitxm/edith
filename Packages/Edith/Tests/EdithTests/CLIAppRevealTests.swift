@@ -18,6 +18,26 @@ import Testing
         }
     }
 
+    @Test func aBareRevealJustBringsTheWindowUp() async throws {
+        try await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in ["ok": true, "section": "machines"] }
+            let result = await CLIProbe.capture(["app", "reveal"])
+            #expect(result.code == 0)
+            #expect(result.stdout.contains("machines"))
+            #expect(world.posted.first?.info["section"] == nil)
+        }
+    }
+
+    @Test func aTabWithoutASectionIsAUsageError() async throws {
+        try await CLIProbe.inWorld { _ in
+            CLIEnvironment.isMainAppRunning = { true }
+            let result = await CLIProbe.capture(["app", "reveal", "--tab", "chat"])
+            #expect(result.code == ExitCodes.usage)
+            #expect(result.stderr.contains("needs a section"))
+        }
+    }
+
     @Test func revealPassesTheTabAlong() async throws {
         try await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
