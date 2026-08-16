@@ -8,7 +8,7 @@ from any machine.
 Usage:
 
 ```
-ed companion chat <message> [--conversation <id>] [--json] [--endpoint <url>]
+ed companion chat <message> [--conversation <id>] [--persona <id>] [--json] [--endpoint <url>]
 ```
 
 Options:
@@ -16,6 +16,7 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--conversation` | conversation id | new conversation | Continues that conversation with its history in context. |
+| `--persona` | persona id | the default lens | Answers through that lens; [`ed companion personas`](./personas.md) lists them. |
 | `--json` | flag | off | Suppresses streaming and emits one JSON document at the end. |
 | `--endpoint` | URL | environment or local default | Uses this Companion API base URL. |
 

@@ -23,70 +23,40 @@ struct CompanionExportCommand: AsyncParsableCommand {
         try await execute {
             let target = URL(
                 fileURLWithPath: (directory as NSString).expandingTildeInPath, isDirectory: true)
-            let bundle = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.exportBundle()
-            }
-            let manifest: CompanionExportManifest
-            do {
-                manifest = try JSONDecoder().decode(CompanionExportManifest.self, from: bundle)
-            } catch {
-                throw CLIFailure(
-                    "the companion sent something that is not an export bundle",
-                    hint: error.localizedDescription)
-            }
-            do {
-                try FileManager.default.createDirectory(
-                    at: target, withIntermediateDirectories: true)
-                try bundle.write(to: target.appendingPathComponent("bundle.json"))
-            } catch {
-                throw CLIFailure(
-                    "could not write into \(target.path)", hint: error.localizedDescription)
-            }
-            var mediaSaved = 0
-            var mediaFailed: [String] = []
-            if includeMedia, !manifest.media.isEmpty {
-                let mediaDir = target.appendingPathComponent("media")
-                try? FileManager.default.createDirectory(
-                    at: mediaDir, withIntermediateDirectories: true)
-                for item in manifest.media {
-                    let basename = (item.uri as NSString).lastPathComponent
-                    let name = "\(item.sha256)-\(basename)"
-                    do {
-                        let (data, _) = try await CompanionBridge.request(endpoint: endpoint) {
-                            client in
-                            try await client.media(episodeId: item.episodeId)
-                        }
-                        try data.write(to: mediaDir.appendingPathComponent(name))
-                        mediaSaved += 1
-                    } catch {
-                        mediaFailed.append(basename)
-                    }
+            let include = includeMedia
+            let result = try await CompanionBridge.request(endpoint: endpoint) { client in
+                do {
+                    return try await CompanionDataTransfer.export(
+                        client: client, into: target, includeMedia: include)
+                } catch let error as CompanionDataTransferError {
+                    throw CLIFailure(error.errorDescription ?? "the export failed")
                 }
             }
-            let counts = manifest.counts.sorted { $0.key < $1.key }
+            let counts = result.counts.sorted { $0.key < $1.key }
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "directory": .string(target.path),
+                        "directory": .string(result.directory),
                         "counts": .object(
                             counts.reduce(into: [:]) { $0[$1.key] = .int($1.value) }),
-                        "mediaSaved": .int(mediaSaved),
-                        "mediaFailed": .array(mediaFailed.map { .string($0) }),
+                        "mediaSaved": .int(result.mediaSaved),
+                        "mediaFailed": .array(result.mediaFailed.map { .string($0) }),
                     ]))
                 return
             }
             let summary = counts.map { "\($0.value) \($0.key)" }.joined(separator: ", ")
-            CLIOut.out("exported \(summary) to \(target.path)")
+            CLIOut.out("exported \(summary) to \(result.directory)")
             if includeMedia {
-                CLIOut.out("media files saved: \(mediaSaved)")
-                if !mediaFailed.isEmpty {
+                CLIOut.out("media files saved: \(result.mediaSaved)")
+                if !result.mediaFailed.isEmpty {
                     CLIOut.note(
-                        "media that would not download: \(mediaFailed.joined(separator: ", "))")
+                        "media that would not download: "
+                            + result.mediaFailed.joined(separator: ", "))
                 }
-            } else if !manifest.media.isEmpty {
+            } else if result.mediaOnCompanion > 0 {
                 CLIOut.note(
-                    "\(manifest.media.count) media file(s) stayed on the companion; add --include-media to bring them too"
-                )
+                    "\(result.mediaOnCompanion) media file(s) stayed on the companion; "
+                        + "add --include-media to bring them too")
             }
         }
     }
@@ -109,54 +79,25 @@ struct CompanionImportCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let expanded = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-            var bundleURL = expanded
-            var isDirectory: ObjCBool = false
-            let exists = FileManager.default.fileExists(
-                atPath: expanded.path, isDirectory: &isDirectory)
-            guard exists else {
-                throw CLIFailure.notFound("nothing at \(expanded.path)")
-            }
-            if isDirectory.boolValue {
-                bundleURL = expanded.appendingPathComponent("bundle.json")
-                guard FileManager.default.fileExists(atPath: bundleURL.path) else {
-                    throw CLIFailure.notFound(
-                        "no bundle.json inside \(expanded.path)",
-                        hint: "point at a directory written by `ed companion export`")
-                }
-            }
-            let data: Data
-            do {
-                data = try Data(contentsOf: bundleURL)
-            } catch {
-                throw CLIFailure(
-                    "could not read \(bundleURL.path)", hint: error.localizedDescription)
-            }
-            let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.importBundle(data)
-            }
-            var mediaRestored = 0
-            var mediaFailed: [String] = []
-            let mediaDir = bundleURL.deletingLastPathComponent().appendingPathComponent("media")
-            let mediaFiles =
-                (try? FileManager.default.contentsOfDirectory(atPath: mediaDir.path)) ?? []
-            for name in mediaFiles.sorted() {
-                guard let separator = name.firstIndex(of: "-"), separator != name.startIndex
-                else { continue }
-                let sha256 = String(name[..<separator])
-                let basename = String(name[name.index(after: separator)...])
-                guard sha256.count == 64 else { continue }
+            let result = try await CompanionBridge.request(endpoint: endpoint) { client in
                 do {
-                    let bytes = try Data(contentsOf: mediaDir.appendingPathComponent(name))
-                    _ = try await CompanionBridge.request(endpoint: endpoint) { client in
-                        try await client.importMedia(
-                            sha256: sha256, name: basename,
-                            dataB64: bytes.base64EncodedString())
+                    return try await CompanionDataTransfer.restore(client: client, from: expanded)
+                } catch let error as CompanionDataTransferError {
+                    switch error {
+                    case .missingBundle:
+                        throw CLIFailure.notFound(
+                            error.errorDescription ?? "no bundle.json there",
+                            hint: "point at a directory written by `ed companion export`")
+                    case .unreadable:
+                        throw CLIFailure.notFound(error.errorDescription ?? "nothing there")
+                    default:
+                        throw CLIFailure(error.errorDescription ?? "the import failed")
                     }
-                    mediaRestored += 1
-                } catch {
-                    mediaFailed.append(basename)
                 }
             }
+            let outcome = result.outcome
+            let mediaRestored = result.mediaRestored
+            let mediaFailed = result.mediaFailed
             guard !json else {
                 CLIOut.json(
                     .object([

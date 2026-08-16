@@ -437,13 +437,18 @@ public struct CompanionClient: Sendable {
     }
 
     public static func endpoint(override: String?) -> URL {
-        let fallback = URL(string: defaultEndpointString)!
+        let fallback = deployedEndpoint() ?? URL(string: defaultEndpointString)!
         let value =
             override
             ?? ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
             ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
         guard let value, !value.isEmpty else { return fallback }
         return URL(string: value) ?? fallback
+    }
+
+    public static func deployedEndpoint() -> URL? {
+        guard let deployment = CompanionDeploymentStore.load() else { return nil }
+        return URL(string: "http://127.0.0.1:\(deployment.localPort)")
     }
 
     public func health() async throws -> CompanionHealth {

@@ -316,9 +316,6 @@ struct CompanionDeployCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Record where it runs without starting anything.")
     var adopt = false
 
-    @Flag(name: .long, help: "Rebuild the api image.")
-    var build = false
-
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
@@ -344,12 +341,24 @@ struct CompanionDeployCommand: AsyncParsableCommand {
                         .joined(separator: "; "))
             }
             if !adopt {
+                let config = CompanionConfigStore.load()
+                try await CompanionInstaller.install(
+                    deployment: deployment, config: config, secrets: CompanionSecrets.all(),
+                    runner: { command, stdin, timeout in
+                        try await CompanionStackRunner.run(
+                            command, on: deployment, stdin: stdin, timeout: timeout)
+                    },
+                    log: { CLIOut.note($0) })
+                CLIOut.note("Starting the stack, building the image when it changed")
                 _ = try await CompanionStackRunner.run(
                     CompanionStackCommands.up(
-                        directory: directory, tier: chosen.tier ?? .cpu, build: build),
+                        directory: directory, tier: chosen.tier ?? .cpu, build: true),
                     on: deployment, timeout: 1800)
             }
             CompanionDeploymentStore.save(deployment)
+            if !adopt, deployment.machineID != nil {
+                await openTunnel(deployment)
+            }
             guard !json else {
                 CLIOut.json(CompanionHostsCommand.deploymentJSON(deployment))
                 return
@@ -361,5 +370,36 @@ struct CompanionDeployCommand: AsyncParsableCommand {
     private func pick(from hosts: [CompanionHost]) -> CompanionHost? {
         if machine != nil { return hosts.first { !$0.isLocal } ?? hosts.first }
         return CompanionHostList.recommended(hosts)
+    }
+
+    @MainActor
+    private func openTunnel(_ deployment: CompanionDeployment) async {
+        guard let machineID = deployment.machineID,
+            let machine = MachineRegistry.machines().first(where: { $0.id == machineID })
+        else { return }
+        if await CompanionTunnel.endpointAnswers(deployment) {
+            CLIOut.note("localhost:\(deployment.localPort) already reaches the companion")
+            return
+        }
+        let forward =
+            CompanionTunnel.savedForward(for: deployment)
+            ?? {
+                let created = PortForward(
+                    machineID: machineID, localPort: deployment.localPort,
+                    remoteHost: "localhost", remotePort: deployment.localPort,
+                    title: "companion")
+                MachineRegistry.addForward(created)
+                return created
+            }()
+        do {
+            let runner = try await MachineResolver.runner(machine.name)
+            try await runner.ssh.addForward(forward)
+            CLIOut.note(
+                "localhost:\(forward.localPort) now reaches the companion on \(machine.name)")
+        } catch {
+            CLIOut.note(
+                "could not open the port forward: \(error.localizedDescription); "
+                    + "run `ed machines forwards on \(machine.name)` yourself")
+        }
     }
 }

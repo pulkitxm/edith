@@ -19,19 +19,24 @@ public enum CompanionStackError: Error, LocalizedError {
 
 public enum CompanionHosts {
     @MainActor
-    public static func all(deployment: CompanionDeployment?) async -> [CompanionHost] {
-        let local = await localHost()
+    public static func all(
+        deployment: CompanionDeployment?, config: CompanionStackConfig = CompanionConfigStore.load()
+    ) async -> [CompanionHost] {
+        let ports = CompanionHostFacts.requiredPorts(for: config)
+        let local = await localHost(ports: ports)
         var remote: [CompanionHost] = []
         for machine in MachineRegistry.machines() {
-            remote.append(await probe(machine))
+            remote.append(await probe(machine, ports: ports))
         }
         return CompanionHostList.ordered(
             local: local, machines: remote, deployment: deployment)
     }
 
     @MainActor
-    public static func localHost() async -> CompanionHost {
-        let output = await CompanionShell.run(CompanionHostProbe.script)
+    public static func localHost(
+        ports: [Int] = CompanionHostFacts.requiredPorts
+    ) async -> CompanionHost {
+        let output = await CompanionShell.run(CompanionHostProbe.script(ports: ports))
         return CompanionHost(
             id: CompanionHost.localID,
             name: Host.current().localizedName ?? "This Mac",
@@ -42,9 +47,12 @@ public enum CompanionHosts {
     }
 
     @MainActor
-    public static func probe(_ machine: Machine) async -> CompanionHost {
+    public static func probe(
+        _ machine: Machine, ports: [Int] = CompanionHostFacts.requiredPorts
+    ) async -> CompanionHost {
         let session = MachineSession(machine: machine, local: false)
-        let result = await session.runCommand(CompanionHostProbe.script, timeout: 45)
+        let result = await session.runCommand(
+            CompanionHostProbe.script(ports: ports), timeout: 45)
         switch result {
         case let .success(output):
             return CompanionHost(
@@ -60,20 +68,48 @@ public enum CompanionHosts {
 
 public enum CompanionStackControl {
     @MainActor
-    public static func deploy(host: CompanionHost, config: CompanionStackConfig) async throws
-        -> CompanionDeployment
-    {
+    public static func deploy(
+        host: CompanionHost, config: CompanionStackConfig,
+        progress: CompanionDeployProgress? = nil,
+        log: @escaping @Sendable (String) -> Void = { _ in }
+    ) async throws -> CompanionDeployment {
         let tier = host.tier ?? .cpu
         let deployment = CompanionDeployment(
             machineID: host.isLocal ? nil : host.id,
             machineName: host.name,
             tier: tier.rawValue,
             localPort: config.apiPort)
+        try await CompanionInstaller.install(
+            deployment: deployment, config: config, secrets: CompanionSecrets.all(),
+            progress: progress, log: log)
+        progress?(.start, "compose up, first builds take minutes")
+        log("Starting the stack, building the image when it changed")
         _ = try await run(
             CompanionStackCommands.up(
-                directory: deployment.directory, tier: tier, build: false),
+                directory: deployment.directory, tier: tier, build: true),
             on: deployment, timeout: 1800)
-        return CompanionDeploymentStore.save(deployment)
+        let saved = CompanionDeploymentStore.save(deployment)
+        if deployment.machineID != nil {
+            progress?(.tunnel, "localhost:\(deployment.localPort)")
+            log("Opening the port forward so this Mac can reach it")
+            _ = await CompanionTunnel.ensure(saved)
+        } else {
+            progress?(.tunnel, "local, nothing to forward")
+        }
+        progress?(.health, "waiting for the doctor")
+        _ = await waitForHealth(saved)
+        return saved
+    }
+
+    @MainActor
+    public static func waitForHealth(
+        _ deployment: CompanionDeployment, attempts: Int = 30
+    ) async -> Bool {
+        for _ in 0..<attempts {
+            if await CompanionTunnel.endpointAnswers(deployment) { return true }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        return false
     }
 
     @MainActor
@@ -123,19 +159,23 @@ public enum CompanionStackControl {
 
     @MainActor
     public static func run(
-        _ command: String, on deployment: CompanionDeployment, timeout: TimeInterval
+        _ command: String, on deployment: CompanionDeployment, stdin: Data? = nil,
+        timeout: TimeInterval
     ) async throws -> String {
         guard let machineID = deployment.machineID else {
-            guard let output = await CompanionShell.run(command) else {
-                throw CompanionStackError.commandFailed(command, "could not run it on this Mac")
+            let outcome = await CompanionShell.runChecked(command, stdin: stdin)
+            switch outcome {
+            case let .success(output):
+                return output
+            case let .failure(failure):
+                throw CompanionStackError.commandFailed(command, failure.detail)
             }
-            return output
         }
         guard let machine = MachineRegistry.machines().first(where: { $0.id == machineID }) else {
             throw CompanionStackError.machineGone(deployment.machineName)
         }
         let session = MachineSession(machine: machine, local: false)
-        switch await session.runCommand(command, timeout: timeout) {
+        switch await session.runCommand(command, stdin: stdin, timeout: timeout) {
         case let .success(output):
             return output
         case let .failure(error):
@@ -146,24 +186,58 @@ public enum CompanionStackControl {
 
 public enum CompanionShell {
     public static func run(_ script: String) async -> String? {
+        try? await runChecked(script, stdin: nil).get()
+    }
+
+    public static func runChecked(
+        _ script: String, stdin: Data? = nil
+    ) async -> Result<String, CompanionShellFailure> {
         await withCheckedContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", script]
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = Pipe()
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(returning: nil)
-                return
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/bin/sh")
+                process.arguments = ["-c", script]
+                let output = Pipe()
+                let errors = Pipe()
+                process.standardOutput = output
+                process.standardError = errors
+                let input = Pipe()
+                process.standardInput = input
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(
+                        returning: .failure(
+                            CompanionShellFailure(detail: error.localizedDescription)))
+                    return
+                }
+                if let stdin {
+                    try? input.fileHandleForWriting.write(contentsOf: stdin)
+                }
+                try? input.fileHandleForWriting.close()
+                let stdout = output.fileHandleForReading.readDataToEndOfFile()
+                let stderr = errors.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                let text = String(decoding: stdout, as: UTF8.self)
+                guard process.terminationStatus == 0 else {
+                    let detail = String(decoding: stderr, as: UTF8.self)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    continuation.resume(
+                        returning: .failure(
+                            CompanionShellFailure(
+                                detail: detail.isEmpty
+                                    ? "exited \(process.terminationStatus)" : detail)))
+                    return
+                }
+                continuation.resume(returning: .success(text))
             }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            continuation.resume(returning: String(decoding: data, as: UTF8.self))
         }
     }
+}
+
+public struct CompanionShellFailure: Error, CustomStringConvertible {
+    public let detail: String
+    public var description: String { detail }
 }
 
 extension CompanionDeployment {

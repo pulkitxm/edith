@@ -82,6 +82,10 @@ public struct CompanionHostFacts: Codable, Equatable, Sendable {
     public static let requiredDiskMb = 12_000
     public static let requiredPorts = [4820, 5432, 6379, 11434]
 
+    public static func requiredPorts(for config: CompanionStackConfig) -> [Int] {
+        [config.apiPort, config.pgPort, config.redisPort, 11434]
+    }
+
     public func runtime(_ kind: CompanionRuntimeKind) -> CompanionRuntimeStatus? {
         runtimes.first { $0.kind == kind }
     }
@@ -95,6 +99,10 @@ public struct CompanionHostFacts: Codable, Equatable, Sendable {
     }
 
     public var blockers: [CompanionBlocker] {
+        blockers(ports: Self.requiredPorts)
+    }
+
+    public func blockers(ports: [Int]) -> [CompanionBlocker] {
         var found: [CompanionBlocker] = []
         if usableRuntime == nil {
             let stopped = installedRuntimes.first { !$0.daemonRunning }
@@ -107,7 +115,7 @@ public struct CompanionHostFacts: Codable, Equatable, Sendable {
         if diskFreeMb < Self.requiredDiskMb {
             found.append(.notEnoughDisk(freeMb: diskFreeMb, needMb: Self.requiredDiskMb))
         }
-        let clashes = Self.requiredPorts.filter { portsTaken.contains($0) }
+        let clashes = ports.filter { portsTaken.contains($0) }
         if !clashes.isEmpty { found.append(.portsInUse(clashes)) }
         return found
     }
@@ -162,7 +170,14 @@ public enum CompanionBlocker: Equatable, Sendable {
 }
 
 public enum CompanionHostProbe {
-    public static let script = """
+    public static let script = script(ports: CompanionHostFacts.requiredPorts)
+
+    public static func script(ports: [Int]) -> String {
+        let list = ports.map(String.init).joined(separator: " ")
+        return template.replacingOccurrences(of: "4820 5432 6379 11434", with: list)
+    }
+
+    static let template = """
         os=$(uname -s | tr 'A-Z' 'a-z')
         arch=$(uname -m)
         if [ "$os" = darwin ]; then

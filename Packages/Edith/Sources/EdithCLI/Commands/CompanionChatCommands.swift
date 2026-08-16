@@ -15,6 +15,9 @@ struct CompanionChatCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Continue this conversation id instead of starting fresh.")
     var conversation: String?
 
+    @Option(name: .long, help: "Answer through this persona; `ed companion personas` lists them.")
+    var persona: String?
+
     @Argument(help: "What to say.")
     var message: String
 
@@ -29,7 +32,9 @@ struct CompanionChatCommand: AsyncParsableCommand {
             var latencyMs = 0
             var chunksConsidered = 0
             do {
-                for try await event in client.chat(message: message, conversationId: conversation) {
+                for try await event in client.chat(
+                    message: message, conversationId: conversation, persona: persona)
+                {
                     switch event {
                     case let .meta(id, activeModel):
                         conversationId = id

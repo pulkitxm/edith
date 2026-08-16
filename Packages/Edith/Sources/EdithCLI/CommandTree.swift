@@ -876,7 +876,8 @@ public enum CommandTree {
                         ]),
                     CommandNode(
                         "chat", "Talk with the companion, streamed as it thinks.",
-                        options: common + ["--endpoint", "--conversation"], arguments: [.free]),
+                        options: common + ["--endpoint", "--conversation", "--persona"],
+                        arguments: [.free]),
                     CommandNode(
                         "conversations", "List chats, or replay one by id.",
                         options: common + ["--endpoint", "--limit"], arguments: [.free]),
@@ -921,7 +922,7 @@ public enum CommandTree {
                         options: common + ["--machine"]),
                     CommandNode(
                         "deploy", "Choose the machine that runs the companion.",
-                        options: common + ["--directory", "--port", "--adopt", "--build"],
+                        options: common + ["--directory", "--port", "--adopt"],
                         arguments: [.machine]),
                     CommandNode(
                         "stack", "Start, stop and inspect the companion stack on its host.",
