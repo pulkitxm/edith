@@ -10,7 +10,7 @@ happened, and ask you about the holes it cannot fill on its own. Back to
 
 When you say "I have been on top of things this week", the system has learned
 exactly one thing with certainty: that you said it. Whether you were on top of
-things is a separate question with separate evidence. Most personal AI collapses
+things is a separate question with separate evidence. Most personal software collapses
 those two into one store and becomes an elaborate paraphrase machine, where
 everything it "knows" is your self-description with extra steps.
 

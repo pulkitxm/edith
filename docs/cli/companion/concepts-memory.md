@@ -8,7 +8,7 @@ is append-only. No machine-learning background is assumed.
 ## Memory is a database, not a brain
 
 When the companion "remembers" something, no model is being trained and
-nothing is being memorised by an AI. Memory is ordinary data in an ordinary
+nothing is being memorised by the language model. Memory is ordinary data in an ordinary
 database: rows in Postgres and files on disk. The intelligence only shows up
 later, at read time, when a language model is handed a small selection of
 those rows and asked to answer with them. This is the single most useful
@@ -61,7 +61,7 @@ preserved original in the vault, and the byte count. The fingerprint column
 is unique, which is the whole deduplication mechanism.
 
 An **episode** answers "what happened, and when?". It stores the readable
-text (`body_original`), the kind (`md`, `pdf` or `voice`), a title, the
+text (`body_original`), the kind (`md`, `pdf`, `voice`, `image` or `video`), a title, the
 language, and two timestamps: `occurred_at`, when the content happened in
 your life, and `ingested_at`, when the companion received it. Search,
 chunking, claims and reflection all operate on episodes; they never go back
@@ -106,7 +106,8 @@ always produces the same output, and any change to the input, even one
 character, produces a completely different output. Finding two different
 inputs with the same output is computationally out of reach, so in practice
 the hash is a unique fingerprint of the content. The companion hashes the
-text of Markdown files and the raw bytes of PDF and audio files, and treats
+text of Markdown files and the raw bytes of PDF, audio, image and video files,
+and treats
 "same fingerprint" as "same memory".
 
 ## The vault: originals, kept forever
@@ -125,12 +126,13 @@ naturally idempotent: if the path already exists, the content is already
 there, byte for byte, and the write is skipped. Nothing in the vault is ever
 overwritten or deleted.
 
-The vault matters for two reasons. First, honesty: the episode body for a PDF
-or a voice memo is an extraction or a transcription, in other words a lossy
+The vault matters for two reasons. First, honesty: the episode body for a PDF,
+voice memo, image or video is an extraction, transcription or caption, in
+other words a lossy
 copy, and the vault keeps the ground truth it came from. Second, playback:
 `GET /v1/episodes/{id}/media` streams the vault file back out, which is how
-the app shows a real PDF page and plays your actual recording rather than
-just its transcript.
+the app shows the original PDF, photo or video and plays your actual recording
+rather than only showing derived text.
 
 ## Where every byte physically lives
 
@@ -169,7 +171,7 @@ do.
 ## Reading on
 
 - [Ingestion](./concepts-ingestion.md): the exact path from a dropped file to
-  an episode, for all three media.
+  an episode, for all five media.
 - [Chunks, embeddings and search](./concepts-search.md): how text becomes
   numbers and how nearest-neighbour search works.
 - [Asking and chatting](./concepts-chat.md): how memory turns into grounded
