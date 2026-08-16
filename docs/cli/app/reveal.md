@@ -38,6 +38,11 @@ A section that does not exist, a tab that does not belong to the section, or
 `--tab` on a section that has none all exit 3 with the valid names in the
 error, and `--tab` without a section is a usage error, exit 2. The main window
 process must be running; without it the command exits 4.
+Section and tab values are exact, lowercase raw values. An explicitly empty
+`--tab ''` is treated as no tab and reveals only the section. A bare reveal
+returns the stored section but does not return that section's current tab, so
+its JSON has `"tab": null`.
+
 Pairs with [`ed app snapshot`](./snapshot.md) for reading the screen you just
 revealed.
 
