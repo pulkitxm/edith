@@ -144,7 +144,7 @@ Homebrew has two package types, and the difference is not cosmetic.
 | Source | Usually built from source, or a bottle | Always a prebuilt download from the vendor |
 | Lands in | `$(brew --cellar)`, linked into `$(brew --prefix)` | `/Applications`, staged through `$(brew --caskroom)` |
 | Command | `brew install jq` | `brew install --cask edith` |
-| Platform | macOS and Linux | macOS only |
+| Platform | multiple operating systems | macOS only |
 
 A **bottle** is a precompiled formula build, which is why `brew install jq` finishes
 in seconds instead of compiling. Casks have no equivalent because a cask is already
@@ -156,7 +156,7 @@ canonical cask shape. The fact that the bundle also contains two command line to
 does not make it a formula: the unit of distribution is still the application.
 
 An important consequence of "cask means macOS only": nothing about the cask can be
-end-to-end tested on a Linux machine, including in CI. This shapes what verification
+end-to-end tested on a generic hosted runner, including in CI. This shapes what verification
 is possible, covered in section 18.
 
 ---
@@ -694,7 +694,7 @@ are still finishing, and a cancelling group would kill the run that is mid-relea
 
 `release.yml` has two build jobs feeding the publisher.
 
-**`version`** runs on Ubuntu, reads `Resources/Info.plist`, refuses to start without
+**`version`** runs on macOS, reads `Resources/Info.plist`, refuses to start without
 the signing, Sparkle, push, and tap secrets, and computes the next patch version and
 build number. It writes nothing and pushes nothing; it only decides what is being
 released and which commit is being built.
@@ -1061,7 +1061,7 @@ question worth asking after a failed release run.
 
 ## 18. What was verified, and how
 
-Casks are macOS-only and this was built on Linux, so it is worth being explicit
+Casks are macOS-only, so it is worth being explicit
 about which claims are tested and which are structural.
 
 **Verified directly:**
@@ -1086,7 +1086,7 @@ about which claims are tested and which are structural.
 **Not verifiable here:**
 
 - `brew install --cask pulkitxm/tap/edith` end to end. Homebrew refuses cask
-  installs on Linux, so this needs a Mac.
+  installs only on macOS, so this needs a Mac.
 
 ---
 

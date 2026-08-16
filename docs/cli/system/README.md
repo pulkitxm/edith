@@ -57,7 +57,7 @@ Neither command looks anything up by name and neither talks to the app, so 3 and
 - `disk.readBps`, `disk.writeBps` and `disk.devices`, along with
   `cpu.stealPercent` and `tasks.runnable`, are part of the shared sample shape
   and are always zero or empty for this Mac. They are filled in by the collector
-  `ed machines metrics` runs on a Linux machine.
+  `ed machines metrics` runs on a remote Mac.
 - `tasks.total` is the number of processes `ps` returned, so it counts every
   process on the machine and not just the ones `--processes` shows.
 - `--json --follow` writes one compact document per line, forever, and repeats

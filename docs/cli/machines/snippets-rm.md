@@ -26,7 +26,7 @@ ed machines snippets rm <machine> <index> [--json]
 {
   "remaining": 0,
   "removed": {
-    "command": "journalctl -xe --no-pager",
+    "command": "log show --last 5m",
     "id": "F8D5CE93-C9B4-4A05-9109-9AEB1BD806BA",
     "index": 1,
     "sharedAcrossMachines": false,
@@ -40,8 +40,8 @@ ed machines snippets rm <machine> <index> [--json]
 ## Examples
 
 ```
-ed machines snippets rm tuf 1
-ed machines snippets rm tuf 1 --json
+ed machines snippets rm studio 1
+ed machines snippets rm studio 1 --json
 ```
 
 ## Behaviour notes
@@ -55,8 +55,8 @@ other machine also offers, and removing it removes it everywhere. Check
 An index outside the range exits 3:
 
 ```
-$ ed machines snippets rm tuf 1
-error: there is no snippet 1 on Asus TUF 7
+$ ed machines snippets rm studio 1
+error: there is no snippet 1 on Studio Mac
 hint: it offers 0, numbered from 1
 ```
 

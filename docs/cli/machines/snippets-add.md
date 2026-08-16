@@ -23,15 +23,15 @@ ed machines snippets add [--shared] [--json] <machine> <title> <command...>
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
 ```
-$ ed machines snippets add tuf logs journalctl -xe --no-pager
-saved logs on Asus TUF 7
+$ ed machines snippets add studio logs log show --last 5m
+saved logs on Studio Mac
 ```
 
 ## `--json` shape
 
 ```json
 {
-  "command": "journalctl -xe --no-pager",
+  "command": "log show --last 5m",
   "id": "F8D5CE93-C9B4-4A05-9109-9AEB1BD806BA",
   "index": 0,
   "sharedAcrossMachines": false,
@@ -45,9 +45,9 @@ the snippets afterwards if you need the number.
 ## Examples
 
 ```
-ed machines snippets add tuf logs journalctl -xe --no-pager
-ed machines snippets add tuf disk df -h
-ed machines snippets add --shared tuf uptime uptime
+ed machines snippets add studio logs log show --last 5m
+ed machines snippets add studio disk df -h
+ed machines snippets add --shared studio uptime uptime
 ```
 
 ## Behaviour notes

@@ -21,14 +21,14 @@ ed machines show <machine> [--json]
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
 ```
-$ ed machines show tuf
-Asus TUF 7
-  target   tuf · pulkit@192.168.1.12
+$ ed machines show studio
+Studio Mac
+  target   studio · pulkit@192.168.1.12
   auth     SSH agent
-  system   Linux 7.0.0-28-generic x86_64
+  system   Darwin 25.6.0 arm64
   uptime   22:19:53 up  9:11,  5 users,  load average: 0.19, 0.16, 0.28
-  session  pulkit on seat0 since 2026-08-08 13:08 (login screen)
-  session  pulkit on tty2 since 2026-08-08 13:08 (tty2)
+  session  pulkit on console since 2026-08-08 13:08
+  session  pulkit on ttys001 since 2026-08-08 13:09
 ```
 
 ## `--json` shape
@@ -44,19 +44,19 @@ Four keys, always all four:
     "createdAt": "2026-08-06T12:11:49Z",
     "host": "192.168.1.12",
     "id": "4303DCF1-52D8-4075-AE9B-C2FD86D3821A",
-    "name": "Asus TUF 7",
+    "name": "Studio Mac",
     "port": 22,
     "source": "sshConfigAlias",
-    "sshAlias": "tuf",
-    "sshTarget": "tuf",
+    "sshAlias": "studio",
+    "sshTarget": "studio",
     "username": "pulkit",
     "wakeMACAddress": "be:f0:86:8d:58:12"
   },
   "sessions": [
-    "pulkit on seat0 since 2026-08-08 13:08 (login screen)",
-    "pulkit on tty2 since 2026-08-08 13:08 (tty2)"
+    "pulkit on console since 2026-08-08 13:08",
+    "pulkit on ttys001 since 2026-08-08 13:09"
   ],
-  "uname": "Linux 7.0.0-28-generic x86_64",
+  "uname": "Darwin 25.6.0 arm64",
   "uptime": "22:18:08 up  9:10,  5 users,  load average: 0.07, 0.13, 0.30"
 }
 ```
@@ -69,10 +69,10 @@ than three fields is dropped rather than guessed at.
 ## Examples
 
 ```
-ed machines show tuf
-ed machines tuf
-ed tuf
-ed machines show tuf --json | jq -r .uname
+ed machines show studio
+ed machines studio
+ed studio
+ed machines show studio --json | jq -r .uname
 ```
 
 ## Behaviour notes

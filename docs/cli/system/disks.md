@@ -76,7 +76,7 @@ are:
   "gpu": {
     "memTotalMB": 8188,
     "memUsedMB": 1204,
-    "name": "NVIDIA GeForce RTX 4060",
+    "name": "Apple M4 Pro",
     "temperature": 47,
     "utilPercent": 12
   },

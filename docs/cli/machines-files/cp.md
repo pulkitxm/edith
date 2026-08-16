@@ -16,19 +16,19 @@ ed machines files cp <machine> <path>... <directory> [--json]
 ```json
 {
   "copied": [
-    "/home/pulkit/notes.md",
-    "/home/pulkit/deploy.sh"
+    "/Users/pulkit/notes.md",
+    "/Users/pulkit/deploy.sh"
   ],
   "done": true,
-  "into": "/home/pulkit/backup",
-  "machine": "Asus TUF 7"
+  "into": "/Users/pulkit/backup",
+  "machine": "Studio Mac"
 }
 ```
 
 ```
-ed machines files cp tuf /home/pulkit/notes.md /home/pulkit/backup
-ed machines files cp tuf /srv/a.conf /srv/b.conf /srv/keep
-ed machines files cp tuf /var/log/syslog /tmp --json
+ed machines files cp studio /Users/pulkit/notes.md /Users/pulkit/backup
+ed machines files cp studio /srv/a.conf /srv/b.conf /srv/keep
+ed machines files cp studio /var/log/system.log /tmp --json
 ```
 
 The last value is always the destination, like the shell tool this mirrors, and
@@ -42,13 +42,13 @@ that does not exist, this copies the source to that name, which is `cp`
 behaviour rather than a special case.
 
 The command is capped at 300 seconds. Without `--json` the output is a single
-line saying what was done, `copied 2 into /home/pulkit/backup`. A non-zero exit
+line saying what was done, `copied 2 into /Users/pulkit/backup`. A non-zero exit
 on the machine exits 1 with that same description and whatever the machine
 printed:
 
 ```
-$ ed machines files cp tuf /srv/a.conf /srv/locked
-error: copied 1 into /srv/locked failed on Asus TUF 7: cp: cannot create regular file '/srv/locked/a.conf': Permission denied
+$ ed machines files cp studio /srv/a.conf /srv/locked
+error: copied 1 into /srv/locked failed on Studio Mac: cp: cannot create regular file '/srv/locked/a.conf': Permission denied
 ```
 
 `done` is `true` in every JSON document this prints, because a failure never

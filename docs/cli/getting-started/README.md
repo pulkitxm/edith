@@ -109,14 +109,14 @@ docker prune targets in their own slots, and `#files` where a local path goes.
 Matching is a case-sensitive prefix, and duplicates are dropped while the order
 is kept.
 
-Remote completion is the interesting one. `ed tuf docker <TAB>` does not consult
+Remote completion is the interesting one. `ed studio docker <TAB>` does not consult
 a list of docker subcommands baked into `ed`; it asks the machine. At the first
 word after the machine name `ed` runs `compgen -c` there, so you get commands
 from the remote `PATH`. After `cd`, `pushd` or `rmdir` it runs `compgen -d`, so
 you get directories. Anywhere else it runs a small bash harness that sources the
 machine's own bash-completion, calls `_completion_loader` for the command you
 are typing, finds the function registered with `complete -F`, and runs it, so
-`ed tuf systemctl sta<TAB>` and `ed tuf apt <TAB>` complete against the tools
+`ed studio launchctl pri<TAB>` and `ed studio brew <TAB>` complete against the tools
 installed there, including ones `ed` has never heard of. Whichever of the three
 runs, it is prefixed with the directory that machine's `cd` last left you in and
 given six seconds; the command and directory lookups are also capped at 2000
@@ -128,7 +128,7 @@ shell; with no open connection you get no candidates at all, silently and
 immediately:
 
 ```
-$ ed __complete --index 2 -- ed tuf upt
+$ ed __complete --index 2 -- ed studio upt
 $ echo $?
 0
 ```
@@ -143,10 +143,10 @@ can be offered `--json` and `--help` even where only its subcommands take them.
 Naming a machine as the first word runs the rest of the line there:
 
 ```
-ed tuf uptime
-ed tuf docker compose up -d
-ed tuf systemctl status nginx
-ed tuf 'ls -la /srv | head'
+ed studio uptime
+ed studio docker compose up -d
+ed studio launchctl print system
+ed studio 'ls -la /srv | head'
 ```
 
 This happens before the parser sees anything. The raw arguments are rewritten
@@ -173,19 +173,19 @@ subcommand, then puts the machine after them:
 
 | What you type | What actually runs |
 | --- | --- |
-| `ed tuf` | `ed machines show tuf` |
-| `ed tuf --json` | `ed machines show tuf --json` |
-| `ed tuf uptime` | `ed machines exec tuf -- uptime` |
-| `ed machines tuf` | `ed machines show tuf` |
-| `ed machines tuf metrics --follow` | `ed machines metrics tuf --follow` |
-| `ed machines tuf docker ps` | `ed machines docker ps tuf` |
-| `ed machines tuf files ls /var/log` | `ed machines files ls tuf /var/log` |
+| `ed studio` | `ed machines show studio` |
+| `ed studio --json` | `ed machines show studio --json` |
+| `ed studio uptime` | `ed machines exec studio -- uptime` |
+| `ed machines studio` | `ed machines show studio` |
+| `ed machines studio metrics --follow` | `ed machines metrics studio --follow` |
+| `ed machines studio docker ps` | `ed machines docker ps studio` |
+| `ed machines studio files ls /var/log` | `ed machines files ls studio /var/log` |
 
 Edith's own command names win over machine names, in both positions. A machine
 called `usage` still needs `ed machines exec usage -- ...`, and a machine called
 `ls` or `docker` needs `ed machines show ls`, because after `ed machines` a word
 that is a subcommand of `machines` is read as that subcommand. A machine name
-with spaces needs quoting, and quoting is enough: `ed "Asus TUF 7" uptime`
+with spaces needs quoting, and quoting is enough: `ed "Studio Mac" uptime`
 works.
 
 The reserved list comes from the same hand-maintained tree that drives

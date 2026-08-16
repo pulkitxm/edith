@@ -15,7 +15,7 @@ There are two ways into docker on a machine, and the difference matters.
 `ed machines <machine> docker ps` is this page: parsed, `--json`, stable keys.
 `ed <machine> docker ps` is the raw shorthand, which sends the line to the
 remote shell verbatim and gives you docker's own output and exit code. Reach for
-the raw form for anything this page does not cover, `ed tuf docker buildx ls`
+the raw form for anything this page does not cover, `ed studio docker buildx ls`
 being the usual example.
 
 ## At a glance
@@ -105,7 +105,7 @@ The docker availability failures all read the same way, with the specific reason
 as the hint:
 
 ```
-error: docker is not usable on Asus TUF 7
+error: docker is not usable on Studio Mac
 hint: docker is not installed there
 ```
 
@@ -115,16 +115,16 @@ something unrecognisable, `docker reported an unknown state`.
 
 ## Notes and gotchas
 
-- Word order is free. `ed machines tuf docker ps` and
-  `ed machines docker ps tuf` are the same invocation: the machine is rewritten
+- Word order is free. `ed machines studio docker ps` and
+  `ed machines docker ps studio` are the same invocation: the machine is rewritten
   into the position the parser expects. A subcommand name always wins, so a
   machine literally called `docker` has to be named as
   `ed machines show docker`.
-- `ed tuf docker ps` is not this page. Naming a machine as the first word makes
+- `ed studio docker ps` is not this page. Naming a machine as the first word makes
   the rest a raw remote command, so that line runs docker's own `ps` on the
   machine and prints docker's own table. Add `machines` to get the parsed form.
-  This is the escape hatch for everything not covered here: `ed tuf docker
-  buildx ls`, `ed tuf docker exec -it api sh`.
+  This is the escape hatch for everything not covered here: `ed studio docker
+  buildx ls`, `ed studio docker exec -it api sh`.
 - `ed machines docker <machine>` with no verb is `ps`, and
   `ed machines docker compose <machine>` with no verb is `compose ls`.
 - There is no `ed machines docker exec`. The Docker window's shell button is
@@ -160,7 +160,7 @@ something unrecognisable, `docker reported an unknown state`.
   compose lifecycle verbs, which the window does not have: it groups containers
   by compose project but never runs compose.
 - Some hints embed the machine's display name unquoted, so a machine whose name
-  has spaces produces a hint you cannot paste as is. Use the ssh alias, `tuf`,
+  has spaces produces a hint you cannot paste as is. Use the ssh alias, `studio`,
   or any unambiguous prefix instead.
 - These commands never need Edith to be running, and never ask macOS for a
   permission. Everything they touch is on the other machine.
@@ -174,7 +174,7 @@ something unrecognisable, `docker reported an unknown state`.
   `--tty`, and everything docker can do that this page does not parse.
 - [`ed machines files`](../machines-files/README.md) for the compose files and bind
   mounts behind these projects.
-- [`ed machines power`](../machines-power/README.md) for the systemd unit that starts
+- [`ed machines power`](../machines-power/README.md) for restarting the Mac that runs
   docker, and for the machine's own power state.
 - [Conventions and contracts](../conventions.md) for the exit code table and the
   `--json` guarantees these commands follow.

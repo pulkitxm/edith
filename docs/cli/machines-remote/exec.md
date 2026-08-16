@@ -26,11 +26,11 @@ ed machines run  [--tty] <machine> [--] <command...>
 
 Every one of these has to come before the machine name. The command array is
 captured for passthrough, so the parser stops reading options at the first
-positional word: in `ed machines exec tuf --tty top` the `--tty` is part of the
+positional word: in `ed machines exec studio --tty top` the `--tty` is part of the
 command and is sent to the machine, where it is not a program:
 
 ```
-$ ed machines exec tuf --tty top
+$ ed machines exec studio --tty top
 bash: line 1: --tty: command not found
 $ echo $?
 127
@@ -44,10 +44,10 @@ unknown option and exits 2.
 ## Examples
 
 ```
-ed machines exec tuf uptime
-ed machines exec tuf -- ls -la /etc
-ed machines exec --tty tuf top
-ed machines run tuf systemctl status nginx
+ed machines exec studio uptime
+ed machines exec studio -- ls -la /etc
+ed machines exec --tty studio top
+ed machines run studio launchctl print system
 ```
 
 ## Behaviour notes
@@ -67,10 +67,10 @@ has to interpret. Several words are quoted individually and joined, so an
 argument with spaces survives and a shell metacharacter does not:
 
 ```
-$ ed tuf echo 'a;pwd'
+$ ed studio echo 'a;pwd'
 a;pwd
 
-$ ed tuf 'ls /etc | head -3'
+$ ed studio 'ls /etc | head -3'
 adduser.conf
 alsa
 alternatives
@@ -79,7 +79,7 @@ alternatives
 A word is left unquoted only when every character in it is a letter, a digit or
 one of `. _ - + / = : @ % ,`. Everything else is wrapped in single quotes, which
 covers spaces, `~`, `*`, `$`, `|`, `>`, `;`, `&` and quotes themselves. So
-`ed tuf ls '*.log'` does not glob on the machine, and `ed tuf ls '~/Desktop'`
+`ed studio ls '*.log'` does not glob on the machine, and `ed studio ls '~/Desktop'`
 does not expand the tilde; quote the whole line instead when you want either.
 
 `--tty` builds its command line differently: the words are joined with single
@@ -88,17 +88,17 @@ the remote shell parse the line. The same input therefore behaves differently
 under the two paths:
 
 ```
-$ ed machines exec --tty tuf echo 'a;pwd'
+$ ed machines exec --tty studio echo 'a;pwd'
 a
-/home/pulkit
+/Users/pulkit
 Shared connection to 192.168.1.12 closed.
 ```
 
 That trailing line is ssh's own, on stderr, and appears on every `--tty` run.
 
 Stdin is not forwarded on the plain path. The remote process is given
-`/dev/null`, so `printf 'x\n' | ed tuf cat` prints nothing and
-`ed tuf wc -l < file` counts zero. With `--tty` your terminal is handed
+`/dev/null`, so `printf 'x\n' | ed studio cat` prints nothing and
+`ed studio wc -l < file` counts zero. With `--tty` your terminal is handed
 straight to ssh and typing works, but a redirected file or a pipe still will
 not end the command: the remote side sees a terminal rather than a closed pipe,
 so a `cat` with nothing more to read waits instead of exiting. Feed data to a
@@ -108,14 +108,14 @@ the far side.
 Output is read line by line off two pipes and re-emitted, stdout to stdout and
 stderr to stderr, so a partial last line with no newline is still printed and
 the exact interleaving of the two streams is not guaranteed to match what the
-machine produced. There is no timeout: `ed tuf tail -f /var/log/syslog` streams
+machine produced. There is no timeout: `ed studio tail -f /var/log/system.log` streams
 until you interrupt it.
 
 The exit code is the remote command's, verbatim and unclamped, which is the one
 documented exception to `ed`'s 0 to 4 contract:
 
 ```
-$ ed tuf exit 42
+$ ed studio exit 42
 $ echo $?
 42
 ```
@@ -124,8 +124,8 @@ Naming no command at all fails before anything is dialled, and the error names
 the machine you gave:
 
 ```
-$ ed machines exec tuf
-error: name a command to run, for example `ed tuf uptime`
+$ ed machines exec studio
+error: name a command to run, for example `ed studio uptime`
 ```
 
 The command runs in whatever directory `ed <machine> cd` last set for this

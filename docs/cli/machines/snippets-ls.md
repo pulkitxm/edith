@@ -26,19 +26,19 @@ Snippets are numbered from 1 in the order they were saved. Nothing is sorted,
 and shared snippets sit in the same numbering as this machine's own:
 
 ```
-$ ed machines snippets ls tuf
+$ ed machines snippets ls studio
 #  TITLE  SCOPE    COMMAND
-1  logs   machine  journalctl -xe --no-pager
+1  logs   machine  log show --last 5m
 ```
 
-A machine with none prints `Asus TUF 7 has no snippets` on stderr and exits 0.
+A machine with none prints `Studio Mac has no snippets` on stderr and exits 0.
 
 ## `--json` shape
 
 ```json
 [
   {
-    "command": "journalctl -xe --no-pager",
+    "command": "log show --last 5m",
     "id": "F8D5CE93-C9B4-4A05-9109-9AEB1BD806BA",
     "index": 1,
     "sharedAcrossMachines": false,
@@ -53,9 +53,9 @@ is the `shared` value in the SCOPE column.
 ## Examples
 
 ```
-ed machines snippets ls tuf
-ed machines snippets tuf
-ed machines snippets ls tuf --json | jq -r '.[] | select(.sharedAcrossMachines) | .title'
+ed machines snippets ls studio
+ed machines snippets studio
+ed machines snippets ls studio --json | jq -r '.[] | select(.sharedAcrossMachines) | .title'
 ```
 
 ## Behaviour notes

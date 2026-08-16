@@ -63,41 +63,42 @@ import Testing
         let previous = MachineHealth(reachable: true)
         let current = MachineHealth(reachable: false)
         let first = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: previous, current: current, disks: [], threshold: 90,
+            machineName: "studio", previous: previous, current: current, disks: [], threshold: 90,
             notifyDown: true, notifyDisk: true)
-        #expect(first == [.unreachable(machine: "Tuf")])
+        #expect(first == [.unreachable(machine: "studio")])
 
         let repeated = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: current, current: current, disks: [], threshold: 90,
+            machineName: "studio", previous: current, current: current, disks: [], threshold: 90,
             notifyDown: true, notifyDisk: true)
         #expect(repeated.isEmpty)
     }
 
     @Test func notifiesOnRecovery() {
         let alerts = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: MachineHealth(reachable: false),
+            machineName: "studio", previous: MachineHealth(reachable: false),
             current: MachineHealth(reachable: true), disks: [], threshold: 90, notifyDown: true,
             notifyDisk: true)
-        #expect(alerts == [.recovered(machine: "Tuf")])
+        #expect(alerts == [.recovered(machine: "studio")])
     }
 
     @Test func notifiesOncePerNewlyFullDisk() {
         let previous = MachineHealth(reachable: true, fullMounts: [])
         let current = MachineHealth(reachable: true, fullMounts: ["/"])
         let alerts = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: previous, current: current, disks: disks, threshold: 90,
+            machineName: "studio", previous: previous, current: current, disks: disks,
+            threshold: 90,
             notifyDown: true, notifyDisk: true)
-        #expect(alerts == [.diskFull(machine: "Tuf", mount: "/", percent: 95)])
+        #expect(alerts == [.diskFull(machine: "studio", mount: "/", percent: 95)])
 
         let repeated = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: current, current: current, disks: disks, threshold: 90,
+            machineName: "studio", previous: current, current: current, disks: disks, threshold: 90,
             notifyDown: true, notifyDisk: true)
         #expect(repeated.isEmpty)
     }
 
     @Test func respectsDisabledToggles() {
         let alerts = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: MachineHealth(reachable: true),
+            machineName: "studio", previous: MachineHealth(reachable: true),
             current: MachineHealth(reachable: false), disks: disks, threshold: 90,
             notifyDown: false, notifyDisk: false)
         #expect(alerts.isEmpty)
@@ -105,7 +106,7 @@ import Testing
 
     @Test func skipsDiskAlertsWhileUnreachable() {
         let alerts = MachineMonitorLogic.alerts(
-            machineName: "Tuf", previous: MachineHealth(reachable: true, fullMounts: []),
+            machineName: "studio", previous: MachineHealth(reachable: true, fullMounts: []),
             current: MachineHealth(reachable: false, fullMounts: ["/"]), disks: disks,
             threshold: 90, notifyDown: false, notifyDisk: true)
         #expect(alerts.isEmpty)
@@ -113,16 +114,16 @@ import Testing
 
     @Test func alertIdentifiersAreStablePerConcern() {
         #expect(
-            MachineAlert.unreachable(machine: "Tuf").identifier
-                == MachineAlert.recovered(machine: "Tuf").identifier)
+            MachineAlert.unreachable(machine: "studio").identifier
+                == MachineAlert.recovered(machine: "studio").identifier)
         #expect(
-            MachineAlert.diskFull(machine: "Tuf", mount: "/", percent: 95).identifier
-                != MachineAlert.diskFull(machine: "Tuf", mount: "/home", percent: 95).identifier)
+            MachineAlert.diskFull(machine: "studio", mount: "/", percent: 95).identifier
+                != MachineAlert.diskFull(machine: "studio", mount: "/home", percent: 95).identifier)
     }
 
     @Test func alertCopyIsUserFacing() {
-        let alert = MachineAlert.diskFull(machine: "Tuf", mount: "/", percent: 94.6)
-        #expect(alert.title == "Tuf is running out of space")
+        let alert = MachineAlert.diskFull(machine: "studio", mount: "/", percent: 94.6)
+        #expect(alert.title == "studio is running out of space")
         #expect(alert.body == "/ is 95% full.")
     }
 }

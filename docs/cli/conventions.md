@@ -204,11 +204,11 @@ logs`, which stream another program's output for as long as it runs. An
 clamped to `0` through `4`:
 
 ```
-$ ed tuf test -f /etc/nope
+$ ed studio test -f /etc/nope
 $ echo $?
 1
 
-$ ed tuf sh -c 'exit 42'
+$ ed studio sh -c 'exit 42'
 $ echo $?
 42
 ```
@@ -239,10 +239,10 @@ many spaces as the label is wide. So continuation lines sit under `error: ` at
 seven spaces and under `hint: ` at six:
 
 ```
-$ ed machines power reboot tuf --yes
-error: Asus TUF 7 did not reboot: sudo: a password is required
+$ ed machines power reboot studio --yes
+error: Studio Mac did not reboot: sudo: a password is required
        Call to Reboot failed: Interactive authentication required.
-hint: give this account passwordless sudo for systemctl on Asus TUF 7
+hint: save the sudo password for Studio Mac with ed machines edit
 ```
 
 `labelled` also tidies what it is given: every line is trimmed of surrounding
@@ -330,8 +330,8 @@ and `--interval fast` fail the same way and produce the same code.
 remote command keeps its own flags:
 
 ```
-ed machines exec tuf -- ls -la /srv
-ed tuf ls -la /srv
+ed machines exec studio -- ls -la /srv
+ed studio ls -la /srv
 ```
 
 `--help` is generated for every command, prints to stdout and exits 0.

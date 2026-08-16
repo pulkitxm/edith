@@ -26,7 +26,7 @@ onwards is the command. Use `--` to make that boundary explicit:
 
 ```
 $ ed machines broadcast -- uptime
-== Asus TUF 7 ==
+== Studio Mac ==
  22:14:03 up 6 days,  3:41,  2 users,  load average: 0.42, 0.51, 0.48
 == Home Box ==
  22:14:05 up 19:02,  1 user,  load average: 0.08, 0.03, 0.01
@@ -36,8 +36,8 @@ A machine whose command failed still shows its output, and the exit note goes to
 stderr:
 
 ```
-$ ed machines broadcast --only tuf,box -- docker ps -q
-== Asus TUF 7 ==
+$ ed machines broadcast --only studio,box -- docker ps -q
+== Studio Mac ==
 b556d7fef23e
 f8968a8b81e5
 == Home Box ==
@@ -52,7 +52,7 @@ A top-level array, one object per machine, in the order they were tried:
 ```json
 [
   {
-    "machine": "Asus TUF 7",
+    "machine": "Studio Mac",
     "output": "b556d7fef23e\nf8968a8b81e5",
     "status": 0
   },
@@ -83,8 +83,8 @@ blocks stream as each machine finishes.
 
 ```
 ed machines broadcast -- uptime
-ed machines broadcast --only tuf,box -- df -h /
-ed machines broadcast --json -- 'systemctl is-system-running' | jq -r '.[] | "\(.machine) \(.output)"'
+ed machines broadcast --only studio,box -- df -h /
+ed machines broadcast --json -- 'launchctl print system' | jq -r '.[] | "\(.machine) \(.output)"'
 ed machines broadcast -- 'apt list --upgradable 2>/dev/null | wc -l'
 ```
 

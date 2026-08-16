@@ -1,7 +1,7 @@
 # Remote machines
 
 Machines turns computers reachable over SSH into one fleet inside Edith. The local
-Mac is always present. Add Linux, macOS or other SSH hosts to monitor them, browse
+Mac is always present. Add other Macs over SSH to monitor them, browse
 their files, run terminals and containers, and collect agent usage without juggling
 separate connections.
 
@@ -12,8 +12,7 @@ an alias from `~/.ssh/config`. Edith supports SSH-agent authentication, private 
 with optional passphrases, and saved login passwords. Secrets are stored in the
 macOS Keychain, not in the machine registry or exported settings.
 
-An optional sudo password enables operations that require elevation, including
-power actions and thermal profile changes. Commands try passwordless sudo when no
+An optional sudo password enables power actions that require elevation. Commands try passwordless sudo when no
 password is stored. Edith reports a clear refusal when the remote account lacks the
 needed privilege.
 
@@ -21,7 +20,7 @@ needed privilege.
 
 The fleet view summarizes reachability and live resource use. Select a host for:
 
-- CPU and memory history, storage, temperatures, GPU data, fans and uptime;
+- CPU and memory history, storage and uptime;
 - a sortable process list;
 - persistent terminal tabs;
 - file browsing, search, preview, upload, download, copy, move and deletion;
@@ -32,7 +31,7 @@ The fleet view summarizes reachability and live resource use. Select a host for:
 Command-click a machine chip to open it in a separate window. Workspace mode saves
 split-pane layouts that can mix terminals and machine content from different hosts.
 Removing a machine only forgets Edith's connection details, forwards, snippets and
-saved secrets. It does not change files or services on that host.
+saved secrets. It does not change files on that host.
 
 ## Agent usage collection
 
@@ -48,10 +47,6 @@ Docker projects are grouped by their Compose project name. The exact
 `edith-companion` project is labeled Companion, sorted first and marked as managed
 by Edith. Similar names are left alone. Container actions still run on the selected
 host, and removing the host from Edith does not stop or delete its containers.
-
-## Fans
-
-Fan RPM is read-only and appears when the selected host reports it.
 
 ## Power controls
 
