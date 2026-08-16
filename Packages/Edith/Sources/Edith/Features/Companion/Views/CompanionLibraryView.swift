@@ -15,6 +15,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     private(set) var ingesting = false
     private(set) var ingestSummary: String?
     private(set) var indexing = false
+    private(set) var loaded = false
     private(set) var selectedId: String?
     private(set) var detail: CompanionEpisodeDetail?
     private(set) var signals: [CompanionSignal] = []
@@ -31,6 +32,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     func refresh() async {
         do {
             episodes = try await client.episodes(limit: 60)
+            loaded = true
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -284,7 +286,7 @@ struct CompanionLibraryScreen: View {
             if let error = model.error {
                 Text(error)
                     .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.warn)
             }
         }
         .pageContent(compact)
@@ -302,25 +304,30 @@ struct CompanionLibraryScreen: View {
             statTile(value: "\(home.status?.episodes ?? 0)", label: "episodes")
             statTile(value: "\(home.status?.chunks ?? 0)", label: "chunks")
             pendingTile
-            Button {
-                pickAndIngest()
-            } label: {
-                statTile(
-                    value: model.ingesting ? "ingesting…" : (model.ingestSummary ?? "browse…"),
-                    label: model.ingesting ? "hold on" : "add to memory")
+            VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                CompanionButton(
+                    title: "Add to memory…", role: .primary, busy: model.ingesting,
+                    busyTitle: "Ingesting…",
+                    help:
+                        "Pick Markdown notes, voice recordings, or PDFs; "
+                        + "dropping files anywhere works too"
+                ) {
+                    pickAndIngest()
+                }
+                if let summary = model.ingestSummary {
+                    Text(summary)
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                }
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
-            .disabled(model.ingesting)
-            .help(
-                "Pick Markdown notes, voice recordings, or PDFs; dropping files anywhere works too")
         }
     }
 
     private func statTile(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text(value)
-                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+                .font(DashSkin.serif(17, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Text(label.uppercased())
@@ -341,22 +348,21 @@ struct CompanionLibraryScreen: View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text("\(pending)")
-                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
-                .foregroundStyle(pending > 0 ? .orange : DashSkin.ink(dark))
+                .font(DashSkin.serif(17, weight: .semibold))
+                .foregroundStyle(pending > 0 ? DashSkin.warn : DashSkin.ink(dark))
             HStack(spacing: UIScale.pt(5)) {
                 Text("PENDING")
                     .font(.system(size: UIScale.pt(9.5), weight: .medium))
                     .tracking(0.6)
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if pending > 0 {
-                    Button(model.indexing ? "indexing…" : "index now") {
+                    CompanionLinkButton(
+                        title: model.indexing ? "indexing…" : "index now",
+                        disabled: model.indexing,
+                        help: "Embed the pending episodes now"
+                    ) {
                         Task { await model.indexNow() }
                     }
-                    .buttonStyle(.plain)
-                    .font(.system(size: UIScale.pt(9.5), weight: .bold))
-                    .foregroundStyle(DashSkin.accent(dark))
-                    .pointerCursor()
-                    .disabled(model.indexing)
                 }
             }
         }
@@ -366,7 +372,7 @@ struct CompanionLibraryScreen: View {
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(10))
-                .strokeBorder(pending > 0 ? Color.orange.opacity(0.6) : DashSkin.line(dark))
+                .strokeBorder(pending > 0 ? DashSkin.warn.opacity(0.6) : DashSkin.line(dark))
         }
     }
 
@@ -398,10 +404,14 @@ struct CompanionLibraryScreen: View {
                             episodeRow(episode)
                         }
                         if model.episodes.isEmpty {
-                            Text("Nothing ingested yet. Drop files above to give it memory.")
-                                .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                                .padding(.top, UIScale.pt(12))
+                            if !model.loaded, model.error == nil {
+                                ListRowsSkeleton(rows: 6, showsLeadingDot: false, dark: dark)
+                            } else {
+                                Text("Nothing ingested yet. Drop files above to give it memory.")
+                                    .font(.system(size: UIScale.pt(12)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                    .padding(.top, UIScale.pt(12))
+                            }
                         }
                     } else {
                         Text("Nothing in the memory matches that.")

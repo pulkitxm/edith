@@ -312,11 +312,11 @@ struct CompanionCaptureScreen: View {
             .font(.system(size: UIScale.pt(11.5)))
             .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: 0)
-            CompanionAsyncButton(
-                model.draining ? "Sending…" : "Send now",
-                disabled: model.draining || !home.reachable
+            CompanionButton(
+                title: "Send now", busy: model.draining, busyTitle: "Sending…",
+                disabled: !home.reachable
             ) {
-                await model.drainOutbox()
+                Task { await model.drainOutbox() }
             }
         }
         .padding(.horizontal, UIScale.pt(12))
@@ -331,7 +331,7 @@ struct CompanionCaptureScreen: View {
                 Spacer(minLength: 0)
                 recordButton
                 Text(timeLabel)
-                    .font(DashSkin.mono(UIScale.pt(13)))
+                    .font(DashSkin.mono(13))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 levelMeter
                 transcriptView
@@ -353,12 +353,12 @@ struct CompanionCaptureScreen: View {
                 if let outcome = model.outcome {
                     Text(outcome)
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(DashSkin.ok)
                 }
                 if let error = model.error {
                     Text(error)
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DashSkin.warn)
                         .multilineTextAlignment(.center)
                 }
                 Spacer(minLength: 0)

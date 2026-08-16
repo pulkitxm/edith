@@ -12,6 +12,9 @@ final class CompanionBackendModel: CompanionRefreshable {
     private(set) var busy: String?
     private(set) var error: String?
     private(set) var lastLog = ""
+    private(set) var configStatus: String?
+    private(set) var configStatusIsError = false
+    private(set) var secretsStatus: String?
     var selectedHostID: UUID?
     var config = CompanionStackConfig()
     var secrets = CompanionSecretValues()
@@ -57,9 +60,34 @@ final class CompanionBackendModel: CompanionRefreshable {
     func deploy() async {
         guard let host = selectedHost else { return }
         await perform("Setting up on \(host.name)") {
-            let deployment = try await CompanionStackControl.deploy(host: host, config: self.config)
+            let deployment = try await CompanionStackControl.deploy(
+                host: host, config: self.config,
+                log: { line in
+                    Task { @MainActor in self.lastLog += line + "\n" }
+                })
             self.deployment = deployment
         }
+    }
+
+    func destroy() async {
+        guard let deployment else { return }
+        await perform("Destroying") {
+            self.lastLog = try await CompanionStackControl.run(
+                CompanionStackCommands.down(
+                    directory: deployment.directory, tier: deployment.resolvedTier,
+                    keepData: false),
+                on: deployment, timeout: 600)
+            CompanionDeploymentStore.clear()
+            self.deployment = nil
+            self.services = []
+        }
+    }
+
+    func forgetDeployment() {
+        CompanionDeploymentStore.clear()
+        deployment = nil
+        services = []
+        error = nil
     }
 
     func start() async {
@@ -93,19 +121,37 @@ final class CompanionBackendModel: CompanionRefreshable {
     func saveConfig() {
         let problems = config.validated()
         guard problems.isEmpty else {
-            error = problems.joined(separator: "; ")
+            configStatus = problems.joined(separator: "; ")
+            configStatusIsError = true
             return
         }
         CompanionConfigStore.save(config)
-        error = nil
+        configStatus = "Saved. The stack picks this up next time it starts."
+        configStatusIsError = false
     }
 
     func saveSecrets() {
-        CompanionSecrets.set(secrets.anthropicKey, kind: .anthropicKey)
-        CompanionSecrets.set(secrets.githubToken, kind: .githubToken)
-        CompanionSecrets.set(secrets.notionToken, kind: .notionToken)
+        var written = 0
+        for (value, kind) in [
+            (secrets.anthropicKey, CompanionSecretKind.anthropicKey),
+            (secrets.githubToken, .githubToken),
+            (secrets.notionToken, .notionToken),
+        ] {
+            let trimmed = value.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            CompanionSecrets.set(trimmed, kind: kind)
+            written += 1
+        }
         secrets = CompanionSecretValues()
-        error = nil
+        secretsStatus =
+            written == 0
+            ? "Nothing to save; paste a key first or use Clear to remove one."
+            : "Saved \(written) value(s) to the Keychain."
+    }
+
+    func clearSecret(_ kind: CompanionSecretKind) {
+        CompanionSecrets.set("", kind: kind)
+        secretsStatus = "Cleared."
     }
 
     func secretHint(_ kind: CompanionSecretKind) -> String {

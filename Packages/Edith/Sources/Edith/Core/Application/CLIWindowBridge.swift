@@ -119,21 +119,14 @@ enum CLIWindowBridge {
 
     private static func render(_ window: NSWindow) -> Data? {
         window.displayIfNeeded()
-        guard let frameView = window.contentView?.superview, let layer = frameView.layer else {
-            return nil
-        }
-        let scale = window.backingScaleFactor
-        let size = frameView.bounds.size
-        guard size.width > 1, size.height > 1,
-            let ctx = CGContext(
-                data: nil, width: Int(size.width * scale), height: Int(size.height * scale),
-                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+        guard let contentView = window.contentView else { return nil }
+        let frameView = contentView.superview ?? contentView
+        let bounds = frameView.bounds
+        guard bounds.width > 40, bounds.height > 40,
+            let bitmap = frameView.bitmapImageRepForCachingDisplay(in: bounds)
         else { return nil }
-        ctx.scaleBy(x: scale, y: scale)
-        layer.render(in: ctx)
-        guard let cg = ctx.makeImage() else { return nil }
-        return NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
+        frameView.cacheDisplay(in: bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     private static func slug(_ title: String) -> String {

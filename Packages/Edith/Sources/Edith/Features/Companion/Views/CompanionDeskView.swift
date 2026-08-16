@@ -13,6 +13,7 @@ final class CompanionDeskModel: CompanionRefreshable {
     private(set) var hypotheses: [CompanionHypothesis] = []
     private(set) var lastResolution: String?
     private(set) var busy = false
+    private(set) var loaded = false
     private(set) var error: String?
     var draft = ""
 
@@ -37,6 +38,7 @@ final class CompanionDeskModel: CompanionRefreshable {
             hypotheses = try await client.hypotheses(limit: 8)
             let queued = try await client.questions(limit: 5)
             budget = (queued.askedToday, queued.dailyBudget)
+            loaded = true
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -130,21 +132,34 @@ struct CompanionDeskScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                if let error = model.error {
-                    Text(error)
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.orange)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+                    if let error = model.error {
+                        Text(error)
+                            .font(.system(size: UIScale.pt(11.5)))
+                            .foregroundStyle(DashSkin.warn)
+                    }
+                    if !model.loaded, model.error == nil {
+                        CompanionGrid(width: proxy.size.width) {
+                            CompanionCardSkeleton(rows: 2, dark: dark)
+                        } secondary: {
+                            CompanionCardSkeleton(rows: 2, dark: dark)
+                        } full: {
+                        }
+                    } else {
+                        questionCard
+                        CompanionGrid(width: proxy.size.width) {
+                            beliefsCard
+                        } secondary: {
+                            predictionsCard
+                        } full: {
+                            discrepanciesCard
+                        }
+                    }
                 }
-                questionCard
-                HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    beliefsCard
-                    predictionsCard
-                }
-                discrepanciesCard
+                .pageContent(compact)
             }
-            .pageContent(compact)
         }
         .task(id: generation) { if requestsEnabled { await model.refresh() } }
         .sheet(item: $overrideTarget) { discrepancy in
@@ -157,38 +172,35 @@ struct CompanionDeskScreen: View {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 if let question = model.question {
                     Text(question.question)
-                        .font(DashSkin.serif(UIScale.pt(16), weight: .medium))
+                        .font(DashSkin.serif(16, weight: .medium))
                         .foregroundStyle(DashSkin.ink(dark))
                     Text(question.motive)
                         .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                    TextField("your answer", text: $model.draft, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(2...6)
-                        .font(.system(size: UIScale.pt(12.5)))
-                        .padding(UIScale.pt(8))
-                        .background(DashSkin.paper2(dark))
-                        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                    AnswerField(placeholder: "your answer", text: $model.draft) {
+                        Task { await model.answer() }
+                    }
                     HStack(spacing: UIScale.pt(8)) {
-                        CompanionAsyncButton("Answer", filled: true, disabled: model.busy) {
-                            await model.answer()
-                        }
-                        CompanionAsyncButton("Not now", disabled: model.busy) {
-                            await model.skip()
-                        }
-                        CompanionAsyncButton(
-                            "Never ask about \(question.topic)",
-                            disabled: model.busy
+                        CompanionButton(
+                            title: "Answer", role: .primary, busy: model.busy
                         ) {
-                            await model.mute()
+                            Task { await model.answer() }
+                        }
+                        CompanionButton(title: "Not now", disabled: model.busy) {
+                            Task { await model.skip() }
+                        }
+                        CompanionButton(
+                            title: "Never ask about \(question.topic)", disabled: model.busy
+                        ) {
+                            Task { await model.mute() }
                         }
                     }
                 } else if let resolution = model.lastResolution {
                     Text(resolution)
                         .font(.system(size: UIScale.pt(13)))
                         .foregroundStyle(DashSkin.ink(dark))
-                    CompanionAsyncButton("Anything else?", disabled: model.busy) {
-                        await model.askNext()
+                    CompanionButton(title: "Anything else?", disabled: model.busy) {
+                        Task { await model.askNext() }
                     }
                 } else {
                     Text(
@@ -198,8 +210,8 @@ struct CompanionDeskScreen: View {
                     )
                     .font(.system(size: UIScale.pt(12.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    CompanionAsyncButton("What do you want to know?", disabled: model.busy) {
-                        await model.askNext()
+                    CompanionButton(title: "What do you want to know?", disabled: model.busy) {
+                        Task { await model.askNext() }
                     }
                 }
                 Text("\(model.budget.asked) of \(model.budget.total) asked today")
@@ -302,27 +314,25 @@ struct CompanionDeskScreen: View {
     private func overrideSheet(_ discrepancy: CompanionDiscrepancy) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text("What actually happened?")
-                .font(DashSkin.serif(UIScale.pt(16), weight: .semibold))
+                .font(DashSkin.serif(16, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(discrepancy.claim)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-            TextField("was pairing, not in git", text: $overrideNote, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(2...5)
-                .font(.system(size: UIScale.pt(12.5)))
-                .padding(UIScale.pt(8))
-                .background(DashSkin.paper2(dark))
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
-            HStack(spacing: UIScale.pt(8)) {
-                CompanionAsyncButton("Save", filled: true, disabled: model.busy) {
+            AnswerField(placeholder: "was pairing, not in git", text: $overrideNote) {
+                Task {
                     await model.markReal(discrepancy, note: overrideNote)
                     overrideTarget = nil
                 }
-                Button("Cancel") { overrideTarget = nil }
-                    .buttonStyle(.plain)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            HStack(spacing: UIScale.pt(8)) {
+                CompanionButton(title: "Save", role: .primary, busy: model.busy) {
+                    Task {
+                        await model.markReal(discrepancy, note: overrideNote)
+                        overrideTarget = nil
+                    }
+                }
+                CompanionButton(title: "Cancel") { overrideTarget = nil }
                     .pointerCursor()
             }
         }

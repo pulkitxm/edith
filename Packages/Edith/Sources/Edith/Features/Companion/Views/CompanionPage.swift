@@ -75,6 +75,8 @@ struct CompanionPage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
+    @State private var refreshTick = 0
+    @State private var setupModel: CompanionSetupModel?
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
@@ -87,7 +89,10 @@ struct CompanionPage: View {
             screens
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(pageBackground)
+        .sheet(item: $setupModel) { model in
+            CompanionSetupSheet(model: model, home: home)
+        }
         .onDrop(of: [.fileURL], isTargeted: $library.dropTargeted) { providers in
             Task {
                 let urls = await CompanionDrop.urls(from: providers)
@@ -101,37 +106,77 @@ struct CompanionPage: View {
         .task {
             guard requestsEnabled else { return }
             var first = true
+            var lastTunnelAttempt = Date.distantPast
             while !Task.isCancelled {
                 await home.refresh()
+                if !home.reachable, let deployment = CompanionDeploymentStore.load(),
+                    deployment.machineID != nil,
+                    Date().timeIntervalSince(lastTunnelAttempt) > 60
+                {
+                    lastTunnelAttempt = Date()
+                    if await CompanionTunnel.ensure(deployment) {
+                        await home.refresh()
+                    }
+                }
                 if first {
                     first = false
-                    if !home.reachable { select(.setup) }
+                    if CompanionDeploymentStore.load() == nil, !home.reachable {
+                        openSetup()
+                    } else if !home.reachable {
+                        select(.setup)
+                    }
                 }
                 try? await Task.sleep(for: .seconds(20))
             }
         }
     }
 
+    private var pageBackground: some View {
+        DashSkin.paper(dark)
+            .overlay(alignment: .topTrailing) {
+                RadialGradient(
+                    colors: [DashSkin.accent(dark).opacity(0.08), .clear], center: .topTrailing,
+                    startRadius: 0, endRadius: 620
+                )
+                .ignoresSafeArea(edges: .vertical)
+            }
+            .ignoresSafeArea(edges: .vertical)
+    }
+
     private var header: some View {
         PageHeader(
             "Companion",
             trailing: {
-                Button {
-                    select(.setup)
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Circle()
-                            .fill(healthTint)
-                            .frame(width: UIScale.pt(8), height: UIScale.pt(8))
-                        Text(home.state.label)
-                            .font(.system(size: UIScale.pt(11.5)))
+                HStack(spacing: UIScale.pt(10)) {
+                    Button {
+                        refreshTick += 1
+                        Task { await home.refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
                             .foregroundStyle(DashSkin.inkFaint(dark))
+                            .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help("Refresh this screen")
+                    Button {
+                        select(.setup)
+                    } label: {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Circle()
+                                .fill(healthTint)
+                                .frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                            Text(home.state.label)
+                                .font(.system(size: UIScale.pt(11.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help(healthHelp)
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
-                .help(healthHelp)
             },
             accessory: {
                 if let status = home.status {
@@ -150,9 +195,9 @@ struct CompanionPage: View {
     private var healthTint: Color {
         switch home.state {
         case .unreachable: DashSkin.inkFaint(dark)
-        case .blocked: .orange
-        case .degraded: .yellow
-        case .ready: .green
+        case .blocked: DashSkin.warn
+        case .degraded: DashSkin.gold
+        case .ready: DashSkin.ok
         }
     }
 
@@ -213,7 +258,7 @@ struct CompanionPage: View {
                 dropOverlay
             }
         }
-        .environment(\.companionGeneration, home.generation)
+        .environment(\.companionGeneration, home.generation &+ refreshTick)
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
             value: library.dropTargeted)
@@ -231,7 +276,7 @@ struct CompanionPage: View {
                     .font(.system(size: UIScale.pt(26)))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Drop to remember")
-                    .font(DashSkin.serif(UIScale.pt(20), weight: .semibold))
+                    .font(DashSkin.serif(20, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("Notes, recordings, photos, video, PDFs")
                     .font(.system(size: UIScale.pt(12)))
@@ -288,7 +333,8 @@ struct CompanionPage: View {
                 })
         case .capture: CompanionCaptureScreen(model: capture, home: home)
         case .desk: CompanionDeskScreen(model: desk)
-        case .setup: CompanionBackendScreen(model: backend)
+        case .setup:
+            CompanionBackendScreen(model: backend, openSetup: { openSetup() })
         case .library: CompanionLibraryScreen(model: library, home: home)
         case .mind:
             CompanionMindScreen(
@@ -301,7 +347,18 @@ struct CompanionPage: View {
         }
     }
 
+    private func openSetup() {
+        let model = CompanionSetupModel(onFinish: {
+            setupModel = nil
+            refreshTick += 1
+            Task { await home.refresh() }
+        })
+        model.begin(home: home, reasonerConfigured: reason.current?.configured == true)
+        setupModel = model
+    }
+
     private func select(_ item: CompanionTab) {
+        if item.rawValue != tabRaw { refreshTick += 1 }
         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
             tabRaw = item.rawValue
         }

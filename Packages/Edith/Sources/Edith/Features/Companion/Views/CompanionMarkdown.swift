@@ -109,7 +109,7 @@ struct MarkdownBody: View {
             Text(inline(title))
                 .font(
                     DashSkin.serif(
-                        UIScale.pt(level == 1 ? size + 4.5 : level == 2 ? size + 2.5 : size + 1),
+                        level == 1 ? size + 4.5 : level == 2 ? size + 2.5 : size + 1,
                         weight: .semibold)
                 )
                 .foregroundStyle(DashSkin.ink(dark))
@@ -130,7 +130,7 @@ struct MarkdownBody: View {
             }
         case let .code(source):
             Text(source)
-                .font(DashSkin.mono(UIScale.pt(size - 1.5)))
+                .font(DashSkin.mono(size - 1.5))
                 .foregroundStyle(bodyColor)
                 .textSelection(.enabled)
                 .padding(UIScale.pt(8))

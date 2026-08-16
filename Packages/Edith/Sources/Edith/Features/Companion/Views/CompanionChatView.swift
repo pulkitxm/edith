@@ -11,6 +11,14 @@ final class CompanionChatModel {
         var content: String
         var citations: [CompanionAskCitation]
         var streaming: Bool
+        var stopped = false
+        var model: String?
+        var createdAt: String?
+    }
+
+    struct ChatFailure: Equatable {
+        let message: String
+        let retryText: String?
     }
 
     private(set) var conversations: [CompanionConversation] = []
@@ -19,13 +27,16 @@ final class CompanionChatModel {
     var draft = ""
     private(set) var streaming = false
     private(set) var model: String?
-    private(set) var error: String?
+    private(set) var failure: ChatFailure?
     private(set) var loaded = false
+    private(set) var loadError: String?
     private(set) var personas: [CompanionPersona] = []
     var persona: String?
     private(set) var council: CompanionCouncil?
     private(set) var councilRunning = false
     private(set) var councilQuestion: String?
+    private(set) var focusTick = 0
+    private var streamTask: Task<Void, Never>?
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -35,23 +46,32 @@ final class CompanionChatModel {
         personas = (try? await client.personas()) ?? []
     }
 
+    var councilSubject: String? {
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        return messages.last(where: { $0.role == "user" })?.content
+    }
+
     func askCouncil() async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !councilRunning, !streaming else { return }
-        guard !text.isEmpty else {
-            error = "Type the question first, then ask for a second opinion."
+        guard let question = councilSubject else {
+            failure = ChatFailure(
+                message: "Type a question first, then ask for a second opinion.",
+                retryText: nil)
             return
         }
         councilRunning = true
-        councilQuestion = text
+        councilQuestion = question
         defer { councilRunning = false }
         do {
-            let outcome = try await client.council(question: text, personas: [])
+            let outcome = try await client.council(question: question, personas: [])
             council = outcome
-            draft = ""
-            error = nil
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines) == question {
+                draft = ""
+            }
+            failure = nil
         } catch {
-            self.error = error.localizedDescription
+            failure = ChatFailure(message: error.localizedDescription, retryText: nil)
             councilQuestion = nil
         }
     }
@@ -65,8 +85,9 @@ final class CompanionChatModel {
         do {
             conversations = try await client.conversations(limit: 50)
             loaded = true
+            loadError = nil
         } catch {
-            if !loaded { self.error = error.localizedDescription }
+            if !loaded { loadError = error.localizedDescription }
         }
     }
 
@@ -77,11 +98,13 @@ final class CompanionChatModel {
             messages = detail.messages.map {
                 DisplayMessage(
                     id: $0.id, role: $0.role, content: $0.content,
-                    citations: $0.citations ?? [], streaming: false)
+                    citations: $0.citations ?? [], streaming: false,
+                    model: $0.model, createdAt: $0.createdAt)
             }
-            error = nil
+            failure = nil
+            focusTick += 1
         } catch {
-            self.error = error.localizedDescription
+            failure = ChatFailure(message: error.localizedDescription, retryText: nil)
         }
     }
 
@@ -89,58 +112,129 @@ final class CompanionChatModel {
         guard !streaming else { return }
         activeConversationId = nil
         messages = []
+        failure = nil
+        focusTick += 1
     }
 
     func delete(_ id: String) async {
-        _ = try? await client.deleteConversation(id: id)
+        do {
+            _ = try await client.deleteConversation(id: id)
+        } catch {
+            failure = ChatFailure(message: error.localizedDescription, retryText: nil)
+        }
         if activeConversationId == id { newChat() }
         await loadConversations()
     }
 
-    func send() async {
+    func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !streaming else { return }
         draft = ""
+        failure = nil
         streaming = true
-        error = nil
-        defer { streaming = false }
+        let userId = "local-\(UUID().uuidString)"
         messages.append(
             DisplayMessage(
-                id: "local-\(UUID().uuidString)", role: "user", content: text,
-                citations: [], streaming: false))
+                id: userId, role: "user", content: text, citations: [], streaming: false))
         let replyId = "reply-\(UUID().uuidString)"
         messages.append(
             DisplayMessage(
-                id: replyId, role: "assistant", content: "", citations: [], streaming: true))
+                id: replyId, role: "assistant", content: "", citations: [], streaming: true,
+                model: model))
+        streamTask = Task {
+            await stream(text: text, userId: userId, replyId: replyId)
+        }
+    }
+
+    func retry() {
+        guard let failure, let text = failure.retryText else { return }
+        draft = text
+        self.failure = nil
+        send()
+    }
+
+    func stop() {
+        streamTask?.cancel()
+    }
+
+    private func stream(text: String, userId: String, replyId: String) async {
+        var failed: String?
         do {
+            var buffer = ""
+            var lastFlush = ContinuousClock.now
             for try await event in client.chat(
                 message: text, conversationId: activeConversationId, persona: persona)
             {
+                if Task.isCancelled { break }
                 switch event {
                 case let .meta(conversationId, model):
                     activeConversationId = conversationId
                     self.model = model
+                    update(replyId) { $0.model = model }
                 case let .delta(delta):
-                    update(replyId) { $0.content += delta }
+                    buffer += delta
+                    let now = ContinuousClock.now
+                    if lastFlush.duration(to: now) > .milliseconds(60) {
+                        let chunk = buffer
+                        buffer = ""
+                        lastFlush = now
+                        update(replyId) { $0.content += chunk }
+                    }
                 case let .citations(citations):
                     update(replyId) { $0.citations = citations }
                 case .done:
-                    update(replyId) { $0.streaming = false }
+                    break
                 case let .failure(message):
-                    error = message
-                    update(replyId) { $0.streaming = false }
+                    failed = message
                 }
             }
+            if !buffer.isEmpty {
+                let chunk = buffer
+                update(replyId) { $0.content += chunk }
+            }
+        } catch is CancellationError {
         } catch {
-            self.error = error.localizedDescription
+            failed = friendlyChatError(error)
         }
-        update(replyId) { $0.streaming = false }
-        if let index = messages.firstIndex(where: { $0.id == replyId }),
-            messages[index].content.isEmpty
-        {
-            messages.remove(at: index)
+        let cancelled = Task.isCancelled
+        streaming = false
+        streamTask = nil
+        update(replyId) {
+            $0.streaming = false
+            $0.stopped = cancelled
+        }
+        let empty = messages.first(where: { $0.id == replyId })?.content.isEmpty ?? true
+        if empty {
+            messages.removeAll { $0.id == replyId }
+            if let failed {
+                messages.removeAll { $0.id == userId }
+                draft = text
+                failure = ChatFailure(message: failed, retryText: text)
+                focusTick += 1
+            } else if cancelled {
+                messages.removeAll { $0.id == userId }
+                draft = text
+                focusTick += 1
+            }
+        } else if let failed {
+            failure = ChatFailure(message: failed, retryText: nil)
         }
         await loadConversations()
+    }
+
+    private func friendlyChatError(_ error: Error) -> String {
+        if let clientError = error as? CompanionClientError {
+            switch clientError {
+            case let .badResponse(status, detail) where status == 412:
+                return detail.isEmpty
+                    ? "No reasoning provider is configured; set one in Settings." : detail
+            case let .badResponse(status, detail):
+                return detail.isEmpty ? "The companion answered HTTP \(status)." : detail
+            case .unreachable:
+                return "The companion is not reachable right now."
+            }
+        }
+        return error.localizedDescription
     }
 
     private func update(_ id: String, _ change: (inout DisplayMessage) -> Void) {
@@ -158,10 +252,11 @@ struct CompanionChatScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
-    @State private var caretDim = false
     @FocusState private var composerFocused: Bool
+    @State private var anchored = true
 
     private var dark: Bool { scheme == .dark }
+    private var columnWidth: CGFloat { UIScale.pt(728) }
 
     var body: some View {
         HStack(spacing: UIScale.pt(0)) {
@@ -177,6 +272,8 @@ struct CompanionChatScreen: View {
                 await model.loadPersonas()
             }
         }
+        .onAppear { composerFocused = true }
+        .onChange(of: model.focusTick) { composerFocused = true }
     }
 
     private var rail: some View {
@@ -190,7 +287,9 @@ struct CompanionChatScreen: View {
                     Text("New chat")
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
                 }
-                .foregroundStyle(DashSkin.accent(dark))
+                .foregroundStyle(
+                    model.streaming ? DashSkin.inkFaint(dark) : DashSkin.accent(dark)
+                )
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, UIScale.pt(7))
                 .overlay {
@@ -201,22 +300,79 @@ struct CompanionChatScreen: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
+            .disabled(model.streaming)
+            .keyboardShortcut("n", modifiers: .command)
+            .help("Start a fresh conversation (⌘N)")
             ScrollView {
-                VStack(spacing: UIScale.pt(4)) {
-                    ForEach(model.conversations) { conversation in
-                        ConversationRow(
-                            conversation: conversation,
-                            active: conversation.id == model.activeConversationId,
-                            dark: dark,
-                            open: { Task { await model.open(conversation.id) } },
-                            delete: { Task { await model.delete(conversation.id) } })
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    if !model.loaded, model.loadError == nil {
+                        ListRowsSkeleton(rows: 5, showsLeadingDot: false, dark: dark)
+                    } else if model.conversations.isEmpty {
+                        Text("Nothing yet. The first chat starts the record.")
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .padding(.horizontal, UIScale.pt(10))
+                            .padding(.top, UIScale.pt(8))
+                    } else {
+                        ForEach(bucketed, id: \.label) { bucket in
+                            Text(bucket.label.uppercased())
+                                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                                .tracking(UIScale.pt(0.8))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .padding(.horizontal, UIScale.pt(10))
+                                .padding(.top, UIScale.pt(10))
+                            ForEach(bucket.items) { conversation in
+                                ConversationRow(
+                                    conversation: conversation,
+                                    active: conversation.id == model.activeConversationId,
+                                    dark: dark,
+                                    open: { Task { await model.open(conversation.id) } },
+                                    delete: { Task { await model.delete(conversation.id) } })
+                            }
+                        }
                     }
                 }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, UIScale.pt(10))
-        .frame(width: UIScale.pt(210))
+        .frame(width: UIScale.pt(230))
+    }
+
+    private struct Bucket {
+        let label: String
+        let items: [CompanionConversation]
+    }
+
+    private var bucketed: [Bucket] {
+        let calendar = Calendar.current
+        let now = Date()
+        var groups: [(String, [CompanionConversation])] = [
+            ("Today", []), ("Yesterday", []), ("Previous 7 days", []),
+            ("Previous 30 days", []), ("Older", []),
+        ]
+        let parser = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        for conversation in model.conversations {
+            let date =
+                fractional.date(from: conversation.lastActiveAt)
+                ?? parser.date(from: conversation.lastActiveAt) ?? now
+            let index: Int
+            if calendar.isDateInToday(date) {
+                index = 0
+            } else if calendar.isDateInYesterday(date) {
+                index = 1
+            } else if date > calendar.date(byAdding: .day, value: -7, to: now) ?? now {
+                index = 2
+            } else if date > calendar.date(byAdding: .day, value: -30, to: now) ?? now {
+                index = 3
+            } else {
+                index = 4
+            }
+            groups[index].1.append(conversation)
+        }
+        return groups.filter { !$0.1.isEmpty }.map { Bucket(label: $0.0, items: $0.1) }
     }
 
     private var thread: some View {
@@ -224,35 +380,10 @@ struct CompanionChatScreen: View {
             if model.messages.isEmpty {
                 greeting
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                            ForEach(model.messages) { message in
-                                messageView(message)
-                            }
-                            Color.clear.frame(height: UIScale.pt(1)).id("bottom")
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, PageMetrics.gutter(compact))
-                        .padding(.top, UIScale.pt(10))
-                    }
-                    .onChange(of: model.messages.last?.content) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                    .onChange(of: model.messages.count) {
-                        withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
-                            proxy.scrollTo("bottom", anchor: .bottom)
-                        }
-                    }
-                }
+                transcript
             }
-            if let error = model.error {
-                Text(error)
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, PageMetrics.gutter(compact))
-                    .padding(.top, UIScale.pt(6))
+            if let failure = model.failure {
+                failureStrip(failure)
             }
             councilPanel
             personaBar
@@ -260,19 +391,116 @@ struct CompanionChatScreen: View {
         }
     }
 
+    private var transcript: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(0)) {
+                    ForEach(Array(model.messages.enumerated()), id: \.element.id) {
+                        index, message in
+                        if let divider = dayDivider(at: index) {
+                            dayDividerView(divider)
+                        }
+                        messageView(message)
+                            .padding(.top, messageTopPadding(at: index))
+                    }
+                    Color.clear.frame(height: UIScale.pt(1)).id("bottom")
+                }
+                .frame(maxWidth: columnWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, PageMetrics.gutter(compact))
+                .padding(.top, UIScale.pt(10))
+                .padding(.bottom, UIScale.pt(16))
+            }
+            .defaultScrollAnchor(.bottom)
+            .trackScrollAnchor($anchored)
+            .overlay(alignment: .bottom) {
+                if !anchored {
+                    jumpToLatest {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .onChange(of: model.messages.last?.content) {
+                guard anchored else { return }
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onChange(of: model.messages.count) {
+                guard anchored else { return }
+                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    private func jumpToLatest(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: UIScale.pt(5)) {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                Text("Latest")
+                    .font(.system(size: UIScale.pt(11), weight: .medium))
+            }
+            .foregroundStyle(DashSkin.ink(dark))
+            .padding(.horizontal, UIScale.pt(11))
+            .padding(.vertical, UIScale.pt(6))
+            .background(DashSkin.paper2(dark), in: Capsule())
+            .overlay { Capsule().strokeBorder(DashSkin.lineStrong(dark)) }
+            .shadow(color: .black.opacity(0.25), radius: UIScale.pt(8), y: 3)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .padding(.bottom, UIScale.pt(10))
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    private func dayDivider(at index: Int) -> String? {
+        let formatter = CompanionChatDates.self
+        guard let day = formatter.day(model.messages[index].createdAt) else { return nil }
+        guard index > 0 else { return formatter.label(day) }
+        let previous = formatter.day(model.messages[index - 1].createdAt)
+        return previous == day ? nil : formatter.label(day)
+    }
+
+    private func dayDividerView(_ label: String) -> some View {
+        HStack(spacing: UIScale.pt(10)) {
+            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Text(label)
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .fixedSize()
+            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+        }
+        .padding(.vertical, UIScale.pt(16))
+    }
+
+    private func messageTopPadding(at index: Int) -> CGFloat {
+        guard index > 0 else { return 0 }
+        let message = model.messages[index]
+        let previous = model.messages[index - 1]
+        return previous.role == message.role ? UIScale.pt(10) : UIScale.pt(22)
+    }
+
     private var greeting: some View {
         VStack(spacing: UIScale.pt(12)) {
             Spacer()
             Text("What do you want to remember?")
-                .font(DashSkin.serif(UIScale.pt(22), weight: .semibold))
+                .font(DashSkin.serif(24, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
-            HStack(spacing: UIScale.pt(8)) {
+            Text("It answers from your own notes, days and doings.")
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
                 ForEach(
                     ["How was my week?", "What am I avoiding?", "What did I write about last?"],
                     id: \.self
                 ) { suggestion in
                     Button {
                         model.draft = suggestion
+                        model.send()
                     } label: {
                         Text(suggestion)
                             .font(.system(size: UIScale.pt(11.5)))
@@ -288,6 +516,7 @@ struct CompanionChatScreen: View {
                     .pointerCursor()
                 }
             }
+            .frame(maxWidth: UIScale.pt(500))
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -296,37 +525,38 @@ struct CompanionChatScreen: View {
     @ViewBuilder
     private func messageView(_ message: CompanionChatModel.DisplayMessage) -> some View {
         if message.role == "user" {
-            Text(message.content)
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(DashSkin.ink(dark))
-                .textSelection(.enabled)
-                .padding(.horizontal, UIScale.pt(12))
-                .padding(.vertical, UIScale.pt(8))
-                .background(
-                    DashSkin.accent(dark).opacity(0.13),
-                    in: UnevenRoundedRectangle(
-                        topLeadingRadius: UIScale.pt(14), bottomLeadingRadius: UIScale.pt(14),
-                        bottomTrailingRadius: UIScale.pt(4), topTrailingRadius: UIScale.pt(14))
-                )
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            HStack {
+                Spacer(minLength: UIScale.pt(80))
+                Text(message.content)
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .textSelection(.enabled)
+                    .padding(.horizontal, UIScale.pt(13))
+                    .padding(.vertical, UIScale.pt(8))
+                    .background(
+                        DashSkin.accent(dark).opacity(0.13),
+                        in: UnevenRoundedRectangle(
+                            topLeadingRadius: UIScale.pt(14),
+                            bottomLeadingRadius: UIScale.pt(14),
+                            bottomTrailingRadius: UIScale.pt(4),
+                            topTrailingRadius: UIScale.pt(14))
+                    )
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                Text(assistantEyebrow)
+                Text(eyebrow(for: message))
                     .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                    .tracking(1.1)
+                    .tracking(UIScale.pt(1.1))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 MarkdownBody(text: message.content, dark: dark, size: 13, bodyInk: true)
                 if message.streaming {
-                    RoundedRectangle(cornerRadius: UIScale.pt(1))
-                        .fill(DashSkin.accent(dark))
-                        .frame(width: UIScale.pt(7), height: UIScale.pt(14))
-                        .opacity(caretDim ? 0.15 : 1)
-                        .onAppear {
-                            guard !reduceMotion else { return }
-                            withAnimation(.easeInOut(duration: 0.5).repeatForever()) {
-                                caretDim = true
-                            }
-                        }
+                    StreamingCaret(dark: dark, waiting: message.content.isEmpty)
+                }
+                if message.stopped {
+                    Text("stopped")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 if !message.citations.isEmpty {
                     citationChips(message.citations)
@@ -336,8 +566,8 @@ struct CompanionChatScreen: View {
         }
     }
 
-    private var assistantEyebrow: String {
-        let model = model.model.map { " · \($0)" } ?? ""
+    private func eyebrow(for message: CompanionChatModel.DisplayMessage) -> String {
+        let model = (message.model ?? self.model.model).map { " · \($0)" } ?? ""
         return "COMPANION\(model)".uppercased()
     }
 
@@ -351,28 +581,58 @@ struct CompanionChatScreen: View {
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
+    private func failureStrip(_ failure: CompanionChatModel.ChatFailure) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.warn)
+            Text(failure.message)
+                .font(.system(size: UIScale.pt(11.5)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            if failure.retryText != nil {
+                CompanionButton(title: "Retry", role: .primary) {
+                    model.retry()
+                }
+            }
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(8))
+        .background(
+            DashSkin.warn.opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(10))
+                .strokeBorder(DashSkin.warn.opacity(0.35))
+        }
+        .frame(maxWidth: columnWidth)
+        .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(.top, UIScale.pt(6))
+    }
+
     private var personaBar: some View {
         HStack(spacing: UIScale.pt(6)) {
-            personaChip(id: nil, label: "Default")
-            ForEach(model.personas, id: \.id) { persona in
-                personaChip(id: persona.id, label: persona.label)
+            WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(6)) {
+                personaChip(id: nil, label: "Default")
+                ForEach(model.personas, id: \.id) { persona in
+                    personaChip(id: persona.id, label: persona.label)
+                }
             }
             Spacer(minLength: 0)
-            Button(model.councilRunning ? "Asking three lenses…" : "Second opinion") {
+            CompanionLinkButton(
+                title: model.councilRunning ? "Asking three lenses…" : "Second opinion",
+                disabled: model.councilRunning || model.streaming
+                    || model.councilSubject == nil,
+                help: model.councilRunning
+                    ? "Analyst, coach and skeptic are answering; this takes a minute"
+                    : "Ask analyst, coach and skeptic at once about the typed or last question"
+            ) {
                 Task { await model.askCouncil() }
             }
-            .buttonStyle(.plain)
-            .font(.system(size: UIScale.pt(11.5), weight: .medium))
-            .foregroundStyle(
-                model.councilRunning ? DashSkin.inkFaint(dark) : DashSkin.accent(dark)
-            )
-            .pointerCursor()
-            .disabled(model.councilRunning || model.streaming)
-            .help(
-                model.councilRunning
-                    ? "Analyst, coach and skeptic are answering; this takes a minute"
-                    : "Type a question, then ask analyst, coach and skeptic at once")
         }
+        .frame(maxWidth: columnWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(6))
     }
@@ -390,6 +650,11 @@ struct CompanionChatScreen: View {
                 .background {
                     if selected {
                         Capsule().fill(DashSkin.paper2(dark))
+                    }
+                }
+                .overlay {
+                    if selected {
+                        Capsule().strokeBorder(DashSkin.lineStrong(dark))
                     }
                 }
                 .contentShape(Capsule())
@@ -411,38 +676,43 @@ struct CompanionChatScreen: View {
                 .lineLimit(2)
             }
             .padding(UIScale.pt(12))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: columnWidth, alignment: .leading)
             .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
             .padding(.horizontal, PageMetrics.gutter(compact))
             .padding(.bottom, UIScale.pt(8))
         } else if let council = model.council {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                ForEach(council.answers, id: \.persona) { answer in
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(answer.label)
-                            .font(.system(size: UIScale.pt(12), weight: .semibold))
-                            .foregroundStyle(DashSkin.ink(dark))
-                        Text(answer.answer)
-                            .font(.system(size: UIScale.pt(12.5)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        ForEach(council.answers, id: \.persona) { answer in
+                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                Text(answer.label)
+                                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                                    .foregroundStyle(DashSkin.ink(dark))
+                                Text(answer.answer)
+                                    .font(.system(size: UIScale.pt(12.5)))
+                                    .foregroundStyle(DashSkin.inkSoft(dark))
+                                    .textSelection(.enabled)
+                            }
+                        }
                     }
                 }
+                .frame(maxHeight: UIScale.pt(220))
                 Divider().opacity(0.3)
-                Text("the crux: \(council.crux)")
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                    .foregroundStyle(DashSkin.ink(dark))
+                if !council.crux.isEmpty {
+                    Text("the crux: \(council.crux)")
+                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                        .foregroundStyle(DashSkin.ink(dark))
+                }
                 if !council.cruxQuestion.isEmpty {
                     Text(council.cruxQuestion)
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                Button("Close") { model.dismissCouncil() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.accent(dark))
-                    .pointerCursor()
+                CompanionLinkButton(title: "Close") { model.dismissCouncil() }
             }
             .padding(UIScale.pt(12))
+            .frame(maxWidth: columnWidth, alignment: .leading)
             .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
             .padding(.horizontal, PageMetrics.gutter(compact))
             .padding(.bottom, UIScale.pt(8))
@@ -451,31 +721,17 @@ struct CompanionChatScreen: View {
 
     private var composer: some View {
         HStack(alignment: .center, spacing: UIScale.pt(10)) {
-            Image(systemName: "bubble.left")
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
             TextField("Talk to your memory…", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.plain)
-                .lineLimit(1...6)
+                .lineLimit(1...8)
                 .font(.system(size: UIScale.pt(13.5)))
                 .foregroundStyle(DashSkin.ink(dark))
                 .tint(DashSkin.accent(dark))
                 .focused($composerFocused)
                 .focusEffectDisabled()
-                .onSubmit { Task { await model.send() } }
-            Button {
-                Task { await model.send() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
-                    .foregroundStyle(
-                        model.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.streaming
-                            ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
-            }
-            .buttonStyle(.plain)
-            .pointerCursor()
-            .disabled(model.streaming)
-            .help("Send")
+                .onSubmit { model.send() }
+                .help("Return sends; Option-Return starts a new line")
+            sendOrStop
         }
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(12))
@@ -489,8 +745,101 @@ struct CompanionChatScreen: View {
                     lineWidth: UIScale.pt(composerFocused ? 1.5 : 1))
         }
         .animation(.easeOut(duration: 0.12), value: composerFocused)
+        .frame(maxWidth: columnWidth)
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(12))
+    }
+
+    @ViewBuilder
+    private var sendOrStop: some View {
+        if model.streaming {
+            Button {
+                model.stop()
+            } label: {
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: UIScale.pt(24)))
+                    .foregroundStyle(DashSkin.accent(dark))
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .keyboardShortcut(.escape, modifiers: [])
+            .help("Stop generating (Esc)")
+        } else {
+            Button {
+                model.send()
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: UIScale.pt(24)))
+                    .foregroundStyle(
+                        draftEmpty ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .disabled(draftEmpty)
+            .help("Send (Return)")
+        }
+    }
+
+    private var draftEmpty: Bool {
+        model.draft.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+}
+
+enum CompanionChatDates {
+    static func day(_ iso: String?) -> String? {
+        guard let iso, iso.count >= 10 else { return nil }
+        return String(iso.prefix(10))
+    }
+
+    static func label(_ day: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: day) else { return day }
+        if Calendar.current.isDateInToday(date) { return "Today" }
+        if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
+        let output = DateFormatter()
+        output.dateFormat = "MMMM d"
+        return output.string(from: date)
+    }
+}
+
+private struct StreamingCaret: View {
+    let dark: Bool
+    var waiting = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: UIScale.pt(1))
+            .fill(DashSkin.accent(dark))
+            .frame(width: UIScale.pt(7), height: UIScale.pt(14))
+            .opacity(dim ? 0.15 : 1)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: waiting ? 0.8 : 0.5).repeatForever()) {
+                    dim = true
+                }
+            }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    fileprivate func trackScrollAnchor(_ anchored: Binding<Bool>) -> some View {
+        if #available(macOS 15.0, *) {
+            onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height
+                    >= geometry.contentSize.height - 100
+            } action: { _, isAtBottom in
+                if anchored.wrappedValue != isAtBottom {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        anchored.wrappedValue = isAtBottom
+                    }
+                }
+            }
+        } else {
+            self
+        }
     }
 }
 
@@ -527,7 +876,7 @@ private struct CitationChip: View {
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(citation.title)
-                    .font(DashSkin.serif(UIScale.pt(15), weight: .semibold))
+                    .font(DashSkin.serif(15, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("\(String(citation.occurredAt.prefix(10))) · \(supportLabel)")
                     .font(.system(size: UIScale.pt(10.5)))
@@ -540,7 +889,7 @@ private struct CitationChip: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Button("Open in Library") {
+                CompanionButton(title: "Open in Library") {
                     showing = false
                     open(citation.episodeId)
                 }
@@ -565,8 +914,8 @@ private struct ConversationRow: View {
     @State private var hovering = false
 
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: UIScale.pt(4)) {
+        HStack(spacing: UIScale.pt(4)) {
+            Button(action: open) {
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                     Text(conversation.title.isEmpty ? "Untitled" : conversation.title)
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
@@ -578,28 +927,29 @@ private struct ConversationRow: View {
                     .font(.system(size: UIScale.pt(10)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                Spacer(minLength: 0)
-                if hovering {
-                    Button(action: delete) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: UIScale.pt(9), weight: .bold))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
-                    .help("Delete conversation")
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(6))
-            .background(
-                active || hovering ? DashSkin.accent(dark).opacity(0.13) : .clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .pointerCursor()
+            if hovering {
+                Button(action: delete) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(9), weight: .bold))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointerCursor()
+                .help("Delete conversation")
+            }
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .padding(.horizontal, UIScale.pt(10))
+        .padding(.vertical, UIScale.pt(6))
+        .background(
+            active || hovering ? DashSkin.accent(dark).opacity(0.13) : .clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+        )
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Delete conversation", role: .destructive, action: delete)
@@ -612,7 +962,7 @@ struct FlowChips<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(spacing: spacing) {
+        WrapHStack(spacing: spacing, lineSpacing: spacing) {
             content
         }
     }
