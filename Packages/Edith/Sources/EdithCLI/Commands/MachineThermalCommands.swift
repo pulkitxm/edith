@@ -5,7 +5,7 @@ import Foundation
 struct MachinesThermalCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "thermal",
-        abstract: "Inspect fan speeds and switch the platform thermal profile.",
+        abstract: "Inspect and switch the platform thermal profile.",
         subcommands: [MachinesThermalStatusCommand.self, MachinesThermalSetCommand.self],
         defaultSubcommand: MachinesThermalStatusCommand.self)
 }

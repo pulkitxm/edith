@@ -10,8 +10,9 @@ struct UsageMachinesCommand: AsyncParsableCommand {
             `ed usage machines collect <machine>` runs the collector Edith runs here
             over SSH instead, brings the numbers back and folds them into the same
             usage.json the dashboard reads. The machine's agents arrive as their own
-            sources, named after it, so `ed usage summary` counts the fleet and
-            `--source` still narrows to one agent on one machine.
+            stable `machine:<uuid>:<agent>` sources, so renaming a machine does not
+            split its history. `ed usage summary` counts the fleet and `--source`
+            still narrows to one agent on one machine.
 
             Anything the collector needs and cannot find there (jq, bun, ccusage) is
             installed under ~/.cache/edith on that machine, which is why collecting

@@ -149,7 +149,7 @@ public enum Guide {
         ed machines power wake box              works while it is off
         ed machines services restart box nginx.service
         ed machines kill box 4213 --signal KILL
-        ed machines thermal status box          fans, active profile and choices
+        ed machines thermal status box          active platform profile and choices
         ed machines thermal set box performance --minutes 30
         ```
 

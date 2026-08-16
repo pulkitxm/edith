@@ -477,7 +477,7 @@ public enum CommandTree {
                                 arguments: [.machine]),
                         ]),
                     CommandNode(
-                        "thermal", "Inspect fan speeds and switch the platform thermal profile.",
+                        "thermal", "Inspect and switch the platform thermal profile.",
                         children: [
                             CommandNode(
                                 "status", "Show the active and available thermal profiles.",
