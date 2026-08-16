@@ -49,21 +49,9 @@ Docker projects are grouped by their Compose project name. The exact
 by Edith. Similar names are left alone. Container actions still run on the selected
 host, and removing the host from Edith does not stop or delete its containers.
 
-## Fans and thermal profiles
+## Fans
 
-Fan RPM is read-only. Thermal profile control appears only when a Linux host exposes
-both `/sys/firmware/acpi/platform_profile` and its choices file. Edith offers the
-profiles the kernel reports, rather than assuming names such as balanced or
-performance.
-
-A profile can remain active until changed or automatically revert after 15 minutes,
-30 minutes, 1 hour or 2 hours. Timed changes use `systemd-run` on the host. They need
-systemd and sudo access to the platform profile file. Applying another profile
-cancels the previous timer and starts a new one; an untimed choice cancels rollback.
-
-Thermal profiles affect heat, fan noise, performance and battery life. Use a timed
-change for experiments or short builds, and verify that the host reports the
-expected current profile afterward.
+Fan RPM is read-only and appears when the selected host reports it.
 
 ## Power controls
 

@@ -149,13 +149,7 @@ public enum Guide {
         ed machines power wake box              works while it is off
         ed machines services restart box nginx.service
         ed machines kill box 4213 --signal KILL
-        ed machines thermal status box          active platform profile and choices
-        ed machines thermal set box performance --minutes 30
         ```
-
-        Thermal controls use the Linux platform profile exposed by the machine.
-        A timed profile change schedules its reversion on that machine, so it still
-        restores the previous profile if Edith closes or the SSH connection drops.
 
         The machine name comes first, subject then verb. The older order with the
         machine last still parses, so `ed machines docker ps tuf` keeps working. A

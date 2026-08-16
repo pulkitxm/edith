@@ -102,12 +102,6 @@ public enum MachineReports {
                 value.fans.map { fan in
                     .object(["label": .string(fan.label), "rpm": .int(fan.rpm)])
                 }),
-            "platformProfile": value.platformProfile.map { profile in
-                JSONValue.object([
-                    "current": .string(profile.current),
-                    "choices": .strings(profile.choices),
-                ])
-            } ?? .null,
             "battery": value.battery.map { battery in
                 JSONValue.object([
                     "percent": .int(battery.percent), "status": .string(battery.status),

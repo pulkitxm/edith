@@ -24,7 +24,7 @@ Macintosh HD  /      494 GB  170 GB  66%
 
 ## `--json` shape
 
-Six keys, always all six:
+Five keys, always all five:
 
 ```json
 {
@@ -44,7 +44,6 @@ Six keys, always all six:
     }
   ],
   "gpu": null,
-  "platformProfile": null,
   "temperatures": []
 }
 ```
@@ -58,12 +57,11 @@ is mounted. `usedKB` is `totalKB` minus `availableKB`, and `usedPercent` is
 on a Mac with no battery, and `null` rather than missing, so the key is always
 there.
 
-`temperatures`, `fans`, `platformProfile` and `gpu` are part of the shared
-report shape the Linux collector fills in for a remote machine. The local
+`temperatures`, `fans` and `gpu` are part of the shared report shape for a machine. The local
 sampler collects none of them, so on this Mac the arrays are always empty and
-the objects are always `null`. No `ed` command prints a remote machine's slow
+the object is always `null`. No `ed` command prints a remote machine's slow
 record either: `ed machines metrics` keeps the sample half and drops the volume,
-battery, temperature, fan, platform profile and GPU record, which reaches the
+battery, temperature, fan and GPU record, which reaches the
 app's Machines window instead. The fields, when a machine does report them,
 are:
 
@@ -82,14 +80,6 @@ are:
     "temperature": 47,
     "utilPercent": 12
   },
-  "platformProfile": {
-    "choices": [
-      "low-power",
-      "balanced",
-      "performance"
-    ],
-    "current": "balanced"
-  },
   "temperatures": [
     {
       "celsius": 43.5,
@@ -99,10 +89,8 @@ are:
 }
 ```
 
-The fan label comes from the hwmon sensor label when present and otherwise from
-the hwmon device plus fan index. `rpm` is a whole number. Platform profile names
-come directly from the two ACPI sysfs files and stay in the order the machine
-reports them.
+The fan label comes from the sensor label when present and otherwise from the
+device plus fan index. `rpm` is a whole number.
 
 ## Examples
 

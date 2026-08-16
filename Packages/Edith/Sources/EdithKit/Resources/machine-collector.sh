@@ -251,7 +251,7 @@ function emit_sample(dt,  out, i, label, busyD, totalD, pct, stealPct, first, na
   printf "@EDITH@%s\n", out
   fflush()
 }
-function emit_slow(  out, i, first, parts, dev, seenDev, label, temp, path, name2, j, bat, rpm, currentProfile, profileLine, nProfiles) {
+function emit_slow(  out, i, first, parts, dev, seenDev, label, temp, path, name2, j, bat, rpm) {
   out = "{\"t\":\"slow\",\"disks\":["
   first = 1
   delete seenDev
@@ -307,22 +307,6 @@ function emit_slow(  out, i, first, parts, dev, seenDev, label, temp, path, name
     }
   }
   out = out "]"
-  currentProfile = firstline("/sys/firmware/acpi/platform_profile")
-  profileLine = firstline("/sys/firmware/acpi/platform_profile_choices")
-  if (currentProfile != "" && profileLine != "") {
-    delete profileChoices
-    nProfiles = split(profileLine, profileChoices, /[ \t]+/)
-    out = out sprintf(",\"platformProfile\":{\"current\":\"%s\",\"choices\":[", jesc(currentProfile))
-    first = 1
-    for (i = 1; i <= nProfiles; i++) {
-      if (profileChoices[i] == "") continue
-      out = out (first ? "" : ",") sprintf("\"%s\"", jesc(profileChoices[i]))
-      first = 0
-    }
-    out = out "]}"
-  } else {
-    out = out ",\"platformProfile\":null"
-  }
   bat = ""
   for (i = 1; i <= nPsup; i++) {
     path = psupDirs[i]
