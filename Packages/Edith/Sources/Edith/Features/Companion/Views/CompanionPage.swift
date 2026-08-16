@@ -102,8 +102,18 @@ struct CompanionPage: View {
         .task {
             guard requestsEnabled else { return }
             var first = true
+            var lastTunnelAttempt = Date.distantPast
             while !Task.isCancelled {
                 await home.refresh()
+                if !home.reachable, let deployment = CompanionDeploymentStore.load(),
+                    deployment.machineID != nil,
+                    Date().timeIntervalSince(lastTunnelAttempt) > 60
+                {
+                    lastTunnelAttempt = Date()
+                    if await CompanionTunnel.ensure(deployment) {
+                        await home.refresh()
+                    }
+                }
                 if first {
                     first = false
                     if !home.reachable { select(.setup) }

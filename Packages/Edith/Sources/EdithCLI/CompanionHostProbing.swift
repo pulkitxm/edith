@@ -100,13 +100,18 @@ enum CompanionStackRunner {
     }
 
     static func run(
-        _ command: String, on deployment: CompanionDeployment, timeout: TimeInterval
+        _ command: String, on deployment: CompanionDeployment, stdin: Data? = nil,
+        timeout: TimeInterval
     ) async throws -> String {
         guard let machineID = deployment.machineID else {
-            guard let output = await Shell.run("/bin/sh", ["-c", command]) else {
-                throw CLIFailure("could not run the command on this Mac")
+            let outcome = await CompanionShell.runChecked(command, stdin: stdin)
+            switch outcome {
+            case let .success(output):
+                return output
+            case let .failure(failure):
+                throw CLIFailure(
+                    "the command failed on this Mac", hint: failure.detail)
             }
-            return output
         }
         guard let machine = MachineRegistry.machines().first(where: { $0.id == machineID }) else {
             throw CLIFailure.notFound(
@@ -116,7 +121,7 @@ enum CompanionStackRunner {
         let runner = RemoteRunner(machine: machine)
         try await runner.connect()
         defer { Task { await runner.disconnect() } }
-        let result = try await runner.run(command, timeout: timeout)
+        let result = try await runner.run(command, stdin: stdin, timeout: timeout)
         let output = result.stdoutText + result.stderrText
         guard result.succeeded else {
             throw CLIFailure.unavailable(

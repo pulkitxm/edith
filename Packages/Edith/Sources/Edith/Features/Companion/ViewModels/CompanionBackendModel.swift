@@ -60,9 +60,34 @@ final class CompanionBackendModel: CompanionRefreshable {
     func deploy() async {
         guard let host = selectedHost else { return }
         await perform("Setting up on \(host.name)") {
-            let deployment = try await CompanionStackControl.deploy(host: host, config: self.config)
+            let deployment = try await CompanionStackControl.deploy(
+                host: host, config: self.config,
+                log: { line in
+                    Task { @MainActor in self.lastLog += line + "\n" }
+                })
             self.deployment = deployment
         }
+    }
+
+    func destroy() async {
+        guard let deployment else { return }
+        await perform("Destroying") {
+            self.lastLog = try await CompanionStackControl.run(
+                CompanionStackCommands.down(
+                    directory: deployment.directory, tier: deployment.resolvedTier,
+                    keepData: false),
+                on: deployment, timeout: 600)
+            CompanionDeploymentStore.clear()
+            self.deployment = nil
+            self.services = []
+        }
+    }
+
+    func forgetDeployment() {
+        CompanionDeploymentStore.clear()
+        deployment = nil
+        services = []
+        error = nil
     }
 
     func start() async {

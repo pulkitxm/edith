@@ -11,6 +11,7 @@ struct CompanionBackendScreen: View {
     @Environment(\.companionGeneration) private var generation
     @State private var exporting = false
     @State private var importing = false
+    @State private var confirmingDestroy = false
 
     private var dark: Bool { scheme == .dark }
 
@@ -23,6 +24,7 @@ struct CompanionBackendScreen: View {
                 } secondary: {
                     if model.deployment != nil { servicesCard }
                     secretsCard
+                    if model.deployment != nil { teardownCard }
                 } full: {
                     if !model.lastLog.isEmpty { logCard }
                 }
@@ -36,6 +38,19 @@ struct CompanionBackendScreen: View {
             contentType: .json,
             defaultFilename: "companion-configuration"
         ) { _ in }
+        .sheet(isPresented: $confirmingDestroy) {
+            CompanionConfirmSheet(
+                title: "Destroy the companion stack?",
+                message:
+                    "The containers stop and every volume is deleted: the database, the vault "
+                    + "with your original files, and the downloaded models. This cannot be "
+                    + "undone from here.",
+                phrase: "DESTROY",
+                actionTitle: "Destroy it all"
+            ) {
+                Task { await model.destroy() }
+            }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
             guard case let .success(url) = result else { return }
             let scoped = url.startAccessingSecurityScopedResource()
@@ -261,6 +276,37 @@ struct CompanionBackendScreen: View {
             clear: model.secretHint(kind) == "not set"
                 ? nil : { model.clearSecret(kind) },
             onSubmit: { model.saveSecrets() })
+    }
+
+    private var teardownCard: some View {
+        SkinCard(title: "Danger zone", note: "the stack, not just the app", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                CompanionDangerRow(
+                    title: "Destroy the stack and its data",
+                    consequence:
+                        "Runs compose down with the volumes: containers, database, vault and "
+                        + "models all go. Export from Settings first if the memory matters.",
+                    buttonTitle: "Destroy…", busy: model.busy == "Destroying",
+                    disabled: model.busy != nil && model.busy != "Destroying"
+                ) {
+                    confirmingDestroy = true
+                }
+                Divider().opacity(0.3)
+                CompanionDangerRow(
+                    title: "Forget this deployment",
+                    consequence:
+                        "Only clears the record on this Mac of where the stack runs. "
+                        + "Nothing on the host is touched.",
+                    buttonTitle: "Forget", disabled: model.busy != nil
+                ) {
+                    model.forgetDeployment()
+                }
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(16))
+                .strokeBorder(DashSkin.danger.opacity(0.35), lineWidth: UIScale.pt(1))
+        }
     }
 
     private var logCard: some View {

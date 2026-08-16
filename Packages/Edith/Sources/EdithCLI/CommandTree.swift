@@ -922,7 +922,7 @@ public enum CommandTree {
                         options: common + ["--machine"]),
                     CommandNode(
                         "deploy", "Choose the machine that runs the companion.",
-                        options: common + ["--directory", "--port", "--adopt", "--build"],
+                        options: common + ["--directory", "--port", "--adopt"],
                         arguments: [.machine]),
                     CommandNode(
                         "stack", "Start, stop and inspect the companion stack on its host.",
