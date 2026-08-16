@@ -14,8 +14,14 @@ RUN cargo build --release --locked
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates exiftool ffmpeg
+RUN apk add --no-cache ca-certificates exiftool ffmpeg \
+    && addgroup -S companion \
+    && adduser -S -G companion companion \
+    && mkdir -p /vault \
+    && chown companion:companion /vault
 
 COPY --from=builder /app/target/release/companion /usr/local/bin/companion
+
+USER companion
 
 CMD ["companion"]

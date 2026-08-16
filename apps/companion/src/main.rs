@@ -59,6 +59,18 @@ use crate::lang::SttRouter;
 use crate::vision::VisionClient;
 use crate::stt::SttClient;
 
+fn migrate_only_requested() -> Result<bool, lexopt::Error> {
+    let mut parser = lexopt::Parser::from_env();
+    let mut requested = false;
+    while let Some(argument) = parser.next()? {
+        match argument {
+            lexopt::Arg::Long("migrate-only") => requested = true,
+            value => return Err(value.unexpected()),
+        }
+    }
+    Ok(requested)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
@@ -69,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pool = PgPoolOptions::new().connect(&database_url).await?;
     migrate::run_migrations(&pool).await?;
-    if env::args().any(|argument| argument == "--migrate-only") {
+    if migrate_only_requested()? {
         println!("{} migrations applied", migrate::migration_count());
         return Ok(());
     }

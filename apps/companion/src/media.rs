@@ -265,8 +265,9 @@ pub async fn ingest_video(
     let stored = vault_path(deps.vault_dir, &uri);
     let duration = probe_duration(&stored).await;
 
-    let work = std::env::temp_dir().join(format!("companion-video-{sha256}"));
-    tokio::fs::create_dir_all(&work).await?;
+    let prefix = format!("companion-video-{sha256}-");
+    let workspace = tempfile::Builder::new().prefix(&prefix).tempdir()?;
+    let work = workspace.path();
     let audio_path = work.join("audio.wav");
     let audio_ok = Command::new("ffmpeg")
         .args(["-nostdin", "-y", "-i"])
@@ -295,8 +296,8 @@ pub async fn ingest_video(
         }
     }
 
-    let keyframes = keyframe_captions(deps, &stored, &work).await;
-    let _ = tokio::fs::remove_dir_all(&work).await;
+    let keyframes = keyframe_captions(deps, &stored, work).await;
+    drop(workspace);
 
     let mut body = String::new();
     if transcript_text.is_empty() {
