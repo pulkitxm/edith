@@ -554,8 +554,8 @@ The whole file, from `Casks/edith.rb` in this repository:
 
 ```ruby
 cask "edith" do
-  version "0.0.76"
-  sha256 "add4ed7de0324e27b67f961a4b2f87dae67dc268b982218c2c85b66e0484e38b"
+  version "0.0.98"
+  sha256 "338f7aaad4714ad10e31e25174793d63f9e9415fa55e96ff2b5310cc2699e04d"
 
   url "https://github.com/pulkitxm/edith/releases/download/v#{version}/Edith.dmg",
       verified: "github.com/pulkitxm/edith/"
@@ -789,26 +789,20 @@ failure. A `sed` expression that matches nothing exits successfully, which is
 exactly the sort of thing that produces a tap pinned to an old version for months
 without anyone noticing.
 
-The commit step:
+The cut path in `publish-release-state.sh`:
 
-```yaml
-          for attempt in 1 2 3; do
-            git fetch origin main --tags
-            git reset --hard origin/main
-
-            cp release-plists/Info.plist Resources/Info.plist
-            cp release-plists/HelperInfo.plist Resources/HelperInfo.plist
-            # ... rewrite Casks/edith.rb ...
-
-            git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
-            git commit -m "Release ${RELEASE_TAG}"
-            git tag "$RELEASE_TAG"
-
-            if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
-              exit 0
-            fi
-            git tag -d "$RELEASE_TAG"
-          done
+```bash
+git fetch origin main --tags
+[[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]
+[[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]
+cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
+cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
+rewrite_cask
+verify_cask
+git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+git commit -m "Release ${RELEASE_TAG}"
+git tag "$RELEASE_TAG"
+git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
 ```
 
 **One commit.** The plists and the cask move together, so a release is a single
@@ -816,10 +810,11 @@ The commit step:
 plists are copied from the `dmg` job's artifact, so they are the same bytes that were
 built rather than a re-derived edit that could drift.
 
-**Reset and retry, not rebase.** `main` can move between checkout and push, since a
-release takes minutes. Each attempt resets to the current `origin/main` and reapplies
-the same files, which is deterministic in a way a rebase of an already made commit is
-not. Three attempts cover the realistic race without an unbounded loop.
+**Refuse a moving base.** `main` can move while a release builds. The script verifies
+that both its checkout and the latest `origin/main` still equal the commit CI built.
+If another change landed, the release stops before writing anything instead of
+combining checked artifacts with a different source revision. The next CI run can
+release the new head.
 
 **Atomic.** `git push --atomic` sends the branch and the tag as one update. Either
 both land or neither does, so there is no window in which `main` carries a version
@@ -836,11 +831,9 @@ The mirror step:
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
-          test -n "$TAP_PUSH_TOKEN" \
-            || { echo "cask mirror blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
           git clone --depth 1 \
             "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
-          cp Casks/edith.rb tap/Casks/edith.rb
+          cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
             echo "the tap already carries $RELEASE_TAG"
@@ -858,12 +851,11 @@ cannot push to a different repository, so a cross-repository push needs a creden
 of its own: a fine-grained personal access token scoped to `pulkitxm/homebrew-tap`
 with read and write access to contents, stored as `TAP_PUSH_TOKEN`.
 
-**Fail rather than skip.** The step refuses to run without the token instead of
-warning and continuing. A silent skip means the release is published, the cask in
-this repository is bumped, and the tap that users actually install from still points
-at the previous version, with nothing red anywhere to say so. Loud failure after
-publication is the better trade: the release is out, and the job that failed names
-exactly what is missing.
+**Fail rather than skip.** The version job refuses to start without the token, and
+the mirror step fails on any clone or push error. A silent skip could publish a
+release while leaving the tap that users install from on the previous version.
+Blocking before the build when the secret is absent, and failing loudly on a later
+transport error, keeps that drift visible.
 
 ---
 
@@ -977,9 +969,10 @@ the docs guard the cask.
 ### Cut a release
 
 Nothing Homebrew-specific to do. Merge to `main` and let CI call the release
-workflow after every required check passes. To rebuild an existing release, run
-the Release workflow manually with `rebuild` set to its tag. The `publish` job
-updates this repository and mirrors the cask to the tap.
+workflow after every required check passes. To rebuild the current release, run
+the Release workflow manually from `main` with `rebuild` set to its tag. The
+`publish` job refreshes the release assets, updates this repository if the checksum
+changed, and mirrors the cask to the tap.
 
 Confirm afterwards:
 
