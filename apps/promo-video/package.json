@@ -7,15 +7,15 @@
     "render": "remotion render Main out/edith-promo.mp4"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.484",
-    "@remotion/transitions": "^4.0.484",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "remotion": "4.0.484"
+    "@remotion/cli": "4.0.512",
+    "@remotion/transitions": "4.0.512",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.512"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "typescript": "^5.6.3"
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "typescript": "7.0.2"
   }
 }

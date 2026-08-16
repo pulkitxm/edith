@@ -5,6 +5,7 @@ import {
   htmlComments,
   jsoncComments,
   swiftComments,
+  tsComments,
 } from "./strip-comments.mjs";
 
 const strip = (fn, src) => build(src, fn(src).remove);
@@ -62,4 +63,25 @@ test("css: slashes inside strings are safe", () => {
 test("json: strips // and /* */ comments", () => {
   expect(jsoncComments('{\n// c\n"a": 1\n}').remove.length).toBe(1);
   expect(jsoncComments('{"url": "http://x"}').remove.length).toBe(0);
+});
+
+test("typescript: strips comments without touching syntax lookalikes", () => {
+  const src = `
+    const url: string = "https://example.com";
+    const pattern = /\\/\\/ literal/;
+    const view = <div>// text /* stays */</div>;
+    // remove
+  `;
+  const result = tsComments("example.tsx", src);
+  expect(result.remove.length).toBe(1);
+  expect(strip((text) => tsComments("example.tsx", text), src)).toContain(
+    "// text /* stays */",
+  );
+});
+
+test("typescript: keeps functional directives", () => {
+  const src = "// @ts-expect-error\nconst value: number = 'text';";
+  const result = tsComments("example.ts", src);
+  expect(result.kept).toBe(1);
+  expect(result.remove.length).toBe(0);
 });

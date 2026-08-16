@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import ts from "typescript";
+import { parse } from "@babel/parser";
 
 const args = process.argv.slice(2);
 const CHECK = args.some(
@@ -41,52 +41,21 @@ export function keep(raw) {
   return false;
 }
 
-function scriptKind(file) {
-  if (file.endsWith(".tsx")) return ts.ScriptKind.TSX;
-  if (file.endsWith(".jsx")) return ts.ScriptKind.JSX;
-  if (/\.(c|m)?ts$/.test(file)) return ts.ScriptKind.TS;
-  return ts.ScriptKind.JS;
-}
-
 export function tsComments(file, text) {
-  const sf = ts.createSourceFile(
-    file,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(file),
-  );
-  const seen = new Set();
-  const found = [];
-  const jsxSpans = [];
-  const add = (ranges) => {
-    for (const r of ranges || []) {
-      const key = `${r.pos}:${r.end}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      found.push({ pos: r.pos, end: r.end });
-    }
-  };
-  const visit = (node) => {
-    if (node.kind === ts.SyntaxKind.JsxText) {
-      jsxSpans.push([node.getFullStart(), node.getEnd()]);
-      return;
-    }
-    const children = node.getChildren(sf);
-    if (children.length === 0) {
-      add(ts.getLeadingCommentRanges(text, node.getFullStart()));
-      add(ts.getTrailingCommentRanges(text, node.getEnd()));
-      return;
-    }
-    for (const c of children) visit(c);
-  };
-  visit(sf);
-
-  const inJsxText = (r) => jsxSpans.some(([s, e]) => r.pos < e && r.end > s);
+  const plugins = [];
+  if (/\.(c|m)?tsx?$/.test(file)) plugins.push("typescript");
+  if (/\.[jt]sx$/.test(file)) plugins.push("jsx");
+  const tree = parse(text, {
+    sourceType: "unambiguous",
+    plugins,
+    errorRecovery: true,
+    allowAwaitOutsideFunction: true,
+    allowReturnOutsideFunction: true,
+  });
   const remove = [];
   let kept = 0;
-  for (const r of found) {
-    if (inJsxText(r)) continue;
+  for (const comment of tree.comments || []) {
+    const r = { pos: comment.start, end: comment.end };
     if (keep(text.slice(r.pos, r.end))) kept++;
     else remove.push(r);
   }
