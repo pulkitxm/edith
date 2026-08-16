@@ -16,9 +16,7 @@ same way.
 | Command | What it does |
 | --- | --- |
 | `ed system stats` | Samples CPU, memory, load, uptime, network and optionally the top processes. Streams with `--follow`. Runs when you type `ed system` with no subcommand. |
-| `ed system disks` | Lists the mounted volumes with their size, free space and use, plus battery, temperature and GPU fields in JSON. |
-
-## Commands
+| `ed system disks` | Lists mounted volumes, plus battery, temperature, fan, platform profile and GPU fields in JSON. |
 
 ## Commands
 

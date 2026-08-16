@@ -24,7 +24,7 @@ Macintosh HD  /      494 GB  170 GB  66%
 
 ## `--json` shape
 
-Four keys, always all four:
+Six keys, always all six:
 
 ```json
 {
@@ -32,6 +32,7 @@ Four keys, always all four:
     "percent": 99,
     "status": "Finishing Charge"
   },
+  "fans": [],
   "filesystems": [
     {
       "availableKB": 166164022,
@@ -43,6 +44,7 @@ Four keys, always all four:
     }
   ],
   "gpu": null,
+  "platformProfile": null,
   "temperatures": []
 }
 ```
@@ -56,22 +58,37 @@ is mounted. `usedKB` is `totalKB` minus `availableKB`, and `usedPercent` is
 on a Mac with no battery, and `null` rather than missing, so the key is always
 there.
 
-`temperatures` and `gpu` are part of the shared report shape the Linux collector
-fills in for a remote machine. The local sampler collects neither, so on this
-Mac `temperatures` is always `[]` and `gpu` is always `null`. No `ed` command
-prints a remote machine's values either: `ed machines metrics` keeps the sample
-half and drops the volume, battery, temperature and GPU record, which reaches
-the app's Machines window instead. The keys, when a machine does report them,
+`temperatures`, `fans`, `platformProfile` and `gpu` are part of the shared
+report shape the Linux collector fills in for a remote machine. The local
+sampler collects none of them, so on this Mac the arrays are always empty and
+the objects are always `null`. No `ed` command prints a remote machine's slow
+record either: `ed machines metrics` keeps the sample half and drops the volume,
+battery, temperature, fan, platform profile and GPU record, which reaches the
+app's Machines window instead. The fields, when a machine does report them,
 are:
 
 ```json
 {
+  "fans": [
+    {
+      "label": "cpu_fan",
+      "rpm": 3200
+    }
+  ],
   "gpu": {
     "memTotalMB": 8188,
     "memUsedMB": 1204,
     "name": "NVIDIA GeForce RTX 4060",
     "temperature": 47,
     "utilPercent": 12
+  },
+  "platformProfile": {
+    "choices": [
+      "low-power",
+      "balanced",
+      "performance"
+    ],
+    "current": "balanced"
   },
   "temperatures": [
     {
@@ -81,6 +98,11 @@ are:
   ]
 }
 ```
+
+The fan label comes from the hwmon sensor label when present and otherwise from
+the hwmon device plus fan index. `rpm` is a whole number. Platform profile names
+come directly from the two ACPI sysfs files and stay in the order the machine
+reports them.
 
 ## Examples
 
