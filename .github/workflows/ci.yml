@@ -195,7 +195,7 @@ jobs:
           brew install postgresql@18 pgvector
           brew services start postgresql@18
           until pg_isready; do sleep 1; done
-          createuser companion
+          createuser --superuser companion
           psql postgres -c "ALTER ROLE companion WITH PASSWORD 'companion-dev'"
           createdb --owner=companion companion
       - name: Cache cargo
