@@ -2,8 +2,8 @@
 
 Companion is Edith's self-hosted memory and conversation system. It stores notes,
 recordings, media, derived observations and conversations on hardware you choose.
-The Mac app is the client and deployment controller; the backend runs as five
-containers on this Mac or on a machine already registered in Edith.
+The Mac app is the client and deployment controller; the backend runs as a
+multi-container stack on this Mac or on a machine already registered in Edith.
 
 ## What it does
 
@@ -67,8 +67,10 @@ deployment until it is added again or a different stack is adopted.
 
 PostgreSQL with pgvector stores indexed data, Redis provides service state, Ollama
 serves the local embedding and vision models, and Whisper handles local speech to
-text. A reasoning model is optional during setup. It can use a local OpenAI-compatible
-endpoint, such as the bundled Ollama service, or Anthropic with a key you provide.
+text. The API is the fifth base service. GPU deployments also add a reranker
+service. A reasoning model is optional during setup. It can use a local
+OpenAI-compatible endpoint, such as the bundled Ollama service, or Anthropic with a
+key you provide.
 
 Settings can also connect GitHub and Notion. Tokens are saved through the Companion
 service and are only used for the sync you request. Calendar, music and YouTube

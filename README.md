@@ -44,7 +44,7 @@ current platform scope.
 
 **Companion**
 
-- **Private memory** - deploy the five-container backend on this Mac or an SSH machine, then reach it through a localhost tunnel.
+- **Private memory** - deploy the multi-container backend on this Mac or an SSH machine, then reach it through a localhost tunnel.
 - **Capture and library** - give it notes, recordings, images, video and PDFs; failed recordings wait in a local outbox instead of disappearing.
 - **Evidence-backed chat** - ask questions over your own history, inspect citations, or ask three independent lenses for a second opinion.
 - **Your data, your exit** - export or import the memory, erase individual episodes, wipe everything, move the deployment, and inspect its health and logs from Edith.

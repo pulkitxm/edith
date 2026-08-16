@@ -128,7 +128,7 @@ commands below and dedicated CI jobs.
 | `make ci-scripts` | The `bun test` suite for `scripts/`. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |
 | `make ci-swift-lint` | `swift format lint --strict` over `Sources`, `Tests` and `Package.swift`. |
-| `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all five targets. |
+| `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all five Xcode targets and runs the privileged-helper SwiftPM embed phase. |
 | `make ci-swift-test` | The Swift test suite, through `Packages/Edith/test.sh`. |
 | `make ci-swift-check` | The three above. They share nothing, so CI and the pre-push hook run them in parallel. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
@@ -155,11 +155,14 @@ DMG when Apple credentials are available, generates the signed Sparkle appcast,
 installs and diagnoses the Debian package, then publishes all three assets to one
 GitHub Release. The versioned plists and cask land together in one release commit
 and tag, and the cask is mirrored to the tap. To rebuild an existing release, run
-the Release workflow manually from `main` with `rebuild` set to the current tag.
-The rebuild refreshes the release assets, repository cask checksum and tap copy
-together. To recover a skipped automatic release, run the CI workflow manually
-from `main` with `release` enabled. That path runs every product check before it
-calls the release workflow.
+the Release workflow manually from `main` with its required `rebuild` input set to
+the current tag. Only the current release can be rebuilt. The rebuild replaces its
+three assets, commits a changed DMG checksum to `main` when needed, and mirrors the
+same cask to the tap. It does not create a new version or tag. To recover a skipped
+automatic release, run the CI workflow manually from `main` with `release` enabled.
+That path runs every routed product check before it calls the reusable workflow
+with permission to cut a new patch release. The Release workflow's manual entry
+point cannot cut a new release directly because it only accepts a rebuild tag.
 
 ### Required secrets
 
