@@ -352,12 +352,11 @@ import Testing
         #expect(MachineFacts.parseMACAddress("not-a-mac") == nil)
     }
 
-    @Test func theWakeAddressComesFromARealNICRatherThanABridgeOrAVeth() {
+    @Test func theWakeAddressComesFromAMacEthernetOrWiFiPort() {
         let command = MachineFacts.macAddressCommand
-        #expect(command.contains("[ -e \"$iface/device\" ] || continue"))
-        #expect(command.contains("00:00:00:00:00:00"))
-        #expect(command.contains("phy80211"))
-        #expect(!command.contains("head -1"))
+        #expect(command.contains("networksetup -listallhardwareports"))
+        #expect(command.contains("Hardware Port: (Ethernet|Wi-Fi)"))
+        #expect(command.contains("Ethernet Address:"))
     }
 
     @Test func buildsWakeOnLANMagicPacket() {
