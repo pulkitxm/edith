@@ -4,14 +4,15 @@ import EdithKit
 
 enum PushToTalkKey {
     static var code: Int {
-        SharedDefaults.store.object(forKey: "pushToTalkHotKeyCode") as? Int ?? kVK_ANSI_M
+        SharedDefaults.store.object(forKey: AppStorageKeys.Mic.pushToTalkHotKeyCode) as? Int
+            ?? kVK_ANSI_M
     }
     static var mods: Int {
-        SharedDefaults.store.object(forKey: "pushToTalkHotKeyMods") as? Int
+        SharedDefaults.store.object(forKey: AppStorageKeys.Mic.pushToTalkHotKeyMods) as? Int
             ?? (controlKey | optionKey)
     }
     static var label: String {
-        SharedDefaults.store.string(forKey: "pushToTalkHotKeyLabel") ?? "⌃⌥M"
+        SharedDefaults.store.string(forKey: AppStorageKeys.Mic.pushToTalkHotKeyLabel) ?? "⌃⌥M"
     }
 }
 

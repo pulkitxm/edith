@@ -162,7 +162,7 @@ final class AppServices {
             lidAwake = nil
         }
         notchShelf?.attachLidAwake(lidAwake)
-        let pushToTalkOn = micOn && Self.extensionEnabled("pushToTalkEnabled")
+        let pushToTalkOn = micOn && Self.extensionEnabled(AppStorageKeys.Mic.pushToTalkEnabled)
         if pushToTalkOn, pushToTalk == nil { pushToTalk = PushToTalkEngine() }
         if !pushToTalkOn, let engine = pushToTalk {
             engine.shutdown()
@@ -176,7 +176,7 @@ final class AppServices {
             systemStats = nil
         }
 
-        let hyperOn = Self.extensionEnabled("hyperKeyEnabled")
+        let hyperOn = Self.extensionEnabled(AppStorageKeys.HyperKey.enabled)
         if hyperOn, hyperKey == nil { hyperKey = HyperKeyEngine() }
         if !hyperOn, let engine = hyperKey {
             engine.shutdown()

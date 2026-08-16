@@ -37,7 +37,8 @@ struct ClipboardRows: View {
         var saveImages = true
     @AppStorage(AppStorageKeys.Clipboard.saveText, store: SharedDefaults.store) private
         var saveText = true
-    @AppStorage("pasteQueueEnabled", store: SharedDefaults.store) private var pasteQueueEnabled =
+    @AppStorage(AppStorageKeys.Clipboard.pasteQueueEnabled, store: SharedDefaults.store)
+    private var pasteQueueEnabled =
         false
 
     @State private var tab = "general"

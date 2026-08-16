@@ -55,8 +55,10 @@ struct ExtensionsPane: View {
         false
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
         var preventSleep = false
-    @AppStorage("hyperKeyEnabled", store: SharedDefaults.store) private var hyperKeyEnabled = false
-    @AppStorage("scratchpadEnabled", store: SharedDefaults.store) private var scratchpadEnabled =
+    @AppStorage(AppStorageKeys.HyperKey.enabled, store: SharedDefaults.store)
+    private var hyperKeyEnabled = false
+    @AppStorage(AppStorageKeys.Scratchpad.enabled, store: SharedDefaults.store)
+    private var scratchpadEnabled =
         false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
@@ -255,8 +257,8 @@ struct ExtensionsPane: View {
         case AppStorageKeys.Presenter.enabled: $presenterEnabled
         case AppStorageKeys.ColorPicker.enabled: $colorPickerEnabled
         case LidAwakeState.enabledKey: $lidAwakeEnabled
-        case "hyperKeyEnabled": $hyperKeyEnabled
-        case "scratchpadEnabled": $scratchpadEnabled
+        case AppStorageKeys.HyperKey.enabled: $hyperKeyEnabled
+        case AppStorageKeys.Scratchpad.enabled: $scratchpadEnabled
         default: .constant(false)
         }
     }
@@ -1100,7 +1102,8 @@ private struct MicMuteRows: View {
         false
     @AppStorage(AppStorageKeys.Mic.muteInMenuBar, store: SharedDefaults.store) private
         var inMenuBar = true
-    @AppStorage("pushToTalkEnabled", store: SharedDefaults.store) private var pushToTalkEnabled =
+    @AppStorage(AppStorageKeys.Mic.pushToTalkEnabled, store: SharedDefaults.store)
+    private var pushToTalkEnabled =
         false
     @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
     private var accessibilityGranted = false

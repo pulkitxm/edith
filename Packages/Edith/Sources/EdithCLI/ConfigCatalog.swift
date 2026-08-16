@@ -539,6 +539,18 @@ public enum ConfigCatalog {
             AppStorageKeys.Clipboard.enabled, .bool, group: "clipboard",
             summary: "Clipboard extension: history with instant paste.", fallback: .bool(false)),
         SettingDefinition(
+            AppStorageKeys.Clipboard.pasteQueueEnabled, .bool, group: "clipboard",
+            summary: "Queue new clipboard entries for sequential pasting.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Clipboard.pasteQueueHotKeyCode, .int, group: "clipboard",
+            summary: "Virtual key code of the paste queue next shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Clipboard.pasteQueueHotKeyMods, .int, group: "clipboard",
+            summary: "Carbon modifier mask of the paste queue next shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Clipboard.pasteQueueHotKeyLabel, .string, group: "clipboard",
+            summary: "Printable label for the paste queue next shortcut."),
+        SettingDefinition(
             "clipboardHotKeyCode", .int, group: "clipboard",
             summary: "Virtual key code of the clipboard panel shortcut."),
         SettingDefinition(
@@ -602,13 +614,22 @@ public enum ConfigCatalog {
 
     private static let utilities: [SettingDefinition] = [
         SettingDefinition(
-            "hyperKeyEnabled", .bool, group: "utilities",
+            AppStorageKeys.HyperKey.enabled, .bool, group: "utilities",
             summary: "Hyper Key extension: turn Caps Lock into a global modifier key.",
             fallback: .bool(false)),
         SettingDefinition(
-            "scratchpadEnabled", .bool, group: "utilities",
+            AppStorageKeys.Scratchpad.enabled, .bool, group: "utilities",
             summary: "Scratchpad extension: quick notes with inline math and unit conversion.",
             fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.hotKeyCode, .int, group: "utilities",
+            summary: "Virtual key code of the scratchpad shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.hotKeyMods, .int, group: "utilities",
+            summary: "Carbon modifier mask of the scratchpad shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.hotKeyLabel, .string, group: "utilities",
+            summary: "Printable label for the scratchpad shortcut."),
     ]
 
     private static let notch: [SettingDefinition] = [
@@ -793,6 +814,19 @@ public enum ConfigCatalog {
         SettingDefinition(
             "micHotKeyLabel", .string, group: "micmute",
             summary: "Printable label for the mic mute shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Mic.pushToTalkEnabled, .bool, group: "micmute",
+            summary: "Hold a shortcut to unmute while it is held, then mute on release.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Mic.pushToTalkHotKeyCode, .int, group: "micmute",
+            summary: "Virtual key code of the push-to-talk shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Mic.pushToTalkHotKeyMods, .int, group: "micmute",
+            summary: "Carbon modifier mask of the push-to-talk shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Mic.pushToTalkHotKeyLabel, .string, group: "micmute",
+            summary: "Printable label for the push-to-talk shortcut."),
     ]
 
     private static let terminal: [SettingDefinition] = [

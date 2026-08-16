@@ -15,7 +15,7 @@ struct ClipboardCommand: AsyncParsableCommand {
         subcommands: [
             ClipboardListCommand.self, ClipboardStatsCommand.self, ClipboardGetCommand.self,
             ClipboardCopyCommand.self, ClipboardPinCommand.self, ClipboardUnpinCommand.self,
-            ClipboardRemoveCommand.self, ClipboardClearCommand.self,
+            ClipboardRemoveCommand.self, ClipboardClearCommand.self, ClipboardQueueCommand.self,
         ],
         defaultSubcommand: ClipboardListCommand.self)
 }
@@ -352,6 +352,183 @@ struct ClipboardClearCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out("cleared \(outcome.changed) entries")
+        }
+    }
+}
+
+struct ClipboardQueueCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "queue",
+        abstract: "Inspect and control the paste queue.",
+        subcommands: [
+            ClipboardQueueListCommand.self, ClipboardQueueAddCommand.self,
+            ClipboardQueueRemoveCommand.self, ClipboardQueueNextCommand.self,
+            ClipboardQueueClearCommand.self,
+        ],
+        defaultSubcommand: ClipboardQueueListCommand.self)
+}
+
+enum ClipboardQueueBridge {
+    static func request(action: String, id: String? = nil) async throws -> [AnyHashable: Any] {
+        try AppBridge.requireHelper("using the paste queue")
+        var info: [String: Any] = ["action": action]
+        if let id { info["id"] = id }
+        let requestInfo = info
+        guard let reply = await AppBridge.awaitReply(
+            IPC.Name.pasteQueueResult, timeout: 5,
+            trigger: { AppBridge.post(IPC.Name.requestPasteQueue, userInfo: requestInfo) })
+        else {
+            throw AppBridge.silence(
+                "the paste queue", extensionKey: AppStorageKeys.Clipboard.enabled)
+        }
+        guard reply["ok"] as? Bool != false else {
+            throw CLIFailure.notFound(
+                reply["error"] as? String ?? "the paste queue rejected the request")
+        }
+        return reply
+    }
+
+    static func entries(from reply: [AnyHashable: Any]) -> [[String: String]] {
+        (reply["entries"] as? [[String: Any]] ?? []).map { entry in
+            [
+                "id": entry["id"] as? String ?? "",
+                "kind": entry["kind"] as? String ?? "",
+                "preview": entry["preview"] as? String ?? "",
+                "sourceApp": entry["sourceApp"] as? String ?? "",
+            ]
+        }
+    }
+}
+
+struct ClipboardQueueListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "ls", abstract: "List queued clipboard entries.", aliases: ["list"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let reply = try await ClipboardQueueBridge.request(action: "list")
+            let entries = ClipboardQueueBridge.entries(from: reply)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "count": .int(reply["count"] as? Int ?? entries.count),
+                        "entries": .array(
+                            entries.map { entry in
+                                .object([
+                                    "id": .string(entry["id"] ?? ""),
+                                    "kind": .string(entry["kind"] ?? ""),
+                                    "preview": .string(entry["preview"] ?? ""),
+                                    "sourceApp": .string(entry["sourceApp"] ?? ""),
+                                ])
+                            }),
+                    ]))
+                return
+            }
+            let rows = entries.enumerated().map { index, entry in
+                [
+                    String(index + 1), entry["kind"] ?? "", entry["sourceApp"] ?? "",
+                    entry["preview"] ?? "", entry["id"] ?? "",
+                ]
+            }
+            CLIOut.out(
+                TextTable.render(headers: ["#", "KIND", "FROM", "PREVIEW", "ID"], rows: rows))
+        }
+    }
+}
+
+struct ClipboardQueueAddCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "add", abstract: "Add a clipboard history entry to the queue.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "The clipboard history entry number, counting from 1.")
+    var index: Int
+
+    func run() async throws {
+        try await execute {
+            let found = try ClipboardBridge.entry(at: index)
+            _ = try await ClipboardQueueBridge.request(action: "add", id: found.entry.id)
+            guard !json else {
+                CLIOut.json(
+                    .object(["index": .int(index), "id": .string(found.entry.id), "added": .bool(true)]))
+                return
+            }
+            CLIOut.out("queued clipboard entry (index)")
+        }
+    }
+}
+
+struct ClipboardQueueRemoveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rm", abstract: "Remove an entry from the paste queue.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "The clipboard entry id from `ed clipboard queue ls --json`.")
+    var id: String
+
+    func run() async throws {
+        try await execute {
+            _ = try await ClipboardQueueBridge.request(action: "remove", id: id)
+            guard !json else {
+                CLIOut.json(.object(["id": .string(id), "removed": .bool(true)]))
+                return
+            }
+            CLIOut.out("removed (id) from the paste queue")
+        }
+    }
+}
+
+struct ClipboardQueueNextCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "next", abstract: "Paste the oldest queued clipboard entry.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let reply = try await ClipboardQueueBridge.request(action: "next")
+            let pasted = reply["pasted"] as? Bool ?? false
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "pasted": .bool(pasted),
+                        "remaining": .int(reply["remaining"] as? Int ?? 0),
+                    ]))
+                return
+            }
+            let remaining = reply["remaining"] as? Int ?? 0
+            CLIOut.out(
+                pasted
+                    ? "pasted the next clipboard entry, \(remaining) left"
+                    : "the paste queue is empty")
+        }
+    }
+}
+
+struct ClipboardQueueClearCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "clear", abstract: "Remove every entry from the paste queue.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let reply = try await ClipboardQueueBridge.request(action: "clear")
+            let removed = reply["removed"] as? Int ?? 0
+            guard !json else {
+                CLIOut.json(.object(["removed": .int(removed)]))
+                return
+            }
+            CLIOut.out("cleared (removed) queued entries")
         }
     }
 }

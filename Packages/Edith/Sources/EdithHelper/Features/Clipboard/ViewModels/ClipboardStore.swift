@@ -244,6 +244,28 @@ final class ClipboardStore: FeatureModule {
         mutateOnDisk(scheduleBackup: false) { try ClipboardActions.delete(ids: [id]) }
     }
 
+    func queueSnapshot() -> [ClipboardEntry] {
+        pasteQueue.entryIDs.compactMap { id in entries.first { $0.id == id } }
+    }
+
+    @discardableResult
+    func enqueueFromCLI(_ id: String) -> Bool {
+        guard entries.contains(where: { $0.id == id }) else { return false }
+        pasteQueue.enqueue(id)
+        return true
+    }
+
+    @discardableResult
+    func removeFromQueue(_ id: String) -> Bool {
+        let before = pasteQueue.count
+        pasteQueue.remove(id)
+        return pasteQueue.count != before
+    }
+
+    func clearQueue() {
+        pasteQueue.clear()
+    }
+
     private func mutateOnDisk(
         requireChange: Bool = true, scheduleBackup: Bool = true,
         _ action: @escaping @Sendable () throws -> ClipboardActions.Outcome

@@ -48,6 +48,9 @@ public enum AppStorageKeys {
         public static let maxItems = "clipboardMaxItems"
         public static let pastePlainText = "clipboardPastePlainText"
         public static let pasteQueueEnabled = "pasteQueueEnabled"
+        public static let pasteQueueHotKeyCode = "pasteQueueHotKeyCode"
+        public static let pasteQueueHotKeyLabel = "pasteQueueHotKeyLabel"
+        public static let pasteQueueHotKeyMods = "pasteQueueHotKeyMods"
         public static let pinTo = "clipboardPinTo"
         public static let popupAt = "clipboardPopupAt"
         public static let saveFiles = "clipboardSaveFiles"
@@ -115,6 +118,21 @@ public enum AppStorageKeys {
     public enum Mic {
         public static let muteEnabled = "micMuteEnabled"
         public static let muteInMenuBar = "micMuteInMenuBar"
+        public static let pushToTalkEnabled = "pushToTalkEnabled"
+        public static let pushToTalkHotKeyCode = "pushToTalkHotKeyCode"
+        public static let pushToTalkHotKeyLabel = "pushToTalkHotKeyLabel"
+        public static let pushToTalkHotKeyMods = "pushToTalkHotKeyMods"
+    }
+
+    public enum HyperKey {
+        public static let enabled = "hyperKeyEnabled"
+    }
+
+    public enum Scratchpad {
+        public static let enabled = "scratchpadEnabled"
+        public static let hotKeyCode = "scratchpadHotKeyCode"
+        public static let hotKeyLabel = "scratchpadHotKeyLabel"
+        public static let hotKeyMods = "scratchpadHotKeyMods"
     }
 
     public enum Music {

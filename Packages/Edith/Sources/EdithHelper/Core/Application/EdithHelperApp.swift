@@ -86,6 +86,70 @@ struct EdithApp: App {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.requestPasteQueue, info: { info in
+            Task { @MainActor in
+                guard let store = services.clipboard else {
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: ["ok": false, "error": "the Clipboard extension is off"])
+                    return
+                }
+                let action = info["action"] as? String ?? "list"
+                switch action {
+                case "list":
+                    let entries = store.queueSnapshot().map { entry in
+                        [
+                            "id": entry.id,
+                            "kind": entry.ext,
+                            "preview": entry.preview ?? "",
+                            "sourceApp": entry.sourceApp ?? "",
+                        ]
+                    }
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: [
+                            "ok": true,
+                            "action": action,
+                            "count": store.pasteQueue.count,
+                            "entries": entries,
+                        ])
+                case "add":
+                    let id = info["id"] as? String ?? ""
+                    let added = store.enqueueFromCLI(id)
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: ["ok": added, "action": action, "id": id])
+                case "remove":
+                    let id = info["id"] as? String ?? ""
+                    let removed = store.removeFromQueue(id)
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: ["ok": removed, "action": action, "id": id])
+                case "clear":
+                    let count = store.pasteQueue.count
+                    store.clearQueue()
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: ["ok": true, "action": action, "removed": count])
+                case "next":
+                    let before = store.pasteQueue.count
+                    let pasted = store.pasteNextFromQueue()
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: [
+                            "ok": true,
+                            "action": action,
+                            "before": before,
+                            "pasted": pasted,
+                            "remaining": store.pasteQueue.count,
+                        ])
+                default:
+                    IPC.post(
+                        IPC.Name.pasteQueueResult,
+                        userInfo: ["ok": false, "error": "unknown paste queue action"])
+                }
+            }
+        })
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
             services.usage?.refreshMenuBarItem()
         }
@@ -346,18 +410,20 @@ enum MicHotKey {
 
 enum PasteQueueHotKey {
     static var code: Int {
-        SharedDefaults.store.object(forKey: "pasteQueueHotKeyCode") as? Int ?? kVK_ANSI_V
+        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.pasteQueueHotKeyCode) as? Int
+            ?? kVK_ANSI_V
     }
     static var mods: Int {
-        SharedDefaults.store.object(forKey: "pasteQueueHotKeyMods") as? Int
+        SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.pasteQueueHotKeyMods) as? Int
             ?? (cmdKey | optionKey | shiftKey)
     }
     static var label: String {
-        SharedDefaults.store.string(forKey: "pasteQueueHotKeyLabel") ?? "⇧⌥⌘V"
+        SharedDefaults.store.string(forKey: AppStorageKeys.Clipboard.pasteQueueHotKeyLabel) ?? "⇧⌥⌘V"
     }
 
     static func register() {
-        let clipboardOn = SharedDefaults.store.object(forKey: "clipboardEnabled") as? Bool ?? false
+        let clipboardOn = SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled)
+            as? Bool ?? false
         let queueOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pasteQueueEnabled)
         guard clipboardOn, queueOn else {
             unregister()
@@ -390,18 +456,20 @@ enum PasteQueueHotKey {
 
 enum ScratchpadHotKey {
     static var code: Int {
-        SharedDefaults.store.object(forKey: "scratchpadHotKeyCode") as? Int ?? kVK_Space
+        SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.hotKeyCode) as? Int
+            ?? kVK_Space
     }
     static var mods: Int {
-        SharedDefaults.store.object(forKey: "scratchpadHotKeyMods") as? Int
+        SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.hotKeyMods) as? Int
             ?? (cmdKey | optionKey | shiftKey)
     }
     static var label: String {
-        SharedDefaults.store.string(forKey: "scratchpadHotKeyLabel") ?? "⇧⌥⌘Space"
+        SharedDefaults.store.string(forKey: AppStorageKeys.Scratchpad.hotKeyLabel) ?? "⇧⌥⌘Space"
     }
 
     static func register() {
-        let enabled = SharedDefaults.store.object(forKey: "scratchpadEnabled") as? Bool ?? false
+        let enabled = SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.enabled)
+            as? Bool ?? false
         guard enabled else {
             unregister()
             return

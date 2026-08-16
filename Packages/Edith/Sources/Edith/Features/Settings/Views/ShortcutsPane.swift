@@ -15,9 +15,11 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
-    @AppStorage("scratchpadEnabled", store: SharedDefaults.store) private var scratchpadEnabled =
+    @AppStorage(AppStorageKeys.Scratchpad.enabled, store: SharedDefaults.store)
+    private var scratchpadEnabled =
         false
-    @AppStorage("pasteQueueEnabled", store: SharedDefaults.store) private var pasteQueueEnabled =
+    @AppStorage(AppStorageKeys.Clipboard.pasteQueueEnabled, store: SharedDefaults.store)
+    private var pasteQueueEnabled =
         false
 
     private var extensionShortcuts: [ExtensionShortcut] {
