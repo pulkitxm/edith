@@ -154,14 +154,14 @@ struct AddMachineSheet: View {
                 }
             }
             .widgetBar(cornerRadius: 10, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
-            labelledField("Display name", text: $name, placeholder: "Linux laptop")
+            labelledField("Display name", text: $name, placeholder: "Build server")
         }
     }
 
     private var manualSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             eyebrow("CONNECTION")
-            labelledField("Display name", text: $name, placeholder: "Linux laptop")
+            labelledField("Display name", text: $name, placeholder: "Build server")
             labelledField("Host", text: $host, placeholder: "192.168.1.12")
             HStack(spacing: UIScale.pt(10)) {
                 labelledField("User", text: $username, placeholder: "pulkit")

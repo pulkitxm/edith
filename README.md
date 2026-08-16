@@ -1,8 +1,7 @@
 # <img src="Packages/Edith/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
 
-A native desktop control center for macOS, with an early Ubuntu preview. The
-complete Mac app replaces a shelf of single-purpose utilities and idles at about
-22 MB.
+A native desktop control center for macOS. Edith replaces a shelf of
+single-purpose utilities and idles at about 22 MB.
 
 Free and open source under the [GPL-3.0](LICENSE). Every feature is in the one
 app. No licence key, no account, no paid tier.
@@ -20,14 +19,10 @@ Homebrew to fetch a newer release. Full command list:
 [docs/homebrew.md](docs/homebrew.md), and
 [how it all works](docs/homebrew-internals.md).
 
-**[Download the Ubuntu preview](https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb)**
-· [edith.pulkit.page](https://edith.pulkit.page)
+[edith.pulkit.page](https://edith.pulkit.page)
 · [Wiki](https://github.com/pulkitxm/edith/wiki)
 
-The macOS app requires macOS 14 or later on Apple Silicon. The Ubuntu preview
-targets Ubuntu 24.04 LTS on `amd64`; see the
-[Ubuntu development guide](docs/ubuntu-development.md) for source builds and the
-current platform scope.
+Edith requires macOS 14 or later on Apple Silicon.
 
 ## Features
 
@@ -57,7 +52,7 @@ model choices and recovery.
 - **One fleet view** - add the local Mac and SSH hosts, monitor live CPU, memory, disks, temperatures, GPUs and running processes, and detach any machine into its own window.
 - **Terminal, files and workspaces** - keep terminal tabs, browse and transfer files, preview remote content, and arrange saved split-pane workspaces.
 - **Containers** - inspect Docker Compose groups, resources, configuration and logs, then start, stop, restart or remove containers.
-- **Power and cooling** - wake, restart or shut down hosts; read fan speeds and temporarily switch supported Linux platform profiles with automatic rollback.
+- **Power and cooling** - wake, restart or shut down hosts; read fan speeds and temporarily switch supported platform profiles with automatic rollback.
 
 See the [remote machines guide](docs/remote-machines.md) for connection, privilege
 and platform details.

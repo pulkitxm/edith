@@ -236,10 +236,6 @@ h4 {
   fill: currentColor;
 }
 
-[data-download-os="linux"] svg {
-  fill: #e95420;
-}
-
 .btn-solid {
   background: var(--color-fg);
   color: var(--color-bg);
@@ -5077,7 +5073,7 @@ button.action {
   display: grid;
   gap: 1rem;
   margin: 3rem auto 0;
-  max-width: 52rem;
+  max-width: 32rem;
   text-align: left;
 }
 
@@ -5099,20 +5095,6 @@ button.action {
     ),
     var(--color-surface);
   box-shadow: var(--shadow-card);
-}
-
-.download-card-linux {
-  background:
-    radial-gradient(
-      90% 70% at 8% 0%,
-      color-mix(in oklab, var(--color-sage) 15%, transparent),
-      transparent 70%
-    ),
-    var(--color-surface);
-}
-
-.download-card-linux .download-platform-icon {
-  color: #e95420;
 }
 
 .download-platform {
@@ -5459,10 +5441,6 @@ button.action {
   .perf-grid {
     grid-template-columns: 5fr 7fr;
     align-items: start;
-  }
-
-  .download-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .footer-inner {

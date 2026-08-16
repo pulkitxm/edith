@@ -71,26 +71,11 @@ The main source tree is organized by role after the feature-folder restructure:
 | `Packages/Edith/Sources/EdithHelper/Features` | Always-on macOS integrations and their menu bar UI. |
 | `Packages/Edith/Sources/EdithKit/Core` | Shared macOS defaults, IPC, paths, processes, resources and update support. |
 | `Packages/Edith/Sources/EdithKit/Features` | Reusable macOS domain models and services. |
-| `Packages/Edith/Sources/EdithCore` | Portable code compiled on both macOS and Linux. |
+| `Packages/Edith/Sources/EdithCore` | Shared extension registry and platform capability models. |
 
 `AppIcon.icns` and the helper's `MenuBar.png` are checked in, generated from
 `Packages/Edith/Sources/Edith/Resources/appicon.png`. Run `make icon` after
 changing the artwork.
-
-### Ubuntu
-
-Ubuntu 24.04 development uses Swift 6.3.3 and GTK 4. The shortest local loop is:
-
-```bash
-make linux-test
-make linux-build
-make linux-run
-```
-
-Use `make linux-check` to test the portable core, validate desktop metadata, and
-build the Debian package. The complete toolchain setup, packaging workflow,
-project layout, and cross-platform extension rules are in the
-[Ubuntu development guide](docs/ubuntu-development.md).
 
 ### Companion backend
 
@@ -115,8 +100,8 @@ end-user deployment and data model are in the
 ## Checks
 
 Run `make ci` before pushing. The pre-push hook runs the applicable macOS, site,
-script and policy gates in parallel. Linux and Companion changes have additional
-commands below and dedicated CI jobs.
+script and policy gates in parallel. Companion changes have additional commands
+below and a dedicated CI job.
 
 | Target | What it does |
 | --- | --- |
@@ -134,30 +119,28 @@ commands below and dedicated CI jobs.
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
 
-For Ubuntu changes, run `make linux-check`. For Companion backend changes, run the
-Clippy and Cargo tests shown above. CI also applies every migration to a real
+For Companion backend changes, run the Clippy and Cargo tests shown above. CI also
+applies every migration to a real
 pgvector database. These checks are not part of `make ci` or the pre-push hook.
 
 Other targets: `make build`, `make install`, `make reset`, `make reinstall`,
 `make icon`, `make site-dev` (serves `apps/site` on port 8000), `make loc`,
-`make linux-test`, `make linux-build`, `make linux-run`, `make linux-diagnose`,
-`make linux-metadata`, `make linux-package`, and `make linux-check`.
+and `make wiki`.
 
 This repo is kept comment-free and CI enforces it. Run `bun run strip-comments`
 if one slips in. Write names and structure that do not need prose.
 
 ## Releases
 
-Merging application or packaging changes into `main` publishes
-a new patch version after the required CI jobs pass. CI calls the reusable release
-workflow, which builds the signed DMG and Ubuntu package in parallel, notarizes the
-DMG when Apple credentials are available, generates the signed Sparkle appcast,
-installs and diagnoses the Debian package, then publishes all three assets to one
-GitHub Release. The versioned plists and cask land together in one release commit
+Merging application changes into `main` publishes a new patch version after the
+required CI jobs pass. CI calls the reusable release workflow, which builds the
+signed DMG, notarizes it when Apple credentials are available, generates the signed
+Sparkle appcast, then publishes both assets to one GitHub Release. The versioned
+plists and cask land together in one release commit
 and tag, and the cask is mirrored to the tap. To rebuild an existing release, run
 the Release workflow manually from `main` with its required `rebuild` input set to
 the current tag. Only the current release can be rebuilt. The rebuild replaces its
-three assets, commits a changed DMG checksum to `main` when needed, and mirrors the
+two assets, commits a changed DMG checksum to `main` when needed, and mirrors the
 same cask to the tap. It does not create a new version or tag. To recover a skipped
 automatic release, run the CI workflow manually from `main` with `release` enabled.
 That path runs every routed product check before it calls the reusable workflow
@@ -226,9 +209,7 @@ signed release flow remains available, but Gatekeeper can warn on other Macs.
 
 The DMG is published as `Edith.dmg` rather than a versioned name so
 `releases/latest/download/Edith.dmg` always resolves to the newest build, which
-is what the website's download button uses. The Ubuntu asset is published as
-`Edith.deb` for the same stable latest-release URL, while its Debian metadata
-retains the release version.
+is what the website's download button uses.
 
 ### Why signing identity matters
 

@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0e0f11" />
-    <title>Edith: native macOS and Ubuntu control center</title>
+    <title>Edith: native macOS control center</title>
     <meta
       name="description"
-      content="Edith is a free, open source native control center for macOS and Ubuntu with usage analytics, local music, clipboard tools, and system utilities."
+      content="Edith is a free, open source native macOS control center with usage analytics, local music, clipboard tools, and system utilities."
     />
     <link rel="canonical" href="https://edith.pulkit.page/" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
@@ -24,11 +24,11 @@
     <meta property="og:site_name" content="Edith" />
     <meta
       property="og:title"
-      content="Edith: native macOS and Ubuntu control center"
+      content="Edith: native macOS control center"
     />
     <meta
       property="og:description"
-      content="A free and open source native control center for macOS and Ubuntu. One app instead of twelve."
+      content="A free and open source native macOS control center. One app instead of twelve."
     />
     <meta property="og:url" content="https://edith.pulkit.page/" />
     <meta property="og:image" content="https://edith.pulkit.page/og-home.png" />
@@ -37,7 +37,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Edith: one native control center instead of twelve, for macOS and Ubuntu."
+      content="Edith: one native macOS control center instead of twelve."
     />
     <meta property="og:video" content="https://edith.pulkit.page/announcement.mp4" />
     <meta property="og:video:type" content="video/mp4" />
@@ -46,16 +46,16 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="Edith: native macOS and Ubuntu control center"
+      content="Edith: native macOS control center"
     />
     <meta
       name="twitter:description"
-      content="A free and open source native control center for macOS and Ubuntu. One app instead of twelve."
+      content="A free and open source native macOS control center. One app instead of twelve."
     />
     <meta name="twitter:image" content="https://edith.pulkit.page/og-home.png" />
     <meta
       name="twitter:image:alt"
-      content="Edith: one native control center instead of twelve, for macOS and Ubuntu."
+      content="Edith: one native macOS control center instead of twelve."
     />
     <script type="application/ld+json">
       {
@@ -67,11 +67,8 @@
             "url": "https://edith.pulkit.page/",
             "image": "https://edith.pulkit.page/app-icon-512.png",
             "applicationCategory": "UtilitiesApplication",
-            "operatingSystem": ["macOS 14+", "Ubuntu 24.04 LTS"],
-            "downloadUrl": [
-              "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
-              "https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
-            ],
+            "operatingSystem": "macOS 14+",
+            "downloadUrl": "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
             "license": "https://www.gnu.org/licenses/gpl-3.0.html",
             "isAccessibleForFree": true,
             "offers": {
@@ -79,7 +76,7 @@
               "price": "0",
               "priceCurrency": "USD"
             },
-            "description": "A free, open source native control center for macOS and Ubuntu with usage analytics, local music, and system tools.",
+            "description": "A free, open source native macOS control center with usage analytics, local music, and system tools.",
             "featureList": [
               "Claude and Codex rate-limit tracking with live countdowns",
               "Selectable Claude, Codex, and Fable limit windows in the menu bar",
@@ -146,7 +143,7 @@
                 "name": "Which systems does Edith support?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "The full app runs on macOS 14 and later on Apple Silicon. The native Ubuntu preview targets Ubuntu 24.04 LTS on amd64."
+                  "text": "Edith runs on macOS 14 and later on Apple Silicon."
                 }
               }
             ]
@@ -167,7 +164,11 @@
           <a href="#performance">Performance</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <a class="btn btn-solid btn-sm" data-download-auto href="#download">
+        <a
+          class="btn btn-solid btn-sm"
+          href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
+          aria-label="Download Edith for macOS"
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="M12 3a1.2 1.2 0 0 1 1.2 1.2v8.9l3.05-3.05a1.2 1.2 0 1 1 1.7 1.7l-5.1 5.1a1.2 1.2 0 0 1-1.7 0l-5.1-5.1a1.2 1.2 0 1 1 1.7-1.7l3.05 3.05V4.2A1.2 1.2 0 0 1 12 3zM5.2 18.6h13.6a1.2 1.2 0 0 1 0 2.4H5.2a1.2 1.2 0 0 1 0-2.4z"
@@ -181,16 +182,15 @@
     <main id="top">
       <section class="hero">
         <div class="hero-inner">
-          <p class="eyebrow hero-eyebrow">Native on macOS and Ubuntu</p>
+          <p class="eyebrow hero-eyebrow">Native on macOS</p>
           <h1>One control center<br />instead of twelve.</h1>
           <p class="hero-lede">
-            Get the complete native Mac app or the new native Ubuntu preview. Both share
-            Edith's portable core, extension catalog, and focus on efficient desktop tools.
+            Get the complete native Mac app with Edith's full extension catalog and efficient
+            desktop tools.
           </p>
           <div class="hero-cta">
             <a
               class="btn btn-solid"
-              data-download-os="macos"
               href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -199,18 +199,6 @@
                 />
               </svg>
               Download for macOS
-            </a>
-            <a
-              class="btn btn-outline"
-              data-download-os="linux"
-              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M17.61.455a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zM12.92.8C8.923.777 5.137 2.941 3.148 6.451a4.5 4.5 0 0 1 .26-.007 4.92 4.92 0 0 1 2.585.737A8.316 8.316 0 0 1 12.688 3.6 4.944 4.944 0 0 1 13.723.834 11.008 11.008 0 0 0 12.92.8zm9.226 4.994a4.915 4.915 0 0 1-1.918 2.246 8.36 8.36 0 0 1-.273 8.303 4.89 4.89 0 0 1 1.632 2.54 11.156 11.156 0 0 0 .559-13.089zM3.41 7.932A3.41 3.41 0 0 0 0 11.342a3.41 3.41 0 0 0 3.41 3.409 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zm2.027 7.866a4.908 4.908 0 0 1-2.915.358 11.1 11.1 0 0 0 7.991 6.698 11.234 11.234 0 0 0 2.422.249 4.879 4.879 0 0 1-.999-2.85 8.484 8.484 0 0 1-.836-.136 8.304 8.304 0 0 1-5.663-4.32zm11.405.928a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41z"
-                />
-              </svg>
-              Download for Ubuntu
             </a>
             <a class="btn btn-ghost" href="https://github.com/pulkitxm/edith">
               <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -222,11 +210,8 @@
             </a>
           </div>
           <p class="fineprint hero-note">
-            Free forever. macOS 14+ on Apple Silicon or Ubuntu 24.04 on amd64.
+            Free forever. Requires macOS 14+ on Apple Silicon.
           </p>
-          <a class="hero-other" data-other-downloads href="#download" hidden>
-            Other platforms
-          </a>
 
           <div class="hero-demo">
             <div class="window">
@@ -634,7 +619,7 @@
             <h4>Remote machines</h4>
             <p>
               Monitor SSH hosts, open terminals, browse files, run containers, control power,
-              and switch supported Linux thermal profiles.
+              and switch supported thermal profiles.
             </p>
           </div>
           <div class="card card-shortcut">
@@ -1080,11 +1065,10 @@
       </section>
 
       <section id="download" class="wrap download" data-reveal-group>
-        <p class="eyebrow">Choose your platform</p>
+        <p class="eyebrow">Download for macOS</p>
         <h2>Native where you work.</h2>
         <p class="download-lede">
-          One release, two native builds. Pick the complete Mac experience or help shape the
-          Ubuntu preview as its integrations come online.
+          One complete native Mac release with every Edith extension and system integration.
         </p>
         <div class="download-grid">
           <article class="download-card">
@@ -1121,31 +1105,6 @@
               </button>
             </div>
             <span class="fineprint">macOS 14+ · Apple Silicon</span>
-          </article>
-          <article class="download-card download-card-linux">
-            <div class="download-platform">
-              <span class="download-platform-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M17.61.455a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zM12.92.8C8.923.777 5.137 2.941 3.148 6.451a4.5 4.5 0 0 1 .26-.007 4.92 4.92 0 0 1 2.585.737A8.316 8.316 0 0 1 12.688 3.6 4.944 4.944 0 0 1 13.723.834 11.008 11.008 0 0 0 12.92.8zm9.226 4.994a4.915 4.915 0 0 1-1.918 2.246 8.36 8.36 0 0 1-.273 8.303 4.89 4.89 0 0 1 1.632 2.54 11.156 11.156 0 0 0 .559-13.089zM3.41 7.932A3.41 3.41 0 0 0 0 11.342a3.41 3.41 0 0 0 3.41 3.409 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41zm2.027 7.866a4.908 4.908 0 0 1-2.915.358 11.1 11.1 0 0 0 7.991 6.698 11.234 11.234 0 0 0 2.422.249 4.879 4.879 0 0 1-.999-2.85 8.484 8.484 0 0 1-.836-.136 8.304 8.304 0 0 1-5.663-4.32zm11.405.928a3.41 3.41 0 0 0-3.41 3.41 3.41 3.41 0 0 0 3.41 3.41 3.41 3.41 0 0 0 3.41-3.41 3.41 3.41 0 0 0-3.41-3.41z"
-                  />
-                </svg>
-              </span>
-              <span>
-                <strong>Ubuntu</strong>
-                <small>Native preview</small>
-              </span>
-            </div>
-            <p>
-              A lean GTK 4 shell with the shared core, extension model, and Debian packaging.
-            </p>
-            <a
-              class="btn btn-solid"
-              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb"
-            >
-              Download Edith.deb
-            </a>
-            <span class="fineprint">Ubuntu 24.04 LTS · amd64</span>
           </article>
         </div>
       </section>
@@ -1208,8 +1167,7 @@
               <span aria-hidden="true">+</span>
             </summary>
             <p>
-              The full app runs on macOS 14 and later on Apple Silicon. The native Ubuntu
-              preview targets Ubuntu 24.04 LTS on amd64.
+              Edith runs on macOS 14 and later on Apple Silicon.
             </p>
           </details>
           <details>
@@ -1232,7 +1190,7 @@
       <div class="footer-inner">
         <div class="footer-brand">
           <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" />
-          <span>Edith. Native on macOS and Ubuntu.</span>
+          <span>Edith. Native on macOS.</span>
         </div>
         <div class="footer-links">
           <a href="#features">Features</a>

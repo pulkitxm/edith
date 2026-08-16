@@ -1,5 +1,3 @@
-import { currentDesktopPlatform } from "./platform.js";
-
 const library = [
   {
     title: "Weightless",
@@ -246,45 +244,6 @@ function startPresenterDemo() {
   window.setInterval(flip, 3600);
 }
 
-const downloadUrls = {
-  macos: "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
-  linux: "https://github.com/pulkitxm/edith/releases/latest/download/Edith.deb",
-};
-
-const downloadLabels = {
-  macos: "Download Edith for macOS",
-  linux: "Download Edith for Ubuntu",
-};
-
-function startPlatformDownload() {
-  const platform = currentDesktopPlatform();
-  if (!platform) {
-    return;
-  }
-  for (const button of document.querySelectorAll("[data-download-auto]")) {
-    button.href = downloadUrls[platform];
-    button.setAttribute("aria-label", downloadLabels[platform]);
-  }
-  const buttons = document.querySelectorAll("[data-download-os]");
-  for (const button of buttons) {
-    const matches = button.dataset.downloadOs === platform;
-    button.hidden = !matches;
-    button.classList.toggle("btn-solid", matches);
-    button.classList.toggle("btn-outline", !matches);
-  }
-  const note = document.querySelector(".hero-note");
-  if (note) {
-    note.textContent =
-      platform === "macos"
-        ? "Free forever. Requires macOS Sonoma (v14)+ on Apple Silicon."
-        : "Free forever. Ubuntu 24.04 LTS on amd64. Native preview.";
-  }
-  const otherDownloads = document.querySelector("[data-other-downloads]");
-  if (otherDownloads) {
-    otherDownloads.hidden = false;
-  }
-}
-
 function startSystemActions() {
   const buttons = document.querySelectorAll("[data-action]");
   const text = document.querySelector("[data-action-text]");
@@ -349,7 +308,6 @@ function startHeaderScroll() {
 }
 
 function start() {
-  startPlatformDownload();
   startHeaderScroll();
   startSystemActions();
   startCopyButtons();

@@ -107,7 +107,7 @@ struct ExtensionPreview: View {
                     Circle()
                         .fill(DashSkin.sage.opacity(0.55 + pulse * 0.45))
                         .frame(width: UIScale.pt(4), height: UIScale.pt(4))
-                    Text("LINUX")
+                    Text("HOST")
                         .font(DashSkin.mono(6, weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }

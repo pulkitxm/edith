@@ -674,10 +674,10 @@ check jobs run for the areas that moved, and a final `release` job calls
 `.github/workflows/release.yml` as a reusable workflow.
 
 That `release` job requires a push to `main`, a successful routing and policy job,
-no applicable job failure or cancellation, and a change to the macOS app or Linux
-package. The Ubuntu package, macOS build, Swift tests and Companion backend are each
-required when their routed area changed. Checks and release are therefore the same
-run, and the release cannot start until every applicable check has gone green.
+no applicable job failure or cancellation, and a change to the macOS app. The
+macOS build, Swift tests and Companion backend are each required when their routed
+area changed. Checks and release are therefore the same run, and the release cannot
+start until every applicable check has gone green.
 There is no second workflow watching for a tag, and no tag trigger anywhere.
 
 `ci.yml` skips itself when the head commit message starts with `Release v` or
@@ -692,7 +692,7 @@ are still finishing, and a cancelling group would kill the run that is mid-relea
 
 ### Build
 
-`release.yml` has three jobs feeding a fourth.
+`release.yml` has two build jobs feeding the publisher.
 
 **`version`** runs on Ubuntu, reads `Resources/Info.plist`, refuses to start without
 the signing, Sparkle, push, and tap secrets, and computes the next patch version and
@@ -709,10 +709,6 @@ disk image and carries a signature, and uploads `Edith.dmg` and `appcast.xml`. I
 also uploads the two stamped plists, so the bytes that go on to `main` are the exact
 bytes that produced the disk image rather than a second, independent edit.
 
-**`deb`** runs in a Swift container on Ubuntu, runs the portable tests, validates the
-desktop metadata, builds the Debian package at the release version, checks its
-version, installs it, runs `edith-linux --diagnose`, and uploads `Edith.deb`.
-
 ### Bump
 
 **`publish`** is where every write happens, and it happens once. It downloads the
@@ -722,7 +718,7 @@ GitHub release, mirrors the cask to the tap, and reads the tap back to confirm i
 landed.
 
 Two properties fall out of doing it in that order. A release costs exactly one commit
-on `main`, where it used to cost two. And nothing is written until both builds have
+on `main`, where it used to cost two. And nothing is written until the build has
 passed, so a failed build leaves no tag, no bumped version, and no cask pointing at a
 release that does not exist. The next merge simply tries the same version again.
 
