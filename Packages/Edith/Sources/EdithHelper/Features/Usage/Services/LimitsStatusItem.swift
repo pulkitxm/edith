@@ -6,6 +6,7 @@ final class LimitsStatusItem {
     nonisolated(unsafe) static private(set) weak var button: NSStatusBarButton?
 
     private let item: NSStatusItem
+    private var stackedView: StackedLimitsView?
 
     init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -26,120 +27,174 @@ final class LimitsStatusItem {
     }
 
     func update(_ providers: [ProviderLimits]) {
-        let title = NSMutableAttributedString()
+        let defaults = SharedDefaults.store
         let masked =
             PresenterState.shared.active
-            && (SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
-        if providers.count == 1, let limits = providers.first {
-            segment("5h", window: limits.session, kind: .session, into: title, masked: masked)
-            title.append(NSAttributedString(string: "  "))
-            segment("7d", window: limits.week, kind: .weekly, into: title, masked: masked)
-        } else if providers.count > 1 {
-            for (index, limits) in providers.enumerated() {
-                if index > 0 { title.append(NSAttributedString(string: "   ")) }
-                providerSegment(limits, into: title, masked: masked)
-            }
-        } else {
-            segment("5h", window: nil, kind: .session, into: title, masked: masked)
-            title.append(NSAttributedString(string: "  "))
-            segment("7d", window: nil, kind: .weekly, into: title, masked: masked)
+        let source =
+            providers.isEmpty
+            ? [ProviderLimits(provider: .claude, session: nil, week: nil)] : providers
+        let groups = MenuBarLimits.groups(
+            providers: source,
+            selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
+            masked: masked)
+        item.isVisible = !groups.isEmpty
+        guard !groups.isEmpty else { return }
+        switch MenuBarLimits.style(defaults) {
+        case .stacked: renderStacked(groups)
+        case .tagged: renderTagged(groups)
+        case .slash: renderSlash(groups)
         }
-        item.button?.attributedTitle = title
     }
 
     func showUnavailable() { update([]) }
 
-    private func providerSegment(
-        _ limits: ProviderLimits, into out: NSMutableAttributedString, masked: Bool
-    ) {
+    private func setTitle(_ title: NSAttributedString) {
+        stackedView?.removeFromSuperview()
+        stackedView = nil
+        item.length = NSStatusItem.variableLength
+        item.button?.attributedTitle = title
+    }
+
+    private func renderTagged(_ groups: [MenuBarProviderGroup]) {
+        let multi = groups.count > 1
+        let title = NSMutableAttributedString()
+        for (index, group) in groups.enumerated() {
+            if index > 0 { title.append(NSAttributedString(string: "   ")) }
+            if multi { appendLogo(group.provider, into: title) }
+            for (segmentIndex, segment) in group.segments.enumerated() {
+                if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
+                appendLabel(segment.slot.menuBarLabel + " ", into: title)
+                appendValue(segment, percentSuffix: !multi, into: title)
+            }
+        }
+        setTitle(title)
+    }
+
+    private func renderSlash(_ groups: [MenuBarProviderGroup]) {
+        let title = NSMutableAttributedString()
+        let separatorColor = (subColor ?? numberOverride ?? NSColor.labelColor)
+            .withAlphaComponent(0.65)
+        for (index, group) in groups.enumerated() {
+            if index > 0 { title.append(NSAttributedString(string: "   ")) }
+            appendLogo(group.provider, into: title)
+            for (segmentIndex, segment) in group.segments.enumerated() {
+                if segmentIndex > 0 {
+                    title.append(
+                        NSAttributedString(
+                            string: "/",
+                            attributes: [
+                                .font: NSFont.monospacedDigitSystemFont(
+                                    ofSize: 11, weight: .medium),
+                                .foregroundColor: separatorColor,
+                            ]))
+                }
+                appendValue(segment, percentSuffix: false, into: title)
+            }
+        }
+        setTitle(title)
+    }
+
+    private func renderStacked(_ groups: [MenuBarProviderGroup]) {
+        item.button?.attributedTitle = NSAttributedString()
+        let view = stackedView ?? StackedLimitsView()
+        if stackedView == nil, let button = item.button {
+            view.autoresizingMask = [.width, .height]
+            view.frame = button.bounds
+            button.addSubview(view)
+            stackedView = view
+        }
+        let multi = groups.count > 1
+        view.groups = groups.map { stackedGroup($0, multi: multi) }
+        item.length = view.desiredWidth
+    }
+
+    private func stackedGroup(
+        _ group: MenuBarProviderGroup, multi: Bool
+    ) -> StackedLimitsView.Group {
+        let logoColor = subColor ?? numberOverride ?? NSColor.labelColor
+        let labelColor = subColor ?? NSColor.secondaryLabelColor
+        let dimColor = subColor ?? NSColor.tertiaryLabelColor
+        let columns = group.segments.map { segment -> StackedLimitsView.Column in
+            let value: String
+            let color: NSColor
+            switch segment.value {
+            case .masked:
+                value = "·"
+                color = dimColor
+            case .missing:
+                value = "\u{2013}"
+                color = dimColor
+            case .percent(let percent):
+                value = "\(percent)"
+                color =
+                    numberOverride
+                    ?? segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
+                    ?? dimColor
+            }
+            return StackedLimitsView.Column(
+                label: segment.slot.menuBarLabel, value: value, valueColor: color,
+                labelColor: labelColor)
+        }
+        return StackedLimitsView.Group(
+            logo: multi ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
+            columns: columns)
+    }
+
+    private func appendLogo(_ provider: LimitProvider, into out: NSMutableAttributedString) {
         let textColor = subColor ?? numberOverride ?? NSColor.labelColor
-        if let image = ProviderLogo.tintedImage(limits.provider, color: textColor) {
-            let attachment = NSTextAttachment()
-            attachment.image = image
-            attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
-            out.append(NSAttributedString(attachment: attachment))
-            out.append(NSAttributedString(string: " "))
-        }
-        compactValue(limits.session, kind: .session, into: out, masked: masked)
-        out.append(
-            NSAttributedString(
-                string: "/",
-                attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
-                    .foregroundColor: textColor.withAlphaComponent(0.65),
-                ]))
-        compactValue(limits.week, kind: .weekly, into: out, masked: masked)
+        guard let image = ProviderLogo.tintedImage(provider, color: textColor) else { return }
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
+        out.append(NSAttributedString(attachment: attachment))
+        out.append(NSAttributedString(string: " "))
     }
 
-    private func compactValue(
-        _ window: LimitWindow?, kind: LimitWindowKind, into out: NSMutableAttributedString,
-        masked: Bool
-    ) {
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        let text: String
-        let color: NSColor
-        if masked {
-            text = "·"
-            color = subColor ?? NSColor.tertiaryLabelColor
-        } else if let window {
-            text = "\(Int(window.percent.rounded()))"
-            color = numberOverride ?? self.color(for: window, kind: kind)
-        } else {
-            text = "\u{2013}"
-            color = subColor ?? NSColor.tertiaryLabelColor
-        }
-        out.append(
-            NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]))
-    }
-
-    private func segment(
-        _ label: String, window: LimitWindow?, kind: LimitWindowKind,
-        into out: NSMutableAttributedString, masked: Bool
-    ) {
+    private func appendLabel(_ label: String, into out: NSMutableAttributedString) {
         out.append(
             NSAttributedString(
-                string: label + " ",
+                string: label,
                 attributes: [
                     .font: NSFont.systemFont(ofSize: 9, weight: .bold),
                     .foregroundColor: subColor ?? NSColor.secondaryLabelColor,
                     .baselineOffset: 1.5,
                 ]))
-        let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        guard !masked else {
+    }
+
+    private func appendValue(
+        _ segment: MenuBarLimitSegment, percentSuffix: Bool, into out: NSMutableAttributedString
+    ) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        let dimColor = subColor ?? NSColor.tertiaryLabelColor
+        switch segment.value {
+        case .masked:
             out.append(
                 NSAttributedString(
-                    string: "· ·",
-                    attributes: [
-                        .font: numberFont,
-                        .foregroundColor: subColor ?? NSColor.tertiaryLabelColor,
-                    ]))
-            return
-        }
-        guard let window else {
+                    string: "·", attributes: [.font: font, .foregroundColor: dimColor]))
+        case .missing:
             out.append(
                 NSAttributedString(
-                    string: "\u{2013}",
-                    attributes: [
-                        .font: numberFont,
-                        .foregroundColor: subColor ?? NSColor.tertiaryLabelColor,
-                    ]))
-            return
+                    string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
+        case .percent(let percent):
+            let tint =
+                numberOverride
+                ?? segment.window.map { color(for: $0, kind: segment.slot.kind) }
+                ?? dimColor
+            out.append(
+                NSAttributedString(
+                    string: "\(percent)", attributes: [.font: font, .foregroundColor: tint]))
+            if percentSuffix {
+                out.append(
+                    NSAttributedString(
+                        string: "%",
+                        attributes: [
+                            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
+                            .foregroundColor: tint.withAlphaComponent(0.75),
+                        ]))
+            }
         }
-        let tint = numberOverride ?? color(for: window, kind: kind)
-        out.append(
-            NSAttributedString(
-                string: "\(Int(window.percent.rounded()))",
-                attributes: [
-                    .font: numberFont, .foregroundColor: tint,
-                ]))
-        out.append(
-            NSAttributedString(
-                string: "%",
-                attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
-                    .foregroundColor: tint.withAlphaComponent(0.75),
-                ]))
     }
 
     private func color(for window: LimitWindow, kind: LimitWindowKind) -> NSColor {
@@ -227,5 +282,98 @@ final class LimitsStatusItem {
             saturation: x.saturationComponent + (y.saturationComponent - x.saturationComponent) * f,
             brightness: x.brightnessComponent + (y.brightnessComponent - x.brightnessComponent) * f,
             alpha: 1)
+    }
+}
+
+final class StackedLimitsView: NSView {
+    struct Column {
+        let label: String
+        let value: String
+        let valueColor: NSColor
+        let labelColor: NSColor
+    }
+
+    struct Group {
+        let logo: NSImage?
+        let columns: [Column]
+    }
+
+    var groups: [Group] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    private static let labelFont = NSFont.systemFont(ofSize: 7, weight: .bold)
+    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+    private static let edgeInset: CGFloat = 5
+    private static let columnGap: CGFloat = 7
+    private static let groupGap: CGFloat = 12
+    private static let logoSize: CGFloat = 12
+    private static let logoGap: CGFloat = 4
+    private static let rowGap: CGFloat = 1
+
+    var desiredWidth: CGFloat {
+        var width = Self.edgeInset * 2
+        for (index, group) in groups.enumerated() {
+            if index > 0 { width += Self.groupGap }
+            if group.logo != nil { width += Self.logoSize + Self.logoGap }
+            for (columnIndex, column) in group.columns.enumerated() {
+                if columnIndex > 0 { width += Self.columnGap }
+                width += Self.columnWidth(column)
+            }
+        }
+        return width.rounded(.up)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let labelHeight = Self.labelFont.capHeight + 2
+        let valueHeight = ceil(Self.valueFont.ascender - Self.valueFont.descender)
+        let blockHeight = labelHeight + Self.rowGap + valueHeight
+        let blockTop = (bounds.height + blockHeight) / 2
+        var x = Self.edgeInset
+        for (index, group) in groups.enumerated() {
+            if index > 0 { x += Self.groupGap }
+            if let logo = group.logo {
+                let y = (bounds.height - Self.logoSize) / 2
+                logo.draw(
+                    in: NSRect(x: x, y: y, width: Self.logoSize, height: Self.logoSize),
+                    from: .zero, operation: .sourceOver, fraction: 1)
+                x += Self.logoSize + Self.logoGap
+            }
+            for (columnIndex, column) in group.columns.enumerated() {
+                if columnIndex > 0 { x += Self.columnGap }
+                let width = Self.columnWidth(column)
+                let label = Self.attributed(
+                    column.label, font: Self.labelFont, color: column.labelColor)
+                let value = Self.attributed(
+                    column.value, font: Self.valueFont, color: column.valueColor)
+                let labelX = x + (width - label.size().width) / 2
+                let valueX = x + (width - value.size().width) / 2
+                label.draw(at: NSPoint(x: labelX, y: blockTop - labelHeight))
+                value.draw(
+                    at: NSPoint(
+                        x: valueX, y: blockTop - labelHeight - Self.rowGap - valueHeight))
+                x += width
+            }
+        }
+    }
+
+    private static func columnWidth(_ column: Column) -> CGFloat {
+        let label = attributed(column.label, font: labelFont, color: .labelColor).size().width
+        let value = attributed(column.value, font: valueFont, color: .labelColor).size().width
+        return ceil(max(label, value))
+    }
+
+    private static func attributed(
+        _ text: String, font: NSFont, color: NSColor
+    ) -> NSAttributedString {
+        NSAttributedString(
+            string: text, attributes: [.font: font, .foregroundColor: color])
     }
 }
