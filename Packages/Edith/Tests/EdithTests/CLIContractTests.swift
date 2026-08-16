@@ -45,6 +45,12 @@ enum JSONContract {
         JSONCase("ed clipboard unpin", ["clipboard", "unpin", "1", "--json"]),
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
+        JSONCase("ed clipboard queue ls", ["clipboard", "queue", "ls", "--json"]),
+        JSONCase("ed clipboard queue add", ["clipboard", "queue", "add", "1", "--json"]),
+        JSONCase("ed clipboard queue next", ["clipboard", "queue", "next", "--json"]),
+        JSONCase(
+            "ed clipboard queue rm", ["clipboard", "queue", "rm", "entry-id", "--json"]),
+        JSONCase("ed clipboard queue clear", ["clipboard", "queue", "clear", "--json"]),
         JSONCase("ed music ls", ["music", "ls", "--json"]),
         JSONCase("ed music rescan", ["music", "rescan", "--json"]),
         JSONCase("ed music start", ["music", "start", "nothing-at-all", "--json"]),

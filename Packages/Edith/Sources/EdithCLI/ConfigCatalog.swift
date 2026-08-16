@@ -565,6 +565,10 @@ public enum ConfigCatalog {
             AppStorageKeys.Clipboard.pastePlainText, .bool, group: "clipboard",
             summary: "Strip formatting when pasting."),
         SettingDefinition(
+            AppStorageKeys.Clipboard.pasteQueueEnabled, .bool, group: "clipboard",
+            summary: "Automatically add new clipboard entries to the paste queue.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.Clipboard.checkInterval, .number, group: "clipboard",
             summary: "Seconds between pasteboard polls.", fallback: .double(1)),
         SettingDefinition(

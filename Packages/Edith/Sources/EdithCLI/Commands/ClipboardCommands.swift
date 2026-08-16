@@ -15,9 +15,73 @@ struct ClipboardCommand: AsyncParsableCommand {
         subcommands: [
             ClipboardListCommand.self, ClipboardStatsCommand.self, ClipboardGetCommand.self,
             ClipboardCopyCommand.self, ClipboardPinCommand.self, ClipboardUnpinCommand.self,
-            ClipboardRemoveCommand.self, ClipboardClearCommand.self,
+            ClipboardRemoveCommand.self, ClipboardClearCommand.self, ClipboardQueueCommand.self,
         ],
         defaultSubcommand: ClipboardListCommand.self)
+}
+
+enum ClipboardQueueCLI {
+    static func request(_ action: ClipboardQueueAction, entryID: String? = nil) async throws
+        -> ClipboardQueueResponse
+    {
+        try AppBridge.requireHelper("the clipboard paste queue")
+        let requestID = UUID().uuidString
+        var info: [String: Any] = [
+            ClipboardQueueBridge.actionKey: action.rawValue,
+            ClipboardQueueBridge.requestIDKey: requestID,
+        ]
+        if let entryID { info[ClipboardQueueBridge.entryIDKey] = entryID }
+        let requestInfo = info
+        let reply = await AppBridge.awaitReply(
+            ClipboardQueueBridge.responseName(requestID: requestID), timeout: 3
+        ) {
+            AppBridge.post(IPC.Name.requestClipboardQueue, userInfo: requestInfo)
+        }
+        guard let encoded = reply?[ClipboardQueueBridge.responseKey] as? String,
+            let response = ClipboardQueueBridge.decode(encoded)
+        else {
+            throw AppBridge.silence(
+                "the clipboard paste queue", extensionKey: AppStorageKeys.Clipboard.enabled)
+        }
+        switch response.status {
+        case .ok:
+            return response
+        case .extensionOff:
+            throw CLIFailure.unavailable(
+                "the Clipboard extension is off",
+                hint: "run `ed extensions enable clipboard`, then retry")
+        case .empty:
+            throw CLIFailure.notFound("the clipboard paste queue is empty")
+        case .entryNotFound:
+            let target = entryID.map { " named \($0)" } ?? ""
+            throw CLIFailure.notFound(
+                "there is no queued clipboard entry\(target)",
+                hint: "run `ed clipboard queue ls` to see what is queued")
+        case .accessibilityRequired:
+            throw CLIFailure.unavailable(
+                "pasting the next queued entry needs Accessibility permission",
+                hint: "run `ed permissions request accessibility`, then retry")
+        case .blobMissing:
+            throw CLIFailure.notFound(
+                "the stored copy of the next queued entry is gone",
+                hint: "remove it with `ed clipboard queue rm <entry-id>`")
+        }
+    }
+
+    static func json(_ item: ClipboardQueueItem, position: Int) -> JSONValue {
+        .object([
+            "position": .int(position),
+            "id": .string(item.id),
+            "kind": .string(item.entry.ext),
+            "family": .string(item.entry.kind.rawValue),
+            "isText": .bool(item.entry.isTextual),
+            "preview": .optional(item.entry.preview),
+            "sourceApp": .optional(item.entry.sourceApp),
+            "sizeBytes": .int(item.entry.size),
+            "queuedAt": .date(item.queuedAt),
+            "copiedAt": .date(item.entry.lastCopiedAt),
+        ])
+    }
 }
 
 enum ClipboardBridge {
@@ -352,6 +416,151 @@ struct ClipboardClearCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out("cleared \(outcome.changed) entries")
+        }
+    }
+}
+
+struct ClipboardQueueCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "queue",
+        abstract: "Collect history entries and paste them in order.",
+        subcommands: [
+            ClipboardQueueListCommand.self, ClipboardQueueAddCommand.self,
+            ClipboardQueueNextCommand.self, ClipboardQueueRemoveCommand.self,
+            ClipboardQueueClearCommand.self,
+        ],
+        defaultSubcommand: ClipboardQueueListCommand.self)
+}
+
+struct ClipboardQueueListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "ls", abstract: "List entries waiting to be pasted.", aliases: ["list"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let response = try await ClipboardQueueCLI.request(.list)
+            guard !json else {
+                CLIOut.json(
+                    .array(
+                        response.items.enumerated().map {
+                            ClipboardQueueCLI.json($0.element, position: $0.offset + 1)
+                        }))
+                return
+            }
+            guard !response.items.isEmpty else {
+                CLIOut.note("the clipboard paste queue is empty")
+                return
+            }
+            let rows = response.items.enumerated().map { offset, item in
+                [
+                    String(offset + 1), item.id, item.entry.ext,
+                    item.entry.sourceApp ?? "", item.entry.preview ?? "",
+                ]
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["#", "ENTRY ID", "KIND", "FROM", "PREVIEW"], rows: rows))
+        }
+    }
+}
+
+struct ClipboardQueueAddCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "add", abstract: "Add one history entry to the paste queue.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "The history entry number, counting from 1.")
+    var index: Int
+
+    func run() async throws {
+        try await execute {
+            let found = try ClipboardBridge.entry(at: index)
+            let response = try await ClipboardQueueCLI.request(.add, entryID: found.entry.id)
+            guard let item = response.item else { throw AppBridge.silence("adding to the queue") }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "added": ClipboardQueueCLI.json(item, position: response.items.count),
+                        "count": .int(response.items.count),
+                    ]))
+                return
+            }
+            CLIOut.out("queued history entry \(index) as \(item.id)")
+        }
+    }
+}
+
+struct ClipboardQueueNextCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "next", abstract: "Paste and remove the oldest queued entry.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let response = try await ClipboardQueueCLI.request(.next)
+            guard let item = response.item else {
+                throw AppBridge.silence("pasting from the queue")
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "pasted": ClipboardQueueCLI.json(item, position: 1),
+                        "remaining": .int(response.items.count),
+                    ]))
+                return
+            }
+            CLIOut.out("pasted queued entry \(item.id), \(response.items.count) left")
+        }
+    }
+}
+
+struct ClipboardQueueRemoveCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "rm", abstract: "Remove one entry from the paste queue.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "The queued clipboard entry ID.")
+    var entryID: String
+
+    func run() async throws {
+        try await execute {
+            let response = try await ClipboardQueueCLI.request(.remove, entryID: entryID)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "removed": .string(entryID), "remaining": .int(response.items.count),
+                    ]))
+                return
+            }
+            CLIOut.out("removed queued entry \(entryID), \(response.items.count) left")
+        }
+    }
+}
+
+struct ClipboardQueueClearCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "clear", abstract: "Remove every entry from the paste queue.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let response = try await ClipboardQueueCLI.request(.clear)
+            guard !json else {
+                CLIOut.json(.object(["removed": .int(response.changed), "remaining": .int(0)]))
+                return
+            }
+            CLIOut.out("cleared \(response.changed) queued entries")
         }
     }
 }

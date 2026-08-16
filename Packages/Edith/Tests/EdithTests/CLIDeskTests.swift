@@ -342,6 +342,82 @@ import Testing
             #expect(result.stdoutLines.count == 2)
         }
     }
+
+    @Test func thePasteQueueNeedsTheRunningHelper() async {
+        let result = await CLIProbe.run(["clipboard", "queue", "ls", "--json"])
+        #expect(result.code == ExitCodes.unavailable)
+        #expect(result.stderr.contains("menu bar app"))
+    }
+
+    @Test func listingThePasteQueueUsesTheHelpersInMemoryResponse() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seed(world, count: 2)
+            let entries = ClipboardActions.arrange(ClipboardRepository.loadEntries())
+            let items = [
+                ClipboardQueueItem(
+                    entry: entries[1], queuedAt: Date(timeIntervalSince1970: 1_800_000_000)),
+                ClipboardQueueItem(
+                    entry: entries[0], queuedAt: Date(timeIntervalSince1970: 1_800_000_001)),
+            ]
+            world.helperRunning(true)
+            world.answers { _ in
+                [
+                    ClipboardQueueBridge.responseKey: ClipboardQueueBridge.encode(
+                        ClipboardQueueResponse(status: .ok, items: items))
+                ]
+            }
+
+            let result = await CLIProbe.capture(["clipboard", "queue", "ls", "--json"])
+
+            #expect(result.code == 0)
+            let rows = result.array as? [[String: Any]] ?? []
+            #expect(rows.map { $0["position"] as? Int } == [1, 2])
+            #expect(rows.map { $0["id"] as? String } == items.map(\.id))
+            #expect(world.postedNames().contains(IPC.Name.requestClipboardQueue.rawValue))
+        }
+    }
+
+    @Test func addingAHistoryEntryReportsTheQueuedEntry() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seed(world, count: 2)
+            let entry = ClipboardActions.arrange(ClipboardRepository.loadEntries())[0]
+            let item = ClipboardQueueItem(entry: entry)
+            world.helperRunning(true)
+            world.answers { _ in
+                [
+                    ClipboardQueueBridge.responseKey: ClipboardQueueBridge.encode(
+                        ClipboardQueueResponse(
+                            status: .ok, items: [item], item: item, changed: 1))
+                ]
+            }
+
+            let result = await CLIProbe.capture([
+                "clipboard", "queue", "add", "1", "--json",
+            ])
+
+            #expect(result.code == 0)
+            #expect((result.object?["added"] as? [String: Any])?["id"] as? String == entry.id)
+            #expect(result.object?["count"] as? Int == 1)
+        }
+    }
+
+    @Test func queueNextExplainsTheAccessibilityRequirement() async {
+        let result = await CLIProbe.runInWorld(
+            ["clipboard", "queue", "next", "--json"]
+        ) { world in
+            world.helperRunning(true)
+            world.answers { _ in
+                [
+                    ClipboardQueueBridge.responseKey: ClipboardQueueBridge.encode(
+                        ClipboardQueueResponse(status: .accessibilityRequired))
+                ]
+            }
+        }
+
+        #expect(result.code == ExitCodes.unavailable)
+        #expect(result.stderr.contains("Accessibility permission"))
+        #expect(result.stderr.contains("permissions request accessibility"))
+    }
 }
 
 @Suite struct CLIColorTests {

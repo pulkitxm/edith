@@ -354,6 +354,25 @@ public enum CommandTree {
                     CommandNode(
                         "clear", "Forget the whole history.",
                         options: ["--json", "--help", "--keep-pinned"]),
+                    CommandNode(
+                        "queue", "Collect history entries and paste them in order.",
+                        children: [
+                            CommandNode(
+                                "ls", "List entries waiting to be pasted.", aliases: ["list"],
+                                options: common),
+                            CommandNode(
+                                "add", "Add one history entry to the paste queue.",
+                                options: common, arguments: [.historyIndex]),
+                            CommandNode(
+                                "next", "Paste and remove the oldest queued entry.",
+                                options: common),
+                            CommandNode(
+                                "rm", "Remove one entry from the paste queue.", options: common,
+                                arguments: [.free]),
+                            CommandNode(
+                                "clear", "Remove every entry from the paste queue.",
+                                options: common),
+                        ]),
                 ]),
             CommandNode(
                 "color", "The colours picked with the colour picker.", aliases: ["colour"],

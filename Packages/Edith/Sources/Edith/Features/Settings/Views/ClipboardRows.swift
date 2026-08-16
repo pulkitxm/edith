@@ -20,6 +20,8 @@ struct ClipboardRows: View {
     @AppStorage(AppStorageKeys.Clipboard.pastePlainText, store: SharedDefaults.store) private
         var pastePlainText =
         false
+    @AppStorage(AppStorageKeys.Clipboard.pasteQueueEnabled, store: SharedDefaults.store) private
+        var pasteQueueEnabled = false
     @AppStorage(AppStorageKeys.Clipboard.checkInterval, store: SharedDefaults.store) private
         var checkInterval =
         ClipboardIndex.defaultCheckInterval
@@ -142,6 +144,10 @@ struct ClipboardRows: View {
             Toggle("Paste without formatting", isOn: $pastePlainText)
                 .pointerCursor()
             Text("Strips fonts, colors and links so pasted text matches the destination.")
+                .settingsCaption()
+            Toggle("Add new copies to paste queue", isOn: $pasteQueueEnabled)
+                .pointerCursor()
+            Text("Queues new clipboard entries so the CLI can paste them in order.")
                 .settingsCaption()
         } header: {
             Text("Behavior")
