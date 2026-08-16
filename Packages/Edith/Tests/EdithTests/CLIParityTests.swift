@@ -42,6 +42,14 @@ enum UIParity {
             "the Docker window restarts containers one at a time, never a whole project",
         "ed machines docker compose pull":
             "the Docker window never pulls images, for a project or otherwise",
+        "ed clipboard queue add":
+            "the queue is script-facing and has no mapped panel action",
+        "ed clipboard queue clear":
+            "the queue is script-facing and has no mapped panel action",
+        "ed clipboard queue next":
+            "the queue is script-facing and has no mapped panel action",
+        "ed clipboard queue rm":
+            "the queue is script-facing and has no mapped panel action",
     ]
 
     static let capabilities: [UICapability] = [
