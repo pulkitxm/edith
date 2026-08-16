@@ -6,8 +6,10 @@ import Foundation
 @Observable
 final class ClipboardStore: FeatureModule {
     private(set) var entries: [ClipboardEntry] = []
+    private(set) var revision = 0
     private(set) var skippedOversizeAt: Date?
 
+    private var loaded = false
     private var timer: DispatchSourceTimer?
     private var lastChangeCount = NSPasteboard.general.changeCount
     private var locked = false
@@ -17,8 +19,11 @@ final class ClipboardStore: FeatureModule {
     private var settingsObserver: NSObjectProtocol?
     private var clipboardChangedObserver: NSObjectProtocol?
 
+    private static let diskQueue = DispatchQueue(
+        label: "com.edith.clipboard.disk", qos: .userInitiated)
+
     init() {
-        entries = ClipboardRepository.loadEntries()
+        reloadFromDisk(initial: true)
 
         let dnc = DistributedNotificationCenter.default()
         lockObservers = [
@@ -57,7 +62,7 @@ final class ClipboardStore: FeatureModule {
             IPC.Name.clipboardChanged,
             info: { [weak self] info in
                 guard info["sender"] as? String != Self.senderID else { return }
-                Task { @MainActor in self?.entries = ClipboardRepository.loadEntries() }
+                Task { @MainActor in self?.reloadFromDisk() }
             })
 
         startTimer()
@@ -75,6 +80,17 @@ final class ClipboardStore: FeatureModule {
         wakeObserver = nil
         settingsObserver = nil
         clipboardChangedObserver = nil
+    }
+
+    private func reloadFromDisk(initial: Bool = false) {
+        Self.diskQueue.async { [weak self] in
+            let loaded = ClipboardRepository.loadEntries()
+            Task { @MainActor in
+                guard let self else { return }
+                if initial { self.loaded = true }
+                self.adopt(loaded)
+            }
+        }
     }
 
     private var interval: Double {
@@ -103,6 +119,7 @@ final class ClipboardStore: FeatureModule {
     }
 
     private func tick() {
+        guard loaded else { return }
         let pb = NSPasteboard.general
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount
@@ -137,9 +154,20 @@ final class ClipboardStore: FeatureModule {
             return
         }
 
-        let sha = ClipboardRepository.sha256Hex(captured.data)
-        try? ClipboardRepository.writeBlob(captured.data, sha256: sha, ext: captured.ext)
+        let sourceApp = frontApp?.localizedName
+        Self.diskQueue.async { [weak self] in
+            let sha = ClipboardRepository.sha256Hex(captured.data)
+            try? ClipboardRepository.writeBlob(captured.data, sha256: sha, ext: captured.ext)
+            Task { @MainActor in
+                self?.absorb(
+                    captured, sha: sha, sourceApp: sourceApp, sourceBundleID: bundleID)
+            }
+        }
+    }
 
+    private func absorb(
+        _ captured: ClipboardPayload, sha: String, sourceApp: String?, sourceBundleID: String?
+    ) {
         let existing = entries.first { $0.sha256 == sha && $0.ext == captured.ext }
         if let existing {
             entries.removeAll { $0.id == existing.id }
@@ -147,11 +175,11 @@ final class ClipboardStore: FeatureModule {
         let entry = ClipboardEntry(
             id: existing?.id ?? UUID().uuidString,
             sha256: sha, types: captured.types, ext: captured.ext,
-            sourceApp: frontApp?.localizedName, sourceBundleID: bundleID,
+            sourceApp: sourceApp, sourceBundleID: sourceBundleID,
             lastCopiedAt: Date(),
             size: captured.data.count, preview: captured.preview,
             pinned: existing?.pinned ?? false)
-        entries = ClipboardActions.arrange(entries + [entry])
+        adopt(ClipboardActions.arrange(entries + [entry]))
         persistAndTrim(appending: existing == nil ? entry : nil)
         SettingsBackup.shared.scheduleClipboardBackup()
     }
@@ -165,6 +193,7 @@ final class ClipboardStore: FeatureModule {
 
     private func adopt(_ updated: [ClipboardEntry]) {
         entries = ClipboardActions.arrange(updated)
+        revision += 1
     }
 
     private func persistAndTrim(appending appended: ClipboardEntry? = nil) {
@@ -176,52 +205,68 @@ final class ClipboardStore: FeatureModule {
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.maxAgeDays) as? Int ?? 0
         let maxAge: TimeInterval? = maxAgeDays > 0 ? Double(maxAgeDays) * 86400 : nil
         entries = ClipboardIndex.applyRetention(entries, maxItems: maxItems, maxAge: maxAge)
+        revision += 1
         let removedAny = entries.count != beforeRetention
-        let appendedFastPath =
-            appended != nil && !removedAny && ClipboardRepository.appendEntry(appended!)
-        if !appendedFastPath {
-            try? ClipboardRepository.saveEntries(entries)
-        }
-        if removedAny {
-            ClipboardRepository.pruneOrphanBlobs(keeping: entries)
+        let snapshot = entries
+        Self.diskQueue.async {
+            ClipboardRepository.withIndexLock {
+                let appendedFastPath =
+                    appended != nil && !removedAny
+                    && ClipboardRepository.appendEntry(appended!)
+                if !appendedFastPath {
+                    try? ClipboardRepository.saveEntries(snapshot)
+                }
+            }
+            if removedAny {
+                ClipboardRepository.pruneOrphanBlobs(keeping: snapshot)
+            }
         }
         postChanged()
     }
 
     func togglePin(_ id: String) {
-        guard let outcome = try? ClipboardActions.togglePin(ids: [id]), outcome.changed > 0 else {
-            return
-        }
-        adopt(outcome.entries)
-        SettingsBackup.shared.scheduleClipboardBackup()
-        postChanged()
+        mutateOnDisk { try ClipboardActions.togglePin(ids: [id]) }
     }
 
     func clear(includingPinned: Bool = false) {
-        guard let outcome = try? ClipboardActions.clear(keepingPinned: !includingPinned) else {
-            return
+        mutateOnDisk(requireChange: false) {
+            try ClipboardActions.clear(keepingPinned: !includingPinned)
         }
-        adopt(outcome.entries)
-        SettingsBackup.shared.scheduleClipboardBackup()
-        postChanged()
     }
 
     func delete(_ id: String) {
-        guard let outcome = try? ClipboardActions.delete(ids: [id]), outcome.changed > 0 else {
-            return
+        mutateOnDisk(scheduleBackup: false) { try ClipboardActions.delete(ids: [id]) }
+    }
+
+    private func mutateOnDisk(
+        requireChange: Bool = true, scheduleBackup: Bool = true,
+        _ action: @escaping @Sendable () throws -> ClipboardActions.Outcome
+    ) {
+        Self.diskQueue.async { [weak self] in
+            guard let outcome = try? action(), outcome.changed > 0 || !requireChange else {
+                return
+            }
+            Task { @MainActor in
+                guard let self else { return }
+                self.adopt(outcome.entries)
+                if scheduleBackup { SettingsBackup.shared.scheduleClipboardBackup() }
+                self.postChanged()
+            }
         }
-        adopt(outcome.entries)
-        postChanged()
     }
 
     func activate(_ entry: ClipboardEntry, forcePlainText: Bool = false) {
         let plain =
             forcePlainText
             || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
-        guard let outcome = try? ClipboardActions.copy(entry, asPlainText: plain) else { return }
+        guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { return }
         lastChangeCount = NSPasteboard.general.changeCount
-        if outcome.changed > 0 {
-            adopt(outcome.entries)
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            var updated = entries
+            updated[index].lastCopiedAt = Date()
+            adopt(updated)
+            let id = entry.id
+            Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: id) }
             SettingsBackup.shared.scheduleClipboardBackup()
             postChanged()
         }

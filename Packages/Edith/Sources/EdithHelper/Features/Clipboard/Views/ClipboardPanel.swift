@@ -12,12 +12,18 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
 
     static let width: CGFloat = 450
     static let maxHeight: CGFloat = 800
+    static let willShow = Notification.Name("clipboardPanelWillShow")
 
-    weak var store: ClipboardStore?
+    weak var store: ClipboardStore? {
+        didSet {
+            guard store !== oldValue else { return }
+            if store == nil { hide() }
+            mountRootView()
+        }
+    }
 
     private var panel: NSPanel?
     private var hosting: NSHostingView<AnyView>?
-    private var showCount = 0
 
     func toggle() {
         if let panel, panel.isVisible {
@@ -28,16 +34,8 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        guard let store else { return }
-        let p = panel ?? makePanel()
-        showCount += 1
-        hosting?.rootView = AnyView(
-            ClipboardPanelView(
-                store: store,
-                onDismiss: { [weak self] in self?.hide() },
-                onHeightChange: { [weak self] height in self?.resize(toFit: height) }
-            )
-            .id(showCount))
+        guard let store, let p = panel else { return }
+        NotificationCenter.default.post(name: Self.willShow, object: nil)
         let height = min(
             ClipboardPanelView.estimatedHeight(entries: store.entries), Self.maxHeight)
         p.setContentSize(NSSize(width: Self.width, height: height))
@@ -52,6 +50,21 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         panel?.orderOut(nil)
     }
 
+    private func mountRootView() {
+        guard let store else {
+            hosting?.rootView = AnyView(EmptyView())
+            return
+        }
+        if panel == nil { makePanel() }
+        hosting?.rootView = AnyView(
+            ClipboardPanelView(
+                store: store,
+                onDismiss: { [weak self] in self?.hide() },
+                onHeightChange: { [weak self] height in self?.resize(toFit: height) }
+            ))
+        hosting?.layoutSubtreeIfNeeded()
+    }
+
     private func resize(toFit height: CGFloat) {
         guard let panel, panel.isVisible else { return }
         let clamped = min(height, Self.maxHeight)
@@ -63,7 +76,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: true)
     }
 
-    private func makePanel() -> NSPanel {
+    private func makePanel() {
         let p = ClipboardFloatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 400),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -100,7 +113,6 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         p.contentView = effect
         hosting = host
         panel = p
-        return p
     }
 
     nonisolated func windowDidResignKey(_ notification: Notification) {
