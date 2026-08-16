@@ -49,14 +49,9 @@ public enum ExtensionPlatformAvailability: Equatable, Sendable {
 }
 
 public struct PlatformCapabilities: Equatable, Sendable {
-    public let platform: AppPlatform
     public let states: [PlatformCapability: PlatformCapabilityState]
 
-    public init(
-        platform: AppPlatform,
-        states: [PlatformCapability: PlatformCapabilityState]
-    ) {
-        self.platform = platform
+    public init(states: [PlatformCapability: PlatformCapabilityState]) {
         self.states = states
     }
 
@@ -75,7 +70,6 @@ public struct PlatformCapabilities: Equatable, Sendable {
     }
 
     public static let macOS = PlatformCapabilities(
-        platform: .macOS,
         states: states(
             defaultState: .available,
             overriding: [
@@ -88,22 +82,6 @@ public struct PlatformCapabilities: Equatable, Sendable {
                 .screenColorSampling: .permissionRequired,
                 .screenShareDetection: .permissionRequired,
                 .windowDimming: .permissionRequired,
-            ]))
-
-    public static let ubuntu = PlatformCapabilities(
-        platform: .linux,
-        states: states(
-            defaultState: .unsupported("No Ubuntu implementation is available yet."),
-            overriding: [
-                .cameraPreview: .integrationRequired("PipeWire camera integration"),
-                .clipboardHistory: .integrationRequired("Wayland clipboard integration"),
-                .globalPaste: .integrationRequired("GNOME input integration"),
-                .globalShortcuts: .integrationRequired("XDG GlobalShortcuts portal"),
-                .inputSuppression: .integrationRequired("GNOME Shell extension"),
-                .notifications: .integrationRequired("freedesktop notification service"),
-                .screenColorSampling: .integrationRequired("XDG Screenshot portal"),
-                .screenShareDetection: .integrationRequired("GNOME Shell extension"),
-                .windowDimming: .integrationRequired("GNOME Shell extension"),
             ]))
 
     private static func states(

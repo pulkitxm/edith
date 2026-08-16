@@ -13,32 +13,11 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push linux-test linux-build linux-run linux-diagnose linux-metadata linux-package linux-check
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
 
 ci:
 	bun install --frozen-lockfile
 	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-site ci-promo ci-swift
-
-linux-test:
-	swift test --package-path $(PKG)
-
-linux-build:
-	swift build --package-path $(PKG) --product edith-linux
-
-linux-run:
-	swift run --package-path $(PKG) edith-linux
-
-linux-diagnose:
-	swift run --package-path $(PKG) edith-linux --diagnose
-
-linux-metadata:
-	desktop-file-validate packaging/linux/com.pulkit.Edith.desktop
-	appstreamcli validate --no-net packaging/linux/com.pulkit.Edith.metainfo.xml
-
-linux-package:
-	packaging/debian/build-deb.sh
-
-linux-check: linux-test linux-metadata linux-package
 
 site-dev:
 	cd apps/site && python3 -m http.server 8000

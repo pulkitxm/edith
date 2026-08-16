@@ -1,13 +1,22 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-var products: [Product] = [
-    .library(name: "EdithCore", targets: ["EdithCore"])
+let products: [Product] = [
+    .library(name: "EdithCore", targets: ["EdithCore"]),
+    .library(name: "Edith", targets: ["Edith"]),
+    .library(name: "EdithKit", targets: ["EdithKit"]),
+    .library(name: "EdithCLI", targets: ["EdithCLI"]),
+    .library(name: "Highlighter", targets: ["Highlighter"]),
+    .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
 ]
 
-var dependencies: [Package.Dependency] = []
+let dependencies: [Package.Dependency] = [
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.15.0"),
+    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
+]
 
-var targets: [Target] = [
+let targets: [Target] = [
     .target(
         name: "EdithCore",
         swiftSettings: [.swiftLanguageMode(.v5)]
@@ -17,24 +26,6 @@ var targets: [Target] = [
         dependencies: ["EdithCore"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-]
-
-#if os(macOS)
-products += [
-    .library(name: "Edith", targets: ["Edith"]),
-    .library(name: "EdithKit", targets: ["EdithKit"]),
-    .library(name: "EdithCLI", targets: ["EdithCLI"]),
-    .library(name: "Highlighter", targets: ["Highlighter"]),
-    .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
-]
-
-dependencies += [
-    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
-    .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.15.0"),
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
-]
-
-targets += [
     .target(
         name: "EdithKit",
         dependencies: ["EdithCore"],
@@ -121,26 +112,6 @@ targets += [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
 ]
-#endif
-
-#if os(Linux)
-products += [
-    .executable(name: "edith-linux", targets: ["EdithLinux"])
-]
-
-targets += [
-    .systemLibrary(
-        name: "CGTK",
-        pkgConfig: "gtk4",
-        providers: [.apt(["libgtk-4-dev"])]
-    ),
-    .executableTarget(
-        name: "EdithLinux",
-        dependencies: ["EdithCore", "CGTK"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
-    ),
-]
-#endif
 
 let package = Package(
     name: "Edith",

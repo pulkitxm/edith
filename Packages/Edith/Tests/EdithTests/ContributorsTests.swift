@@ -60,6 +60,6 @@ private let payload = """
 @Test func theCacheIsEmptyWhenNothingHasBeenWritten() throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString)
-    let directories = AppDirectories(platform: .macOS, homeDirectory: directory)
+    let directories = AppDirectories(homeDirectory: directory)
     #expect(Contributors.cached(directories: directories).isEmpty)
 }
