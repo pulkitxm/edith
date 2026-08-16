@@ -53,7 +53,8 @@ test("manual production workflows require main", () => {
 test("backend changes run the companion job", () => {
   expect(ciWorkflow).toContain("area companion '^apps/companion/'");
   expect(ciWorkflow).toContain("needs.changes.outputs.companion == 'true'");
-  expect(ciWorkflow).toContain("pgvector/pgvector:pg18");
+  expect(ciWorkflow).toContain("brew install postgresql@18 pgvector");
+  expect(ciWorkflow).toContain("runs-on: macos-26");
   expect(ciWorkflow).toContain("cargo test --locked");
   expect(ciWorkflow).toContain(
     "cargo clippy --all-targets --locked -- -D warnings",

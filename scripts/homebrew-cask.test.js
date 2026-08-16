@@ -70,7 +70,9 @@ test("the unified publisher updates and mirrors the cask", () => {
   expect(commitStep).toBeGreaterThan(-1);
   expect(publishStep).toBeGreaterThan(commitStep);
   expect(mirrorStep).toBeGreaterThan(publishStep);
-  expect(releaseWorkflow).toContain("sha256sum ../release-assets/Edith.dmg");
+  expect(releaseWorkflow).toContain(
+    "shasum -a 256 ../release-assets/Edith.dmg",
+  );
   expect(releaseStateScript).toContain("Casks/edith.rb");
   expect(releaseWorkflow).toContain(
     `git commit -m "Update the Edith cask to ${releaseTagRef}"`,

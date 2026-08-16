@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   version:
-    runs-on: ubuntu-latest
+    runs-on: macos-26
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       version: ${{ steps.resolve.outputs.version }}
@@ -242,7 +242,7 @@ jobs:
 
   publish:
     needs: [version, dmg]
-    runs-on: ubuntu-latest
+    runs-on: macos-26
     permissions:
       contents: write
     env:
@@ -288,7 +288,7 @@ jobs:
             echo "release blocked: the version job produced no version" >&2
             exit 1
           fi
-          RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
+          RELEASE_SHA256="$(shasum -a 256 ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
           export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
           ../scripts/publish-release-state.sh cut
@@ -297,7 +297,7 @@ jobs:
         if: env.REBUILD != ''
         working-directory: release-source
         run: |
-          RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
+          RELEASE_SHA256="$(shasum -a 256 ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
           ../scripts/publish-release-state.sh rebuild
 

@@ -87,7 +87,7 @@ test("the publisher uses a token that clears the ruleset", () => {
 test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain("permissions:\n  contents: read");
   expect(releaseWorkflow).toContain(
-    "publish:\n    needs: [version, dmg]\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
+    "publish:\n    needs: [version, dmg]\n    runs-on: macos-26\n    permissions:\n      contents: write",
   );
   expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);
