@@ -76,7 +76,6 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
     @State private var refreshTick = 0
-    @State private var showingSetup = false
     @State private var setupModel: CompanionSetupModel?
 
     private var dark: Bool { scheme == .dark }
@@ -91,10 +90,8 @@ struct CompanionPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(pageBackground)
-        .sheet(isPresented: $showingSetup) {
-            if let setupModel {
-                CompanionSetupSheet(model: setupModel, home: home)
-            }
+        .sheet(item: $setupModel) { model in
+            CompanionSetupSheet(model: model, home: home)
         }
         .onDrop(of: [.fileURL], isTargeted: $library.dropTargeted) { providers in
             Task {
@@ -352,13 +349,12 @@ struct CompanionPage: View {
 
     private func openSetup() {
         let model = CompanionSetupModel(onFinish: {
-            showingSetup = false
+            setupModel = nil
             refreshTick += 1
             Task { await home.refresh() }
         })
         model.begin(home: home, reasonerConfigured: reason.current?.configured == true)
         setupModel = model
-        showingSetup = true
     }
 
     private func select(_ item: CompanionTab) {

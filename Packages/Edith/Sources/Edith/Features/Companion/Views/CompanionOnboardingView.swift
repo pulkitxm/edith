@@ -33,7 +33,8 @@ enum CompanionStageState: Equatable {
 
 @MainActor
 @Observable
-final class CompanionSetupModel {
+final class CompanionSetupModel: Identifiable {
+    let id = UUID()
     var step = CompanionSetupStep.welcome
     private(set) var hosts: [CompanionHost] = []
     private(set) var probing = false
@@ -147,7 +148,8 @@ final class CompanionSetupModel {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
 
-    func loadReasoner() async {
+    func loadReasoner(reachable: Bool) async {
+        guard reachable else { return }
         guard let settings = try? await client.reasonSettings() else { return }
         if settings.configured {
             provider = settings.provider == "openai" ? "openai" : "anthropic"
@@ -204,8 +206,9 @@ struct CompanionSetupSheet: View {
         .frame(width: UIScale.pt(760), height: UIScale.pt(560))
         .background(DashSkin.paper(dark))
         .task {
-            await model.probeHosts()
-            await model.loadReasoner()
+            async let probes: Void = model.probeHosts()
+            async let reasoner: Void = model.loadReasoner(reachable: home.reachable)
+            _ = await (probes, reasoner)
         }
     }
 
