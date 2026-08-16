@@ -784,13 +784,11 @@ async fn machines_profile(
     let Some(profile) = body
         .get("profile")
         .and_then(Value::as_str)
-        .filter(|profile| {
-            ["gpu-large", "gpu-small", "apple-metal", "cpu-only"].contains(profile)
-        })
+        .filter(|profile| ["apple-metal", "cpu-only"].contains(profile))
     else {
         return error_response(
             StatusCode::BAD_REQUEST,
-            "profile must be gpu-large, gpu-small, apple-metal or cpu-only",
+            "profile must be apple-metal or cpu-only",
         );
     };
     match machines::set_profile(&state.pool, &name, profile).await {

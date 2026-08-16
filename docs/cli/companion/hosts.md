@@ -27,8 +27,8 @@ Examples:
 $ ed companion hosts
 NAME                  TARGET            STATE                                         DETAIL
 Pulkit's MacBook Pro  this Mac          Apple Container is installed but not running  darwin arm64 · 14 cores · 24 GB
-* TUF Wired           pulkit@10.77.0.2  ready                                         linux x86_64 · 20 cores · 62 GB · Docker 29.7.1
-the stack is running on TUF Wired, cpu, reached on port 4820
+* Studio Mac          pulkit@10.77.0.2  ready                                         darwin x86_64 · 20 cores · 62 GB · Docker 29.7.1
+the stack is running on Studio Mac, cpu, reached on port 4820
 ```
 
 Each host reports its os, arch, cores, memory, free disk, GPU, which container

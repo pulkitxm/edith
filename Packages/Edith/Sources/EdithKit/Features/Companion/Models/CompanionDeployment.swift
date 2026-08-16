@@ -41,13 +41,11 @@ public struct CompanionDeployment: Codable, Equatable, Sendable {
 }
 
 public enum CompanionTier: String, CaseIterable, Codable, Sendable {
-    case gpu
     case cpu
     case appleMetal
 
     public var composeFiles: [String] {
         switch self {
-        case .gpu: ["compose.yaml", "compose.gpu.yaml"]
         case .cpu: ["compose.yaml", "compose.cpu.yaml"]
         case .appleMetal: ["compose.yaml", "compose.mac.yaml"]
         }
@@ -55,16 +53,13 @@ public enum CompanionTier: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .gpu: "GPU"
         case .cpu: "CPU only"
         case .appleMetal: "Apple Metal"
         }
     }
 
     public static func derive(from facts: CompanionHostFacts) -> CompanionTier {
-        if facts.os == "darwin" { return .appleMetal }
-        if let gpu = facts.gpuModel, !gpu.isEmpty { return .gpu }
-        return .cpu
+        facts.arch == "arm64" ? .appleMetal : .cpu
     }
 }
 

@@ -178,23 +178,12 @@ public enum CompanionHostProbe {
     }
 
     static let template = """
-        os=$(uname -s | tr 'A-Z' 'a-z')
+        os=darwin
         arch=$(uname -m)
-        if [ "$os" = darwin ]; then
-          cores=$(sysctl -n hw.ncpu 2>/dev/null || echo 0)
-          rammb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1048576 ))
-          diskmb=$(df -m / 2>/dev/null | awk 'NR==2 {print $4}')
-          gpu=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
-        else
-          cores=$(nproc 2>/dev/null || echo 0)
-          rammb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
-          diskmb=$(df -m / 2>/dev/null | awk 'NR==2 {print $4}')
-          if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
-            gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-          else
-            gpu=
-          fi
-        fi
+        cores=$(sysctl -n hw.ncpu 2>/dev/null || echo 0)
+        rammb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1048576 ))
+        diskmb=$(df -m / 2>/dev/null | awk 'NR==2 {print $4}')
+        gpu=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
         [ -n "$diskmb" ] || diskmb=0
         emit_runtime() {
           name=$1; bin=$2

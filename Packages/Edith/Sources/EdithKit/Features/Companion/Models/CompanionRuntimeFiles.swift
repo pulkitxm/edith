@@ -102,49 +102,6 @@ public enum CompanionRuntimeFiles {
 
         """#
 
-    public static let composeGpu = #"""
-        services:
-          ollama:
-            deploy:
-              resources:
-                reservations:
-                  devices:
-                    - driver: nvidia
-                      count: all
-                      capabilities: [gpu]
-          whisper:
-            image: ghcr.io/ggml-org/whisper.cpp:main-cuda
-            deploy:
-              resources:
-                reservations:
-                  devices:
-                    - driver: nvidia
-                      count: all
-                      capabilities: [gpu]
-          reranker:
-            image: ghcr.io/huggingface/text-embeddings-inference:1.8
-            command: ["--model-id", "${COMPANION_RERANK_HF_MODEL:-Qwen/Qwen3-Reranker-0.6B}"]
-            volumes:
-              - companion-rerank:/data
-            deploy:
-              resources:
-                reservations:
-                  devices:
-                    - driver: nvidia
-                      count: all
-                      capabilities: [gpu]
-          api:
-            environment:
-              RERANK_URL: ${COMPANION_RERANK_URL:-http://reranker:80}
-            depends_on:
-              reranker:
-                condition: service_started
-
-        volumes:
-          companion-rerank:
-
-        """#
-
     public static let composeMac = #"""
         services:
           ollama:
@@ -169,9 +126,11 @@ public enum CompanionRuntimeFiles {
         """#
 
     public static let dockerfile = #"""
-        FROM rust:1.97-slim AS builder
+        FROM rust:1.97-alpine AS builder
 
         WORKDIR /app
+
+        RUN apk add --no-cache musl-dev
 
         COPY Cargo.toml Cargo.lock ./
         COPY src ./src
@@ -181,9 +140,9 @@ public enum CompanionRuntimeFiles {
         COPY evals ./evals
         RUN cargo build --release --locked
 
-        FROM debian:trixie-slim
+        FROM alpine:3.22
 
-        RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg libimage-exiftool-perl && rm -rf /var/lib/apt/lists/*
+        RUN apk add --no-cache ca-certificates exiftool ffmpeg
 
         COPY --from=builder /app/target/release/companion /usr/local/bin/companion
 
@@ -194,7 +153,6 @@ public enum CompanionRuntimeFiles {
     public static let all: [(name: String, content: String)] = [
         ("compose.yaml", composeBase),
         ("compose.cpu.yaml", composeCpu),
-        ("compose.gpu.yaml", composeGpu),
         ("compose.mac.yaml", composeMac),
         ("Dockerfile", dockerfile),
     ]
