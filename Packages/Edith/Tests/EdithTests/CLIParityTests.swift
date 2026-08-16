@@ -34,8 +34,6 @@ enum UIParity {
         "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
         "ed completions install": "shell completion has no UI at all",
         "ed config import": "the app restores from iCloud rather than from a JSON file",
-        "ed companion import":
-            "restoring a memory bundle is CLI-only until the companion settings grow a data section",
         "ed machines docker compose up":
             "the Docker window groups by project but never runs compose",
         "ed machines docker compose down":
@@ -87,6 +85,21 @@ enum UIParity {
 
         UICapability("Companion", "sync github activity", ["companion", "sync", "github"]),
         UICapability("Companion", "ask about your life", ["companion", "ask", "how is warden"]),
+        UICapability(
+            "Companion settings", "export the memory as a bundle",
+            ["companion", "export", "/tmp/backup"]),
+        UICapability(
+            "Companion settings", "restore a memory bundle",
+            ["companion", "import", "/tmp/backup"]),
+        UICapability(
+            "Companion settings", "wipe the whole memory",
+            ["companion", "wipe", "--yes"]),
+        UICapability(
+            "Companion settings", "drop and rebuild the search index",
+            ["companion", "db", "reindex"]),
+        UICapability(
+            "Companion settings", "rebuild everything derived",
+            ["companion", "db", "rebuild-derived"]),
         UICapability(
             "Companion", "ingest dropped files", ["companion", "ingest", "/tmp/notes"]),
         UICapability(
