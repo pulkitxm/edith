@@ -35,6 +35,8 @@ enum JSONContract {
         JSONCase("ed app relaunch", ["app", "relaunch", "--json"], mutatesTheMachine: true),
         JSONCase(
             "ed app clear-updates", ["app", "clear-updates", "--json"], mutatesTheMachine: true),
+        JSONCase("ed app reveal", ["app", "reveal", "companion", "--json"]),
+        JSONCase("ed app snapshot", ["app", "snapshot", "--json"]),
         JSONCase("ed clipboard ls", ["clipboard", "ls", "--json"]),
         JSONCase("ed clipboard stats", ["clipboard", "stats", "--json"]),
         JSONCase("ed clipboard get", ["clipboard", "get", "1", "--json"]),
@@ -78,7 +80,35 @@ enum JSONContract {
         JSONCase("ed shelf rm", ["shelf", "rm", "1", "--json"]),
         JSONCase("ed shelf clear", ["shelf", "clear", "--json"]),
         JSONCase("ed companion status", ["companion", "status", "--json"]),
+        JSONCase("ed companion hosts", ["companion", "hosts", "--json"]),
+        JSONCase(
+            "ed companion deploy", ["companion", "deploy", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion stack status", ["companion", "stack", "status", "--json"]),
+        JSONCase(
+            "ed companion stack up", ["companion", "stack", "up", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion stack down", ["companion", "stack", "down", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion stack restart", ["companion", "stack", "restart", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed companion stack logs", ["companion", "stack", "logs", "--json"]),
+        JSONCase("ed companion stack env", ["companion", "stack", "env", "--json"]),
         JSONCase("ed companion doctor", ["companion", "doctor", "--json"]),
+        JSONCase(
+            "ed companion export", ["companion", "export", "/tmp/ed-export-test", "--json"]),
+        JSONCase(
+            "ed companion import", ["companion", "import", "/tmp/ed-export-test", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion erase",
+            ["companion", "erase", "00000000-0000-0000-0000-000000000000", "--yes", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed companion wipe", ["companion", "wipe", "--yes", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed companion search", ["companion", "search", "warden", "--json"]),
         JSONCase(
             "ed companion index", ["companion", "index", "--json"],
@@ -296,6 +326,12 @@ enum JSONContract {
             ["machines", "power", "shutdown", "nowhere-at-all", "--json"]),
         JSONCase(
             "ed machines power wake", ["machines", "power", "wake", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines thermal status",
+            ["machines", "thermal", "status", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines thermal set",
+            ["machines", "thermal", "set", "nowhere-at-all", "balanced", "--json"]),
         JSONCase("ed machines kill", ["machines", "kill", "nowhere-at-all", "42", "--json"]),
         JSONCase(
             "ed machines services ls", ["machines", "services", "ls", "nowhere-at-all", "--json"]),
@@ -584,7 +620,9 @@ enum JSONContract {
         let object = try? #require(result.object)
         #expect(
             Set(object?.keys ?? [:].keys)
-                == ["filesystems", "temperatures", "battery", "gpu"])
+                == [
+                    "filesystems", "temperatures", "fans", "platformProfile", "battery", "gpu",
+                ])
         let disks = object?["filesystems"] as? [[String: Any]] ?? []
         #expect(!disks.isEmpty)
         for disk in disks {

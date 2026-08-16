@@ -14,6 +14,7 @@ struct RangeStat: Identifiable {
 final class UsageStore: FeatureModule {
     private(set) var session: LimitWindow?
     private(set) var week: LimitWindow?
+    private(set) var fableWeek: LimitWindow?
     private(set) var codexSession: LimitWindow?
     private(set) var codexWeek: LimitWindow?
     private(set) var limitsError: String?
@@ -75,7 +76,8 @@ final class UsageStore: FeatureModule {
         switch provider {
         case .claude:
             return ProviderLimits(
-                provider: provider, session: Self.fresh(session), week: Self.fresh(week))
+                provider: provider, session: Self.fresh(session), week: Self.fresh(week),
+                fable: Self.fresh(fableWeek))
         case .codex:
             return ProviderLimits(
                 provider: provider, session: Self.fresh(codexSession), week: Self.fresh(codexWeek))
@@ -181,6 +183,7 @@ final class UsageStore: FeatureModule {
         if let last = LimitsHistory.latest(provider: .claude) {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
+            fableWeek = Self.fresh(last.fable)
             limitsUpdatedAt = last.date
         }
         if let last = LimitsHistory.latest(provider: .codex) {
@@ -344,7 +347,7 @@ final class UsageStore: FeatureModule {
             let usage = try await Self.fetchUsage(token: credential.accessToken)
             apply(usage)
             let msg =
-                "usage ok: session=\(Int((session?.percent ?? 0).rounded()))% week=\(Int((week?.percent ?? 0).rounded()))%"
+                "usage ok: session=\(Int((session?.percent ?? 0).rounded()))% week=\(Int((week?.percent ?? 0).rounded()))% fable=\(fableWeek.map { "\(Int($0.percent.rounded()))%" } ?? "n/a")"
             Log.usage.notice("\(msg, privacy: .public)")
             diag(msg)
             return
@@ -440,13 +443,10 @@ final class UsageStore: FeatureModule {
         statusItem?.update(availableProviders.map(limits(for:)))
     }
 
-    private func apply(_ usage: OAuthUsage) {
-        session = usage.fiveHour.map {
-            LimitWindow(percent: $0.utilization ?? 0, resetsAt: Self.parseISO($0.resetsAt))
-        }
-        week = usage.sevenDay.map {
-            LimitWindow(percent: $0.utilization ?? 0, resetsAt: Self.parseISO($0.resetsAt))
-        }
+    private func apply(_ usage: ClaudeUsageParser.Result) {
+        session = usage.session
+        week = usage.week
+        fableWeek = usage.fable
         limitsError = nil
         limitsUpdatedAt = Date()
         retryNotBefore = nil
@@ -454,7 +454,7 @@ final class UsageStore: FeatureModule {
         quickRetryTask?.cancel()
         quickRetryTask = nil
         notifier.evaluate(session: session, week: week)
-        history.append(provider: .claude, session: session, week: week)
+        history.append(provider: .claude, session: session, week: week, fable: fableWeek)
         SettingsBackup.shared.syncLimits()
         updateStatusItem()
         IPC.post(IPC.Name.limitsUpdated)
@@ -594,23 +594,6 @@ final class UsageStore: FeatureModule {
         CLIToolEnvironment.executable(named: "codex")
     }
 
-    private struct OAuthUsage: Decodable {
-        struct Window: Decodable {
-            let utilization: Double?
-            let resetsAt: String?
-            enum CodingKeys: String, CodingKey {
-                case utilization
-                case resetsAt = "resets_at"
-            }
-        }
-        let fiveHour: Window?
-        let sevenDay: Window?
-        enum CodingKeys: String, CodingKey {
-            case fiveHour = "five_hour"
-            case sevenDay = "seven_day"
-        }
-    }
-
     private enum FetchError: Error {
         case unauthorized
         case rateLimited(after: TimeInterval?)
@@ -625,7 +608,9 @@ final class UsageStore: FeatureModule {
         return URLSession(configuration: config)
     }()
 
-    private nonisolated static func fetchUsage(token: String) async throws -> OAuthUsage {
+    private nonisolated static func fetchUsage(token: String) async throws
+        -> ClaudeUsageParser.Result
+    {
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -634,7 +619,7 @@ final class UsageStore: FeatureModule {
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if code != 200 { Log.usage.error("GET /oauth/usage -> HTTP \(code, privacy: .public)") }
         switch code {
-        case 200: return try JSONDecoder().decode(OAuthUsage.self, from: data)
+        case 200: return try ClaudeUsageParser.parse(data)
         case 401, 403: throw FetchError.unauthorized
         case 429:
             let after = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")

@@ -15,6 +15,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     private(set) var ingesting = false
     private(set) var ingestSummary: String?
     private(set) var indexing = false
+    private(set) var loaded = false
     private(set) var selectedId: String?
     private(set) var detail: CompanionEpisodeDetail?
     private(set) var signals: [CompanionSignal] = []
@@ -31,6 +32,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     func refresh() async {
         do {
             episodes = try await client.episodes(limit: 60)
+            loaded = true
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -123,35 +125,87 @@ final class CompanionLibraryModel: CompanionRefreshable {
         var ingested = 0
         var duplicates = 0
         var skipped = 0
-        do {
-            let client = client
-            for url in urls {
-                let markdown = try CompanionScan.markdownFiles(at: url)
-                let audio = try CompanionScan.audioFiles(at: url)
-                let pdfs = try CompanionScan.pdfFiles(at: url)
-                skipped += markdown.skipped.count + audio.skipped.count + pdfs.skipped.count
-                if !markdown.files.isEmpty {
-                    let outcomes = try await client.ingest(files: markdown.files)
+        var failed: [String] = []
+        let client = client
+        for url in urls {
+            guard let scanned = scan(url, skipped: &skipped, failed: &failed) else { continue }
+            if !scanned.markdown.isEmpty {
+                do {
+                    let outcomes = try await client.ingest(files: scanned.markdown)
                     ingested += outcomes.filter { $0.status == "ingested" }.count
                     duplicates += outcomes.filter { $0.status == "duplicate" }.count
-                }
-                for file in audio.files {
-                    let outcome = try await client.ingestAudio(
-                        name: file.name, data: file.data, mtime: file.mtime)
-                    if outcome.status == "ingested" { ingested += 1 } else { duplicates += 1 }
-                }
-                for file in pdfs.files {
-                    let outcome = try await client.ingestPdf(
-                        name: file.name, data: file.data, mtime: file.mtime)
-                    if outcome.status == "ingested" { ingested += 1 } else { duplicates += 1 }
+                } catch {
+                    failed.append(url.lastPathComponent)
                 }
             }
-            ingestSummary = "\(ingested) ingested, \(duplicates) duplicates, \(skipped) skipped"
-            error = nil
-            await refresh()
-        } catch {
-            self.error = error.localizedDescription
+            for file in scanned.binaries {
+                do {
+                    let outcome = try await file.send(client)
+                    if outcome.status == "ingested" { ingested += 1 } else { duplicates += 1 }
+                } catch {
+                    failed.append(file.name)
+                }
+            }
         }
+        ingestSummary = summary(
+            ingested: ingested, duplicates: duplicates, skipped: skipped, failed: failed)
+        error = failed.isEmpty ? nil : "Could not ingest \(failed.joined(separator: ", "))"
+        await refresh()
+    }
+
+    private struct BinaryIngest {
+        let name: String
+        let data: Data
+        let mtime: String?
+        let kind: Kind
+
+        enum Kind { case audio, pdf, image, video }
+
+        func send(_ client: CompanionClient) async throws -> CompanionIngestOutcome {
+            switch kind {
+            case .audio: try await client.ingestAudio(name: name, data: data, mtime: mtime)
+            case .pdf: try await client.ingestPdf(name: name, data: data, mtime: mtime)
+            case .image: try await client.ingestImage(name: name, data: data, mtime: mtime)
+            case .video: try await client.ingestVideo(name: name, data: data, mtime: mtime)
+            }
+        }
+    }
+
+    private func scan(
+        _ url: URL, skipped: inout Int, failed: inout [String]
+    ) -> (markdown: [CompanionIngestFile], binaries: [BinaryIngest])? {
+        do {
+            let markdown = try CompanionScan.markdownFiles(at: url)
+            let audio = try CompanionScan.audioFiles(at: url)
+            let pdfs = try CompanionScan.pdfFiles(at: url)
+            let images = try CompanionScan.imageFiles(at: url)
+            let videos = try CompanionScan.videoFiles(at: url)
+            skipped +=
+                markdown.skipped.count + audio.skipped.count + pdfs.skipped.count
+                + images.skipped.count + videos.skipped.count
+            var binaries = audio.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .audio)
+            }
+            binaries += pdfs.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .pdf)
+            }
+            binaries += images.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .image)
+            }
+            binaries += videos.files.map {
+                BinaryIngest(name: $0.name, data: $0.data, mtime: $0.mtime, kind: .video)
+            }
+            return (markdown.files, binaries)
+        } catch {
+            failed.append(url.lastPathComponent)
+            return nil
+        }
+    }
+
+    private func summary(ingested: Int, duplicates: Int, skipped: Int, failed: [String]) -> String {
+        var parts = ["\(ingested) ingested", "\(duplicates) duplicates", "\(skipped) skipped"]
+        if !failed.isEmpty { parts.append("\(failed.count) failed") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -216,6 +270,7 @@ struct CompanionLibraryScreen: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
 
     private var dark: Bool { scheme == .dark }
 
@@ -231,12 +286,12 @@ struct CompanionLibraryScreen: View {
             if let error = model.error {
                 Text(error)
                     .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.warn)
             }
         }
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await model.refresh() }
         }
         .onChange(of: model.query) {
@@ -249,25 +304,30 @@ struct CompanionLibraryScreen: View {
             statTile(value: "\(home.status?.episodes ?? 0)", label: "episodes")
             statTile(value: "\(home.status?.chunks ?? 0)", label: "chunks")
             pendingTile
-            Button {
-                pickAndIngest()
-            } label: {
-                statTile(
-                    value: model.ingesting ? "ingesting…" : (model.ingestSummary ?? "browse…"),
-                    label: model.ingesting ? "hold on" : "add to memory")
+            VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                CompanionButton(
+                    title: "Add to memory…", role: .primary, busy: model.ingesting,
+                    busyTitle: "Ingesting…",
+                    help:
+                        "Pick Markdown notes, voice recordings, or PDFs; "
+                        + "dropping files anywhere works too"
+                ) {
+                    pickAndIngest()
+                }
+                if let summary = model.ingestSummary {
+                    Text(summary)
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                }
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
-            .disabled(model.ingesting)
-            .help(
-                "Pick Markdown notes, voice recordings, or PDFs; dropping files anywhere works too")
         }
     }
 
     private func statTile(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text(value)
-                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+                .font(DashSkin.serif(17, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Text(label.uppercased())
@@ -288,22 +348,21 @@ struct CompanionLibraryScreen: View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text("\(pending)")
-                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
-                .foregroundStyle(pending > 0 ? .orange : DashSkin.ink(dark))
+                .font(DashSkin.serif(17, weight: .semibold))
+                .foregroundStyle(pending > 0 ? DashSkin.warn : DashSkin.ink(dark))
             HStack(spacing: UIScale.pt(5)) {
                 Text("PENDING")
                     .font(.system(size: UIScale.pt(9.5), weight: .medium))
                     .tracking(0.6)
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if pending > 0 {
-                    Button(model.indexing ? "indexing…" : "index now") {
+                    CompanionLinkButton(
+                        title: model.indexing ? "indexing…" : "index now",
+                        disabled: model.indexing,
+                        help: "Embed the pending episodes now"
+                    ) {
                         Task { await model.indexNow() }
                     }
-                    .buttonStyle(.plain)
-                    .font(.system(size: UIScale.pt(9.5), weight: .bold))
-                    .foregroundStyle(DashSkin.accent(dark))
-                    .pointerCursor()
-                    .disabled(model.indexing)
                 }
             }
         }
@@ -313,7 +372,7 @@ struct CompanionLibraryScreen: View {
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(10))
-                .strokeBorder(pending > 0 ? Color.orange.opacity(0.6) : DashSkin.line(dark))
+                .strokeBorder(pending > 0 ? DashSkin.warn.opacity(0.6) : DashSkin.line(dark))
         }
     }
 
@@ -345,10 +404,14 @@ struct CompanionLibraryScreen: View {
                             episodeRow(episode)
                         }
                         if model.episodes.isEmpty {
-                            Text("Nothing ingested yet. Drop files above to give it memory.")
-                                .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                                .padding(.top, UIScale.pt(12))
+                            if !model.loaded, model.error == nil {
+                                ListRowsSkeleton(rows: 6, showsLeadingDot: false, dark: dark)
+                            } else {
+                                Text("Nothing ingested yet. Drop files above to give it memory.")
+                                    .font(.system(size: UIScale.pt(12)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                    .padding(.top, UIScale.pt(12))
+                            }
                         }
                     } else {
                         Text("Nothing in the memory matches that.")

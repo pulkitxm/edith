@@ -2,23 +2,46 @@ import Foundation
 
 public struct CompanionHealth: Codable, Equatable, Sendable {
     public let ok: Bool
+    public let degraded: Bool?
     public let checks: [CompanionCheck]
 
-    public init(ok: Bool, checks: [CompanionCheck]) {
+    public init(ok: Bool, degraded: Bool? = nil, checks: [CompanionCheck]) {
         self.ok = ok
+        self.degraded = degraded
         self.checks = checks
     }
+
+    public var failing: [CompanionCheck] { checks.filter { !$0.ok } }
+
+    public var blocking: [CompanionCheck] {
+        failing.filter { $0.severityKind == .blocker }
+    }
+}
+
+public enum CompanionCheckSeverity: String, Codable, Equatable, Sendable {
+    case blocker
+    case degraded
+    case optional
 }
 
 public struct CompanionCheck: Codable, Equatable, Sendable {
     public let name: String
     public let ok: Bool
+    public let severity: String?
     public let detail: String
 
-    public init(name: String, ok: Bool, detail: String) {
+    public init(name: String, ok: Bool, severity: String? = nil, detail: String) {
         self.name = name
         self.ok = ok
+        self.severity = severity
         self.detail = detail
+    }
+
+    public var severityKind: CompanionCheckSeverity {
+        guard let severity, let parsed = CompanionCheckSeverity(rawValue: severity) else {
+            return .blocker
+        }
+        return parsed
     }
 }
 
@@ -258,6 +281,14 @@ struct JSONValueBox: Decodable, CustomStringConvertible {
                 .joined(separator: ", ")
         } else if let text = try? container.decode(String.self) {
             description = text
+        } else if let number = try? container.decode(Double.self) {
+            description = number == number.rounded() ? String(Int(number)) : String(number)
+        } else if let flag = try? container.decode(Bool.self) {
+            description = flag ? "yes" : "no"
+        } else if let object = try? container.decode([String: String].self) {
+            description = object.sorted { $0.key < $1.key }
+                .map { "\($0.key) \($0.value)" }
+                .joined(separator: ", ")
         } else {
             description = ""
         }
@@ -368,6 +399,18 @@ public struct CompanionBelief: Codable, Equatable, Sendable {
     }
 }
 
+public struct CompanionWriteAck: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let id: String?
+    public let section: String?
+
+    public init(ok: Bool, id: String? = nil, section: String? = nil) {
+        self.ok = ok
+        self.id = id
+        self.section = section
+    }
+}
+
 public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
     case unreachable(String)
     case badResponse(Int, String)
@@ -377,13 +420,14 @@ public enum CompanionClientError: Error, Equatable, LocalizedError, Sendable {
         case let .unreachable(detail):
             return detail
         case let .badResponse(status, detail):
-            return detail.isEmpty ? "HTTP \(status)" : "HTTP \(status): \(detail)"
+            return detail.isEmpty ? "HTTP \(status)" : detail
         }
     }
 }
 
 public struct CompanionClient: Sendable {
     public static let defaultEndpointString = "http://127.0.0.1:4820"
+    public static let defaultTimeout: TimeInterval = 20
     public static let longRequestTimeout: TimeInterval = 300
 
     public let baseURL: URL
@@ -393,13 +437,18 @@ public struct CompanionClient: Sendable {
     }
 
     public static func endpoint(override: String?) -> URL {
-        let fallback = URL(string: defaultEndpointString)!
+        let fallback = deployedEndpoint() ?? URL(string: defaultEndpointString)!
         let value =
             override
             ?? ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
             ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
         guard let value, !value.isEmpty else { return fallback }
         return URL(string: value) ?? fallback
+    }
+
+    public static func deployedEndpoint() -> URL? {
+        guard let deployment = CompanionDeploymentStore.load() else { return nil }
+        return URL(string: "http://127.0.0.1:\(deployment.localPort)")
     }
 
     public func health() async throws -> CompanionHealth {
@@ -428,7 +477,7 @@ public struct CompanionClient: Sendable {
         var request = URLRequest(url: url(for: "index"))
         request.httpMethod = "POST"
         request.httpBody = Data()
-        return try await self.request(request)
+        return try await self.request(request, timeout: CompanionClient.longRequestTimeout)
     }
 
     public func ingest(files: [CompanionIngestFile]) async throws -> [CompanionIngestOutcome] {
@@ -440,7 +489,7 @@ public struct CompanionClient: Sendable {
         } catch {
             throw CompanionClientError.unreachable(error.localizedDescription)
         }
-        return try await self.request(request)
+        return try await self.request(request, timeout: CompanionClient.longRequestTimeout)
     }
 
     public func runs(limit: Int) async throws -> [CompanionRun] {
@@ -612,7 +661,7 @@ public struct CompanionClient: Sendable {
         try await get("core")
     }
 
-    public func writeCore(section: String, content: String) async throws -> [String: String] {
+    public func writeCore(section: String, content: String) async throws -> CompanionWriteAck {
         try await post("core", body: CoreWriteRequest(section: section, content: content))
     }
 
@@ -636,7 +685,7 @@ public struct CompanionClient: Sendable {
         try await get("discrepancies", query: ["limit": String(limit)])
     }
 
-    public func overrideDiscrepancy(id: String, real: String) async throws -> [String: String] {
+    public func overrideDiscrepancy(id: String, real: String) async throws -> CompanionWriteAck {
         try await post("discrepancies/\(id)/override", body: OverrideRequest(real: real))
     }
 
@@ -781,7 +830,7 @@ public struct CompanionClient: Sendable {
     }
 
     func request<T: Decodable>(
-        _ request: URLRequest, allowing: Set<Int> = [], timeout: TimeInterval = 5
+        _ request: URLRequest, allowing: Set<Int> = [], timeout: TimeInterval = defaultTimeout
     ) async throws
         -> T
     {
@@ -812,8 +861,17 @@ public struct CompanionClient: Sendable {
     }
 
     private func responseText(_ data: Data) -> String {
-        String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        if let envelope = try? JSONDecoder().decode(ServerError.self, from: data),
+            !envelope.error.isEmpty
+        {
+            return envelope.error
+        }
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+private struct ServerError: Decodable {
+    let error: String
 }
 
 private struct IngestRequest: Encodable {

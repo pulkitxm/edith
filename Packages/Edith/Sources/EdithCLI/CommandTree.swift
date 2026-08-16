@@ -118,6 +118,12 @@ public enum CommandTree {
                     CommandNode(
                         "clear-updates", "Forget the record of past update checks.",
                         options: common),
+                    CommandNode(
+                        "reveal", "Show a section of the main window.",
+                        options: ["--json", "--help", "--tab"]),
+                    CommandNode(
+                        "snapshot", "Capture the open windows as PNG files.",
+                        options: ["--json", "--help", "--dir"]),
                 ]),
             CommandNode(
                 "extensions", "Turn Edith's extensions on and off.",
@@ -452,6 +458,17 @@ public enum CommandTree {
                             CommandNode(
                                 "wake", "Send a wake-on-LAN packet.", options: common,
                                 arguments: [.machine]),
+                        ]),
+                    CommandNode(
+                        "thermal", "Inspect fan speeds and switch the platform thermal profile.",
+                        children: [
+                            CommandNode(
+                                "status", "Show the active and available thermal profiles.",
+                                options: common, arguments: [.machine]),
+                            CommandNode(
+                                "set", "Switch the thermal profile permanently or for a while.",
+                                options: ["--json", "--help", "--minutes"],
+                                arguments: [.machine, .free]),
                         ]),
                     CommandNode(
                         "workspace", "Saved multi-pane layouts.", aliases: ["workspaces"],
@@ -859,7 +876,8 @@ public enum CommandTree {
                         ]),
                     CommandNode(
                         "chat", "Talk with the companion, streamed as it thinks.",
-                        options: common + ["--endpoint", "--conversation"], arguments: [.free]),
+                        options: common + ["--endpoint", "--conversation", "--persona"],
+                        arguments: [.free]),
                     CommandNode(
                         "conversations", "List chats, or replay one by id.",
                         options: common + ["--endpoint", "--limit"], arguments: [.free]),
@@ -899,6 +917,42 @@ public enum CommandTree {
                                 "test", "Round-trip one tiny completion through the reasoner.",
                                 options: common + ["--endpoint"]),
                         ]),
+                    CommandNode(
+                        "hosts", "Machines that could run the companion, and what each needs.",
+                        options: common + ["--machine"]),
+                    CommandNode(
+                        "deploy", "Choose the machine that runs the companion.",
+                        options: common + ["--directory", "--port", "--adopt"],
+                        arguments: [.machine]),
+                    CommandNode(
+                        "stack", "Start, stop and inspect the companion stack on its host.",
+                        children: [
+                            CommandNode(
+                                "status", "Which host runs the stack, and what is up.",
+                                options: common),
+                            CommandNode("up", "Start the stack.", options: common + ["--build"]),
+                            CommandNode("down", "Stop the stack.", options: common + ["--wipe"]),
+                            CommandNode("restart", "Restart the stack.", options: common),
+                            CommandNode(
+                                "logs", "Read the stack's logs.", options: common + ["--tail"],
+                                arguments: [.free]),
+                            CommandNode(
+                                "env", "Print the environment the stack would be given.",
+                                options: common + ["--reveal"]),
+                        ]),
+                    CommandNode(
+                        "export", "Save everything remembered as a restorable bundle.",
+                        options: common + ["--endpoint", "--include-media"],
+                        arguments: [.localPath]),
+                    CommandNode(
+                        "import", "Restore a bundle written by export.",
+                        options: common + ["--endpoint"], arguments: [.localPath]),
+                    CommandNode(
+                        "erase", "Delete one episode and everything derived from it.",
+                        options: common + ["--endpoint", "--yes"], arguments: [.free]),
+                    CommandNode(
+                        "wipe", "Delete the companion's entire memory.",
+                        options: common + ["--endpoint", "--yes"]),
                 ]),
         ])
 

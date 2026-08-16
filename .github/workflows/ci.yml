@@ -43,6 +43,7 @@ jobs:
       site: ${{ steps.areas.outputs.site }}
       scripts: ${{ steps.areas.outputs.scripts }}
       source: ${{ steps.areas.outputs.source }}
+      companion: ${{ steps.areas.outputs.companion }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -86,6 +87,7 @@ jobs:
           area site '^apps/site/'
           area scripts '^(scripts/|Casks/|package\.json$|bun\.lock$|biome\.json$)'
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
+          area companion '^apps/companion/'
 
   checks:
     needs: changes
@@ -207,8 +209,53 @@ jobs:
         run: ./test.sh
         working-directory: Packages/Edith
 
+  companion:
+    needs: changes
+    if: >-
+      needs.changes.outputs.companion == 'true'
+      || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: companion
+          POSTGRES_USER: companion
+          POSTGRES_PASSWORD: companion-dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U companion -d companion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the toolchain
+        run: rustup toolchain install stable --profile minimal --component clippy
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/companion/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('apps/companion/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: apps/companion
+      - name: Tests
+        run: cargo test --locked
+        working-directory: apps/companion
+      - name: Migrations apply to a real pgvector database
+        env:
+          DATABASE_URL: postgres://companion:companion-dev@127.0.0.1:5432/companion
+        run: cargo run --locked -- --migrate-only
+        working-directory: apps/companion
+
   release:
-    needs: [changes, checks, ubuntu, swift-build, swift-test]
+    needs: [changes, checks, ubuntu, swift-build, swift-test, companion]
     if: >-
       always()
       && github.ref == 'refs/heads/main'
@@ -223,6 +270,8 @@ jobs:
       && ((needs.changes.outputs.swift != 'true'
       && needs.changes.outputs.docs != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
+      && ((needs.changes.outputs.companion != 'true'
+      && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
       && ((github.event_name == 'push'
       && (needs.changes.outputs.swift == 'true' || needs.changes.outputs.linux == 'true'))
       || (github.event_name == 'workflow_dispatch' && inputs.release))

@@ -15,7 +15,7 @@ struct AppCommand: AsyncParsableCommand {
             AppActionsCommand.self, AppCleanKeysCommand.self, AppTestNotificationCommand.self,
             AppOpenCommand.self, AppQuitCommand.self, AppCheckUpdatesCommand.self,
             AppUpdatesCommand.self, AppRelaunchCommand.self,
-            AppClearUpdateHistoryCommand.self,
+            AppClearUpdateHistoryCommand.self, AppRevealCommand.self, AppSnapshotCommand.self,
         ],
         defaultSubcommand: AppActionsCommand.self)
 }
@@ -38,6 +38,12 @@ enum AppActions {
         AppAction(name: "quit", summary: "Quit the Edith main window.", needsMainApp: true),
         AppAction(
             name: "check-updates", summary: "Ask Sparkle to check for an update now.",
+            needsMainApp: true),
+        AppAction(
+            name: "reveal", summary: "Show a section of the main window.",
+            needsMainApp: true),
+        AppAction(
+            name: "snapshot", summary: "Capture the open windows as PNG files.",
             needsMainApp: true),
     ]
 
@@ -322,6 +328,116 @@ struct AppClearUpdateHistoryCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out("cleared \(before) check(s)")
+        }
+    }
+}
+
+struct AppRevealCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reveal",
+        abstract: "Show a section of the main window, and optionally a tab inside it.")
+
+    @Argument(
+        help: ArgumentHelp(
+            "The section to show; without it the window comes up where it was.",
+            discussion:
+                "One of home, dashboard, music, calendar, system, machines, companion, "
+                + "extensions, settings, about."))
+    var section: String?
+
+    @Option(help: "A tab inside the section; companion and settings have them.")
+    var tab: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let action = try AppActions.named("reveal")
+            try AppActions.require(action)
+            if tab != nil, section == nil {
+                throw CLIFailure.usage(
+                    "--tab needs a section to go with it",
+                    hint: "ed app reveal companion --tab chat")
+            }
+            let payload: [String: Any]
+            switch (section, tab) {
+            case let (.some(section), .some(tab)) where !tab.isEmpty:
+                payload = ["section": section, "tab": tab]
+            case let (.some(section), _):
+                payload = ["section": section]
+            default:
+                payload = [:]
+            }
+            let reply = await AppBridge.awaitReply(IPC.Name.revealResult, timeout: 10) {
+                AppBridge.post(IPC.Name.requestReveal, userInfo: payload)
+            }
+            guard let reply else {
+                throw AppBridge.silence("the reveal")
+            }
+            let ok = reply["ok"] as? Bool ?? false
+            guard ok else {
+                throw CLIFailure.notFound(
+                    reply["error"] as? String ?? "the app refused the reveal",
+                    hint: "run `ed app reveal --help` for the section and tab names")
+            }
+            let shown = reply["section"] as? String ?? section ?? "the window"
+            let shownTab = reply["tab"] as? String
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("reveal"), "section": .string(shown),
+                        "tab": .optional(shownTab),
+                    ]))
+                return
+            }
+            CLIOut.out(shownTab.map { "showing \(shown) · \($0)" } ?? "showing \(shown)")
+        }
+    }
+}
+
+struct AppSnapshotCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "snapshot",
+        abstract: "Capture the app's open windows as PNG files.")
+
+    @Option(help: "Write the images into this directory; /tmp/edith-snapshots without it.")
+    var dir: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let action = try AppActions.named("snapshot")
+            try AppActions.require(action)
+            let payload: [String: Any]
+            if let dir, !dir.isEmpty {
+                payload = [
+                    "dir": URL(fileURLWithPath: (dir as NSString).expandingTildeInPath).path
+                ]
+            } else {
+                payload = [:]
+            }
+            let reply = await AppBridge.awaitReply(IPC.Name.windowSnapshotResult, timeout: 15) {
+                AppBridge.post(IPC.Name.requestWindowSnapshot, userInfo: payload)
+            }
+            guard let reply else {
+                throw AppBridge.silence("the snapshot")
+            }
+            let ok = reply["ok"] as? Bool ?? false
+            guard ok else {
+                throw CLIFailure(
+                    reply["error"] as? String ?? "the app could not capture its windows",
+                    hint: "make sure a window is open; `ed app open` brings one up")
+            }
+            let files = (reply["files"] as? String ?? "")
+                .split(separator: "\n").map(String.init)
+            guard !json else {
+                CLIOut.json(.object(["files": .array(files.map { .string($0) })]))
+                return
+            }
+            for file in files { CLIOut.out(file) }
         }
     }
 }

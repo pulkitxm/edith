@@ -41,6 +41,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)
         }
+        CLIWindowBridge.install()
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main

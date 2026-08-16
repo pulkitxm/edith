@@ -146,3 +146,49 @@ import Testing
         #expect(codexPoints.map(\.w) == [48])
     }
 }
+
+@Suite struct LimitsHistoryFableTests {
+    let now = Date(timeIntervalSince1970: 1_787_000_000)
+
+    @Test func fableRoundTripsAndChangesTheDedupeKey() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let session = LimitWindow(percent: 92, resetsAt: nil)
+        let week = LimitWindow(percent: 68, resetsAt: nil)
+        var history = LimitsHistory(url: url)
+        history.append(
+            session: session, week: week,
+            fable: LimitWindow(percent: 45.5, resetsAt: now.addingTimeInterval(86400)), now: now)
+
+        let latest = try #require(LimitsHistory.latest(url: url))
+        #expect(latest.fable?.percent == 45.5)
+        #expect(latest.fable?.resetsAt != nil)
+        #expect(latest.session?.percent == 92)
+
+        history.append(
+            session: session, week: week,
+            fable: LimitWindow(percent: 46, resetsAt: now.addingTimeInterval(86400)),
+            now: now.addingTimeInterval(300))
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.split(separator: "\n").count == 2)
+    }
+
+    @Test func rowsWithoutFableStillDecode() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let iso = ISO8601DateFormatter()
+        let line = """
+            {"ts":"\(iso.string(from: now))","p":"claude","s":87,"w":67,"sr":null,"wr":null}
+            """
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data((line + "\n").utf8).write(to: url)
+        let latest = try #require(LimitsHistory.latest(url: url))
+        #expect(latest.session?.percent == 87)
+        #expect(latest.fable == nil)
+    }
+}

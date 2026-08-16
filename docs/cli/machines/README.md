@@ -73,11 +73,11 @@ the process state between metric records.
 | `ed machines unmount` | Unmounts it again and tidies the folder away. Aliased `umount`. |
 | `ed machines mounts` | Lists every machine file system Edith mounted or can see, and whether each one still answers. |
 
-Seven more subcommands live under `ed machines` and are documented on four
+Eight more subcommands live under `ed machines` and are documented on five
 further pages: [`docker`](../machines-docker/README.md), [`files`](../machines-files/README.md),
 [`power`](../machines-power/README.md), [`services`](../machines-power/README.md),
-[`kill`](../machines-power/README.md), [`broadcast`](../machines-power/README.md) and
-[`workspace`](../machines-workspace/README.md).
+[`kill`](../machines-power/README.md), [`broadcast`](../machines-power/README.md),
+[`thermal`](../machines-thermal/README.md) and [`workspace`](../machines-workspace/README.md).
 
 ## The machine record
 

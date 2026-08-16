@@ -1,3 +1,4 @@
+import Combine
 import EdithKit
 import SwiftUI
 
@@ -9,7 +10,9 @@ struct ClipboardPanelView: View {
     @State private var filterText = ""
     @State private var selectedID: String?
     @State private var keyboardScrollTick = 0
+    @State private var arranged: [ClipboardEntry] = []
     @State private var visible: [ClipboardEntry] = []
+    @State private var renderLimit = ClipboardPanelView.pageSize
     @State private var searching = false
     @State private var searchTask: Task<Void, Never>?
     @State private var lastMouse = NSEvent.mouseLocation
@@ -22,6 +25,8 @@ struct ClipboardPanelView: View {
         "top"
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
+
+    static let pageSize = 80
 
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
@@ -42,8 +47,14 @@ struct ClipboardPanelView: View {
     }
 
     private static func height(for entries: [ClipboardEntry], showFooter: Bool) -> CGFloat {
-        let rows = entries.isEmpty ? rowHeight : entries.reduce(0) { $0 + rowHeight(for: $1) }
-        return headerHeight + rows + (showFooter ? footerHeight : 0) + bottomPadding
+        let chrome = headerHeight + (showFooter ? footerHeight : 0) + bottomPadding
+        guard !entries.isEmpty else { return chrome + rowHeight }
+        var rows: CGFloat = 0
+        for entry in entries {
+            rows += rowHeight(for: entry)
+            if chrome + rows >= ClipboardPanel.maxHeight { break }
+        }
+        return chrome + rows
     }
 
     private var pinToTop: Bool { pinTo != "bottom" }
@@ -60,27 +71,59 @@ struct ClipboardPanelView: View {
         arrange(entries, query: query, pinToTop: pinToTop)
     }
 
-    private func refreshVisible(selectFirst: Bool = false) {
+    private func adoptArranged(_ result: [ClipboardEntry], selectFirst: Bool) {
+        arranged = result
+        syncVisible()
+        if selectFirst { selectFirstRow() }
+        reportHeight()
+    }
+
+    private func syncVisible() {
+        visible = Array(arranged.prefix(renderLimit))
+    }
+
+    private func ensureRendered(upTo index: Int) {
+        guard index >= renderLimit else { return }
+        renderLimit = min(arranged.count, index + Self.pageSize)
+        syncVisible()
+    }
+
+    private func extendPage() {
+        guard renderLimit < arranged.count else { return }
+        renderLimit = min(arranged.count, renderLimit + Self.pageSize)
+        syncVisible()
+    }
+
+    private func refreshVisible(selectFirst: Bool = false, resetLimit: Bool = false) {
         searchTask?.cancel()
+        if resetLimit { renderLimit = Self.pageSize }
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if query.isEmpty {
-            visible = Self.arrange(store.entries, query: query, pinToTop: pinToTop)
             searching = false
-            if selectFirst { selectFirstRow() }
-            reportHeight()
+            adoptArranged(
+                Self.arrange(store.entries, query: query, pinToTop: pinToTop),
+                selectFirst: selectFirst)
             return
         }
         searching = true
         let entries = store.entries
         let pinTop = pinToTop
         searchTask = Task {
-            let arranged = await Self.search(entries, query: query, pinToTop: pinTop)
+            let result = await Self.search(entries, query: query, pinToTop: pinTop)
             guard !Task.isCancelled else { return }
-            visible = arranged
             searching = false
-            if selectFirst { selectFirstRow() }
-            reportHeight()
+            adoptArranged(result, selectFirst: selectFirst)
         }
+    }
+
+    private func resetForShow() {
+        lastMouse = NSEvent.mouseLocation
+        searchTask?.cancel()
+        searching = false
+        filterText = ""
+        renderLimit = Self.pageSize
+        refreshVisible(selectFirst: true)
+        DispatchQueue.main.async { searchFocused = true }
     }
 
     private func selectFirstRow() {
@@ -104,13 +147,14 @@ struct ClipboardPanelView: View {
         }
         .padding(.bottom, Self.bottomPadding)
         .frame(width: ClipboardPanel.width)
-        .onAppear {
-            lastMouse = NSEvent.mouseLocation
-            refreshVisible(selectFirst: true)
-            DispatchQueue.main.async { searchFocused = true }
+        .onAppear { resetForShow() }
+        .onReceive(NotificationCenter.default.publisher(for: ClipboardPanel.willShow)) { _ in
+            resetForShow()
         }
-        .onChange(of: filterText) { _, _ in refreshVisible(selectFirst: true) }
-        .onChange(of: store.entries) { _, _ in refreshVisible() }
+        .onChange(of: filterText) { _, _ in
+            refreshVisible(selectFirst: true, resetLimit: true)
+        }
+        .onChange(of: store.revision) { _, _ in refreshVisible() }
         .onChange(of: pinTo) { _, _ in refreshVisible() }
         .onChange(of: showFooter) { _, _ in reportHeight() }
     }
@@ -205,6 +249,14 @@ struct ClipboardPanelView: View {
                                         selectedID == entry.id
                                             ? themeColor(themeName) : Color.clear)
                             )
+                    }
+                    if visible.count < arranged.count {
+                        Color.clear
+                            .frame(height: 1)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .onAppear { extendPage() }
                     }
                 }
             }
@@ -310,11 +362,11 @@ struct ClipboardPanelView: View {
     }
 
     private var selectedEntry: ClipboardEntry? {
-        visible.first { $0.id == selectedID }
+        arranged.first { $0.id == selectedID }
     }
 
     private func move(_ delta: Int) {
-        let items = visible
+        let items = arranged
         guard !items.isEmpty else { return }
         let index = selectedID.flatMap { id in items.firstIndex { $0.id == id } } ?? -delta
         let next: Int
@@ -325,16 +377,18 @@ struct ClipboardPanelView: View {
         } else {
             next = min(max(index + delta, 0), items.count - 1)
         }
+        ensureRendered(upTo: next)
         selectedID = items[next].id
         keyboardScrollTick += 1
     }
 
     private func jumpToEdge(top: Bool) {
-        let items = visible
+        let items = arranged
         guard !items.isEmpty else { return }
         if top {
             selectedID = items[0].id
         } else {
+            ensureRendered(upTo: items.count - 1)
             let index = edgeShownIndex(in: items, bottom: true) ?? items.count - 1
             selectedID = items[index].id
         }
@@ -391,19 +445,23 @@ struct ClipboardPanelView: View {
 
     private func deleteSelected() {
         guard let entry = selectedEntry else { return }
-        let index = visible.firstIndex { $0.id == entry.id } ?? 0
-        visible.removeAll { $0.id == entry.id }
+        let index = arranged.firstIndex { $0.id == entry.id } ?? 0
+        arranged.removeAll { $0.id == entry.id }
+        syncVisible()
         store.delete(entry.id)
-        if visible.isEmpty {
+        if arranged.isEmpty {
             selectedID = nil
         } else {
-            selectedID = visible[min(index, visible.count - 1)].id
+            let nextIndex = min(index, arranged.count - 1)
+            ensureRendered(upTo: nextIndex)
+            selectedID = arranged[nextIndex].id
         }
         reportHeight()
     }
 
     private func clear() {
         store.clear()
+        arranged = []
         visible = []
         selectedID = nil
         reportHeight()
@@ -417,7 +475,7 @@ struct ClipboardPanelView: View {
     }
 
     private func reportHeight() {
-        let sizingEntries = filterText.isEmpty ? visible : store.entries
+        let sizingEntries = filterText.isEmpty ? arranged : store.entries
         onHeightChange(Self.height(for: sizingEntries, showFooter: showFooter))
     }
 }

@@ -85,8 +85,7 @@ pub async fn store_signals(
 #[cfg(test)]
 mod tests {
     use super::signals_from_segments;
-    use crate::baseline::episode_context_bucket;
-use crate::stt::TranscriptSegment;
+    use crate::stt::TranscriptSegment;
 
     fn segment(start: f32, end: f32, text: &str) -> TranscriptSegment {
         TranscriptSegment {

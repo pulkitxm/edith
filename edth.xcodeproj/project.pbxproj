@@ -437,18 +437,19 @@
 /* Begin PBXShellScriptBuildPhase section */
 		894E33B83968A6646E7A6B4F /* Embed Login Item Helper */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"${BUILT_PRODUCTS_DIR}/EdithHelper.app",
 			);
 			name = "Embed Login Item Helper";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

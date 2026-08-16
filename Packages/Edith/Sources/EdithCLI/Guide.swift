@@ -187,6 +187,10 @@ public enum Guide {
         ed companion episode <id>               read one episode in full
         ed companion reason set --api-key sk-x  configure the reasoner in place
         ed companion nightly                    run the learning pipeline now
+        ed companion export ~/backup            everything, as a restorable bundle
+        ed companion import ~/backup            put a bundle back, idempotently
+        ed companion erase <id> --yes           delete one episode for good
+        ed companion wipe --yes                 delete the whole memory
         ```
 
         ## Usage and limits
@@ -293,6 +297,8 @@ public enum Guide {
         ed app check-updates            ask Sparkle to look now
         ed app updates                  the checks already made
         ed app quit                     quit the main window, leave the menu bar
+        ed app reveal companion --tab chat  show a section, and a tab inside it
+        ed app snapshot                 the open windows as PNGs, no screen recording
         ```
 
         ## Completions

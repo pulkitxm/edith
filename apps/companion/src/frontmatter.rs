@@ -17,10 +17,10 @@ fn scalar(value: &str) -> &str {
 }
 
 fn parsed_date(value: &str) -> Option<DateTime<Utc>> {
-    if value.len() == 10 {
-        if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-            return date.and_hms_opt(0, 0, 0).map(|date| date.and_utc());
-        }
+    if value.len() == 10
+        && let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d")
+    {
+        return date.and_hms_opt(0, 0, 0).map(|date| date.and_utc());
     }
     DateTime::parse_from_rfc3339(value)
         .ok()
@@ -53,36 +53,33 @@ pub fn parse_front_matter(text: &str) -> FrontMatter {
     let mut date_seen = false;
     let mut title = None;
 
-    if lines.first().is_some_and(|line| line.trim() == "---") {
-        if let Some(closing_index) = lines
+    if lines.first().is_some_and(|line| line.trim() == "---")
+        && let Some(closing_index) = lines
             .iter()
             .enumerate()
             .skip(1)
             .find_map(|(index, line)| (line.trim() == "---").then_some(index))
-        {
-            body_start = closing_index + 1;
+    {
+        body_start = closing_index + 1;
 
-            for line in &lines[1..closing_index] {
-                let Some((key, value)) = line.split_once(':') else {
-                    continue;
-                };
-                if key.trim().is_empty() {
-                    continue;
-                }
-                let key = key.trim();
-                let value = scalar(value);
+        for line in &lines[1..closing_index] {
+            let Some((key, value)) = line.split_once(':') else {
+                continue;
+            };
+            if key.trim().is_empty() {
+                continue;
+            }
+            let key = key.trim();
+            let value = scalar(value);
 
-                if key == "title" && !value.is_empty() {
-                    title = Some(value.to_owned());
-                }
+            if key == "title" && !value.is_empty() {
+                title = Some(value.to_owned());
+            }
 
-                if !date_seen
-                    && matches!(key, "date" | "created" | "occurred_at")
-                    && !value.is_empty()
-                {
-                    date_seen = true;
-                    date = parsed_date(value);
-                }
+            if !date_seen && matches!(key, "date" | "created" | "occurred_at") && !value.is_empty()
+            {
+                date_seen = true;
+                date = parsed_date(value);
             }
         }
     }

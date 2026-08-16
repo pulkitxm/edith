@@ -91,7 +91,7 @@ pub fn tokens(text: &str) -> HashSet<String> {
 }
 
 pub fn sentences(text: &str) -> Vec<String> {
-    text.split(|character| matches!(character, '.' | '!' | '?' | '\n'))
+    text.split(['.', '!', '?', '\n'])
         .map(str::trim)
         .filter(|sentence| sentence.split_whitespace().count() >= 4)
         .map(str::to_owned)

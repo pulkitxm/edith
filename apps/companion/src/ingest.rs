@@ -37,10 +37,10 @@ where
 }
 
 pub fn parse_file_date(value: &str) -> Option<DateTime<Utc>> {
-    if value.len() == 10 {
-        if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-            return date.and_hms_opt(0, 0, 0).map(|date| date.and_utc());
-        }
+    if value.len() == 10
+        && let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d")
+    {
+        return date.and_hms_opt(0, 0, 0).map(|date| date.and_utc());
     }
     DateTime::parse_from_rfc3339(value)
         .ok()

@@ -204,11 +204,10 @@ pub async fn run_probe(transport: &str, endpoint: &str) -> Result<Value, String>
                 .stderr(std::process::Stdio::piped())
                 .spawn()
                 .map_err(|error| error.to_string())
-                .and_then(|mut child| {
+                .map(|mut child| {
                     let stdin = child.stdin.take();
-                    Ok((child, stdin))
+                    (child, stdin)
                 })
-                .map(|(child, stdin)| (child, stdin))
         }
         _ => Err("only local and ssh transports probe today".to_owned()),
     };

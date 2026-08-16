@@ -32,6 +32,7 @@ episodesKept}`.
 ## Where to go next
 
 - [`ed companion index`](./index.md), what rebuilds the chunks
+- [`ed companion export`](./export.md) and [`ed companion wipe`](./wipe.md), the data itself rather than what is derived from it
 - [Memory](./concepts-memory.md), why the ladder is arranged this way
 - [`ed companion`](./README.md), the rest of this group
 - [All `ed` commands](../README.md)

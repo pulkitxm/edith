@@ -12,6 +12,7 @@ final class CompanionMindModel: CompanionRefreshable {
     private(set) var core: [CompanionCoreSection] = []
     private(set) var calibration: [CompanionCalibration] = []
     private(set) var savingCore = false
+    private(set) var loaded = false
     private(set) var runningNightly = false
     private(set) var error: String?
 
@@ -28,6 +29,7 @@ final class CompanionMindModel: CompanionRefreshable {
             runs = try await client.runs(limit: 5)
             core = (try? await client.core()) ?? []
             calibration = (try? await client.calibration()) ?? []
+            loaded = true
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -80,6 +82,7 @@ struct CompanionMindScreen: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
     @State private var barsFilled = false
     @State private var detail: MindDetail?
     @State private var editingSection: String?
@@ -88,27 +91,38 @@ struct CompanionMindScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                if let error = model.error {
-                    Text(error)
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.orange)
-                }
-                HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    beliefsCard
-                    VStack(spacing: UIScale.pt(12)) {
-                        claimsCard
-                        nightlyCard
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+                    if let error = model.error {
+                        Text(error)
+                            .font(.system(size: UIScale.pt(11.5)))
+                            .foregroundStyle(DashSkin.warn)
+                    }
+                    if !model.loaded, model.error == nil {
+                        CompanionGrid(width: proxy.size.width) {
+                            CompanionCardSkeleton(rows: 3, dark: dark)
+                        } secondary: {
+                            CompanionCardSkeleton(rows: 2, dark: dark)
+                        } full: {
+                        }
+                    } else {
+                        CompanionGrid(width: proxy.size.width) {
+                            beliefsCard
+                        } secondary: {
+                            claimsCard
+                            nightlyCard
+                        } full: {
+                            coreCard
+                            calibrationCard
+                            observationsCard
+                        }
                     }
                 }
-                coreCard
-                calibrationCard
-                observationsCard
+                .pageContent(compact)
             }
-            .pageContent(compact)
         }
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await model.refresh() }
             withAnimation(Motion.animation(Motion.settle, reduceMotion: reduceMotion)) {
                 barsFilled = true
@@ -137,7 +151,9 @@ struct CompanionMindScreen: View {
                                 Text("by \(section.updatedBy)")
                                     .font(.system(size: UIScale.pt(10.5)))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
-                                Button(editingSection == section.section ? "Cancel" : "Edit") {
+                                CompanionLinkButton(
+                                    title: editingSection == section.section ? "Cancel" : "Edit"
+                                ) {
                                     if editingSection == section.section {
                                         editingSection = nil
                                     } else {
@@ -145,30 +161,20 @@ struct CompanionMindScreen: View {
                                         sectionDraft = section.content
                                     }
                                 }
-                                .buttonStyle(.plain)
-                                .font(.system(size: UIScale.pt(11)))
-                                .foregroundStyle(DashSkin.accent(dark))
-                                .pointerCursor()
                             }
                             if editingSection == section.section {
-                                TextField("", text: $sectionDraft, axis: .vertical)
-                                    .textFieldStyle(.plain)
-                                    .lineLimit(2...8)
-                                    .font(.system(size: UIScale.pt(12.5)))
-                                    .padding(UIScale.pt(8))
-                                    .background(DashSkin.paper2(dark))
-                                    .clipShape(
-                                        RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                                Button("Save") {
+                                AnswerField(placeholder: "", text: $sectionDraft) {
                                     let draft = sectionDraft
                                     let name = section.section
                                     editingSection = nil
                                     Task { await model.saveCore(section: name, content: draft) }
                                 }
-                                .buttonStyle(.plain)
-                                .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                                .foregroundStyle(DashSkin.accent(dark))
-                                .pointerCursor()
+                                CompanionButton(title: "Save", role: .primary) {
+                                    let draft = sectionDraft
+                                    let name = section.section
+                                    editingSection = nil
+                                    Task { await model.saveCore(section: name, content: draft) }
+                                }
                             } else {
                                 Text(section.content)
                                     .font(.system(size: UIScale.pt(12.5)))
@@ -342,10 +348,12 @@ struct CompanionMindScreen: View {
             dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                Button(model.runningNightly ? "Running the pipeline…" : "Run now") {
+                CompanionButton(
+                    title: "Run now", busy: model.runningNightly,
+                    busyTitle: "Running the pipeline…"
+                ) {
                     Task { await model.runNightly() }
                 }
-                .disabled(model.runningNightly)
                 if let run = model.runs.first {
                     Text(runSummary(run))
                         .font(.system(size: UIScale.pt(11.5)))
@@ -442,6 +450,7 @@ private struct MindDetailSheet: View {
     let close: () -> Void
     @State private var episodeRefs: [(String, String)] = []
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
+    @Environment(\.companionGeneration) private var generation
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -493,7 +502,7 @@ private struct MindDetailSheet: View {
         .padding(UIScale.pt(20))
         .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
         .background(DashSkin.paper(dark))
-        .task {
+        .task(id: generation) {
             if requestsEnabled { await loadRefs() }
         }
     }
@@ -554,7 +563,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func beliefDetail(_ belief: CompanionBelief) -> some View {
         Text(belief.statement)
-            .font(DashSkin.serif(UIScale.pt(18), weight: .semibold))
+            .font(DashSkin.serif(18, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
@@ -580,7 +589,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func claimDetail(_ claim: CompanionClaim) -> some View {
         Text(claim.statement)
-            .font(DashSkin.serif(UIScale.pt(18), weight: .semibold))
+            .font(DashSkin.serif(18, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
@@ -623,7 +632,7 @@ private struct MindDetailSheet: View {
     @ViewBuilder
     private func observationDetail(_ observation: CompanionObservation) -> some View {
         Text(observation.summary)
-            .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+            .font(DashSkin.serif(17, weight: .semibold))
             .foregroundStyle(DashSkin.ink(dark))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)

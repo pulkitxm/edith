@@ -66,6 +66,7 @@ public enum AppStorageKeys {
     public enum Companion {
         public static let endpoint = "companionEndpoint"
         public static let tab = "companionTab"
+        public static let setupDeclined = "companionSetupDeclined"
     }
 
     public enum FocusDim {
@@ -98,7 +99,10 @@ public enum AppStorageKeys {
     }
 
     public enum MenuBar {
+        public static let claudeWindows = "menuBarClaudeWindows"
+        public static let codexWindows = "menuBarCodexWindows"
         public static let colorMode = "menuBarColorMode"
+        public static let limitsStyle = "menuBarLimitsStyle"
         public static let highColorHex = "menuBarHighColorHex"
         public static let lowColorHex = "menuBarLowColorHex"
         public static let midColorHex = "menuBarMidColorHex"

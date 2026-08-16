@@ -7,10 +7,19 @@ private struct CompanionRequestsEnabledKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct CompanionGenerationKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
 extension EnvironmentValues {
     var companionRequestsEnabled: Bool {
         get { self[CompanionRequestsEnabledKey.self] }
         set { self[CompanionRequestsEnabledKey.self] = newValue }
+    }
+
+    var companionGeneration: Int {
+        get { self[CompanionGenerationKey.self] }
+        set { self[CompanionGenerationKey.self] = newValue }
     }
 }
 
@@ -32,7 +41,7 @@ enum CompanionTab: String, CaseIterable, Identifiable {
         case .desk: return "Desk"
         case .library: return "Library"
         case .mind: return "Mind"
-        case .setup: return "Setup"
+        case .setup: return "Backend"
         case .settings: return "Settings"
         }
     }
@@ -57,7 +66,7 @@ struct CompanionPage: View {
     @State private var library = CompanionLibraryModel()
     @State private var mind = CompanionMindModel()
     @State private var desk = CompanionDeskModel()
-    @State private var setup = CompanionSetupModel()
+    @State private var backend = CompanionBackendModel()
     @State private var reason = CompanionSettingsModel()
     @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
@@ -66,6 +75,10 @@ struct CompanionPage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
+    @State private var refreshTick = 0
+    @State private var setupModel: CompanionSetupModel?
+    @AppStorage(AppStorageKeys.Companion.setupDeclined, store: SharedDefaults.store)
+    private var setupDeclined = false
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
@@ -78,7 +91,10 @@ struct CompanionPage: View {
             screens
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(pageBackground)
+        .sheet(item: $setupModel) { model in
+            CompanionSetupSheet(model: model, home: home)
+        }
         .onDrop(of: [.fileURL], isTargeted: $library.dropTargeted) { providers in
             Task {
                 let urls = await CompanionDrop.urls(from: providers)
@@ -91,26 +107,80 @@ struct CompanionPage: View {
         }
         .task {
             guard requestsEnabled else { return }
+            var first = true
+            var lastTunnelAttempt = Date.distantPast
             while !Task.isCancelled {
                 await home.refresh()
+                if !home.reachable, let deployment = CompanionDeploymentStore.load(),
+                    deployment.machineID != nil,
+                    Date().timeIntervalSince(lastTunnelAttempt) > 60
+                {
+                    lastTunnelAttempt = Date()
+                    if await CompanionTunnel.ensure(deployment) {
+                        await home.refresh()
+                    }
+                }
+                if first {
+                    first = false
+                    if CompanionDeploymentStore.load() == nil, !home.reachable,
+                        !setupDeclined
+                    {
+                        openSetup()
+                    } else if !home.reachable {
+                        select(.setup)
+                    }
+                }
                 try? await Task.sleep(for: .seconds(20))
             }
         }
+    }
+
+    private var pageBackground: some View {
+        DashSkin.paper(dark)
+            .overlay(alignment: .topTrailing) {
+                RadialGradient(
+                    colors: [DashSkin.accent(dark).opacity(0.08), .clear], center: .topTrailing,
+                    startRadius: 0, endRadius: 620
+                )
+                .ignoresSafeArea(edges: .vertical)
+            }
+            .ignoresSafeArea(edges: .vertical)
     }
 
     private var header: some View {
         PageHeader(
             "Companion",
             trailing: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Circle()
-                        .fill(home.healthy ? Color.green : Color.orange)
-                        .frame(width: UIScale.pt(8), height: UIScale.pt(8))
-                    Text(home.healthy ? "healthy" : "degraded")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                HStack(spacing: UIScale.pt(10)) {
+                    Button {
+                        refreshTick += 1
+                        Task { await home.refresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help("Refresh this screen")
+                    Button {
+                        select(.setup)
+                    } label: {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Circle()
+                                .fill(healthTint)
+                                .frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                            Text(home.state.label)
+                                .font(.system(size: UIScale.pt(11.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help(healthHelp)
                 }
-                .help(home.checks.map { "\($0.name): \($0.detail)" }.joined(separator: "\n"))
             },
             accessory: {
                 if let status = home.status {
@@ -124,6 +194,27 @@ struct CompanionPage: View {
             }
         )
         .pageGutter(compact)
+    }
+
+    private var healthTint: Color {
+        switch home.state {
+        case .unreachable: DashSkin.inkFaint(dark)
+        case .blocked: DashSkin.warn
+        case .degraded: DashSkin.gold
+        case .ready: DashSkin.ok
+        }
+    }
+
+    private var healthHelp: String {
+        guard home.reachable else {
+            return "The companion backend is not reachable. Open Backend to choose where it runs."
+        }
+        let failing = home.failing
+        guard !failing.isEmpty else {
+            return home.checks.map { "\($0.name): \($0.detail)" }.joined(separator: "\n")
+        }
+        return failing.map { "\($0.name) (\($0.severityKind.rawValue)): \($0.detail)" }
+            .joined(separator: "\n")
     }
 
     private var tabBar: some View {
@@ -171,6 +262,7 @@ struct CompanionPage: View {
                 dropOverlay
             }
         }
+        .environment(\.companionGeneration, home.generation &+ refreshTick)
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
             value: library.dropTargeted)
@@ -188,7 +280,7 @@ struct CompanionPage: View {
                     .font(.system(size: UIScale.pt(26)))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Drop to remember")
-                    .font(DashSkin.serif(UIScale.pt(20), weight: .semibold))
+                    .font(DashSkin.serif(20, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("Notes, recordings, photos, video, PDFs")
                     .font(.system(size: UIScale.pt(12)))
@@ -238,14 +330,15 @@ struct CompanionPage: View {
         switch item {
         case .chat:
             CompanionChatScreen(
-                model: chat, home: home,
+                model: chat, home: home, isActive: tab == .chat,
                 openEpisode: { id in
                     select(.library)
                     Task { await library.select(id) }
                 })
         case .capture: CompanionCaptureScreen(model: capture, home: home)
         case .desk: CompanionDeskScreen(model: desk)
-        case .setup: CompanionSetupScreen(model: setup)
+        case .setup:
+            CompanionBackendScreen(model: backend, openSetup: { openSetup() })
         case .library: CompanionLibraryScreen(model: library, home: home)
         case .mind:
             CompanionMindScreen(
@@ -256,6 +349,18 @@ struct CompanionPage: View {
                 })
         case .settings: CompanionSettingsScreen(model: reason, home: home)
         }
+    }
+
+    private func openSetup() {
+        setupDeclined = false
+        let model = CompanionSetupModel(onFinish: { finished in
+            if !finished { setupDeclined = true }
+            setupModel = nil
+            refreshTick += 1
+            Task { await home.refresh() }
+        })
+        model.begin(home: home, reasonerConfigured: reason.current?.configured == true)
+        setupModel = model
     }
 
     private func select(_ item: CompanionTab) {

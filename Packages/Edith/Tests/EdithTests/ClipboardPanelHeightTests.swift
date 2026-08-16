@@ -47,6 +47,15 @@ import Testing
         #expect(with - without == 55)
     }
 
+    @Test func heightStopsAccumulatingAtThePanelCap() {
+        withFooter(false) {
+            let many = (0..<500).map { _ in entry(ext: "txt") }
+            let height = ClipboardPanelView.estimatedHeight(entries: many)
+            #expect(height >= ClipboardPanel.maxHeight)
+            #expect(height < ClipboardPanel.maxHeight + 62)
+        }
+    }
+
     @Test func heightGrowsPerEntry() {
         withFooter(false) {
             let one = ClipboardPanelView.estimatedHeight(entries: [entry(ext: "txt")])

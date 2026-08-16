@@ -98,7 +98,7 @@ pub fn parse_scores(value: &Value, expected: usize) -> Option<Vec<f32>> {
             scores[index] = score;
         }
     }
-    if scores.iter().any(|score| *score == f32::MIN) {
+    if scores.contains(&f32::MIN) {
         return None;
     }
     Some(scores)

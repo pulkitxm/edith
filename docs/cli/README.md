@@ -50,6 +50,7 @@ key.
 | [`ed machines docker`](./machines-docker/README.md) | Containers, images, volumes, networks and compose projects |
 | [`ed machines files`](./machines-files/README.md) | Browsing, transferring and editing files over SSH, and the undo model |
 | [`ed machines power`](./machines-power/README.md) | Power state, processes and system services |
+| [`ed machines thermal`](./machines-thermal/README.md) | Fan speeds and temporary or persistent thermal profiles |
 | [`ed machines workspace`](./machines-workspace/README.md) | Workspaces and panes |
 
 ## The short version

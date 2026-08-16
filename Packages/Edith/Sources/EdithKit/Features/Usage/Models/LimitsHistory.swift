@@ -17,15 +17,18 @@ public struct LimitsHistory {
         let p: LimitProvider?
         let s: Double?
         let w: Double?
+        let f: Double?
         let sr: String?
         let wr: String?
+        let fr: String?
     }
 
     private static let iso = ISO8601DateFormatter()
     private static let decoder = JSONDecoder()
 
     public static func row(
-        provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?, now: Date
+        provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
+        fable: LimitWindow? = nil, now: Date
     ) -> (
         key: String, line: String
     ) {
@@ -35,19 +38,23 @@ public struct LimitsHistory {
             p: provider,
             s: session.map { round1($0.percent) },
             w: week.map { round1($0.percent) },
+            f: fable.map { round1($0.percent) },
             sr: session?.resetsAt.map { iso.string(from: $0) },
-            wr: week?.resetsAt.map { iso.string(from: $0) })
-        let key = "\(provider.rawValue)|\(r.s ?? -1)|\(r.w ?? -1)|\(r.sr ?? "-")|\(r.wr ?? "-")"
+            wr: week?.resetsAt.map { iso.string(from: $0) },
+            fr: fable?.resetsAt.map { iso.string(from: $0) })
+        let key =
+            "\(provider.rawValue)|\(r.s ?? -1)|\(r.w ?? -1)|\(r.f ?? -1)|\(r.sr ?? "-")|\(r.wr ?? "-")|\(r.fr ?? "-")"
         let data = (try? JSONEncoder().encode(r)) ?? Data("{}".utf8)
         return (key, String(decoding: data, as: UTF8.self) + "\n")
     }
 
     public mutating func append(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
-        now: Date = Date()
+        fable: LimitWindow? = nil, now: Date = Date()
     ) {
         if !seeded { seed() }
-        let (key, line) = Self.row(provider: provider, session: session, week: week, now: now)
+        let (key, line) = Self.row(
+            provider: provider, session: session, week: week, fable: fable, now: now)
         guard key != lastKeys[provider] else { return }
         lastKeys[provider] = key
         let url = fileURL
@@ -84,14 +91,14 @@ public struct LimitsHistory {
             let provider = row.p ?? .claude
             guard lastKeys[provider] == nil else { continue }
             lastKeys[provider] =
-                "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")"
+                "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
         }
     }
 
     public static func latest(
         provider: LimitProvider = .claude, url: URL = LimitsHistory.url
     ) -> (
-        date: Date, session: LimitWindow?, week: LimitWindow?
+        date: Date, session: LimitWindow?, week: LimitWindow?, fable: LimitWindow?
     )? {
         let text = FileTail.read(url, maxBytes: 8192)
         for line in text.split(separator: "\n").reversed() {
@@ -105,6 +112,9 @@ public struct LimitsHistory {
                 },
                 week: row.w.map {
                     LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
+                },
+                fable: row.f.map {
+                    LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
                 }
             )
         }

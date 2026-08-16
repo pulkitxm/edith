@@ -1,6 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg18
+    restart: unless-stopped
     environment:
       POSTGRES_DB: companion
       POSTGRES_USER: companion
@@ -16,6 +17,7 @@ services:
       retries: 10
   redis:
     image: redis:8-alpine
+    restart: unless-stopped
     ports:
       - "127.0.0.1:${COMPANION_REDIS_PORT:-6379}:6379"
     healthcheck:
@@ -25,10 +27,12 @@ services:
       retries: 10
   ollama:
     image: ollama/ollama:latest
+    restart: unless-stopped
     volumes:
       - companion-ollama:/root/.ollama
   whisper:
     image: ghcr.io/ggml-org/whisper.cpp:main
+    restart: unless-stopped
     entrypoint: ["/bin/sh", "-c"]
     command:
       - test -f /models/${COMPANION_STT_MODEL:-ggml-base.bin} || /app/models/download-ggml-model.sh ${COMPANION_STT_MODEL_NAME:-base} /models; exec /app/build/bin/whisper-server -m /models/${COMPANION_STT_MODEL:-ggml-base.bin} --host 0.0.0.0 --port 8080
@@ -36,6 +40,7 @@ services:
       - companion-whisper:/models
   api:
     build: .
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy

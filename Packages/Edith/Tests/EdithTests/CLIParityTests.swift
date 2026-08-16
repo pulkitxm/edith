@@ -86,6 +86,21 @@ enum UIParity {
         UICapability("Companion", "sync github activity", ["companion", "sync", "github"]),
         UICapability("Companion", "ask about your life", ["companion", "ask", "how is warden"]),
         UICapability(
+            "Companion settings", "export the memory as a bundle",
+            ["companion", "export", "/tmp/backup"]),
+        UICapability(
+            "Companion settings", "restore a memory bundle",
+            ["companion", "import", "/tmp/backup"]),
+        UICapability(
+            "Companion settings", "wipe the whole memory",
+            ["companion", "wipe", "--yes"]),
+        UICapability(
+            "Companion settings", "drop and rebuild the search index",
+            ["companion", "db", "reindex"]),
+        UICapability(
+            "Companion settings", "rebuild everything derived",
+            ["companion", "db", "rebuild-derived"]),
+        UICapability(
             "Companion", "ingest dropped files", ["companion", "ingest", "/tmp/notes"]),
         UICapability(
             "Companion chat", "send a chat message",
@@ -138,6 +153,18 @@ enum UIParity {
         UICapability(
             "Companion settings", "test the reasoner", ["companion", "reason", "test"]),
         UICapability(
+            "Companion backend", "start the stack on its host",
+            ["companion", "stack", "up"]),
+        UICapability(
+            "Companion backend", "stop the stack on its host",
+            ["companion", "stack", "down"]),
+        UICapability(
+            "Companion backend", "restart the stack on its host",
+            ["companion", "stack", "restart"]),
+        UICapability(
+            "Companion backend", "choose the machine that runs the companion",
+            ["companion", "deploy"]),
+        UICapability(
             "Companion settings", "point at another companion",
             ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
         UICapability("Machines", "add a machine", ["machines", "add", "box", "--host", "h"]),
@@ -161,6 +188,12 @@ enum UIParity {
             "Machine header", "shut the machine down",
             ["machines", "power", "shutdown", "box", "--yes"]),
         UICapability("Machine header", "wake the machine", ["machines", "power", "wake", "box"]),
+        UICapability(
+            "Machine cooling", "inspect thermal profiles",
+            ["machines", "thermal", "status", "box"]),
+        UICapability(
+            "Machine cooling", "switch thermal profiles",
+            ["machines", "thermal", "set", "box", "performance"]),
         UICapability(
             "Machine tools", "start a systemd unit",
             ["machines", "services", "start", "box", "nginx.service"]),

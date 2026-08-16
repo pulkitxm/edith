@@ -20,37 +20,59 @@ Options:
 ```json
 {
   "checks": [
-    { "detail": "connected", "name": "postgres", "ok": true },
-    { "detail": "3 of 3 migrations applied", "name": "migrations", "ok": true },
-    { "detail": "installed", "name": "pgvector", "ok": true },
-    { "detail": "connected", "name": "redis", "ok": true },
-    { "detail": "writable", "name": "vault", "ok": true }
+    { "detail": "connected", "name": "postgres", "ok": true, "severity": "blocker" },
+    { "detail": "installed", "name": "pgvector", "ok": true, "severity": "blocker" },
+    { "detail": "connected", "name": "redis", "ok": true, "severity": "optional" },
+    { "detail": "not configured, fusion order kept", "name": "reranker", "ok": false, "severity": "optional" }
   ],
+  "degraded": true,
   "ok": true
 }
 ```
 
-`ok` is true only when every check passed. Each item in `checks` has the
-dependency `name`, its own Boolean `ok`, and a human-readable `detail` from the
-backend.
+Each item in `checks` has the dependency `name`, its own Boolean `ok`, a
+human-readable `detail` from the backend, and a `severity`:
+
+| Severity | Meaning |
+| --- | --- |
+| `blocker` | The companion cannot do its job without it. |
+| `degraded` | One capability is lost, the rest still works. |
+| `optional` | Off by choice; nothing is broken. |
+
+`ok` is true when no `blocker` check is failing, so an unconfigured reranker
+does not make the companion unhealthy while an unconfigured reasoning provider
+does. `degraded` is true when any check at all is failing, including optional
+ones. `/v1/health` answers 200 when `ok` and 503 otherwise.
 
 Examples:
 
 ```
 $ ed companion doctor
 postgres  ok  connected
-migrations  ok  3 of 3 migrations applied
+migrations  ok  12 of 12 migrations applied
 pgvector  ok  installed
-redis  ok  connected
-vault  ok  writable
+embeddings  ok  ollama 0.32.6, model qwen3-embedding:0.6b
+reasoning  ok  openai-compatible at http://ollama:11434/v1, model qwen3:1.7b
+reranker  off  not configured, fusion order kept
+github  off  no token; set it from the app or `ed companion connectors set`
 
 $ ed companion doctor --json
 {
   "checks": [
-    { "detail": "connected", "name": "postgres", "ok": true }
+    { "detail": "connected", "name": "postgres", "ok": true, "severity": "blocker" }
   ],
+  "degraded": false,
   "ok": true
 }
+```
+
+A failing `blocker` is also summarised on stderr, so a passing run stays quiet
+on stdout for scripts:
+
+```
+$ ed companion doctor
+reasoning  FAIL  no reasoning provider; set one from the app or `ed companion reason set`
+1 blocking: reasoning
 ```
 
 Behaviour: `doctor` decodes the health report even when the API returns HTTP

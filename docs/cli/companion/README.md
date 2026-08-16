@@ -33,6 +33,10 @@ For the machinery behind these commands, start at
 | `ed companion chat <message>` | Talks with the companion, streamed as it thinks. |
 | `ed companion conversations` | Lists chats, or replays one by id. |
 | `ed companion forget <id>` | Deletes a conversation and its messages. |
+| `ed companion export <dir>` | Saves everything remembered as a restorable bundle, media included. |
+| `ed companion import <path>` | Restores a bundle, merging and skipping what already exists. |
+| `ed companion erase <id>` | Deletes one episode and everything derived from it. |
+| `ed companion wipe` | Deletes the entire memory; the stack and its settings survive. |
 | `ed companion nightly` | Runs the nightly learning pipeline right now. |
 | `ed companion reason` | Shows or changes the reasoning provider, model and API key. |
 | `ed companion ask <question>` | Answers from your own memory, through one lens. |
@@ -51,6 +55,9 @@ For the machinery behind these commands, start at
 | `ed companion eval` | Scores the friend layer against the cases it should fail. |
 | `ed companion standup <file>` | Records a standup and checks it against the record. |
 | `ed companion machines` | Where the stack runs, and what each machine can do. |
+| `ed companion hosts` | Machines that could run the companion, and what each one needs. |
+| `ed companion deploy` | Choose the machine that runs it, and bring it up there. |
+| `ed companion stack` | Start, stop, restart, log and inspect the stack on its host. |
 | `ed companion baselines` | Your own delivery baselines, which every signal is measured against. |
 | `ed companion connectors` | Tokens for GitHub and Notion, and imports for calendar, music and YouTube. |
 | `ed companion facts` | What was true, and what it believed at the time. |
@@ -60,6 +67,9 @@ For the machinery behind these commands, start at
 
 ## Commands
 
+- [`ed companion hosts`](./hosts.md)
+- [`ed companion deploy`](./deploy.md)
+- [`ed companion stack`](./stack.md)
 - [`ed companion status`](./status.md)
 - [`ed companion doctor`](./doctor.md)
 - [`ed companion search`](./search.md)
@@ -78,6 +88,10 @@ For the machinery behind these commands, start at
 - [`ed companion chat`](./chat.md)
 - [`ed companion conversations`](./conversations.md)
 - [`ed companion forget`](./forget.md)
+- [`ed companion export`](./export.md)
+- [`ed companion import`](./import.md)
+- [`ed companion erase`](./erase.md)
+- [`ed companion wipe`](./wipe.md)
 - [`ed companion episode`](./episode.md)
 - [`ed companion nightly`](./nightly.md)
 - [`ed companion reason`](./reason.md)
@@ -127,7 +141,7 @@ For the machinery behind these commands, start at
 
 `--endpoint` wins over `EDITH_COMPANION_URL`, which wins over
 `http://127.0.0.1:4820`. A saved machine forward can put a remote companion on
-that local address: run `ed machines forwards on tuf 2`, then
+that local address: run `ed machines forwards on <machine> <n>`, then
 `ed companion status`.
 
 Each Markdown file must be no larger than 2MB, recordings, photos and PDFs no

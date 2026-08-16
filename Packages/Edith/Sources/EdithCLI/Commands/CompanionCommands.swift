@@ -10,8 +10,8 @@ struct CompanionCommand: AsyncParsableCommand {
             The backend runs with docker compose from apps/companion. Pass --endpoint or
             set EDITH_COMPANION_URL to point at it; the default is http://127.0.0.1:4820.
 
-            For a remote backend, run `ed machines forwards on tuf 2`, then
-            `ed companion status`.
+            For a backend on one of your machines, forward its port with
+            `ed machines forwards on <machine> <n>`, then `ed companion status`.
             """,
         subcommands: [
             CompanionStatusCommand.self, CompanionDoctorCommand.self,
@@ -35,6 +35,10 @@ struct CompanionCommand: AsyncParsableCommand {
             CompanionBaselinesCommand.self, CompanionConnectorsCommand.self,
             CompanionFactsCommand.self, CompanionForgetBeliefCommand.self,
             CompanionWeeklyCommand.self, CompanionDbCommand.self,
+            CompanionHostsCommand.self, CompanionStackCommand.self,
+            CompanionDeployCommand.self, CompanionExportCommand.self,
+            CompanionImportCommand.self, CompanionEraseCommand.self,
+            CompanionWipeCommand.self,
         ],
         defaultSubcommand: CompanionStatusCommand.self)
 }
@@ -438,10 +442,21 @@ enum CompanionBridge {
         do {
             return try await operation(CompanionClient(baseURL: resolved))
         } catch let error as CompanionClientError {
-            throw CLIFailure.unavailable(
-                "the companion backend at \(resolved.absoluteString) is unavailable",
-                hint: "\(error.localizedDescription); run `docker compose up` in "
-                    + "apps/companion or `ed machines forwards on tuf 2`")
+            throw failure(error, endpoint: resolved)
+        }
+    }
+
+    static func failure(_ error: CompanionClientError, endpoint: URL) -> CLIFailure {
+        switch error {
+        case let .unreachable(detail):
+            return CLIFailure.unavailable(
+                "the companion backend at \(endpoint.absoluteString) is unavailable",
+                hint: "\(detail); start the stack on the machine that hosts it, or point at "
+                    + "another endpoint with --endpoint or EDITH_COMPANION_URL")
+        case let .badResponse(status, detail):
+            return CLIFailure(
+                "the companion returned HTTP \(status)",
+                hint: detail.isEmpty ? nil : detail)
         }
     }
 
@@ -456,10 +471,7 @@ enum CompanionBridge {
                 "the Ollama embedding service is unavailable",
                 hint: detail.isEmpty ? "check the Ollama service and embedding model" : detail)
         } catch let error as CompanionClientError {
-            throw CLIFailure.unavailable(
-                "the companion backend at \(resolved.absoluteString) is unavailable",
-                hint: "\(error.localizedDescription); run `docker compose up` in "
-                    + "apps/companion or `ed machines forwards on tuf 2`")
+            throw failure(error, endpoint: resolved)
         }
     }
 
@@ -642,11 +654,13 @@ struct CompanionDoctorCommand: AsyncParsableCommand {
                 CLIOut.json(
                     .object([
                         "ok": .bool(health.ok),
+                        "degraded": .bool(health.degraded ?? !health.failing.isEmpty),
                         "checks": .array(
                             health.checks.map { check in
                                 .object([
                                     "name": .string(check.name),
                                     "ok": .bool(check.ok),
+                                    "severity": .string(check.severityKind.rawValue),
                                     "detail": .string(check.detail),
                                 ])
                             }),
@@ -654,8 +668,14 @@ struct CompanionDoctorCommand: AsyncParsableCommand {
                 return
             }
             for check in health.checks {
-                let state = check.ok ? "ok" : "fail"
+                let state = check.ok ? "ok" : check.severityKind == .blocker ? "FAIL" : "off"
                 CLIOut.out("\(check.name)  \(state)  \(TextTable.oneLine(check.detail))")
+            }
+            let blocking = health.blocking
+            if !blocking.isEmpty {
+                CLIOut.note(
+                    "\(blocking.count) blocking: "
+                        + blocking.map(\.name).joined(separator: ", "))
             }
         }
     }
