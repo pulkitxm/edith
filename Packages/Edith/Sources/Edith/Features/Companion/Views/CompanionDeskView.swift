@@ -132,26 +132,34 @@ struct CompanionDeskScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                if let error = model.error {
-                    Text(error)
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.warn)
-                }
-                if !model.loaded, model.error == nil {
-                    CompanionCardSkeleton(rows: 2, dark: dark)
-                    CompanionCardSkeleton(rows: 2, dark: dark)
-                } else {
-                    questionCard
-                    HStack(alignment: .top, spacing: CompanionMetrics.cardSpacing) {
-                        beliefsCard
-                        predictionsCard
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+                    if let error = model.error {
+                        Text(error)
+                            .font(.system(size: UIScale.pt(11.5)))
+                            .foregroundStyle(DashSkin.warn)
                     }
-                    discrepanciesCard
+                    if !model.loaded, model.error == nil {
+                        CompanionGrid(width: proxy.size.width) {
+                            CompanionCardSkeleton(rows: 2, dark: dark)
+                        } secondary: {
+                            CompanionCardSkeleton(rows: 2, dark: dark)
+                        } full: {
+                        }
+                    } else {
+                        questionCard
+                        CompanionGrid(width: proxy.size.width) {
+                            beliefsCard
+                        } secondary: {
+                            predictionsCard
+                        } full: {
+                            discrepanciesCard
+                        }
+                    }
                 }
+                .pageContent(compact)
             }
-            .pageContent(compact)
         }
         .task(id: generation) { if requestsEnabled { await model.refresh() } }
         .sheet(item: $overrideTarget) { discrepancy in

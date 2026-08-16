@@ -5,6 +5,38 @@ enum CompanionMetrics {
     static var columnWidth: CGFloat { UIScale.pt(680) }
     static var cardSpacing: CGFloat { UIScale.pt(16) }
     static var rowSpacing: CGFloat { UIScale.pt(10) }
+    static var twoColumnThreshold: CGFloat { UIScale.pt(1020) }
+}
+
+struct CompanionGrid<Primary: View, Secondary: View, Full: View>: View {
+    let width: CGFloat
+    @ViewBuilder var primary: () -> Primary
+    @ViewBuilder var secondary: () -> Secondary
+    @ViewBuilder var full: () -> Full
+
+    private var wide: Bool { width >= CompanionMetrics.twoColumnThreshold }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+            if wide {
+                HStack(alignment: .top, spacing: CompanionMetrics.cardSpacing) {
+                    VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+                        primary()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+                        secondary()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            } else {
+                primary()
+                secondary()
+            }
+            full()
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
 }
 
 struct CompanionButton: View {
