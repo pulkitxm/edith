@@ -14,6 +14,12 @@ pub async fn write_vault_file(
         .file_name()
         .filter(|value| !value.is_empty())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file name has no basename"))?;
+    if sha256.len() < 2 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the sha256 is not a hex digest",
+        ));
+    }
     let relative = PathBuf::from("objects")
         .join(&sha256[..2])
         .join(sha256)

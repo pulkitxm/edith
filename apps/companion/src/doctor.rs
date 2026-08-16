@@ -146,15 +146,23 @@ async fn vault_check(vault_dir: &Path) -> Result<String, String> {
     Ok("writable".to_owned())
 }
 
+static EMBED_PROBE_OK_AT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+const EMBED_PROBE_EVERY_SECONDS: i64 = 300;
+
 async fn embeddings_check(embed: &EmbedClient) -> Result<String, String> {
     let version = embed
         .version_probe()
         .await
         .map_err(|error| error.to_string())?;
-    embed
-        .embed(&["health probe".to_owned()])
-        .await
-        .map_err(|error| format!("model {} is not answering: {error}", embed.model()))?;
+    let now = chrono::Utc::now().timestamp();
+    let last = EMBED_PROBE_OK_AT.load(std::sync::atomic::Ordering::Relaxed);
+    if now - last >= EMBED_PROBE_EVERY_SECONDS {
+        embed
+            .embed(&["health probe".to_owned()])
+            .await
+            .map_err(|error| format!("model {} is not answering: {error}", embed.model()))?;
+        EMBED_PROBE_OK_AT.store(now, std::sync::atomic::Ordering::Relaxed);
+    }
     Ok(format!(
         "ollama {version}, model {} loaded",
         embed.model()

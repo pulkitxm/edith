@@ -1738,7 +1738,10 @@ async fn episode_media(State(state): State<AppState>, Path(id): Path<Uuid>) -> R
         Ok(None) => return error_response(StatusCode::NOT_FOUND, "no such episode"),
         Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     };
-    match tokio::fs::read(state.vault_dir.join(&uri)).await {
+    let Some(relative) = dataport::vault_relative(&uri) else {
+        return error_response(StatusCode::NOT_FOUND, "the media path is not inside the vault");
+    };
+    match tokio::fs::read(state.vault_dir.join(relative)).await {
         Ok(bytes) => (
             StatusCode::OK,
             [(axum::http::header::CONTENT_TYPE, media_content_type(&uri))],

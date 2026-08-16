@@ -261,6 +261,10 @@ pub struct ImportOutcome {
     pub pending_episodes: i64,
 }
 
+pub fn sha256_is_clean(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 pub fn validate(bundle: &Bundle) -> Result<(), String> {
     if bundle.format != FORMAT {
         return Err(format!(
@@ -273,6 +277,20 @@ pub fn validate(bundle: &Bundle) -> Result<(), String> {
             "this export is format version {}, and this companion only reads up to {VERSION}; update the companion first",
             bundle.version
         ));
+    }
+    for episode in &bundle.episodes {
+        if !sha256_is_clean(&episode.source.sha256) {
+            return Err(format!(
+                "episode {} carries a malformed source sha256; refusing the bundle",
+                episode.id
+            ));
+        }
+        if vault_relative(&episode.source.uri).is_none() {
+            return Err(format!(
+                "episode {} carries a source uri that escapes the vault; refusing the bundle",
+                episode.id
+            ));
+        }
     }
     Ok(())
 }
@@ -526,6 +544,9 @@ pub async fn import_media(
     name: &str,
     bytes: &[u8],
 ) -> Result<Value, Box<dyn Error + Send + Sync>> {
+    if !sha256_is_clean(sha256) {
+        return Err("that is not a sha256".into());
+    }
     let known =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM sources WHERE sha256 = $1)")
             .bind(sha256)
@@ -714,6 +735,45 @@ mod tests {
                 .to_string_lossy(),
             "objects/ab/abc123/note.md"
         );
+    }
+
+    #[test]
+    fn a_bundle_with_a_traversal_sha_is_refused() {
+        let bundle: super::Bundle = serde_json::from_value(serde_json::json!({
+            "format": FORMAT, "version": VERSION,
+            "episodes": [{
+                "id": "1f6f2be2-0000-4000-8000-000000000000",
+                "occurredAt": "2026-08-16T00:00:00Z",
+                "kind": "md", "title": "x", "bodyOriginal": "x",
+                "source": {"kind": "md", "uri": "objects/aa/x/x.md", "sha256": "../../etc", "bytes": 1}
+            }]
+        }))
+        .expect("bundle parses");
+        assert!(validate(&bundle).unwrap_err().contains("malformed source sha256"));
+    }
+
+    #[test]
+    fn a_bundle_with_an_escaping_uri_is_refused() {
+        let sha = "a".repeat(64);
+        let bundle: super::Bundle = serde_json::from_value(serde_json::json!({
+            "format": FORMAT, "version": VERSION,
+            "episodes": [{
+                "id": "1f6f2be2-0000-4000-8000-000000000001",
+                "occurredAt": "2026-08-16T00:00:00Z",
+                "kind": "md", "title": "x", "bodyOriginal": "x",
+                "source": {"kind": "md", "uri": "../outside.md", "sha256": sha, "bytes": 1}
+            }]
+        }))
+        .expect("bundle parses");
+        assert!(validate(&bundle).unwrap_err().contains("escapes the vault"));
+    }
+
+    #[test]
+    fn only_real_digests_pass_the_sha_gate() {
+        assert!(super::sha256_is_clean(&"ab".repeat(32)));
+        assert!(!super::sha256_is_clean("short"));
+        assert!(!super::sha256_is_clean(&"zz".repeat(32)));
+        assert!(!super::sha256_is_clean(&format!("{}/", "a".repeat(63))));
     }
 
     #[test]
