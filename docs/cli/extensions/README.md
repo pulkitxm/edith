@@ -27,16 +27,17 @@ launches. Nothing in this group waits on the app, and nothing in it can exit 4.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Thirteen entries, in this order:
+walks, and its order is the order `ls` prints. Fourteen entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
+| `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
-| `lidAwake` | Lid Awake | System | Keep running with the lid shut, with timed and battery-aware sessions |
+| `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `music` | Music | Media | Plays your local music folder, with media keys |
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
@@ -45,7 +46,7 @@ walks, and its order is the order `ls` prints. Thirteen entries, in this order:
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same thirteen, with what each one is made of. `Key` is the preference the app
+The same fourteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 five the welcome tour shows before you ask it for all of them.
 
@@ -54,6 +55,7 @@ five the welcome tour shows before you ask it for all of them.
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` |
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none |
+| `companion` | `tabCompanionEnabled` | no | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none |
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none |
@@ -65,13 +67,32 @@ five the welcome tour shows before you ask it for all of them.
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none |
 
+The JSON form also exposes the platform capability registry. Capabilities are
+not permission ids. They say which implementation an extension requires from
+the current platform, and which missing implementations merely degrade it:
+
+| ID | Required capabilities | Optional capabilities |
+| --- | --- | --- |
+| `usage` | `usageCollection` | `notifications` |
+| `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
+| `machines` | `machineManagement` | `notifications` |
+| `companion` | `companionService` | none |
+| `systemStats` | `systemMetrics` | none |
+| `micMute` | `microphoneControl` | `globalShortcuts` |
+| `lidAwake` | `preventSleep` | none |
+| `music` | `localMusicPlayback` | `mediaControls` |
+| `calendar` | `calendarEvents` | none |
+| `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
+| `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
+| `focusDim` | `windowDimming` | none |
+| `presenter` | `screenShareDetection` | none |
+| `colorPicker` | `screenColorSampling` | `globalShortcuts` |
+
 An id is matched exactly and case-insensitively against the `ID` column first,
 then against the `Key` column, so `ed extensions info clipboard`,
 `ed extensions info CLIPBOARD` and `ed extensions info clipboardEnabled` are the
 same command. There is no prefix matching here: unlike a machine name, `clip`
 fails with the full list of ids rather than guessing.
-
-## Commands
 
 ## Commands
 
@@ -98,7 +119,7 @@ failure mode between "the id exists" and "the boolean is written".
   question from the catalogue's fallback instead, which is `true` for
   `tabUsageEnabled` and `tabSystemEnabled`, so on a Mac where Edith has never
   run those two disagree. Upgrading from an older Edith writes a concrete value
-  for all thirteen keys on the next launch and they agree again; a fresh install
+  for all fourteen keys on the next launch and they agree again; a fresh install
   only writes the keys you turn on, so an untouched `tabUsageEnabled` keeps
   disagreeing until something writes it.
 - Every extension is also an ordinary `ed config` boolean, and both paths write
