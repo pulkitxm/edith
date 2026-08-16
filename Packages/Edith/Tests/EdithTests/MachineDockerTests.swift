@@ -689,7 +689,7 @@ import Testing
             "Failed to reboot: Interactive authentication required.")
         #expect(!PowerOutcome.hostWentAway(denied))
         #expect(PowerOutcome.explain(denied).contains("Interactive authentication required"))
-        #expect(PowerOutcome.explain(denied).contains("passwordless sudo"))
+        #expect(PowerOutcome.explain(denied).contains("Save this account's sudo password"))
     }
 
     @Test func theSudoPasswordPromptIsRecognisedAsAPrivilegeProblem() {
