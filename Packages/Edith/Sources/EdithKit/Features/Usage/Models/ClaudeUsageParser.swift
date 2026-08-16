@@ -62,13 +62,17 @@ public enum ClaudeUsageParser {
     }
 
     private static func window(_ raw: Response.Window?) -> LimitWindow? {
-        raw.map { LimitWindow(percent: $0.utilization ?? 0, resetsAt: EdithDate.parseISO($0.resetsAt)) }
+        raw.map {
+            LimitWindow(percent: $0.utilization ?? 0, resetsAt: EdithDate.parseISO($0.resetsAt))
+        }
     }
 
     private static func fableWindow(_ limits: [Response.ScopedLimit]?) -> LimitWindow? {
         let scoped = (limits ?? []).filter { $0.kind == "weekly_scoped" && $0.scope?.model != nil }
         let match =
-            scoped.first { $0.scope?.model?.displayName?.caseInsensitiveCompare("Fable") == .orderedSame }
+            scoped.first {
+                $0.scope?.model?.displayName?.caseInsensitiveCompare("Fable") == .orderedSame
+            }
             ?? scoped.first
         return match.map {
             LimitWindow(percent: $0.percent ?? 0, resetsAt: EdithDate.parseISO($0.resetsAt))
