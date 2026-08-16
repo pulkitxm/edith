@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0192"
+ignoreUntil = 2026-11-17
+reason = "No fixed release exists; RustSec classifies this transitive dependency as an unmaintained warning."
