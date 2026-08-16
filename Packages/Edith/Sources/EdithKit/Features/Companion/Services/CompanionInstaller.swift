@@ -124,9 +124,22 @@ public enum CompanionTunnel {
     }
 
     @MainActor
+    public static func endpointAnswers(_ deployment: CompanionDeployment) async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:\(deployment.localPort)/v1/status")
+        else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+            let http = response as? HTTPURLResponse
+        else { return false }
+        return (200..<300).contains(http.statusCode)
+    }
+
+    @MainActor
     @discardableResult
     public static func ensure(_ deployment: CompanionDeployment) async -> Bool {
         guard let machineID = deployment.machineID else { return true }
+        if await endpointAnswers(deployment) { return true }
         guard let machine = MachineRegistry.machines().first(where: { $0.id == machineID })
         else { return false }
         let forward: PortForward

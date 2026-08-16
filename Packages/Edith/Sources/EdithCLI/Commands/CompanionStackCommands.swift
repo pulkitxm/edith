@@ -377,6 +377,10 @@ struct CompanionDeployCommand: AsyncParsableCommand {
         guard let machineID = deployment.machineID,
             let machine = MachineRegistry.machines().first(where: { $0.id == machineID })
         else { return }
+        if await CompanionTunnel.endpointAnswers(deployment) {
+            CLIOut.note("localhost:\(deployment.localPort) already reaches the companion")
+            return
+        }
         let forward =
             CompanionTunnel.savedForward(for: deployment)
             ?? {
