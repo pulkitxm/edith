@@ -43,8 +43,8 @@ use crate::media::{VideoDeps, ingest_image, ingest_video, kind_for};
 use crate::vision::VisionClient;
 use crate::turns::{RetrievedChunk, latency_since, log_turn};
 use crate::{
-    baseline, commitments, connectors, core_memory, curate, entities, evals, facts, hypotheses,
-    inquire, lenses, machines, standup,
+    baseline, commitments, connectors, core_memory, curate, dataport, entities, evals, facts,
+    hypotheses, inquire, lenses, machines, standup,
 };
 
 #[derive(Clone)]
@@ -1122,6 +1122,102 @@ async fn db_route(State(state): State<AppState>, Path(action): Path<String>) -> 
             StatusCode::BAD_REQUEST,
             "the actions are migrate, reindex and rebuild-derived",
         ),
+    }
+}
+
+async fn export_route(State(state): State<AppState>) -> Response {
+    match dataport::export(&state.pool).await {
+        Ok(bundle) => Json(bundle).into_response(),
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+async fn import_route(State(state): State<AppState>, request: Request) -> Response {
+    let bytes = match to_bytes(request.into_body(), 512 * 1024 * 1024).await {
+        Ok(bytes) => bytes,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid JSON body"),
+    };
+    let bundle = match serde_json::from_slice::<dataport::Bundle>(&bytes) {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!("this does not parse as a companion export: {error}"),
+            );
+        }
+    };
+    if let Err(error) = dataport::validate(&bundle) {
+        return error_response(StatusCode::UNPROCESSABLE_ENTITY, error);
+    }
+    match dataport::import(&state.pool, &state.vault_dir, bundle).await {
+        Ok(outcome) => {
+            if outcome.pending_episodes > 0 {
+                spawn_index(&state);
+            }
+            Json(outcome).into_response()
+        }
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+async fn import_media_route(State(state): State<AppState>, request: Request) -> Response {
+    let bytes = match to_bytes(request.into_body(), 64 * 1024 * 1024).await {
+        Ok(bytes) => bytes,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid JSON body"),
+    };
+    let body = match serde_json::from_slice::<Value>(&bytes) {
+        Ok(body) => body,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "Invalid JSON body"),
+    };
+    let Some(object) = body.as_object() else {
+        return error_response(StatusCode::BAD_REQUEST, "Body must be an object");
+    };
+    let (Some(sha256), Some(name), Some(data)) = (
+        object.get("sha256").and_then(Value::as_str),
+        object.get("name").and_then(Value::as_str),
+        object.get("dataB64").and_then(Value::as_str),
+    ) else {
+        return error_response(StatusCode::BAD_REQUEST, "Pass sha256, name and dataB64");
+    };
+    let decoded = match base64::engine::general_purpose::STANDARD.decode(data) {
+        Ok(decoded) => decoded,
+        Err(_) => return error_response(StatusCode::BAD_REQUEST, "dataB64 is not base64"),
+    };
+    match dataport::import_media(&state.pool, &state.vault_dir, sha256, name, &decoded).await {
+        Ok(outcome) => Json(outcome).into_response(),
+        Err(error) if error.to_string().contains("no source") => {
+            error_response(StatusCode::NOT_FOUND, error)
+        }
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+async fn episode_delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Response {
+    match dataport::delete_episode(&state.pool, &state.vault_dir, id).await {
+        Ok(Some(outcome)) => Json(outcome).into_response(),
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "no such episode"),
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
+}
+
+async fn db_wipe(State(state): State<AppState>, body: Option<Json<Value>>) -> Response {
+    let confirmed = body
+        .as_ref()
+        .and_then(|Json(value)| value.get("confirm"))
+        .and_then(Value::as_str)
+        == Some(dataport::WIPE_CONFIRMATION);
+    if !confirmed {
+        return error_response(
+            StatusCode::PRECONDITION_REQUIRED,
+            format!(
+                "wiping deletes every episode, observation, belief and conversation; pass {{\"confirm\": \"{}\"}} to proceed",
+                dataport::WIPE_CONFIRMATION
+            ),
+        );
+    }
+    match dataport::wipe(&state.pool, &state.vault_dir).await {
+        Ok(outcome) => Json(outcome).into_response(),
+        Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     }
 }
 
@@ -2248,6 +2344,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/beliefs/{id}/correct", post(belief_correct))
         .route("/v1/reflect/weekly", post(weekly_route))
         .route("/v1/db/{action}", post(db_route))
+        .route("/v1/db/wipe", post(db_wipe))
+        .route("/v1/export", get(export_route))
+        .route("/v1/import", post(import_route))
+        .route("/v1/import/media", post(import_media_route))
         .route("/v1/turns/{id}/feedback", post(feedback_route))
         .route("/v1/evals", get(evals_route))
         .route("/v1/evals/run", post(evals_run))
@@ -2276,7 +2376,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/signals", get(signals))
         .route("/v1/status", get(status))
         .route("/v1/episodes", get(episodes))
-        .route("/v1/episodes/{id}", get(episode_detail))
+        .route(
+            "/v1/episodes/{id}",
+            get(episode_detail).delete(episode_delete),
+        )
         .route("/v1/episodes/{id}/media", get(episode_media))
         .with_state(state)
 }

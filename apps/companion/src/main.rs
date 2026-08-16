@@ -8,6 +8,7 @@ mod connectors;
 mod core_memory;
 mod council;
 mod curate;
+mod dataport;
 mod doctor;
 mod embed;
 mod entities;
