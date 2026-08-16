@@ -34,6 +34,8 @@ enum UIParity {
         "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
         "ed completions install": "shell completion has no UI at all",
         "ed config import": "the app restores from iCloud rather than from a JSON file",
+        "ed companion import":
+            "restoring a memory bundle is CLI-only until the companion settings grow a data section",
         "ed machines docker compose up":
             "the Docker window groups by project but never runs compose",
         "ed machines docker compose down":
