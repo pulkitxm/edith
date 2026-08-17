@@ -16,15 +16,39 @@ public enum MachineFacts {
     public static let whoCommand = "who 2>/dev/null | head -20"
 
     public static let macAddressCommand = """
-        networksetup -listallhardwareports 2>/dev/null | awk '
-          /^Hardware Port: (Ethernet|Wi-Fi)$/ { wanted=1; next }
-          wanted && /^Ethernet Address:/ { print $3; exit }
-          /^Hardware Port:/ { wanted=0 }
-        '
+        case "$(uname -s 2>/dev/null)" in
+          Darwin)
+            networksetup -listallhardwareports 2>/dev/null | awk '
+              /^Hardware Port: (Ethernet|Wi-Fi)$/ { wanted=1; next }
+              wanted && /^Ethernet Address:/ { print $3; exit }
+              /^Hardware Port:/ { wanted=0 }
+            '
+            ;;
+          Linux)
+            ip -o link show up 2>/dev/null | awk '
+              $0 !~ /LOOPBACK/ {
+                for (i=1; i<=NF; i++) if ($i == "link/ether") { print $(i+1); exit }
+              }
+            '
+            ;;
+        esac
         """
 
     public static let updatesCommand = """
-        softwareupdate -l 2>/dev/null | awk '/^[[:space:]]*\\* Label:/ { count++ } END { print count + 0 }'
+        case "$(uname -s 2>/dev/null)" in
+          Darwin)
+            softwareupdate -l 2>/dev/null | awk '/^[[:space:]]*\\* Label:/ { count++ } END { print count + 0 }'
+            ;;
+          Linux)
+            if command -v apt >/dev/null 2>&1; then
+              apt list --upgradable 2>/dev/null | awk 'NR > 1 { count++ } END { print count + 0 }'
+            elif command -v dnf >/dev/null 2>&1; then
+              dnf -q check-update 2>/dev/null | awk 'NF > 2 { count++ } END { print count + 0 }'
+            elif command -v pacman >/dev/null 2>&1; then
+              pacman -Qu 2>/dev/null | awk 'NF { count++ } END { print count + 0 }'
+            fi
+            ;;
+        esac
         """
 
     public static func parseWho(_ output: String) -> [String] {

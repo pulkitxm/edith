@@ -292,6 +292,15 @@ import Testing
         #expect(text.contains("top -l 1"))
     }
 
+    @Test func collectorUsesLinuxMetricsSources() {
+        let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
+        #expect(text.contains("/etc/os-release"))
+        #expect(text.contains("/proc/stat"))
+        #expect(text.contains("/proc/meminfo"))
+        #expect(text.contains("/proc/diskstats"))
+        #expect(text.contains("/proc/net/dev"))
+    }
+
     @Test func collectorScriptResourceExists() {
         let script = MachineCollector.script()
         #expect(script != nil)

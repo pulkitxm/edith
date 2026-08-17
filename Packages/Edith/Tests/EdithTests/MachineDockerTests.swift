@@ -352,11 +352,21 @@ import Testing
         #expect(MachineFacts.parseMACAddress("not-a-mac") == nil)
     }
 
-    @Test func theWakeAddressComesFromAMacEthernetOrWiFiPort() {
+    @Test func theWakeAddressSupportsMacOSAndLinuxInterfaces() {
         let command = MachineFacts.macAddressCommand
         #expect(command.contains("networksetup -listallhardwareports"))
         #expect(command.contains("Hardware Port: (Ethernet|Wi-Fi)"))
         #expect(command.contains("Ethernet Address:"))
+        #expect(command.contains("ip -o link show up"))
+        #expect(command.contains("link/ether"))
+    }
+
+    @Test func updateCountsSupportMacOSAndLinuxPackageManagers() {
+        let command = MachineFacts.updatesCommand
+        #expect(command.contains("softwareupdate -l"))
+        #expect(command.contains("apt list --upgradable"))
+        #expect(command.contains("dnf -q check-update"))
+        #expect(command.contains("pacman -Qu"))
     }
 
     @Test func buildsWakeOnLANMagicPacket() {

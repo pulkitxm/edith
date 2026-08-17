@@ -7,7 +7,7 @@ struct MachinesPowerCommand: AsyncParsableCommand {
         commandName: "power",
         abstract: "Restart, shut down or wake a machine.",
         discussion: """
-            Restart and shut down use the remote Mac's shutdown command and need privilege:
+            Restart and shut down use the remote machine's shutdown command and need privilege:
             `ed` tries `sudo -n` unless a sudo password is saved. A machine that
             asks for a password or for interactive authentication is reported as refusing,
             rather than being called done.
