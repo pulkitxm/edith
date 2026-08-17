@@ -212,15 +212,13 @@ struct MachineOverviewTab: View {
                 Image(systemName: "bolt.horizontal.circle")
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
-            Text(MachineStatusStyle.label(session.state))
+            Text(MachineStatusStyle.detail(session.state))
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: 0)
-            if !session.state.isBusy {
-                Button(session.state.isRetryable ? "Retry" : "Connect") {
-                    session.state.isRetryable ? session.retry() : session.start()
-                }
-                .pointerCursor()
+            if case .disconnected = session.state {
+                Button("Connect") { session.start() }
+                    .pointerCursor()
             }
         }
         .padding(UIScale.pt(14))

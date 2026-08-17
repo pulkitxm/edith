@@ -226,7 +226,11 @@ enum MachineStatusStyle {
         case .connecting: return "Connecting…"
         case .reconnecting: return "Reconnecting…"
         case .disconnected: return "Not connected"
-        case let .failed(message, _): return message
+        case .failed: return "Connection failed"
         }
+    }
+
+    static func detail(_ state: MachineConnectionState) -> String {
+        state.failureMessage ?? label(state)
     }
 }
