@@ -122,6 +122,31 @@ import EventKit
     }
 }
 
+@Suite struct CalendarTextTests {
+    private static let scratchStore = EKEventStore()
+
+    private static func event(minutes: Int, allDay: Bool = false) -> EKEvent {
+        let event = EKEvent(eventStore: scratchStore)
+        event.startDate = Date(timeIntervalSince1970: 1_700_000_000)
+        event.endDate = event.startDate.addingTimeInterval(TimeInterval(minutes * 60))
+        event.isAllDay = allDay
+        return event
+    }
+
+    @Test func formatsUsefulDurations() {
+        #expect(CalendarText.duration(for: Self.event(minutes: 30)) == "30 min")
+        #expect(CalendarText.duration(for: Self.event(minutes: 60)) == "1 hr")
+        #expect(CalendarText.duration(for: Self.event(minutes: 150)) == "2 hr 30 min")
+    }
+
+    @Test func labelsAllDayEventsWithoutSecondaryTime() {
+        let event = Self.event(minutes: 1_440, allDay: true)
+
+        #expect(CalendarText.startTime(for: event) == "All day")
+        #expect(CalendarText.timeDetail(for: event) == nil)
+    }
+}
+
 @Suite struct MeetingLinkTests {
     @Test func findsZoomLinkInNotes() {
         let notes = "Join Zoom Meeting\nhttps://us02web.zoom.us/j/8412345678?pwd=abc\nID: 841"

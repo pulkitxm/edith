@@ -127,7 +127,7 @@ private struct CalendarDaySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.headerToRowsSpacing) {
-            CalendarDayHeader(day: day, style: style)
+            CalendarDayHeader(day: day, eventCount: events.count, style: style)
             if style.wrapsRowsInCard {
                 VStack(alignment: .leading, spacing: 0) {
                     rows
@@ -159,18 +159,33 @@ private struct CalendarDaySection: View {
 
 private struct CalendarDayHeader: View {
     private let day: Date
+    private let eventCount: Int
     private let style: CalendarAgendaStyle
 
-    init(day: Date, style: CalendarAgendaStyle) {
+    init(day: Date, eventCount: Int, style: CalendarAgendaStyle) {
         self.day = day
+        self.eventCount = eventCount
         self.style = style
     }
 
     var body: some View {
-        Text(title)
-            .font(.system(size: style.headerSize, weight: .semibold))
-            .tracking(style.headerTracking)
-            .foregroundStyle(style.headerColor)
+        HStack(spacing: style.headerContentSpacing) {
+            Text(title)
+                .font(.system(size: style.headerSize, weight: .semibold))
+                .tracking(style.headerTracking)
+                .foregroundStyle(style.headerColor)
+            if style.showsEventCount {
+                Text(eventCount == 1 ? "1 event" : "\(eventCount) events")
+                    .font(.system(size: style.eventCountSize, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, UIScale.pt(8))
+                    .padding(.vertical, UIScale.pt(3))
+                    .background(.quaternary.opacity(0.45), in: Capsule())
+            }
+            Rectangle()
+                .fill(.quaternary)
+                .frame(height: 1)
+        }
     }
 
     private var title: String {
@@ -201,6 +216,49 @@ private struct CalendarEventRow: View {
     }
 
     var body: some View {
+        if style.showsRichRows {
+            richRow
+        } else {
+            compactRow
+        }
+    }
+
+    private var richRow: some View {
+        HStack(alignment: .top, spacing: style.rowSpacing) {
+            RoundedRectangle(cornerRadius: UIScale.pt(2))
+                .fill(CalendarText.calendarColor(for: event, fallback: accentColor))
+                .frame(width: UIScale.pt(4))
+                .frame(minHeight: UIScale.pt(44))
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text(CalendarText.startTime(for: event))
+                    .font(.system(size: style.timeSize, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                if let detail = CalendarText.timeDetail(for: event) {
+                    Text(detail)
+                        .font(.system(size: style.detailSize, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: style.richTimeWidth, alignment: .leading)
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                Text(event.title ?? "Untitled")
+                    .font(.system(size: style.titleSize, weight: .medium))
+                    .lineLimit(1)
+                    .presenterBlur(blurEvents)
+                metadata
+            }
+            Spacer(minLength: style.trailingSpacerMinLength)
+            meetingButton
+        }
+        .padding(.horizontal, style.rowHorizontalPadding)
+        .padding(.vertical, style.richRowVerticalPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(CalendarText.accessibilityLabel(for: event))
+    }
+
+    private var compactRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: style.rowSpacing) {
             Text(CalendarText.timeRange(for: event))
                 .font(.system(size: style.timeSize, weight: .medium))
@@ -220,23 +278,70 @@ private struct CalendarEventRow: View {
                 }
             }
             Spacer(minLength: style.trailingSpacerMinLength)
-            if let url = MeetingLink.url(for: event) {
-                Button {
-                    onOpenMeeting(url)
-                } label: {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: style.meetingIconSize))
-                        .foregroundStyle(
-                            CalendarText.providerColor(for: url, fallback: accentColor))
-                }
-                .buttonStyle(HoverButtonStyle())
-                .help(url.absoluteString)
-            }
+            meetingButton
         }
         .padding(.horizontal, style.rowHorizontalPadding)
         .padding(.vertical, style.rowVerticalPadding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(CalendarText.accessibilityLabel(for: event))
+    }
+
+    @ViewBuilder
+    private var metadata: some View {
+        HStack(spacing: UIScale.pt(12)) {
+            if let calendar = CalendarText.calendarName(for: event) {
+                CalendarMetadataLabel(systemImage: "calendar", text: calendar)
+            }
+            if let location = CalendarText.visibleLocation(for: event) {
+                CalendarMetadataLabel(systemImage: "mappin.and.ellipse", text: location)
+                    .presenterBlur(blurEvents)
+            }
+            if let attendees = CalendarText.attendeeSummary(for: event) {
+                CalendarMetadataLabel(systemImage: "person.2", text: attendees)
+            }
+            if event.hasRecurrenceRules {
+                CalendarMetadataLabel(systemImage: "repeat", text: "Recurring")
+            }
+        }
+        .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private var meetingButton: some View {
+        if let url = MeetingLink.url(for: event) {
+            let color = CalendarText.providerColor(for: url, fallback: accentColor)
+            Button {
+                onOpenMeeting(url)
+            } label: {
+                if style.showsMeetingLabel {
+                    Label("Join", systemImage: "video.fill")
+                        .font(.system(size: style.meetingIconSize, weight: .semibold))
+                        .padding(.horizontal, UIScale.pt(10))
+                        .padding(.vertical, UIScale.pt(6))
+                        .foregroundStyle(color)
+                        .background(color.opacity(0.12), in: Capsule())
+                        .overlay(Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1))
+                } else {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: style.meetingIconSize))
+                        .foregroundStyle(color)
+                }
+            }
+            .buttonStyle(HoverButtonStyle())
+            .help("Join meeting at \(url.host ?? url.absoluteString)")
+        }
+    }
+}
+
+private struct CalendarMetadataLabel: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
     }
 }
 
@@ -260,7 +365,7 @@ private struct CalendarEmptyState: View {
     }
 }
 
-private enum CalendarText {
+enum CalendarText {
     static func dayName(_ day: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(day) { return "Today" }
@@ -273,6 +378,45 @@ private enum CalendarText {
         let start = event.startDate.formatted(date: .omitted, time: .shortened)
         let end = event.endDate.formatted(date: .omitted, time: .shortened)
         return "\(start) – \(end)"
+    }
+
+    static func startTime(for event: EKEvent) -> String {
+        if event.isAllDay { return "All day" }
+        return event.startDate.formatted(date: .omitted, time: .shortened)
+    }
+
+    static func timeDetail(for event: EKEvent) -> String? {
+        guard !event.isAllDay else { return nil }
+        let end = event.endDate.formatted(date: .omitted, time: .shortened)
+        return "Until \(end) · \(duration(for: event))"
+    }
+
+    static func duration(for event: EKEvent) -> String {
+        let minutes = max(0, Int(event.endDate.timeIntervalSince(event.startDate) / 60))
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if hours == 0 { return "\(minutes) min" }
+        if remainder == 0 { return hours == 1 ? "1 hr" : "\(hours) hrs" }
+        return "\(hours) hr \(remainder) min"
+    }
+
+    static func calendarName(for event: EKEvent) -> String? {
+        guard let title = event.calendar?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            !title.isEmpty
+        else { return nil }
+        return title
+    }
+
+    static func attendeeSummary(for event: EKEvent) -> String? {
+        guard let count = event.attendees?.count, count > 0 else { return nil }
+        return count == 1 ? "1 attendee" : "\(count) attendees"
+    }
+
+    static func calendarColor(for event: EKEvent, fallback: Color) -> Color {
+        guard let cgColor = event.calendar?.cgColor, let color = NSColor(cgColor: cgColor) else {
+            return fallback
+        }
+        return Color(nsColor: color)
     }
 
     static func visibleLocation(for event: EKEvent) -> String? {
@@ -320,6 +464,27 @@ public enum CalendarAgendaStyle {
         switch self {
         case .page: return UIScale.pt(8)
         case .panel: return 6
+        }
+    }
+
+    var headerContentSpacing: CGFloat {
+        switch self {
+        case .page: return UIScale.pt(10)
+        case .panel: return 8
+        }
+    }
+
+    var showsEventCount: Bool {
+        switch self {
+        case .page: return true
+        case .panel: return false
+        }
+    }
+
+    var eventCountSize: CGFloat {
+        switch self {
+        case .page: return UIScale.pt(9.5)
+        case .panel: return 9
         }
     }
 
@@ -398,6 +563,13 @@ public enum CalendarAgendaStyle {
         }
     }
 
+    var showsRichRows: Bool {
+        switch self {
+        case .page: return true
+        case .panel: return false
+        }
+    }
+
     var timeSize: CGFloat {
         switch self {
         case .page: return UIScale.pt(12)
@@ -409,6 +581,20 @@ public enum CalendarAgendaStyle {
         switch self {
         case .page: return UIScale.pt(140)
         case .panel: return 128
+        }
+    }
+
+    var richTimeWidth: CGFloat {
+        switch self {
+        case .page: return UIScale.pt(148)
+        case .panel: return 128
+        }
+    }
+
+    var detailSize: CGFloat {
+        switch self {
+        case .page: return UIScale.pt(10)
+        case .panel: return 10
         }
     }
 
@@ -447,6 +633,13 @@ public enum CalendarAgendaStyle {
         }
     }
 
+    var showsMeetingLabel: Bool {
+        switch self {
+        case .page: return true
+        case .panel: return false
+        }
+    }
+
     var rowHorizontalPadding: CGFloat {
         switch self {
         case .page: return UIScale.pt(14)
@@ -457,6 +650,13 @@ public enum CalendarAgendaStyle {
     var rowVerticalPadding: CGFloat {
         switch self {
         case .page: return UIScale.pt(8)
+        case .panel: return 0
+        }
+    }
+
+    var richRowVerticalPadding: CGFloat {
+        switch self {
+        case .page: return UIScale.pt(12)
         case .panel: return 0
         }
     }
