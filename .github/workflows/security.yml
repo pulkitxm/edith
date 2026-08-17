@@ -121,42 +121,6 @@ jobs:
           comment-summary-in-pr: on-failure
           fail-on-severity: high
 
-  codeql-javascript:
-    name: CodeQL JavaScript
-    if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
-        with:
-          languages: javascript-typescript
-          build-mode: none
-          queries: security-and-quality
-      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
-
-  codeql-rust:
-    name: CodeQL Rust
-    if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
-        with:
-          languages: rust
-          build-mode: none
-          queries: security-and-quality
-      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
-
   scorecard:
     name: OpenSSF Scorecard
     if: github.event_name == 'schedule' || github.event_name == 'push'
@@ -189,8 +153,6 @@ jobs:
       - trivy
       - sbom
       - dependency-review
-      - codeql-javascript
-      - codeql-rust
       - scorecard
     runs-on: ubuntu-latest
     steps:

@@ -26,8 +26,6 @@ const expectedActions = new Map([
     "48f256284bd46cdaab1048c3721360e808335d50",
   ],
   ["aquasecurity/trivy-action", "ed142fd0673e97e23eac54620cfb913e5ce36c25"],
-  ["github/codeql-action/analyze", "ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd"],
-  ["github/codeql-action/init", "ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd"],
   [
     "github/codeql-action/upload-sarif",
     "ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd",
