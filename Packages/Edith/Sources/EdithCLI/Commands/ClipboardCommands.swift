@@ -288,7 +288,9 @@ struct ClipboardCopyCommand: AsyncParsableCommand {
         try await execute {
             let found = try ClipboardBridge.entry(at: index)
             do {
-                try ClipboardActions.copy(found.entry, asPlainText: plain)
+                try ClipboardActions.copy(
+                    found.entry, asPlainText: plain,
+                    pasteboard: CLIEnvironment.clipboardPasteboard)
             } catch ClipboardActionError.blobMissing {
                 throw CLIFailure.notFound("the stored copy of that entry is gone")
             }

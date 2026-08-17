@@ -39,6 +39,8 @@ public enum CLIEnvironment {
     nonisolated(unsafe) public static var homeDirectory: URL =
         FileManager.default.homeDirectoryForCurrentUser
 
+    nonisolated(unsafe) public static var clipboardPasteboard: NSPasteboard = .general
+
     nonisolated(unsafe) public static var runAppleScript:
         @Sendable (String, TimeInterval) throws -> String = {
             try AppleScriptHost.execute($0, timeout: $1)
@@ -93,6 +95,7 @@ public enum CLIEnvironment {
         }
         deliver = { IPC.post($0, userInfo: $1) }
         homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+        clipboardPasteboard = .general
         ClipboardPaths.root = AppData.supportDir
         MachinePaths.root = AppData.supportDir
         ShelfIndex.root = AppData.supportDir.appendingPathComponent("Shelf")

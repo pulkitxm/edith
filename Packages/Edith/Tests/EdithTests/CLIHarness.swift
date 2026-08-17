@@ -1,3 +1,4 @@
+import AppKit
 import ArgumentParser
 import Foundation
 
@@ -47,12 +48,15 @@ final class CLIWorld: @unchecked Sendable {
     let shared: UserDefaults
     let standard: UserDefaults
     let sandbox: URL
+    let pasteboard: NSPasteboard
     private(set) var posted: [(name: Notification.Name, info: [String: Any])] = []
     private(set) var scripts: [String] = []
     private let lock = NSLock()
 
     init(_ label: String = UUID().uuidString) {
         suite = "test.cli.\(label)"
+        pasteboard = NSPasteboard(name: NSPasteboard.Name(suite))
+        pasteboard.clearContents()
         sandbox = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-cli-world-\(label)")
         try? FileManager.default.createDirectory(
@@ -61,6 +65,7 @@ final class CLIWorld: @unchecked Sendable {
         MachinePaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         CLIEnvironment.homeDirectory = sandbox
+        CLIEnvironment.clipboardPasteboard = pasteboard
         shared = UserDefaults(suiteName: suite)!
         standard = UserDefaults(suiteName: suite + ".standard")!
         shared.removePersistentDomain(forName: suite)
@@ -141,6 +146,7 @@ final class CLIWorld: @unchecked Sendable {
         try? FileManager.default.removeItem(at: sandbox)
         shared.removePersistentDomain(forName: suite)
         standard.removePersistentDomain(forName: suite + ".standard")
+        pasteboard.clearContents()
         CLIEnvironment.reset()
     }
 }

@@ -250,6 +250,7 @@ import Testing
             let before = ClipboardRepository.loadEntries()
                 .first { $0.preview == "entry number 0" }
             _ = await CLIProbe.capture(["clipboard", "copy", "3", "--json"])
+            #expect(world.pasteboard.string(forType: .string) == "entry number 0")
             let after = ClipboardRepository.loadEntries()
                 .first { $0.preview == "entry number 0" }
             #expect(before != nil)
