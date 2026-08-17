@@ -102,6 +102,18 @@ import Testing
     }
 }
 
+@Suite struct SSHConnectionPlatformTests {
+    @Test func supportsMacOSAndLinux() {
+        #expect(SSHConnection.supportsPlatform("Darwin"))
+        #expect(SSHConnection.supportsPlatform("Linux"))
+    }
+
+    @Test func rejectsUnknownRemotePlatforms() {
+        #expect(!SSHConnection.supportsPlatform("FreeBSD"))
+        #expect(!SSHConnection.supportsPlatform(""))
+    }
+}
+
 @Suite struct MachineModelsTests {
     @Test func sshTargetUsesAliasWhenConfigSourced() {
         let machine = Machine(

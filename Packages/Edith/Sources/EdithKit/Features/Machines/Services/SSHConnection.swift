@@ -172,12 +172,17 @@ public actor SSHConnection {
     private func validatePlatform() async throws {
         let result = try await run("uname -s", timeout: 10)
         let name = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard result.succeeded, name == "Darwin" else {
+        guard result.succeeded, Self.supportsPlatform(name) else {
             await disconnect()
             throw SSHConnectionError.connectFailed(
                 SSHConnectFailure(
-                    message: "Edith connects to remote Macs only.", isRecoverable: false))
+                    message: "Edith supports remote macOS and Linux machines.",
+                    isRecoverable: false))
         }
+    }
+
+    nonisolated static func supportsPlatform(_ name: String) -> Bool {
+        name == "Darwin" || name == "Linux"
     }
 
     public func disconnect() async {
