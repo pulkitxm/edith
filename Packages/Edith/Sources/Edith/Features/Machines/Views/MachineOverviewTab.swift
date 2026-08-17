@@ -265,7 +265,7 @@ struct MachineOverviewTab: View {
                 footnote: session.sample.map { sample in
                     sample.cpu.steal > 1
                         ? String(format: "steal %.0f%%", sample.cpu.steal)
-                        : "\(sample.cpu.cores.count) cores"
+                        : "\(session.hello?.cores ?? sample.cpu.cores.count) cores"
                 } ?? "")
             metricCard(
                 "Memory",
