@@ -44,6 +44,7 @@ const workflows = readdirSync(".github/workflows")
     name,
     text: readFileSync(`.github/workflows/${name}`, "utf8"),
   }));
+const lockfile = readFileSync("bun.lock", "utf8");
 
 test("workflow actions use approved immutable revisions", () => {
   const seen = new Set();
@@ -70,4 +71,10 @@ test("workflow validation uses current stable tooling", () => {
   const ci = workflows.find(({ name }) => name === "ci.yml")?.text;
   expect(ci).toContain('go-version: "1.26.x"');
   expect(ci).toContain("github.com/rhysd/actionlint/cmd/actionlint@v1.7.12");
+});
+
+test("the lockfile carries Linux workflow executables", () => {
+  expect(lockfile).toContain('"lefthook-linux-arm64"');
+  expect(lockfile).toContain('"lefthook-linux-x64"');
+  expect(lockfile).toContain('"@biomejs/cli-linux-x64"');
 });
