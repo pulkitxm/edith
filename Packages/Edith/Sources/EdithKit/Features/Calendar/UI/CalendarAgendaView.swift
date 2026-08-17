@@ -343,14 +343,6 @@ private struct CalendarEventRow: View {
                 }
             }
             CalendarActionButton(
-                title: "Open",
-                systemImage: "calendar",
-                color: accentColor,
-                help: "Open Calendar"
-            ) {
-                CalendarEventActions.openInCalendar(event)
-            }
-            CalendarActionButton(
                 title: "Details",
                 systemImage: detailsExpanded ? "chevron.up" : "chevron.down",
                 color: .secondary,

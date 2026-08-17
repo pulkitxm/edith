@@ -22,11 +22,6 @@ public enum CalendarEventActions {
     }
 
     @MainActor
-    public static func openInCalendar(_: CalendarEventPayload) {
-        openCalendar()
-    }
-
-    @MainActor
     public static func openCalendar() {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
