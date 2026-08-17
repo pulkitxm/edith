@@ -142,7 +142,7 @@ private struct CalendarDaySection: View {
     }
 
     private var rows: some View {
-        ForEach(Array(events.enumerated()), id: \.element.eventIdentifier) { index, event in
+        ForEach(Array(events.enumerated()), id: \.offset) { index, event in
             CalendarEventRow(
                 event: event,
                 style: style,
