@@ -28,6 +28,18 @@ struct ClipboardPanelView: View {
 
     static let pageSize = 80
 
+    static func jumpTargetIndex(
+        itemCount: Int, top: Bool, shownEdgeIndex: Int?, renderedCount: Int
+    ) -> Int? {
+        guard itemCount > 0 else { return nil }
+        if top { return 0 }
+        guard renderedCount > 0 else { return nil }
+        if let shownEdgeIndex, (0..<min(renderedCount, itemCount)).contains(shownEdgeIndex) {
+            return shownEdgeIndex
+        }
+        return min(renderedCount, itemCount) - 1
+    }
+
     private static let headerHeight: CGFloat = 33
     private static let rowHeight: CGFloat = 24
     private static let imageRowHeight: CGFloat = 48
@@ -384,14 +396,13 @@ struct ClipboardPanelView: View {
 
     private func jumpToEdge(top: Bool) {
         let items = arranged
-        guard !items.isEmpty else { return }
-        if top {
-            selectedID = items[0].id
-        } else {
-            ensureRendered(upTo: items.count - 1)
-            let index = edgeShownIndex(in: items, bottom: true) ?? items.count - 1
-            selectedID = items[index].id
-        }
+        let shownEdgeIndex = top ? nil : edgeShownIndex(in: items, bottom: true)
+        guard
+            let index = Self.jumpTargetIndex(
+                itemCount: items.count, top: top, shownEdgeIndex: shownEdgeIndex,
+                renderedCount: visible.count)
+        else { return }
+        selectedID = items[index].id
         keyboardScrollTick += 1
     }
 
