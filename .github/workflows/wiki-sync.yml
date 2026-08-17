@@ -19,7 +19,7 @@ concurrency:
 jobs:
   sync:
     name: Sync wiki
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     timeout-minutes: 10

@@ -34,7 +34,7 @@ jobs:
       github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
       && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
       docs: ${{ steps.areas.outputs.docs }}
@@ -94,7 +94,7 @@ jobs:
   checks:
     name: checks
     needs: changes
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -131,7 +131,7 @@ jobs:
     name: promo-video
     needs: changes
     if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -203,21 +203,27 @@ jobs:
     if: >-
       needs.changes.outputs.companion == 'true'
       || needs.changes.outputs.workflows == 'true'
-    runs-on: macos-26
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: companion
+          POSTGRES_USER: companion
+          POSTGRES_PASSWORD: companion-dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U companion -d companion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Install the toolchain
         run: rustup toolchain install stable --profile minimal --component clippy
-      - name: Start the database
-        run: |
-          brew install postgresql@18 pgvector
-          brew services start postgresql@18
-          until pg_isready; do sleep 1; done
-          createuser --superuser companion
-          psql postgres -c "ALTER ROLE companion WITH PASSWORD 'companion-dev'"
-          createdb --owner=companion companion
       - name: Cache cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:

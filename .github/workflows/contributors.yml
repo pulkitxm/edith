@@ -15,7 +15,7 @@ permissions:
 jobs:
   refresh:
     name: Refresh contributors
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
