@@ -194,6 +194,7 @@ private struct CalendarDayHeader: View {
 }
 
 private struct CalendarEventRow: View {
+    @State private var detailsExpanded = false
     private let event: CalendarEventPayload
     private let style: CalendarAgendaStyle
     private let accentColor: Color
@@ -223,6 +224,22 @@ private struct CalendarEventRow: View {
     }
 
     private var richRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            richSummary
+            if detailsExpanded {
+                Divider()
+                    .padding(.leading, style.richDetailLeadingPadding)
+                eventDetails
+                    .padding(.leading, style.richDetailLeadingPadding)
+                    .padding(.trailing, style.rowHorizontalPadding)
+                    .padding(.vertical, UIScale.pt(12))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: detailsExpanded)
+    }
+
+    private var richSummary: some View {
         HStack(alignment: .top, spacing: style.rowSpacing) {
             RoundedRectangle(cornerRadius: UIScale.pt(2))
                 .fill(CalendarText.calendarColor(for: event, fallback: accentColor))
@@ -249,12 +266,10 @@ private struct CalendarEventRow: View {
                 metadata
             }
             Spacer(minLength: style.trailingSpacerMinLength)
-            meetingButton
+            richActions
         }
         .padding(.horizontal, style.rowHorizontalPadding)
         .padding(.vertical, style.richRowVerticalPadding)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(CalendarText.accessibilityLabel(for: event))
     }
 
     private var compactRow: some View {
@@ -305,6 +320,86 @@ private struct CalendarEventRow: View {
         .lineLimit(1)
     }
 
+    private var richActions: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            if let url = MeetingLink.url(for: event) {
+                CalendarActionButton(
+                    title: "Join",
+                    systemImage: "video.fill",
+                    color: CalendarText.providerColor(for: url, fallback: accentColor),
+                    help: "Join meeting at \(url.host ?? url.absoluteString)"
+                ) {
+                    onOpenMeeting(url)
+                }
+            }
+            if CalendarEventActions.locationURL(for: event) != nil {
+                CalendarActionButton(
+                    title: "Directions",
+                    systemImage: "arrow.triangle.turn.up.right.diamond.fill",
+                    color: .orange,
+                    help: "Open this location in Maps"
+                ) {
+                    CalendarEventActions.openLocation(event)
+                }
+            }
+            CalendarActionButton(
+                title: "Open",
+                systemImage: "calendar",
+                color: accentColor,
+                help: "Open this date in Calendar"
+            ) {
+                CalendarEventActions.openInCalendar(event)
+            }
+            CalendarActionButton(
+                title: "Details",
+                systemImage: detailsExpanded ? "chevron.up" : "chevron.down",
+                color: .secondary,
+                help: detailsExpanded ? "Hide event details" : "Show event details"
+            ) {
+                detailsExpanded.toggle()
+            }
+        }
+    }
+
+    private var eventDetails: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            HStack(spacing: UIScale.pt(16)) {
+                if let organizer = CalendarText.organizerSummary(for: event) {
+                    CalendarDetailLabel(
+                        title: "Organizer", value: organizer, systemImage: "person.crop.circle")
+                }
+                if let response = CalendarText.responseSummary(for: event) {
+                    CalendarDetailLabel(
+                        title: "Responses", value: response, systemImage: "checkmark.circle")
+                }
+                if event.hasAlarms {
+                    CalendarDetailLabel(
+                        title: "Reminder", value: "Enabled", systemImage: "bell")
+                }
+            }
+            .presenterBlur(blurEvents)
+            if let attendees = CalendarText.attendeeNames(for: event) {
+                CalendarDetailLabel(
+                    title: "Attendees", value: attendees, systemImage: "person.2"
+                )
+                .presenterBlur(blurEvents)
+            }
+            if let notes = CalendarText.notes(for: event) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Label("Notes", systemImage: "text.alignleft")
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                    Text(notes)
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(5)
+                        .textSelection(.enabled)
+                        .presenterBlur(blurEvents)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var meetingButton: some View {
         if let url = MeetingLink.url(for: event) {
@@ -315,20 +410,60 @@ private struct CalendarEventRow: View {
                 if style.showsMeetingLabel {
                     Label("Join", systemImage: "video.fill")
                         .font(.system(size: style.meetingIconSize, weight: .semibold))
-                        .padding(.horizontal, UIScale.pt(10))
-                        .padding(.vertical, UIScale.pt(6))
-                        .foregroundStyle(color)
-                        .background(color.opacity(0.12), in: Capsule())
-                        .overlay(Capsule().strokeBorder(color.opacity(0.22), lineWidth: 1))
                 } else {
                     Image(systemName: "video.fill")
                         .font(.system(size: style.meetingIconSize))
                         .foregroundStyle(color)
                 }
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.plain)
+            .pointerCursor()
             .help("Join meeting at \(url.host ?? url.absoluteString)")
         }
+    }
+}
+
+private struct CalendarActionButton: View {
+    @State private var hovering = false
+    let title: String
+    let systemImage: String
+    let color: Color
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .padding(.horizontal, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(6))
+                .foregroundStyle(color)
+                .background(color.opacity(hovering ? 0.17 : 0.1), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(hovering ? 0.34 : 0.2), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
+private struct CalendarDetailLabel: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(5)) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.tertiary)
+            Text(title)
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+        .lineLimit(1)
     }
 }
 
@@ -410,6 +545,49 @@ enum CalendarText {
         let count = event.attendees.count
         guard count > 0 else { return nil }
         return count == 1 ? "1 attendee" : "\(count) attendees"
+    }
+
+    static func organizerSummary(for event: CalendarEventPayload) -> String? {
+        guard let organizer = event.organizer else { return nil }
+        return participantName(organizer)
+    }
+
+    static func responseSummary(for event: CalendarEventPayload) -> String? {
+        guard !event.attendees.isEmpty else { return nil }
+        let order = ["accepted", "tentative", "pending", "declined"]
+        let counts = Dictionary(grouping: event.attendees, by: \.status).mapValues(\.count)
+        let values = order.compactMap { status -> String? in
+            guard let count = counts[status], count > 0 else { return nil }
+            return "\(count) \(status)"
+        }
+        return values.isEmpty ? nil : values.joined(separator: " · ")
+    }
+
+    static func attendeeNames(for event: CalendarEventPayload) -> String? {
+        let names = event.attendees.compactMap(participantName)
+        guard !names.isEmpty else { return nil }
+        let visible = names.prefix(6).joined(separator: ", ")
+        let remaining = names.count - min(names.count, 6)
+        return remaining > 0 ? "\(visible) +\(remaining) more" : visible
+    }
+
+    static func notes(for event: CalendarEventPayload) -> String? {
+        guard let notes = event.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !notes.isEmpty
+        else { return nil }
+        return notes
+    }
+
+    private static func participantName(_ participant: CalendarParticipantPayload) -> String? {
+        if let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !name.isEmpty
+        {
+            return name
+        }
+        guard let address = participant.address?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !address.isEmpty
+        else { return nil }
+        return address.replacingOccurrences(of: "mailto:", with: "")
     }
 
     static func calendarColor(for event: CalendarEventPayload, fallback: Color) -> Color {
@@ -586,6 +764,13 @@ public enum CalendarAgendaStyle {
         switch self {
         case .page: return UIScale.pt(148)
         case .panel: return 128
+        }
+    }
+
+    var richDetailLeadingPadding: CGFloat {
+        switch self {
+        case .page: return UIScale.pt(180)
+        case .panel: return 0
         }
     }
 

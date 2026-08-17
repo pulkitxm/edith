@@ -145,6 +145,81 @@ import Testing
         #expect(CalendarText.startTime(for: event) == "All day")
         #expect(CalendarText.timeDetail(for: event) == nil)
     }
+
+    @Test func summarizesParticipantResponses() {
+        var event = Self.event(minutes: 30)
+        event.attendees = [
+            Self.participant(status: "accepted"),
+            Self.participant(status: "accepted"),
+            Self.participant(status: "pending"),
+            Self.participant(status: "declined"),
+        ]
+
+        #expect(CalendarText.responseSummary(for: event) == "2 accepted · 1 pending · 1 declined")
+    }
+
+    @Test func limitsAttendeeNames() {
+        var event = Self.event(minutes: 30)
+        event.attendees = (1...8).map {
+            Self.participant(name: "Person \($0)", status: "pending")
+        }
+
+        #expect(
+            CalendarText.attendeeNames(for: event)
+                == "Person 1, Person 2, Person 3, Person 4, Person 5, Person 6 +2 more")
+    }
+
+    private static func participant(
+        name: String? = nil, status: String
+    ) -> CalendarParticipantPayload {
+        CalendarParticipantPayload(
+            name: name,
+            address: nil,
+            status: status,
+            role: "required",
+            isCurrentUser: false)
+    }
+}
+
+@Suite struct CalendarEventActionsTests {
+    private static func event(
+        location: String? = nil, latitude: Double? = nil, longitude: Double? = nil
+    ) -> CalendarEventPayload {
+        CalendarEventPayload(
+            title: "Planning",
+            start: Date(timeIntervalSinceReferenceDate: 123_456),
+            end: Date(timeIntervalSinceReferenceDate: 127_056),
+            isAllDay: false,
+            location: location,
+            latitude: latitude,
+            longitude: longitude)
+    }
+
+    @Test func createsCalendarDeepLink() {
+        let url = CalendarEventActions.calendarURL(for: Self.event())
+
+        #expect(url?.scheme == "calshow")
+        #expect(url?.absoluteString == "calshow:123456.0")
+    }
+
+    @Test func createsMapsLinkWithCoordinates() {
+        let url = CalendarEventActions.locationURL(
+            for: Self.event(location: "Conference Room", latitude: 12.9, longitude: 77.6))
+        let components = url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }
+        let query = Dictionary(
+            uniqueKeysWithValues: (components?.queryItems ?? []).compactMap { item in
+                item.value.map { (item.name, $0) }
+            })
+
+        #expect(components?.host == "maps.apple.com")
+        #expect(query["q"] == "Conference Room")
+        #expect(query["ll"] == "12.9,77.6")
+    }
+
+    @Test func omitsDirectionsWithoutLocation() {
+        #expect(CalendarEventActions.locationURL(for: Self.event()) == nil)
+        #expect(CalendarEventActions.locationURL(for: Self.event(location: "   ")) == nil)
+    }
 }
 
 @Suite struct CalendarEventPayloadTests {
