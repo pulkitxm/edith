@@ -195,11 +195,9 @@ import Testing
             longitude: longitude)
     }
 
-    @Test func createsCalendarDeepLink() {
-        let url = CalendarEventActions.calendarURL(for: Self.event())
-
-        #expect(url?.scheme == "calshow")
-        #expect(url?.absoluteString == "calshow:123456.0")
+    @Test func targetsCalendarApplication() {
+        #expect(CalendarEventActions.calendarApplicationURL.lastPathComponent == "Calendar.app")
+        #expect(CalendarEventActions.calendarApplicationURL.isFileURL)
     }
 
     @Test func createsMapsLinkWithCoordinates() {

@@ -346,7 +346,7 @@ private struct CalendarEventRow: View {
                 title: "Open",
                 systemImage: "calendar",
                 color: accentColor,
-                help: "Open this date in Calendar"
+                help: "Open Calendar"
             ) {
                 CalendarEventActions.openInCalendar(event)
             }

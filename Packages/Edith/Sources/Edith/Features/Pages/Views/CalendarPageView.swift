@@ -1,4 +1,3 @@
-import AppKit
 import EdithKit
 import SwiftUI
 
@@ -48,8 +47,7 @@ struct CalendarPage: View {
             "Calendar",
             trailing: {
                 Button {
-                    NSWorkspace.shared.open(
-                        URL(fileURLWithPath: "/System/Applications/Calendar.app"))
+                    CalendarEventActions.openCalendar()
                 } label: {
                     Label("Open Calendar", systemImage: "arrow.up.forward.app")
                 }

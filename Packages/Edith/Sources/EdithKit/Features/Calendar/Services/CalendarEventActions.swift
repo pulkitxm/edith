@@ -2,9 +2,8 @@ import AppKit
 import Foundation
 
 public enum CalendarEventActions {
-    public static func calendarURL(for event: CalendarEventPayload) -> URL? {
-        URL(string: "calshow:\(event.start.timeIntervalSinceReferenceDate)")
-    }
+    public static let calendarApplicationURL = URL(
+        fileURLWithPath: "/System/Applications/Calendar.app", isDirectory: true)
 
     public static func locationURL(for event: CalendarEventPayload) -> URL? {
         guard let location = event.location?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -23,11 +22,17 @@ public enum CalendarEventActions {
     }
 
     @MainActor
-    public static func openInCalendar(_ event: CalendarEventPayload) {
-        guard let url = calendarURL(for: event), NSWorkspace.shared.open(url) else {
-            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Calendar.app"))
-            return
-        }
+    public static func openInCalendar(_: CalendarEventPayload) {
+        openCalendar()
+    }
+
+    @MainActor
+    public static func openCalendar() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(
+            at: calendarApplicationURL,
+            configuration: configuration)
     }
 
     @MainActor
