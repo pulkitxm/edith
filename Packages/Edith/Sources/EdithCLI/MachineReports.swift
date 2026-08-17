@@ -102,6 +102,12 @@ public enum MachineReports {
                 value.fans.map { fan in
                     .object(["label": .string(fan.label), "rpm": .int(fan.rpm)])
                 }),
+            "platformProfile": value.platformProfile.map { profile in
+                JSONValue.object([
+                    "current": .string(profile.current),
+                    "choices": .strings(profile.choices),
+                ])
+            } ?? .null,
             "battery": value.battery.map { battery in
                 JSONValue.object([
                     "percent": .int(battery.percent), "status": .string(battery.status),
@@ -181,6 +187,18 @@ public enum MachineReports {
             "modified": .date(value.modified),
             "mode": .string(value.mode),
             "linkTarget": .optional(value.linkTarget),
+        ])
+    }
+
+    public static func service(_ value: SystemdService) -> JSONValue {
+        .object([
+            "unit": .string(value.unit),
+            "load": .string(value.load),
+            "active": .string(value.active),
+            "sub": .string(value.sub),
+            "description": .string(value.describes),
+            "running": .bool(value.isRunning),
+            "failed": .bool(value.isFailed),
         ])
     }
 

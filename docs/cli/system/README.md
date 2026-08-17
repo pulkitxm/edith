@@ -16,7 +16,7 @@ same way.
 | Command | What it does |
 | --- | --- |
 | `ed system stats` | Samples CPU, memory, load, uptime, network and optionally the top processes. Streams with `--follow`. Runs when you type `ed system` with no subcommand. |
-| `ed system disks` | Lists mounted volumes, plus battery, temperature, fan and GPU fields in JSON. |
+| `ed system disks` | Lists mounted volumes, plus battery, temperature, fan, platform profile and GPU fields in JSON. |
 
 ## Commands
 
@@ -57,7 +57,7 @@ Neither command looks anything up by name and neither talks to the app, so 3 and
 - `disk.readBps`, `disk.writeBps` and `disk.devices`, along with
   `cpu.stealPercent` and `tasks.runnable`, are part of the shared sample shape
   and are always zero or empty for this Mac. They are filled in by the collector
-  `ed machines metrics` runs on a remote Mac.
+  `ed machines metrics` runs on a Linux machine.
 - `tasks.total` is the number of processes `ps` returned, so it counts every
   process on the machine and not just the ones `--processes` shows.
 - `--json --follow` writes one compact document per line, forever, and repeats

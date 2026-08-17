@@ -18,14 +18,14 @@ ed machines files search <machine> <path> <query> [--limit <n>] [--json]
 [
   "/var/log/nginx/access.log",
   "/var/log/nginx/error.log",
-  "/var/log/system.log"
+  "/var/log/syslog"
 ]
 ```
 
 ```
-ed machines files search studio /var/log nginx
-ed machines files search studio /srv .env --limit 20
-ed machines files search studio /Users/pulkit report --json
+ed machines files search tuf /var/log nginx
+ed machines files search tuf /srv .env --limit 20
+ed machines files search tuf /home/pulkit report --json
 ```
 
 What runs is `find <path> -iname '*<query>*' -not -path '*/.git/*' | head`,
@@ -40,7 +40,7 @@ of failing the command, and a directory that does not exist simply matches
 nothing:
 
 ```
-$ ed machines files search studio /var/log nothing-like-this
+$ ed machines files search tuf /var/log nothing-like-this
 nothing under /var/log matches nothing-like-this
 ```
 

@@ -70,7 +70,7 @@ public enum MachineSecrets {
 public enum SudoPassword {
     public static let hint =
         "store this account's sudo password with `ed machines edit <machine> "
-        + "--sudo-password-stdin`, or allow passwordless sudo for shutdown"
+        + "--sudo-password-stdin`, or give it passwordless sudo for systemctl"
 
     public static let refusedHint =
         "the stored sudo password was refused; replace it with `ed machines edit <machine> "

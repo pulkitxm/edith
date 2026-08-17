@@ -29,8 +29,8 @@ The first line is the collector's greeting, carrying the machine's own host
 name, its OS string and its core count. Each later line is a sample:
 
 ```
-$ ed machines metrics studio
-studio-mac  macOS 26.6.1  20 cores
+$ ed machines metrics tuf
+pulkit-tuf  Ubuntu 24.04.4 LTS  20 cores
 cpu   1.0%   mem 5% of 67.0 GB   load 0.12 0.14 0.30   net down 132 B/s up 1.6 KB/s
 ```
 
@@ -49,12 +49,12 @@ trimmed:
   "host": {
     "arch": "x86_64",
     "cores": 20,
-    "cpuModel": "Apple M4 Pro",
-    "host": "studio-mac",
+    "cpuModel": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "host": "pulkit-tuf",
     "kernel": "7.0.0-28-generic",
     "memTotalKB": 65452140,
-    "os": "macOS 26.6.1",
-    "osID": "macos",
+    "os": "Ubuntu 24.04.4 LTS",
+    "osID": "ubuntu",
     "virtual": false
   },
   "sample": {
@@ -68,7 +68,7 @@ trimmed:
       "devices": [
         {
           "busyPercent": 0,
-          "name": "disk3",
+          "name": "nvme0n1",
           "readBps": 0,
           "writeBps": 24576
         }
@@ -127,8 +127,8 @@ trimmed:
 
 What the fields mean:
 
-- `host.os` is what the machine calls itself, from `sw_vers`, and
-  `host.osID` is its short id such as `macos`. `host.virtual` is the
+- `host.os` is what the machine calls itself, from `/etc/os-release`, and
+  `host.osID` is its short id such as `ubuntu`. `host.virtual` is the
   collector's judgement about whether it is a VM.
 - `sample.at` is the sample time, and `sample.intervalSeconds` is how long the
   window behind this sample actually was.
@@ -152,10 +152,10 @@ What the fields mean:
 ## Examples
 
 ```
-ed machines metrics studio
-ed machines metrics studio --json
-ed machines metrics studio --processes 20
-ed machines metrics studio --follow --interval 5 --json | jq -c '{cpu: .sample.cpu.totalPercent}'
+ed machines metrics tuf
+ed machines metrics tuf --json
+ed machines metrics tuf --processes 20
+ed machines metrics tuf --follow --interval 5 --json | jq -c '{cpu: .sample.cpu.totalPercent}'
 ```
 
 ## Behaviour notes
@@ -188,8 +188,9 @@ parser reads it as a missing value and exits 2 for that reason instead.
 whole `host` object on every line so each line stands alone for `jq -c`, `head`
 or a pipe. Without `--follow` you get a single pretty document.
 
-The collector also emits a slower filesystem record. `ed machines metrics`
-decodes and discards it because filesystem data has its own Machines view.
+The collector also emits a slower record carrying filesystems, temperatures,
+battery and GPU. `ed machines metrics` decodes and discards it, so those never
+appear here even though the app's Machines view shows them.
 
 `ed system stats` is the same report for the Mac you are typing on, in the same
 shape, so a script can treat local and remote the same way.

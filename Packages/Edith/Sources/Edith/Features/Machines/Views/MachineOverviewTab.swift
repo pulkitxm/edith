@@ -196,7 +196,7 @@ struct MachineOverviewTab: View {
         if let slow = session.slow, !slow.temps.isEmpty || slow.gpu != nil {
             SkinCard(title: "Hardware", dark: dark) { hardware(slow) }
         }
-        if let slow = session.slow, !slow.fans.isEmpty {
+        if let slow = session.slow, !slow.fans.isEmpty || slow.platformProfile != nil {
             MachineCoolingCard(session: session, dark: dark)
         }
         if !session.facts.who.isEmpty || session.facts.updatesAvailable != nil {

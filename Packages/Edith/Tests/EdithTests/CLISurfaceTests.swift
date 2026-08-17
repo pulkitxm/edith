@@ -291,6 +291,19 @@ import Testing
 }
 
 @Suite struct CLIRemoteReportTests {
+    @Test func serviceRowsCarryStableFields() {
+        let services = ServiceCommands.parse(
+            "nginx.service loaded active running A high performance web server\n")
+        guard let first = services.first,
+            case let .object(fields) = MachineReports.service(first)
+        else {
+            Issue.record("a service should parse into an object")
+            return
+        }
+        #expect(fields["unit"] == .string("nginx.service"))
+        #expect(fields["active"] == .string("active"))
+    }
+
     @Test func fileRowsCarryStableFields() {
         let fields = ["d", "4096", "1700000000", "755", "logs", ""]
         let entries = FileListing.parse(

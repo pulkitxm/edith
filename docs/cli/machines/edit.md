@@ -30,7 +30,7 @@ ed machines edit <machine> [--name <n>] [--host <h>] [--port <n>] [--user <u>]
 | `--password-stdin` | flag | off | Read a new login password from stdin, store it in the keychain, and set `auth` to `Password`. |
 | `--key-passphrase-stdin` | flag | off | Read the key file's passphrase from stdin and store it. |
 | `--sudo-password-stdin` | flag | off | Read this account's sudo password from stdin and store it in the keychain. It is what `power reboot`, `power shutdown` and the unit verbs use to become root. Cannot be combined with `--forget-sudo-password`. |
-| `--forget-sudo-password` | flag | off | Delete the stored sudo password. Privileged verbs go back to trying `sudo -n`. |
+| `--forget-sudo-password` | flag | off | Delete the stored sudo password. The privileged verbs go back to trying `sudo -n` and plain `systemctl`. |
 | `--json` | flag | off | Emit JSON on stdout instead of the confirmation block. |
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
@@ -75,7 +75,7 @@ Two shapes surprise people:
   no-op with a notification.
 
 ```
-$ ed machines edit studio --agent --key ~/.ssh/id_ed25519
+$ ed machines edit tuf --agent --key ~/.ssh/id_ed25519
 error: --agent and --key are different answers to the same question
 ```
 

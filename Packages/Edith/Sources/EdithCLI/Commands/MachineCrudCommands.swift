@@ -533,7 +533,7 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
         discussion: """
             Everything after the title is the command, verbatim, so `--shared` and `--json`
             have to come before the machine name: `ed machines snippets add --shared box
-            logs log show --last 5m`.
+            logs journalctl -xe`.
             """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")

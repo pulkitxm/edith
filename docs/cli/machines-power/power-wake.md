@@ -20,7 +20,7 @@ ed machines power wake <machine> [--json]
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
 ```
-$ ed machines power wake studio
+$ ed machines power wake tuf
 sent a wake packet to 04:42:1a:8d:2f:6c
 ```
 
@@ -31,7 +31,7 @@ sent a wake packet to 04:42:1a:8d:2f:6c
   "action": "wake",
   "applied": true,
   "macAddress": "04:42:1a:8d:2f:6c",
-  "machine": "Studio Mac"
+  "machine": "Asus TUF 7"
 }
 ```
 
@@ -41,10 +41,10 @@ machine woke.
 ## Examples
 
 ```
-ed machines power wake studio
-ed machines studio power wake
-ed machines power wake studio --json
-ed machines edit studio --mac 04:42:1a:8d:2f:6c
+ed machines power wake tuf
+ed machines tuf power wake
+ed machines power wake tuf --json
+ed machines edit tuf --mac 04:42:1a:8d:2f:6c
 ```
 
 ## Behaviour notes
@@ -57,7 +57,7 @@ machine on another subnet needs a router that forwards directed broadcasts, and
 this command cannot arrange that for you.
 
 Edith learns the address the first time it sees the machine up, by walking
-the remote Mac's hardware-port list and picking a real network interface. An interface only counts
+`/sys/class/net/*` and picking a real network card. An interface only counts
 when it has a `device` symlink, which is what separates a card from a bridge, a
 veth or a loopback, and an address that is empty or all zeroes is skipped.
 Wired wins: the first non-wireless card ends the search immediately, while a

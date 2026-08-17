@@ -27,10 +27,10 @@ else.
 ## Examples
 
 ```
-ed machines exec studio -- uptime
-ed studio uptime
-ed machines exec --tty studio -- top
-ed studio 'ls -la /srv | head'
+ed machines exec tuf -- uptime
+ed tuf uptime
+ed machines exec --tty tuf -- top
+ed tuf 'ls -la /srv | head'
 ```
 
 ## Behaviour notes
@@ -45,7 +45,7 @@ containing spaces survives. Shell metacharacters do not: to use a pipe, a
 redirection or a glob on the machine, quote the whole line as in the last
 example. A single-word command is sent verbatim, unquoted.
 
-`cd` is special when it is the whole command: `ed studio cd Desktop` records a
+`cd` is special when it is the whole command: `ed tuf cd Desktop` records a
 working directory for that terminal rather than running anything, and later
 commands are prefixed with it. `cd -` goes back, `cd` with no argument goes
 home, and a path that does not exist exits 1 with the machine's own error and
@@ -56,8 +56,8 @@ is scoped to one terminal and how remote completion follows it, is on
 Naming no command at all exits 1:
 
 ```
-$ ed machines exec studio
-error: name a command to run, for example `ed studio uptime`
+$ ed machines exec tuf
+error: name a command to run, for example `ed tuf uptime`
 ```
 
 An unknown machine exits 3, an unreachable one exits 4.
@@ -71,6 +71,7 @@ documented elsewhere:
 ```
 ed machines files ...        browsing, transfers, the Finder operations and undo
 ed machines docker ...       containers, images, volumes, networks, compose
+ed machines services ...     systemd units: list, start, stop, restart
 ed machines power ...        status, reboot, shutdown, wake-on-LAN
 ed machines kill ...         end a process by pid
 ed machines broadcast ...    one command on every configured machine

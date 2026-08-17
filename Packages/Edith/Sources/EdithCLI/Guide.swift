@@ -19,7 +19,7 @@ public enum Guide {
         ed <machine> <cmd...>     A configured machine, over SSH.  Everything after
                                   the machine name is run there, verbatim, with your
                                   exit code and both streams preserved.
-                                  ed studio docker ps, ed studio ls -la /srv
+                                  ed tuf docker ps, ed tuf ls -la /srv
         ```
 
         The second form is why `ed <machine> docker <TAB>` completes docker's own
@@ -101,15 +101,16 @@ public enum Guide {
 
         ```
         ed machines ls
-        ed machines studio                         one machine, with live facts
-        ed machines studio metrics                 one sample
-        ed machines studio metrics --follow        a sample every two seconds
-        ed machines studio uptime                  run a command there
-        ed studio uptime                           the same thing, shorter
-        ed machines studio files ls /var/log
-        ed machines studio files get /System/Library/CoreServices/SystemVersion.plist ./SystemVersion.plist
-        ed machines studio files put ./deploy.sh /tmp/deploy.sh
-        ed machines studio disconnect
+        ed machines tuf                         one machine, with live facts
+        ed machines tuf metrics                 one sample
+        ed machines tuf metrics --follow        a sample every two seconds
+        ed machines tuf uptime                  run a command there
+        ed tuf uptime                           the same thing, shorter
+        ed machines tuf files ls /var/log
+        ed machines tuf files get /etc/os-release ./os-release
+        ed machines tuf files put ./deploy.sh /tmp/deploy.sh
+        ed machines tuf services
+        ed machines tuf disconnect
         ```
 
         A machine's disk can also come to you. `mount` hangs its file system off a
@@ -120,37 +121,44 @@ public enum Guide {
         connected to, and `mount` run again repairs rather than refusing.
 
         ```
-        ed machines mount studio                   all of / at ~/Edith/studio
-        ed machines mount studio /srv --read-only  one directory, look but do not touch
+        ed machines mount tuf                   all of / at ~/Edith/tuf
+        ed machines mount tuf /srv --read-only  one directory, look but do not touch
         ed machines mounts                      what is mounted, and whether it answers
-        ed machines mount studio                   again: puts a dead mount back
-        ed machines unmount studio
-        ed machines studio files open /var/log     a Files window, in its own small app
+        ed machines mount tuf                   again: puts a dead mount back
+        ed machines unmount tuf
+        ed machines tuf files open /var/log     a Files window, in its own small app
         ```
 
         The list itself is yours to edit from here, and a change reaches a running
         Edith immediately.
 
         ```
-        ed machines add studio --host 10.0.0.4 --user pulkit
+        ed machines add box --host 10.0.0.4 --user pi
         ed machines edit box --name shed --key ~/.ssh/id_ed25519
         ed machines rm shed --yes               with its forwards, snippets and secrets
         ed machines forwards add box --local 8080 --remote 80
-        ed machines snippets add box logs log show --last 5m
+        ed machines snippets add box logs journalctl -xe
         ```
 
-        Power and processes. Restart and shut down need --yes, and report
+        Power, units and processes. Restart and shut down need --yes, and report
         the machine's own refusal rather than claiming success.
 
         ```
         ed machines power status box            up? wakeable? rebootable?
         ed machines power reboot box --yes
         ed machines power wake box              works while it is off
+        ed machines services restart box nginx.service
         ed machines kill box 4213 --signal KILL
+        ed machines thermal status box          active platform profile and choices
+        ed machines thermal set box performance --minutes 30
         ```
 
+        Thermal controls use the Linux platform profile exposed by the machine.
+        A timed profile change schedules its reversion on that machine, so it still
+        restores the previous profile if Edith closes or the SSH connection drops.
+
         The machine name comes first, subject then verb. The older order with the
-        machine last still parses, so `ed machines docker ps studio` keeps working. A
+        machine last still parses, so `ed machines docker ps tuf` keeps working. A
         subcommand name always wins, so a machine literally called `ls` or `docker`
         has to be named explicitly: `ed machines show docker`.
 
@@ -158,29 +166,29 @@ public enum Guide {
         for scripts, the raw form is for everything docker can do:
 
         ```
-        ed machines studio docker ps --json        parsed, stable field names
-        ed machines studio docker images
-        ed machines studio docker logs api --tail 100 --follow
-        ed machines studio docker start|stop|restart|rm api
-        ed machines studio docker prune images --yes
-        ed machines studio docker compose ls
-        ed machines studio docker compose up|down|restart|pull web
-        ed studio docker buildx ls                 raw docker, straight through
+        ed machines tuf docker ps --json        parsed, stable field names
+        ed machines tuf docker images
+        ed machines tuf docker logs api --tail 100 --follow
+        ed machines tuf docker start|stop|restart|rm api
+        ed machines tuf docker prune images --yes
+        ed machines tuf docker compose ls
+        ed machines tuf docker compose up|down|restart|pull web
+        ed tuf docker buildx ls                 raw docker, straight through
         ```
 
         `ed <machine> <anything>` is the general escape hatch, and it is not limited to
-        docker: `ed studio launchctl print system`, `ed studio tail -f /var/log/system.log`, `ed
-        studio 'ls -la | head'`. Stdin is forwarded, so pipes work in both directions.
+        docker: `ed tuf systemctl status nginx`, `ed tuf tail -f /var/log/syslog`, `ed
+        tuf 'ls -la | head'`. Stdin is forwarded, so pipes work in both directions.
 
         `cd` sticks, so the commands after it run where you left off. The directory
         belongs to the terminal it was set in, like a local shell, and remote path
         completion follows it.
 
         ```
-        ed studio cd Desktop
-        ed studio pwd                              /Users/pulkit/Desktop
-        ed studio cd -                             back to where you were before
-        ed studio cd                               back to the home directory
+        ed tuf cd Desktop
+        ed tuf pwd                              /home/pulkit/Desktop
+        ed tuf cd -                             back to where you were before
+        ed tuf cd                               back to the home directory
         ```
 
         ## Companion memory
@@ -191,7 +199,7 @@ public enum Guide {
 
         ```
         ed companion hosts                      machines that can run the stack
-        ed companion deploy studio                 install, start and remember its host
+        ed companion deploy tuf                 install, start and remember its host
         ed companion stack status               host, tier, services and ports
         ed companion status                     counts and latest ingest
         ed companion doctor                     postgres, redis and vault checks
@@ -225,7 +233,7 @@ public enum Guide {
         ed usage projects              repositories, with folders in JSON
         ed usage sources
         ed usage machines               machines counted with this Mac
-        ed usage machines collect studio   run the collector there, bring it back
+        ed usage machines collect tuf   run the collector there, bring it back
         ed usage refresh                re-collect from every agent, live progress
         ed usage refresh --follow       watch a refresh that is already running
         ```
@@ -367,7 +375,7 @@ public enum Guide {
         - `ed extensions ls` and `ed extensions enable|disable <id>` toggle features.
         - `ed machines ls --json` lists configured machines. `ed <machine> <command>`
           runs a command there over the app's shared SSH ControlMaster, preserving the
-          exit code and both streams: `ed studio docker ps`, `ed studio launchctl print system`.
+          exit code and both streams: `ed tuf docker ps`, `ed tuf systemctl status`.
         - `ed usage limits --json` and `ed usage summary --json` read the same usage
           pipeline the app's dashboard does, so never re-derive token or cost numbers
           from raw logs.

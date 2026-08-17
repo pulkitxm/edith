@@ -74,7 +74,11 @@ git_quick() {
 
 platform_tag() {
   local os arch
-  os=macos
+  case "$(uname -s)" in
+    Darwin) os=macos ;;
+    Linux) os=linux ;;
+    *) os=unsupported ;;
+  esac
   case "$(uname -m)" in
     x86_64 | amd64) arch=amd64 ;;
     aarch64 | arm64) arch=arm64 ;;

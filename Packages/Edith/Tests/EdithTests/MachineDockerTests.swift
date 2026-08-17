@@ -377,6 +377,41 @@ import Testing
     }
 }
 
+@Suite struct ServiceCommandsTests {
+    @Test func parsesSystemctlUnits() {
+        let output = """
+            docker.service loaded active running Docker Application Container Engine
+            ssh.service    loaded active running OpenBSD Secure Shell server
+            broken.service loaded failed failed  Some Broken Unit
+            dev-sda.device loaded active plugged ignored
+            """
+        let services = ServiceCommands.parse(output)
+        #expect(services.count == 3)
+        #expect(services[0].displayName == "docker")
+        #expect(services[0].isRunning)
+        #expect(services[2].isFailed)
+    }
+
+    @Test func fallsBackToSudoForActions() {
+        let command = ServiceCommands.action("restart", unit: "docker.service")
+        #expect(command.contains("systemctl restart docker.service"))
+        #expect(command.contains("sudo -n systemctl restart docker.service"))
+    }
+
+    @Test func aStoredSudoPasswordUsesStandardInput() {
+        let command = ServiceCommands.action(
+            "restart", unit: "docker.service", withSudoPassword: true)
+        #expect(command == "sudo -S -p '' systemctl restart docker.service 2>&1")
+        #expect(!command.contains("sudo -n"))
+    }
+
+    @Test func journalCommandSupportsFollow() {
+        #expect(
+            ServiceCommands.journal(unit: "ssh.service", lines: 300, follow: true)
+                == "journalctl -u ssh.service -n 300 --no-pager -f 2>&1")
+    }
+}
+
 @Suite struct PowerCommandsTests {
     @Test func macPowerCommandsUseShutdown() {
         #expect(PowerCommands.reboot().contains("shutdown -r now"))

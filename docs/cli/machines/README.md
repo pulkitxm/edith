@@ -73,11 +73,11 @@ the process state between metric records.
 | `ed machines unmount` | Unmounts it again and tidies the folder away. Aliased `umount`. |
 | `ed machines mounts` | Lists every machine file system Edith mounted or can see, and whether each one still answers. |
 
-Six more subcommands live under `ed machines` and are documented on four
+Eight more subcommands live under `ed machines` and are documented on five
 further pages: [`docker`](../machines-docker/README.md), [`files`](../machines-files/README.md),
-[`power`](../machines-power/README.md),
+[`power`](../machines-power/README.md), [`services`](../machines-power/README.md),
 [`kill`](../machines-power/README.md), [`broadcast`](../machines-power/README.md),
-and [`workspace`](../machines-workspace/README.md).
+[`thermal`](../machines-thermal/README.md) and [`workspace`](../machines-workspace/README.md).
 
 ## The machine record
 
@@ -109,11 +109,11 @@ Nine of these are stored in `machines.json`; four are derived on every read.
   "createdAt": "2026-08-06T12:11:49Z",
   "host": "192.168.1.12",
   "id": "4303DCF1-52D8-4075-AE9B-C2FD86D3821A",
-  "name": "Studio Mac",
+  "name": "Asus TUF 7",
   "port": 22,
   "source": "sshConfigAlias",
-  "sshAlias": "studio",
-  "sshTarget": "studio",
+  "sshAlias": "tuf",
+  "sshTarget": "tuf",
   "username": "pulkit",
   "wakeMACAddress": "be:f0:86:8d:58:12"
 }
@@ -182,9 +182,9 @@ app is closed.
   `docker`, `ls` or `power` has to be named explicitly with
   `ed machines show docker`, and the error hint lists every subcommand name so
   you can see the collision.
-- The machine name comes first, subject then verb: `ed machines studio metrics`,
-  `ed machines studio files ls /etc`. The older order with the machine last,
-  `ed machines metrics studio`, still parses. `ed <machine> ...` is shorthand for
+- The machine name comes first, subject then verb: `ed machines tuf metrics`,
+  `ed machines tuf files ls /etc`. The older order with the machine last,
+  `ed machines metrics tuf`, still parses. `ed <machine> ...` is shorthand for
   `ed machines <machine> ...`, and `ed <machine>` alone is
   `ed machines show <machine>`.
 - Every mutation posts `com.pulkit.edith.machinesChanged` on the distributed
@@ -235,7 +235,7 @@ app is closed.
   Finder window's operations.
 - [`ed machines docker`](../machines-docker/README.md) for containers, images, volumes
   and compose projects.
-- [`ed machines power`](../machines-power/README.md) for power state,
+- [`ed machines power`](../machines-power/README.md) for power state, systemd units,
   processes and `broadcast`.
 - [`ed machines workspace`](../machines-workspace/README.md) for the saved multi-pane
   layouts.

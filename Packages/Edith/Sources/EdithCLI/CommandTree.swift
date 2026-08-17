@@ -477,6 +477,17 @@ public enum CommandTree {
                                 arguments: [.machine]),
                         ]),
                     CommandNode(
+                        "thermal", "Inspect and switch the platform thermal profile.",
+                        children: [
+                            CommandNode(
+                                "status", "Show the active and available thermal profiles.",
+                                options: common, arguments: [.machine]),
+                            CommandNode(
+                                "set", "Switch the thermal profile permanently or for a while.",
+                                options: ["--json", "--help", "--minutes"],
+                                arguments: [.machine, .free]),
+                        ]),
+                    CommandNode(
                         "workspace", "Saved multi-pane layouts.", aliases: ["workspaces"],
                         children: [
                             CommandNode(
@@ -653,6 +664,22 @@ public enum CommandTree {
                                         options: ["--tail", "--follow", "--help"],
                                         arguments: [.machine, .composeProject]),
                                 ]),
+                        ]),
+                    CommandNode(
+                        "services", "systemd units on a machine.",
+                        children: [
+                            CommandNode(
+                                "ls", "List systemd units.", aliases: ["list"],
+                                options: ["--json", "--failed"], arguments: [.machine]),
+                            CommandNode(
+                                "start", "Start a unit.", options: common,
+                                arguments: [.machine, .free]),
+                            CommandNode(
+                                "stop", "Stop a unit.", options: common,
+                                arguments: [.machine, .free]),
+                            CommandNode(
+                                "restart", "Restart a unit.", options: common,
+                                arguments: [.machine, .free]),
                         ]),
                     CommandNode(
                         "connect", "Open the shared SSH connection.", options: ["--json"],

@@ -25,7 +25,7 @@ struct MachinesCommand: AsyncParsableCommand {
             MachinesForwardsCommand.self, MachinesSnippetsCommand.self,
             MachinesMetricsCommand.self,
             MachinesExecCommand.self, MachinesFilesCommand.self, MachinesDockerCommand.self,
-            MachinesPowerCommand.self,
+            MachinesServicesCommand.self, MachinesPowerCommand.self, MachinesThermalCommand.self,
             MachinesKillCommand.self, MachinesBroadcastCommand.self,
             MachinesWorkspaceCommand.self,
             MachinesConnectCommand.self,
@@ -307,6 +307,39 @@ struct MachinesExecCommand: AsyncParsableCommand {
     static func strippingSeparator(_ words: [String]) -> [String] {
         guard words.first == "--" else { return words }
         return Array(words.dropFirst())
+    }
+}
+
+struct MachinesServicesListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "ls", abstract: "List systemd units on a machine.", aliases: ["list"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Only failed units.")
+    var failed = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    func run() async throws {
+        try await execute {
+            let runner = try await MachineResolver.runner(machine)
+            let output = try await runner.text(ServiceCommands.list(), timeout: 30)
+            var services = ServiceCommands.parse(output)
+            if failed { services = services.filter(\.isFailed) }
+            guard !json else {
+                CLIOut.json(.array(services.map(MachineReports.service)))
+                return
+            }
+            guard !services.isEmpty else {
+                CLIOut.note("no systemd units reported")
+                return
+            }
+            let rows = services.map { [$0.unit, $0.active, $0.sub, $0.describes] }
+            CLIOut.out(TextTable.render(headers: ["UNIT", "ACTIVE", "SUB", "WHAT"], rows: rows))
+        }
     }
 }
 

@@ -335,7 +335,24 @@ enum JSONContract {
             ["machines", "power", "shutdown", "nowhere-at-all", "--json"]),
         JSONCase(
             "ed machines power wake", ["machines", "power", "wake", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines thermal status",
+            ["machines", "thermal", "status", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines thermal set",
+            ["machines", "thermal", "set", "nowhere-at-all", "balanced", "--json"]),
         JSONCase("ed machines kill", ["machines", "kill", "nowhere-at-all", "42", "--json"]),
+        JSONCase(
+            "ed machines services ls", ["machines", "services", "ls", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines services start",
+            ["machines", "services", "start", "nowhere-at-all", "nginx.service", "--json"]),
+        JSONCase(
+            "ed machines services stop",
+            ["machines", "services", "stop", "nowhere-at-all", "nginx.service", "--json"]),
+        JSONCase(
+            "ed machines services restart",
+            ["machines", "services", "restart", "nowhere-at-all", "nginx.service", "--json"]),
         JSONCase(
             "ed machines files cp",
             ["machines", "files", "cp", "nowhere-at-all", "/a", "/b", "--json"]),
@@ -401,6 +418,7 @@ enum JSONContract {
         JSONCase("ed machines unmount", ["machines", "unmount", "nowhere-at-all", "--json"]),
         JSONCase("ed machines connect", ["machines", "connect", "nowhere-at-all", "--json"]),
         JSONCase("ed machines disconnect", ["machines", "disconnect", "nowhere-at-all", "--json"]),
+        JSONCase("ed machines services", ["machines", "services", "nowhere-at-all", "--json"]),
         JSONCase("ed machines files ls", ["machines", "files", "ls", "nowhere-at-all", "--json"]),
         JSONCase(
             "ed machines files get",
@@ -612,7 +630,7 @@ enum JSONContract {
         #expect(
             Set(object?.keys ?? [:].keys)
                 == [
-                    "filesystems", "temperatures", "fans", "battery", "gpu",
+                    "filesystems", "temperatures", "fans", "platformProfile", "battery", "gpu",
                 ])
         let disks = object?["filesystems"] as? [[String: Any]] ?? []
         #expect(!disks.isEmpty)

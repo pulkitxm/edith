@@ -15,16 +15,16 @@ ed machines files get <machine> <remote> [local] [--json]
 
 ```json
 {
-  "local": "/Users/pulkit/SystemVersion.plist",
-  "remote": "/System/Library/CoreServices/SystemVersion.plist",
+  "local": "/Users/pulkit/os-release",
+  "remote": "/etc/os-release",
   "sizeBytes": 382
 }
 ```
 
 ```
-ed machines files get studio /System/Library/CoreServices/SystemVersion.plist
-ed machines files get studio /var/log/system.log ~/Desktop/syslog.txt
-ed machines files get studio /etc/hosts --json
+ed machines files get tuf /etc/os-release
+ed machines files get tuf /var/log/syslog ~/Desktop/syslog.txt
+ed machines files get tuf /etc/hosts --json
 ```
 
 The transfer is `cat <remote>` on the far side, streamed into the local file 128
@@ -39,7 +39,7 @@ That line is repainted on a timer roughly ten times a second rather than once
 per chunk, and it is transient, cleared when the transfer ends or fails:
 
 ```
-$ ed machines files get studio /srv/backup.tar.gz
+$ ed machines files get tuf /srv/backup.tar.gz
   ⠹ backup.tar.gz  24.0 MB of 87.3 MB  27% 14s
 ```
 
@@ -53,8 +53,8 @@ the size the machine reported for the meter, so it is what actually landed, and
 it is 0 if the file cannot be stat'ed. The human line is the path and that size:
 
 ```
-$ ed machines files get studio /System/Library/CoreServices/SystemVersion.plist
-/Users/pulkit/SystemVersion.plist  382 B
+$ ed machines files get tuf /etc/os-release
+/Users/pulkit/os-release  382 B
 ```
 
 A remote path that does not exist, or one `cat` refuses such as a directory,
@@ -62,7 +62,7 @@ exits 1, and the half-written local file is removed rather than left looking
 complete:
 
 ```
-$ ed machines files get studio /etc/shadow
+$ ed machines files get tuf /etc/shadow
 error: download failed: cat: /etc/shadow: Permission denied
 ```
 

@@ -59,7 +59,7 @@ tell you which side produced one. When a script needs to know, look at stderr:
 - The plain path gives the remote process no terminal at all. Anything that
   checks `isatty` will disable colour and progress bars, which is usually what
   you want from a script and never what you want from `top`.
-- A single leading `--` is stripped, once. `ed machines exec studio -- -- ls`
+- A single leading `--` is stripped, once. `ed machines exec tuf -- -- ls`
   sends `-- ls`.
 - The shorthand and the machine-first spelling both leave a word alone when it
   starts with `-`, so `ed --help` and `ed machines --help` are never mistaken
@@ -71,8 +71,8 @@ tell you which side produced one. When a script needs to know, look at stderr:
   the same terminal emulator have different `ttys` names and so different
   directories; a subshell inside one pane shares its parent's.
 - Everything a pipe touches uses the `shared` session slot, so
-  `ed studio cd /tmp` typed at a prompt does not change where a cron job's
-  `ed studio make` runs, and two concurrent scripts do share one slot.
+  `ed tuf cd /tmp` typed at a prompt does not change where a cron job's
+  `ed tuf make` runs, and two concurrent scripts do share one slot.
 - The ControlMaster socket lives at
   `~/Library/Application Support/Edith/machines/sockets/<hash>.sk`, keyed by the
   same ten characters of the machine id that name the working directory folder.
@@ -100,7 +100,7 @@ tell you which side produced one. When a script needs to know, look at stderr:
   what `ed <machine> docker ...` reaches raw.
 - [`ed machines files`](../machines-files/README.md) for moving files, which is also how
   you get data onto a machine given that stdin does not travel.
-- [`ed machines power`](../machines-power/README.md) for reboot, wake and
+- [`ed machines power`](../machines-power/README.md) for reboot, wake, systemd units and
   killing a process by pid.
 - [Getting started](../getting-started/README.md) for installing the completion scripts
   that call `ed __complete`.

@@ -210,6 +210,9 @@ import Testing
                 == ["machines", "docker", "ps", "tuf"])
         #expect(
             Self.rewrite(["machines", "tuf", "metrics"]) == ["machines", "metrics", "tuf"])
+        #expect(
+            Self.rewrite(["machines", "tuf", "services", "--failed"])
+                == ["machines", "services", "tuf", "--failed"])
     }
 
     @Test func aNestedSubcommandKeepsItsWholePathBeforeTheMachine() {
