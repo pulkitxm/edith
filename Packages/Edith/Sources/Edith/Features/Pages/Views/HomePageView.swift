@@ -1,7 +1,6 @@
 import AppKit
 import Charts
 import EdithKit
-import EventKit
 import SwiftUI
 
 struct HomePage: View {
@@ -636,8 +635,8 @@ private struct MeetingsCard: View {
     private var theme: Color { themeColor(themeName) }
     private var blurCalendar: Bool { presenterState.active && presenterBlurCalendar }
 
-    private var todayEvents: [EKEvent] {
-        store.events.filter { Calendar.current.isDateInToday($0.startDate) }
+    private var todayEvents: [CalendarEventPayload] {
+        store.events.filter { Calendar.current.isDateInToday($0.start) }
     }
 
     var body: some View {
@@ -651,7 +650,7 @@ private struct MeetingsCard: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
                 } else {
-                    ForEach(todayEvents.prefix(6), id: \.eventIdentifier) { event in
+                    ForEach(todayEvents.prefix(6), id: \.id) { event in
                         row(event)
                         if event != todayEvents.prefix(6).last {
                             Divider().opacity(0.4)
@@ -676,14 +675,14 @@ private struct MeetingsCard: View {
         return count == 0 ? "" : "\(count) event\(count == 1 ? "" : "s")"
     }
 
-    private func row(_ event: EKEvent) -> some View {
+    private func row(_ event: CalendarEventPayload) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
             Text(timeLabel(event))
                 .font(DashSkin.mono(11))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            Text(event.title ?? "Untitled")
+            Text(event.title)
                 .font(.system(size: UIScale.pt(12.5)))
                 .lineLimit(1)
                 .foregroundStyle(DashSkin.ink(dark))
@@ -704,10 +703,10 @@ private struct MeetingsCard: View {
         .padding(.vertical, UIScale.pt(6))
     }
 
-    private func timeLabel(_ event: EKEvent) -> String {
+    private func timeLabel(_ event: CalendarEventPayload) -> String {
         guard !event.isAllDay else { return "All day" }
-        let start = event.startDate.formatted(date: .omitted, time: .shortened)
-        let end = event.endDate.formatted(date: .omitted, time: .shortened)
+        let start = event.start.formatted(date: .omitted, time: .shortened)
+        let end = event.end.formatted(date: .omitted, time: .shortened)
         return "\(start)–\(end)"
     }
 

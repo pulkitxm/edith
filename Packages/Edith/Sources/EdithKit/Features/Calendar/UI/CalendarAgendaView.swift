@@ -1,21 +1,20 @@
 import AppKit
-import EventKit
 import SwiftUI
 
 public struct CalendarAgendaView: View {
-    private let events: [EKEvent]
+    private let events: [CalendarEventPayload]
     private let style: CalendarAgendaStyle
     private let accentColor: Color
     private let blurEvents: Bool
     private let onLoadMore: () -> Void
     private let onOpenMeeting: (URL) -> Void
 
-    private var groupedDays: [(day: Date, events: [EKEvent])] {
+    private var groupedDays: [(day: Date, events: [CalendarEventPayload])] {
         CalendarDayEvents.groupedByDay(events)
     }
 
     public init(
-        events: [EKEvent],
+        events: [CalendarEventPayload],
         style: CalendarAgendaStyle,
         accentColor: Color,
         blurEvents: Bool,
@@ -103,7 +102,7 @@ public struct CalendarPermissionPrompt: View {
 
 private struct CalendarDaySection: View {
     private let day: Date
-    private let events: [EKEvent]
+    private let events: [CalendarEventPayload]
     private let style: CalendarAgendaStyle
     private let accentColor: Color
     private let blurEvents: Bool
@@ -111,7 +110,7 @@ private struct CalendarDaySection: View {
 
     init(
         day: Date,
-        events: [EKEvent],
+        events: [CalendarEventPayload],
         style: CalendarAgendaStyle,
         accentColor: Color,
         blurEvents: Bool,
@@ -195,14 +194,14 @@ private struct CalendarDayHeader: View {
 }
 
 private struct CalendarEventRow: View {
-    private let event: EKEvent
+    private let event: CalendarEventPayload
     private let style: CalendarAgendaStyle
     private let accentColor: Color
     private let blurEvents: Bool
     private let onOpenMeeting: (URL) -> Void
 
     init(
-        event: EKEvent,
+        event: CalendarEventPayload,
         style: CalendarAgendaStyle,
         accentColor: Color,
         blurEvents: Bool,
@@ -243,7 +242,7 @@ private struct CalendarEventRow: View {
             }
             .frame(width: style.richTimeWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Text(event.title ?? "Untitled")
+                Text(event.title)
                     .font(.system(size: style.titleSize, weight: .medium))
                     .lineLimit(1)
                     .presenterBlur(blurEvents)
@@ -266,7 +265,7 @@ private struct CalendarEventRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: style.timeWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: style.titleLocationSpacing) {
-                Text(event.title ?? "Untitled")
+                Text(event.title)
                     .font(.system(size: style.titleSize))
                     .lineLimit(1)
                     .presenterBlur(blurEvents)
@@ -299,7 +298,7 @@ private struct CalendarEventRow: View {
             if let attendees = CalendarText.attendeeSummary(for: event) {
                 CalendarMetadataLabel(systemImage: "person.2", text: attendees)
             }
-            if event.hasRecurrenceRules {
+            if event.isRecurring {
                 CalendarMetadataLabel(systemImage: "repeat", text: "Recurring")
             }
         }
@@ -373,26 +372,26 @@ enum CalendarText {
         return day.formatted(.dateTime.weekday(.wide))
     }
 
-    static func timeRange(for event: EKEvent) -> String {
+    static func timeRange(for event: CalendarEventPayload) -> String {
         guard !event.isAllDay else { return "All day" }
-        let start = event.startDate.formatted(date: .omitted, time: .shortened)
-        let end = event.endDate.formatted(date: .omitted, time: .shortened)
+        let start = event.start.formatted(date: .omitted, time: .shortened)
+        let end = event.end.formatted(date: .omitted, time: .shortened)
         return "\(start) – \(end)"
     }
 
-    static func startTime(for event: EKEvent) -> String {
+    static func startTime(for event: CalendarEventPayload) -> String {
         if event.isAllDay { return "All day" }
-        return event.startDate.formatted(date: .omitted, time: .shortened)
+        return event.start.formatted(date: .omitted, time: .shortened)
     }
 
-    static func timeDetail(for event: EKEvent) -> String? {
+    static func timeDetail(for event: CalendarEventPayload) -> String? {
         guard !event.isAllDay else { return nil }
-        let end = event.endDate.formatted(date: .omitted, time: .shortened)
+        let end = event.end.formatted(date: .omitted, time: .shortened)
         return "Until \(end) · \(duration(for: event))"
     }
 
-    static func duration(for event: EKEvent) -> String {
-        let minutes = max(0, Int(event.endDate.timeIntervalSince(event.startDate) / 60))
+    static func duration(for event: CalendarEventPayload) -> String {
+        let minutes = max(0, Int(event.end.timeIntervalSince(event.start) / 60))
         let hours = minutes / 60
         let remainder = minutes % 60
         if hours == 0 { return "\(minutes) min" }
@@ -400,26 +399,25 @@ enum CalendarText {
         return "\(hours) hr \(remainder) min"
     }
 
-    static func calendarName(for event: EKEvent) -> String? {
-        guard let title = event.calendar?.title.trimmingCharacters(in: .whitespacesAndNewlines),
-            !title.isEmpty
+    static func calendarName(for event: CalendarEventPayload) -> String? {
+        let title = event.calendar.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty
         else { return nil }
         return title
     }
 
-    static func attendeeSummary(for event: EKEvent) -> String? {
-        guard let count = event.attendees?.count, count > 0 else { return nil }
+    static func attendeeSummary(for event: CalendarEventPayload) -> String? {
+        let count = event.attendees.count
+        guard count > 0 else { return nil }
         return count == 1 ? "1 attendee" : "\(count) attendees"
     }
 
-    static func calendarColor(for event: EKEvent, fallback: Color) -> Color {
-        guard let cgColor = event.calendar?.cgColor, let color = NSColor(cgColor: cgColor) else {
-            return fallback
-        }
-        return Color(nsColor: color)
+    static func calendarColor(for event: CalendarEventPayload, fallback: Color) -> Color {
+        guard let color = event.calendarColor else { return fallback }
+        return Color(red: color.red, green: color.green, blue: color.blue, opacity: color.alpha)
     }
 
-    static func visibleLocation(for event: EKEvent) -> String? {
+    static func visibleLocation(for event: CalendarEventPayload) -> String? {
         guard let location = event.location, !location.isEmpty, !location.hasPrefix("http") else {
             return nil
         }
@@ -435,8 +433,8 @@ enum CalendarText {
         return fallback
     }
 
-    static func accessibilityLabel(for event: EKEvent) -> String {
-        var parts = [timeRange(for: event), event.title ?? "Untitled"]
+    static func accessibilityLabel(for event: CalendarEventPayload) -> String {
+        var parts = [timeRange(for: event), event.title]
         if let location = visibleLocation(for: event) {
             parts.append(location)
         }
@@ -710,7 +708,7 @@ public enum CalendarAgendaStyle {
         }
     }
 
-    func fixedHeight(for groups: [(day: Date, events: [EKEvent])]) -> CGFloat? {
+    func fixedHeight(for groups: [(day: Date, events: [CalendarEventPayload])]) -> CGFloat? {
         switch self {
         case .page:
             return nil
@@ -838,7 +836,7 @@ public enum CalendarAgendaStyle {
         }
     }
 
-    private func panelRowHeight(for event: EKEvent) -> CGFloat {
+    private func panelRowHeight(for event: CalendarEventPayload) -> CGFloat {
         var height: CGFloat = 20
         if CalendarText.visibleLocation(for: event) != nil {
             height += 13

@@ -58,13 +58,26 @@ struct CalendarListCommand: AsyncParsableCommand {
                     .array(
                         events.map { event in
                             .object([
+                                "id": .string(event.id),
                                 "title": .string(event.title),
                                 "calendar": .string(event.calendar),
+                                "calendarColor": color(event.calendarColor),
                                 "start": .date(event.start),
                                 "end": .date(event.end),
                                 "allDay": .bool(event.isAllDay),
                                 "location": .optional(event.location),
+                                "latitude": .optional(event.latitude),
+                                "longitude": .optional(event.longitude),
                                 "meetingURL": .optional(event.meetingURL),
+                                "url": .optional(event.url),
+                                "notes": .optional(event.notes),
+                                "organizer": event.organizer.map(participant) ?? .null,
+                                "attendees": .array(event.attendees.map(participant)),
+                                "recurring": .bool(event.isRecurring),
+                                "status": .string(event.status),
+                                "availability": .string(event.availability),
+                                "timeZone": .optional(event.timeZone),
+                                "hasAlarms": .bool(event.hasAlarms),
                             ])
                         }))
                 return
@@ -80,5 +93,25 @@ struct CalendarListCommand: AsyncParsableCommand {
             CLIOut.out(
                 TextTable.render(headers: ["WHEN", "TITLE", "CALENDAR", "LINK"], rows: rows))
         }
+    }
+
+    private func color(_ color: CalendarColorPayload?) -> JSONValue {
+        guard let color else { return .null }
+        return .object([
+            "red": .double(color.red),
+            "green": .double(color.green),
+            "blue": .double(color.blue),
+            "alpha": .double(color.alpha),
+        ])
+    }
+
+    private func participant(_ participant: CalendarParticipantPayload) -> JSONValue {
+        .object([
+            "name": .optional(participant.name),
+            "address": .optional(participant.address),
+            "status": .string(participant.status),
+            "role": .string(participant.role),
+            "isCurrentUser": .bool(participant.isCurrentUser),
+        ])
     }
 }

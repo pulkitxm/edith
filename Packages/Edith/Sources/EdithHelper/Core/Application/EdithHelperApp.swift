@@ -156,8 +156,7 @@ struct EdithApp: App {
                     IPC.Name.calendarEvents,
                     userInfo: [
                         CalendarEventBridge.statusKey: "ok",
-                        CalendarEventBridge.payloadKey: CalendarEventBridge.encode(
-                            CalendarEventBridge.payloads(events)),
+                        CalendarEventBridge.payloadKey: CalendarEventBridge.encode(events),
                     ])
             }
         }

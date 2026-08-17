@@ -5,7 +5,7 @@ import Observation
 @MainActor
 @Observable
 public final class CalendarStore: FeatureModule {
-    public private(set) var events: [EKEvent] = []
+    public private(set) var events: [CalendarEventPayload] = []
     public private(set) var authStatus: EKAuthorizationStatus
 
     private var daysLoaded = 14
@@ -70,7 +70,7 @@ public final class CalendarStore: FeatureModule {
     }
 
     @discardableResult
-    public func refreshAndWait() async -> [EKEvent] {
+    public func refreshAndWait() async -> [CalendarEventPayload] {
         fetchTask?.cancel()
         fetchTask = nil
         guard let fetched = await fetchEvents() else { return events }
@@ -78,7 +78,7 @@ public final class CalendarStore: FeatureModule {
         return fetched
     }
 
-    private func fetchEvents() async -> [EKEvent]? {
+    private func fetchEvents() async -> [CalendarEventPayload]? {
         guard authStatus == .fullAccess else { return nil }
         let start = Calendar.current.startOfDay(for: Date())
         guard let end = Calendar.current.date(byAdding: .day, value: daysLoaded, to: start) else {
@@ -88,8 +88,8 @@ public final class CalendarStore: FeatureModule {
             let store = EKEventStore()
             let predicate = store.predicateForEvents(
                 withStart: start, end: end, calendars: store.calendars(for: .event))
-            return CalendarDayEvents.sorted(
-                CalendarDayEvents.deduplicated(store.events(matching: predicate)))
+            let events = store.events(matching: predicate).map(CalendarEventPayload.init(event:))
+            return CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(events))
         }.value
     }
 

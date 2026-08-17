@@ -1,17 +1,16 @@
+import Foundation
 import Testing
-import EventKit
 @testable import EdithKit
 
 @Suite struct CalendarDayEventsTests {
-    private static let scratchStore = EKEventStore()
-
-    private static func event(title: String, start: Date, allDay: Bool = false) -> EKEvent {
-        let event = EKEvent(eventStore: scratchStore)
-        event.title = title
-        event.startDate = start
-        event.endDate = start.addingTimeInterval(1800)
-        event.isAllDay = allDay
-        return event
+    private static func event(
+        title: String, start: Date, allDay: Bool = false
+    ) -> CalendarEventPayload {
+        CalendarEventPayload(
+            title: title,
+            start: start,
+            end: start.addingTimeInterval(1800),
+            isAllDay: allDay)
     }
 
     @Test func sortsAllDayFirstThenByStartTime() {
@@ -39,36 +38,36 @@ import EventKit
     @Test func removesMatchingEventsAcrossCalendars() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let first = Self.event(title: "Daily Standup", start: start)
-        let duplicate = Self.event(title: "Daily Standup", start: start)
+        var duplicate = Self.event(title: "Daily Standup", start: start)
         duplicate.location = "Synced from another account"
 
         let deduplicated = CalendarDayEvents.deduplicated([first, duplicate])
 
         #expect(deduplicated.count == 1)
-        #expect(deduplicated.first === first)
+        #expect(deduplicated.first?.id == first.id)
     }
 
     @Test func removesEventsWithInvisibleProviderDifferences() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let first = Self.event(title: "Daily Standup", start: start)
-        let duplicate = Self.event(
+        var duplicate = Self.event(
             title: "  Daily\nStandup  ", start: start.addingTimeInterval(20))
-        duplicate.endDate = first.endDate.addingTimeInterval(20)
+        duplicate.end = first.end.addingTimeInterval(20)
 
         let deduplicated = CalendarDayEvents.deduplicated([first, duplicate])
 
         #expect(deduplicated.count == 1)
-        #expect(deduplicated.first === first)
+        #expect(deduplicated.first?.id == first.id)
     }
 
     @Test func removesMatchingAllDayEventsWithDifferentStoredDurations() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         let start = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
-        let first = Self.event(title: "Holiday", start: start, allDay: true)
-        let duplicate = Self.event(title: "Holiday", start: start, allDay: true)
-        first.endDate = calendar.date(byAdding: .day, value: 1, to: start)!
-        duplicate.endDate = calendar.date(byAdding: .day, value: 2, to: start)!
+        var first = Self.event(title: "Holiday", start: start, allDay: true)
+        var duplicate = Self.event(title: "Holiday", start: start, allDay: true)
+        first.end = calendar.date(byAdding: .day, value: 1, to: start)!
+        duplicate.end = calendar.date(byAdding: .day, value: 2, to: start)!
 
         let deduplicated = CalendarDayEvents.deduplicated(
             [first, duplicate], calendar: calendar)
@@ -82,8 +81,8 @@ import EventKit
         let differentTitle = Self.event(title: "Team Standup", start: start)
         let differentStart = Self.event(
             title: "Daily Standup", start: start.addingTimeInterval(60))
-        let differentEnd = Self.event(title: "Daily Standup", start: start)
-        differentEnd.endDate = start.addingTimeInterval(3600)
+        var differentEnd = Self.event(title: "Daily Standup", start: start)
+        differentEnd.end = start.addingTimeInterval(3600)
         let allDay = Self.event(title: "Daily Standup", start: start, allDay: true)
 
         let deduplicated = CalendarDayEvents.deduplicated([
@@ -123,14 +122,15 @@ import EventKit
 }
 
 @Suite struct CalendarTextTests {
-    private static let scratchStore = EKEventStore()
-
-    private static func event(minutes: Int, allDay: Bool = false) -> EKEvent {
-        let event = EKEvent(eventStore: scratchStore)
-        event.startDate = Date(timeIntervalSince1970: 1_700_000_000)
-        event.endDate = event.startDate.addingTimeInterval(TimeInterval(minutes * 60))
-        event.isAllDay = allDay
-        return event
+    private static func event(
+        minutes: Int, allDay: Bool = false
+    ) -> CalendarEventPayload {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        return CalendarEventPayload(
+            title: "Event",
+            start: start,
+            end: start.addingTimeInterval(TimeInterval(minutes * 60)),
+            isAllDay: allDay)
     }
 
     @Test func formatsUsefulDurations() {
@@ -144,6 +144,42 @@ import EventKit
 
         #expect(CalendarText.startTime(for: event) == "All day")
         #expect(CalendarText.timeDetail(for: event) == nil)
+    }
+}
+
+@Suite struct CalendarEventPayloadTests {
+    @Test func roundTripsExtendedEventData() {
+        let participant = CalendarParticipantPayload(
+            name: "Taylor",
+            address: "mailto:taylor@example.com",
+            status: "accepted",
+            role: "required",
+            isCurrentUser: false)
+        let event = CalendarEventPayload(
+            id: "event-1",
+            title: "Planning",
+            calendar: "Work",
+            calendarColor: CalendarColorPayload(red: 1, green: 0.5, blue: 0, alpha: 1),
+            start: Date(timeIntervalSince1970: 1_700_000_000),
+            end: Date(timeIntervalSince1970: 1_700_003_600),
+            isAllDay: false,
+            location: "Conference Room",
+            latitude: 12.9,
+            longitude: 77.6,
+            meetingURL: "https://meet.google.com/abc-defg-hij",
+            url: "https://example.com/event",
+            notes: "Review the proposal",
+            organizer: participant,
+            attendees: [participant],
+            isRecurring: true,
+            status: "confirmed",
+            availability: "busy",
+            timeZone: "Asia/Kolkata",
+            hasAlarms: true)
+
+        let decoded = CalendarEventBridge.decode(CalendarEventBridge.encode([event]))
+
+        #expect(decoded == [event])
     }
 }
 
