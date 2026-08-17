@@ -226,7 +226,7 @@ enum MachineStatusStyle {
         case .connecting: return "Connecting…"
         case .reconnecting: return "Reconnecting…"
         case .disconnected: return "Not connected"
-        case let .failed(message): return message
+        case let .failed(message, _): return message
         }
     }
 }

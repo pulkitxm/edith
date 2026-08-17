@@ -584,7 +584,7 @@ private actor ProcessReadProbe {
         #expect(
             MachineReconnect.state(
                 afterFailures: MachineReconnect.quietFailures + 1, reason: "Connection refused.")
-                == .failed(message: "Connection refused."))
+                == .failed(message: "Connection refused.", recoverable: true))
     }
 
     @Test func aQuietReconnectIsBusyAndRetryableButNotConnected() {
@@ -594,5 +594,16 @@ private actor ProcessReadProbe {
         #expect(state.isConnected == false)
         #expect(MachineConnectionState.connecting.isRetryable == false)
         #expect(MachineConnectionState.disconnected.isRetryable == false)
+    }
+
+    @Test func onlyRecoverableFailuresCanRetry() {
+        let recoverable = MachineConnectionState.failed(
+            message: "Connection refused.", recoverable: true)
+        let terminal = MachineConnectionState.failed(
+            message: "Edith connects to remote Macs only.", recoverable: false)
+
+        #expect(recoverable.isRetryable)
+        #expect(terminal.isRetryable == false)
+        #expect(terminal.failureMessage == "Edith connects to remote Macs only.")
     }
 }

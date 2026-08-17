@@ -86,7 +86,8 @@ public final class MachineSession {
     public func start() {
         guard !state.isConnected, !state.isBusy else { return }
         guard !machine.isMissing else {
-            state = .failed(message: "This machine is no longer configured.")
+            state = .failed(
+                message: "This machine is no longer configured.", recoverable: false)
             return
         }
         if isLocal {
@@ -114,7 +115,8 @@ public final class MachineSession {
             return
         }
         guard !machine.isMissing else {
-            state = .failed(message: "This machine is no longer configured.")
+            state = .failed(
+                message: "This machine is no longer configured.", recoverable: false)
             return
         }
         cancelWork()
@@ -173,7 +175,8 @@ public final class MachineSession {
                     guard !Task.isCancelled else { return }
                     let failure = Self.failure(from: error)
                     guard failure.isRecoverable else {
-                        state = .failed(message: failure.message)
+                        state = .failed(
+                            message: failure.message, recoverable: failure.isRecoverable)
                         return
                     }
                     failures += 1

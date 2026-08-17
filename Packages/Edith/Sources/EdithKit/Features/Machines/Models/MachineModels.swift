@@ -80,7 +80,7 @@ public enum MachineConnectionState: Equatable, Sendable {
     case connecting
     case reconnecting
     case connected(latencyMillis: Double?)
-    case failed(message: String)
+    case failed(message: String, recoverable: Bool)
 
     public var isConnected: Bool {
         if case .connected = self { return true }
@@ -96,9 +96,15 @@ public enum MachineConnectionState: Equatable, Sendable {
 
     public var isRetryable: Bool {
         switch self {
-        case .reconnecting, .failed: return true
+        case .reconnecting: return true
+        case let .failed(_, recoverable): return recoverable
         default: return false
         }
+    }
+
+    public var failureMessage: String? {
+        guard case let .failed(message, _) = self else { return nil }
+        return message
     }
 }
 
