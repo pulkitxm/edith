@@ -139,7 +139,7 @@ test("manual production workflows require main", () => {
 test("backend changes run the companion job", () => {
   expect(ciWorkflow).toContain("area companion '^apps/companion/'");
   expect(ciWorkflow).toContain("needs.changes.outputs.companion == 'true'");
-  expect(ciWorkflow).toContain("pgvector/pgvector:pg18");
+  expect(ciWorkflow).toMatch(/pgvector\/pgvector:pg18@sha256:[a-f0-9]{64}/);
   expect(ciWorkflow).toContain("runs-on: ubuntu-latest");
   expect(ciWorkflow).toContain("cargo test --locked");
   expect(ciWorkflow).toContain(
