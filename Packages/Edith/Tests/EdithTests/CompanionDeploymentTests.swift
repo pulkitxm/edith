@@ -5,14 +5,14 @@ import Testing
 
 @Suite struct CompanionDeploymentTests {
     private func facts(
-        arch: String = "x86_64", gpu: String? = nil, ports: [Int] = [],
+        os: String = "linux", gpu: String? = nil, ports: [Int] = [],
         runtimes: [CompanionRuntimeStatus] = [
             CompanionRuntimeStatus(
                 kind: .docker, version: "29.7.1", daemonRunning: true, composeVersion: "5.4.0")
         ]
     ) -> CompanionHostFacts {
         CompanionHostFacts(
-            os: "darwin", arch: arch, cpuCores: 20, memoryMb: 63918, diskFreeMb: 216_127,
+            os: os, arch: "x86_64", cpuCores: 20, memoryMb: 63918, diskFreeMb: 216_127,
             gpuModel: gpu, runtimes: runtimes, portsTaken: ports)
     }
 
@@ -29,15 +29,17 @@ import Testing
 
     @Test func eachTierPicksItsOwnComposeOverlay() {
         #expect(CompanionTier.cpu.composeFiles == ["compose.yaml", "compose.cpu.yaml"])
+        #expect(CompanionTier.gpu.composeFiles == ["compose.yaml", "compose.gpu.yaml"])
         #expect(CompanionTier.appleMetal.composeFiles == ["compose.yaml", "compose.mac.yaml"])
-        let up = CompanionStackCommands.up(directory: "/x", tier: .appleMetal, build: true)
-        #expect(up.contains("-f compose.yaml -f compose.mac.yaml"))
+        let up = CompanionStackCommands.up(directory: "/x", tier: .gpu, build: true)
+        #expect(up.contains("-f compose.yaml -f compose.gpu.yaml"))
         #expect(up.contains("-p edith-companion up -d --build"))
     }
 
     @Test func tierFollowsWhatTheHostActuallyHas() {
         #expect(CompanionTier.derive(from: facts()) == .cpu)
-        #expect(CompanionTier.derive(from: facts(arch: "arm64")) == .appleMetal)
+        #expect(CompanionTier.derive(from: facts(gpu: "NVIDIA RTX 4090")) == .gpu)
+        #expect(CompanionTier.derive(from: facts(os: "darwin")) == .appleMetal)
     }
 
     @Test func takingTheStackDownKeepsDataUnlessAsked() {
@@ -67,12 +69,11 @@ import Testing
     @Test func theHostAlreadyRunningTheStackIsNotBlockedByItsOwnPorts() {
         let busy = facts(ports: [4820, 5432, 6379])
         let candidate = CompanionHost(
-            id: UUID(), name: "Studio Mac", target: "p@h", isLocal: false, reachable: true,
+            id: UUID(), name: "TUF", target: "p@h", isLocal: false, reachable: true,
             facts: busy, hostsTheStack: false)
         #expect(!candidate.canHostTheStack)
         let hosting = CompanionHost(
-            id: candidate.id, name: "Studio Mac", target: "p@h", isLocal: false,
-            reachable: true,
+            id: candidate.id, name: "TUF", target: "p@h", isLocal: false, reachable: true,
             facts: busy, hostsTheStack: true)
         #expect(hosting.canHostTheStack)
     }
@@ -80,7 +81,7 @@ import Testing
     @Test func thisMacIsAlwaysOfferedFirstEvenWhenNothingIsConnected() {
         let local = CompanionHost(
             id: UUID(), name: "This Mac", target: "this Mac", isLocal: true, reachable: true,
-            facts: facts(runtimes: []))
+            facts: facts(os: "darwin", runtimes: []))
         let hosts = CompanionHostList.ordered(local: local, machines: [], deployment: nil)
         #expect(hosts.count == 1)
         #expect(hosts[0].isLocal)
@@ -94,12 +95,12 @@ import Testing
         let machineID = UUID()
         let local = CompanionHost(
             id: UUID(), name: "This Mac", target: "this Mac", isLocal: true, reachable: true,
-            facts: facts(runtimes: []))
+            facts: facts(os: "darwin", runtimes: []))
         let remote = CompanionHost(
-            id: machineID, name: "Studio Mac", target: "p@h", isLocal: false, reachable: true,
+            id: machineID, name: "TUF", target: "p@h", isLocal: false, reachable: true,
             facts: facts())
         let deployment = CompanionDeployment(
-            machineID: machineID, machineName: "Studio Mac", tier: CompanionTier.cpu.rawValue)
+            machineID: machineID, machineName: "TUF", tier: CompanionTier.cpu.rawValue)
         let hosts = CompanionHostList.ordered(
             local: local, machines: [remote], deployment: deployment)
         #expect(hosts[0].isLocal)
@@ -122,10 +123,10 @@ import Testing
             .appendingPathComponent("companion-deployment-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
         let deployment = CompanionDeployment(
-            machineID: UUID(), machineName: "Studio Mac", tier: "cpu", localPort: 4820)
+            machineID: UUID(), machineName: "TUF Wired", tier: "cpu", localPort: 4820)
         CompanionDeploymentStore.save(deployment, to: url)
         let loaded = CompanionDeploymentStore.load(url)
-        #expect(loaded?.machineName == "Studio Mac")
+        #expect(loaded?.machineName == "TUF Wired")
         #expect(loaded?.endpoint.absoluteString == "http://127.0.0.1:4820")
         #expect(loaded?.isLocal == false)
     }

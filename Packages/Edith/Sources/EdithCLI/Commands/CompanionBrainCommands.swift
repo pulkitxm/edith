@@ -1407,7 +1407,7 @@ struct CompanionMachinesProfileCommand: AsyncParsableCommand {
     @Argument(help: "The machine name.")
     var name: String
 
-    @Argument(help: "apple-metal or cpu-only.")
+    @Argument(help: "gpu-large, gpu-small, apple-metal or cpu-only.")
     var profile: String
 
     func run() async throws {

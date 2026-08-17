@@ -8,17 +8,31 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 pub const PROBE_SCRIPT: &str = r#"
-os=darwin
+os=$(uname -s | tr 'A-Z' 'a-z')
 arch=$(uname -m)
+case "$arch" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; esac
 docker=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo none)
 compose=$(docker compose version --short 2>/dev/null || echo none)
 gpu_vendor=none; gpu_model=; vram=0
-if [ "$arch" = arm64 ]; then
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+  gpu_vendor=nvidia
+  gpu_model=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+  vram=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+elif command -v rocm-smi >/dev/null 2>&1; then
+  gpu_vendor=amd; gpu_model=$(rocm-smi --showproductname 2>/dev/null | head -1)
+elif [ "$os" = darwin ] && [ "$arch" = arm64 ]; then
   gpu_vendor=apple; gpu_model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
 fi
-cores=$(sysctl -n hw.ncpu); ram=$(( $(sysctl -n hw.memsize) / 1048576 ))
+if [ "$os" = darwin ]; then
+  cores=$(sysctl -n hw.ncpu); ram=$(( $(sysctl -n hw.memsize) / 1048576 ))
+else
+  cores=$(nproc); ram=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 ))
+fi
 disk=$(df -Pm . | awk 'NR==2 {print $4}')
 gpu_runtime=no
+if [ "$gpu_vendor" = nvidia ] && docker run --rm --gpus all busybox true >/dev/null 2>&1; then
+  gpu_runtime=yes
+fi
 ports=
 for port in 4820 5432 6379 8081 11434; do
   if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 $port >/dev/null 2>&1; then
@@ -69,16 +83,37 @@ pub struct Plan {
     pub compose: Vec<String>,
 }
 
-pub fn derive_profile(arch: &str) -> &'static str {
-    if arch == "arm64" {
-        "apple-metal"
-    } else {
-        "cpu-only"
+pub fn derive_profile(
+    os: &str,
+    arch: &str,
+    gpu_vendor: &str,
+    vram_mb: i64,
+    gpu_runtime_ok: bool,
+) -> &'static str {
+    match gpu_vendor {
+        "nvidia" | "amd" if vram_mb >= 24_000 && gpu_runtime_ok => "gpu-large",
+        "nvidia" | "amd" if vram_mb >= 8_000 && gpu_runtime_ok => "gpu-small",
+        "apple" if os == "darwin" && arch == "arm64" => "apple-metal",
+        _ => "cpu-only",
     }
 }
 
 pub fn models_for(profile: &str) -> Value {
     match profile {
+        "gpu-large" => json!({
+            "stt": "whisper-large-v3",
+            "vision": "qwen3-vl:8b",
+            "embedding": "qwen3-embedding:0.6b",
+            "rerank": "qwen3-reranker:0.6b",
+            "note": "everything in-container with the GPU passed through",
+        }),
+        "gpu-small" => json!({
+            "stt": "whisper-large-v3",
+            "vision": "qwen3-vl:4b",
+            "embedding": "qwen3-embedding:0.6b",
+            "rerank": "qwen3-reranker:0.6b",
+            "note": "in-container, mid sized vision model",
+        }),
         "apple-metal" => json!({
             "stt": "parakeet-mlx for english, whisper.cpp large-v3 for hindi",
             "vision": "qwen3-vl:8b",
@@ -128,6 +163,7 @@ pub fn profile_warnings(profile: &str, disk_free_mb: i64, ports_taken: &str) -> 
 pub fn compose_files(profile: &str) -> Vec<String> {
     let mut files = vec!["compose.yaml".to_owned()];
     match profile {
+        "gpu-large" | "gpu-small" => files.push("compose.gpu.yaml".to_owned()),
         "apple-metal" => files.push("compose.mac.yaml".to_owned()),
         _ => files.push("compose.cpu.yaml".to_owned()),
     }
@@ -248,7 +284,8 @@ pub async fn probe(pool: &PgPool, name: &str) -> Result<MachineRow, Box<dyn Erro
     let arch = read_str("arch").unwrap_or_default();
     let gpu_vendor = read_str("gpuVendor").unwrap_or_else(|| "none".to_owned());
     let vram = read_int("vramMb");
-    let profile = derive_profile(&arch);
+    let runtime_ok = read_str("gpuRuntime").as_deref() == Some("yes");
+    let profile = derive_profile(&os, &arch, &gpu_vendor, vram, runtime_ok);
 
     sqlx::query(
         "UPDATE machines SET os = $2, arch = $3, docker_version = $4, compose_version = $5, gpu_vendor = $6, gpu_model = $7, vram_mb = $8, cpu_cores = $9, ram_mb = $10, disk_free_mb = $11, capabilities = $12, profile = $13, status = 'ready', last_seen = now() WHERE id = $1",
@@ -405,8 +442,31 @@ mod tests {
     use super::{compose_files, derive_profile, models_for, parse_probe, profile_warnings};
 
     #[test]
+    fn a_big_card_with_a_working_runtime_is_the_large_tier() {
+        assert_eq!(
+            derive_profile("linux", "amd64", "nvidia", 24_576, true),
+            "gpu-large"
+        );
+        assert_eq!(
+            derive_profile("linux", "amd64", "nvidia", 12_288, true),
+            "gpu-small"
+        );
+    }
+
+    #[test]
+    fn a_card_whose_runtime_does_not_work_is_not_a_gpu_machine() {
+        assert_eq!(
+            derive_profile("linux", "amd64", "nvidia", 24_576, false),
+            "cpu-only"
+        );
+    }
+
+    #[test]
     fn apple_silicon_runs_its_models_on_the_host() {
-        assert_eq!(derive_profile("arm64"), "apple-metal");
+        assert_eq!(
+            derive_profile("darwin", "arm64", "apple", 0, false),
+            "apple-metal"
+        );
         assert!(compose_files("apple-metal").contains(&"compose.mac.yaml".to_owned()));
         assert!(
             models_for("apple-metal")["note"]
@@ -425,16 +485,16 @@ mod tests {
 
     #[test]
     fn a_full_disk_and_a_taken_port_are_both_called_out() {
-        let warnings = profile_warnings("apple-metal", 10_000, " 5432");
+        let warnings = profile_warnings("gpu-large", 10_000, " 5432");
         assert!(warnings.iter().any(|warning| warning.contains("10000MB")));
         assert!(warnings.iter().any(|warning| warning.contains("5432")));
     }
 
     #[test]
     fn probe_output_is_read_off_the_last_json_line() {
-        let output = "warning: something\n{\"os\":\"darwin\",\"vramMb\":0}\n";
+        let output = "warning: something\n{\"os\":\"linux\",\"vramMb\":24576}\n";
         let value = parse_probe(output).unwrap();
-        assert_eq!(value["os"], "darwin");
+        assert_eq!(value["os"], "linux");
         assert!(parse_probe("nothing here").is_err());
     }
 }

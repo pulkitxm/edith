@@ -54,7 +54,7 @@ model choices and recovery.
 - **One fleet view** - add the local Mac and SSH hosts, monitor live CPU, memory, disks, temperatures, GPUs and running processes, and detach any machine into its own window.
 - **Terminal, files and workspaces** - keep terminal tabs, browse and transfer files, preview remote content, and arrange saved split-pane workspaces.
 - **Containers** - inspect Docker Compose groups, resources, configuration and logs, then start, stop, restart or remove containers.
-- **Power and cooling** - wake, restart or shut down hosts and read fan speeds.
+- **Power and cooling** - wake, restart or shut down hosts; read fan speeds and temporarily switch supported platform profiles with automatic rollback.
 
 See the [remote machines guide](docs/remote-machines.md) for connection, privilege
 and platform details.

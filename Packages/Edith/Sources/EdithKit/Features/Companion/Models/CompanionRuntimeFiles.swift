@@ -102,6 +102,49 @@ public enum CompanionRuntimeFiles {
 
         """#
 
+    public static let composeGpu = #"""
+        services:
+          ollama:
+            deploy:
+              resources:
+                reservations:
+                  devices:
+                    - driver: nvidia
+                      count: all
+                      capabilities: [gpu]
+          whisper:
+            image: ghcr.io/ggml-org/whisper.cpp:main-cuda
+            deploy:
+              resources:
+                reservations:
+                  devices:
+                    - driver: nvidia
+                      count: all
+                      capabilities: [gpu]
+          reranker:
+            image: ghcr.io/huggingface/text-embeddings-inference:1.8
+            command: ["--model-id", "${COMPANION_RERANK_HF_MODEL:-Qwen/Qwen3-Reranker-0.6B}"]
+            volumes:
+              - companion-rerank:/data
+            deploy:
+              resources:
+                reservations:
+                  devices:
+                    - driver: nvidia
+                      count: all
+                      capabilities: [gpu]
+          api:
+            environment:
+              RERANK_URL: ${COMPANION_RERANK_URL:-http://reranker:80}
+            depends_on:
+              reranker:
+                condition: service_started
+
+        volumes:
+          companion-rerank:
+
+        """#
+
     public static let composeMac = #"""
         services:
           ollama:
@@ -159,6 +202,7 @@ public enum CompanionRuntimeFiles {
     public static let all: [(name: String, content: String)] = [
         ("compose.yaml", composeBase),
         ("compose.cpu.yaml", composeCpu),
+        ("compose.gpu.yaml", composeGpu),
         ("compose.mac.yaml", composeMac),
         ("Dockerfile", dockerfile),
     ]

@@ -57,14 +57,14 @@ import Testing
         let bundle = CompanionConfigBundle(
             config: config,
             deployment: CompanionDeployment(
-                machineID: UUID(), machineName: "Studio Mac", tier: "cpu"))
+                machineID: UUID(), machineName: "TUF Wired", tier: "cpu"))
         let data = try CompanionConfigBundle.encode(bundle)
         let text = String(decoding: data, as: UTF8.self)
         #expect(!text.lowercased().contains("anthropic_api_key"))
         #expect(!text.lowercased().contains("sk-"))
         let decoded = try CompanionConfigBundle.decode(data)
         #expect(decoded.config.reasonModel == "qwen3:4b")
-        #expect(decoded.deployment?.machineName == "Studio Mac")
+        #expect(decoded.deployment?.machineName == "TUF Wired")
     }
 
     @Test func aBundleFromANewerEdithIsRefusedRatherThanMisread() throws {

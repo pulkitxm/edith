@@ -29,7 +29,7 @@ Compose project name `edith-companion`.
 
 ```
 $ ed companion stack status
-running on Studio Mac, cpu, reached on port 4820
+running on TUF Wired, cpu, reached on port 4820
 SERVICE   STATUS                      PORTS
 api       Up 28 minutes               127.0.0.1:4820->4820/tcp
 postgres  Up About an hour (healthy)  127.0.0.1:5432->5432/tcp

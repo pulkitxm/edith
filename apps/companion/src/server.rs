@@ -22,26 +22,26 @@ use uuid::Uuid;
 
 use crate::ask::ask_run;
 use crate::chat::{ChatDeps, chat_stream, event_json, resolve_conversation};
-use crate::council::council_run;
 use crate::claims::{corroborate_claims, extract_claims};
+use crate::council::council_run;
 use crate::doctor::{DoctorDeps, run_doctor};
 use crate::embed::EmbedClient;
 
-use crate::grounding::GroundingClient;
 use crate::friend::FriendDeps;
+use crate::grounding::GroundingClient;
 use crate::indexer::index_pending;
 use crate::ingest::{IngestFile, ingest_audio, ingest_files, ingest_pdf, parse_file_date};
+use crate::lang::SttRouter;
+use crate::media::{VideoDeps, ingest_image, ingest_video, kind_for};
 use crate::nightly::{NightlyDeps, record_run};
-use crate::reason::ReasonClient;
 use crate::persona;
+use crate::reason::ReasonClient;
 use crate::reflect::reflect_run;
 use crate::rerank::RerankClient;
 use crate::retrieve::{RetrievalPolicy, retrieve};
 use crate::settings::{self, ConnectorHandle, ReasonHandle};
-use crate::lang::SttRouter;
-use crate::media::{VideoDeps, ingest_image, ingest_video, kind_for};
-use crate::vision::VisionClient;
 use crate::turns::{RetrievedChunk, latency_since, log_turn};
+use crate::vision::VisionClient;
 use crate::{
     baseline, commitments, connectors, core_memory, curate, dataport, entities, evals, facts,
     hypotheses, inquire, lenses, machines, standup,
@@ -623,7 +623,10 @@ async fn entities_route(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
-    if let Some(name) = query.get("name").map(|value| value.trim()).filter(|value| !value.is_empty())
+    if let Some(name) = query
+        .get("name")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
     {
         return match entities::timeline(&state.pool, name, limit_of(&query, 40)).await {
             Ok(rows) => Json(serde_json::json!({"name": name, "timeline": rows})).into_response(),
@@ -685,10 +688,7 @@ async fn standup_route(State(state): State<AppState>, request: Request) -> Respo
     else {
         return error_response(StatusCode::BAD_REQUEST, "text is required");
     };
-    let verify = body
-        .get("verify")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let verify = body.get("verify").and_then(Value::as_bool).unwrap_or(false);
     let reason = state.reason.current().await;
     match standup::record(&state.pool, &state.vault_dir, &reason, text, verify).await {
         Ok(outcome) => {
@@ -704,7 +704,11 @@ async fn standup_aggregate(
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
     let aggregate = standup::aggregate(&state.pool).await;
-    let phrase = match query.get("phrase").map(String::as_str).filter(|phrase| !phrase.is_empty()) {
+    let phrase = match query
+        .get("phrase")
+        .map(String::as_str)
+        .filter(|phrase| !phrase.is_empty())
+    {
         Some(phrase) => standup::phrase_history(&state.pool, phrase).await.ok(),
         None => None,
     };
@@ -784,11 +788,11 @@ async fn machines_profile(
     let Some(profile) = body
         .get("profile")
         .and_then(Value::as_str)
-        .filter(|profile| ["apple-metal", "cpu-only"].contains(profile))
+        .filter(|profile| ["gpu-large", "gpu-small", "apple-metal", "cpu-only"].contains(profile))
     else {
         return error_response(
             StatusCode::BAD_REQUEST,
-            "profile must be apple-metal or cpu-only",
+            "profile must be gpu-large, gpu-small, apple-metal or cpu-only",
         );
     };
     match machines::set_profile(&state.pool, &name, profile).await {
@@ -1063,10 +1067,7 @@ async fn facts_route(
     let as_of = query
         .get("asOf")
         .and_then(|value| crate::ingest::parse_file_date(value));
-    let timeline = query
-        .get("timeline")
-        .map(String::as_str)
-        .unwrap_or("valid");
+    let timeline = query.get("timeline").map(String::as_str).unwrap_or("valid");
     match facts::list(&state.pool, as_of, timeline, limit_of(&query, 40)).await {
         Ok(rows) => Json(rows).into_response(),
         Err(error) => error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
@@ -1737,7 +1738,10 @@ async fn episode_media(State(state): State<AppState>, Path(id): Path<Uuid>) -> R
         Err(error) => return error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
     };
     let Some(relative) = dataport::vault_relative(&uri) else {
-        return error_response(StatusCode::NOT_FOUND, "the media path is not inside the vault");
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "the media path is not inside the vault",
+        );
     };
     match tokio::fs::read(state.vault_dir.join(relative)).await {
         Ok(bytes) => (
@@ -2065,8 +2069,7 @@ async fn notion_sync(
         .get("full")
         .map(|value| value == "true" || value == "1")
         .unwrap_or(false);
-    match notion.sync(&state.pool, &state.vault_dir, full).await
-    {
+    match notion.sync(&state.pool, &state.vault_dir, full).await {
         Ok(outcome) => {
             spawn_index(&state);
             Json(outcome).into_response()
@@ -2328,7 +2331,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/predictions", get(predictions_route))
         .route("/v1/commitments", get(commitments_route))
         .route("/v1/discrepancies", get(discrepancies_route))
-        .route("/v1/discrepancies/{id}/override", post(discrepancy_override))
+        .route(
+            "/v1/discrepancies/{id}/override",
+            post(discrepancy_override),
+        )
         .route("/v1/calibration", get(calibration_route))
         .route("/v1/questions", get(questions_route))
         .route("/v1/questions/next", post(question_next))
@@ -2338,7 +2344,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/entities", get(entities_route))
         .route("/v1/lenses", get(lenses_route))
         .route("/v1/memory/why/{id}", get(memory_why))
-        .route("/v1/settings/connectors", get(connectors_show).post(connectors_set))
+        .route(
+            "/v1/settings/connectors",
+            get(connectors_show).post(connectors_set),
+        )
         .route("/v1/connectors/{source}/import", post(connectors_import))
         .route("/v1/connectors/edith/usage", post(usage_route))
         .route("/v1/facts", get(facts_route))

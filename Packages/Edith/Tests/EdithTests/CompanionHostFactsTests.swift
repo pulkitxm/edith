@@ -15,9 +15,9 @@ import Testing
         ports 4820
         """
 
-    private let intelMac = """
+    private let tuf = """
         runtime docker 29.7.1 true 5.4.0
-        os darwin
+        os linux
         arch x86_64
         cores 20
         rammb 63918
@@ -47,8 +47,8 @@ import Testing
         #expect(!facts.blockers.contains(.noRuntime))
     }
 
-    @Test func anIntelMacWithDockerCanRunTheStack() {
-        let facts = CompanionHostProbe.parse(intelMac)
+    @Test func aLinuxBoxWithDockerCanRunTheStack() {
+        let facts = CompanionHostProbe.parse(tuf)
         #expect(facts.cpuCores == 20)
         #expect(facts.diskFreeMb == 216_127)
         #expect(facts.gpuModel == nil)
@@ -56,13 +56,13 @@ import Testing
         #expect(facts.usableRuntime?.composeVersion == "5.4.0")
     }
 
-    @Test func anEmptyGraphicsProbeIsNotAName() {
-        let facts = CompanionHostProbe.parse(intelMac)
+    @Test func aFailedNvidiaProbeIsNotAGpuName() {
+        let facts = CompanionHostProbe.parse(tuf)
         #expect(facts.gpuModel == nil)
     }
 
     @Test func portsAlreadyServingTheStackAreReportedAsClashes() {
-        let facts = CompanionHostProbe.parse(intelMac)
+        let facts = CompanionHostProbe.parse(tuf)
         let clash = facts.blockers.first { blocker in
             if case .portsInUse = blocker { return true }
             return false
@@ -73,7 +73,7 @@ import Testing
     @Test func aHostWithNothingInstalledSaysSo() {
         let facts = CompanionHostProbe.parse(
             """
-            os darwin
+            os linux
             arch x86_64
             cores 4
             rammb 8192
@@ -90,7 +90,7 @@ import Testing
         let facts = CompanionHostProbe.parse(
             """
             runtime docker 29.7.1 true 5.4.0
-            os darwin
+            os linux
             arch x86_64
             cores 4
             rammb 8192
@@ -118,7 +118,7 @@ import Testing
     }
 
     @Test func plainEnglishNamesTheRuntimeSituation() {
-        #expect(CompanionHostProbe.parse(intelMac).plainEnglish.contains("Docker 29.7.1"))
+        #expect(CompanionHostProbe.parse(tuf).plainEnglish.contains("Docker 29.7.1"))
         #expect(
             CompanionHostProbe.parse(thisMac).plainEnglish
                 .contains("Apple Container installed, not running"))

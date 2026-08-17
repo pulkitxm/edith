@@ -29,11 +29,11 @@ when the local host is the recommended candidate.
 Examples:
 
 ```
-$ ed companion deploy "Studio Mac"
-the companion running on Studio Mac, cpu, reached on port 4820
+$ ed companion deploy "TUF Wired"
+the companion running on TUF Wired, cpu, reached on port 4820
 
-$ ed companion deploy "Studio Mac" --adopt
-the companion running on Studio Mac, cpu, reached on port 4820
+$ ed companion deploy "TUF Wired" --adopt
+the companion running on TUF Wired, cpu, reached on port 4820
 ```
 
 A machine that cannot run it yet is refused with the reason and the fix, so

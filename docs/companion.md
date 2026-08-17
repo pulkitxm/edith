@@ -47,8 +47,9 @@ Edith when the repository lives elsewhere. Deployment sends that source to the
 chosen host, writes the Compose and environment files, builds the API, starts the
 services and runs health checks.
 
-Apple silicon Macs use the Apple Metal overlay. Intel Macs use the CPU overlay.
-The initial image pulls, model downloads and Rust build can take several minutes.
+GPU hosts use the GPU Compose overlay, Macs use the Apple Metal overlay, and other
+hosts use the CPU overlay. The initial image pulls, model downloads and Rust build
+can take several minutes.
 
 ## Remote hosts and tunnels
 
@@ -66,7 +67,8 @@ deployment until it is added again or a different stack is adopted.
 
 PostgreSQL with pgvector stores indexed data, Redis provides service state, Ollama
 serves the local embedding and vision models, and Whisper handles local speech to
-text. The API is the fifth base service. A reasoning model is optional during setup. It can use a local
+ text. The API is the fifth base service. GPU deployments also add a reranker
+ service. A reasoning model is optional during setup. It can use a local
 OpenAI-compatible endpoint, such as the bundled Ollama service, or Anthropic with a
 key you provide.
 
