@@ -48,6 +48,34 @@ import EventKit
         #expect(deduplicated.first === first)
     }
 
+    @Test func removesEventsWithInvisibleProviderDifferences() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let first = Self.event(title: "Daily Standup", start: start)
+        let duplicate = Self.event(
+            title: "  Daily\nStandup  ", start: start.addingTimeInterval(20))
+        duplicate.endDate = first.endDate.addingTimeInterval(20)
+
+        let deduplicated = CalendarDayEvents.deduplicated([first, duplicate])
+
+        #expect(deduplicated.count == 1)
+        #expect(deduplicated.first === first)
+    }
+
+    @Test func removesMatchingAllDayEventsWithDifferentStoredDurations() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let start = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        let first = Self.event(title: "Holiday", start: start, allDay: true)
+        let duplicate = Self.event(title: "Holiday", start: start, allDay: true)
+        first.endDate = calendar.date(byAdding: .day, value: 1, to: start)!
+        duplicate.endDate = calendar.date(byAdding: .day, value: 2, to: start)!
+
+        let deduplicated = CalendarDayEvents.deduplicated(
+            [first, duplicate], calendar: calendar)
+
+        #expect(deduplicated.count == 1)
+    }
+
     @Test func retainsEventsWhenIdentityFieldsDiffer() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let original = Self.event(title: "Daily Standup", start: start)

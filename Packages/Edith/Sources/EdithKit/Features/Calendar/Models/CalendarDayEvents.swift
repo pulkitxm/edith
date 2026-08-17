@@ -3,23 +3,39 @@ import Foundation
 
 public enum CalendarDayEvents {
     private struct EventIdentity: Hashable {
-        let title: String?
-        let startDate: Date
-        let endDate: Date
+        let title: String
+        let startMinute: Int64
+        let endMinute: Int64?
         let isAllDay: Bool
+
+        init(event: EKEvent, calendar: Calendar) {
+            title =
+                (event.title ?? "Untitled")
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+                .precomposedStringWithCanonicalMapping
+            isAllDay = event.isAllDay
+            if event.isAllDay {
+                startMinute = Self.minute(calendar.startOfDay(for: event.startDate))
+                endMinute = nil
+            } else {
+                startMinute = Self.minute(event.startDate)
+                endMinute = Self.minute(event.endDate)
+            }
+        }
+
+        private static func minute(_ date: Date) -> Int64 {
+            Int64(floor(date.timeIntervalSinceReferenceDate / 60))
+        }
     }
 
-    public static func deduplicated(_ events: [EKEvent]) -> [EKEvent] {
+    public static func deduplicated(
+        _ events: [EKEvent], calendar: Calendar = .current
+    ) -> [EKEvent] {
         var identities = Set<EventIdentity>()
         return events.filter { event in
-            identities.insert(
-                EventIdentity(
-                    title: event.title,
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    isAllDay: event.isAllDay
-                )
-            ).inserted
+            identities.insert(EventIdentity(event: event, calendar: calendar)).inserted
         }
     }
 
@@ -33,7 +49,7 @@ public enum CalendarDayEvents {
     public static func groupedByDay(
         _ events: [EKEvent], calendar: Calendar = .current
     ) -> [(day: Date, events: [EKEvent])] {
-        let byDay = Dictionary(grouping: sorted(deduplicated(events))) {
+        let byDay = Dictionary(grouping: sorted(deduplicated(events, calendar: calendar))) {
             calendar.startOfDay(for: $0.startDate)
         }
         return byDay.keys.sorted().map { (day: $0, events: byDay[$0]!) }
