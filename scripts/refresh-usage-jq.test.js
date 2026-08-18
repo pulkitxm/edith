@@ -2426,6 +2426,8 @@ describe("collector configuration", () => {
     expect(script).toContain("collect_cursor");
     expect(script).toContain("get-filtered-usage-events");
     expect(script).toContain('EDITH_CURSOR_CHATS="$chats"');
-    expect(script).toContain('cat "$TMP/cursor.events.jsonl" >>"$TMP/walk.jsonl"');
+    expect(script).toContain(
+      'cat "$TMP/cursor.events.jsonl" >>"$TMP/walk.jsonl"',
+    );
   });
 });
