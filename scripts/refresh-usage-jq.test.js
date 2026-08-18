@@ -2415,9 +2415,17 @@ describe("collector configuration", () => {
       kimi: "Kimi",
       qwen: "Qwen",
       openclaw: "OpenClaw",
+      cursor: "Cursor Agent",
     };
     for (const [source, label] of Object.entries(labels)) {
       expect(script).toContain(`${source}) echo "${label}" ;;`);
     }
+  });
+
+  test("collects Cursor Agent from the dashboard API scoped to local chats", () => {
+    expect(script).toContain("collect_cursor");
+    expect(script).toContain("get-filtered-usage-events");
+    expect(script).toContain('EDITH_CURSOR_CHATS="$chats"');
+    expect(script).toContain('cat "$TMP/cursor.events.jsonl" >>"$TMP/walk.jsonl"');
   });
 });
