@@ -1,10 +1,13 @@
 import AppKit
+import EdithKit
 import SwiftUI
 
 struct TabBar: View {
     let tabs: [(id: String, title: String)]
     @Binding var selection: String
     let theme: Color
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -13,7 +16,7 @@ struct TabBar: View {
             }
         }
         .padding(3)
-        .background(.primary.opacity(0.06), in: Capsule())
+        .background(DashSkin.line(dark), in: Capsule())
     }
 
     private func chip(_ entry: (id: String, title: String)) -> some View {
@@ -23,7 +26,7 @@ struct TabBar: View {
         } label: {
             Text(entry.title)
                 .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                .foregroundStyle(selected ? .white : .secondary)
+                .foregroundStyle(selected ? .white : DashSkin.inkSoft(dark))
                 .lineLimit(1)
                 .padding(.vertical, 7)
                 .padding(.horizontal, 14)

@@ -353,12 +353,12 @@ struct CompanionCaptureScreen: View {
                 if let outcome = model.outcome {
                     Text(outcome)
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.ok)
+                        .foregroundStyle(DashSkin.sage)
                 }
                 if let error = model.error {
                     Text(error)
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.warn)
+                        .foregroundStyle(DashSkin.gold)
                         .multilineTextAlignment(.center)
                 }
                 Spacer(minLength: 0)
@@ -407,6 +407,9 @@ struct CompanionCaptureScreen: View {
                         model.phase == .recording ? Color.white : DashSkin.accent(dark))
             }
             .contentShape(Circle())
+            .pendantGlow(
+                dark: dark, anchor: .center,
+                intensity: model.phase == .recording ? 1.6 : 0)
         }
         .buttonStyle(.plain)
         .pointerCursor()

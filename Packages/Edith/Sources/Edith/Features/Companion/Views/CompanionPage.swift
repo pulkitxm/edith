@@ -76,7 +76,7 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
     @State private var refreshTick = 0
-    @State private var setupModel: CompanionSetupModel?
+    @State private var setupModel: CompanionOnboardingModel?
     @AppStorage(AppStorageKeys.Companion.setupDeclined, store: SharedDefaults.store)
     private var setupDeclined = false
 
@@ -353,7 +353,7 @@ struct CompanionPage: View {
 
     private func openSetup() {
         setupDeclined = false
-        let model = CompanionSetupModel(onFinish: { finished in
+        let model = CompanionOnboardingModel(onFinish: { finished in
             if !finished { setupDeclined = true }
             setupModel = nil
             refreshTick += 1

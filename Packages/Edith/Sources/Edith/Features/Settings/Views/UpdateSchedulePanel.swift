@@ -8,6 +8,12 @@ struct UpdateSchedulePanel: View {
     @State private var customSeconds = ""
     @State private var clampNotice: String?
     @FocusState private var customFocused: Bool
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
+
+    private var theme: Color { themeColor(themeName) }
 
     private var showsCustomField: Bool {
         editingCustom || !UpdateCheckInterval.isPreset(updater.checkInterval)
@@ -52,19 +58,22 @@ struct UpdateSchedulePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
+            WoodRule(dark: dark)
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(20)) {
                     schedule
-                    Divider()
+                    WoodRule(dark: dark)
                     history
                 }
                 .padding(UIScale.pt(20))
             }
-            Divider()
+            WoodRule(dark: dark)
             footer
         }
         .frame(width: UIScale.pt(540), height: UIScale.pt(620))
+        .background(DashSkin.paper(dark))
+        .foregroundStyle(DashSkin.ink(dark))
+        .tint(DashSkin.accent(dark))
     }
 
     private var header: some View {
@@ -73,7 +82,7 @@ struct UpdateSchedulePanel: View {
                 .font(.system(size: UIScale.pt(17), weight: .semibold))
             Text(countSummary)
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(20))
@@ -89,9 +98,7 @@ struct UpdateSchedulePanel: View {
 
     private var schedule: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Text("Schedule")
-                .font(.system(size: UIScale.pt(12), weight: .medium))
-                .foregroundStyle(.secondary)
+            eyebrow("Schedule")
             Toggle("Check automatically", isOn: automaticChecks)
                 .pointerCursor()
             HStack(spacing: UIScale.pt(10)) {
@@ -117,12 +124,12 @@ struct UpdateSchedulePanel: View {
                     .disabled(!updater.canCheckForUpdates)
                 Text("uses the scheduled check path")
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             if let next = nextCheckDescription {
                 Text(next)
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
     }
@@ -134,27 +141,27 @@ struct UpdateSchedulePanel: View {
     }
 
     private var noticeStyle: AnyShapeStyle {
-        clampNotice == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.orange)
+        clampNotice == nil ? AnyShapeStyle(DashSkin.inkFaint(dark)) : AnyShapeStyle(DashSkin.gold)
     }
 
     private var customField: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             HStack(spacing: UIScale.pt(8)) {
-                TextField("", text: $customSeconds)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: UIScale.pt(110))
-                    .focused($customFocused)
-                    .onSubmit(commitCustomSeconds)
-                    .onChange(of: customFocused) { _, focused in
-                        if !focused { commitCustomSeconds() }
-                    }
+                EdithTextField(
+                    placeholder: "", text: $customSeconds, compact: true, focus: $customFocused,
+                    onSubmit: commitCustomSeconds
+                )
+                .frame(width: UIScale.pt(110))
+                .onChange(of: customFocused) { _, focused in
+                    if !focused { commitCustomSeconds() }
+                }
                 Text("seconds")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkSoft(dark))
                 Spacer()
                 Text(UpdateCheckInterval.describe(updater.checkInterval))
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Text(clampNotice ?? rangeHint)
                 .font(.system(size: UIScale.pt(11)))
@@ -174,9 +181,7 @@ struct UpdateSchedulePanel: View {
     private var history: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {
-                Text("History")
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
-                    .foregroundStyle(.secondary)
+                eyebrow("History")
                 Spacer()
                 if !updater.checkHistory.isEmpty {
                     Button("Clear", action: updater.clearCheckHistory)
@@ -188,7 +193,7 @@ struct UpdateSchedulePanel: View {
             if updater.checkHistory.isEmpty {
                 Text("Checks appear here once Edith has looked for an update.")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 VStack(spacing: 0) {
@@ -198,8 +203,11 @@ struct UpdateSchedulePanel: View {
                         row(entry)
                     }
                 }
-                .background(Color.primary.opacity(0.03))
+                .background(DashSkin.paper2(dark))
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(8)).strokeBorder(DashSkin.line(dark))
+                }
             }
         }
     }
@@ -210,16 +218,16 @@ struct UpdateSchedulePanel: View {
                 .fill(color(for: record.outcome))
                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
             Text(record.date.formatted(.dateTime.month().day().hour().minute()))
-                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .font(DashSkin.mono(12))
                 .frame(width: UIScale.pt(140), alignment: .leading)
             Text(record.summary)
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(2)
             Spacer(minLength: UIScale.pt(8))
             Text(record.kind.label)
                 .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(9))
@@ -227,9 +235,9 @@ struct UpdateSchedulePanel: View {
 
     private func color(for outcome: UpdateCheckRecord.Outcome) -> Color {
         switch outcome {
-        case .upToDate: return .secondary
-        case .updateFound: return .accentColor
-        case .failed: return .red
+        case .upToDate: return DashSkin.inkFaint(dark)
+        case .updateFound: return theme
+        case .failed: return DashSkin.danger
         }
     }
 

@@ -15,6 +15,9 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    private var dark: Bool { scheme == .dark }
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
@@ -23,61 +26,54 @@ struct ShortcutsSettingsPane: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                shortcutRow(
-                    "Open panel", subtitle: "Opens the menu bar panel from anywhere",
-                    keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
-            } header: {
-                Text("Global")
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                SkinCard(title: "Global", dark: dark) {
+                    shortcutRow(
+                        "Open panel", subtitle: "Opens the menu bar panel from anywhere",
+                        keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
+                }
 
-            Section {
-                if extensionShortcuts.isEmpty {
-                    Text("Extensions with shortcuts appear here when enabled.")
-                        .settingsCaption()
-                } else {
-                    ForEach(extensionShortcuts, id: \.self) { shortcut in
-                        extensionShortcutRow(shortcut)
+                SkinCard(title: "Extensions", dark: dark) {
+                    if extensionShortcuts.isEmpty {
+                        Text("Extensions with shortcuts appear here when enabled.")
+                            .settingsCaption()
+                    } else {
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            ForEach(extensionShortcuts, id: \.self) { shortcut in
+                                extensionShortcutRow(shortcut)
+                            }
+                        }
                     }
                 }
-            } header: {
-                Text("Extensions")
-            }
 
-            Section {
-                LabeledContent("Toggle sidebar") {
-                    Text("⌘B")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
+                SkinCard(
+                    title: "Fixed",
+                    note: "Click a shortcut to record a new one; Esc cancels recording.",
+                    dark: dark
+                ) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        fixedRow("Toggle sidebar", "⌘B")
+                        fixedRow("Close panel", "Esc")
+                        fixedRow("Back", "⌘[")
+                        fixedRow("Forward", "⌘]")
+                    }
                 }
-                LabeledContent("Close panel") {
-                    Text("Esc")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                LabeledContent("Back") {
-                    Text("⌘[")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
-                }
-                LabeledContent("Forward") {
-                    Text("⌘]")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Fixed")
-            } footer: {
-                Text("Click a shortcut to record a new one; Esc cancels recording.")
-                    .font(.system(size: UIScale.pt(10)))
             }
+            .pageContent(compact)
+            .padding(.top, UIScale.pt(16))
         }
-        .formStyle(.grouped)
-        .navigationTitle("Shortcuts")
+        .background(DashSkin.paper(dark))
+    }
+
+    private func fixedRow(_ title: String, _ key: String) -> some View {
+        LabeledContent(title) {
+            Text(key)
+                .font(DashSkin.mono(12, weight: .medium))
+                .kerning(1.5)
+                .foregroundStyle(DashSkin.inkSoft(dark))
+        }
+        .foregroundStyle(DashSkin.ink(dark))
     }
 
     private func shortcutRow(
@@ -86,6 +82,7 @@ struct ShortcutsSettingsPane: View {
         HStack {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
+                    .foregroundStyle(DashSkin.ink(dark))
                 Text(subtitle)
                     .settingsCaption()
             }
@@ -123,17 +120,30 @@ struct HotKeyRecorderControl: View {
     @State private var recording = false
     @State private var monitor: Any?
     @State private var label = ""
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Button {
             recording ? stop() : start()
         } label: {
             Text(recording ? "Press shortcut…" : currentLabel)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
-                .kerning(recording ? 0 : 2)
-                .padding(.vertical, UIScale.pt(2))
-                .padding(.horizontal, UIScale.pt(6))
+                .font(DashSkin.mono(12, weight: .medium))
+                .kerning(recording ? 0 : 1.5)
+                .foregroundStyle(recording ? DashSkin.accent(dark) : DashSkin.ink(dark))
+                .padding(.vertical, UIScale.pt(3))
+                .padding(.horizontal, UIScale.pt(9))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        .strokeBorder(
+                            recording ? DashSkin.accent(dark) : DashSkin.lineStrong(dark),
+                            lineWidth: UIScale.pt(1))
+                }
         }
+        .buttonStyle(.plain)
         .pointerCursor()
         .onAppear { label = currentLabel }
         .onDisappear { if recording { stop() } }

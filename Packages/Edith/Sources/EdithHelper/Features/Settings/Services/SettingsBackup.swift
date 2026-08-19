@@ -126,7 +126,7 @@ final class SettingsBackup {
         AppStorageKeys.Notify.reminderWeekly, AppStorageKeys.Notify.reminderWeeklyOffsetMin,
         AppStorageKeys.Notify.tokenExpired,
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
-        "dashBillingDay", "dashSort", "dashSortAsc",
+        "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
         AppStorageKeys.MenuBar.systemStats, AppStorageKeys.Mic.muteEnabled,
         AppStorageKeys.Mic.muteInMenuBar,
@@ -174,7 +174,7 @@ final class SettingsBackup {
         "musicFavourites", "musicLastTrack", "musicLastPosition", "musicWasPlaying",
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
-        AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
+        AppStorageKeys.General.mainSidebarOpen,
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -223,7 +223,7 @@ final class SettingsBackup {
         AppStorageKeys.General.hotKeyMods,
         AppStorageKeys.General.hotKeyLabel,
         "dashRange", "dashSources", "dashKnownSources", "dashSourceSelectionVersion", "dashModels",
-        "dashBillingDay", "dashSort", "dashSortAsc",
+        "dashSort", "dashSortAsc",
         "dashHeatMetric", "projSort", "projSortAsc", "systemAppsSort", "systemAppsSortAsc",
         AppStorageKeys.MenuBar.systemStats, AppStorageKeys.Mic.muteEnabled,
         AppStorageKeys.Mic.muteInMenuBar,
@@ -268,7 +268,7 @@ final class SettingsBackup {
         AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
         AppStorageKeys.Music.gridView, "musicFavourites",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
-        AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
+        AppStorageKeys.General.mainSidebarOpen,
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [

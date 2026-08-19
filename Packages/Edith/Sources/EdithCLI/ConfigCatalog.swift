@@ -141,9 +141,6 @@ public enum ConfigCatalog {
             AppStorageKeys.General.mainSidebarOpen, .bool, group: "panel",
             summary: "Whether the main window sidebar starts open.", fallback: .bool(true)),
         SettingDefinition(
-            AppStorageKeys.General.mainSidebarWidth, .number, group: "panel",
-            summary: "Main window sidebar width in points."),
-        SettingDefinition(
             Repo.pathKey, .string, group: "panel",
             summary: "Development repository root used for usage data and music."),
     ]
@@ -314,9 +311,6 @@ public enum ConfigCatalog {
         SettingDefinition(
             "dashModels", .string, group: "dashboard",
             summary: "Model filter for the dashboard charts."),
-        SettingDefinition(
-            "dashBillingDay", .int, group: "dashboard",
-            summary: "Day of month the billing cycle starts on.", fallback: .int(26)),
         SettingDefinition(
             "dashSort", .string, group: "dashboard", summary: "Model table sort column.",
             fallback: .string("cost")),

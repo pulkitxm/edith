@@ -25,6 +25,8 @@ struct ClipboardPanelView: View {
         "top"
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     static let pageSize = 80
 
@@ -174,7 +176,7 @@ struct ClipboardPanelView: View {
     private var searchField: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.secondary.opacity(0.1))
+                .fill(DashSkin.line(dark))
             HStack(spacing: 0) {
                 Image(systemName: "magnifyingglass")
                     .resizable()
@@ -236,7 +238,7 @@ struct ClipboardPanelView: View {
                 if visible.isEmpty {
                     Text(filterText.isEmpty ? "Clipboard history is empty" : "No matches")
                         .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                         .frame(maxWidth: .infinity, alignment: .center)
                         .frame(height: Self.rowHeight)
                         .listRowInsets(EdgeInsets())
@@ -298,20 +300,20 @@ struct ClipboardPanelView: View {
             if entry.pinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                    .foregroundStyle(selected ? Color.white.opacity(0.8) : DashSkin.inkFaint(dark))
             }
             rowContent(entry)
             Spacer(minLength: 8)
             if let digit = digitShortcuts[entry.id] {
                 Text("⌘\(digit)")
                     .font(.system(size: 11))
-                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                    .foregroundStyle(selected ? Color.white.opacity(0.8) : DashSkin.inkFaint(dark))
             }
         }
         .padding(.horizontal, 8)
         .frame(height: Self.rowHeight(for: entry))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .foregroundStyle(selected ? Color.white : Color.primary)
+        .foregroundStyle(selected ? Color.white : DashSkin.ink(dark))
         .contentShape(Rectangle())
         .onContinuousHover { phase in
             guard case .active = phase else { return }
@@ -506,6 +508,8 @@ private struct FooterRow: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @State private var hovered = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         HStack {
@@ -514,11 +518,11 @@ private struct FooterRow: View {
             Spacer()
             Text(shortcut)
                 .font(.system(size: 11))
-                .foregroundStyle(hovered ? Color.white.opacity(0.8) : Color.secondary)
+                .foregroundStyle(hovered ? Color.white.opacity(0.8) : DashSkin.inkFaint(dark))
         }
         .padding(.horizontal, 8)
         .frame(height: 21)
-        .foregroundStyle(hovered ? Color.white : Color.primary)
+        .foregroundStyle(hovered ? Color.white : DashSkin.ink(dark))
         .background(
             hovered ? themeColor(themeName) : Color.clear,
             in: RoundedRectangle(cornerRadius: 4)

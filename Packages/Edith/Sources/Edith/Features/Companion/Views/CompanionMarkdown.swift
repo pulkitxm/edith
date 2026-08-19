@@ -125,7 +125,7 @@ struct MarkdownBody: View {
                             .foregroundStyle(bodyColor)
                             .textSelection(.enabled)
                     }
-                    .font(.system(size: UIScale.pt(size)))
+                    .font(DashSkin.serif(size, weight: .regular))
                 }
             }
         case let .code(source):
@@ -138,9 +138,10 @@ struct MarkdownBody: View {
                 .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         case let .paragraph(content):
             Text(inline(content))
-                .font(.system(size: UIScale.pt(size)))
+                .font(DashSkin.serif(size, weight: .regular))
                 .foregroundStyle(bodyColor)
                 .textSelection(.enabled)
+                .lineSpacing(UIScale.pt(2))
         }
     }
 

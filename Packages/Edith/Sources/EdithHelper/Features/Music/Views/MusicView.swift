@@ -42,6 +42,8 @@ struct TrackRow: View {
         true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var theme: Color { themeColor(themeName) }
     private var isCurrent: Bool { player.current == track }
@@ -75,9 +77,9 @@ struct TrackRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7))
 
                 Text(track.title)
-                    .font(.system(size: 13))
+                    .font(DashSkin.serifLabel(dark))
                     .lineLimit(1)
-                    .foregroundStyle(isCurrent ? theme : .primary)
+                    .foregroundStyle(isCurrent ? theme : DashSkin.ink(dark))
                     .presenterBlur(presenterState.active && presenterBlurMusic)
 
                 Spacer()
@@ -92,7 +94,7 @@ struct TrackRow: View {
                     Text(duration)
                         .font(.system(size: 11))
                         .monospacedDigit()
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
             .padding(.vertical, 6)
@@ -102,7 +104,7 @@ struct TrackRow: View {
         .buttonStyle(.plain)
         .background(
             isCurrent
-                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+                ? DashSkin.line(dark) : hovering ? DashSkin.ink(dark).opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: 7)
         )
         .onHover { hovering = $0 }

@@ -12,7 +12,7 @@ import Testing
     @Test func aFreshMachineStartsAtTheBeginning() async {
         await MainActor.run {
             #expect(
-                CompanionSetupModel.initialStep(
+                CompanionOnboardingModel.initialStep(
                     deployment: nil, reachable: false, reasonerConfigured: false) == .welcome)
         }
     }
@@ -20,7 +20,7 @@ import Testing
     @Test func aDeployedButUnreachableStackResumesAtDeploy() async {
         await MainActor.run {
             #expect(
-                CompanionSetupModel.initialStep(
+                CompanionOnboardingModel.initialStep(
                     deployment: deployment(), reachable: false, reasonerConfigured: true)
                     == .deploy)
         }
@@ -29,7 +29,7 @@ import Testing
     @Test func aHealthyStackWithoutAReasonerResumesAtIntelligence() async {
         await MainActor.run {
             #expect(
-                CompanionSetupModel.initialStep(
+                CompanionOnboardingModel.initialStep(
                     deployment: deployment(), reachable: true, reasonerConfigured: false)
                     == .intelligence)
         }
@@ -38,7 +38,7 @@ import Testing
     @Test func aFullySetUpCompanionLandsOnDone() async {
         await MainActor.run {
             #expect(
-                CompanionSetupModel.initialStep(
+                CompanionOnboardingModel.initialStep(
                     deployment: deployment(), reachable: true, reasonerConfigured: true)
                     == .done)
         }

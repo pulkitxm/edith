@@ -37,27 +37,25 @@ struct RateLimitsDialsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .firstTextBaseline) {
-                ProviderSwitchButton(
-                    selection: Binding(get: { selected }, set: { selected = $0 }),
-                    providers: providers, color: DashSkin.ink(dark), size: 16)
-                Text("Rate limits").font(DashSkin.serif(18)).foregroundStyle(DashSkin.ink(dark))
+            HStack(alignment: .center, spacing: UIScale.pt(14)) {
+                VStack(spacing: 8) {
+                    rotatedTitle
+                    ProviderSwitchButton(
+                        selection: Binding(get: { selected }, set: { selected = $0 }),
+                        providers: providers, color: DashSkin.ink(dark), size: 16)
+                }
+                HStack(spacing: UIScale.pt(24)) {
+                    dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
+                    dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            HStack {
+                if showsJumpLink {
+                    JumpLink(title: "Open Agent Usage", destination: .dashboard, dark: dark)
+                }
                 Spacer()
-                Text("session · weekly").font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
-            }
-            HStack(spacing: UIScale.pt(24)) {
-                dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
-                dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
-            }
-            .frame(maxWidth: .infinity)
-            if let point {
-                Text("As of \(point.date.formatted(.dateTime.hour().minute()))")
-                    .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            if showsJumpLink {
-                JumpLink(title: "Open Agent Usage", destination: .dashboard, dark: dark)
             }
         }
         .padding(
@@ -84,6 +82,16 @@ struct RateLimitsDialsView: View {
         }
     }
 
+    private var rotatedTitle: some View {
+        Text("Rate limits")
+            .font(DashSkin.serif(18))
+            .foregroundStyle(DashSkin.ink(dark))
+            .lineLimit(1)
+            .fixedSize()
+            .rotationEffect(.degrees(-90))
+            .frame(width: UIScale.pt(22), height: UIScale.pt(110))
+    }
+
     private func dial(_ label: String, pct: Double?, reset: Date?) -> some View {
         let p = pct ?? 0
         return VStack(spacing: UIScale.pt(8)) {
@@ -108,20 +116,31 @@ struct RateLimitsDialsView: View {
             .frame(width: UIScale.pt(104), height: UIScale.pt(104))
             Text(label).font(DashSkin.mono(9)).tracking(UIScale.pt(1.4))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(resetText(reset)).font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
+                .padding(.top, 8)
+            resetLabel(reset)
         }
     }
 
-    private static let resetFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
+    @ViewBuilder private func resetLabel(_ reset: Date?) -> some View {
+        if let reset, reset > Date() {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(countdown(from: context.date, to: reset))
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
+            }
+        } else {
+            Text(" ").font(.system(size: UIScale.pt(11)))
+        }
+    }
 
-    private func resetText(_ d: Date?) -> String {
-        guard let d else { return " " }
-        return "Resets " + Self.resetFormatter.localizedString(for: d, relativeTo: Date())
+    private func countdown(from now: Date, to reset: Date) -> String {
+        let s = max(0, Int(reset.timeIntervalSince(now)))
+        let d = s / 86400
+        let h = (s % 86400) / 3600
+        let m = (s % 3600) / 60
+        if d > 0 { return String(format: "%dd %d Hrs", d, h) }
+        if h > 0 { return String(format: "%d:%02d Hrs", h, m) }
+        return String(format: "%d Min", m)
     }
 
     private func color(for percent: Double) -> Color {
@@ -284,11 +303,12 @@ struct LimitsCardView: View {
                     .background(
                         range == name
                             ? AnyShapeStyle(theme.opacity(0.9))
-                            : AnyShapeStyle(.primary.opacity(0.06)),
+                            : AnyShapeStyle(DashSkin.line(dark)),
                         in: Capsule()
                     )
                     .foregroundStyle(
-                        range == name ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                        range == name
+                            ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.inkSoft(dark)))
             }
         }
     }
@@ -339,10 +359,10 @@ struct LimitsCardView: View {
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [2, 3]))
             }
             RuleMark(y: .value("Warn", warn))
-                .foregroundStyle(.orange.opacity(0.5))
+                .foregroundStyle(DashSkin.warn.opacity(0.5))
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 4]))
             RuleMark(y: .value("Crit", crit))
-                .foregroundStyle(.red.opacity(0.5))
+                .foregroundStyle(DashSkin.danger.opacity(0.5))
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 4]))
             ForEach(samples) { s in
                 LineMark(
@@ -361,7 +381,7 @@ struct LimitsCardView: View {
         .chartXSelection(value: $selected)
         .chartYAxis {
             AxisMarks(values: [0, 50, 100]) { value in
-                AxisGridLine().foregroundStyle(.primary.opacity(0.08))
+                AxisGridLine().foregroundStyle(DashSkin.line(dark))
                 AxisValueLabel {
                     if let v = value.as(Int.self) {
                         Text("\(v)%").font(.system(size: UIScale.pt(8)))
@@ -374,8 +394,7 @@ struct LimitsCardView: View {
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
                         Text(tick(d, spanDays: spanDays)).font(.system(size: UIScale.pt(8)))
-                            .foregroundStyle(
-                                .tertiary)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
             }

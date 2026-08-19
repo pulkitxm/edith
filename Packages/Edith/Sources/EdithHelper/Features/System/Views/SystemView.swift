@@ -5,6 +5,8 @@ struct SystemView: View {
     @Environment(SystemStore.self) private var store
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var theme: Color { themeColor(themeName) }
 
@@ -18,7 +20,7 @@ struct SystemView: View {
                             .font(.system(size: 13))
                         Text("Keeps the display awake; closing the lid still sleeps")
                             .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     Spacer()
                     Toggle(
@@ -43,7 +45,7 @@ struct SystemView: View {
                     "Blocks every key - letters, shortcuts, volume, brightness - so you can wipe the keyboard. The trackpad stays live; exit with the Done button or the 60s auto-restore."
                 )
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
 
                 if !store.hasInputMonitoring || !store.hasAccessibility {
@@ -58,7 +60,7 @@ struct SystemView: View {
                             "Grant opens System Settings - flip Edith on there and this updates by itself. Still showing Grant after enabling?"
                         )
                         .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                         Button("Relaunch") { store.relaunch() }
                             .buttonStyle(HoverButtonStyle())
@@ -95,7 +97,7 @@ struct SystemView: View {
         HStack(spacing: 8) {
             Image(systemName: granted ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 12))
-                .foregroundStyle(granted ? .green : .secondary)
+                .foregroundStyle(granted ? DashSkin.sage : DashSkin.inkFaint(dark))
             Text(name)
                 .font(.system(size: 12))
             Spacer()

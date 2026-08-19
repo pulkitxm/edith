@@ -62,7 +62,7 @@ struct OnboardingView: View {
                 .frame(height: UIScale.pt(58))
         }
         .frame(width: UIScale.pt(620), height: UIScale.pt(560))
-        .background(DashSkin.paper(dark))
+        .background(DashSkin.paper(dark).paperGrain(dark: dark, opacity: 0.035))
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             guard step == .permissions else { return }
             refreshPermissions()
@@ -106,6 +106,7 @@ struct OnboardingView: View {
             appIcon
                 .frame(width: UIScale.pt(92), height: UIScale.pt(92))
                 .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: UIScale.pt(18), y: 9)
+                .pendantGlow(dark: dark, anchor: .center, intensity: 1.4)
             Text("Welcome to Edith")
                 .font(DashSkin.serif(36, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
@@ -137,13 +138,18 @@ struct OnboardingView: View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
             ZStack {
-                Circle()
+                ArchedNiche()
                     .fill(brandAccent.opacity(0.13))
                     .frame(width: UIScale.pt(106), height: UIScale.pt(106))
+                    .overlay {
+                        ArchedNiche().strokeBorder(
+                            .brassBorder(dark: dark), lineWidth: UIScale.pt(1))
+                    }
                 Image(systemName: restoreSymbol)
                     .font(.system(size: UIScale.pt(40), weight: .medium))
                     .foregroundStyle(brandAccent)
             }
+            .pendantGlow(dark: dark, anchor: .center, intensity: 1.1)
             Text(restoreTitle)
                 .font(DashSkin.serif(34, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
@@ -338,13 +344,18 @@ struct OnboardingView: View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
             ZStack {
-                Circle()
+                ArchedNiche()
                     .fill(brandAccent.opacity(0.13))
                     .frame(width: UIScale.pt(106), height: UIScale.pt(106))
+                    .overlay {
+                        ArchedNiche().strokeBorder(
+                            .brassBorder(dark: dark), lineWidth: UIScale.pt(1))
+                    }
                 Image(systemName: "checkmark")
                     .font(.system(size: UIScale.pt(44), weight: .medium))
                     .foregroundStyle(brandAccent)
             }
+            .pendantGlow(dark: dark, anchor: .center, intensity: 1.1)
             Text("You're ready")
                 .font(DashSkin.serif(34, weight: .bold))
                 .foregroundStyle(DashSkin.ink(dark))
@@ -418,11 +429,15 @@ struct OnboardingView: View {
     }
 
     private var stepIndicator: some View {
-        HStack(spacing: UIScale.pt(8)) {
+        HStack(spacing: UIScale.pt(6)) {
             ForEach(Step.allCases, id: \.rawValue) { item in
-                Circle()
-                    .fill(item == step ? brandAccent : DashSkin.lineStrong(dark))
-                    .frame(width: item == step ? 8 : 6, height: item == step ? 8 : 6)
+                Capsule()
+                    .fill(
+                        item == step
+                            ? AnyShapeStyle(.brassBorder(dark: dark))
+                            : AnyShapeStyle(DashSkin.lineStrong(dark))
+                    )
+                    .frame(width: item == step ? 20 : 6, height: 6)
                     .animation(glide, value: step)
             }
         }
@@ -725,6 +740,8 @@ private struct OnboardingPermissionCard: View {
 
 private struct OnboardingPrimaryButtonStyle: ButtonStyle {
     var compact = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -736,6 +753,15 @@ private struct OnboardingPrimaryButtonStyle: ButtonStyle {
             .background(
                 brandAccent.opacity(configuration.isPressed ? 0.78 : 1),
                 in: RoundedRectangle(cornerRadius: compact ? 8 : 10)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: compact ? 8 : 10)
+                    .strokeBorder(.brassBorder(dark: dark), lineWidth: UIScale.pt(1))
+                    .opacity(configuration.isPressed ? 0.4 : 0.8)
+            }
+            .shadow(
+                color: brandAccent.opacity(configuration.isPressed ? 0 : 0.35),
+                radius: UIScale.pt(8), y: 3
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)

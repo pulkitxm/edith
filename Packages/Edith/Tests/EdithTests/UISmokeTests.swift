@@ -181,10 +181,6 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
         #expect(renders(MusicPage()))
     }
 
-    @Test func titlebarChromeRenders() {
-        #expect(renders(TitlebarChrome(height: 52, width: 200), width: 220, height: 60))
-    }
-
     @Test func panelTabBarRenders() {
         let tabs: [(id: String, title: String)] = allTabs.map { ($0.id, $0.title) }
         #expect(

@@ -34,6 +34,8 @@ struct DeveloperPanel: View {
     @State private var repoPath = SharedDefaults.store.string(forKey: Repo.pathKey) ?? ""
     @State private var idleWakeups = EnergyStats.idleWakeups()
     @State private var refreshing = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var versionLine: String {
         let info = Bundle.main.infoDictionary
@@ -47,7 +49,7 @@ struct DeveloperPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(versionLine)
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
 
                 HStack(spacing: 12) {
                     Button("Force refresh") {

@@ -33,7 +33,7 @@ enum CompanionStageState: Equatable {
 
 @MainActor
 @Observable
-final class CompanionSetupModel: Identifiable {
+final class CompanionOnboardingModel: Identifiable {
     let id = UUID()
     var step = CompanionSetupStep.welcome
     private(set) var hosts: [CompanionHost] = []
@@ -192,7 +192,7 @@ final class CompanionSetupModel: Identifiable {
 }
 
 struct CompanionSetupSheet: View {
-    @Bindable var model: CompanionSetupModel
+    @Bindable var model: CompanionOnboardingModel
     let home: CompanionHomeModel
     @Environment(\.colorScheme) private var scheme
 
