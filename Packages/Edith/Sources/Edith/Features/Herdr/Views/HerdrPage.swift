@@ -7,22 +7,35 @@ struct HerdrPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
+    @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
+        var sidebarOpen = true
 
     private var dark: Bool { scheme == .dark }
+    private var onBoard: Bool { store.selectedTab == HerdrStore.boardID }
+    private var listedAgents: [HerdrAgent] {
+        store.filteredAgents.isEmpty ? store.agents : store.filteredAgents
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             tabBar
             Divider().opacity(0.35)
-            ZStack {
-                board.opacity(store.selectedTab == HerdrStore.boardID ? 1 : 0)
-                    .allowsHitTesting(store.selectedTab == HerdrStore.boardID)
-                ForEach(store.tabs) { tab in
-                    HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
-                        .opacity(tab.id == store.selectedTab ? 1 : 0)
-                        .allowsHitTesting(tab.id == store.selectedTab)
+            HStack(spacing: 0) {
+                if !onBoard {
+                    agentList
+                    Divider().opacity(0.35)
                 }
+                ZStack {
+                    board.opacity(onBoard ? 1 : 0)
+                        .allowsHitTesting(onBoard)
+                    ForEach(store.tabs) { tab in
+                        HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
+                            .opacity(tab.id == store.selectedTab ? 1 : 0)
+                            .allowsHitTesting(tab.id == store.selectedTab)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -36,6 +49,9 @@ struct HerdrPage: View {
                 if Task.isCancelled { break }
                 await store.refresh()
             }
+        }
+        .onChange(of: store.selectedTab) { _, tab in
+            sidebarOpen = tab == HerdrStore.boardID
         }
     }
 
@@ -219,7 +235,7 @@ struct HerdrPage: View {
     private func card(_ agent: HerdrAgent) -> some View {
         let open = store.openIDs.contains(agent.id)
         return Button {
-            store.open(agent)
+            openAgent(agent)
         } label: {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 HStack(spacing: UIScale.pt(6)) {
@@ -257,6 +273,76 @@ struct HerdrPage: View {
         }
         .buttonStyle(.plain)
         .pointerCursor()
+    }
+
+    private var agentList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: UIScale.pt(8)) {
+                Text("Agents")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text("\(listedAgents.count)")
+                    .font(DashSkin.mono(10, weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            .padding(.horizontal, UIScale.pt(14))
+            .padding(.vertical, UIScale.pt(10))
+            Divider().opacity(0.35)
+            ScrollView {
+                LazyVStack(spacing: UIScale.pt(2)) {
+                    ForEach(listedAgents) { agent in
+                        agentRow(agent)
+                    }
+                }
+                .padding(.horizontal, UIScale.pt(6))
+                .padding(.vertical, UIScale.pt(6))
+            }
+        }
+        .frame(width: UIScale.pt(compact ? 200 : 252))
+        .frame(maxHeight: .infinity)
+        .background(DashSkin.paper(dark))
+    }
+
+    private func agentRow(_ agent: HerdrAgent) -> some View {
+        let selected = store.selectedTab == agent.id
+        return Button {
+            openAgent(agent)
+        } label: {
+            HStack(alignment: .top, spacing: UIScale.pt(8)) {
+                Circle()
+                    .fill(HerdrStatusColor.color(agent.status, dark: dark))
+                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                    .padding(.top, UIScale.pt(5))
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(agent.title)
+                        .font(
+                            .system(size: UIScale.pt(12.5), weight: selected ? .semibold : .medium)
+                        )
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text("\(agent.kind) · \(agent.machineName) · \(agent.pane)")
+                        .font(DashSkin.mono(9.5))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(8))
+            .background(
+                selected ? DashSkin.accent(dark).opacity(0.16) : Color.clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+    }
+
+    private func openAgent(_ agent: HerdrAgent) {
+        store.open(agent)
+        sidebarOpen = false
     }
 
     private func emptyState(title: String, detail: String) -> some View {
