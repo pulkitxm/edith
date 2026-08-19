@@ -99,20 +99,22 @@ closed.
 ## Attribution model
 
 The daily and model rows are the authoritative accounting totals. The collector
-discovers Claude Code, Cowork, Codex, OpenCode, Amp, Droid, Codebuff, Hermes,
-Pi, Goose, Kilo, Copilot, Gemini, Kimi, Qwen, OpenClaw and Command Code when
-their local stores contain usage. A source appears in `ed usage sources` only
-when it contributed data, so this list is collector coverage rather than a
-promise that every id is present on every Mac.
+discovers Claude Code, Cowork, Codex, Cursor Agent, OpenCode, Amp, Droid,
+Codebuff, Hermes, Pi, Goose, Kilo, Copilot, Gemini, Kimi, Qwen, OpenClaw and
+Command Code when their local stores contain usage. A source appears in
+`ed usage sources` only when it contributed data, so this list is collector
+coverage rather than a promise that every id is present on every Mac.
 
 Repository detail comes from the session stores that expose it: Claude and
-Cowork transcripts, Codex daily sessions and metadata, Pi session logs, Command
-Code projects and the OpenCode database. Those measurements are reconciled per
-day and source to the authoritative totals. Detail is scaled down when it would
-exceed the total, and any remaining source or model total with no reliable
-folder is emitted under the `Unattributed` repository. That is why
-`ed usage projects` adds back to `summary` without pretending every provider
-cost belongs to a known folder.
+Cowork transcripts, Codex daily sessions and metadata, Cursor Agent chat
+metadata, Pi session logs, Command Code projects and the OpenCode database.
+Cursor token and cost totals come from Cursor's authenticated usage API, scoped
+to CLI events whose conversation ids exist in the local chat store. Those
+measurements are reconciled per day and source to the authoritative totals.
+Detail is scaled down when it would exceed the total, and any remaining source
+or model total with no reliable folder is emitted under the `Unattributed`
+repository. That is why `ed usage projects` adds back to `summary` without
+pretending every provider cost belongs to a known folder.
 
 Machine sources use the stable id
 `machine:<lowercase-machine-uuid>:<agent>`, not the machine's editable name or
