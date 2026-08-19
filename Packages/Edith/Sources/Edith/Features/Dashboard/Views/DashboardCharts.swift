@@ -54,21 +54,21 @@ struct ComboChart: View {
             }
             if let p = selectedPoint {
                 RuleMark(x: .value("Day", p.label))
-                    .foregroundStyle(.primary.opacity(0.18))
+                    .foregroundStyle(DashSkin.lineStrong(dark))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
                         position: .top, alignment: .center, spacing: UIScale.pt(6),
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
                         PointTooltip(
-                            label: p.label, tokens: p.tokens, cost: p.cost, blur: blur,
+                            label: p.label, tokens: p.tokens, cost: p.cost, dark: dark, blur: blur,
                             blurTokens: blurTokens)
                     }
             }
         }
         .chartYAxis {
             AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(.primary.opacity(0.06))
+                AxisGridLine().foregroundStyle(DashSkin.line(dark))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
                         Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
@@ -112,21 +112,23 @@ struct PointTooltip: View {
     let label: String
     let tokens: Double
     let cost: Double
+    var dark = false
     var blur = false
     var blurTokens = false
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(.secondary)
+            Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
             Text(DashFmt.tokens(tokens)).font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
                 .presenterBlur(blurTokens)
             Text(DashFmt.usdFull(cost)).font(.system(size: UIScale.pt(10))).foregroundStyle(
-                .secondary
+                DashSkin.inkFaint(dark)
             )
             .presenterBlur(blur)
         }
         .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(5))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
-        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(7)).strokeBorder(.primary.opacity(0.12)))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(7)).strokeBorder(DashSkin.line(dark)))
     }
 }
 
@@ -180,20 +182,20 @@ struct StackedChart: View {
                     x: .value("Day", p.label),
                     y: .value("Cost", p.cost * scale)
                 )
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .interpolationMethod(.catmullRom)
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.2)))
             }
             if let p = selectedPoint {
                 RuleMark(x: .value("Day", p.label))
-                    .foregroundStyle(.primary.opacity(0.18))
+                    .foregroundStyle(DashSkin.lineStrong(dark))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
                         position: .top, alignment: .center, spacing: UIScale.pt(6),
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
                         PointTooltip(
-                            label: p.label, tokens: p.tokens, cost: p.cost, blur: blur,
+                            label: p.label, tokens: p.tokens, cost: p.cost, dark: dark, blur: blur,
                             blurTokens: blurTokens)
                     }
             }
@@ -202,7 +204,7 @@ struct StackedChart: View {
         .chartForegroundStyleScale(domain: domain, range: range)
         .chartYAxis {
             AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(.primary.opacity(0.06))
+                AxisGridLine().foregroundStyle(DashSkin.line(dark))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
                         Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
@@ -254,6 +256,7 @@ func donutTotal(_ slices: [DonutSlice]) -> Double {
 
 struct DonutChart: View {
     let slices: [DonutSlice]
+    var dark = false
     var height: CGFloat = 220
     var blurTokens = false
     @State private var angle: Double?
@@ -286,21 +289,24 @@ struct DonutChart: View {
                 if let s = selected {
                     Text(s.label)
                         .font(.system(size: UIScale.pt(10), weight: .medium)).foregroundStyle(
-                            .secondary
+                            DashSkin.inkSoft(dark)
                         )
                         .lineLimit(1)
                     Text(DashFmt.tokens(s.value)).font(
                         .system(size: UIScale.pt(13), weight: .semibold)
                     )
+                    .foregroundStyle(DashSkin.ink(dark))
                     .presenterBlur(blurTokens)
                     Text(DashFmt.pct(s.value / percentageTotal)).font(.system(size: UIScale.pt(9)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 } else {
                     Text(DashFmt.tokens(total)).font(
                         .system(size: UIScale.pt(13), weight: .semibold)
                     )
+                    .foregroundStyle(DashSkin.ink(dark))
                     .presenterBlur(blurTokens)
-                    Text("tokens").font(.system(size: UIScale.pt(8))).foregroundStyle(.tertiary)
+                    Text("tokens").font(.system(size: UIScale.pt(8))).foregroundStyle(
+                        DashSkin.inkFaint(dark))
                 }
             }
             .frame(maxWidth: UIScale.pt(110))
@@ -320,7 +326,8 @@ struct HeatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(DashboardModel.ymd.string(from: detail.date))
-                .font(.system(size: UIScale.pt(11), weight: .semibold)).foregroundStyle(.secondary)
+                .font(.system(size: UIScale.pt(11), weight: .semibold)).foregroundStyle(
+                    DashSkin.inkSoft(dark))
             HStack(spacing: UIScale.pt(5)) {
                 Text("\(DashFmt.tokens(detail.tokens)) tokens")
                     .font(.system(size: UIScale.pt(15), weight: .semibold))
@@ -345,16 +352,16 @@ struct HeatCard: View {
         }
         .padding(UIScale.pt(12))
         .frame(width: UIScale.pt(258))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(.primary.opacity(0.1)))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark)))
     }
 
     private func chip(_ text: String) -> some View {
         Text(text)
             .font(.system(size: UIScale.pt(9), weight: .medium))
             .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(2))
-            .background(.primary.opacity(0.08), in: Capsule())
-            .foregroundStyle(.secondary)
+            .background(DashSkin.line(dark), in: Capsule())
+            .foregroundStyle(DashSkin.inkSoft(dark))
     }
 
     private var tokenRows: some View {
@@ -382,8 +389,8 @@ struct HeatCard: View {
             Text(title).font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
                 UIScale.pt(0.8)
             )
-            .foregroundStyle(.tertiary)
-            FlowTags(items: items, color: color, blurTokens: blurTokens)
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            FlowTags(items: items, color: color, dark: dark, blurTokens: blurTokens)
         }
     }
 
@@ -392,19 +399,20 @@ struct HeatCard: View {
             Text("TOP PROJECTS").font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
                 UIScale.pt(0.8)
             )
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(DashSkin.inkFaint(dark))
             ForEach(detail.projects.prefix(4)) { p in
                 HStack {
                     Text(p.name).font(.system(size: UIScale.pt(10))).lineLimit(1)
+                        .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Text(DashFmt.tokens(p.value)).font(.system(size: UIScale.pt(9)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                         .presenterBlur(blurTokens)
                 }
             }
             if detail.projects.count > 4 {
                 Text("+\(detail.projects.count - 4) more").font(.system(size: UIScale.pt(9)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
     }
@@ -413,6 +421,7 @@ struct HeatCard: View {
 struct FlowTags: View {
     let items: [NamedValue]
     let color: (String) -> Color
+    var dark = false
     var blurTokens = false
 
     var body: some View {
@@ -422,10 +431,11 @@ struct FlowTags: View {
                     Circle().fill(color(item.id)).frame(width: UIScale.pt(6), height: UIScale.pt(6))
                     Text("\(item.name) \(DashFmt.tokens(item.value))")
                         .font(.system(size: UIScale.pt(9)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                         .presenterBlur(blurTokens)
                 }
                 .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(2))
-                .background(.primary.opacity(0.06), in: Capsule())
+                .background(DashSkin.line(dark), in: Capsule())
             }
         }
     }

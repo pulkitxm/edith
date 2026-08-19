@@ -55,7 +55,8 @@ struct BudgetCardView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
                 Text("\(Int(status.actualPercent.rounded()))%")
-                    .font(.system(size: UIScale.pt(26), weight: .semibold, design: .rounded))
+                    .font(DashSkin.serif(28))
+                    .foregroundStyle(DashSkin.ink(dark))
                     .monospacedDigit()
                 statePill(status.state)
                 Spacer()
@@ -79,7 +80,7 @@ struct BudgetCardView: View {
         GeometryReader { geo in
             let w = geo.size.width
             ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.08))
+                Capsule().fill(DashSkin.line(dark))
                 Capsule().fill(color(status.state).opacity(0.85))
                     .frame(width: max(3, w * min(1, status.actualPercent / 100)))
                 Rectangle().fill(theme.opacity(0.6)).frame(width: UIScale.pt(2))
@@ -93,6 +94,7 @@ struct BudgetCardView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
             Text(value).font(.system(size: UIScale.pt(14), weight: .medium)).monospacedDigit()
+                .foregroundStyle(DashSkin.ink(dark))
         }
     }
 

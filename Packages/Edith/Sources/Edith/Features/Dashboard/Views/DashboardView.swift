@@ -48,11 +48,16 @@ struct DashboardView: View {
                         }
                         if model.loaded {
                             kpiGrid.pageGutter(compact)
-                            LazyVStack(spacing: UIScale.pt(16)) {
+                            LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
                                 activityRow(compact: compact)
                                 LimitsCardView(theme: acc, dark: dark)
                                 BudgetCardView(theme: acc, dark: dark)
-                                charts(compact: compact)
+                                SectionHeading("Trends", dark: dark)
+                                    .padding(.top, UIScale.pt(8))
+                                trendCharts(compact: compact)
+                                SectionHeading("Breakdown", dark: dark)
+                                    .padding(.top, UIScale.pt(8))
+                                breakdownCharts(compact: compact)
                             }
                             .pageContent(compact)
                             .animation(
@@ -77,7 +82,6 @@ struct DashboardView: View {
             .background(background)
             .environment(\.compactLayout, compact)
         }
-        .navigationTitle("Agent Usage")
         .task {
             guard automaticActionsEnabled else { return }
             await model.load()
@@ -97,19 +101,12 @@ struct DashboardView: View {
         DashSkin.paper(dark)
             .overlay(alignment: .topTrailing) {
                 RadialGradient(
-                    colors: [acc.opacity(0.08), .clear], center: .topTrailing,
+                    colors: [acc.opacity(0.08), .clear], center: .trailing,
                     startRadius: 0, endRadius: 620
                 )
                 .ignoresSafeArea(edges: .vertical)
             }
-            .overlay(alignment: .bottomLeading) {
-                RadialGradient(
-                    colors: [DashPalette.slate(dark).opacity(0.06), .clear], center: .bottomLeading,
-                    startRadius: 0, endRadius: 520
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .ignoresSafeArea(edges: .vertical)
+            .ignoresSafeArea()
     }
 
     private var masthead: some View {
@@ -259,7 +256,7 @@ struct DashboardView: View {
         } else {
             HStack(alignment: .top, spacing: UIScale.pt(16)) {
                 SkinCard(title: "Activity", dark: dark, fill: true) { activityHeatmap }
-                RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
+                RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(420))
             }
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -280,19 +277,7 @@ struct DashboardView: View {
                 rangeButton("Yesterday", .yesterday)
                 rangeButton("Week", .thisWeek)
                 rangeButton("Last week", .lastWeek)
-                rangeButton("Cycle", .cycle(nil))
                 rangeButton("All", .all)
-                if !model.cycleOptions.isEmpty {
-                    Menu {
-                        ForEach(model.cycleOptions) { c in
-                            Button(c.label) { model.range = .cycle(c.id) }
-                        }
-                    } label: {
-                        Label("Cycle", systemImage: "calendar").font(.system(size: UIScale.pt(11)))
-                    }
-                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                    .modifier(FilterChip(dark: dark))
-                }
                 if !model.monthOptions.isEmpty {
                     Menu {
                         ForEach(model.monthOptions, id: \.self) { m in
@@ -315,70 +300,12 @@ struct DashboardView: View {
                 modelMenu
                 projectMenu
                 sourceMenu
-                billingDayControl
-                customRange
             }
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .pageGutter(compactLayout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical)
-    }
-
-    private var billingDayControl: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Text("Billing day \(model.billingDay)")
-                .font(.system(size: UIScale.pt(11)))
-                .monospacedDigit()
-            HStack(spacing: UIScale.pt(2)) {
-                billingDayStep("minus", enabled: model.billingDay > 1) { model.billingDay -= 1 }
-                billingDayStep("plus", enabled: model.billingDay < 31) { model.billingDay += 1 }
-            }
-        }
-        .pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
-    }
-
-    private func billingDayStep(_ systemImage: String, enabled: Bool, action: @escaping () -> Void)
-        -> some View
-    {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: UIScale.pt(9), weight: .semibold))
-                .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-        }
-        .buttonStyle(.plain)
-        .pointerCursor()
-        .opacity(enabled ? 1 : 0.3)
-        .disabled(!enabled)
-    }
-
-    private var customRange: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            DatePicker(
-                "",
-                selection: Binding(
-                    get: { customFrom },
-                    set: {
-                        customFrom = $0
-                        model.range = .custom(model.ymd($0), model.ymd(customTo))
-                    }),
-                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
-            )
-            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
-            Text("→").font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
-            DatePicker(
-                "",
-                selection: Binding(
-                    get: { customTo },
-                    set: {
-                        customTo = $0
-                        model.range = .custom(model.ymd(customFrom), model.ymd($0))
-                    }),
-                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
-            )
-            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
-        }
     }
 
     private func syncCustomDates() {
@@ -413,7 +340,7 @@ struct DashboardView: View {
     private func isActive(_ r: DashRange) -> Bool {
         switch (model.range, r) {
         case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
-            (.lastWeek, .lastWeek), (.all, .all), (.cycle, .cycle):
+            (.lastWeek, .lastWeek), (.all, .all):
             return true
         default: return false
         }
@@ -537,7 +464,7 @@ struct DashboardView: View {
         TerminalLogView(log: refresh.log, theme: appTheme, height: UIScale.pt(150))
     }
 
-    @ViewBuilder private func charts(compact: Bool) -> some View {
+    @ViewBuilder private func trendCharts(compact: Bool) -> some View {
         SkinCard(title: "Daily usage", dark: dark) {
             ComboChart(
                 points: model.chartData.daily, barColor: acc, lineColor: gold, dark: dark,
@@ -563,6 +490,9 @@ struct DashboardView: View {
                     blurTokens: blurUsage)
             }
         }
+    }
+
+    @ViewBuilder private func breakdownCharts(compact: Bool) -> some View {
         if compact {
             VStack(spacing: UIScale.pt(16)) {
                 dowCard
@@ -578,10 +508,7 @@ struct DashboardView: View {
             SkinCard(title: "By project", dark: dark) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     if !model.projects.isEmpty {
-                        ComboChart(
-                            points: model.chartData.project, barColor: acc, lineColor: gold,
-                            dark: dark, height: UIScale.pt(280), blur: blurMoney,
-                            blurTokens: blurUsage)
+                        DonutChart(slices: projectSlices, dark: dark, blurTokens: blurUsage)
                         ProjectDrilldownView(
                             model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
                     }
@@ -658,15 +585,13 @@ struct DashboardView: View {
 
     private var dowCard: some View {
         SkinCard(title: "By day of week", dark: dark) {
-            ComboChart(
-                points: model.chartData.dow, barColor: acc, lineColor: gold, dark: dark,
-                height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+            DonutChart(slices: dowSlices, dark: dark, blurTokens: blurUsage)
         }
     }
 
     private var shareByModelCard: some View {
         SkinCard(title: "Share by model", dark: dark) {
-            DonutChart(slices: donutSlices, blurTokens: blurUsage)
+            DonutChart(slices: donutSlices, dark: dark, blurTokens: blurUsage)
         }
     }
 
@@ -751,6 +676,20 @@ struct DashboardView: View {
             DonutSlice(
                 id: $0.model, label: model.modelLabel($0.model), value: $0.tokens,
                 color: model.modelColor($0.model, dark: dark))
+        }
+    }
+    private var dowSlices: [DonutSlice] {
+        model.chartData.dow.enumerated().map { index, point in
+            DonutSlice(
+                id: point.id, label: point.label, value: point.tokens,
+                color: DashPalette.categorical(index, dark: dark))
+        }
+    }
+    private var projectSlices: [DonutSlice] {
+        model.chartData.project.enumerated().map { index, point in
+            DonutSlice(
+                id: point.id, label: point.label, value: point.tokens,
+                color: DashPalette.categorical(index, dark: dark))
         }
     }
 }
