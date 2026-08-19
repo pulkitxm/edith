@@ -177,6 +177,10 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
         #expect(renders(CalendarPage()))
     }
 
+    @Test func herdrPageRenders() {
+        #expect(renders(HerdrPage()))
+    }
+
     @Test func musicPageRenders() {
         #expect(renders(MusicPage()))
     }

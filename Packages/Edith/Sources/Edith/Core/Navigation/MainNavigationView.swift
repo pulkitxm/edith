@@ -14,7 +14,7 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, dashboard, music, calendar, system, machines, companion
+    case home, dashboard, herdr, music, calendar, system, machines, companion
     case extensions, settings, about
 
     var id: String { rawValue }
@@ -23,6 +23,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "Home"
         case .dashboard: return "Agent Usage"
+        case .herdr: return "Herdr"
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .system: return "System"
@@ -38,6 +39,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house.fill"
         case .dashboard: return "chart.bar.fill"
+        case .herdr: return "rectangle.split.3x1.fill"
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "cpu"
@@ -50,7 +52,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .dashboard, .music, .calendar, .system, .machines, .companion,
+        .home, .dashboard, .herdr, .music, .calendar, .system, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -275,6 +277,8 @@ struct MainWindowView: View {
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
+        var herdrEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -350,6 +354,7 @@ struct MainWindowView: View {
         let requested = MainDestination.resolve(navigationSelection.mainWindowSection)
         return switch requested {
         case .dashboard: usageEnabled ? requested : .home
+        case .herdr: herdrEnabled ? requested : .home
         case .music: musicEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
@@ -680,6 +685,7 @@ struct MainWindowView: View {
         MainDestination.homeItems.filter { item in
             switch item {
             case .dashboard: usageEnabled
+            case .herdr: herdrEnabled
             case .music: musicEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled
@@ -1077,6 +1083,7 @@ struct MainWindowView: View {
         switch destination {
         case .home: HomePage()
         case .dashboard: DashboardView()
+        case .herdr: HerdrPage()
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
