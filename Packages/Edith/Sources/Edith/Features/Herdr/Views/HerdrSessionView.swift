@@ -66,8 +66,10 @@ struct HerdrSessionView: View {
                         store.copyAttachCommand(for: agent)
                     } label: {
                         Label(
-                            agent.machineIsLocal ? "Copy command" : "Copy SSH",
-                            systemImage: "doc.on.doc")
+                            store.copiedID == agent.id
+                                ? "Copied"
+                                : (agent.machineIsLocal ? "Copy command" : "Copy SSH"),
+                            systemImage: store.copiedID == agent.id ? "checkmark" : "doc.on.doc")
                     }
                     .buttonStyle(HoverButtonStyle())
                 }

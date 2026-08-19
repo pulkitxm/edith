@@ -150,12 +150,16 @@ struct HerdrPage: View {
                 Button {
                     store.copyAttachCommand(for: agent)
                 } label: {
-                    Image(systemName: "terminal")
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    Image(
+                        systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
+                    )
+                    .font(.system(size: UIScale.pt(10)))
+                    .foregroundStyle(
+                        store.copiedID == agent.id
+                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 }
                 .buttonStyle(.plain)
-                .help("Copy attach command")
+                .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
             }
             if closable {
                 Button {

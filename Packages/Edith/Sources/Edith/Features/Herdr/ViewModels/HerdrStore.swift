@@ -15,6 +15,7 @@ final class HerdrStore {
     var selectedTab = boardID
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
+    var copiedID: String?
 
     private var connections: [UUID: SSHConnection] = [:]
 
@@ -108,6 +109,12 @@ final class HerdrStore {
     func copyAttachCommand(for agent: HerdrAgent) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(HerdrAttachCommand.line(for: agent), forType: .string)
+        copiedID = agent.id
+        let id = agent.id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            if copiedID == id { copiedID = nil }
+        }
     }
 }
 
