@@ -18,9 +18,11 @@ struct HerdrSessionView: View {
     var body: some View {
         HStack(spacing: 0) {
             sessionPane
-            Divider().opacity(0.35)
-            sidebar
-                .frame(width: UIScale.pt(compact ? 220 : 260))
+            if store.detailOpen {
+                Divider().opacity(0.35)
+                sidebar
+                    .frame(width: UIScale.pt(compact ? 220 : 260))
+            }
         }
         .task(id: tab.id) { await startIfNeeded() }
     }
@@ -47,6 +49,7 @@ struct HerdrSessionView: View {
                 Text(agent.title)
                     .font(DashSkin.serif(20))
                     .foregroundStyle(DashSkin.ink(dark))
+                    .padding(.trailing, UIScale.pt(36))
                 kindRow
                 metaRow("Status", agent.status.title)
                 metaRow("Machine", agent.machineName)

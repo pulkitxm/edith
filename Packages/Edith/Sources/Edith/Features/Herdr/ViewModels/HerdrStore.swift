@@ -16,6 +16,7 @@ final class HerdrStore {
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
     var copiedID: String?
+    var detailOpen = true
 
     private var connections: [UUID: SSHConnection] = [:]
 

@@ -7,6 +7,7 @@ struct HerdrPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
         var sidebarOpen = true
 
@@ -26,13 +27,16 @@ struct HerdrPage: View {
                     agentList
                     Divider().opacity(0.35)
                 }
-                ZStack {
+                ZStack(alignment: .topTrailing) {
                     board.opacity(onBoard ? 1 : 0)
                         .allowsHitTesting(onBoard)
                     ForEach(store.tabs) { tab in
                         HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
                             .opacity(tab.id == store.selectedTab ? 1 : 0)
                             .allowsHitTesting(tab.id == store.selectedTab)
+                    }
+                    if !onBoard {
+                        detailToggle
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -68,6 +72,32 @@ struct HerdrPage: View {
                 .disabled(store.refreshing)
             },
             accessory: { filters })
+    }
+
+    private var detailToggle: some View {
+        Button {
+            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                store.detailOpen.toggle()
+            }
+        } label: {
+            Image(systemName: "sidebar.right")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .buttonStyle(.plain)
+        .padding(UIScale.pt(4))
+        .widgetBar(
+            cornerRadius: 8,
+            fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark)
+        )
+        .pointerCursor()
+        .help(store.detailOpen ? "Hide details" : "Show details")
+        .padding(.top, UIScale.pt(8))
+        .padding(.trailing, UIScale.pt(8))
+        .zIndex(1)
+        .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
 
     private var filters: some View {
