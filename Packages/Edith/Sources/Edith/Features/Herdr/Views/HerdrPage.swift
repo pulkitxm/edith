@@ -78,13 +78,15 @@ struct HerdrPage: View {
             ) { store.machineFilter = $0 }
             pillRow(
                 items: [("all", "Any agent")] + store.kindChoices.map { ($0, $0) },
-                selected: store.kindFilter
+                selected: store.kindFilter,
+                showsKindMark: true
             ) { store.kindFilter = $0 }
         }
     }
 
     private func pillRow(
-        items: [(String, String)], selected: String, onSelect: @escaping (String) -> Void
+        items: [(String, String)], selected: String, showsKindMark: Bool = false,
+        onSelect: @escaping (String) -> Void
     ) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UIScale.pt(6)) {
@@ -92,20 +94,25 @@ struct HerdrPage: View {
                     Button {
                         onSelect(item.0)
                     } label: {
-                        Text(item.1)
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                            .foregroundStyle(
-                                item.0 == selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
-                            )
-                            .padding(.horizontal, UIScale.pt(10))
-                            .padding(.vertical, UIScale.pt(5))
-                            .widgetBar(
-                                cornerRadius: 8,
-                                fill: item.0 == selected
-                                    ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                                stroke: item.0 == selected
-                                    ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                                strokeWidth: item.0 == selected ? 1.4 : 1)
+                        HStack(spacing: UIScale.pt(5)) {
+                            if showsKindMark, item.0 != "all" {
+                                HerdrKindMark(kind: item.0, size: UIScale.pt(11))
+                            }
+                            Text(item.1)
+                                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        }
+                        .foregroundStyle(
+                            item.0 == selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
+                        )
+                        .padding(.horizontal, UIScale.pt(10))
+                        .padding(.vertical, UIScale.pt(5))
+                        .widgetBar(
+                            cornerRadius: 8,
+                            fill: item.0 == selected
+                                ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
+                            stroke: item.0 == selected
+                                ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
+                            strokeWidth: item.0 == selected ? 1.4 : 1)
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
@@ -136,6 +143,8 @@ struct HerdrPage: View {
                 Circle()
                     .fill(HerdrStatusColor.color(agent.status, dark: dark))
                     .frame(width: UIScale.pt(6), height: UIScale.pt(6))
+                HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
             }
             Button {
                 store.selectedTab = id
@@ -193,10 +202,6 @@ struct HerdrPage: View {
                     detail:
                         "Install Herdr on this Mac or an SSH machine, then refresh. Edith looks for the herdr binary on PATH, including ~/.local/bin."
                 )
-            } else if store.filteredAgents.isEmpty {
-                emptyState(
-                    title: "No sessions match",
-                    detail: "Nothing on this machine and kind combination is live right now.")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -230,10 +235,29 @@ struct HerdrPage: View {
                     ForEach(cards) { agent in
                         card(agent)
                     }
+                    if cards.isEmpty {
+                        emptyColumnSlot
+                    }
                 }
             }
         }
         .frame(width: UIScale.pt(compact ? 220 : 240), alignment: .topLeading)
+        .frame(minHeight: UIScale.pt(220), alignment: .topLeading)
+    }
+
+    private var emptyColumnSlot: some View {
+        RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
+            .strokeBorder(
+                DashSkin.line(dark),
+                style: StrokeStyle(lineWidth: 1, dash: [UIScale.pt(5), UIScale.pt(4)])
+            )
+            .frame(height: UIScale.pt(72))
+            .overlay {
+                Text("No panes")
+                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            .accessibilityLabel("No panes")
     }
 
     private func card(_ agent: HerdrAgent) -> some View {
@@ -243,9 +267,9 @@ struct HerdrPage: View {
         } label: {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 HStack(spacing: UIScale.pt(6)) {
+                    HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                     Text(agent.kind)
                         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
                     Spacer(minLength: 0)
                     if open {
                         Text("Open")
@@ -258,6 +282,7 @@ struct HerdrPage: View {
                                 in: Capsule())
                     }
                 }
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 Text(agent.title)
                     .font(.system(size: UIScale.pt(13), weight: .medium))
                     .foregroundStyle(DashSkin.ink(dark))
@@ -317,6 +342,9 @@ struct HerdrPage: View {
                     .fill(HerdrStatusColor.color(agent.status, dark: dark))
                     .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                     .padding(.top, UIScale.pt(5))
+                HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(agent.title)
                         .font(

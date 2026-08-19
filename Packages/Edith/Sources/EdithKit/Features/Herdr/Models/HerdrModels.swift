@@ -38,7 +38,8 @@ public enum HerdrAgentStatus: String, CaseIterable, Codable, Sendable, Equatable
 
 public enum HerdrKind {
     public static let filterLabels = [
-        "Claude Code", "Codex", "OpenCode", "Cursor Agent", "Copilot CLI",
+        "Claude Code", "Codex", "OpenCode", "Cursor Agent", "Copilot CLI", "Pi", "Gemini", "Grok",
+        "Cline",
     ]
 
     public static func displayName(for raw: String) -> String {
@@ -49,15 +50,78 @@ public enum HerdrKind {
             return "Claude Code"
         case "codex", "openai-codex":
             return "Codex"
-        case "opencode", "open-code":
+        case "opencode", "open-code", "opencode2":
             return "OpenCode"
         case "cursor", "cursor-agent", "cursor-agent-cli", "cursor-cli":
             return "Cursor Agent"
-        case "copilot", "github-copilot", "github-copilot-cli", "copilot-cli":
+        case "copilot", "github-copilot", "github-copilot-cli", "copilot-cli", "ghcs":
             return "Copilot CLI"
+        case "pi", "py", "pi-coding-agent":
+            return "Pi"
+        case "gemini", "gemini-cli":
+            return "Gemini"
+        case "grok", "grok-build", "grok-cli":
+            return "Grok"
+        case "cline":
+            return "Cline"
+        case "devin", "devin-cli":
+            return "Devin"
+        case "agy", "antigravity", "antigravity-cli":
+            return "Antigravity"
+        case "amp", "amp-local":
+            return "Amp"
+        case "droid", "factory-droid":
+            return "Droid"
+        case "kimi", "kimi-code":
+            return "Kimi"
+        case "kilo", "kilo-code":
+            return "Kilo"
+        case "qwen", "qwen-code":
+            return "Qwen"
+        case "hermes", "hermes-agent":
+            return "Hermes"
+        case "kiro", "kiro-cli":
+            return "Kiro"
+        case "qodercli", "qoder", "qoderclicn":
+            return "Qoder"
+        case "omp":
+            return "OMP"
+        case "mastracode", "mastra-code":
+            return "Mastra Code"
+        case "maki":
+            return "Maki"
         default:
             return trimmed
         }
+    }
+
+    public static func logoName(for kind: String) -> String? {
+        switch displayName(for: kind) {
+        case "Claude Code": "claude"
+        case "Codex": "codex"
+        case "OpenCode": "opencode"
+        case "Cursor Agent": "cursor"
+        case "Copilot CLI": "copilot"
+        case "Pi": "pi"
+        case "Gemini": "gemini"
+        case "Grok": "grok"
+        case "Cline": "cline"
+        case "Amp": "amp"
+        case "Antigravity": "antigravity"
+        case "Devin": "devin"
+        case "Kilo": "kilo"
+        case "Kimi": "kimi"
+        case "Kiro": "kiro"
+        case "Mastra Code": "mastra"
+        case "Qoder": "qoder"
+        case "Qwen": "qwen"
+        default: nil
+        }
+    }
+
+    public static func monogram(for kind: String) -> String {
+        let name = displayName(for: kind)
+        return String(name.prefix(1)).uppercased()
     }
 }
 

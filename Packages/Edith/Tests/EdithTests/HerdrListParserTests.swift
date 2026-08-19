@@ -111,6 +111,46 @@ import Testing
     }
 }
 
+@Suite struct HerdrKindTests {
+    @Test func displayNamesCoverTheCommonAgents() {
+        #expect(HerdrKind.displayName(for: "opencode") == "OpenCode")
+        #expect(HerdrKind.displayName(for: "claude-code") == "Claude Code")
+        #expect(HerdrKind.displayName(for: "codex") == "Codex")
+        #expect(HerdrKind.displayName(for: "pi") == "Pi")
+        #expect(HerdrKind.displayName(for: "py") == "Pi")
+        #expect(HerdrKind.displayName(for: "cursor-agent") == "Cursor Agent")
+        #expect(HerdrKind.displayName(for: "gemini") == "Gemini")
+        #expect(HerdrKind.displayName(for: "grok") == "Grok")
+        #expect(HerdrKind.displayName(for: "cline") == "Cline")
+    }
+
+    @Test func logoNamesPointAtKitResources() {
+        #expect(HerdrKind.logoName(for: "Claude Code") == "claude")
+        #expect(HerdrKind.logoName(for: "Codex") == "codex")
+        #expect(HerdrKind.logoName(for: "OpenCode") == "opencode")
+        #expect(HerdrKind.logoName(for: "pi") == "pi")
+        #expect(HerdrKind.logoName(for: "Cursor Agent") == "cursor")
+        #expect(HerdrKind.logoName(for: "Copilot CLI") == "copilot")
+        #expect(HerdrKind.logoName(for: "Gemini") == "gemini")
+        #expect(HerdrKind.logoName(for: "Grok") == "grok")
+        #expect(HerdrKind.logoName(for: "Cline") == "cline")
+        #expect(HerdrKind.logoName(for: "Amp") == "amp")
+        #expect(HerdrKind.logoName(for: "Devin") == "devin")
+        #expect(HerdrKind.logoName(for: "Kimi") == "kimi")
+        #expect(HerdrKind.monogram(for: "OMP") == "O")
+        #expect(HerdrKind.logoName(for: "OMP") == nil)
+    }
+
+    @Test func kitBundleContainsTheAgentMarks() {
+        for name in [
+            "claude", "codex", "opencode", "cursor", "copilot", "pi", "gemini", "grok", "cline",
+            "amp", "antigravity", "devin", "kilo", "kimi", "kiro", "mastra", "qoder", "qwen",
+        ] {
+            #expect(ProviderLogo.image(named: name) != nil, "missing \(name).svg")
+        }
+    }
+}
+
 @Suite struct HerdrAttachCommandTests {
     @Test func localAttachIsTheHerdrLine() {
         let agent = HerdrAgent.make(

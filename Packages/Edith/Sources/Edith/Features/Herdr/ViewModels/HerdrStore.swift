@@ -48,11 +48,7 @@ final class HerdrStore {
         }
     }
 
-    var columns: [HerdrAgentStatus] {
-        HerdrAgentStatus.allCases.filter { status in
-            filteredAgents.contains { $0.status == status }
-        }
-    }
+    var columns: [HerdrAgentStatus] { HerdrAgentStatus.allCases }
 
     var openIDs: Set<String> { Set(tabs.map(\.id)) }
 

@@ -47,7 +47,7 @@ struct HerdrSessionView: View {
                 Text(agent.title)
                     .font(DashSkin.serif(20))
                     .foregroundStyle(DashSkin.ink(dark))
-                metaRow("Kind", agent.kind)
+                kindRow
                 metaRow("Status", agent.status.title)
                 metaRow("Machine", agent.machineName)
                 metaRow("Session", agent.session)
@@ -78,6 +78,21 @@ struct HerdrSessionView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(DashSkin.paper(dark))
+    }
+
+    private var kindRow: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Text("Kind")
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            HStack(spacing: UIScale.pt(8)) {
+                HerdrKindMark(kind: agent.kind, size: UIScale.pt(14))
+                Text(agent.kind)
+                    .font(.system(size: UIScale.pt(12.5)))
+                    .textSelection(.enabled)
+            }
+            .foregroundStyle(DashSkin.ink(dark))
+        }
     }
 
     private func metaRow(_ label: String, _ value: String) -> some View {
