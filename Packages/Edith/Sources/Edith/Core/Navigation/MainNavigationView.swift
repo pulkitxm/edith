@@ -164,6 +164,8 @@ private struct SidebarNavRow: View {
     let action: () -> Void
     var detach: (() -> Void)?
     @State private var hovering = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Button {
@@ -179,13 +181,13 @@ private struct SidebarNavRow: View {
                     .frame(width: UIScale.pt(22))
                 Text(item.title)
                     .font(.system(size: UIScale.pt(13.5), weight: .medium))
-                    .foregroundStyle(selected ? .primary : .secondary)
+                    .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 if let shortcutHint {
                     Text(shortcutHint)
                         .font(.system(size: UIScale.pt(11), weight: .medium))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
             }
@@ -198,11 +200,11 @@ private struct SidebarNavRow: View {
             ZStack {
                 if hovering && !selected {
                     RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-                        .fill(.primary.opacity(0.07))
+                        .fill(DashSkin.ink(dark).opacity(0.05))
                 }
                 if selected {
                     RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-                        .fill(theme.opacity(0.16))
+                        .fill(theme.opacity(dark ? 0.16 : 0.1))
                         .matchedGeometryEffect(
                             id: "sidebarSelection", in: selectionNamespace, isSource: true)
                 }
@@ -628,12 +630,14 @@ struct MainWindowView: View {
     private func sidebar(_ bandHeight: CGFloat) -> some View {
         ZStack {
             SidebarMaterial()
+            DashSkin.paper(scheme == .dark).opacity(scheme == .dark ? 0.55 : 0.35)
+                .allowsHitTesting(false)
             VStack(spacing: UIScale.pt(0)) {
                 band(.clear, height: bandHeight)
                 VStack(spacing: UIScale.pt(0)) {
                     sidebarList
                     if footerVisible {
-                        Divider()
+                        WoodRule(dark: scheme == .dark)
                         sidebarFooter
                     }
                     credit
@@ -654,11 +658,11 @@ struct MainWindowView: View {
                         action: { select(item) },
                         detach: { detach(item) })
                 }
-                Text("App")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                WoodRule(dark: scheme == .dark)
+                    .padding(.top, UIScale.pt(12))
+                    .padding(.bottom, UIScale.pt(8))
+                eyebrow("App")
                     .padding(.horizontal, UIScale.pt(8))
-                    .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(4))
                 ForEach(MainDestination.appItems) { item in
                     SidebarNavRow(
@@ -815,7 +819,8 @@ struct MainWindowView: View {
             .foregroundStyle(DashSkin.sage)
             .padding(.horizontal, UIScale.pt(9))
             .frame(height: UIScale.pt(28))
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+            .background(
+                DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         }
         .buttonStyle(.plain)
         .pointerCursor()
@@ -888,7 +893,7 @@ struct MainWindowView: View {
             .help("Blur sensitive numbers and track names everywhere in Edith")
 
             Rectangle()
-                .fill(presenterMode ? Color.white.opacity(0.24) : Color.primary.opacity(0.08))
+                .fill(presenterMode ? Color.white.opacity(0.24) : DashSkin.line(scheme == .dark))
                 .frame(width: UIScale.pt(1), height: UIScale.pt(28))
 
             Button {
@@ -907,9 +912,11 @@ struct MainWindowView: View {
                 presenterQuickActionsPopover
             }
         }
-        .foregroundStyle(presenterMode ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+        .foregroundStyle(
+            presenterMode ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.inkSoft(scheme == .dark))
+        )
         .background(
-            presenterMode ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
+            presenterMode ? AnyShapeStyle(theme) : AnyShapeStyle(DashSkin.paper2(scheme == .dark)),
             in: RoundedRectangle(cornerRadius: UIScale.pt(9))
         )
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
@@ -959,7 +966,8 @@ struct MainWindowView: View {
         .padding(.horizontal, UIScale.pt(8))
         .padding(.vertical, UIScale.pt(8))
         .background(
-            hoveredPresenterQuickAction == title ? Color.primary.opacity(0.06) : Color.clear
+            hoveredPresenterQuickAction == title
+                ? DashSkin.ink(scheme == .dark).opacity(0.06) : Color.clear
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -990,9 +998,11 @@ struct MainWindowView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(8))
-            .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .foregroundStyle(
+                active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.inkSoft(scheme == .dark))
+            )
             .background(
-                active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
+                active ? AnyShapeStyle(theme) : AnyShapeStyle(DashSkin.paper2(scheme == .dark)),
                 in: RoundedRectangle(cornerRadius: UIScale.pt(9))
             )
             .contentShape(Rectangle())
@@ -1040,7 +1050,7 @@ struct MainWindowView: View {
             HStack(spacing: UIScale.pt(3)) {
                 Spacer(minLength: 0)
                 Text("Made with ♥ by")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                 Button("Pulkit") {
                     NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
                 }
@@ -1055,7 +1065,7 @@ struct MainWindowView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: UIScale.pt(8), weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                         .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }
                 .buttonStyle(HoverButtonStyle())
@@ -1078,11 +1088,11 @@ struct MainWindowView: View {
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(.orange)
+            .foregroundStyle(DashSkin.gold)
             .padding(.horizontal, UIScale.pt(8))
             .frame(height: UIScale.pt(26))
             .background(
-                Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+                DashSkin.gold.opacity(0.14), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
         .buttonStyle(.plain)
         .pointerCursor()

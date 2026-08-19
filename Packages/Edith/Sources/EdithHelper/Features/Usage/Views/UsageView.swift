@@ -21,6 +21,8 @@ struct UsageView: View {
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
         var selectedRaw =
         LimitProvider.claude.rawValue
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var theme: Color { themeColor(themeName) }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
@@ -61,7 +63,7 @@ struct UsageView: View {
             HStack {
                 ProviderSwitchButton(
                     selection: Binding(get: { selected }, set: { selected = $0 }),
-                    providers: providers, color: .primary, size: 15)
+                    providers: providers, color: DashSkin.ink(dark), size: 15)
                 eyebrow("LIMITS")
                 Spacer()
                 if let at = store.limitsUpdatedAt {
@@ -71,14 +73,14 @@ struct UsageView: View {
                     Text("updated \(at.formatted(date: .omitted, time: .shortened)) · next \(next)")
                         .font(.system(size: 10))
                         .monospacedDigit()
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 Button {
                     showDiagnostics.toggle()
                 } label: {
                     Image(systemName: "terminal")
                         .font(.system(size: 11))
-                        .foregroundStyle(showDiagnostics ? theme : Color.secondary)
+                        .foregroundStyle(showDiagnostics ? theme : DashSkin.inkSoft(dark))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Show diagnostic log")
@@ -93,7 +95,7 @@ struct UsageView: View {
                         } else {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(DashSkin.inkSoft(dark))
                         }
                     }
                     .frame(width: 16, height: 16)
@@ -112,13 +114,13 @@ struct UsageView: View {
             } else {
                 Text("Collecting limits history - chart appears after a few polls")
                     .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             if let err = store.limitsError {
                 Text(err)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.gold)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             if showDiagnostics {
@@ -134,7 +136,7 @@ struct UsageView: View {
         return VStack(spacing: 7) {
             ZStack {
                 Circle()
-                    .stroke(.primary.opacity(0.1), lineWidth: 7)
+                    .stroke(DashSkin.line(dark), lineWidth: 7)
                 Circle()
                     .trim(from: 0, to: min(pct / 100, 1))
                     .stroke(fill, style: StrokeStyle(lineWidth: 7, lineCap: .round))
@@ -152,7 +154,7 @@ struct UsageView: View {
                     Text(countdown(from: context.date, to: reset))
                         .font(.system(size: 11))
                         .monospacedDigit()
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
             } else {
@@ -171,8 +173,8 @@ struct UsageView: View {
     }
 
     private func color(for percent: Double) -> Color {
-        if percent >= Double(crit) { return .red }
-        if percent >= Double(warn) { return .orange }
+        if percent >= Double(crit) { return DashSkin.danger }
+        if percent >= Double(warn) { return DashSkin.gold }
         return usageSage
     }
 
@@ -195,7 +197,7 @@ struct UsageView: View {
                 Text(String(format: "$%.0f · %d weeks", total, weeks.count))
                     .font(.system(size: 11))
                     .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .presenterBlur(blurMoney)
             }
             HStack(alignment: .top, spacing: 4) {
@@ -204,7 +206,7 @@ struct UsageView: View {
                         _, label in
                         Text(label)
                             .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(width: 13, height: 17)
                     }
                 }
@@ -215,7 +217,7 @@ struct UsageView: View {
                             VStack(spacing: 4) {
                                 Text(monthLabel(for: weeks, at: index))
                                     .font(.system(size: 9))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
                                     .frame(height: 12)
                                 ForEach(week) { day in
                                     RoundedRectangle(cornerRadius: 3.5)
@@ -249,7 +251,7 @@ struct UsageView: View {
     }
 
     private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
-        if cost <= 0 { return .primary.opacity(0.08) }
+        if cost <= 0 { return DashSkin.line(dark) }
         if cost <= cuts[0] { return theme.opacity(0.25) }
         if cost <= cuts[1] { return theme.opacity(0.45) }
         if cost <= cuts[2] { return theme.opacity(0.7) }
@@ -274,14 +276,14 @@ struct UsageView: View {
                     .frame(width: 16, height: 16)
                 }
                 .buttonStyle(HoverButtonStyle())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .disabled(store.updating)
                 .help("Refresh usage data")
                 Button {
                     showLog.toggle()
                 } label: {
                     Image(systemName: "terminal")
-                        .foregroundStyle(showLog ? theme : Color.secondary)
+                        .foregroundStyle(showLog ? theme : DashSkin.inkSoft(dark))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Show refresh log")
@@ -292,7 +294,7 @@ struct UsageView: View {
                     Image(systemName: "chart.bar.xaxis")
                 }
                 .buttonStyle(HoverButtonStyle())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .help("Open the full dashboard")
             }
             .font(.system(size: 13))
@@ -303,7 +305,7 @@ struct UsageView: View {
                 if let at = store.statsGeneratedAt {
                     Text("Data from \(at.formatted(.relative(presentation: .named)))")
                         .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
 
@@ -314,20 +316,20 @@ struct UsageView: View {
             if let err = store.statsError {
                 Text(err)
                     .font(.caption2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.gold)
             } else {
                 VStack(spacing: 9) {
                     ForEach(store.stats) { stat in
                         HStack {
                             Text(stat.label)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(DashSkin.inkSoft(dark))
                             Spacer()
                             Text(stat.tokens.compactTokens)
                                 .monospacedDigit()
                                 .presenterBlur(blurUsage)
                             Text(String(format: "$%.2f", stat.cost))
                                 .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(DashSkin.inkSoft(dark))
                                 .frame(width: 84, alignment: .trailing)
                                 .presenterBlur(blurMoney)
                         }
@@ -366,7 +368,7 @@ struct UsageView: View {
                     .lineLimit(1)
             }
             .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DashSkin.inkSoft(dark))
             .hoverButton()
         }
         .menuStyle(.borderlessButton)

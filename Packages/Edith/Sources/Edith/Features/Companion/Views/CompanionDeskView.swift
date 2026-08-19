@@ -270,7 +270,8 @@ struct CompanionDeskScreen: View {
                             Spacer(minLength: 0)
                             MindChip(
                                 label: prediction.outcome ?? "open",
-                                tone: prediction.outcome == "confirmed" ? .green : .orange)
+                                tone: prediction.outcome == "confirmed"
+                                    ? DashSkin.sage : DashSkin.gold)
                         }
                     }
                 }

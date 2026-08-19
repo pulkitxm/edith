@@ -32,6 +32,8 @@ struct PresenterRows: View {
     private var detectScreenSharing = true
     @AppStorage(AppStorageKeys.Presenter.detectMirroring, store: SharedDefaults.store)
     private var detectMirroring = true
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Group {
@@ -75,61 +77,99 @@ struct PresenterRows: View {
                 Group {
                     Toggle(isOn: $hideMenuBarNumbers) {
                         HStack(spacing: UIScale.pt(6)) {
-                            Text("Hide menu bar numbers")
+                            Text("Manual presenter mode")
                             InfoDot(
-                                "Replaces the usage percentages in the menu bar while presenting - they're visible in every screen share otherwise."
+                                "Blurs sensitive numbers and track names everywhere in Edith until you turn it back off."
                             )
                         }
                     }
                     .pointerCursor()
-                    Toggle(isOn: $detectRecording) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Detect screen recordings")
-                            InfoDot("Also blur during QuickTime or ⇧⌘5 recordings.")
-                        }
+                    .onChange(of: presenterMode) {
+                        if !presenterMode { IPC.post(IPC.Name.presenterPauseAuto) }
                     }
-                    .pointerCursor()
-                    Toggle(isOn: $detectScreenSharing) {
+                    Toggle("Blur music", isOn: $presenterBlurMusic)
+                        .pointerCursor()
+                    Toggle("Blur cost figures", isOn: $presenterBlurMoney)
+                        .pointerCursor()
+                    Toggle("Blur usage figures", isOn: $presenterBlurUsage)
+                        .pointerCursor()
+                    Toggle("Blur calendar events", isOn: $presenterBlurCalendar)
+                        .pointerCursor()
+                }
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!presenterEnabled)
+                .opacity(presenterEnabled ? 1 : 0.5)
+            }
+
+            SkinCard(
+                title: "Auto detection",
+                note:
+                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics.",
+                dark: dark
+            ) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    Toggle(isOn: $autoEnabled) {
                         HStack(spacing: UIScale.pt(6)) {
-                            Text("Detect macOS Screen Sharing")
+                            Text("Auto presenter mode")
                             InfoDot(
-                                "Also blur when someone views this Mac via Screen Sharing or Remote Management."
+                                "Automatically blurs Edith when your screen looks like it's being shared or recorded. Manual presenter mode keeps working independently."
                             )
                         }
                     }
                     .pointerCursor()
-                    Toggle(isOn: $detectMirroring) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Mirrored display counts")
-                            InfoDot(
-                                "Blur when your display mirrors to a projector, TV, or AirPlay.")
+                    Group {
+                        Toggle(isOn: $hideMenuBarNumbers) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text("Hide menu bar numbers")
+                                InfoDot(
+                                    "Replaces the usage percentages in the menu bar while presenting - they're visible in every screen share otherwise."
+                                )
+                            }
                         }
+                        .pointerCursor()
+                        Toggle(isOn: $detectRecording) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text("Detect screen recordings")
+                                InfoDot("Also blur during QuickTime or ⇧⌘5 recordings.")
+                            }
+                        }
+                        .pointerCursor()
+                        Toggle(isOn: $detectScreenSharing) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text("Detect macOS Screen Sharing")
+                                InfoDot(
+                                    "Also blur when someone views this Mac via Screen Sharing or Remote Management."
+                                )
+                            }
+                        }
+                        .pointerCursor()
+                        Toggle(isOn: $detectMirroring) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text("Mirrored display counts")
+                                InfoDot(
+                                    "Blur when your display mirrors to a projector, TV, or AirPlay."
+                                )
+                            }
+                        }
+                        .pointerCursor()
+                    }
+                    .disabled(!autoEnabled)
+                    .opacity(autoEnabled ? 1 : 0.5)
+                    Button("Open Screen Recording Settings…") {
+                        NSWorkspace.shared.open(
+                            URL(
+                                string:
+                                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+                            )!)
                     }
                     .pointerCursor()
                 }
-                .disabled(!autoEnabled)
-                .opacity(autoEnabled ? 1 : 0.5)
-            } header: {
-                Text("Auto detection")
-            } footer: {
-                Text(
-                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics."
-                )
-                .font(.system(size: UIScale.pt(10)))
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!presenterEnabled)
+                .opacity(presenterEnabled ? 1 : 0.5)
             }
 
-            Section {
-                Button("Open Screen Recording Settings…") {
-                    NSWorkspace.shared.open(
-                        URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                        )!)
-                }
-                .pointerCursor()
-            }
-
-            Section {
+            SkinCard(title: "Shortcut", dark: dark) {
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P")
                 } label: {
@@ -140,11 +180,10 @@ struct PresenterRows: View {
                         )
                     }
                 }
-            } header: {
-                Text("Shortcut")
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!presenterEnabled)
+                .opacity(presenterEnabled ? 1 : 0.5)
             }
         }
-        .disabled(!presenterEnabled)
-        .opacity(presenterEnabled ? 1 : 0.5)
     }
 }

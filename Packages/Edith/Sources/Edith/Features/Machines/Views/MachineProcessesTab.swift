@@ -181,7 +181,7 @@ private struct ProcessRow: View {
                 if canKill, hovering {
                     Button(action: onKill) {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()

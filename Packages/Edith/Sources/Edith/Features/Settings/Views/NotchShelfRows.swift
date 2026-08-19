@@ -39,108 +39,119 @@ struct NotchShelfRows: View {
         var audioMixer =
         false
     @State private var bluetoothAuthorization = CBManager.authorization
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Group {
-            Section {
-                Toggle("Open when dragging near the notch", isOn: $openOnDrag)
-                    .pointerCursor()
-                Text("The island slides out mid-drag so you can drop without clicking first.")
-                    .settingsCaption()
-                Toggle("Open on hover", isOn: $openOnHover)
-                    .pointerCursor()
-                Text("Expand when the mouse rests on the notch, without a drag.")
-                    .settingsCaption()
-                Toggle(isOn: $requireOption) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Require \u{2325} to trigger")
-                        InfoDot(
-                            "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
-                        )
-                    }
-                }
-                .pointerCursor()
-            }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.5)
-
-            Section {
-                Picker(selection: $keepDuration) {
-                    Text("Forever").tag("forever")
-                    Text("1 hour").tag("oneHour")
-                    Text("1 day").tag("oneDay")
-                    Text("1 week").tag("oneWeek")
-                    Text("1 month").tag("oneMonth")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Keep items for")
-                        InfoDot(
-                            "Parked files auto-delete after this long. They're copies - originals are never touched."
-                        )
-                    }
-                }
-                .pointerCursor()
-                Toggle("Remove after dragging out", isOn: $removeAfterDragOut)
-                    .pointerCursor()
-                Text("Treats the shelf as a hand-off tray rather than storage.")
-                    .settingsCaption()
-            }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.5)
-
-            Section {
-                Toggle("Show what's playing", isOn: $showMusic)
-                    .pointerCursor()
-                Text(
-                    "Album art and a live equalizer hug the notch while music plays in the library, Spotify, or Apple Music."
-                )
-                .settingsCaption()
-                Toggle("Notch alerts", isOn: $showAlerts)
-                    .pointerCursor()
-                Text(
-                    "Drops a brief card from the notch. Alerts that arrive while the notch is open queue up and show after it closes."
-                )
-                .settingsCaption()
-                if showAlerts {
-                    Toggle("Audio output changes", isOn: $alertAudio)
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            SkinCard(title: "Triggering", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    Toggle("Open when dragging near the notch", isOn: $openOnDrag)
                         .pointerCursor()
-                    Toggle("Power plugged / unplugged", isOn: $alertPower)
+                    Text("The island slides out mid-drag so you can drop without clicking first.")
+                        .settingsCaption()
+                    Toggle("Open on hover", isOn: $openOnHover)
                         .pointerCursor()
-                    Toggle("Battery low", isOn: $alertBattery)
-                        .pointerCursor()
-                    Toggle("Bluetooth connect / disconnect", isOn: $alertBluetooth)
-                        .pointerCursor()
-                    if alertBluetooth,
-                        bluetoothAuthorization == .denied
-                            || bluetoothAuthorization == .restricted
-                    {
-                        Button("Open Bluetooth Privacy Settings...") {
-                            NSWorkspace.shared.open(
-                                URL(
-                                    string:
-                                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
-                                )!)
+                    Text("Expand when the mouse rests on the notch, without a drag.")
+                        .settingsCaption()
+                    Toggle(isOn: $requireOption) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Require \u{2325} to trigger")
+                            InfoDot(
+                                "Only expand - on drag or on hover - while you're holding Option. Keeps accidental passes over the notch from opening it."
+                            )
                         }
-                        .pointerCursor()
                     }
+                    .pointerCursor()
                 }
-                Toggle("Per-app volume mixer (beta)", isOn: $audioMixer)
-                    .pointerCursor()
-                Text(
-                    "Adds an Audio tab to set each app's volume. macOS 14.4+; asks for audio-recording permission the first time. Off by default."
-                )
-                .settingsCaption()
-                Toggle("Show on external displays", isOn: $showOnExternal)
-                    .pointerCursor()
-                Text("Draws a small pill at the top of screens without a notch.")
-                    .settingsCaption()
-                Toggle("Haptic feedback", isOn: $haptics)
-                    .pointerCursor()
-                Text("A small trackpad tap when the shelf reacts.")
-                    .settingsCaption()
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!enabled)
+                .opacity(enabled ? 1 : 0.5)
             }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.5)
+
+            SkinCard(title: "Retention", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    Picker(selection: $keepDuration) {
+                        Text("Forever").tag("forever")
+                        Text("1 hour").tag("oneHour")
+                        Text("1 day").tag("oneDay")
+                        Text("1 week").tag("oneWeek")
+                        Text("1 month").tag("oneMonth")
+                    } label: {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Keep items for")
+                            InfoDot(
+                                "Parked files auto-delete after this long. They're copies - originals are never touched."
+                            )
+                        }
+                    }
+                    .pointerCursor()
+                    Toggle("Remove after dragging out", isOn: $removeAfterDragOut)
+                        .pointerCursor()
+                    Text("Treats the shelf as a hand-off tray rather than storage.")
+                        .settingsCaption()
+                }
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!enabled)
+                .opacity(enabled ? 1 : 0.5)
+            }
+
+            SkinCard(title: "Playback & alerts", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    Toggle("Show what's playing", isOn: $showMusic)
+                        .pointerCursor()
+                    Text(
+                        "Album art and a live equalizer hug the notch while music plays in the library, Spotify, or Apple Music."
+                    )
+                    .settingsCaption()
+                    Toggle("Notch alerts", isOn: $showAlerts)
+                        .pointerCursor()
+                    Text(
+                        "Drops a brief card from the notch. Alerts that arrive while the notch is open queue up and show after it closes."
+                    )
+                    .settingsCaption()
+                    if showAlerts {
+                        Toggle("Audio output changes", isOn: $alertAudio)
+                            .pointerCursor()
+                        Toggle("Power plugged / unplugged", isOn: $alertPower)
+                            .pointerCursor()
+                        Toggle("Battery low", isOn: $alertBattery)
+                            .pointerCursor()
+                        Toggle("Bluetooth connect / disconnect", isOn: $alertBluetooth)
+                            .pointerCursor()
+                        if alertBluetooth,
+                            bluetoothAuthorization == .denied
+                                || bluetoothAuthorization == .restricted
+                        {
+                            Button("Open Bluetooth Privacy Settings...") {
+                                NSWorkspace.shared.open(
+                                    URL(
+                                        string:
+                                            "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
+                                    )!)
+                            }
+                            .pointerCursor()
+                        }
+                    }
+                    Toggle("Per-app volume mixer (beta)", isOn: $audioMixer)
+                        .pointerCursor()
+                    Text(
+                        "Adds an Audio tab to set each app's volume. macOS 14.4+; asks for audio-recording permission the first time. Off by default."
+                    )
+                    .settingsCaption()
+                    Toggle("Show on external displays", isOn: $showOnExternal)
+                        .pointerCursor()
+                    Text("Draws a small pill at the top of screens without a notch.")
+                        .settingsCaption()
+                    Toggle("Haptic feedback", isOn: $haptics)
+                        .pointerCursor()
+                    Text("A small trackpad tap when the shelf reacts.")
+                        .settingsCaption()
+                }
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!enabled)
+                .opacity(enabled ? 1 : 0.5)
+            }
         }
         .onReceive(
             NotificationCenter.default.publisher(

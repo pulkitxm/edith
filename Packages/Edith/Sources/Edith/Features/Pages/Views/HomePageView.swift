@@ -36,7 +36,7 @@ struct HomePage: View {
             VStack(spacing: UIScale.pt(0)) {
                 HomeHeader(dark: dark)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(20)) {
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
@@ -52,11 +52,8 @@ struct HomePage: View {
                             }
                         }
                         if usageEnabled, model.loaded {
-                            SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                ActivityHeatmap(
-                                    days: model.calendarDays, cuts: model.chartData.heatCuts,
-                                    model: model, dark: dark, blur: blurMoney)
-                            }
+                            activityRow(compact: compact)
+                            UsageSummaryCard(dark: dark)
                         }
                         LazyVGrid(
                             columns: [
@@ -68,8 +65,7 @@ struct HomePage: View {
                         ) {
                             Group {
                                 if calendarEnabled { MeetingsCard(dark: dark) }
-                                if usageEnabled {
-                                    UsageSummaryCard(dark: dark)
+                                if usageEnabled, !model.loaded {
                                     RateLimitsDialsView(dark: dark, showsJumpLink: true)
                                 }
                                 if musicEnabled { MusicCard(dark: dark) }
@@ -84,14 +80,38 @@ struct HomePage: View {
             .background(background)
             .environment(\.compactLayout, compact)
         }
-        .navigationTitle("Home")
         .task(id: usageEnabled) {
             if automaticActionsEnabled, usageEnabled { await model.load() }
         }
     }
 
+    @ViewBuilder private func activityRow(compact: Bool) -> some View {
+        if compact {
+            VStack(spacing: UIScale.pt(16)) {
+                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                    ActivityHeatmap(
+                        days: model.calendarDays, cuts: model.chartData.heatCuts,
+                        model: model, dark: dark, blur: blurMoney)
+                }
+                RateLimitsDialsView(dark: dark, showsJumpLink: true)
+            }
+        } else {
+            HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                SkinCard(title: "Activity", note: "daily cost", dark: dark, fill: true) {
+                    ActivityHeatmap(
+                        days: model.calendarDays, cuts: model.chartData.heatCuts,
+                        model: model, dark: dark, blur: blurMoney)
+                }
+                RateLimitsDialsView(dark: dark, fill: true, showsJumpLink: true)
+                    .frame(width: UIScale.pt(420))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var background: some View {
         DashSkin.paper(dark)
+            .paperGrain(dark: dark, opacity: 0.035)
             .overlay(alignment: .topTrailing) {
                 RadialGradient(
                     colors: [DashSkin.accent(dark).opacity(0.08), .clear], center: .topTrailing,
@@ -342,7 +362,7 @@ private struct WorldClocksCard: View {
                                     Spacer()
                                     Text(id.split(separator: "/").first.map(String.init) ?? "")
                                         .font(.system(size: UIScale.pt(10.5)))
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
                                 .padding(.horizontal, UIScale.pt(8))
                                 .padding(.vertical, UIScale.pt(5))
@@ -354,7 +374,7 @@ private struct WorldClocksCard: View {
                         if matches.isEmpty {
                             Text("No matching timezones")
                                 .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                                 .padding(UIScale.pt(8))
                         }
                     }
@@ -713,7 +733,7 @@ private struct MeetingsCard: View {
     private var accessPrompt: some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "calendar.badge.exclamationmark")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DashSkin.gold)
             Text("Grant calendar access to see today's schedule.")
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
@@ -797,6 +817,13 @@ private struct UsageSummaryCard: View {
         HomeMath.topModels(days: (0..<7).map(day))
     }
 
+    @State private var selectedDay: Date?
+
+    private var selectedEntry: (date: Date, cost: Double, tokens: Double)? {
+        guard let selectedDay else { return nil }
+        return lastDays.first { Calendar.current.isDate($0.date, inSameDayAs: selectedDay) }
+    }
+
     var body: some View {
         SkinCard(title: "Agent usage", note: "last 14 days", dark: dark) {
             if model.loaded {
@@ -866,20 +893,65 @@ private struct UsageSummaryCard: View {
             .foregroundStyle(
                 Calendar.current.isDateInToday(entry.date)
                     ? DashSkin.accent(dark) : DashSkin.accent(dark).opacity(0.45))
+            if let selectedEntry,
+                Calendar.current.isDate(selectedEntry.date, inSameDayAs: entry.date)
+            {
+                RuleMark(x: .value("Day", entry.date, unit: .day))
+                    .foregroundStyle(DashSkin.lineStrong(dark))
+                    .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
+                    .annotation(
+                        position: .top, alignment: .center, spacing: UIScale.pt(6),
+                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                    ) {
+                        chartTooltip(selectedEntry)
+                    }
+            }
         }
+        .chartXSelection(value: $selectedDay)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: 3)) { value in
+            AxisMarks(values: .stride(by: .day, count: 2)) { value in
+                AxisGridLine().foregroundStyle(DashSkin.line(dark))
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
                         Text(d.formatted(.dateTime.day()))
                             .font(.system(size: UIScale.pt(8)))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
             }
         }
-        .chartYAxis(.hidden)
-        .frame(height: UIScale.pt(64))
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                AxisGridLine().foregroundStyle(DashSkin.line(dark))
+                AxisValueLabel {
+                    if let d = value.as(Double.self) {
+                        Text(DashFmt.usd(d))
+                            .font(.system(size: UIScale.pt(8)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                }
+            }
+        }
+        .frame(height: UIScale.pt(96))
+        .padding(.top, UIScale.pt(14))
+    }
+
+    private func chartTooltip(_ entry: (date: Date, cost: Double, tokens: Double)) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+            Text(entry.date.formatted(.dateTime.month(.abbreviated).day()))
+                .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+            Text(DashFmt.usdFull(entry.cost))
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
+                .presenterBlur(blurMoney)
+            Text("\(DashFmt.tokens(entry.tokens)) tokens")
+                .font(.system(size: UIScale.pt(9)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .presenterBlur(blurMoney)
+        }
+        .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(5))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(7)).strokeBorder(DashSkin.line(dark)))
     }
 }
 

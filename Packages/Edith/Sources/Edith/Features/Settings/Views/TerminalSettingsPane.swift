@@ -13,16 +13,22 @@ struct TerminalSettingsPane: View {
     @State private var outcome: ActionOutcome?
     @State private var outcomeStamp = 0
     @Environment(\.terminalLaunchEnabled) private var terminalLaunchEnabled
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Form {
-            toolsSection
-            completionSection
-            fallbackSection
-            launchSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                toolsSection
+                completionSection
+                fallbackSection
+                launchSection
+            }
+            .pageContent(compact)
+            .padding(.top, UIScale.pt(16))
         }
-        .formStyle(.grouped)
-        .navigationTitle("Terminal")
+        .background(DashSkin.paper(dark))
         .task {
             if terminalLaunchEnabled { await refresh() }
         }
@@ -34,102 +40,106 @@ struct TerminalSettingsPane: View {
     }
 
     private var toolsSection: some View {
-        Section {
-            LabeledContent("Tools") {
-                if loaded {
-                    Text(toolSummary).foregroundStyle(.secondary)
-                } else {
-                    CheckingLabel("Checking...")
+        SkinCard(title: "Command line tools", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                LabeledContent("Tools") {
+                    if loaded {
+                        Text(toolSummary).foregroundStyle(DashSkin.inkSoft(dark))
+                    } else {
+                        CheckingLabel("Checking...", dark: dark)
+                    }
                 }
-            }
-            LabeledContent("Location") {
-                if loaded {
-                    Text(tools.directory.isEmpty ? "-" : abbreviate(tools.directory))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                } else {
-                    CheckingLabel("Checking...")
+                LabeledContent("Location") {
+                    if loaded {
+                        Text(tools.directory.isEmpty ? "-" : abbreviate(tools.directory))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .textSelection(.enabled)
+                    } else {
+                        CheckingLabel("Checking...", dark: dark)
+                    }
                 }
+                HStack(spacing: UIScale.pt(10)) {
+                    ActionButton(
+                        idle: loaded && tools.isComplete ? "Reinstall" : "Install",
+                        running: loaded && tools.isComplete ? "Reinstalling..." : "Installing...",
+                        done: "Installed",
+                        phase: phase(of: .installTools),
+                        enabled: idle && loaded && tools.bundled
+                    ) { run(.installTools) }
+                    ActionButton(
+                        idle: "Remove", running: "Removing...", done: "Removed",
+                        phase: phase(of: .removeTools),
+                        enabled: idle && loaded && !tools.linked.isEmpty
+                    ) { run(.removeTools) }
+                }
+                SectionFooter(
+                    help: toolsHelp, outcome: footerOutcome(for: [.installTools, .removeTools]),
+                    dark: dark)
             }
-            HStack(spacing: UIScale.pt(10)) {
-                ActionButton(
-                    idle: loaded && tools.isComplete ? "Reinstall" : "Install",
-                    running: loaded && tools.isComplete ? "Reinstalling..." : "Installing...",
-                    done: "Installed",
-                    phase: phase(of: .installTools),
-                    enabled: idle && loaded && tools.bundled
-                ) { run(.installTools) }
-                ActionButton(
-                    idle: "Remove", running: "Removing...", done: "Removed",
-                    phase: phase(of: .removeTools),
-                    enabled: idle && loaded && !tools.linked.isEmpty
-                ) { run(.removeTools) }
-            }
-        } header: {
-            Text("Command line tools")
-        } footer: {
-            SectionFooter(
-                help: toolsHelp, outcome: footerOutcome(for: [.installTools, .removeTools]))
+            .foregroundStyle(DashSkin.ink(dark))
         }
     }
 
     private var completionSection: some View {
-        Section {
-            if !loaded {
-                CheckingLabel("Looking for shells...")
-            } else if completions.isEmpty {
-                Text("No shells found.").foregroundStyle(.secondary)
-            } else {
-                ForEach(completions, id: \.shell) { status in
-                    completionRow(status)
+        SkinCard(title: "Shell completion", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                if !loaded {
+                    CheckingLabel("Looking for shells...", dark: dark)
+                } else if completions.isEmpty {
+                    Text("No shells found.").foregroundStyle(DashSkin.inkSoft(dark))
+                } else {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        ForEach(completions, id: \.shell) { status in
+                            completionRow(status)
+                        }
+                    }
                 }
+                ActionButton(
+                    idle: "Install completions", running: "Writing scripts...", done: "Installed",
+                    phase: phase(of: .installCompletions),
+                    enabled: idle && loaded
+                ) { run(.installCompletions) }
+                SectionFooter(
+                    help:
+                        "A shell reads its completions once, when it starts. Run  exec zsh  in a terminal you already have open, or open a new tab.",
+                    outcome: footerOutcome(for: [.installCompletions]), dark: dark)
             }
-            ActionButton(
-                idle: "Install completions", running: "Writing scripts...", done: "Installed",
-                phase: phase(of: .installCompletions),
-                enabled: idle && loaded
-            ) { run(.installCompletions) }
-        } header: {
-            Text("Shell completion")
-        } footer: {
-            SectionFooter(
-                help:
-                    "A shell reads its completions once, when it starts. Run  exec zsh  in a terminal you already have open, or open a new tab.",
-                outcome: footerOutcome(for: [.installCompletions]))
+            .foregroundStyle(DashSkin.ink(dark))
         }
     }
 
     private var fallbackSection: some View {
-        Section {
-            if loaded {
-                Text(sourceLine)
-                    .font(.system(size: UIScale.pt(11), design: .monospaced))
-                    .textSelection(.enabled)
-            } else {
-                CheckingLabel("Working out the path...")
+        SkinCard(title: "If a shell still does not complete", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                if loaded {
+                    Text(sourceLine)
+                        .font(DashSkin.mono(11))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .textSelection(.enabled)
+                } else {
+                    CheckingLabel("Working out the path...", dark: dark)
+                }
+                ActionButton(
+                    idle: "Copy", running: "Copy", done: "Copied",
+                    phase: phase(of: .copySourceLine),
+                    enabled: loaded && !sourceLine.isEmpty
+                ) { run(.copySourceLine) }
+                if let hint = completions.compactMap(\.hint).first {
+                    Text(hint)
+                        .settingsCaption()
+                        .textSelection(.enabled)
+                }
+                SectionFooter(
+                    help:
+                        "Adding this to ~/.zshrc loads the completion directly, the way the ac CLI does, instead of waiting for compinit to find it.",
+                    outcome: footerOutcome(for: [.copySourceLine]), dark: dark)
             }
-            ActionButton(
-                idle: "Copy", running: "Copy", done: "Copied",
-                phase: phase(of: .copySourceLine),
-                enabled: loaded && !sourceLine.isEmpty
-            ) { run(.copySourceLine) }
-            if let hint = completions.compactMap(\.hint).first {
-                Text(hint)
-                    .settingsCaption()
-                    .textSelection(.enabled)
-            }
-        } header: {
-            Text("If a shell still does not complete")
-        } footer: {
-            SectionFooter(
-                help:
-                    "Adding this to ~/.zshrc loads the completion directly, the way the ac CLI does, instead of waiting for compinit to find it.",
-                outcome: footerOutcome(for: [.copySourceLine]))
+            .foregroundStyle(DashSkin.ink(dark))
         }
     }
 
     private var launchSection: some View {
-        Section {
+        SkinCard(title: "On launch", dark: dark) {
             Toggle(isOn: $autoRefresh) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Keep completions up to date")
@@ -139,8 +149,7 @@ struct TerminalSettingsPane: View {
                 }
             }
             .pointerCursor()
-        } header: {
-            Text("On launch")
+            .foregroundStyle(DashSkin.ink(dark))
         }
     }
 
@@ -151,11 +160,11 @@ struct TerminalSettingsPane: View {
                     Circle()
                         .fill(color(for: status.state))
                         .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                    Text(label(for: status.state)).foregroundStyle(.secondary)
+                    Text(label(for: status.state)).foregroundStyle(DashSkin.inkSoft(dark))
                 }
                 Text(abbreviate(status.path.path))
                     .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .textSelection(.enabled)
             }
         }
@@ -172,10 +181,10 @@ struct TerminalSettingsPane: View {
 
     private func color(for state: CompletionInstallState) -> Color {
         switch state {
-        case .current: return .green
-        case .outdated: return .orange
-        case .missing: return .secondary
-        case .foreign: return .yellow
+        case .current: return DashSkin.sage
+        case .outdated: return DashSkin.gold
+        case .missing: return DashSkin.inkFaint(dark)
+        case .foreign: return DashSkin.accent(dark)
         }
     }
 
@@ -315,15 +324,17 @@ private struct ActionOutcome: Equatable {
 
 private struct CheckingLabel: View {
     let text: String
+    let dark: Bool
 
-    init(_ text: String) {
+    init(_ text: String, dark: Bool) {
         self.text = text
+        self.dark = dark
     }
 
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             ProgressView().controlSize(.mini)
-            Text(text).foregroundStyle(.secondary)
+            Text(text).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 }
@@ -353,9 +364,9 @@ private struct ActionButton: View {
         case .running:
             ProgressView().controlSize(.mini)
         case .done:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(DashSkin.sage)
         case .failed:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DashSkin.gold)
         case .idle:
             EmptyView()
         }
@@ -373,6 +384,7 @@ private struct ActionButton: View {
 private struct SectionFooter: View {
     let help: String
     let outcome: ActionOutcome?
+    let dark: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -383,15 +395,16 @@ private struct SectionFooter: View {
                         systemName: outcome.succeeded
                             ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                     )
-                    .foregroundStyle(outcome.succeeded ? Color.green : Color.orange)
+                    .foregroundStyle(outcome.succeeded ? DashSkin.sage : DashSkin.gold)
                     Text(outcome.message)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(DashSkin.ink(dark))
                         .textSelection(.enabled)
                 }
                 .transition(.opacity)
             }
         }
         .font(.system(size: UIScale.pt(10)))
+        .foregroundStyle(DashSkin.inkFaint(dark))
         .animation(.easeInOut(duration: 0.18), value: outcome)
     }
 }

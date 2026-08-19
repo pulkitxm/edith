@@ -286,7 +286,7 @@ struct CompanionLibraryScreen: View {
             if let error = model.error {
                 Text(error)
                     .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.warn)
+                    .foregroundStyle(DashSkin.gold)
             }
         }
         .pageContent(compact)
@@ -348,8 +348,8 @@ struct CompanionLibraryScreen: View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
             Text("\(pending)")
-                .font(DashSkin.serif(17, weight: .semibold))
-                .foregroundStyle(pending > 0 ? DashSkin.warn : DashSkin.ink(dark))
+                .font(DashSkin.serif(UIScale.pt(17), weight: .semibold))
+                .foregroundStyle(pending > 0 ? DashSkin.gold : DashSkin.ink(dark))
             HStack(spacing: UIScale.pt(5)) {
                 Text("PENDING")
                     .font(.system(size: UIScale.pt(9.5), weight: .medium))
@@ -372,7 +372,7 @@ struct CompanionLibraryScreen: View {
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(10))
-                .strokeBorder(pending > 0 ? DashSkin.warn.opacity(0.6) : DashSkin.line(dark))
+                .strokeBorder(pending > 0 ? DashSkin.gold.opacity(0.6) : DashSkin.line(dark))
         }
     }
 

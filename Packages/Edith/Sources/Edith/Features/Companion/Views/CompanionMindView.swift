@@ -200,7 +200,7 @@ struct CompanionMindScreen: View {
                                 .foregroundStyle(DashSkin.ink(dark))
                             MindChip(
                                 label: row.direction.replacingOccurrences(of: "_", with: " "),
-                                tone: row.direction == "accurate" ? .green : .orange)
+                                tone: row.direction == "accurate" ? DashSkin.sage : DashSkin.gold)
                             Spacer(minLength: 0)
                             Text("\(row.samples) times")
                                 .font(.system(size: UIScale.pt(11)))
@@ -239,7 +239,7 @@ struct CompanionMindScreen: View {
                         .lineLimit(2)
                     Spacer(minLength: 0)
                     if superseded {
-                        MindChip(label: "superseded", tone: .orange)
+                        MindChip(label: "superseded", tone: DashSkin.gold)
                     } else {
                         Text("\(Int(belief.confidence * 100))%")
                             .font(.system(size: UIScale.pt(11)))
@@ -294,11 +294,11 @@ struct CompanionMindScreen: View {
     private func claimVerdict(_ claim: CompanionClaim) -> some View {
         switch claim.verdict {
         case "corroborated":
-            MindChip(label: "corroborated", tone: .green)
+            MindChip(label: "corroborated", tone: DashSkin.sage)
         case "contradicted":
-            MindChip(label: "contradicted", tone: .red)
+            MindChip(label: "contradicted", tone: DashSkin.danger)
         case .some:
-            MindChip(label: "unclear", tone: .orange)
+            MindChip(label: "unclear", tone: DashSkin.gold)
         case nil:
             MindChip(label: "unchecked", tone: DashSkin.inkFaint(dark))
         }
@@ -377,7 +377,7 @@ struct CompanionMindScreen: View {
                 HStack(spacing: UIScale.pt(4)) {
                     Image(systemName: step.ok ? "checkmark" : "xmark")
                         .font(.system(size: UIScale.pt(8.5), weight: .bold))
-                        .foregroundStyle(step.ok ? .green : .red)
+                        .foregroundStyle(step.ok ? DashSkin.sage : DashSkin.danger)
                     Text(step.name.replacingOccurrences(of: "_", with: " "))
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
@@ -496,6 +496,7 @@ private struct MindDetailSheet: View {
                 .pointerCursor()
                 .help("Close")
             }
+            WoodRule(dark: dark)
             content
             Spacer(minLength: 0)
         }
@@ -570,7 +571,7 @@ private struct MindDetailSheet: View {
         HStack(spacing: UIScale.pt(8)) {
             MindChip(
                 label: belief.status == "active" ? "active" : belief.status,
-                tone: belief.status == "active" ? .green : .orange)
+                tone: belief.status == "active" ? DashSkin.sage : DashSkin.gold)
             MindChip(label: belief.kind, tone: DashSkin.inkFaint(dark))
             Text("\(Int(belief.confidence * 100))% confident")
                 .font(.system(size: UIScale.pt(11.5)))
@@ -595,9 +596,9 @@ private struct MindDetailSheet: View {
             .textSelection(.enabled)
         HStack(spacing: UIScale.pt(8)) {
             switch claim.verdict {
-            case "corroborated": MindChip(label: "corroborated", tone: .green)
-            case "contradicted": MindChip(label: "contradicted", tone: .red)
-            case .some: MindChip(label: "unclear", tone: .orange)
+            case "corroborated": MindChip(label: "corroborated", tone: DashSkin.sage)
+            case "contradicted": MindChip(label: "contradicted", tone: DashSkin.danger)
+            case .some: MindChip(label: "unclear", tone: DashSkin.gold)
             case nil: MindChip(label: "unchecked", tone: DashSkin.inkFaint(dark))
             }
             MindChip(label: claim.claimType, tone: DashSkin.inkFaint(dark))

@@ -24,15 +24,18 @@ struct ToolProvisioningPanel: View {
     let continueAction: (() -> Void)?
     @State private var provisioner = ToolProvisioner.shared
     @State private var logExpanded = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(title)
                     .font(.system(size: UIScale.pt(17), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
                 Text("You can continue immediately. Setup will keep running in the background.")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             VStack(spacing: UIScale.pt(10)) {
                 ForEach(tools) { tool in
@@ -42,17 +45,19 @@ struct ToolProvisioningPanel: View {
             DisclosureGroup("Installation log", isExpanded: $logExpanded) {
                 ScrollView {
                     Text(logText)
-                        .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                        .font(DashSkin.mono(10.5))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(UIScale.pt(10))
                 }
                 .frame(height: UIScale.pt(110))
                 .background(
-                    Color(nsColor: .textBackgroundColor),
+                    DashSkin.paper2(dark),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
             }
             .font(.system(size: UIScale.pt(10), weight: .medium))
+            .foregroundStyle(DashSkin.ink(dark))
             if let continueAction {
                 HStack {
                     Spacer()
@@ -63,6 +68,7 @@ struct ToolProvisioningPanel: View {
             }
         }
         .padding(UIScale.pt(22))
+        .background(DashSkin.paper(dark))
         .onAppear { provisioner.provision(tools) }
     }
 
@@ -78,6 +84,8 @@ struct ToolProvisioningPanel: View {
 private struct ProvisioningToolRow: View {
     let tool: CLIToolSpec
     let state: CLIToolProvisionState
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         HStack(alignment: .top, spacing: UIScale.pt(11)) {
@@ -87,6 +95,7 @@ private struct ProvisioningToolRow: View {
                 HStack {
                     Text(tool.displayName)
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Text(statusText)
                         .font(.system(size: UIScale.pt(10)))
@@ -104,8 +113,13 @@ private struct ProvisioningToolRow: View {
         }
         .padding(UIScale.pt(11))
         .background(
-            Color(nsColor: .controlBackgroundColor),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(10))
+                .stroke(DashSkin.line(dark))
+        }
     }
 
     private var statusText: String {
@@ -121,15 +135,17 @@ private struct ProvisioningToolRow: View {
 
     private var statusColor: Color {
         switch state {
-        case .failed: .red
-        case .present, .installed: .green
-        default: .secondary
+        case .failed: DashSkin.danger
+        case .present, .installed: DashSkin.sage
+        default: DashSkin.inkFaint(dark)
         }
     }
 }
 
 private struct ToolStateIcon: View {
     let state: CLIToolProvisionState
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         switch state {
@@ -138,13 +154,13 @@ private struct ToolStateIcon: View {
                 .controlSize(.small)
         case .present, .installed:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(DashSkin.sage)
         case .failed:
             Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(DashSkin.danger)
         case .idle:
             Image(systemName: "circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
 }
@@ -153,36 +169,39 @@ struct CLIToolStatusSection: View {
     let tools: [CLIToolSpec]
     let extensionEnabled: Bool
     @State private var provisioner = ToolProvisioner.shared
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Section {
-            ForEach(tools) { tool in
-                HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                    ToolStateIcon(state: provisioner.state(for: tool))
-                        .frame(width: UIScale.pt(18), height: UIScale.pt(22))
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        Text(tool.displayName)
-                            .fontWeight(.medium)
-                        Text(detail(for: tool))
-                            .settingsCaption()
-                            .textSelection(.enabled)
-                    }
-                    Spacer(minLength: 12)
-                    if canInstall(tool) {
-                        Button(buttonTitle(for: tool)) { provisioner.provision(tool) }
-                            .controlSize(.small)
-                            .pointerCursor()
+        SkinCard(
+            title: "Command-line tools",
+            note: extensionEnabled
+                ? "Tools stay installed when the extension is disabled."
+                : "Enable the extension before installing its tools.",
+            dark: dark
+        ) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                ForEach(tools) { tool in
+                    HStack(alignment: .top, spacing: UIScale.pt(10)) {
+                        ToolStateIcon(state: provisioner.state(for: tool))
+                            .frame(width: UIScale.pt(18), height: UIScale.pt(22))
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            Text(tool.displayName)
+                                .fontWeight(.medium)
+                                .foregroundStyle(DashSkin.ink(dark))
+                            Text(detail(for: tool))
+                                .settingsCaption()
+                                .textSelection(.enabled)
+                        }
+                        Spacer(minLength: 12)
+                        if canInstall(tool) {
+                            Button(buttonTitle(for: tool)) { provisioner.provision(tool) }
+                                .controlSize(.small)
+                                .pointerCursor()
+                        }
                     }
                 }
             }
-        } header: {
-            Text("Command-line tools")
-        } footer: {
-            Text(
-                extensionEnabled
-                    ? "Tools stay installed when the extension is disabled."
-                    : "Enable the extension before installing its tools."
-            )
         }
         .onAppear {
             for tool in tools { provisioner.check(tool) }

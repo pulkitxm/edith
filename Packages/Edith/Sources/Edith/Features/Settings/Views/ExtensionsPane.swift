@@ -3,6 +3,17 @@ import Combine
 import EdithKit
 import SwiftUI
 
+extension View {
+    @ViewBuilder
+    fileprivate func keepSearchExpanded() -> some View {
+        if #available(macOS 26.0, *) {
+            searchToolbarBehavior(.automatic)
+        } else {
+            self
+        }
+    }
+}
+
 enum ExtensionPermissionState {
     static func readGrantedPermissions() -> [ExtensionPermission: Bool] {
         Dictionary(
@@ -82,12 +93,7 @@ struct ExtensionsPane: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
-            PageHeader(
-                "Extensions",
-                accessory: {
-                    searchField
-                    categoryRow
-                })
+            PageHeader("Extensions")
             ScrollViewReader { proxy in
                 ScrollView {
                     extensionGrid
@@ -99,7 +105,14 @@ struct ExtensionsPane: View {
                 }
             }
         }
-        .navigationTitle("Extensions")
+        .searchable(text: $query, placement: .toolbar, prompt: "Search extensions")
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                LiquidTabPicker(
+                    items: ExtensionMarketplaceCategory.allCases, label: \.rawValue,
+                    selection: $category)
+            }
+        }
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
         .onChange(of: systemEnabled) {
             if !systemEnabled { preventSleep = false }
@@ -132,40 +145,6 @@ struct ExtensionsPane: View {
         .sheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry)
         }
-    }
-
-    private var searchField: some View {
-        SearchField(placeholder: "Search extensions", text: $query, typeAhead: true)
-    }
-
-    private var categoryRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: UIScale.pt(8)) {
-                ForEach(ExtensionMarketplaceCategory.allCases, id: \.self) { item in
-                    Button {
-                        withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                            category = item
-                        }
-                    } label: {
-                        Text(item.rawValue)
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
-                            .foregroundStyle(category == item ? Color.white : Color.secondary)
-                            .padding(.horizontal, UIScale.pt(12))
-                            .frame(height: UIScale.pt(28))
-                            .background(category == item ? Color.accentColor : Color.clear)
-                            .clipShape(Capsule())
-                            .overlay {
-                                if category != item {
-                                    Capsule().stroke(Color(nsColor: .separatorColor).opacity(0.65))
-                                }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
-                }
-            }
-        }
-        .scrollIndicators(.never)
     }
 
     private var filteredEntries: [ExtensionRegistryEntry] {
@@ -392,6 +371,16 @@ private struct ExtensionMarketplaceCard: View {
                     .controlSize(.small)
                     .tint(brandAccent)
                     .pointerCursor()
+                if hasSettings {
+                    Button(action: open) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                    .buttonStyle(.plain)
+                    .pointerCursor()
+                    .help("Open \(entry.title) settings")
+                }
             }
             Button(action: open) {
                 Text(entry.subtitle)
@@ -419,7 +408,11 @@ private struct ExtensionMarketplaceCard: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(14))
-                .strokeBorder(DashSkin.line(dark), lineWidth: hovering ? 1.5 : 1)
+                .strokeBorder(
+                    enabled
+                        ? AnyShapeStyle(.brassBorder(dark: dark))
+                        : AnyShapeStyle(DashSkin.line(dark)),
+                    lineWidth: enabled ? 1.5 : (hovering ? 1.5 : 1))
         }
         .shadow(color: .black.opacity(hovering ? 0.1 : 0), radius: UIScale.pt(8), y: 3)
         .onHover { hovering = $0 }
@@ -428,23 +421,37 @@ private struct ExtensionMarketplaceCard: View {
     private var permissions: [ExtensionPermission] {
         entry.requiredPermissions + entry.optionalPermissions
     }
+
+    private var hasSettings: Bool {
+        switch entry.id {
+        case "usage", "system", "machines", "systemStats", "micMute", "music", "notchShelf",
+            "clipboard", "focusDim", "presenter", "colorPicker":
+            true
+        default:
+            !permissions.isEmpty
+        }
+    }
 }
 
 private struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         NavigationStack {
-            Form {
-                RequiredPermissionRows(permissions: entry.requiredPermissions)
-                ExtensionDetailRows(entry: entry)
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                    RequiredPermissionRows(permissions: entry.requiredPermissions, dark: dark)
+                    ExtensionDetailRows(entry: entry)
+                }
+                .padding(UIScale.pt(18))
             }
-            .formStyle(.grouped)
-            .navigationTitle(entry.title)
+            .background(DashSkin.paper(dark))
             .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
                 VStack(spacing: UIScale.pt(0)) {
-                    Divider()
+                    WoodRule(dark: dark)
                     HStack {
                         Spacer()
                         Button("Done") { dismiss() }
@@ -453,7 +460,7 @@ private struct ExtensionSettingsSheet: View {
                     }
                     .padding(.horizontal, UIScale.pt(18))
                     .padding(.vertical, UIScale.pt(12))
-                    .background(.bar)
+                    .background(DashSkin.paper2(dark))
                 }
             }
         }
@@ -479,32 +486,35 @@ private struct ExtensionSettingsSheet: View {
 
 private struct RequiredPermissionRows: View {
     let permissions: [ExtensionPermission]
+    let dark: Bool
     @State private var grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
 
     var body: some View {
         Group {
             if !permissions.isEmpty {
-                Section {
-                    ForEach(permissions, id: \.self) { permission in
-                        HStack(spacing: UIScale.pt(8)) {
-                            Image(
-                                systemName: grantedPermissions[permission] == true
-                                    ? "checkmark.circle.fill" : "circle"
-                            )
-                            .foregroundStyle(
-                                grantedPermissions[permission] == true ? .green : .secondary)
-                            Text(permission.displayName)
-                            Spacer()
-                            if grantedPermissions[permission] != true,
-                                let request = permission.grantRequest
-                            {
-                                Button("Grant...") { IPC.post(request) }
-                                    .pointerCursor()
+                SkinCard(title: "Required Access", dark: dark) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        ForEach(permissions, id: \.self) { permission in
+                            HStack(spacing: UIScale.pt(8)) {
+                                Image(
+                                    systemName: grantedPermissions[permission] == true
+                                        ? "checkmark.circle.fill" : "circle"
+                                )
+                                .foregroundStyle(
+                                    grantedPermissions[permission] == true
+                                        ? DashSkin.sage : DashSkin.inkFaint(dark))
+                                Text(permission.displayName)
+                                    .foregroundStyle(DashSkin.ink(dark))
+                                Spacer()
+                                if grantedPermissions[permission] != true,
+                                    let request = permission.grantRequest
+                                {
+                                    Button("Grant...") { IPC.post(request) }
+                                        .pointerCursor()
+                                }
                             }
                         }
                     }
-                } header: {
-                    Text("Required Access")
                 }
             }
         }
@@ -558,6 +568,8 @@ private struct ExtensionPermissionSheet: View {
     let cancel: () -> Void
     let enable: () -> Void
     let refresh: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var requiredGranted: Bool {
         request.entry.requiredPermissions.allSatisfy { grantedPermissions[$0] == true }
@@ -570,13 +582,14 @@ private struct ExtensionPermissionSheet: View {
                     .foregroundStyle(.tint)
                     .frame(width: UIScale.pt(44), height: UIScale.pt(44))
                     .background(
-                        Color.accentColor.opacity(0.12),
+                        DashSkin.accent(dark).opacity(0.12),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Enable \(request.entry.title)")
                         .font(.system(size: UIScale.pt(17), weight: .semibold))
+                        .foregroundStyle(DashSkin.ink(dark))
                     Text(request.entry.subtitle)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
             }
@@ -607,6 +620,7 @@ private struct ExtensionPermissionSheet: View {
         }
         .padding(UIScale.pt(24))
         .frame(width: UIScale.pt(540))
+        .background(DashSkin.paper(dark))
         .onAppear(perform: refresh)
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             refresh()
@@ -624,19 +638,20 @@ private struct ExtensionPermissionSheet: View {
         return HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: permission.symbolName)
                 .font(.system(size: UIScale.pt(16), weight: .medium))
-                .foregroundStyle(isGranted ? .green : .secondary)
+                .foregroundStyle(isGranted ? DashSkin.sage : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .background(
-                    (isGranted ? Color.green : Color.secondary).opacity(0.1),
+                    (isGranted ? DashSkin.sage : DashSkin.inkFaint(dark)).opacity(0.1),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text(permission.displayName)
                         .fontWeight(.medium)
+                        .foregroundStyle(DashSkin.ink(dark))
                     PermissionInfoButton(permission)
                     Text(required ? "Required" : "Optional")
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(required ? .orange : .secondary)
+                        .foregroundStyle(required ? DashSkin.gold : DashSkin.inkFaint(dark))
                 }
                 Text(permission.reason)
                     .settingsCaption()
@@ -649,7 +664,7 @@ private struct ExtensionPermissionSheet: View {
             if isGranted {
                 Label("Granted", systemImage: "checkmark.circle.fill")
                     .font(.system(size: UIScale.pt(10), weight: .medium))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(DashSkin.sage)
             } else if let request = permission.grantRequest {
                 Button("Grant") { grant(request) }
                     .controlSize(.small)
@@ -658,12 +673,12 @@ private struct ExtensionPermissionSheet: View {
         }
         .padding(UIScale.pt(14))
         .background(
-            Color(nsColor: .controlBackgroundColor),
+            DashSkin.paper2(dark),
             in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.45))
+                .stroke(DashSkin.line(dark))
         }
     }
 }
@@ -744,18 +759,41 @@ private struct UsageRows: View {
     @AppStorage(AppStorageKeys.Notify.tokenExpired, store: SharedDefaults.store) private
         var tokenExpired = true
     @State private var testSent = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var hasProvider: Bool { claudeEnabled || codexEnabled }
 
     var body: some View {
-        CLIToolStatusSection(
-            tools: ExtensionRegistry.entries.first { $0.id == "usage" }?.requiredTools ?? [],
-            extensionEnabled: enabled)
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            CLIToolStatusSection(
+                tools: ExtensionRegistry.entries.first { $0.id == "usage" }?.requiredTools ?? [],
+                extensionEnabled: enabled)
 
-        UsageMachineRows(extensionEnabled: enabled)
+            UsageMachineRows(extensionEnabled: enabled)
 
-        Section {
-            Group {
+            readoutCard
+            budgetCard
+            alertsCard
+        }
+        .onChange(of: claudeEnabled) { reconcileProviders() }
+        .onChange(of: codexEnabled) {
+            if enabled && codexEnabled { ToolProvisioner.shared.provision(.codex) }
+            reconcileProviders()
+        }
+    }
+
+    private var readoutCard: some View {
+        SkinCard(
+            title: "Readout styling",
+            note: limitsInMenuBar
+                ? (isCustomColor
+                    ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
+                    : "White and Black force a single tint. Pick Custom to color by risk stage.")
+                : nil,
+            dark: dark
+        ) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Toggle("Claude limits", isOn: $claudeEnabled)
                     .pointerCursor()
                 Toggle("Codex limits", isOn: $codexEnabled)
@@ -824,162 +862,153 @@ private struct UsageRows: View {
             .opacity(enabled ? 1 : 0.5)
             if !hasProvider {
                 Label("Agent Usage is paused", systemImage: "pause.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkSoft(dark))
                 Text(
                     "Turn on Agent Usage above to restore \(selectedProvider.label) limits. Menu bar limits and alerts are off."
                 )
                 .settingsCaption()
             }
-        } header: {
-            Text("Readout styling")
-        } footer: {
-            if limitsInMenuBar {
+        }
+        .foregroundStyle(DashSkin.ink(dark))
+    }
+
+    private var budgetCard: some View {
+        SkinCard(title: "Budget and pacing", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                Toggle("Pace my Claude usage", isOn: $budgetEnabled)
+                    .pointerCursor()
                 Text(
-                    isCustomColor
-                        ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
-                        : "White and Black force a single tint. Pick Custom to color by risk stage."
+                    "Set a personal cap under the real limit and get told if you're spending too fast."
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .settingsCaption()
+                if budgetEnabled {
+                    Picker("Mode", selection: $budgetMode) {
+                        Text("Auto daily pace").tag("pace")
+                        Text("Cap by a deadline").tag("cap")
+                    }.pointerCursor()
+                    Picker("Window", selection: $budgetKind) {
+                        Text("Weekly").tag("weekly")
+                        Text("Session (5h)").tag("session")
+                    }.pointerCursor()
+                    HStack {
+                        Text("Cap")
+                        Slider(value: $budgetCap, in: 10...100, step: 5)
+                        Text("\(Int(budgetCap))%").monospacedDigit().frame(
+                            width: UIScale.pt(40), alignment: .trailing)
+                    }
+                    if budgetMode == "cap" {
+                        DatePicker(
+                            "Stay under until",
+                            selection: Binding(
+                                get: {
+                                    budgetDeadlineTS > 0
+                                        ? Date(timeIntervalSinceReferenceDate: budgetDeadlineTS)
+                                        : Date().addingTimeInterval(2 * 86400)
+                                },
+                                set: { budgetDeadlineTS = $0.timeIntervalSinceReferenceDate }),
+                            displayedComponents: [.date, .hourAndMinute])
+                    }
+                }
             }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
         }
+        .foregroundStyle(DashSkin.ink(dark))
+    }
 
-        Section {
-            Toggle("Pace my Claude usage", isOn: $budgetEnabled)
-                .pointerCursor()
-            Text(
-                "Set a personal cap under the real limit and get told if you're spending too fast."
-            )
-            .settingsCaption()
-            if budgetEnabled {
-                Picker("Mode", selection: $budgetMode) {
-                    Text("Auto daily pace").tag("pace")
-                    Text("Cap by a deadline").tag("cap")
-                }.pointerCursor()
-                Picker("Window", selection: $budgetKind) {
-                    Text("Weekly").tag("weekly")
-                    Text("Session (5h)").tag("session")
-                }.pointerCursor()
-                HStack {
-                    Text("Cap")
-                    Slider(value: $budgetCap, in: 10...100, step: 5)
-                    Text("\(Int(budgetCap))%").monospacedDigit().frame(
-                        width: UIScale.pt(40), alignment: .trailing)
+    private var alertsCard: some View {
+        SkinCard(
+            title: "Alerts",
+            note:
+                "Alerts fire once per level or zone crossing, not on a repeating timer - staying in the same zone won't page you again.",
+            dark: dark
+        ) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                Toggle("Enable alerts", isOn: alertsBinding)
+                    .pointerCursor()
+                Group {
+                    Toggle(isOn: $trackSession) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Session (5h) alerts")
+                            InfoDot(
+                                "Fires once when the session window crosses warn or critical - it won't repeat while you stay in that zone."
+                            )
+                        }
+                    }
+                    .pointerCursor()
+                    Toggle(isOn: $trackWeekly) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Weekly alerts")
+                            InfoDot(
+                                "Fires once when the weekly window crosses warn or critical - same one-shot-per-zone behavior as session alerts."
+                            )
+                        }
+                    }
+                    .pointerCursor()
+                    Toggle("Back to green", isOn: $recovery)
+                        .pointerCursor()
+                    HStack {
+                        Text("Pacing margin")
+                        Spacer()
+                        Stepper(
+                            "±\(Int(pacingMargin)) pp", value: $pacingMargin, in: 5...25, step: 5
+                        )
+                        .pointerCursor()
+                    }
+                    Toggle(isOn: $pacingWarning) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Drifting / burning hot")
+                            InfoDot(
+                                "A separate signal from the level alerts above: how far ahead of an even burn-rate pace you are, regardless of the absolute percentage."
+                            )
+                        }
+                    }
+                    .pointerCursor()
+                    Toggle("Token expired", isOn: $tokenExpired)
+                        .pointerCursor()
+                    HStack {
+                        Toggle("Remind before session reset", isOn: $reminderSession)
+                            .pointerCursor()
+                        Picker("", selection: $reminderSessionOffset) {
+                            Text("5 min").tag(5)
+                            Text("15 min").tag(15)
+                            Text("30 min").tag(30)
+                            Text("1 h").tag(60)
+                        }
+                        .labelsHidden().pointerCursor().disabled(!reminderSession)
+                    }
+                    HStack {
+                        Toggle("Remind before weekly reset", isOn: $reminderWeekly)
+                            .pointerCursor()
+                        Picker("", selection: $reminderWeeklyOffset) {
+                            Text("1 h").tag(60)
+                            Text("2 h").tag(120)
+                            Text("6 h").tag(360)
+                            Text("12 h").tag(720)
+                        }
+                        .labelsHidden().pointerCursor().disabled(!reminderWeekly)
+                    }
                 }
-                if budgetMode == "cap" {
-                    DatePicker(
-                        "Stay under until",
-                        selection: Binding(
-                            get: {
-                                budgetDeadlineTS > 0
-                                    ? Date(timeIntervalSinceReferenceDate: budgetDeadlineTS)
-                                    : Date().addingTimeInterval(2 * 86400)
-                            },
-                            set: { budgetDeadlineTS = $0.timeIntervalSinceReferenceDate }),
-                        displayedComponents: [.date, .hourAndMinute])
+                .disabled(!notifyMaster)
+                .opacity(notifyMaster ? 1 : 0.5)
+
+                HStack {
+                    Button("Send test notification") {
+                        IPC.post(IPC.Name.requestTestNotification)
+                        testSent = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { testSent = false }
+                    }
+                    .pointerCursor()
+                    if testSent {
+                        Text("Sent - check Notification Center")
+                            .settingsCaption()
+                    }
                 }
             }
-        } header: {
-            Text("Budget and pacing")
         }
+        .foregroundStyle(DashSkin.ink(dark))
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-
-        Section {
-            Toggle("Enable alerts", isOn: alertsBinding)
-                .pointerCursor()
-            Group {
-                Toggle(isOn: $trackSession) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Session (5h) alerts")
-                        InfoDot(
-                            "Fires once when the session window crosses warn or critical - it won't repeat while you stay in that zone."
-                        )
-                    }
-                }
-                .pointerCursor()
-                Toggle(isOn: $trackWeekly) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Weekly alerts")
-                        InfoDot(
-                            "Fires once when the weekly window crosses warn or critical - same one-shot-per-zone behavior as session alerts."
-                        )
-                    }
-                }
-                .pointerCursor()
-                Toggle("Back to green", isOn: $recovery)
-                    .pointerCursor()
-                HStack {
-                    Text("Pacing margin")
-                    Spacer()
-                    Stepper(
-                        "±\(Int(pacingMargin)) pp", value: $pacingMargin, in: 5...25, step: 5
-                    )
-                    .pointerCursor()
-                }
-                Toggle(isOn: $pacingWarning) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Drifting / burning hot")
-                        InfoDot(
-                            "A separate signal from the level alerts above: how far ahead of an even burn-rate pace you are, regardless of the absolute percentage."
-                        )
-                    }
-                }
-                .pointerCursor()
-                Toggle("Token expired", isOn: $tokenExpired)
-                    .pointerCursor()
-                HStack {
-                    Toggle("Remind before session reset", isOn: $reminderSession)
-                        .pointerCursor()
-                    Picker("", selection: $reminderSessionOffset) {
-                        Text("5 min").tag(5)
-                        Text("15 min").tag(15)
-                        Text("30 min").tag(30)
-                        Text("1 h").tag(60)
-                    }
-                    .labelsHidden().pointerCursor().disabled(!reminderSession)
-                }
-                HStack {
-                    Toggle("Remind before weekly reset", isOn: $reminderWeekly)
-                        .pointerCursor()
-                    Picker("", selection: $reminderWeeklyOffset) {
-                        Text("1 h").tag(60)
-                        Text("2 h").tag(120)
-                        Text("6 h").tag(360)
-                        Text("12 h").tag(720)
-                    }
-                    .labelsHidden().pointerCursor().disabled(!reminderWeekly)
-                }
-            }
-            .disabled(!notifyMaster)
-            .opacity(notifyMaster ? 1 : 0.5)
-
-            HStack {
-                Button("Send test notification") {
-                    IPC.post(IPC.Name.requestTestNotification)
-                    testSent = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { testSent = false }
-                }
-                .pointerCursor()
-                if testSent {
-                    Text("Sent - check Notification Center")
-                        .settingsCaption()
-                }
-            }
-        } header: {
-            Text("Alerts")
-        } footer: {
-            Text(
-                "Alerts fire once per level or zone crossing, not on a repeating timer - staying in the same zone won't page you again."
-            )
-            .font(.system(size: UIScale.pt(10)))
-        }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
-        .onChange(of: claudeEnabled) { reconcileProviders() }
-        .onChange(of: codexEnabled) {
-            if enabled && codexEnabled { ToolProvisioner.shared.provision(.codex) }
-            reconcileProviders()
-        }
     }
 
     private var alertsBinding: Binding<Bool> {
@@ -1034,20 +1063,25 @@ private struct SystemStatsRows: View {
     @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
         var statsColorHex =
         "FFFFFF"
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Section {
-            ColorPicker(
-                "Color",
-                selection: Binding(
-                    get: { DashPalette.color(statsColorHex) },
-                    set: { statsColorHex = $0.hex6 }),
-                supportsOpacity: false)
-            Text("Sampled every couple of seconds; costs nothing measurable.")
-                .settingsCaption()
+        SkinCard(title: "Menu bar color", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                ColorPicker(
+                    "Color",
+                    selection: Binding(
+                        get: { DashPalette.color(statsColorHex) },
+                        set: { statsColorHex = $0.hex6 }),
+                    supportsOpacity: false)
+                Text("Sampled every couple of seconds; costs nothing measurable.")
+                    .settingsCaption()
+            }
+            .foregroundStyle(DashSkin.ink(dark))
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
     }
 }
 
@@ -1057,37 +1091,44 @@ private struct MusicRows: View {
     @AppStorage(MusicFade.enabledKey, store: SharedDefaults.store) private var crossfade = true
     @AppStorage(MusicFade.secondsKey, store: SharedDefaults.store) private var crossfadeSeconds =
         MusicFade.defaultSeconds
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        CLIToolStatusSection(tools: [.youtubeDownloader], extensionEnabled: enabled)
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            CLIToolStatusSection(tools: [.youtubeDownloader], extensionEnabled: enabled)
 
-        Section {
-            LabeledContent("Music folder") {
-                Button("Open in Finder") {
-                    try? FileManager.default.createDirectory(
-                        at: Repo.musicDir, withIntermediateDirectories: true)
-                    NSWorkspace.shared.open(Repo.musicDir)
-                }
-                .pointerCursor()
-            }
-            Toggle("Fade between tracks", isOn: $crossfade)
-                .pointerCursor()
-            if crossfade {
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    LabeledContent("Fade length") {
-                        Text(String(format: "%.1fs", crossfadeSeconds))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    Slider(value: $crossfadeSeconds, in: MusicFade.secondsRange)
+            SkinCard(title: "Playback", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    LabeledContent("Music folder") {
+                        Button("Open in Finder") {
+                            try? FileManager.default.createDirectory(
+                                at: Repo.musicDir, withIntermediateDirectories: true)
+                            NSWorkspace.shared.open(Repo.musicDir)
+                        }
                         .pointerCursor()
-                    Text("How long the old track fades out while the next one fades in.")
-                        .settingsCaption()
+                    }
+                    Toggle("Fade between tracks", isOn: $crossfade)
+                        .pointerCursor()
+                    if crossfade {
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            LabeledContent("Fade length") {
+                                Text(String(format: "%.1fs", crossfadeSeconds))
+                                    .foregroundStyle(DashSkin.inkSoft(dark))
+                                    .monospacedDigit()
+                            }
+                            Slider(value: $crossfadeSeconds, in: MusicFade.secondsRange)
+                                .pointerCursor()
+                            Text("How long the old track fades out while the next one fades in.")
+                                .settingsCaption()
+                        }
+                    }
                 }
+                .foregroundStyle(DashSkin.ink(dark))
+                .disabled(!enabled)
+                .opacity(enabled ? 1 : 0.5)
             }
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
     }
 }
 
@@ -1096,16 +1137,21 @@ private struct MicMuteRows: View {
         false
     @AppStorage(AppStorageKeys.Mic.muteInMenuBar, store: SharedDefaults.store) private
         var inMenuBar = true
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Section {
-            Toggle("Show in the menu bar", isOn: $inMenuBar)
-                .pointerCursor()
-            Text("The menu bar icon shows the current mute state and toggles it on click.")
-                .settingsCaption()
+        SkinCard(title: "Mic Mute", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                Toggle("Show in the menu bar", isOn: $inMenuBar)
+                    .pointerCursor()
+                Text("The menu bar icon shows the current mute state and toggles it on click.")
+                    .settingsCaption()
+            }
+            .foregroundStyle(DashSkin.ink(dark))
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
     }
 }
 
@@ -1115,40 +1161,45 @@ private struct SystemRows: View {
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
         var preventSleep = false
     @State private var cleaningStarted = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Section {
-            Toggle(isOn: $preventSleep) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Keep awake")
-                    InfoDot(
-                        "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
-                    )
-                }
-            }
-            .pointerCursor()
-            HStack {
-                Text("Keyboard cleaning")
-                InfoDot(
-                    "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
-                )
-                Spacer()
-                if cleaningStarted {
-                    Text("Locked - check the overlay")
-                        .settingsCaption()
-                }
-                Button("Clean now") {
-                    IPC.post(IPC.Name.requestKeyboardClean)
-                    cleaningStarted = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                        cleaningStarted = false
+        SkinCard(title: "System", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                Toggle(isOn: $preventSleep) {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("Keep awake")
+                        InfoDot(
+                            "Keeps your Mac awake until you turn this off again, even with the lid closed on power."
+                        )
                     }
                 }
                 .pointerCursor()
+                HStack {
+                    Text("Keyboard cleaning")
+                    InfoDot(
+                        "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
+                    )
+                    Spacer()
+                    if cleaningStarted {
+                        Text("Locked - check the overlay")
+                            .settingsCaption()
+                    }
+                    Button("Clean now") {
+                        IPC.post(IPC.Name.requestKeyboardClean)
+                        cleaningStarted = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                            cleaningStarted = false
+                        }
+                    }
+                    .pointerCursor()
+                }
             }
+            .foregroundStyle(DashSkin.ink(dark))
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
     }
 }
 

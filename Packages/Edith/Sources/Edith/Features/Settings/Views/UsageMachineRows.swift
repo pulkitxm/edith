@@ -9,43 +9,47 @@ struct UsageMachineRows: View {
     @State private var summaries: [UUID: MachineUsageSummary] = [:]
     @State private var collecting: Task<Void, Never>?
     @State private var status = ""
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Section {
-            if machines.isEmpty {
-                Text("No machines are configured yet. Add one under Machines.")
-                    .settingsCaption()
-            } else {
-                ForEach(machines) { machine in
-                    row(machine)
-                }
-                HStack(spacing: UIScale.pt(8)) {
-                    Text(status.isEmpty ? footnote : status)
+        SkinCard(
+            title: "Collected over SSH",
+            note:
+                "Edith runs its collector on a ticked machine over SSH and installs what it is missing there. Each agent it finds arrives as its own usage source.",
+            dark: dark
+        ) {
+            Group {
+                if machines.isEmpty {
+                    Text("No machines are configured yet. Add one under Machines.")
                         .settingsCaption()
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                    if collecting != nil {
-                        ProgressView().controlSize(.small)
-                        Button("Stop") { stop() }.pointerCursor()
-                    } else {
-                        Button("Collect now") { collect() }
-                            .pointerCursor()
-                            .disabled(counted.isEmpty)
+                } else {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        ForEach(machines) { machine in
+                            row(machine)
+                        }
+                        HStack(spacing: UIScale.pt(8)) {
+                            Text(status.isEmpty ? footnote : status)
+                                .settingsCaption()
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 0)
+                            if collecting != nil {
+                                ProgressView().controlSize(.small)
+                                Button("Stop") { stop() }.pointerCursor()
+                            } else {
+                                Button("Collect now") { collect() }
+                                    .pointerCursor()
+                                    .disabled(counted.isEmpty)
+                            }
+                        }
                     }
                 }
             }
-        } header: {
-            Text("Collected over SSH")
-        } footer: {
-            Text(
-                "Edith runs its collector on a ticked machine over SSH and installs what it "
-                    + "is missing there. Each agent it finds arrives as its own usage source."
-            )
-            .font(.system(size: UIScale.pt(10)))
+            .foregroundStyle(DashSkin.ink(dark))
+            .disabled(!extensionEnabled)
+            .opacity(extensionEnabled ? 1 : 0.5)
         }
-        .disabled(!extensionEnabled)
-        .opacity(extensionEnabled ? 1 : 0.5)
         .onAppear(perform: reload)
     }
 

@@ -614,7 +614,6 @@ struct MusicPage: View {
             trackList
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
-        .navigationTitle("Music")
         .sheet(isPresented: $showDownloader) {
             DownloadSheet()
         }
@@ -696,7 +695,7 @@ struct MusicPage: View {
                             .buttonStyle(.link)
                     }
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 searchField
                 breadcrumbBar
@@ -728,7 +727,7 @@ struct MusicPage: View {
                 Image(systemName: remote.showingFavourites ? "heart.fill" : "heart")
                     .foregroundStyle(
                         remote.showingFavourites
-                            ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
+                            ? AnyShapeStyle(theme) : AnyShapeStyle(DashSkin.inkSoft(dark)))
             }
             .buttonStyle(HoverButtonStyle())
             .help(remote.showingFavourites ? "Back to your folders" : "Show favourites")
@@ -839,7 +838,7 @@ struct MusicPage: View {
         if folders.isEmpty {
             Image(systemName: "chevron.right")
                 .font(.system(size: UIScale.pt(9)))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
         } else {
             Menu {
                 ForEach(folders) { folder in
@@ -848,7 +847,7 @@ struct MusicPage: View {
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: UIScale.pt(9), weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                     .contentShape(Rectangle())
             }
@@ -865,14 +864,14 @@ struct MusicPage: View {
             VStack(spacing: UIScale.pt(8)) {
                 Text(emptyMessage)
                     .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkSoft(dark))
                 Text(
                     remote.showingFavourites
                         ? "Tap the heart on a track to add it here"
                         : TrackMeta.url(for: remote.folderPath).path
                 )
                 .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -992,12 +991,14 @@ struct SeekBar: View {
     let theme: Color
     var height: CGFloat = 5
     @State private var dragFraction: Double?
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         GeometryReader { geo in
             let knob = max(11, height + 7)
             ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.1))
+                Capsule().fill(DashSkin.line(dark))
                 if remote.isPlaying, visibility.visible, dragFraction == nil {
                     TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
                         fill(geo.size.width, knob)
@@ -1051,6 +1052,8 @@ private struct CrumbButton: View {
     let onTap: () -> Void
     let onDrop: ([String]) -> Void
     @State private var dropTargeted = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         HStack(spacing: UIScale.pt(3)) {
@@ -1060,7 +1063,7 @@ private struct CrumbButton: View {
             Text(name).lineLimit(1)
         }
         .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
-        .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+        .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(DashSkin.inkSoft(dark)))
         .padding(.horizontal, UIScale.pt(7))
         .padding(.vertical, UIScale.pt(4))
         .background(
@@ -1090,9 +1093,11 @@ private struct MusicFolderRow: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -1108,14 +1113,14 @@ private struct MusicFolderRow: View {
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                         Text(folder.name)
-                            .font(.system(size: UIScale.pt(13), weight: .medium))
+                            .font(DashSkin.serif(13.5, weight: .medium))
                             .lineLimit(1)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(DashSkin.ink(dark))
                         Text(
                             location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " "
                         )
                         .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                         .truncationMode(.head)
                     }
@@ -1138,13 +1143,13 @@ private struct MusicFolderRow: View {
 
             Image(systemName: "chevron.right")
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
         }
         .padding(.vertical, UIScale.pt(6))
         .padding(.horizontal, UIScale.pt(8))
         .background(
             dropTargeted
-                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
+                ? theme.opacity(0.16) : hovering ? DashSkin.ink(dark).opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .overlay(
@@ -1193,8 +1198,10 @@ private struct MusicPageRow: View {
     let onToggleFavourite: () -> Void
     let onOpenFolder: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var duration: String?
     @State private var hovering = false
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -1208,14 +1215,14 @@ private struct MusicPageRow: View {
                 HStack(spacing: UIScale.pt(10)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                         Text(track.title)
-                            .font(.system(size: UIScale.pt(13)))
+                            .font(DashSkin.serif(13.5, weight: .medium))
                             .lineLimit(1)
-                            .foregroundStyle(isCurrent ? theme : .primary)
+                            .foregroundStyle(isCurrent ? theme : DashSkin.ink(dark))
                             .presenterBlur(blur)
                         if let location {
                             Text(location)
                                 .font(.system(size: UIScale.pt(10.5)))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                                 .truncationMode(.head)
                         }
@@ -1229,7 +1236,7 @@ private struct MusicPageRow: View {
                     Text(duration ?? "")
                         .font(.system(size: UIScale.pt(11)))
                         .monospacedDigit()
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -1240,7 +1247,9 @@ private struct MusicPageRow: View {
             Button(action: onToggleFavourite) {
                 Image(systemName: isFavourite ? "heart.fill" : "heart")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(isFavourite ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(
+                        isFavourite ? AnyShapeStyle(theme) : AnyShapeStyle(DashSkin.inkFaint(dark))
+                    )
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1252,7 +1261,7 @@ private struct MusicPageRow: View {
         .padding(.horizontal, UIScale.pt(8))
         .background(
             isCurrent
-                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+                ? DashSkin.line(dark) : hovering ? DashSkin.ink(dark).opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(7))
         )
         .onHover { hovering = $0 }
@@ -1327,9 +1336,11 @@ private struct MusicFolderTile: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
@@ -1360,11 +1371,12 @@ private struct MusicFolderTile: View {
 
             VStack(spacing: UIScale.pt(1)) {
                 Text(folder.name)
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(DashSkin.serif(13.5, weight: .medium))
+                    .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                 Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .truncationMode(.head)
             }
@@ -1373,7 +1385,7 @@ private struct MusicFolderTile: View {
         .padding(UIScale.pt(6))
         .background(
             dropTargeted
-                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
+                ? theme.opacity(0.16) : hovering ? DashSkin.ink(dark).opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(10))
         )
         .overlay(
@@ -1416,8 +1428,10 @@ private struct MusicTrackTile: View {
     let onToggleFavourite: () -> Void
     let onOpenFolder: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @State private var duration: String?
     @State private var hovering = false
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
@@ -1453,15 +1467,15 @@ private struct MusicTrackTile: View {
 
             VStack(spacing: UIScale.pt(1)) {
                 Text(track.title)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(DashSkin.serif(12, weight: .regular))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(isCurrent ? theme : .primary)
+                    .foregroundStyle(isCurrent ? theme : DashSkin.ink(dark))
                     .presenterBlur(blur)
                 Text(location ?? duration ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .truncationMode(.head)
             }
@@ -1474,7 +1488,7 @@ private struct MusicTrackTile: View {
         .padding(UIScale.pt(6))
         .background(
             isCurrent
-                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
+                ? DashSkin.line(dark) : hovering ? DashSkin.ink(dark).opacity(0.05) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(10))
         )
         .onHover { hovering = $0 }
@@ -1620,8 +1634,8 @@ private struct MusicDetailSheet: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             Spacer()
-            headerButton("trash", tint: .red, help: "Move to Trash", action: onDelete)
-            headerButton("xmark", tint: .secondary, help: "Close", action: onClose)
+            headerButton("trash", tint: DashSkin.danger, help: "Move to Trash", action: onDelete)
+            headerButton("xmark", tint: DashSkin.inkFaint(dark), help: "Close", action: onClose)
         }
         .padding(.horizontal, UIScale.pt(16))
         .padding(.top, UIScale.pt(14))
@@ -1760,7 +1774,7 @@ private struct MusicDetailSheet: View {
             }
             .font(.system(size: UIScale.pt(10.5)))
             .monospacedDigit()
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
 
@@ -1891,11 +1905,9 @@ struct MusicFooter: View {
         }
         .frame(height: UIScale.pt(64))
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial)
+        .background(DashSkin.paper2(dark))
         .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(height: UIScale.pt(1))
+            WoodRule(dark: dark)
         }
     }
 
@@ -1924,12 +1936,13 @@ struct MusicFooter: View {
             .help(track.isVideo ? "Watch this video" : "Show details")
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(track.title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(DashSkin.serif(13.5, weight: .medium))
+                    .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .presenterBlur(blur)
                 Text(remote.isPlaying ? "Now playing" : "Paused")
                     .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(78), alignment: .leading)
             }
             PlaybackWave(
@@ -1992,7 +2005,7 @@ struct MusicFooter: View {
         }
         .font(.system(size: UIScale.pt(10.5)))
         .monospacedDigit()
-        .foregroundStyle(.secondary)
+        .foregroundStyle(DashSkin.inkFaint(dark))
     }
 
     @ViewBuilder
@@ -2012,7 +2025,7 @@ struct MusicFooter: View {
                 let liked = remote.favouritePaths.contains(track.relativePath)
                 glassButton(
                     liked ? "heart.fill" : "heart", diameter: 34, iconSize: 12,
-                    iconColor: liked ? .white : .secondary,
+                    iconColor: liked ? .white : DashSkin.inkSoft(dark),
                     tint: liked ? theme : nil
                 ) {
                     remote.toggleFavourite(track)
@@ -2021,7 +2034,7 @@ struct MusicFooter: View {
             }
             glassButton(
                 "shuffle", diameter: 34, iconSize: 12,
-                iconColor: remote.shuffling ? .white : .secondary,
+                iconColor: remote.shuffling ? .white : DashSkin.inkSoft(dark),
                 tint: remote.shuffling ? theme : nil
             ) {
                 remote.toggleShuffle()
@@ -2029,7 +2042,7 @@ struct MusicFooter: View {
             .help(remote.shuffling ? "Shuffling this folder and everything in it" : "Play in order")
             glassButton(
                 "repeat", diameter: 34, iconSize: 12,
-                iconColor: remote.looping ? .white : .secondary,
+                iconColor: remote.looping ? .white : DashSkin.inkSoft(dark),
                 tint: remote.looping ? theme : nil
             ) {
                 remote.toggleLoop()
@@ -2057,10 +2070,10 @@ struct MusicFooter: View {
         HStack(spacing: UIScale.pt(12)) {
             Image(systemName: "music.note")
                 .font(.system(size: UIScale.pt(14)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
             Text("Nothing playing")
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
             Button {
                 mainWindowSection = MainDestination.music.rawValue

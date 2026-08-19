@@ -264,7 +264,13 @@ struct CompanionChatScreen: View {
         HStack(spacing: UIScale.pt(0)) {
             if !compact {
                 rail
-                Divider().opacity(0.35)
+                LinearGradient(
+                    colors: [
+                        DashSkin.line(dark).opacity(0), DashSkin.gold.opacity(dark ? 0.4 : 0.32),
+                        DashSkin.line(dark).opacity(0),
+                    ], startPoint: .top, endPoint: .bottom
+                )
+                .frame(width: UIScale.pt(1))
             }
             thread
         }

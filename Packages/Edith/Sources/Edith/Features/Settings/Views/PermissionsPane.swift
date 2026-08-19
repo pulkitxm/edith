@@ -15,6 +15,8 @@ struct PermissionsPane: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var accent: Color { themeColor(themeName) }
 
@@ -47,7 +49,7 @@ struct PermissionsPane: View {
                     eyebrow(title)
                     Text("\(sectionUsages.count)")
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 ForEach(sectionUsages) { usage in
                     PermissionCard(usage: usage, grant: grant)
@@ -75,7 +77,8 @@ struct PermissionsPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle("Permissions")
+        .background(DashSkin.paper(dark))
+        .foregroundStyle(DashSkin.ink(dark))
         .onAppear {
             if automaticActionsEnabled { refresh() }
         }
@@ -136,21 +139,22 @@ struct PermissionsPane: View {
                             Text("\(attentionCount)")
                                 .padding(.horizontal, UIScale.pt(5))
                                 .background(
-                                    filter == item ? Color.white.opacity(0.25) : Color.red,
+                                    filter == item
+                                        ? Color.white.opacity(0.25) : DashSkin.accentDeep(dark),
                                     in: Capsule()
                                 )
                                 .foregroundStyle(Color.white)
                         }
                     }
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    .foregroundStyle(filter == item ? Color.white : Color.secondary)
+                    .foregroundStyle(filter == item ? Color.white : DashSkin.inkSoft(dark))
                     .padding(.horizontal, UIScale.pt(12))
                     .frame(height: UIScale.pt(28))
                     .background(filter == item ? accent : Color.clear)
                     .clipShape(Capsule())
                     .overlay {
                         if filter != item {
-                            Capsule().stroke(Color(nsColor: .separatorColor).opacity(0.65))
+                            Capsule().stroke(DashSkin.line(dark))
                         }
                     }
                 }
@@ -170,14 +174,14 @@ struct PermissionsPane: View {
         VStack(spacing: UIScale.pt(6)) {
             Image(systemName: "checkmark.seal")
                 .font(.system(size: UIScale.pt(26)))
-                .foregroundStyle(.green)
+                .foregroundStyle(DashSkin.sage)
             Text(
                 filter == .attention
                     ? "Everything your extensions need is granted."
                     : "Turn on an extension to see the access it needs."
             )
             .font(.system(size: UIScale.pt(12)))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DashSkin.inkSoft(dark))
             Button("Browse Extensions") {
                 mainWindowSection = MainDestination.extensions.rawValue
             }
@@ -208,6 +212,8 @@ struct PermissionsPane: View {
 private struct PermissionCard: View {
     let usage: PermissionUsage
     let grant: (PermissionUsage) -> Void
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var permission: ExtensionPermission { usage.permission }
 
@@ -215,10 +221,10 @@ private struct PermissionCard: View {
         HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: permission.symbolName)
                 .font(.system(size: UIScale.pt(16), weight: .medium))
-                .foregroundStyle(usage.isGranted ? .green : .secondary)
+                .foregroundStyle(usage.isGranted ? DashSkin.sage : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(34), height: UIScale.pt(34))
                 .background(
-                    (usage.isGranted ? Color.green : Color.secondary).opacity(0.12),
+                    (usage.isGranted ? DashSkin.sage : DashSkin.inkFaint(dark)).opacity(0.12),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous))
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 HStack(spacing: UIScale.pt(8)) {
@@ -238,27 +244,27 @@ private struct PermissionCard: View {
         }
         .padding(UIScale.pt(14))
         .background(
-            Color(nsColor: .controlBackgroundColor),
+            DashSkin.paper2(dark),
             in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .stroke(
                     usage.blocksEnabledExtension
-                        ? Color.orange.opacity(0.6)
-                        : Color(nsColor: .separatorColor).opacity(0.5))
+                        ? DashSkin.gold.opacity(0.6)
+                        : DashSkin.line(dark))
         }
     }
 
     @ViewBuilder private var statusBadge: some View {
         if usage.isGranted {
-            badge("Granted", color: .green)
+            badge("Granted", color: DashSkin.sage)
         } else if usage.blocksEnabledExtension {
-            badge("Needed now", color: .orange)
+            badge("Needed now", color: DashSkin.gold)
         } else if usage.grantsOnFirstUse {
-            badge("On first use", color: .secondary)
+            badge("On first use", color: DashSkin.inkFaint(dark))
         } else {
-            badge("Not granted", color: .secondary)
+            badge("Not granted", color: DashSkin.inkFaint(dark))
         }
     }
 
@@ -288,15 +294,15 @@ private struct PermissionCard: View {
                     Text(entry.title)
                     if required {
                         Text("required")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
                 .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(enabled ? Color.primary : Color.secondary)
+                .foregroundStyle(enabled ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
                 .padding(.horizontal, UIScale.pt(7))
                 .padding(.vertical, UIScale.pt(3))
                 .background(
-                    Color(nsColor: .separatorColor).opacity(enabled ? 0.35 : 0.15), in: Capsule())
+                    DashSkin.line(dark).opacity(enabled ? 0.7 : 0.4), in: Capsule())
             }
         }
     }

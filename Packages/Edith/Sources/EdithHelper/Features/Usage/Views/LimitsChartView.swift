@@ -9,6 +9,8 @@ struct LimitsChartView: View {
         LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     struct Sample: Identifiable {
         let date: Date
@@ -44,24 +46,24 @@ struct LimitsChartView: View {
                 .foregroundStyle(by: .value("Series", s.series))
             }
             RuleMark(y: .value("Warning", warn))
-                .foregroundStyle(.orange.opacity(0.35))
+                .foregroundStyle(DashSkin.gold.opacity(0.35))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             RuleMark(y: .value("Critical", crit))
-                .foregroundStyle(.red.opacity(0.35))
+                .foregroundStyle(DashSkin.danger.opacity(0.35))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
         }
-        .chartForegroundStyleScale(["Session": theme, "Weekly": Color.secondary])
+        .chartForegroundStyleScale(["Session": theme, "Weekly": DashSkin.inkSoft(dark)])
         .chartYScale(domain: 0...100)
         .chartYAxis {
             AxisMarks(values: [0, 50, 100]) {
-                AxisGridLine().foregroundStyle(.primary.opacity(0.08))
-                AxisValueLabel().font(.system(size: 8)).foregroundStyle(.tertiary)
+                AxisGridLine().foregroundStyle(DashSkin.line(dark))
+                AxisValueLabel().font(.system(size: 8)).foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
         .chartXAxis {
             AxisMarks(values: .stride(by: .hour, count: 6)) {
                 AxisValueLabel(format: .dateTime.hour())
-                    .font(.system(size: 8)).foregroundStyle(.tertiary)
+                    .font(.system(size: 8)).foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
         .chartLegend(position: .top, alignment: .trailing, spacing: 4)
