@@ -296,16 +296,13 @@ struct MainWindowView: View {
     @State private var keyboardCleanTrigger = 0
     @State private var lidAwakeActive = SharedDefaults.store.bool(
         forKey: LidAwakeState.activeKey)
+    @State private var sidebarWidth: CGFloat = 250
     @Namespace private var sidebarSelectionNamespace
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var theme: Color { themeColor(themeName) }
-
-    private static let minSidebarWidth = 180.0
-
-    private var clampedSidebarWidth: Double { Self.minSidebarWidth }
 
     private var columnVisibility: Binding<NavigationSplitViewVisibility> {
         Binding(
@@ -507,7 +504,7 @@ struct MainWindowView: View {
     private func mainArea() -> some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
             sidebar()
-                .navigationSplitViewColumnWidth(min: 250, ideal: 250, max: 250)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 350)
         } detail: {
             detailColumn()
         }
@@ -550,6 +547,13 @@ struct MainWindowView: View {
                 }
                 credit
                     .padding(.vertical, UIScale.pt(8))
+            }
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { sidebarWidth = geo.size.width }
+                    .onChange(of: geo.size.width) { _, width in sidebarWidth = width }
             }
         }
     }
@@ -758,14 +762,14 @@ struct MainWindowView: View {
                 preventSleep.toggle()
             },
         ]
-        VStack(spacing: UIScale.pt(8)) {
+        VStack(spacing: UIScale.pt(10)) {
             if systemEnabled {
-                if clampedSidebarWidth < 220 {
-                    tiles[0]; tiles[1]
-                } else {
-                    HStack(spacing: UIScale.pt(8)) {
+                if sidebarWidth > 250 {
+                    HStack(spacing: UIScale.pt(10)) {
                         tiles[0]; tiles[1]
                     }
+                } else {
+                    tiles[0]; tiles[1]
                 }
             }
             if presenterEnabled {
@@ -897,20 +901,20 @@ struct MainWindowView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: UIScale.pt(4)) {
+            VStack(spacing: UIScale.pt(8)) {
                 Image(systemName: icon)
-                    .font(.system(size: UIScale.pt(14)))
+                    .font(.system(size: UIScale.pt(21)))
                     .symbolEffect(.bounce, value: trigger)
                 Text(title)
-                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .font(.system(size: UIScale.pt(13), weight: .semibold))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(16))
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             .background(
                 active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                in: RoundedRectangle(cornerRadius: UIScale.pt(14))
             )
             .contentShape(Rectangle())
         }
