@@ -2,7 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct HerdrPage: View {
-    @State private var store = HerdrStore()
+    @State private var store: HerdrStore
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
@@ -13,6 +13,10 @@ struct HerdrPage: View {
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
+
+    init(store: HerdrStore = .shared) {
+        _store = State(initialValue: store)
+    }
 
     private var dark: Bool { scheme == .dark }
     private var hideAgents: Bool { presenterState.active && presenterBlurAgents }

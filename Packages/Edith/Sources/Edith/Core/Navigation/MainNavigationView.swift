@@ -438,6 +438,14 @@ struct MainWindowView: View {
                 nav.record(location)
             }
         }
+        .onChange(of: destination) { old, new in
+            if old == .herdr, new != .herdr {
+                sidebarOpen = true
+            }
+            if new == .herdr {
+                sidebarOpen = HerdrStore.shared.selectedTab == HerdrStore.boardID
+            }
+        }
         .onAppear {
             guard automaticActionsEnabled else { return }
             applyNavigationFallback()

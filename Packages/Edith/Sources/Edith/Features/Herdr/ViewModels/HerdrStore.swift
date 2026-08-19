@@ -7,6 +7,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class HerdrStore {
+    static let shared = HerdrStore()
     static let boardID = "board"
 
     var hosts: [HerdrHostSnapshot] = []

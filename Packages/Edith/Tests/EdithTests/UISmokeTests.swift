@@ -178,7 +178,7 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     }
 
     @Test func herdrPageRenders() {
-        #expect(renders(HerdrPage()))
+        #expect(renders(HerdrPage(store: HerdrStore())))
     }
 
     @Test func musicPageRenders() {
