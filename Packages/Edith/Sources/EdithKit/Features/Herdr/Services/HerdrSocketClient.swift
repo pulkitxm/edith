@@ -40,26 +40,32 @@ final class HerdrSocketClient: @unchecked Sendable {
           os.write(o.fileno(),b)
         """
 
-    private let writer: FileHandle
-    private let reader: FileHandle
+    private var readFD: Int32
+    private var writeFD: Int32
     private let teardown: () -> Void
+    private let keepAlive: [AnyObject]
     private let lock = NSLock()
     private var buffer = Data()
     private var pending: [String: CheckedContinuation<String, Error>] = [:]
     private var eventWaiters: [UUID: AsyncStream<Void>.Continuation] = [:]
     private var closed = false
 
-    private init(writer: FileHandle, reader: FileHandle, teardown: @escaping () -> Void) {
-        self.writer = writer
-        self.reader = reader
+    private init(
+        readFD: Int32, writeFD: Int32, teardown: @escaping () -> Void,
+        keepAlive: [AnyObject]
+    ) {
+        self.readFD = readFD
+        self.writeFD = writeFD
         self.teardown = teardown
+        self.keepAlive = keepAlive
+        Self.setCloseOnExec(readFD)
+        if writeFD != readFD { Self.setCloseOnExec(writeFD) }
         startReading()
     }
 
     static func unix(path: String) throws -> HerdrSocketClient {
         let fd = try connectUnix(path)
-        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        return HerdrSocketClient(writer: handle, reader: handle, teardown: {})
+        return HerdrSocketClient(readFD: fd, writeFD: fd, teardown: {}, keepAlive: [])
     }
 
     static func ssh(_ connection: SSHConnection, socketPath: String) throws -> HerdrSocketClient {
@@ -73,13 +79,18 @@ final class HerdrSocketClient: @unchecked Sendable {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         try process.run()
+        let readFD = Darwin.dup(stdoutPipe.fileHandleForReading.fileDescriptor)
+        let writeFD = Darwin.dup(stdinPipe.fileHandleForWriting.fileDescriptor)
+        guard readFD >= 0, writeFD >= 0 else {
+            if process.isRunning { process.terminate() }
+            throw HerdrSocketError(message: "could not attach to the herdr relay")
+        }
         return HerdrSocketClient(
-            writer: stdinPipe.fileHandleForWriting,
-            reader: stdoutPipe.fileHandleForReading,
+            readFD: readFD, writeFD: writeFD,
             teardown: {
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
                 if process.isRunning { process.terminate() }
-            })
+            },
+            keepAlive: [process, stdinPipe, stdoutPipe, stderrPipe])
     }
 
     var events: AsyncStream<Void> {
@@ -146,7 +157,7 @@ final class HerdrSocketClient: @unchecked Sendable {
             }
             pending[id] = continuation
             lock.unlock()
-            writer.write(Data(line.utf8))
+            writeBytes(Data(line.utf8))
             Task {
                 try? await Task.sleep(for: .seconds(8))
                 resume(
@@ -156,15 +167,49 @@ final class HerdrSocketClient: @unchecked Sendable {
     }
 
     private func startReading() {
-        let reader = reader
         Task.detached { [weak self] in
+            var chunk = [UInt8](repeating: 0, count: 64 * 1024)
             while let self {
-                let data = reader.readData(ofLength: 64 * 1024)
-                if data.isEmpty {
+                self.lock.lock()
+                let fd = self.readFD
+                let done = self.closed
+                self.lock.unlock()
+                if done || fd < 0 { return }
+                let count = chunk.withUnsafeMutableBytes { raw -> Int in
+                    guard let base = raw.baseAddress else { return -1 }
+                    return Darwin.read(fd, base, raw.count)
+                }
+                if count == 0 {
                     self.finish(HerdrSocketError(message: "herdr socket closed"))
                     return
                 }
-                self.ingest(data)
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    self.finish(HerdrSocketError(message: "herdr socket closed"))
+                    return
+                }
+                self.ingest(Data(chunk.prefix(count)))
+            }
+        }
+    }
+
+    private func writeBytes(_ data: Data) {
+        data.withUnsafeBytes { raw in
+            guard let base = raw.bindMemory(to: UInt8.self).baseAddress else { return }
+            var sent = 0
+            while sent < data.count {
+                lock.lock()
+                let fd = writeFD
+                let done = closed
+                lock.unlock()
+                if done || fd < 0 { return }
+                let count = Darwin.write(fd, base + sent, data.count - sent)
+                if count == 0 { return }
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    return
+                }
+                sent += count
             }
         }
     }
@@ -224,18 +269,33 @@ final class HerdrSocketClient: @unchecked Sendable {
             return
         }
         closed = true
+        let readFD = readFD
+        let writeFD = writeFD
+        self.readFD = -1
+        self.writeFD = -1
         let pending = pending
         self.pending = [:]
         let waiters = Array(eventWaiters.values)
         eventWaiters = [:]
         lock.unlock()
+        if readFD >= 0 {
+            _ = Darwin.shutdown(readFD, SHUT_RDWR)
+            Darwin.close(readFD)
+        }
+        if writeFD >= 0, writeFD != readFD {
+            Darwin.close(writeFD)
+        }
         for continuation in pending.values {
             continuation.resume(throwing: error)
         }
         for waiter in waiters { waiter.finish() }
-        try? writer.close()
-        if reader !== writer { try? reader.close() }
         teardown()
+        _ = keepAlive
+    }
+
+    private static func setCloseOnExec(_ fd: Int32) {
+        let flags = fcntl(fd, F_GETFD)
+        if flags >= 0 { _ = fcntl(fd, F_SETFD, flags | FD_CLOEXEC) }
     }
 
     private static func connectUnix(_ path: String) throws -> Int32 {

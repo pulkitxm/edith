@@ -228,4 +228,16 @@ import Testing
         #expect(HerdrSocketClient.relayScript.contains("AF_UNIX"))
         #expect(HerdrSocketClient.boardSubscriptions.contains { $0["type"] == "pane.updated" })
     }
+
+    @Test func aMissingSocketThrowsInsteadOfAborting() {
+        #expect(throws: HerdrSocketError.self) {
+            try HerdrSocketClient.unix(path: "/tmp/edith-herdr-missing.sock")
+        }
+    }
+
+    @Test func closingALiveSocketDoesNotAbort() throws {
+        guard let path = HerdrSocketDiscovery.local().first?.path else { return }
+        let client = try HerdrSocketClient.unix(path: path)
+        client.close()
+    }
 }
