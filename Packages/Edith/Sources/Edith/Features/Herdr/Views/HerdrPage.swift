@@ -8,8 +8,6 @@ struct HerdrPage: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
-        var sidebarOpen = true
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
@@ -61,9 +59,6 @@ struct HerdrPage: View {
             } else {
                 store.stopWatching()
             }
-        }
-        .onChange(of: store.selectedTab) { _, tab in
-            sidebarOpen = tab == HerdrStore.boardID
         }
     }
 
@@ -473,7 +468,6 @@ struct HerdrPage: View {
 
     private func openAgent(_ agent: HerdrAgent) {
         store.open(agent)
-        sidebarOpen = false
     }
 
     private var hiddenLine: some View {
