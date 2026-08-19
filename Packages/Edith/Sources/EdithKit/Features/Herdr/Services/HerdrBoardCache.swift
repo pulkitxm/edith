@@ -85,14 +85,17 @@ public final class HerdrBoardCache: @unchecked Sendable {
                 upsert(record)
             }
         case "pane_agent_detected":
-            if !HerdrListParser.eventReleased(in: text),
-                let pane = HerdrListParser.eventPaneID(in: text),
-                knownPanes.contains(pane)
-            {
-                let record =
+            if let pane = HerdrListParser.eventPaneID(in: text), knownPanes.contains(pane) {
+                var record =
                     HerdrListParser.eventPane(in: text)
                     ?? HerdrPaneRecord(
                         pane: pane, kindRaw: HerdrListParser.eventAgentKind(in: text))
+                if record.kindRaw == nil {
+                    record.kindRaw = HerdrListParser.eventAgentKind(in: text)
+                }
+                if HerdrListParser.eventReleased(in: text) {
+                    record.statusRaw = HerdrListParser.eventFinalStatus(in: text) ?? "idle"
+                }
                 upsert(record)
             }
         case "workspace_created", "workspace_updated", "workspace_renamed":

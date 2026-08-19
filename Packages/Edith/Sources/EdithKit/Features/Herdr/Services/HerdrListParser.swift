@@ -117,6 +117,11 @@ public enum HerdrListParser {
         return string(in: data, keys: ["agent", "display_agent", "kind"])
     }
 
+    public static func eventFinalStatus(in text: String) -> String? {
+        guard let data = eventData(in: text) else { return nil }
+        return string(in: data, keys: ["final_status"])
+    }
+
     public static func eventWorkspace(in text: String) -> (id: String, label: String?)? {
         guard let data = eventData(in: text) else { return nil }
         let object = data["workspace"] as? [String: Any] ?? data

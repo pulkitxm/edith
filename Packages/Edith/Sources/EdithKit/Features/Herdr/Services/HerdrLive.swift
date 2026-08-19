@@ -121,8 +121,11 @@ public enum HerdrLive {
             do {
                 try await publishSnapshot(
                     client: rpc, session: socket.name, sessions: sessions, fleet: fleet)
-                let events = stream.events
                 try await stream.subscribeBoard()
+                try await Task.sleep(for: .milliseconds(400))
+                try await publishSnapshot(
+                    client: rpc, session: socket.name, sessions: sessions, fleet: fleet)
+                let events = stream.events
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
                         for await line in events {

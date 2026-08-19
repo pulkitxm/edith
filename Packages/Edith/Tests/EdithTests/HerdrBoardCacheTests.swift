@@ -63,6 +63,40 @@ import Testing
         #expect(cache.agents.first { $0.pane == "w3:p1N" }?.title == "Image Query")
     }
 
+    @Test func aReleasedTurnTakesTheFinalStatusWithoutDroppingTheCard() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        cache.applyEvent(
+            paneUpdated(
+                pane: "w3:p1N", agent: "opencode", status: "working", title: "Image Query"))
+        #expect(cache.agents.first { $0.pane == "w3:p1N" }?.status == .working)
+        cache.applyEvent(
+            #"{"event":"pane_agent_detected","data":{"type":"pane_agent_detected","agent":"opencode","final_status":"idle","pane_id":"w3:p1N","released":true,"workspace_id":"w3"}}"#
+        )
+        #expect(cache.agents.map(\.pane) == ["w3:p1N", "w3:p1Q"])
+        #expect(cache.agents.first { $0.pane == "w3:p1N" }?.status == .idle)
+        #expect(cache.agents.first { $0.pane == "w3:p1N" }?.kind == "OpenCode")
+        #expect(cache.agents.first { $0.pane == "w3:p1N" }?.title == "Image Query")
+        #expect(cache.agents.first { $0.pane == "w3:p1Q" }?.status == .idle)
+    }
+
+    @Test func aLaterSnapshotWinsOverAStaleWorkingEvent() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        cache.applyEvent(
+            paneUpdated(
+                pane: "w3:p1N", agent: "opencode", status: "working", title: "Image Query"))
+        cache.applyEvent(
+            paneUpdated(
+                pane: "w3:p1Q", agent: "claude", status: "working", title: "Waiting on a key"))
+        #expect(Set(cache.agents.map(\.status)) == [.working])
+        let restored = cache.applySnapshot(
+            tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        #expect(Set(restored.map(\.status)) == [.idle])
+        #expect(restored.map(\.pane) == ["w3:p1N", "w3:p1Q"])
+        #expect(restored.first { $0.pane == "w3:p1N" }?.title == "Image Query")
+    }
+
     @Test func paneClosedDropsOnlyThatCard() {
         let cache = HerdrBoardCache(context: tuf)
         cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))

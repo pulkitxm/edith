@@ -131,6 +131,11 @@ import Testing
                     #"{"event":"pane_agent_detected","data":{"released":true,"pane_id":"w3:p1N"}}"#)
         )
         #expect(
+            HerdrListParser.eventFinalStatus(
+                in:
+                    #"{"event":"pane_agent_detected","data":{"released":true,"final_status":"idle","pane_id":"w3:p1N"}}"#
+            ) == "idle")
+        #expect(
             !HerdrListParser.eventReleased(
                 in: #"{"event":"pane_agent_detected","data":{"agent":"cursor","pane_id":"w3:p1N"}}"#
             ))
