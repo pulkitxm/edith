@@ -641,10 +641,228 @@ if [ -d "$CCODE_DIR" ]; then
   include_source commandcode "$TMP/commandcode.daily.json" "$TMP/commandcode.session.json"
 fi
 
-# Cursor Agent CLI does not persist token/cost in local store.db. Tokens and
-# imputed USD come from the dashboard usage API, scoped to conversation IDs
-# that exist under ~/.cursor/chats on this machine so fleet collects do not
-# double-count the same account-wide events.
+CURSOR_COLLECTOR='
+  import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from "fs";
+  import { join } from "path";
+
+  const authPath = process.env.EDITH_CURSOR_AUTH;
+  const chatsRoot = process.env.EDITH_CURSOR_CHATS;
+  const off = Number(process.env.EDITH_CURSOR_OFF || "0");
+  const tmp = process.env.EDITH_CURSOR_TMP;
+  const emptyDaily = { daily: [] };
+  const emptySessions = { sessions: [] };
+
+  const writeEmpty = () => {
+    writeFileSync(`${tmp}/cursor.daily.json`, JSON.stringify(emptyDaily));
+    writeFileSync(`${tmp}/cursor.session.json`, JSON.stringify(emptySessions));
+    writeFileSync(`${tmp}/cursor.events.jsonl`, "");
+  };
+
+  const pad = (s) => s + "=".repeat((4 - (s.length % 4)) % 4);
+  const jwtPayload = (token) => {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    try {
+      return JSON.parse(Buffer.from(pad(part.replace(/-/g, "+").replace(/_/g, "/")), "base64").toString("utf8"));
+    } catch {
+      return null;
+    }
+  };
+
+  let auth;
+  try {
+    auth = JSON.parse(readFileSync(authPath, "utf8"));
+  } catch {
+    writeEmpty();
+    process.exit(0);
+  }
+  if (!auth?.accessToken || typeof auth.accessToken !== "string") {
+    writeEmpty();
+    process.exit(0);
+  }
+
+  const nowSec = Date.now() / 1000;
+  const accessPayload = jwtPayload(auth.accessToken);
+  if (auth.refreshToken && accessPayload?.exp && accessPayload.exp < nowSec + 120) {
+    try {
+      const refreshed = await fetch("https://api2.cursor.sh/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant_type: "refresh_token", refresh_token: auth.refreshToken }),
+      });
+      if (refreshed.ok) {
+        const body = await refreshed.json();
+        if (body.access_token) auth.accessToken = body.access_token;
+        if (body.refresh_token) auth.refreshToken = body.refresh_token;
+        try {
+          writeFileSync(authPath, JSON.stringify(auth, null, 2));
+        } catch {}
+      }
+    } catch {}
+  }
+
+  const local = new Map();
+  const projectCwd = new Map();
+  let earliestMs = Date.now();
+  try {
+    for (const project of readdirSync(chatsRoot)) {
+      const projectDir = join(chatsRoot, project);
+      if (!statSync(projectDir).isDirectory()) continue;
+      for (const chatId of readdirSync(projectDir)) {
+        const chatDir = join(projectDir, chatId);
+        if (!statSync(chatDir).isDirectory()) continue;
+        let cwd = "";
+        let title = "";
+        let createdAtMs = 0;
+        const metaPath = join(chatDir, "meta.json");
+        if (existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+            cwd = typeof meta.cwd === "string" ? meta.cwd : "";
+            title = typeof meta.title === "string" ? meta.title : "";
+            createdAtMs = Number(meta.createdAtMs) || 0;
+          } catch {}
+        }
+        if (!existsSync(join(chatDir, "store.db")) && !cwd && !title) continue;
+        local.set(chatId, { cwd, title, createdAtMs, project });
+        if (cwd && !projectCwd.has(project)) projectCwd.set(project, cwd);
+        if (createdAtMs > 0 && createdAtMs < earliestMs) earliestMs = createdAtMs;
+      }
+    }
+  } catch {
+    writeEmpty();
+    process.exit(0);
+  }
+  for (const meta of local.values()) {
+    if (!meta.cwd) meta.cwd = projectCwd.get(meta.project) || "";
+  }
+  if (local.size === 0) {
+    writeEmpty();
+    process.exit(0);
+  }
+
+  const endMs = Date.now();
+  const startMs = Math.min(earliestMs, endMs - 180 * 24 * 3600 * 1000);
+  const events = [];
+  let page = 1;
+  try {
+    while (page <= 50) {
+      const resp = await fetch("https://api2.cursor.sh/aiserver.v1.DashboardService/GetFilteredUsageEvents", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${auth.accessToken}`,
+          "Content-Type": "application/json",
+          "Connect-Protocol-Version": "1",
+        },
+        body: JSON.stringify({
+          startDate: String(startMs),
+          endDate: String(endMs),
+          page,
+          pageSize: 100,
+          clientType: "cli",
+        }),
+      });
+      if (!resp.ok) throw new Error(`cursor usage HTTP ${resp.status}`);
+      const body = await resp.json();
+      const batch = Array.isArray(body.usageEventsDisplay) ? body.usageEventsDisplay : [];
+      events.push(...batch);
+      const total = Number(body.totalUsageEventsCount) || 0;
+      if (batch.length === 0 || events.length >= total) break;
+      page += 1;
+    }
+  } catch {
+    writeEmpty();
+    process.exit(0);
+  }
+
+  const dayMap = new Map();
+  const sessions = new Set();
+  const titled = new Set();
+  const lines = [];
+  for (const event of events) {
+    const sid = typeof event.conversationId === "string" ? event.conversationId : "";
+    if (!sid || !local.has(sid)) continue;
+    const meta = local.get(sid);
+    const tsMs = Number(event.timestamp);
+    if (!Number.isFinite(tsMs) || tsMs <= 0) continue;
+    const ep = Math.floor(tsMs / 1000);
+    const loc = ep + off;
+    const shifted = new Date(loc * 1000);
+    const yyyy = shifted.getUTCFullYear();
+    const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(shifted.getUTCDate()).padStart(2, "0");
+    const date = `${yyyy}-${mm}-${dd}`;
+    const hour = Math.floor(loc / 3600) % 24;
+    const tu = event.tokenUsage || {};
+    const inp = Number(tu.inputTokens) || 0;
+    const out = Number(tu.outputTokens) || 0;
+    const cc = Number(tu.cacheWriteTokens) || 0;
+    const cr = Number(tu.cacheReadTokens) || 0;
+    if (inp + out + cc + cr <= 0) continue;
+    let cents = event.chargedCents;
+    if (cents == null) cents = tu.totalCents;
+    const cost = (Number(cents) || 0) / 100;
+    const model = typeof event.model === "string" && event.model ? event.model : "unknown";
+    sessions.add(sid);
+
+    if (!dayMap.has(date)) dayMap.set(date, new Map());
+    const models = dayMap.get(date);
+    if (!models.has(model)) {
+      models.set(model, { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, cost: 0 });
+    }
+    const row = models.get(model);
+    row.inputTokens += inp;
+    row.outputTokens += out;
+    row.cacheCreationTokens += cc;
+    row.cacheReadTokens += cr;
+    row.cost += cost;
+
+    lines.push(JSON.stringify({
+      t: "rec",
+      id: `cursor:${sid}:${tsMs}`,
+      date,
+      hour,
+      ts: tsMs,
+      model,
+      cwd: meta.cwd || "",
+      wt: null,
+      sid,
+      src: "cursor",
+      cost,
+      inp,
+      out,
+      cc,
+      cr,
+      tok: inp + out + cc + cr,
+    }));
+    if (meta.title && !titled.has(sid)) {
+      titled.add(sid);
+      lines.push(JSON.stringify({ t: "title", sid, title: meta.title }));
+    }
+  }
+
+  const daily = [...dayMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, models]) => ({
+      date,
+      modelBreakdowns: [...models.entries()].map(([modelName, v]) => ({
+        modelName,
+        inputTokens: v.inputTokens,
+        outputTokens: v.outputTokens,
+        cacheCreationTokens: v.cacheCreationTokens,
+        cacheReadTokens: v.cacheReadTokens,
+        cost: v.cost,
+      })),
+    }));
+
+  writeFileSync(`${tmp}/cursor.daily.json`, JSON.stringify({ daily }));
+  writeFileSync(
+    `${tmp}/cursor.session.json`,
+    JSON.stringify({ sessions: [...sessions].map((sessionId) => ({ sessionId })) }),
+  );
+  writeFileSync(`${tmp}/cursor.events.jsonl`, lines.length ? `${lines.join("\n")}\n` : "");
+'
+
 collect_cursor() {
   local auth="" chats="$HOME/.cursor/chats"
   for candidate in \
@@ -663,233 +881,7 @@ collect_cursor() {
   fi
   if ! EDITH_CURSOR_AUTH="$auth" EDITH_CURSOR_CHATS="$chats" \
     EDITH_CURSOR_OFF="$OFF" EDITH_CURSOR_TMP="$TMP" \
-    bun -e '
-      import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from "fs";
-      import { join } from "path";
-
-      const authPath = process.env.EDITH_CURSOR_AUTH;
-      const chatsRoot = process.env.EDITH_CURSOR_CHATS;
-      const off = Number(process.env.EDITH_CURSOR_OFF || "0");
-      const tmp = process.env.EDITH_CURSOR_TMP;
-      const emptyDaily = { daily: [] };
-      const emptySessions = { sessions: [] };
-
-      const writeEmpty = () => {
-        writeFileSync(`${tmp}/cursor.daily.json`, JSON.stringify(emptyDaily));
-        writeFileSync(`${tmp}/cursor.session.json`, JSON.stringify(emptySessions));
-        writeFileSync(`${tmp}/cursor.events.jsonl`, "");
-      };
-
-      const pad = (s) => s + "=".repeat((4 - (s.length % 4)) % 4);
-      const jwtPayload = (token) => {
-        const part = token.split(".")[1];
-        if (!part) return null;
-        try {
-          return JSON.parse(Buffer.from(pad(part.replace(/-/g, "+").replace(/_/g, "/")), "base64").toString("utf8"));
-        } catch {
-          return null;
-        }
-      };
-
-      let auth;
-      try {
-        auth = JSON.parse(readFileSync(authPath, "utf8"));
-      } catch {
-        writeEmpty();
-        process.exit(0);
-      }
-      if (!auth?.accessToken || typeof auth.accessToken !== "string") {
-        writeEmpty();
-        process.exit(0);
-      }
-
-      const nowSec = Date.now() / 1000;
-      const accessPayload = jwtPayload(auth.accessToken);
-      if (auth.refreshToken && accessPayload?.exp && accessPayload.exp < nowSec + 120) {
-        try {
-          const refreshed = await fetch("https://api2.cursor.sh/oauth/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ grant_type: "refresh_token", refresh_token: auth.refreshToken }),
-          });
-          if (refreshed.ok) {
-            const body = await refreshed.json();
-            if (body.access_token) auth.accessToken = body.access_token;
-            if (body.refresh_token) auth.refreshToken = body.refresh_token;
-            try {
-              writeFileSync(authPath, JSON.stringify(auth, null, 2));
-            } catch {}
-          }
-        } catch {}
-      }
-
-      const sub = jwtPayload(auth.accessToken)?.sub;
-      if (!sub || typeof sub !== "string") {
-        writeEmpty();
-        process.exit(0);
-      }
-      const cookie = `WorkosCursorSessionToken=${encodeURIComponent(`${sub}::${auth.accessToken}`)}`;
-
-      const local = new Map();
-      const projectCwd = new Map();
-      let earliestMs = Date.now();
-      try {
-        for (const project of readdirSync(chatsRoot)) {
-          const projectDir = join(chatsRoot, project);
-          if (!statSync(projectDir).isDirectory()) continue;
-          for (const chatId of readdirSync(projectDir)) {
-            const chatDir = join(projectDir, chatId);
-            if (!statSync(chatDir).isDirectory()) continue;
-            let cwd = "";
-            let title = "";
-            let createdAtMs = 0;
-            const metaPath = join(chatDir, "meta.json");
-            if (existsSync(metaPath)) {
-              try {
-                const meta = JSON.parse(readFileSync(metaPath, "utf8"));
-                cwd = typeof meta.cwd === "string" ? meta.cwd : "";
-                title = typeof meta.title === "string" ? meta.title : "";
-                createdAtMs = Number(meta.createdAtMs) || 0;
-              } catch {}
-            }
-            if (!existsSync(join(chatDir, "store.db")) && !cwd && !title) continue;
-            local.set(chatId, { cwd, title, createdAtMs, project });
-            if (cwd && !projectCwd.has(project)) projectCwd.set(project, cwd);
-            if (createdAtMs > 0 && createdAtMs < earliestMs) earliestMs = createdAtMs;
-          }
-        }
-      } catch {
-        writeEmpty();
-        process.exit(0);
-      }
-      for (const meta of local.values()) {
-        if (!meta.cwd) meta.cwd = projectCwd.get(meta.project) || "";
-      }
-      if (local.size === 0) {
-        writeEmpty();
-        process.exit(0);
-      }
-
-      const endMs = Date.now();
-      const startMs = Math.min(earliestMs, endMs - 180 * 24 * 3600 * 1000);
-      const events = [];
-      let page = 1;
-      try {
-        while (page <= 50) {
-          const resp = await fetch("https://cursor.com/api/dashboard/get-filtered-usage-events", {
-            method: "POST",
-            headers: {
-              Cookie: cookie,
-              "Content-Type": "application/json",
-              Origin: "https://cursor.com",
-            },
-            body: JSON.stringify({
-              startDate: String(startMs),
-              endDate: String(endMs),
-              page,
-              pageSize: 100,
-            }),
-          });
-          if (!resp.ok) throw new Error(`cursor usage HTTP ${resp.status}`);
-          const body = await resp.json();
-          const batch = Array.isArray(body.usageEventsDisplay) ? body.usageEventsDisplay : [];
-          events.push(...batch);
-          const total = Number(body.totalUsageEventsCount) || 0;
-          if (batch.length === 0 || events.length >= total) break;
-          page += 1;
-        }
-      } catch {
-        writeEmpty();
-        process.exit(0);
-      }
-
-      const dayMap = new Map();
-      const sessions = new Set();
-      const titled = new Set();
-      const lines = [];
-      for (const event of events) {
-        const sid = typeof event.conversationId === "string" ? event.conversationId : "";
-        if (!sid || !local.has(sid)) continue;
-        const meta = local.get(sid);
-        const tsMs = Number(event.timestamp);
-        if (!Number.isFinite(tsMs) || tsMs <= 0) continue;
-        const ep = Math.floor(tsMs / 1000);
-        const loc = ep + off;
-        const shifted = new Date(loc * 1000);
-        const yyyy = shifted.getUTCFullYear();
-        const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
-        const dd = String(shifted.getUTCDate()).padStart(2, "0");
-        const date = `${yyyy}-${mm}-${dd}`;
-        const hour = Math.floor(loc / 3600) % 24;
-        const tu = event.tokenUsage || {};
-        const inp = Number(tu.inputTokens) || 0;
-        const out = Number(tu.outputTokens) || 0;
-        const cc = Number(tu.cacheWriteTokens) || 0;
-        const cr = Number(tu.cacheReadTokens) || 0;
-        if (inp + out + cc + cr <= 0) continue;
-        let cents = event.chargedCents;
-        if (cents == null) cents = tu.totalCents;
-        const cost = (Number(cents) || 0) / 100;
-        const model = typeof event.model === "string" && event.model ? event.model : "unknown";
-        sessions.add(sid);
-
-        if (!dayMap.has(date)) dayMap.set(date, new Map());
-        const models = dayMap.get(date);
-        if (!models.has(model)) {
-          models.set(model, { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, cost: 0 });
-        }
-        const row = models.get(model);
-        row.inputTokens += inp;
-        row.outputTokens += out;
-        row.cacheCreationTokens += cc;
-        row.cacheReadTokens += cr;
-        row.cost += cost;
-
-        lines.push(JSON.stringify({
-          t: "rec",
-          id: `cursor:${sid}:${tsMs}`,
-          date,
-          hour,
-          ts: tsMs,
-          model,
-          cwd: meta.cwd || "",
-          wt: null,
-          sid,
-          src: "cursor",
-          cost,
-          inp,
-          out,
-          cc,
-          cr,
-          tok: inp + out + cc + cr,
-        }));
-        if (meta.title && !titled.has(sid)) {
-          titled.add(sid);
-          lines.push(JSON.stringify({ t: "title", sid, title: meta.title }));
-        }
-      }
-
-      const daily = [...dayMap.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([date, models]) => ({
-          date,
-          modelBreakdowns: [...models.entries()].map(([modelName, v]) => ({
-            modelName,
-            inputTokens: v.inputTokens,
-            outputTokens: v.outputTokens,
-            cacheCreationTokens: v.cacheCreationTokens,
-            cacheReadTokens: v.cacheReadTokens,
-            cost: v.cost,
-          })),
-        }));
-
-      writeFileSync(`${tmp}/cursor.daily.json`, JSON.stringify({ daily }));
-      writeFileSync(
-        `${tmp}/cursor.session.json`,
-        JSON.stringify({ sessions: [...sessions].map((sessionId) => ({ sessionId })) }),
-      );
-      writeFileSync(`${tmp}/cursor.events.jsonl`, lines.length ? `${lines.join("\n")}\n` : "");
-    ' 2>/dev/null; then
+    bun -e "$CURSOR_COLLECTOR" 2>/dev/null; then
     _note "cursor collection failed; continuing without it"
     return 0
   fi

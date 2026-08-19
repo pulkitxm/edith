@@ -72,6 +72,7 @@ const RECONCILE = extractBlock("RECONCILE");
 const DETAILS = extractBlock("DETAILS");
 const CCDAILY = extractBlock("CCDAILY");
 const FLEET = extractBlock("FLEET");
+const CURSOR_COLLECTOR = extractBlock("CURSOR_COLLECTOR");
 const OPENCODE_MESSAGES = extractDoubleBlock("OPENCODE_MESSAGES");
 const OPENCODE_MESSAGES_FALLBACK = extractDoubleBlock(
   "OPENCODE_MESSAGES_FALLBACK",
@@ -2424,10 +2425,173 @@ describe("collector configuration", () => {
 
   test("collects Cursor Agent from the dashboard API scoped to local chats", () => {
     expect(script).toContain("collect_cursor");
-    expect(script).toContain("get-filtered-usage-events");
+    expect(script).toContain(
+      "https://api2.cursor.sh/aiserver.v1.DashboardService/GetFilteredUsageEvents",
+    );
+    expect(script).toContain('clientType: "cli"');
     expect(script).toContain('EDITH_CURSOR_CHATS="$chats"');
     expect(script).toContain(
       'cat "$TMP/cursor.events.jsonl" >>"$TMP/walk.jsonl"',
     );
+  });
+});
+
+describe("Cursor Agent collector", () => {
+  test("paginates CLI events and attributes only local chats", () => {
+    const root = mkdtempSync(join(tmpdir(), "edith-cursor-usage-"));
+    const authPath = join(root, "auth.json");
+    const chatsRoot = join(root, "chats");
+    const output = join(root, "output");
+    const requestsPath = join(root, "requests.json");
+    const localChat = join(chatsRoot, "workspace", "local-chat");
+    const timestamp = Date.parse("2026-08-18T10:00:00.000Z");
+    const accessToken = `x.${Buffer.from(
+      JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString("base64url")}.x`;
+
+    mkdirSync(localChat, { recursive: true });
+    mkdirSync(output, { recursive: true });
+    writeFileSync(authPath, JSON.stringify({ accessToken }));
+    writeFileSync(join(localChat, "store.db"), "");
+    writeFileSync(
+      join(localChat, "meta.json"),
+      JSON.stringify({
+        cwd: "/repo/app",
+        title: "Local Cursor session",
+        createdAtMs: timestamp - 1000,
+      }),
+    );
+
+    const mockFetch = `
+  const cursorRequests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body);
+    cursorRequests.push({ url: String(url), headers: options.headers, body });
+    await Bun.write(process.env.EDITH_CURSOR_REQUESTS, JSON.stringify(cursorRequests));
+    const events = [
+      {
+        conversationId: "local-chat",
+        timestamp: String(${timestamp}),
+        model: "cursor-grok",
+        chargedCents: 40,
+        tokenUsage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheWriteTokens: 2,
+          cacheReadTokens: 3,
+          totalCents: 50,
+        },
+      },
+      {
+        conversationId: "remote-chat",
+        timestamp: String(${timestamp + 1000}),
+        model: "cursor-grok",
+        chargedCents: 900,
+        tokenUsage: { inputTokens: 100, outputTokens: 100 },
+      },
+      {
+        conversationId: "local-chat",
+        timestamp: String(${timestamp + 2000}),
+        model: "cursor-sonnet",
+        tokenUsage: {
+          inputTokens: 4,
+          outputTokens: 6,
+          cacheWriteTokens: 0,
+          cacheReadTokens: 1,
+          totalCents: 25,
+        },
+      },
+    ];
+    const usageEventsDisplay = body.page === 1 ? events.slice(0, 2) : events.slice(2);
+    return new Response(
+      JSON.stringify({ usageEventsDisplay, totalUsageEventsCount: events.length }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+`;
+    const collector = CURSOR_COLLECTOR.replace(
+      '  import { join } from "path";',
+      `  import { join } from "path";${mockFetch}`,
+    );
+
+    try {
+      const result = Bun.spawnSync(["bun", "-e", collector], {
+        env: {
+          ...process.env,
+          EDITH_CURSOR_AUTH: authPath,
+          EDITH_CURSOR_CHATS: chatsRoot,
+          EDITH_CURSOR_OFF: "0",
+          EDITH_CURSOR_TMP: output,
+          EDITH_CURSOR_REQUESTS: requestsPath,
+        },
+      });
+      expect(result.exitCode).toBe(0);
+
+      const requests = JSON.parse(readFileSync(requestsPath, "utf8"));
+      expect(requests.map((request) => request.body.page)).toEqual([1, 2]);
+      for (const request of requests) {
+        expect(request.url).toBe(
+          "https://api2.cursor.sh/aiserver.v1.DashboardService/GetFilteredUsageEvents",
+        );
+        expect(request.headers.Authorization).toBe(`Bearer ${accessToken}`);
+        expect(request.headers["Connect-Protocol-Version"]).toBe("1");
+        expect(request.body.clientType).toBe("cli");
+      }
+
+      const daily = JSON.parse(
+        readFileSync(join(output, "cursor.daily.json"), "utf8"),
+      );
+      expect(daily.daily).toHaveLength(1);
+      expect(daily.daily[0].date).toBe("2026-08-18");
+      expect(daily.daily[0].modelBreakdowns).toEqual([
+        {
+          modelName: "cursor-grok",
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheCreationTokens: 2,
+          cacheReadTokens: 3,
+          cost: 0.4,
+        },
+        {
+          modelName: "cursor-sonnet",
+          inputTokens: 4,
+          outputTokens: 6,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 1,
+          cost: 0.25,
+        },
+      ]);
+
+      const sessions = JSON.parse(
+        readFileSync(join(output, "cursor.session.json"), "utf8"),
+      );
+      expect(sessions.sessions).toEqual([{ sessionId: "local-chat" }]);
+
+      const records = readFileSync(join(output, "cursor.events.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(records.filter((record) => record.t === "rec")).toHaveLength(2);
+      expect(records.some((record) => record.sid === "remote-chat")).toBe(
+        false,
+      );
+      expect(records).toContainEqual({
+        t: "title",
+        sid: "local-chat",
+        title: "Local Cursor session",
+      });
+      expect(records[0]).toMatchObject({
+        cwd: "/repo/app",
+        src: "cursor",
+        inp: 10,
+        out: 5,
+        cc: 2,
+        cr: 3,
+        tok: 20,
+        cost: 0.4,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
