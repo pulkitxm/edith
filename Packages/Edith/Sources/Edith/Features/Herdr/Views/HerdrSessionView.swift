@@ -6,6 +6,7 @@ struct HerdrSessionView: View {
     var store: HerdrStore
     let tab: HerdrOpenTab
     let launchEnabled: Bool
+    var hideAgents = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var connectError: String?
@@ -41,40 +42,44 @@ struct HerdrSessionView: View {
             }
         }
         .background(dark ? Color.black.opacity(0.9) : Color.white)
+        .presenterCover(hideAgents, dark: dark)
     }
 
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                Text(agent.title)
+                Text(hideAgents ? "Hidden" : agent.title)
                     .font(DashSkin.serif(20))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(hideAgents ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
                     .padding(.trailing, UIScale.pt(36))
                 kindRow
                 metaRow("Status", agent.status.title)
                 metaRow("Machine", agent.machineName)
-                metaRow("Session", agent.session)
-                metaRow("Pane", agent.pane)
-                if !agent.workspace.isEmpty { metaRow("Workspace", agent.workspace) }
-                if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd) }
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    Text("Attach")
-                        .font(.system(size: UIScale.pt(11), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                    Text(command)
-                        .font(DashSkin.mono(10))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                        .textSelection(.enabled)
-                    Button {
-                        store.copyAttachCommand(for: agent)
-                    } label: {
-                        Label(
-                            store.copiedID == agent.id
-                                ? "Copied"
-                                : (agent.machineIsLocal ? "Copy command" : "Copy SSH"),
-                            systemImage: store.copiedID == agent.id ? "checkmark" : "doc.on.doc")
+                if !hideAgents {
+                    metaRow("Session", agent.session)
+                    metaRow("Pane", agent.pane)
+                    if !agent.workspace.isEmpty { metaRow("Workspace", agent.workspace) }
+                    if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd) }
+                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                        Text("Attach")
+                            .font(.system(size: UIScale.pt(11), weight: .semibold))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        Text(command)
+                            .font(DashSkin.mono(10))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .textSelection(.enabled)
+                        Button {
+                            store.copyAttachCommand(for: agent)
+                        } label: {
+                            Label(
+                                store.copiedID == agent.id
+                                    ? "Copied"
+                                    : (agent.machineIsLocal ? "Copy command" : "Copy SSH"),
+                                systemImage: store.copiedID == agent.id
+                                    ? "checkmark" : "doc.on.doc")
+                        }
+                        .buttonStyle(HoverButtonStyle())
                     }
-                    .buttonStyle(HoverButtonStyle())
                 }
             }
             .padding(UIScale.pt(16))

@@ -337,6 +337,7 @@ not here cannot be set, and `import` skips it.
 | `presenterBlurUsage` | bool | none | shared | Blur usage percentages. |
 | `presenterBlurMusic` | bool | none | shared | Blur track names. |
 | `presenterBlurCalendar` | bool | none | shared | Blur calendar entries. |
+| `presenterBlurAgents` | bool | none | shared | Hide live Herdr titles and blur attached terminals. |
 | `presenterHotKeyCode` | int | none | shared | Virtual key code of the presenter shortcut. |
 | `presenterHotKeyMods` | int | none | shared | Carbon modifier mask of the presenter shortcut. |
 | `presenterHotKeyLabel` | string | none | shared | Printable label for the presenter shortcut. |

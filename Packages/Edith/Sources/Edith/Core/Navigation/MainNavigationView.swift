@@ -308,6 +308,8 @@ struct MainWindowView: View {
         false
     @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
+    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
+    private var presenterBlurAgents = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
@@ -924,6 +926,8 @@ struct MainWindowView: View {
             presenterQuickActionToggle("Blur usage figures", isOn: $presenterBlurUsage)
             Divider()
             presenterQuickActionToggle("Blur calendar events", isOn: $presenterBlurCalendar)
+            Divider()
+            presenterQuickActionToggle("Blur agents", isOn: $presenterBlurAgents)
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))

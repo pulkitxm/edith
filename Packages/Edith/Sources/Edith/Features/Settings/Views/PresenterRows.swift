@@ -20,6 +20,8 @@ struct PresenterRows: View {
         false
     @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
+    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
+    private var presenterBlurAgents = true
     @AppStorage(AppStorageKeys.Presenter.autoEnabled, store: SharedDefaults.store) private
         var autoEnabled = false
     @AppStorage(AppStorageKeys.Presenter.hideMenuBarNumbers, store: SharedDefaults.store)
@@ -53,6 +55,8 @@ struct PresenterRows: View {
                 Toggle("Blur usage figures", isOn: $presenterBlurUsage)
                     .pointerCursor()
                 Toggle("Blur calendar events", isOn: $presenterBlurCalendar)
+                    .pointerCursor()
+                Toggle("Blur agents", isOn: $presenterBlurAgents)
                     .pointerCursor()
             } header: {
                 Text("Manual")

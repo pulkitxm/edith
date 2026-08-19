@@ -10,8 +10,12 @@ struct HerdrPage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
         var sidebarOpen = true
+    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
+        var presenterBlurAgents = true
+    private var presenterState = PresenterState.shared
 
     private var dark: Bool { scheme == .dark }
+    private var hideAgents: Bool { presenterState.active && presenterBlurAgents }
     private var onBoard: Bool { store.selectedTab == HerdrStore.boardID }
     private var listedAgents: [HerdrAgent] {
         store.filteredAgents.isEmpty ? store.agents : store.filteredAgents
@@ -30,9 +34,12 @@ struct HerdrPage: View {
                     board.opacity(onBoard ? 1 : 0)
                         .allowsHitTesting(onBoard)
                     ForEach(store.tabs) { tab in
-                        HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
-                            .opacity(tab.id == store.selectedTab ? 1 : 0)
-                            .allowsHitTesting(tab.id == store.selectedTab)
+                        HerdrSessionView(
+                            store: store, tab: tab, launchEnabled: launchEnabled,
+                            hideAgents: hideAgents
+                        )
+                        .opacity(tab.id == store.selectedTab ? 1 : 0)
+                        .allowsHitTesting(tab.id == store.selectedTab)
                     }
                     if !onBoard {
                         detailToggle
@@ -164,7 +171,9 @@ struct HerdrPage: View {
                     tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
                     ForEach(store.tabs) { tab in
                         tabButton(
-                            id: tab.id, title: tab.agent.title, closable: true, agent: tab.agent)
+                            id: tab.id,
+                            title: hideAgents ? tab.agent.kind : tab.agent.title,
+                            closable: true, agent: tab.agent)
                     }
                 }
                 .padding(.horizontal, PageMetrics.gutter(compact))
@@ -355,15 +364,23 @@ struct HerdrPage: View {
                     }
                 }
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                Text(agent.title)
-                    .font(.system(size: UIScale.pt(13), weight: .medium))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                Text("\(agent.machineName) · \(agent.pane)")
-                    .font(DashSkin.mono(10))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
+                if hideAgents {
+                    hiddenLine
+                    Text(agent.machineName)
+                        .font(DashSkin.mono(10))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                } else {
+                    Text(agent.title)
+                        .font(.system(size: UIScale.pt(13), weight: .medium))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text("\(agent.machineName) · \(agent.pane)")
+                        .font(DashSkin.mono(10))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                }
             }
             .padding(UIScale.pt(12))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -418,17 +435,26 @@ struct HerdrPage: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text(agent.title)
-                        .font(
-                            .system(size: UIScale.pt(12.5), weight: selected ? .semibold : .medium)
-                        )
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text("\(agent.kind) · \(agent.machineName) · \(agent.pane)")
-                        .font(DashSkin.mono(9.5))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
+                    if hideAgents {
+                        hiddenLine
+                        Text("\(agent.kind) · \(agent.machineName)")
+                            .font(DashSkin.mono(9.5))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .lineLimit(1)
+                    } else {
+                        Text(agent.title)
+                            .font(
+                                .system(
+                                    size: UIScale.pt(12.5), weight: selected ? .semibold : .medium)
+                            )
+                            .foregroundStyle(DashSkin.ink(dark))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Text("\(agent.kind) · \(agent.machineName) · \(agent.pane)")
+                            .font(DashSkin.mono(9.5))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -447,6 +473,14 @@ struct HerdrPage: View {
     private func openAgent(_ agent: HerdrAgent) {
         store.open(agent)
         sidebarOpen = false
+    }
+
+    private var hiddenLine: some View {
+        RoundedRectangle(cornerRadius: UIScale.pt(3), style: .continuous)
+            .fill(DashSkin.ink(dark).opacity(0.14))
+            .frame(height: UIScale.pt(13))
+            .frame(maxWidth: UIScale.pt(160), alignment: .leading)
+            .accessibilityLabel("Hidden")
     }
 
     private func emptyState(title: String, detail: String) -> some View {

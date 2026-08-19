@@ -734,6 +734,9 @@ public enum ConfigCatalog {
             AppStorageKeys.Presenter.blurCalendar, .bool, group: "presenter",
             summary: "Blur calendar entries."),
         SettingDefinition(
+            AppStorageKeys.Presenter.blurAgents, .bool, group: "presenter",
+            summary: "Hide live Herdr titles and blur attached terminals."),
+        SettingDefinition(
             "presenterHotKeyCode", .int, group: "presenter",
             summary: "Virtual key code of the presenter shortcut."),
         SettingDefinition(

@@ -174,6 +174,7 @@ public enum AppStorageKeys {
         public static let autoEnabled = "presenterAutoEnabled"
         public static let autoPaused = "presenterAutoPaused"
         public static let autoReason = "presenterAutoReason"
+        public static let blurAgents = "presenterBlurAgents"
         public static let blurCalendar = "presenterBlurCalendar"
         public static let blurMoney = "presenterBlurMoney"
         public static let blurMusic = "presenterBlurMusic"

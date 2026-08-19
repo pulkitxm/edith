@@ -67,9 +67,24 @@ extension View {
     }
 
     @ViewBuilder
-    public func presenterBlur(_ on: Bool) -> some View {
+    public func presenterBlur(_ on: Bool, radius: CGFloat = 4) -> some View {
         if on {
-            blur(radius: UIScale.pt(4))
+            blur(radius: UIScale.pt(radius))
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    public func presenterCover(_ on: Bool, dark: Bool = true) -> some View {
+        if on {
+            compositingGroup()
+                .blur(radius: UIScale.pt(28))
+                .overlay {
+                    (dark ? Color.black : Color.white).opacity(0.45)
+                        .allowsHitTesting(false)
+                }
+                .privacySensitive(true)
         } else {
             self
         }
