@@ -47,7 +47,7 @@ final class HerdrSocketClient: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
     private var pending: [String: CheckedContinuation<String, Error>] = [:]
-    private var eventWaiters: [UUID: AsyncStream<Void>.Continuation] = [:]
+    private var eventWaiters: [UUID: AsyncStream<String>.Continuation] = [:]
     private var closed = false
 
     private init(
@@ -93,7 +93,7 @@ final class HerdrSocketClient: @unchecked Sendable {
             keepAlive: [process, stdinPipe, stdoutPipe, stderrPipe])
     }
 
-    var events: AsyncStream<Void> {
+    var events: AsyncStream<String> {
         AsyncStream { continuation in
             let id = UUID()
             lock.lock()
@@ -251,7 +251,7 @@ final class HerdrSocketClient: @unchecked Sendable {
             lock.lock()
             let waiters = Array(eventWaiters.values)
             lock.unlock()
-            for waiter in waiters { waiter.yield(()) }
+            for waiter in waiters { waiter.yield(line) }
         }
     }
 

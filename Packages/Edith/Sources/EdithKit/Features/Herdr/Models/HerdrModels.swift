@@ -223,3 +223,94 @@ public struct HerdrSessionRecord: Equatable, Sendable {
         self.socketPath = socketPath
     }
 }
+
+public struct HerdrBoardContext: Equatable, Sendable {
+    public var session: String
+    public var machineID: String
+    public var machineName: String
+    public var machineIsLocal: Bool
+    public var sshTarget: String?
+
+    public init(
+        session: String, machineID: String, machineName: String, machineIsLocal: Bool,
+        sshTarget: String?
+    ) {
+        self.session = session
+        self.machineID = machineID
+        self.machineName = machineName
+        self.machineIsLocal = machineIsLocal
+        self.sshTarget = sshTarget
+    }
+}
+
+public struct HerdrPaneRecord: Equatable, Sendable {
+    public var pane: String
+    public var kindRaw: String?
+    public var statusRaw: String?
+    public var title: String?
+    public var workspaceID: String?
+    public var cwd: String?
+
+    public init(
+        pane: String, kindRaw: String? = nil, statusRaw: String? = nil, title: String? = nil,
+        workspaceID: String? = nil, cwd: String? = nil
+    ) {
+        self.pane = pane
+        self.kindRaw = kindRaw
+        self.statusRaw = statusRaw
+        self.title = title
+        self.workspaceID = workspaceID
+        self.cwd = cwd
+    }
+
+    public var looksLikeAgent: Bool {
+        if let kindRaw, !kindRaw.isEmpty { return true }
+        guard let statusRaw else { return false }
+        return HerdrAgentStatus.parse(statusRaw) != .unknown
+    }
+
+    public func merging(_ incoming: HerdrPaneRecord) -> HerdrPaneRecord {
+        let kind: String?
+        if let incomingKind = incoming.kindRaw, !incomingKind.isEmpty {
+            kind = incomingKind
+        } else {
+            kind = kindRaw
+        }
+        let status: String?
+        if let incomingStatus = incoming.statusRaw {
+            if HerdrAgentStatus.parse(incomingStatus) == .unknown,
+                let statusRaw, HerdrAgentStatus.parse(statusRaw) != .unknown
+            {
+                status = statusRaw
+            } else {
+                status = incomingStatus
+            }
+        } else {
+            status = statusRaw
+        }
+        return HerdrPaneRecord(
+            pane: incoming.pane.isEmpty ? pane : incoming.pane,
+            kindRaw: kind,
+            statusRaw: status,
+            title: incoming.title ?? title,
+            workspaceID: incoming.workspaceID ?? workspaceID,
+            cwd: incoming.cwd ?? cwd)
+    }
+}
+
+public struct HerdrSnapshotBoard: Equatable, Sendable {
+    public var labels: [String: String]
+    public var panes: [HerdrPaneRecord]
+    public var agents: [HerdrPaneRecord]
+    public var hasPaneList: Bool
+
+    public init(
+        labels: [String: String], panes: [HerdrPaneRecord], agents: [HerdrPaneRecord],
+        hasPaneList: Bool
+    ) {
+        self.labels = labels
+        self.panes = panes
+        self.agents = agents
+        self.hasPaneList = hasPaneList
+    }
+}

@@ -99,6 +99,43 @@ import Testing
         #expect(agents[0].pane == "w1:p8")
     }
 
+    @Test func snapshotUnionsPanesWhenAgentsDropsTheRow() {
+        let json = """
+            {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w3:p1N","agent":"opencode","agent_status":"working","terminal_title_stripped":"Image Query","workspace_id":"w3","foreground_cwd":"/srv/app"},{"pane_id":"w3:p1Q","agent":null,"agent_status":"unknown","workspace_id":"w3"}],"agents":[],"workspaces":[{"label":"quinjet","workspace_id":"w3"}]}}}
+            """
+        let agents = HerdrListParser.agents(
+            fromSnapshot: json, session: "default",
+            machineID: "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB", machineName: "tuf-wired",
+            machineIsLocal: false, sshTarget: "tuf-wired")
+        #expect(agents.map(\.pane) == ["w3:p1N"])
+        #expect(agents[0].kind == "OpenCode")
+        #expect(agents[0].status == .working)
+        #expect(agents[0].workspace == "quinjet")
+        #expect(agents[0].id == "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB|default|w3:p1N")
+    }
+
+    @Test func eventNameNormalizesDottedTypes() {
+        #expect(
+            HerdrListParser.eventName(
+                in:
+                    #"{"event":"pane.updated","data":{"type":"pane.updated","pane":{"pane_id":"w3:p1N"}}}"#
+            ) == "pane_updated")
+        #expect(
+            HerdrListParser.eventName(
+                in:
+                    #"{"event":"pane_updated","data":{"type":"pane_updated","pane":{"pane_id":"w3:p1N"}}}"#
+            ) == "pane_updated")
+        #expect(
+            HerdrListParser.eventReleased(
+                in:
+                    #"{"event":"pane_agent_detected","data":{"released":true,"pane_id":"w3:p1N"}}"#)
+        )
+        #expect(
+            !HerdrListParser.eventReleased(
+                in: #"{"event":"pane_agent_detected","data":{"agent":"cursor","pane_id":"w3:p1N"}}"#
+            ))
+    }
+
     @Test func eventLinesAreDistinctFromRpcReplies() {
         #expect(
             HerdrListParser.isEventLine(

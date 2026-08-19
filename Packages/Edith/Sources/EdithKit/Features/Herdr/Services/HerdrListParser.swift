@@ -53,11 +53,9 @@ public enum HerdrListParser {
         return object["event"] != nil
     }
 
-    public static func agents(
-        fromSnapshot text: String, session: String, machineID: String, machineName: String,
-        machineIsLocal: Bool, sshTarget: String?
-    ) -> [HerdrAgent] {
-        guard let json = firstJSON(in: text) as? [String: Any] else { return [] }
+    public static func snapshotBoard(from text: String) -> HerdrSnapshotBoard? {
+        guard hasSnapshot(text) else { return nil }
+        guard let json = firstJSON(in: text) as? [String: Any] else { return nil }
         let payload = unwrap(json) as? [String: Any] ?? [:]
         let snapshot = payload["snapshot"] as? [String: Any] ?? payload
         var labels: [String: String] = [:]
@@ -66,11 +64,153 @@ public enum HerdrListParser {
             guard let id = string(in: workspace, keys: ["workspace_id", "id"]) else { continue }
             labels[id] = string(in: workspace, keys: ["label", "name"]) ?? id
         }
-        let values = snapshot["agents"] as? [Any] ?? []
-        return values.compactMap { value in
+        let paneValues = snapshot["panes"] as? [Any]
+        let agentValues = snapshot["agents"] as? [Any] ?? []
+        return HerdrSnapshotBoard(
+            labels: labels,
+            panes: (paneValues ?? []).compactMap { paneRecord(from: $0) },
+            agents: agentValues.compactMap { paneRecord(from: $0) },
+            hasPaneList: paneValues != nil)
+    }
+
+    public static func eventName(in text: String) -> String? {
+        guard let object = firstJSON(in: text) as? [String: Any] else { return nil }
+        let raw =
+            string(object["event"])
+            ?? (object["data"] as? [String: Any]).flatMap { string($0["type"]) }
+        return raw?.replacingOccurrences(of: ".", with: "_")
+    }
+
+    public static func eventData(in text: String) -> [String: Any]? {
+        (firstJSON(in: text) as? [String: Any])?["data"] as? [String: Any]
+    }
+
+    public static func eventPane(in text: String) -> HerdrPaneRecord? {
+        guard let data = eventData(in: text) else { return nil }
+        if let pane = data["pane"] { return paneRecord(from: pane) }
+        if string(in: data, keys: ["pane_id", "pane"]) != nil {
+            return paneRecord(from: data)
+        }
+        return nil
+    }
+
+    public static func eventPaneID(in text: String) -> String? {
+        if let pane = eventPane(in: text)?.pane, !pane.isEmpty { return pane }
+        guard let data = eventData(in: text) else { return nil }
+        return string(in: data, keys: ["pane_id", "pane"])
+    }
+
+    public static func eventPreviousPaneID(in text: String) -> String? {
+        guard let data = eventData(in: text) else { return nil }
+        return string(in: data, keys: ["previous_pane_id"])
+    }
+
+    public static func eventReleased(in text: String) -> Bool {
+        guard let data = eventData(in: text) else { return false }
+        if let flag = data["released"] as? Bool { return flag }
+        if let number = data["released"] as? NSNumber { return number.boolValue }
+        return false
+    }
+
+    public static func eventAgentKind(in text: String) -> String? {
+        guard let data = eventData(in: text) else { return nil }
+        return string(in: data, keys: ["agent", "display_agent", "kind"])
+    }
+
+    public static func eventWorkspace(in text: String) -> (id: String, label: String?)? {
+        guard let data = eventData(in: text) else { return nil }
+        let object = data["workspace"] as? [String: Any] ?? data
+        guard let id = string(in: object, keys: ["workspace_id", "id"]) else { return nil }
+        return (id, string(in: object, keys: ["label", "name"]))
+    }
+
+    public static func paneRecord(from value: Any) -> HerdrPaneRecord? {
+        guard let object = value as? [String: Any] else { return nil }
+        let pane =
+            string(in: object, keys: ["pane_id", "pane", "id", "terminal_id", "target"]) ?? ""
+        guard !pane.isEmpty else { return nil }
+        return HerdrPaneRecord(
+            pane: pane,
+            kindRaw: string(in: object, keys: ["display_agent", "agent", "kind"]),
+            statusRaw: string(
+                in: object, keys: ["agent_status", "status", "state", "agentStatus"]),
+            title: string(
+                in: object, keys: ["terminal_title_stripped", "title", "terminal_title"]),
+            workspaceID: string(in: object, keys: ["workspace_id"]),
+            cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]))
+    }
+
+    public static func agent(
+        from record: HerdrPaneRecord, context: HerdrBoardContext,
+        workspaceLabels: [String: String], previous: HerdrAgent? = nil
+    ) -> HerdrAgent {
+        let kind: String
+        if let raw = record.kindRaw, !raw.isEmpty {
+            let named = HerdrKind.displayName(for: raw)
+            if named == "Unknown", let previous, previous.kind != "Unknown" {
+                kind = previous.kind
+            } else {
+                kind = named
+            }
+        } else {
+            kind = previous?.kind ?? "Unknown"
+        }
+        let parsed = HerdrAgentStatus.parse(record.statusRaw)
+        let status: HerdrAgentStatus
+        if let previous, parsed == .unknown, previous.status != .unknown {
+            status = previous.status
+        } else {
+            status = parsed
+        }
+        let title: String
+        if let incoming = record.title, incoming != record.pane {
+            title = incoming
+        } else if let previous, previous.title != previous.pane, !previous.title.isEmpty {
+            title = previous.title
+        } else {
+            title = record.title ?? previous?.title ?? record.pane
+        }
+        let workspaceID = record.workspaceID ?? ""
+        let workspace: String
+        if let labeled = workspaceLabels[workspaceID], !labeled.isEmpty {
+            workspace = labeled
+        } else if workspaceID.isEmpty {
+            workspace = previous?.workspace ?? ""
+        } else {
+            workspace = workspaceID
+        }
+        let cwd: String
+        if let incoming = record.cwd, !incoming.isEmpty {
+            cwd = incoming
+        } else {
+            cwd = previous?.cwd ?? ""
+        }
+        return HerdrAgent.make(
+            machineID: context.machineID, machineName: context.machineName,
+            machineIsLocal: context.machineIsLocal, sshTarget: context.sshTarget,
+            session: context.session, pane: record.pane, kind: kind, status: status, title: title,
+            workspace: workspace, cwd: cwd)
+    }
+
+    public static func agents(
+        fromSnapshot text: String, session: String, machineID: String, machineName: String,
+        machineIsLocal: Bool, sshTarget: String?
+    ) -> [HerdrAgent] {
+        let context = HerdrBoardContext(
+            session: session, machineID: machineID, machineName: machineName,
+            machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+        guard let board = snapshotBoard(from: text) else { return [] }
+        var records: [String: HerdrPaneRecord] = [:]
+        for record in board.panes where record.looksLikeAgent {
+            records[record.pane] = record
+        }
+        for record in board.agents {
+            records[record.pane] = records[record.pane]?.merging(record) ?? record
+        }
+        return records.keys.sorted().map { pane in
             agent(
-                from: value, session: session, machineID: machineID, machineName: machineName,
-                machineIsLocal: machineIsLocal, sshTarget: sshTarget, workspaceLabels: labels)
+                from: records[pane]!, context: context, workspaceLabels: board.labels,
+                previous: nil)
         }
     }
 

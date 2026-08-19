@@ -110,10 +110,7 @@ public enum HerdrLive {
             rpc = try connect(socket.path)
             stream = try connect(socket.path)
         } catch {
-            fleet.put(
-                sessions.put(
-                    session: socket.name, agents: [],
-                    error: error.localizedDescription))
+            fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             return
         }
         await withTaskCancellationHandler {
@@ -126,22 +123,26 @@ public enum HerdrLive {
                     client: rpc, session: socket.name, sessions: sessions, fleet: fleet)
                 let events = stream.events
                 try await stream.subscribeBoard()
-                var pending: Task<Void, Never>?
-                for await _ in events {
-                    pending?.cancel()
-                    pending = Task {
-                        try? await Task.sleep(for: .milliseconds(100))
-                        guard !Task.isCancelled else { return }
-                        try? await publishSnapshot(
-                            client: rpc, session: socket.name, sessions: sessions, fleet: fleet)
+                await withTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        for await line in events {
+                            fleet.put(sessions.applyEvent(session: socket.name, text: line))
+                        }
                     }
+                    group.addTask {
+                        while !Task.isCancelled {
+                            try? await Task.sleep(for: .seconds(20))
+                            guard !Task.isCancelled else { return }
+                            try? await publishSnapshot(
+                                client: rpc, session: socket.name, sessions: sessions,
+                                fleet: fleet)
+                        }
+                    }
+                    await group.next()
+                    group.cancelAll()
                 }
-                pending?.cancel()
             } catch {
-                fleet.put(
-                    sessions.put(
-                        session: socket.name, agents: [],
-                        error: error.localizedDescription))
+                fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
         } onCancel: {
             rpc.close()
@@ -153,11 +154,7 @@ public enum HerdrLive {
         client: HerdrSocketClient, session: String, sessions: SessionBag, fleet: FleetBag
     ) async throws {
         let line = try await client.snapshot()
-        let agents = HerdrListParser.agents(
-            fromSnapshot: line, session: session, machineID: sessions.machineID,
-            machineName: sessions.machineName, machineIsLocal: sessions.machineIsLocal,
-            sshTarget: sessions.sshTarget)
-        fleet.put(sessions.put(session: session, agents: agents, error: nil))
+        fleet.put(sessions.applySnapshot(session: session, text: line))
     }
 }
 
@@ -189,7 +186,7 @@ private final class SessionBag: @unchecked Sendable {
     let machineIsLocal: Bool
     let sshTarget: String?
     private let lock = NSLock()
-    private var agents: [String: [HerdrAgent]] = [:]
+    private var caches: [String: HerdrBoardCache] = [:]
     private var errors: [String: String] = [:]
 
     init(
@@ -201,17 +198,50 @@ private final class SessionBag: @unchecked Sendable {
         self.sshTarget = sshTarget
     }
 
-    func put(session: String, agents: [HerdrAgent], error: String?) -> HerdrHostSnapshot {
+    func applySnapshot(session: String, text: String) -> HerdrHostSnapshot {
+        let cache = lockedCache(for: session)
+        _ = cache.applySnapshot(text)
         lock.lock()
-        self.agents[session] = agents
-        if let error, !error.isEmpty {
-            errors[session] = error
-        } else {
-            errors[session] = nil
-        }
-        let all = self.agents.values.flatMap { $0 }
-        let error = all.isEmpty ? errors.values.first : nil
+        errors[session] = nil
+        let host = hostLocked()
         lock.unlock()
+        return host
+    }
+
+    func applyEvent(session: String, text: String) -> HerdrHostSnapshot {
+        let cache = lockedCache(for: session)
+        _ = cache.applyEvent(text)
+        lock.lock()
+        let host = hostLocked()
+        lock.unlock()
+        return host
+    }
+
+    func failed(session: String, error: String) -> HerdrHostSnapshot {
+        lock.lock()
+        if caches[session]?.agents.isEmpty != false {
+            errors[session] = error
+        }
+        let host = hostLocked()
+        lock.unlock()
+        return host
+    }
+
+    private func lockedCache(for session: String) -> HerdrBoardCache {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = caches[session] { return existing }
+        let created = HerdrBoardCache(
+            context: HerdrBoardContext(
+                session: session, machineID: machineID, machineName: machineName,
+                machineIsLocal: machineIsLocal, sshTarget: sshTarget))
+        caches[session] = created
+        return created
+    }
+
+    private func hostLocked() -> HerdrHostSnapshot {
+        let all = caches.values.flatMap(\.agents)
+        let error = all.isEmpty ? errors.values.compactMap { $0 }.first : nil
         if machineIsLocal {
             return .local(herdrPresent: true, agents: all, error: error)
         }
