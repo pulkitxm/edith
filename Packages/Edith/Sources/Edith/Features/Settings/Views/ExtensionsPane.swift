@@ -21,6 +21,8 @@ enum ExtensionPermissionState {
 struct ExtensionsPane: View {
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
+        var herdrEnabled = false
     @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
         var claudeEnabled = true
     @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
@@ -239,6 +241,7 @@ struct ExtensionsPane: View {
     private func enabledBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
         switch entry.defaultsKey {
         case AppStorageKeys.Tabs.usageEnabled: agentUsageBinding
+        case AppStorageKeys.Tabs.herdrEnabled: $herdrEnabled
         case AppStorageKeys.Tabs.systemEnabled: $systemEnabled
         case AppStorageKeys.Tabs.machinesEnabled: $machinesEnabled
         case AppStorageKeys.Tabs.companionEnabled: $companionEnabled

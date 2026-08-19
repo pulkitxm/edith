@@ -10,6 +10,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case externalMediaControl
     case fileShelf
     case globalPaste
+    case herdrSessions
     case globalShortcuts
     case inputSuppression
     case localMusicPlayback

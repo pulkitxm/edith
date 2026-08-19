@@ -88,6 +88,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabUsageEnabled", requiredCapabilities: [.usageCollection],
             optionalCapabilities: [.notifications], requiredToolIDs: ["claude", "codex"]),
         ExtensionRegistryEntry(
+            id: "herdr", title: "Herdr",
+            subtitle: "Live Herdr sessions on this Mac and your SSH machines.",
+            symbolName: "rectangle.split.3x1.fill", group: .agent, featured: true,
+            defaultsKey: "tabHerdrEnabled", requiredCapabilities: [.herdrSessions]),
+        ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
             symbolName: "switch.2", group: .system, featured: true,
