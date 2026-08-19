@@ -210,7 +210,9 @@ public enum HerdrCollector {
     }
 
     private static func jsonOrProcessError(_ result: CommandResult) -> String? {
-        HerdrListParser.errorMessage(in: result.stdout) ?? message(from: result)
+        HerdrListParser.errorMessage(in: result.stdout)
+            ?? HerdrListParser.errorMessage(in: result.stderr)
+            ?? message(from: result)
     }
 
     private static func isMissing(_ result: CommandResult) -> Bool {

@@ -15,6 +15,9 @@ import Testing
         #expect(hosts.contains { $0["id"] as? String == "local" })
         for host in hosts {
             #expect(Set(host.keys) == ["error", "herdr", "id", "local", "name"])
+            if let error = host["error"] as? String {
+                #expect(!error.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{"))
+            }
         }
         let agents = object?["agents"] as? [[String: Any]] ?? []
         let expected: Set<String> = [
