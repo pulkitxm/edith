@@ -910,7 +910,7 @@ struct MainWindowView: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(11))
+            .padding(.vertical, UIScale.pt(8))
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             .background(
                 active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
