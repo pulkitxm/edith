@@ -400,6 +400,11 @@ enum UIParity {
         UICapability(
             "Dashboard machines chip", "take a machine out of the charts",
             ["usage", "summary", "--machine", "local"]),
+        UICapability(
+            "Herdr board", "list live sessions on this Mac and SSH machines", ["herdr", "ls"]),
+        UICapability(
+            "Herdr session tab", "copy the attach command for a pane",
+            ["herdr", "command", "w3:p1N"]),
     ]
 }
 

@@ -295,6 +295,9 @@ enum JSONContract {
         JSONCase("ed music previous", ["music", "previous", "--json"]),
         JSONCase("ed music volume", ["music", "volume", "0.5", "--json"]),
         JSONCase("ed calendar ls", ["calendar", "ls", "--json"]),
+        JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
+        JSONCase(
+            "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
         JSONCase("ed machines ls", ["machines", "ls", "--json"]),
         JSONCase("ed machines show", ["machines", "show", "nowhere-at-all", "--json"]),
         JSONCase(
