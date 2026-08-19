@@ -113,48 +113,6 @@ enum Brand {
     }()
 }
 
-struct TitlebarChrome: View {
-    let height: CGFloat
-    let width: CGFloat
-    @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
-        var sidebarOpen = true
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            Button {
-                sidebarOpen.toggle()
-            } label: {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(HoverButtonStyle())
-            .help("Toggle sidebar (⌘B)")
-            .keyboardShortcut("b", modifiers: .command)
-
-            if sidebarOpen, width >= 130 {
-                HStack(alignment: .center, spacing: 6) {
-                    if let icon = Brand.icon {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .interpolation(.high)
-                            .frame(width: 17, height: 17)
-                    }
-                    Text("Edith")
-                        .font(.system(size: 13, weight: .medium))
-                        .tracking(-0.2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(width: width, height: height, alignment: .leading)
-        .clipped()
-    }
-}
-
 private struct SidebarNavRow: View {
     let item: MainDestination
     let selected: Bool
@@ -195,7 +153,7 @@ private struct SidebarNavRow: View {
         }
         .buttonStyle(.plain)
         .background {
-            ZStack {
+            ZStack(alignment: .leading) {
                 if hovering && !selected {
                     RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
                         .fill(.primary.opacity(0.07))
@@ -205,6 +163,11 @@ private struct SidebarNavRow: View {
                         .fill(theme.opacity(0.16))
                         .matchedGeometryEffect(
                             id: "sidebarSelection", in: selectionNamespace, isSource: true)
+                    Capsule()
+                        .fill(theme)
+                        .frame(width: UIScale.pt(3))
+                        .padding(.vertical, UIScale.pt(6))
+                        .padding(.leading, UIScale.pt(2))
                 }
             }
         }
@@ -275,8 +238,6 @@ struct MainWindowView: View {
         var settingsTab = "general"
     @AppStorage(AppStorageKeys.General.mainSidebarOpen, store: SharedDefaults.store) private
         var sidebarOpen = true
-    @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
-        var sidebarWidth = 230.0
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
@@ -321,9 +282,6 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
         var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
-    @AppStorage(AppStorageKeys.General.editMainWindowFullScreen) private var windowFullScreen =
-        false
-    @State private var dragBaseWidth: Double?
     @State private var musicKeyMonitor: Any?
     @State private var windowKeyMonitor: Any?
     @State private var commandHintMonitor: Any?
@@ -346,17 +304,14 @@ struct MainWindowView: View {
     private var theme: Color { themeColor(themeName) }
 
     private static let minSidebarWidth = 180.0
-    private static let maxSidebarWidth = 320.0
-    private static let defaultSidebarWidth = 230.0
-    private static let trafficLightsInset = 94.0
-    private static let chromeHeight = 31.0
-    private static let fullScreenControlsInset = 12.0
 
-    private var clampedSidebarWidth: Double {
-        min(Self.maxSidebarWidth, max(Self.minSidebarWidth, sidebarWidth))
+    private var clampedSidebarWidth: Double { Self.minSidebarWidth }
+
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { sidebarOpen ? .all : .detailOnly },
+            set: { sidebarOpen = $0 != .detailOnly })
     }
-
-    private var displaySidebarWidth: Double { UIScale.pt(clampedSidebarWidth) }
 
     private var destination: MainDestination {
         let requested = MainDestination.resolve(navigationSelection.mainWindowSection)
@@ -413,9 +368,8 @@ struct MainWindowView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let bandHeight = Self.chromeHeight + UIScale.pt(10)
             VStack(spacing: 0) {
-                mainArea(bandHeight)
+                mainArea()
                 if musicFooterVisible {
                     MusicFooter()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -423,7 +377,6 @@ struct MainWindowView: View {
             }
             .ignoresSafeArea()
             .overlay { MusicDetailOverlay() }
-            .overlay(alignment: .topLeading) { chromeOverlay() }
             .animation(
                 Motion.animation(Motion.glide, reduceMotion: reduceMotion),
                 value: visibleHomeItems
@@ -551,33 +504,18 @@ struct MainWindowView: View {
 
     private var detailCorner: CGFloat { sidebarOpen ? 12 : 0 }
 
-    private func mainArea(_ bandHeight: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            sidebar(bandHeight)
-                .frame(width: displaySidebarWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .offset(x: sidebarOpen ? 0 : -displaySidebarWidth)
-                .opacity(sidebarOpen ? 1 : 0)
-                .allowsHitTesting(sidebarOpen)
-
-            detailColumn(bandHeight)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: detailCorner, bottomLeadingRadius: detailCorner,
-                        style: .continuous)
-                )
-                .padding(.leading, sidebarOpen ? displaySidebarWidth : 0)
-                .shadow(color: detailShadow, radius: UIScale.pt(18), x: -6, y: 0)
-
-            sidebarEdge
-                .frame(maxHeight: .infinity)
-                .offset(x: sidebarOpen ? displaySidebarWidth : 0)
-                .opacity(sidebarOpen ? 1 : 0)
+    private func mainArea() -> some View {
+        NavigationSplitView(columnVisibility: columnVisibility) {
+            sidebar()
+                .navigationSplitViewColumnWidth(min: 250, ideal: 250, max: 250)
+        } detail: {
+            detailColumn()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationSplitViewStyle(.prominentDetail)
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .animation(
-            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen)
+            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen
+        )
     }
 
     private func refreshPermissionsPill() {
@@ -589,35 +527,11 @@ struct MainWindowView: View {
         }
     }
 
-    private func chromeOverlay() -> some View {
-        let inset = windowFullScreen ? Self.fullScreenControlsInset : Self.trafficLightsInset
-        return VStack(spacing: 0) {
-            TitlebarChrome(
-                height: Self.chromeHeight,
-                width: sidebarOpen ? max(displaySidebarWidth - inset, 60) : UIScale.pt(200))
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, inset)
-        .ignoresSafeArea(edges: .top)
-    }
-
-    private func band(_ color: Color, height: CGFloat) -> some View {
-        color
-            .frame(height: height)
-            .allowsHitTesting(false)
-    }
-
-    private func detailColumn(_ bandHeight: CGFloat) -> some View {
+    private func detailColumn() -> some View {
         GeometryReader { geo in
-            VStack(spacing: UIScale.pt(0)) {
-                band(
-                    destination.usesPaperBackground
-                        ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor),
-                    height: bandHeight)
-                detail
-                    .tint(theme)
-            }
-            .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
+            detail
+                .tint(theme)
+                .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
         }
     }
 
@@ -625,20 +539,17 @@ struct MainWindowView: View {
         systemEnabled || presenterEnabled || permissionsNeedAttention || updater.updateReady != nil
     }
 
-    private func sidebar(_ bandHeight: CGFloat) -> some View {
+    private func sidebar() -> some View {
         ZStack {
             SidebarMaterial()
             VStack(spacing: UIScale.pt(0)) {
-                band(.clear, height: bandHeight)
-                VStack(spacing: UIScale.pt(0)) {
-                    sidebarList
-                    if footerVisible {
-                        Divider()
-                        sidebarFooter
-                    }
-                    credit
-                        .padding(.vertical, UIScale.pt(8))
+                sidebarList
+                if footerVisible {
+                    Divider()
+                    sidebarFooter
                 }
+                credit
+                    .padding(.vertical, UIScale.pt(8))
             }
         }
     }
@@ -724,6 +635,12 @@ struct MainWindowView: View {
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
                 guard !WindowTabs.isTabbed(NSApp.keyWindow) else { return false }
+                if mods.intersection([.command, .control, .option, .shift]) == .command,
+                    characters?.lowercased() == "b"
+                {
+                    sidebarOpen.toggle()
+                    return true
+                }
                 guard
                     let command = WindowKeyCommand.resolve(
                         characters: characters, keyCode: code, modifiers: mods)
@@ -1000,38 +917,6 @@ struct MainWindowView: View {
         .buttonStyle(.plain)
         .pointerCursor()
         .help(help)
-    }
-
-    private var sidebarEdge: some View {
-        Rectangle()
-            .fill(Color(nsColor: .separatorColor))
-            .frame(width: UIScale.pt(1))
-            .overlay {
-                Color.clear
-                    .frame(width: UIScale.pt(9))
-                    .contentShape(Rectangle())
-                    .onHover { inside in
-                        if inside {
-                            NSCursor.resizeLeftRight.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                    .gesture(
-                        DragGesture(coordinateSpace: .global)
-                            .onChanged { value in
-                                let base = dragBaseWidth ?? displaySidebarWidth
-                                dragBaseWidth = base
-                                sidebarWidth = min(
-                                    Self.maxSidebarWidth,
-                                    max(
-                                        Self.minSidebarWidth,
-                                        (base + value.translation.width) / UIScale.current))
-                            }
-                            .onEnded { _ in dragBaseWidth = nil }
-                    )
-                    .onTapGesture(count: 2) { sidebarWidth = Self.defaultSidebarWidth }
-            }
     }
 
     @ViewBuilder

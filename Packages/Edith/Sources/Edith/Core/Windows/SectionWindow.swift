@@ -94,6 +94,8 @@ enum SectionWindow {
             backing: .buffered, defer: false)
         window.title = destination.title
         window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         window.contentMinSize = NSSize(width: 560, height: 420)
         window.tabbingMode = .automatic
         window.tabbingIdentifier = "EdithSection"
