@@ -7,6 +7,8 @@ struct AboutPane: View {
         "accent"
     @State private var contributors: [Contributor] = []
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var theme: Color { themeColor(themeName) }
 
@@ -33,8 +35,7 @@ struct AboutPane: View {
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .navigationTitle("About")
+        .background(DashSkin.paper(dark).paperGrain(dark: dark, opacity: 0.03))
     }
 
     private var content: some View {
@@ -46,21 +47,24 @@ struct AboutPane: View {
                     .frame(width: UIScale.pt(88), height: UIScale.pt(88))
                     .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(20), style: .continuous))
                     .shadow(color: .black.opacity(0.25), radius: UIScale.pt(12), y: 6)
+                    .pendantGlow(dark: dark, anchor: .center, intensity: 1.3)
             }
             VStack(spacing: UIScale.pt(6)) {
                 Text("Edith")
-                    .font(.system(size: UIScale.pt(28), weight: .bold))
+                    .font(DashSkin.serif(13.5, weight: .medium))
+                    .foregroundStyle(DashSkin.ink(dark))
                 Text(version)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(DashSkin.mono(12))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Text("Every little Mac utility you'd otherwise pay for, under one roof.")
                 .font(.system(size: UIScale.pt(14), weight: .medium))
+                .foregroundStyle(DashSkin.ink(dark))
                 .multilineTextAlignment(.center)
             Text(story)
                 .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .frame(maxWidth: UIScale.pt(460))
@@ -85,7 +89,7 @@ struct AboutPane: View {
             contributorWall
             Text("Made with ♥ by Pulkit")
                 .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UIScale.pt(32))
@@ -118,9 +122,7 @@ struct AboutPane: View {
     @ViewBuilder private var contributorWall: some View {
         if !contributors.isEmpty {
             VStack(spacing: UIScale.pt(10)) {
-                Text("Contributors")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(.secondary)
+                eyebrow("Contributors")
                 LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
                     ForEach(contributors) { person in
                         Button {
@@ -143,10 +145,10 @@ struct AboutPane: View {
         AsyncImage(url: person.avatarURL) { image in
             image.resizable().interpolation(.high)
         } placeholder: {
-            Circle().fill(Color.secondary.opacity(0.18))
+            Circle().fill(DashSkin.line(dark))
         }
         .frame(width: UIScale.pt(44), height: UIScale.pt(44))
         .clipShape(Circle())
-        .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+        .overlay(Circle().strokeBorder(DashSkin.line(dark), lineWidth: 1))
     }
 }

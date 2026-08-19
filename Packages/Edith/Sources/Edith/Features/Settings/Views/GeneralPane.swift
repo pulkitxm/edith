@@ -23,6 +23,8 @@ struct SettingsPane: View {
         var tabRaw =
         Tab.general.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var tab: Binding<Tab> {
         Binding(
@@ -32,17 +34,7 @@ struct SettingsPane: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
-            PageHeader(
-                "Settings",
-                accessory: {
-                    Picker("", selection: tab) {
-                        ForEach(Tab.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .pointerCursor()
-                    .frame(maxWidth: UIScale.pt(320), alignment: .leading)
-                })
+            PageHeader("Settings")
             Group {
                 switch tab.wrappedValue {
                 case .general: GeneralPane()
@@ -53,11 +45,14 @@ struct SettingsPane: View {
                 case .updates: UpdatesPane(updater: updater)
                 }
             }
-            .scrollContentBackground(.hidden)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .navigationTitle("Settings")
+        .background(DashSkin.paper(dark))
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                LiquidTabPicker(items: Tab.allCases, label: \.label, selection: tab)
+            }
+        }
         .onAppear {
             if automaticActionsEnabled {
                 tabRaw =
@@ -72,6 +67,9 @@ struct SettingsPane: View {
 private struct UpdatesPane: View {
     let updater: UpdaterModel
     @State private var showingSchedule = false
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    private var dark: Bool { scheme == .dark }
 
     private var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
@@ -86,57 +84,63 @@ private struct UpdatesPane: View {
     var body: some View {
         Group {
             if updater.updaterAvailable {
-                Form {
-                    Section {
-                        LabeledContent("Current version") {
-                            Text(currentVersion)
-                                .foregroundStyle(.secondary)
-                        }
-                        LabeledContent("Last checked") {
-                            if let date = updater.lastUpdateCheckDate {
-                                Text(date, format: .dateTime.year().month().day().hour().minute())
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("Never")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Button("Check for Updates") {
-                            updater.checkForUpdates()
-                        }
-                        .disabled(!updater.canCheckForUpdates)
-                        .pointerCursor()
-                    } header: {
-                        Text("Version")
-                    }
-
-                    Section {
-                        Toggle("Automatic updates", isOn: automaticDownloads)
-                            .pointerCursor()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .highPriorityGesture(
-                                TapGesture().modifiers(.command).onEnded {
-                                    showingSchedule = true
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                        SkinCard(title: "Version", dark: dark) {
+                            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                                LabeledContent("Current version") {
+                                    Text(currentVersion)
+                                        .foregroundStyle(DashSkin.inkSoft(dark))
                                 }
-                            )
-                            .sheet(isPresented: $showingSchedule) {
-                                UpdateSchedulePanel(updater: updater)
+                                LabeledContent("Last checked") {
+                                    if let date = updater.lastUpdateCheckDate {
+                                        Text(
+                                            date,
+                                            format: .dateTime.year().month().day().hour().minute()
+                                        )
+                                        .foregroundStyle(DashSkin.inkSoft(dark))
+                                    } else {
+                                        Text("Never")
+                                            .foregroundStyle(DashSkin.inkSoft(dark))
+                                    }
+                                }
+                                Button("Check for Updates") {
+                                    updater.checkForUpdates()
+                                }
+                                .disabled(!updater.canCheckForUpdates)
+                                .pointerCursor()
                             }
-                            .accessibilityHint(
-                                "Command-click to configure the check schedule and see history")
-                    } header: {
-                        Text("Updates")
+                            .foregroundStyle(DashSkin.ink(dark))
+                        }
+                        SkinCard(title: "Updates", dark: dark) {
+                            Toggle("Automatic updates", isOn: automaticDownloads)
+                                .pointerCursor()
+                                .foregroundStyle(DashSkin.ink(dark))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                                .highPriorityGesture(
+                                    TapGesture().modifiers(.command).onEnded {
+                                        showingSchedule = true
+                                    }
+                                )
+                                .sheet(isPresented: $showingSchedule) {
+                                    UpdateSchedulePanel(updater: updater)
+                                }
+                                .accessibilityHint(
+                                    "Command-click to configure the check schedule and see history")
+                        }
                     }
+                    .pageContent(compact)
+                    .padding(.top, UIScale.pt(16))
                 }
-                .formStyle(.grouped)
+                .background(DashSkin.paper(dark))
             } else {
                 Text("Updates are unavailable in this build")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(DashSkin.paper(dark))
             }
         }
-        .navigationTitle("Updates")
     }
 }
 
@@ -158,97 +162,101 @@ struct GeneralPane: View {
         SettingsPane.Tab.general.rawValue
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Appearance", selection: $appearance) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                }
-                .pointerCursor()
-                .onChange(of: appearance) { _, value in applyAppearance(value) }
-
-                LabeledContent("Theme") {
-                    HStack(spacing: UIScale.pt(10)) {
-                        Toggle(
-                            "Use accent",
-                            isOn: Binding(
-                                get: { themeName == "accent" },
-                                set: { themeName = $0 ? "accent" : lastPaletteTheme })
-                        )
-                        .toggleStyle(.switch)
+        ScrollView {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                SkinCard(title: "Appearance", dark: dark) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        Picker("Appearance", selection: $appearance) {
+                            Text("System").tag("system")
+                            Text("Light").tag("light")
+                            Text("Dark").tag("dark")
+                        }
                         .pointerCursor()
-                        ForEach(themePalette, id: \.name) { entry in
-                            swatch(entry.name, color: entry.color)
+                        .onChange(of: appearance) { _, value in applyAppearance(value) }
+
+                        LabeledContent("Theme") {
+                            HStack(spacing: UIScale.pt(10)) {
+                                Toggle(
+                                    "Use accent",
+                                    isOn: Binding(
+                                        get: { themeName == "accent" },
+                                        set: { themeName = $0 ? "accent" : lastPaletteTheme })
+                                )
+                                .toggleStyle(.switch)
+                                .pointerCursor()
+                                ForEach(themePalette, id: \.name) { entry in
+                                    swatch(entry.name, color: entry.color)
+                                }
+                            }
+                            .opacity(themeName == "accent" ? 0.5 : 1)
                         }
                     }
-                    .opacity(themeName == "accent" ? 0.5 : 1)
+                    .foregroundStyle(DashSkin.ink(dark))
                 }
-            } header: {
-                Text("Appearance")
-            }
 
-            Section {
-                Toggle("Show Dock icon", isOn: $showDockIcon)
+                SkinCard(
+                    title: "Window",
+                    note: "Features are turned on and off from the Extensions page.", dark: dark
+                ) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        Toggle("Show Dock icon", isOn: $showDockIcon)
+                            .pointerCursor()
+                            .onChange(of: showDockIcon) { _, on in
+                                NSApp.setActivationPolicy(on ? .regular : .accessory)
+                            }
+                        LabeledContent {
+                            HotKeyRecorderControl(keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
+                        } label: {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text("Panel shortcut")
+                                InfoDot(
+                                    "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
+                                )
+                            }
+                        }
+                    }
+                    .foregroundStyle(DashSkin.ink(dark))
+                }
+
+                SkinCard(
+                    title: "Access", note: "Every permission Edith can ask for, in one place.",
+                    dark: dark
+                ) {
+                    Button {
+                        settingsTab = SettingsPane.Tab.permissions.rawValue
+                    } label: {
+                        LabeledContent("Permissions") {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text(permissionSummary)
+                                    .foregroundStyle(DashSkin.inkSoft(dark))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: UIScale.pt(10)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                            }
+                        }
+                        .foregroundStyle(DashSkin.ink(dark))
+                    }
+                    .buttonStyle(.plain)
                     .pointerCursor()
-                    .onChange(of: showDockIcon) { _, on in
-                        NSApp.setActivationPolicy(on ? .regular : .accessory)
-                    }
-                LabeledContent {
-                    HotKeyRecorderControl(keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Panel shortcut")
-                        InfoDot(
-                            "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
-                        )
-                    }
                 }
-            } header: {
-                Text("Window")
-            } footer: {
-                Text("Features are turned on and off from the Extensions page.")
-                    .font(.system(size: UIScale.pt(10)))
-            }
 
-            Section {
-                Button {
-                    settingsTab = SettingsPane.Tab.permissions.rawValue
-                } label: {
-                    LabeledContent("Permissions") {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text(permissionSummary)
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: UIScale.pt(10)))
-                                .foregroundStyle(.tertiary)
-                        }
+                SkinCard(title: "Welcome tour", dark: dark) {
+                    Button("Show welcome tour") {
+                        SharedDefaults.store.removeObject(forKey: OnboardingFlow.completionKey)
+                        OnboardingWindow.open()
                     }
+                    .pointerCursor()
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
-            } header: {
-                Text("Access")
-            } footer: {
-                Text("Every permission Edith can ask for, in one place.")
-                    .font(.system(size: UIScale.pt(10)))
             }
-
-            Section {
-                Button("Show welcome tour") {
-                    SharedDefaults.store.removeObject(forKey: OnboardingFlow.completionKey)
-                    OnboardingWindow.open()
-                }
-                .pointerCursor()
-            } header: {
-                Text("Welcome tour")
-            }
-
+            .pageContent(compact)
+            .padding(.top, UIScale.pt(16))
         }
-        .formStyle(.grouped)
-        .navigationTitle("General")
+        .background(DashSkin.paper(dark))
         .onAppear {
             if automaticActionsEnabled { refreshPermissionState() }
         }

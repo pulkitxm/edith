@@ -19,7 +19,7 @@ struct CalendarPage: View {
         VStack(spacing: UIScale.pt(0)) {
             pageHeader
             if store.authStatus != .fullAccess {
-                CalendarPermissionPrompt(style: calendarStyle, accentColor: theme)
+                CalendarPermissionPrompt(style: calendarStyle, accentColor: theme, dark: dark)
                     .frame(maxWidth: UIScale.pt(420))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onReceive(
@@ -32,7 +32,6 @@ struct CalendarPage: View {
             }
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
-        .navigationTitle("Calendar")
         .onAppear { store.refreshAuthStatus() }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
@@ -60,6 +59,7 @@ struct CalendarPage: View {
             events: store.events,
             style: calendarStyle,
             accentColor: theme,
+            dark: dark,
             blurEvents: blurCalendar,
             onLoadMore: store.loadMore
         )

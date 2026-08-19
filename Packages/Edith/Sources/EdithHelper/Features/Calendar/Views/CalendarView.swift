@@ -9,11 +9,13 @@ struct CalendarView: View {
     private var presenterBlurCalendar = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Group {
             if store.authStatus != .fullAccess {
-                CalendarPermissionPrompt(style: .panel, accentColor: theme)
+                CalendarPermissionPrompt(style: .panel, accentColor: theme, dark: dark)
                     .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
                         store.refreshAuthStatus()
                     }
@@ -29,6 +31,7 @@ struct CalendarView: View {
             events: store.events,
             style: .panel,
             accentColor: theme,
+            dark: dark,
             blurEvents: blurCalendar,
             onLoadMore: store.loadMore,
             onOpenMeeting: { url in

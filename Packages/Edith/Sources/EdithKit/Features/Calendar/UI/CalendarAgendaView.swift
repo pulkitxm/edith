@@ -5,6 +5,7 @@ public struct CalendarAgendaView: View {
     private let events: [CalendarEventPayload]
     private let style: CalendarAgendaStyle
     private let accentColor: Color
+    private let dark: Bool
     private let blurEvents: Bool
     private let onLoadMore: () -> Void
     private let onOpenMeeting: (URL) -> Void
@@ -17,6 +18,7 @@ public struct CalendarAgendaView: View {
         events: [CalendarEventPayload],
         style: CalendarAgendaStyle,
         accentColor: Color,
+        dark: Bool = false,
         blurEvents: Bool,
         onLoadMore: @escaping () -> Void,
         onOpenMeeting: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
@@ -24,6 +26,7 @@ public struct CalendarAgendaView: View {
         self.events = events
         self.style = style
         self.accentColor = accentColor
+        self.dark = dark
         self.blurEvents = blurEvents
         self.onLoadMore = onLoadMore
         self.onOpenMeeting = onOpenMeeting
@@ -33,7 +36,7 @@ public struct CalendarAgendaView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: style.daySpacing) {
                 if groupedDays.isEmpty {
-                    CalendarEmptyState(style: style)
+                    CalendarEmptyState(style: style, dark: dark)
                 } else {
                     ForEach(groupedDays, id: \.day) { group in
                         CalendarDaySection(
@@ -41,6 +44,7 @@ public struct CalendarAgendaView: View {
                             events: group.events,
                             style: style,
                             accentColor: accentColor,
+                            dark: dark,
                             blurEvents: blurEvents,
                             onOpenMeeting: onOpenMeeting
                         )
@@ -60,10 +64,12 @@ public struct CalendarAgendaView: View {
 public struct CalendarPermissionPrompt: View {
     private let style: CalendarAgendaStyle
     private let accentColor: Color
+    private let dark: Bool
 
-    public init(style: CalendarAgendaStyle, accentColor: Color) {
+    public init(style: CalendarAgendaStyle, accentColor: Color, dark: Bool = false) {
         self.style = style
         self.accentColor = accentColor
+        self.dark = dark
     }
 
     public var body: some View {
@@ -74,18 +80,19 @@ public struct CalendarPermissionPrompt: View {
                 Text("CALENDAR ACCESS")
                     .font(.system(size: style.permissionEyebrowSize, weight: .semibold))
                     .tracking(style.headerTracking)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Text(style.permissionMessage)
                 .font(.system(size: style.permissionMessageSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: style.permissionRowSpacing) {
                 Image(systemName: style.permissionIcon)
                     .font(.system(size: style.permissionIconSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                 Text("Calendars")
                     .font(.system(size: style.permissionTitleSize))
+                    .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
                     .buttonStyle(HoverButtonStyle())
@@ -95,8 +102,8 @@ public struct CalendarPermissionPrompt: View {
             }
         }
         .padding(style.permissionPadding)
-        .background(style.permissionBackground)
-        .overlay(style.permissionStroke)
+        .background(style.permissionBackground(dark: dark))
+        .overlay(style.permissionStroke(dark: dark))
     }
 }
 
@@ -105,6 +112,7 @@ private struct CalendarDaySection: View {
     private let events: [CalendarEventPayload]
     private let style: CalendarAgendaStyle
     private let accentColor: Color
+    private let dark: Bool
     private let blurEvents: Bool
     private let onOpenMeeting: (URL) -> Void
 
@@ -113,6 +121,7 @@ private struct CalendarDaySection: View {
         events: [CalendarEventPayload],
         style: CalendarAgendaStyle,
         accentColor: Color,
+        dark: Bool,
         blurEvents: Bool,
         onOpenMeeting: @escaping (URL) -> Void
     ) {
@@ -120,13 +129,14 @@ private struct CalendarDaySection: View {
         self.events = events
         self.style = style
         self.accentColor = accentColor
+        self.dark = dark
         self.blurEvents = blurEvents
         self.onOpenMeeting = onOpenMeeting
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.headerToRowsSpacing) {
-            CalendarDayHeader(day: day, eventCount: events.count, style: style)
+            CalendarDayHeader(day: day, eventCount: events.count, style: style, dark: dark)
             if style.wrapsRowsInCard {
                 VStack(alignment: .leading, spacing: 0) {
                     rows
@@ -146,6 +156,7 @@ private struct CalendarDaySection: View {
                 event: event,
                 style: style,
                 accentColor: accentColor,
+                dark: dark,
                 blurEvents: blurEvents,
                 onOpenMeeting: onOpenMeeting
             )
@@ -160,11 +171,13 @@ private struct CalendarDayHeader: View {
     private let day: Date
     private let eventCount: Int
     private let style: CalendarAgendaStyle
+    private let dark: Bool
 
-    init(day: Date, eventCount: Int, style: CalendarAgendaStyle) {
+    init(day: Date, eventCount: Int, style: CalendarAgendaStyle, dark: Bool) {
         self.day = day
         self.eventCount = eventCount
         self.style = style
+        self.dark = dark
     }
 
     var body: some View {
@@ -198,6 +211,7 @@ private struct CalendarEventRow: View {
     private let event: CalendarEventPayload
     private let style: CalendarAgendaStyle
     private let accentColor: Color
+    private let dark: Bool
     private let blurEvents: Bool
     private let onOpenMeeting: (URL) -> Void
 
@@ -205,12 +219,14 @@ private struct CalendarEventRow: View {
         event: CalendarEventPayload,
         style: CalendarAgendaStyle,
         accentColor: Color,
+        dark: Bool,
         blurEvents: Bool,
         onOpenMeeting: @escaping (URL) -> Void
     ) {
         self.event = event
         self.style = style
         self.accentColor = accentColor
+        self.dark = dark
         self.blurEvents = blurEvents
         self.onOpenMeeting = onOpenMeeting
     }
@@ -277,7 +293,7 @@ private struct CalendarEventRow: View {
             Text(CalendarText.timeRange(for: event))
                 .font(.system(size: style.timeSize, weight: .medium))
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: style.timeWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: style.titleLocationSpacing) {
                 Text(event.title)
@@ -287,7 +303,7 @@ private struct CalendarEventRow: View {
                 if let location = CalendarText.visibleLocation(for: event) {
                     Text(location)
                         .font(.system(size: style.locationSize))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
             }
@@ -473,9 +489,11 @@ private struct CalendarMetadataLabel: View {
 
 private struct CalendarEmptyState: View {
     private let style: CalendarAgendaStyle
+    private let dark: Bool
 
-    init(style: CalendarAgendaStyle) {
+    init(style: CalendarAgendaStyle, dark: Bool) {
         self.style = style
+        self.dark = dark
     }
 
     var body: some View {
@@ -484,7 +502,7 @@ private struct CalendarEmptyState: View {
         } else {
             Text("Nothing coming up")
                 .font(.system(size: style.emptyTextSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.vertical, style.emptyVerticalPadding)
                 .frame(maxWidth: .infinity)
         }
@@ -670,10 +688,10 @@ public enum CalendarAgendaStyle {
         }
     }
 
-    var headerColor: HierarchicalShapeStyle {
+    var headerColor: Color {
         switch self {
-        case .page: return .secondary
-        case .panel: return .tertiary
+        case .page: return .primary
+        case .panel: return .primary
         }
     }
 
@@ -971,18 +989,18 @@ public enum CalendarAgendaStyle {
     }
 
     @ViewBuilder
-    var permissionBackground: some View {
+    func permissionBackground(dark: Bool) -> some View {
         switch self {
         case let .page(_, rowBackground, _):
             RoundedRectangle(cornerRadius: UIScale.pt(12)).fill(rowBackground)
         case .panel:
-            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial)
+            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DashSkin.paper2(dark))
         }
     }
 
-    var permissionStroke: some View {
+    func permissionStroke(dark: Bool) -> some View {
         RoundedRectangle(cornerRadius: permissionStrokeRadius)
-            .strokeBorder(permissionStrokeColor, lineWidth: permissionStrokeWidth)
+            .strokeBorder(permissionStrokeColor(dark: dark), lineWidth: permissionStrokeWidth)
     }
 
     var permissionStrokeRadius: CGFloat {
@@ -992,10 +1010,10 @@ public enum CalendarAgendaStyle {
         }
     }
 
-    var permissionStrokeColor: Color {
+    func permissionStrokeColor(dark: Bool) -> Color {
         switch self {
         case let .page(_, _, strokeColor): return strokeColor
-        case .panel: return Color.white.opacity(0.08)
+        case .panel: return DashSkin.line(dark)
         }
     }
 

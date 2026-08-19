@@ -467,12 +467,12 @@ struct CompanionSettingsScreen: View {
                     ForEach(home.checks, id: \.name) { check in
                         HStack(spacing: UIScale.pt(8)) {
                             Circle()
-                                .fill(check.ok ? DashSkin.ok : DashSkin.warn)
+                                .fill(check.ok ? DashSkin.sage : DashSkin.gold)
                                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                             Text("\(check.name) · \(check.detail)")
                                 .font(.system(size: UIScale.pt(11.5)))
                                 .foregroundStyle(
-                                    check.ok ? DashSkin.inkSoft(dark) : DashSkin.warn
+                                    check.ok ? DashSkin.inkSoft(dark) : DashSkin.gold
                                 )
                                 .lineLimit(1)
                                 .help(check.detail)

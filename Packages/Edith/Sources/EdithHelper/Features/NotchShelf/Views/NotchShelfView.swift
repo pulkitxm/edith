@@ -643,7 +643,7 @@ private struct NotchUsageRings: View {
 
     @ViewBuilder private func resetLabel(_ resetsAt: Date?) -> some View {
         if let reset = resetsAt, reset > Date() {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: .now, by: 60)) { context in
                 Text(countdown(from: context.date, to: reset))
                     .font(.system(size: 9)).monospacedDigit()
                     .foregroundStyle(.white.opacity(0.4))
@@ -659,10 +659,9 @@ private struct NotchUsageRings: View {
         let d = s / 86400
         let h = (s % 86400) / 3600
         let m = (s % 3600) / 60
-        let sec = s % 60
-        if d > 0 { return String(format: "%dd %d:%02d:%02d", d, h, m, sec) }
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
-        return String(format: "%d:%02d", m, sec)
+        if d > 0 { return String(format: "%dd %d Hrs", d, h) }
+        if h > 0 { return String(format: "%d:%02d Hrs", h, m) }
+        return String(format: "%d Min", m)
     }
 
     private func color(_ percent: Double) -> Color {

@@ -485,6 +485,8 @@ struct RootView: View {
     private var permissions = PermissionsModel.shared
     private var presenterState = PresenterState.shared
     @State private var showDeveloper = false
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var enabledTabs: [(id: String, title: String)] {
         orderedTabIDs(tabOrderRaw).compactMap { id in
@@ -516,7 +518,7 @@ struct RootView: View {
                         Text("EDITH")
                             .font(.system(size: 12, weight: .semibold))
                             .tracking(3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                 }
                 .buttonStyle(HoverButtonStyle())
@@ -532,7 +534,7 @@ struct RootView: View {
                     } label: {
                         Image(systemName: "folder")
                             .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help("Open music folder in Finder")
@@ -544,7 +546,7 @@ struct RootView: View {
                     } label: {
                         Image(systemName: "eyedropper")
                             .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help("Grab a color (\(ColorPickerHotKey.label))")
@@ -564,7 +566,7 @@ struct RootView: View {
                     } label: {
                         Image(systemName: "circle.lefthalf.filled")
                             .font(.system(size: 13))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(DashSkin.ink(dark))
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help("Focus dim (\(FocusDimHotKey.label))")
@@ -581,7 +583,7 @@ struct RootView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(
                         permissions.needsAttention
-                            ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                            ? AnyShapeStyle(DashSkin.gold) : AnyShapeStyle(DashSkin.inkSoft(dark)))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help(permissions.needsAttention ? "Permissions need attention" : "Permissions")
@@ -595,7 +597,7 @@ struct RootView: View {
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                 }
                 .buttonStyle(HoverButtonStyle())
                 .help("Settings (⌥-click for developer options)")
@@ -608,7 +610,7 @@ struct RootView: View {
                 } label: {
                     Image(systemName: "power")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .menuIndicator(.hidden)
                 .buttonStyle(HoverButtonStyle())
@@ -664,7 +666,7 @@ struct RootView: View {
         } else if enabledTabs.isEmpty {
             Text("All tabs are off - enable one in Edith's settings (⚙)")
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.vertical, 28)
         }
     }
@@ -673,7 +675,7 @@ struct RootView: View {
         HStack(spacing: 8) {
             Image(systemName: "eye.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(.orange)
+                .foregroundStyle(DashSkin.gold)
             Text(presenterState.autoReason ?? "Screen sharing detected")
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
@@ -686,7 +688,7 @@ struct RootView: View {
             .help("Stop auto-blur until this share ends")
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .background(DashSkin.gold.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func pinTab() {
@@ -700,7 +702,8 @@ private struct PanelBackground: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        (scheme == .dark ? Color.black.opacity(0.55) : Color.white.opacity(0.45))
+        DashSkin.paper(scheme == .dark)
+            .opacity(scheme == .dark ? 0.7 : 0.55)
             .ignoresSafeArea()
     }
 }

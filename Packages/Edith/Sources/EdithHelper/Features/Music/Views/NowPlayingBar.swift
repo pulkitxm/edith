@@ -8,6 +8,8 @@ struct NowPlayingBar: View {
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
         var presenterBlurMusic = true
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
@@ -68,7 +70,7 @@ struct NowPlayingBar: View {
                     } label: {
                         Image(systemName: "shuffle")
                             .font(.system(size: 12))
-                            .foregroundStyle(player.isShuffling ? theme : .secondary)
+                            .foregroundStyle(player.isShuffling ? theme : DashSkin.inkSoft(dark))
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help(
@@ -79,7 +81,7 @@ struct NowPlayingBar: View {
                     } label: {
                         Image(systemName: "repeat")
                             .font(.system(size: 12))
-                            .foregroundStyle(player.isLooping ? theme : .secondary)
+                            .foregroundStyle(player.isLooping ? theme : DashSkin.inkSoft(dark))
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help(player.isLooping ? "Repeating this track" : "Play through the queue")
@@ -93,7 +95,7 @@ struct NowPlayingBar: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+            .background(DashSkin.line(dark), in: RoundedRectangle(cornerRadius: 12))
             .background {
                 AmbientGlow(track: track, player: player)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -107,14 +109,14 @@ struct NowPlayingBar: View {
         Text("\(timeLabel(player.elapsed)) / \(timeLabel(player.trackDuration))")
             .font(.system(size: 10))
             .monospacedDigit()
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DashSkin.inkFaint(dark))
     }
 
     private var scrubber: some View {
         GeometryReader { geo in
             let knob: CGFloat = 10
             ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.1))
+                Capsule().fill(DashSkin.line(dark))
                 if player.isPlaying, dragFraction == nil {
                     TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
                         fill(geo.size.width, knob)

@@ -10,6 +10,8 @@ struct ClipboardHistoryView: View {
     @State private var filterText = ""
     @State private var refreshObserver: NSObjectProtocol?
     @State private var copiedID: String?
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     private var filtered: [ClipboardEntry] {
         ClipboardActions.arrange(entries, query: filterText)
@@ -39,15 +41,19 @@ struct ClipboardHistoryView: View {
                     .pointerCursor()
             }
             .padding()
-            Divider()
+            .foregroundStyle(DashSkin.ink(dark))
+            WoodRule(dark: dark)
             SearchField(placeholder: "Search…", text: $filterText, typeAhead: true)
                 .padding(UIScale.pt(10))
             List(filtered) { entry in
                 row(entry)
+                    .listRowBackground(DashSkin.paper2(dark))
             }
+            .scrollContentBackground(.hidden)
             .listStyle(.inset)
         }
         .frame(width: UIScale.pt(480), height: UIScale.pt(520))
+        .background(DashSkin.paper(dark))
         .onAppear {
             reload()
             refreshObserver = IPC.observe(IPC.Name.clipboardChanged) { reload() }
@@ -66,7 +72,7 @@ struct ClipboardHistoryView: View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
             ClipboardThumbnailView(entry: entry, maxHeight: entry.kind == .text ? 18 : 40) {
                 Image(systemName: icon(for: entry.kind))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
             }
             .frame(minWidth: UIScale.pt(18))
@@ -97,7 +103,7 @@ struct ClipboardHistoryView: View {
                 togglePin(entry)
             } label: {
                 Image(systemName: entry.pinned ? "pin.fill" : "pin")
-                    .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
+                    .foregroundStyle(entry.pinned ? themeColor(themeName) : DashSkin.inkFaint(dark))
             }
             .buttonStyle(.plain).pointerCursor()
             Button(role: .destructive) {
