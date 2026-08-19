@@ -29,6 +29,51 @@ import Testing
         #expect(store.kindFilter.isEmpty)
     }
 
+    @Test func closeOthersKeepsTheClickedTab() {
+        let store = seededStore()
+        let keep = store.tabs[1].id
+        store.selectedTab = store.tabs[0].id
+        store.closeOthers(besides: keep)
+        #expect(store.tabs.map(\.id) == [keep])
+        #expect(store.selectedTab == keep)
+    }
+
+    @Test func closeToTheRightDropsLaterTabs() {
+        let store = seededStore()
+        let first = store.tabs[0].id
+        store.selectedTab = store.tabs[2].id
+        store.closeToTheRight(of: first)
+        #expect(store.tabs.map(\.id) == [first])
+        #expect(store.selectedTab == first)
+        store.closeToTheRight(of: HerdrStore.boardID)
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+    }
+
+    @Test func closeToTheLeftDropsEarlierTabs() {
+        let store = seededStore()
+        let last = store.tabs[2].id
+        store.closeToTheLeft(of: last)
+        #expect(store.tabs.map(\.id) == [last])
+        #expect(store.canCloseToTheLeft(of: last) == false)
+        #expect(store.canCloseToTheRight(of: last) == false)
+    }
+
+    private func seededStore() -> HerdrStore {
+        let store = HerdrStore()
+        store.tabs = [
+            HerdrOpenTab(
+                agent: agent("Claude Code", pane: "a"), machine: nil,
+                holder: TerminalSessionHolder()),
+            HerdrOpenTab(
+                agent: agent("Codex", pane: "b"), machine: nil, holder: TerminalSessionHolder()),
+            HerdrOpenTab(
+                agent: agent("OpenCode", pane: "c"), machine: nil, holder: TerminalSessionHolder()),
+        ]
+        store.selectedTab = store.tabs[2].id
+        return store
+    }
+
     @Test func multipleKindsPassTheBoardFilter() {
         let store = HerdrStore()
         store.hosts = [

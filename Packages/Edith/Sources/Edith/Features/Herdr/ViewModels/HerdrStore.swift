@@ -104,10 +104,59 @@ final class HerdrStore {
     }
 
     func close(_ id: String) {
+        closeWhere { _, tab in tab.id == id }
+    }
+
+    func closeOthers(besides id: String) {
+        if id == Self.boardID {
+            closeWhere { _, _ in true }
+            return
+        }
+        closeWhere { _, tab in tab.id != id }
+        selectedTab = id
+    }
+
+    func closeToTheRight(of id: String) {
+        if id == Self.boardID {
+            closeWhere { _, _ in true }
+            return
+        }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        tabs[index].holder.stop()
-        tabs.remove(at: index)
-        if selectedTab == id {
+        closeWhere { i, _ in i > index }
+    }
+
+    func closeToTheLeft(of id: String) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        closeWhere { i, _ in i < index }
+    }
+
+    func canCloseOthers(besides id: String) -> Bool {
+        id == Self.boardID ? !tabs.isEmpty : tabs.count > 1
+    }
+
+    func canCloseToTheRight(of id: String) -> Bool {
+        if id == Self.boardID { return !tabs.isEmpty }
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
+        return index < tabs.count - 1
+    }
+
+    func canCloseToTheLeft(of id: String) -> Bool {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
+        return index > 0
+    }
+
+    private func closeWhere(_ predicate: (Int, HerdrOpenTab) -> Bool) {
+        let ids = tabs.enumerated().compactMap { item in
+            predicate(item.offset, item.element) ? item.element.id : nil
+        }
+        guard !ids.isEmpty else { return }
+        let selectedClosed = ids.contains(selectedTab)
+        for id in ids {
+            guard let index = tabs.firstIndex(where: { $0.id == id }) else { continue }
+            tabs[index].holder.stop()
+            tabs.remove(at: index)
+        }
+        if selectedClosed {
             selectedTab = tabs.last?.id ?? Self.boardID
         }
     }

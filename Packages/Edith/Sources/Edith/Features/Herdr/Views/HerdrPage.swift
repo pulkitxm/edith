@@ -21,7 +21,6 @@ struct HerdrPage: View {
         VStack(spacing: 0) {
             header
             tabBar
-            Divider().opacity(0.35)
             HStack(spacing: 0) {
                 if !onBoard {
                     agentList
@@ -156,73 +155,112 @@ struct HerdrPage: View {
     }
 
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(4)) {
-                tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
-                ForEach(store.tabs) { tab in
-                    tabButton(id: tab.id, title: tab.agent.title, closable: true, agent: tab.agent)
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(DashSkin.lineStrong(dark))
+                .frame(height: 1)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(6)) {
+                    tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
+                    ForEach(store.tabs) { tab in
+                        tabButton(
+                            id: tab.id, title: tab.agent.title, closable: true, agent: tab.agent)
+                    }
                 }
+                .padding(.horizontal, PageMetrics.gutter(compact))
+                .padding(.vertical, UIScale.pt(8))
             }
-            .padding(.horizontal, PageMetrics.gutter(compact))
-            .padding(.bottom, UIScale.pt(8))
+            Rectangle()
+                .fill(DashSkin.lineStrong(dark))
+                .frame(height: 1)
         }
+        .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
     private func tabButton(id: String, title: String, closable: Bool, agent: HerdrAgent? = nil)
         -> some View
     {
         let selected = store.selectedTab == id
-        return HStack(spacing: UIScale.pt(6)) {
-            if let agent {
-                Circle()
-                    .fill(HerdrStatusColor.color(agent.status, dark: dark))
-                    .frame(width: UIScale.pt(6), height: UIScale.pt(6))
-                HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-            }
-            Button {
-                store.selectedTab = id
-            } label: {
+        return Button {
+            store.selectedTab = id
+        } label: {
+            HStack(spacing: UIScale.pt(6)) {
+                if let agent {
+                    Circle()
+                        .fill(HerdrStatusColor.color(agent.status, dark: dark))
+                        .frame(width: UIScale.pt(6), height: UIScale.pt(6))
+                    HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
+                        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                } else {
+                    Image(systemName: "rectangle.split.3x1.fill")
+                        .font(.system(size: UIScale.pt(11), weight: .semibold))
+                }
                 Text(title)
                     .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
-                    .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                     .lineLimit(1)
-            }
-            .buttonStyle(.plain)
-            if let agent {
-                Button {
-                    store.copyAttachCommand(for: agent)
-                } label: {
-                    Image(
-                        systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
-                    )
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(
-                        store.copiedID == agent.id
-                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                if let agent {
+                    Button {
+                        store.copyAttachCommand(for: agent)
+                    } label: {
+                        Image(
+                            systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
+                        )
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(
+                            store.copiedID == agent.id
+                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                    }
+                    .buttonStyle(.plain)
+                    .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
                 }
-                .buttonStyle(.plain)
-                .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
-            }
-            if closable {
-                Button {
-                    store.close(id)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                if closable {
+                    Button {
+                        store.close(id)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
                 }
-                .buttonStyle(.plain)
+            }
+            .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+            .padding(.horizontal, UIScale.pt(10))
+            .padding(.vertical, UIScale.pt(6))
+            .widgetBar(
+                cornerRadius: 8,
+                fill: selected
+                    ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
+                stroke: selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark),
+                strokeWidth: selected ? 1.4 : 1)
+        }
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .contextMenu { tabContextMenu(id: id, closable: closable) }
+        .help(agent.map { "\($0.kind) · \($0.machineName)" } ?? "Board")
+    }
+
+    @ViewBuilder
+    private func tabContextMenu(id: String, closable: Bool) -> some View {
+        Button("Close Others") {
+            store.closeOthers(besides: id)
+        }
+        .disabled(!store.canCloseOthers(besides: id))
+        Button("Close to the Right") {
+            store.closeToTheRight(of: id)
+        }
+        .disabled(!store.canCloseToTheRight(of: id))
+        Button("Close to the Left") {
+            store.closeToTheLeft(of: id)
+        }
+        .disabled(!store.canCloseToTheLeft(of: id))
+        if closable {
+            Divider()
+            Button("Close", role: .destructive) {
+                store.close(id)
             }
         }
-        .padding(.horizontal, UIScale.pt(10))
-        .padding(.vertical, UIScale.pt(6))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: selected ? DashSkin.paper2(dark) : Color.clear,
-            stroke: selected ? DashSkin.lineStrong(dark) : Color.clear
-        )
-        .pointerCursor()
     }
 
     private var board: some View {
