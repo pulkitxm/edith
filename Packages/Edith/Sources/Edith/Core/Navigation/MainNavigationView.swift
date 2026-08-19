@@ -51,6 +51,13 @@ enum MainDestination: String, CaseIterable, Identifiable {
         }
     }
 
+    var logoName: String? {
+        switch self {
+        case .herdr: return "herdr"
+        default: return nil
+        }
+    }
+
     static let homeItems: [MainDestination] = [
         .home, .dashboard, .herdr, .music, .calendar, .system, .machines, .companion,
     ]
@@ -167,8 +174,7 @@ private struct SidebarNavRow: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(11)) {
-                Image(systemName: item.icon)
-                    .font(.system(size: UIScale.pt(14), weight: .medium))
+                AppGlyph(item, size: UIScale.pt(15), weight: .medium)
                     .foregroundStyle(selected ? .primary : .secondary)
                     .frame(width: UIScale.pt(22))
                 Text(item.title)

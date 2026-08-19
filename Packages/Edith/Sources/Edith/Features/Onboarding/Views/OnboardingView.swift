@@ -605,8 +605,7 @@ private struct ExtensionChoiceCard: View {
                             selected ? brandAccent.opacity(0.1) : DashSkin.paper(dark),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: entry.symbolName)
-                            .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        AppGlyph(entry, size: UIScale.pt(13), weight: .semibold)
                             .foregroundStyle(selected ? brandAccent : DashSkin.inkSoft(dark))
                         Text(entry.title)
                             .font(.system(size: UIScale.pt(13), weight: .semibold))

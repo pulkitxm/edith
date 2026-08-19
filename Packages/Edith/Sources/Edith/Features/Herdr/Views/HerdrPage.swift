@@ -203,8 +203,7 @@ struct HerdrPage: View {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                         .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 } else {
-                    Image(systemName: "rectangle.split.3x1.fill")
-                        .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
                 }
                 Text(title)
                     .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))

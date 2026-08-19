@@ -284,7 +284,7 @@ private struct PermissionCard: View {
                 let enabled = usage.enabledUsers.contains(entry)
                 let required = usage.requiredBy.contains(entry)
                 HStack(spacing: UIScale.pt(4)) {
-                    Image(systemName: entry.symbolName)
+                    AppGlyph(entry, size: UIScale.pt(10))
                     Text(entry.title)
                     if required {
                         Text("required")

@@ -462,8 +462,7 @@ struct ExtensionPreview: View {
                 .fill(brandAccent.opacity(0.1))
             RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .strokeBorder(brandAccent.opacity(0.18))
-            Image(systemName: entry.symbolName)
-                .font(.system(size: UIScale.pt(22), weight: .semibold))
+            AppGlyph(entry, size: UIScale.pt(22), weight: .semibold)
                 .foregroundStyle(brandAccent)
         }
         .frame(width: UIScale.pt(46), height: UIScale.pt(42))

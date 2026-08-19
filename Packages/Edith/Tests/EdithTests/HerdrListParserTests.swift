@@ -218,6 +218,10 @@ import Testing
             #expect(ProviderLogo.image(named: name) != nil, "missing \(name).svg")
         }
     }
+
+    @Test func officialHerdrMarkIsInTheKitBundle() {
+        #expect(ProviderLogo.image(named: "herdr") != nil)
+    }
 }
 
 @Suite struct HerdrAttachCommandTests {

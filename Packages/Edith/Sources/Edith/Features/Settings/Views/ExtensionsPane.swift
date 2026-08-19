@@ -372,8 +372,7 @@ private struct ExtensionMarketplaceCard: View {
             HStack(spacing: UIScale.pt(7)) {
                 Button(action: open) {
                     HStack(spacing: UIScale.pt(7)) {
-                        Image(systemName: entry.symbolName)
-                            .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        AppGlyph(entry, size: UIScale.pt(13), weight: .semibold)
                             .foregroundStyle(enabled ? brandAccent : DashSkin.inkSoft(dark))
                         Text(entry.title)
                             .font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -567,8 +566,7 @@ private struct ExtensionPermissionSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             HStack(spacing: UIScale.pt(14)) {
-                Image(systemName: request.entry.symbolName)
-                    .font(.system(size: UIScale.pt(22), weight: .medium))
+                AppGlyph(request.entry, size: UIScale.pt(22), weight: .medium)
                     .foregroundStyle(.tint)
                     .frame(width: UIScale.pt(44), height: UIScale.pt(44))
                     .background(
