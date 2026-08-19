@@ -70,11 +70,43 @@ import Testing
         #expect(agents[0].id == "abc|work|w3:p1T")
     }
 
-    @Test func sessionListReadsNamesFromTheEnvelope() {
+    @Test func sessionListReadsSocketPathsAndRunningFlags() {
         let json = """
-            {"ok":true,"result":{"sessions":[{"name":"default"},{"name":"work"}]}}
+            {"sessions":[{"default":true,"name":"default","running":true,"session_dir":"/Users/me/.config/herdr","socket_path":"/Users/me/.config/herdr/herdr.sock"},{"name":"work","running":false,"socket_path":"/Users/me/.config/herdr/sessions/work/herdr.sock"}]}
             """
+        let records = HerdrListParser.sessionRecords(from: json)
+        #expect(records.map(\.name) == ["default", "work"])
+        #expect(records[0].running)
+        #expect(records[0].socketPath == "/Users/me/.config/herdr/herdr.sock")
+        #expect(!records[1].running)
         #expect(HerdrListParser.sessions(from: json) == ["default", "work"])
+    }
+
+    @Test func snapshotMapsWorkspaceLabelsAndStrippedTitles() {
+        let json = """
+            {"id":"s","result":{"type":"session_snapshot","snapshot":{"agents":[{"agent":"cursor","agent_status":"idle","cwd":"/repo","foreground_cwd":"/repo/app","pane_id":"w1:p8","tab_id":"w1:t8","terminal_title_stripped":"Nextjs Explainer","workspace_id":"w1"}],"workspaces":[{"label":"Edith","workspace_id":"w1"}]}}}
+            """
+        #expect(HerdrListParser.hasSnapshot(json))
+        let agents = HerdrListParser.agents(
+            fromSnapshot: json, session: "default", machineID: "local", machineName: "This Mac",
+            machineIsLocal: true, sshTarget: nil)
+        #expect(agents.count == 1)
+        #expect(agents[0].kind == "Cursor Agent")
+        #expect(agents[0].status == .idle)
+        #expect(agents[0].title == "Nextjs Explainer")
+        #expect(agents[0].workspace == "Edith")
+        #expect(agents[0].cwd == "/repo/app")
+        #expect(agents[0].pane == "w1:p8")
+    }
+
+    @Test func eventLinesAreDistinctFromRpcReplies() {
+        #expect(
+            HerdrListParser.isEventLine(
+                #"{"event":"pane_updated","data":{"type":"pane_updated","pane":{"pane_id":"w1:p8"}}}"#
+            ))
+        #expect(
+            !HerdrListParser.isEventLine(#"{"id":"sub1","result":{"type":"subscription_started"}}"#)
+        )
     }
 
     @Test func sessionListReadsAStringArray() {
@@ -169,5 +201,31 @@ import Testing
         #expect(
             HerdrAttachCommand.line(for: agent)
                 == "ssh -tt tuf-wired -- herdr --session default agent attach w3:p1N")
+    }
+}
+
+@Suite struct HerdrSocketDiscoveryTests {
+    @Test func sessionNameFromDefaultAndNamedSockets() {
+        #expect(
+            HerdrSocketDiscovery.sessionName(for: "/Users/me/.config/herdr/herdr.sock") == "default"
+        )
+        #expect(
+            HerdrSocketDiscovery.sessionName(
+                for: "/home/me/.config/herdr/sessions/work/herdr.sock") == "work")
+    }
+
+    @Test func remoteListingKeepsUnixSockets() {
+        let text = """
+            /home/me/.config/herdr/herdr.sock
+            /home/me/.config/herdr/sessions/lab/herdr.sock
+            """
+        let sockets = HerdrSocketDiscovery.sockets(fromRemoteListing: text)
+        #expect(sockets.map(\.name) == ["default", "lab"])
+        #expect(sockets.map(\.path).count == 2)
+    }
+
+    @Test func relayScriptTalksUnixSockets() {
+        #expect(HerdrSocketClient.relayScript.contains("AF_UNIX"))
+        #expect(HerdrSocketClient.boardSubscriptions.contains { $0["type"] == "pane.updated" })
     }
 }

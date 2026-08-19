@@ -101,40 +101,52 @@ public enum HerdrCollector {
             return Listing(present: false, agents: [], error: "herdr is not installed")
         }
         let sessions = HerdrListParser.sessions(from: sessionsResult.stdout)
-        if sessions.isEmpty {
-            let defaultResult = await run(
-                runner, herdr: "--session default agent list")
-            if isMissing(defaultResult) {
-                return Listing(present: false, agents: [], error: "herdr is not installed")
-            }
-            let agents = HerdrListParser.agents(
-                from: defaultResult.stdout, session: "default", machineID: machineID,
-                machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
-            return Listing(
-                present: true, agents: agents,
-                error: agents.isEmpty
-                    ? jsonOrProcessError(defaultResult) ?? jsonOrProcessError(sessionsResult)
-                    : nil)
-        }
+        let names = sessions.isEmpty ? ["default"] : sessions
         var agents: [HerdrAgent] = []
         var lastError: String?
-        for session in sessions {
-            let result = await run(
-                runner, herdr: "--session \(ShellQuote.quote(session)) agent list")
-            if isMissing(result) {
-                return Listing(present: false, agents: [], error: "herdr is not installed")
+        for session in names {
+            let listed = await agentsInSession(
+                runner: runner, session: session, machineID: machineID, machineName: machineName,
+                machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+            if !listed.present {
+                return Listing(present: false, agents: [], error: listed.error)
             }
-            let parsed = HerdrListParser.agents(
-                from: result.stdout, session: session, machineID: machineID,
-                machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
-            if parsed.isEmpty {
-                lastError = jsonOrProcessError(result)
-            }
-            agents.append(contentsOf: parsed)
+            if listed.agents.isEmpty { lastError = listed.error }
+            agents.append(contentsOf: listed.agents)
         }
         return Listing(
             present: true, agents: agents,
-            error: agents.isEmpty ? lastError : nil)
+            error: agents.isEmpty
+                ? lastError ?? jsonOrProcessError(sessionsResult) : nil)
+    }
+
+    private static func agentsInSession(
+        runner: Runner, session: String, machineID: String, machineName: String,
+        machineIsLocal: Bool, sshTarget: String?
+    ) async -> Listing {
+        let quoted = ShellQuote.quote(session)
+        let snapshot = await run(runner, herdr: "--session \(quoted) api snapshot")
+        if isMissing(snapshot) {
+            return Listing(present: false, agents: [], error: "herdr is not installed")
+        }
+        if HerdrListParser.hasSnapshot(snapshot.stdout) {
+            let agents = HerdrListParser.agents(
+                fromSnapshot: snapshot.stdout, session: session, machineID: machineID,
+                machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+            return Listing(
+                present: true, agents: agents,
+                error: agents.isEmpty ? jsonOrProcessError(snapshot) : nil)
+        }
+        let result = await run(runner, herdr: "--session \(quoted) agent list")
+        if isMissing(result) {
+            return Listing(present: false, agents: [], error: "herdr is not installed")
+        }
+        let agents = HerdrListParser.agents(
+            from: result.stdout, session: session, machineID: machineID,
+            machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+        return Listing(
+            present: true, agents: agents,
+            error: agents.isEmpty ? jsonOrProcessError(result) : nil)
     }
 
     private struct CommandResult {

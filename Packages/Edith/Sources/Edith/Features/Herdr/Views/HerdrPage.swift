@@ -56,12 +56,10 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationTitle("Herdr")
         .task(id: automaticActions) {
-            guard automaticActions else { return }
-            await store.refresh()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                if Task.isCancelled { break }
-                await store.refresh()
+            if automaticActions {
+                await store.watch()
+            } else {
+                store.stopWatching()
             }
         }
         .onChange(of: store.selectedTab) { _, tab in

@@ -211,3 +211,15 @@ public enum HerdrCollectScope: Sendable {
     case local
     case machine(Machine)
 }
+
+public struct HerdrSessionRecord: Equatable, Sendable {
+    public var name: String
+    public var running: Bool
+    public var socketPath: String?
+
+    public init(name: String, running: Bool, socketPath: String? = nil) {
+        self.name = name
+        self.running = running
+        self.socketPath = socketPath
+    }
+}

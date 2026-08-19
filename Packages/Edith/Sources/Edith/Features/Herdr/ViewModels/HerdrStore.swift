@@ -20,6 +20,7 @@ final class HerdrStore {
     var detailOpen = true
 
     private var connections: [UUID: SSHConnection] = [:]
+    private var watchTask: Task<Void, Never>?
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
@@ -78,17 +79,36 @@ final class HerdrStore {
 
     var openIDs: Set<String> { Set(tabs.map(\.id)) }
 
+    func watch() async {
+        guard watchTask == nil else { return }
+        watchTask = Task { [weak self] in
+            await HerdrLive.watch { hosts in
+                Task { @MainActor in
+                    self?.apply(hosts)
+                }
+            }
+        }
+    }
+
+    func stopWatching() {
+        watchTask?.cancel()
+        watchTask = nil
+    }
+
     func refresh() async {
         guard !refreshing else { return }
         refreshing = true
-        let snapshots = await HerdrCollector.collect(.all)
+        apply(await HerdrCollector.collect(.all))
+        refreshing = false
+    }
+
+    func apply(_ snapshots: [HerdrHostSnapshot]) {
         hosts = snapshots
         for index in tabs.indices {
             if let updated = agents.first(where: { $0.id == tabs[index].id }) {
                 tabs[index].agent = updated
             }
         }
-        refreshing = false
     }
 
     func open(_ agent: HerdrAgent) {

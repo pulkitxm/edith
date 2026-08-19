@@ -90,6 +90,16 @@ import Testing
         #expect(Set(store.filteredAgents.map(\.kind)) == ["Claude Code", "OpenCode"])
     }
 
+    @Test func applyReplacesHostsAndOpenTabAgents() {
+        let store = seededStore()
+        let updated = agent("Claude Code", pane: "a")
+        store.apply([
+            .local(herdrPresent: true, agents: [updated])
+        ])
+        #expect(store.hosts.first?.agents.map(\.id) == [updated.id])
+        #expect(store.tabs.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
+    }
+
     private func agent(_ kind: String, pane: String) -> HerdrAgent {
         HerdrAgent.make(
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
