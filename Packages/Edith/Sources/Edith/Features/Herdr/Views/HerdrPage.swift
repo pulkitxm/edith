@@ -104,23 +104,25 @@ struct HerdrPage: View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             pillRow(
                 items: store.machineChoices.map { ($0.id, $0.name) },
-                selected: store.machineFilter
+                isSelected: { $0 == store.machineFilter }
             ) { store.machineFilter = $0 }
             pillRow(
                 items: [("all", "Any agent")] + store.kindChoices.map { ($0, $0) },
-                selected: store.kindFilter,
+                isSelected: { store.kindIsSelected($0) },
                 showsKindMark: true
-            ) { store.kindFilter = $0 }
+            ) { store.selectKind($0) }
         }
     }
 
     private func pillRow(
-        items: [(String, String)], selected: String, showsKindMark: Bool = false,
+        items: [(String, String)], isSelected: @escaping (String) -> Bool,
+        showsKindMark: Bool = false,
         onSelect: @escaping (String) -> Void
     ) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UIScale.pt(6)) {
                 ForEach(items, id: \.0) { item in
+                    let selected = isSelected(item.0)
                     Button {
                         onSelect(item.0)
                     } label: {
@@ -132,20 +134,22 @@ struct HerdrPage: View {
                                 .font(.system(size: UIScale.pt(11.5), weight: .medium))
                         }
                         .foregroundStyle(
-                            item.0 == selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
+                            selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
                         )
                         .padding(.horizontal, UIScale.pt(10))
                         .padding(.vertical, UIScale.pt(5))
                         .widgetBar(
                             cornerRadius: 8,
-                            fill: item.0 == selected
+                            fill: selected
                                 ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                            stroke: item.0 == selected
+                            stroke: selected
                                 ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                            strokeWidth: item.0 == selected ? 1.4 : 1)
+                            strokeWidth: selected ? 1.4 : 1)
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
+                    .modifier(KindPillHelp(enabled: showsKindMark))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
         }
@@ -431,6 +435,18 @@ enum HerdrStatusColor {
         case .unknown: DashSkin.inkFaint(dark)
         case .done: DashSkin.sage
         case .idle: DashSkin.inkSoft(dark)
+        }
+    }
+}
+
+private struct KindPillHelp: ViewModifier {
+    var enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.help("Click to add or remove. Command-click to show only this agent.")
+        } else {
+            content
         }
     }
 }

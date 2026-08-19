@@ -11,7 +11,7 @@ final class HerdrStore {
 
     var hosts: [HerdrHostSnapshot] = []
     var machineFilter = "all"
-    var kindFilter = "all"
+    var kindFilter: Set<String> = []
     var selectedTab = boardID
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
@@ -44,8 +44,32 @@ final class HerdrStore {
             default:
                 if agent.machineID != machineFilter { return false }
             }
-            if kindFilter != "all", agent.kind != kindFilter { return false }
+            if !kindFilter.isEmpty, !kindFilter.contains(agent.kind) { return false }
             return true
+        }
+    }
+
+    func kindIsSelected(_ id: String) -> Bool {
+        id == "all" ? kindFilter.isEmpty : kindFilter.contains(id)
+    }
+
+    func selectKind(_ id: String) {
+        selectKind(id, exclusive: NSEvent.modifierFlags.contains(.command))
+    }
+
+    func selectKind(_ id: String, exclusive: Bool) {
+        if id == "all" {
+            kindFilter = []
+            return
+        }
+        if exclusive {
+            kindFilter = [id]
+            return
+        }
+        if kindFilter.contains(id) {
+            kindFilter.remove(id)
+        } else {
+            kindFilter.insert(id)
         }
     }
 
