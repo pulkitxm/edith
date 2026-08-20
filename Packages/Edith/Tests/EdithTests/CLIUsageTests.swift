@@ -130,6 +130,13 @@ import Testing
         #expect(projects.first?.folders.count == 1)
     }
 
+    @Test func projectCommandDoesNotSilentlyTruncateAccounting() throws {
+        let command = try UsageProjectsCommand.parse([])
+        #expect(command.limit == nil)
+        let limited = try UsageProjectsCommand.parse(["--limit", "25"])
+        #expect(limited.limit == 25)
+    }
+
     @Test func projectsNormalizeToCanonicalDailyTotals() throws {
         let document = """
             {
