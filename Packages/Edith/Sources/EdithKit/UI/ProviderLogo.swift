@@ -12,10 +12,10 @@ public enum ProviderLogo {
     }
 
     public static func image(named name: String) -> NSImage? {
-        guard
-            let url = resources?.url(forResource: name, withExtension: "svg"),
-            let image = NSImage(contentsOf: url)
-        else { return nil }
+        let url =
+            resources?.url(forResource: name, withExtension: "svg")
+            ?? Bundle.module.url(forResource: name, withExtension: "svg")
+        guard let url, let image = NSImage(contentsOf: url) else { return nil }
         image.isTemplate = true
         return image
     }

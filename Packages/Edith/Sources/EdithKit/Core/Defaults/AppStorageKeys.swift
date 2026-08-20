@@ -173,6 +173,7 @@ public enum AppStorageKeys {
         public static let autoEnabled = "presenterAutoEnabled"
         public static let autoPaused = "presenterAutoPaused"
         public static let autoReason = "presenterAutoReason"
+        public static let blurAgents = "presenterBlurAgents"
         public static let blurCalendar = "presenterBlurCalendar"
         public static let blurMoney = "presenterBlurMoney"
         public static let blurMusic = "presenterBlurMusic"
@@ -188,6 +189,7 @@ public enum AppStorageKeys {
     public enum Tabs {
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
+        public static let herdrEnabled = "tabHerdrEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"

@@ -45,14 +45,16 @@ public struct SettingDefinition: Equatable, Sendable {
 public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "usage", "limits", "menubar", "alerts", "budget", "dashboard",
-        "machines", "companion", "finder", "system", "cleaner", "music", "calendar", "clipboard",
+        "machines", "herdr", "companion", "finder", "system", "cleaner", "music", "calendar",
+        "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "micmute", "backup", "permissions",
         "terminal",
     ]
 
     public static let settings: [SettingDefinition] =
         appearance + panel + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + companion + finder + system + cleaner
+        + menuBar + alerts + budget + dashboard + machines + herdr + companion + finder + system
+        + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
         + backup + permissions + terminal
 
@@ -381,6 +383,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Machines.diskThreshold, .number, group: "machines",
             summary: "Disk usage percentage that triggers the disk alert.", fallback: .double(90)),
+    ]
+
+    private static let herdr: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.herdrEnabled, .bool, group: "herdr",
+            summary: "Herdr extension: live sessions on this Mac and SSH machines.",
+            fallback: .bool(false))
     ]
 
     private static let finder: [SettingDefinition] = [
@@ -718,6 +727,9 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Presenter.blurCalendar, .bool, group: "presenter",
             summary: "Blur calendar entries."),
+        SettingDefinition(
+            AppStorageKeys.Presenter.blurAgents, .bool, group: "presenter",
+            summary: "Hide live Herdr titles and blur attached terminals."),
         SettingDefinition(
             "presenterHotKeyCode", .int, group: "presenter",
             summary: "Virtual key code of the presenter shortcut."),

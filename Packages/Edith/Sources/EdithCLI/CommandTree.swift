@@ -282,6 +282,17 @@ public enum CommandTree {
                         options: ["--json", "--days"])
                 ]),
             CommandNode(
+                "herdr", "Live Herdr sessions on this Mac and your SSH machines.",
+                children: [
+                    CommandNode(
+                        "ls", "List live Herdr sessions.", aliases: ["list"],
+                        options: common + ["--machine"]),
+                    CommandNode(
+                        "command", "Print the command that attaches to a pane.",
+                        options: common + ["--machine", "--session"],
+                        arguments: [.free]),
+                ]),
+            CommandNode(
                 "tools", "Command line tools the extensions rely on.",
                 children: [
                     CommandNode(

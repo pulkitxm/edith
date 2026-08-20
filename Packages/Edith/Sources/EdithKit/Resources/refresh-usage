@@ -241,6 +241,141 @@ ASSEMBLE='
     }
 '
 
+HISTORY='
+  def dedupe: reduce .[] as $value ([]; if index($value) then . else . + [$value] end);
+  def localSources($values):
+    [ $values[]? | select(startswith("machine:") | not) ];
+  def keepSources($allowed):
+    with_entries(select(.key as $key | $allowed | index($key)));
+  def sourceTokens($sources):
+    [ $sources[].tokens // 0 ] | add // 0;
+  def sourceCost($sources):
+    [ $sources[].cost // 0 ] | add // 0;
+  def trimNode($value; $allowed):
+    (($value.bySource // {}) | keepSources($allowed)) as $sources
+    | ($value // {}) + {
+        tokens: sourceTokens($sources),
+        cost: sourceCost($sources),
+        bySource: $sources
+      };
+  def mergeNode($old; $new):
+    (($old.bySource // {}) + ($new.bySource // {})) as $sources
+    | ($old + $new) + {
+        tokens: sourceTokens($sources),
+        cost: sourceCost($sources),
+        bySource: $sources
+      };
+  def trimHour($value; $allowed):
+    trimNode($value; $allowed)
+    | .byPath = ((.byPath // {})
+        | with_entries(.value = trimNode(.value; $allowed))
+        | with_entries(select((.value.bySource | length) > 0)));
+  def mergeHour($old; $new):
+    ((($old.byPath // {}) + ($new.byPath // {})) | keys) as $paths
+    | mergeNode($old; $new)
+    | .byPath = (reduce $paths[] as $path ({};
+        .[$path] = mergeNode(
+          ($old.byPath[$path] // {});
+          ($new.byPath[$path] // {})
+        )));
+  def trimProject($value; $allowed):
+    trimNode($value; $allowed)
+    | .chats = [ ($value.chats // [])[]
+        | select(.source as $source | $allowed | index($source)) ]
+    | .worktrees = [ ($value.worktrees // [])[]
+        | .chats = [ (.chats // [])[]
+            | select(.source as $source | $allowed | index($source)) ]
+        | select((.chats | length) > 0)
+        | .tokens = ([ .chats[].tokens // 0 ] | add // 0)
+        | .cost = ([ .chats[].cost // 0 ] | add // 0) ];
+  def trimDay($value; $allowed):
+    {
+      period: $value.period,
+      bySource: (($value.bySource // {}) | keepSources($allowed)),
+      hours: [ range(0; 24) as $hour
+        | trimHour(($value.hours[$hour] // {}); $allowed) ],
+      projects: [ ($value.projects // [])[]
+        | trimProject(.; $allowed)
+        | select((.bySource | length) > 0) ]
+    };
+  def mergeDay($old; $new):
+    localSources(($old.bySource // {}) | keys) as $oldSources
+    | (($new.bySource // {}) | keys) as $newSources
+    | ($oldSources - $newSources) as $carriedSources
+    | trimDay($old; $carriedSources) as $history
+    | {
+        period: $new.period,
+        bySource: ($history.bySource + ($new.bySource // {})),
+        hours: [ range(0; 24) as $hour
+          | mergeHour(
+              ($history.hours[$hour] // {});
+              ($new.hours[$hour] // {})
+            ) ],
+        projects: ($history.projects + ($new.projects // []))
+      };
+  $previous[0] as $old
+  | $fresh[0] as $new
+  | localSources($old.sources // []) as $oldSources
+  | localSources($old.defaultSources // []) as $oldDefaults
+  | (($old.sourceMeta // {})
+      | with_entries(select(.key | startswith("machine:") | not))) as $oldMeta
+  | ([ ($old.daily // [])[].period, ($new.daily // [])[].period ] | unique | sort) as $periods
+  | {
+      schemaVersion: $new.schemaVersion,
+      generatedAt: $new.generatedAt,
+      sources: (($oldSources + ($new.sources // [])) | dedupe),
+      defaultSources: (($oldDefaults + ($new.defaultSources // [])) | dedupe),
+      sourceMeta: ($oldMeta + ($new.sourceMeta // {})),
+      sessions: ([ ($old.sessions // [])[]
+          | select(.source | startswith("machine:") | not) ]
+        + ($new.sessions // []) | unique_by([.source, .id])),
+      daily: [ $periods[] as $period
+        | ([ ($old.daily // [])[] | select(.period == $period) ][0] // null) as $oldDay
+        | ([ ($new.daily // [])[] | select(.period == $period) ][0] // null) as $newDay
+        | if $oldDay == null then $newDay
+          elif $newDay == null then
+            trimDay($oldDay; localSources(($oldDay.bySource // {}) | keys))
+          else mergeDay($oldDay; $newDay)
+          end ]
+    }
+  | ([ .daily[].bySource[][] ]) as $rows
+  | .totals = {
+      cost: ([ $rows[].cost // 0 ] | add // 0),
+      tokens: ([ $rows[] | ((.inputTokens // 0) + (.outputTokens // 0)
+        + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0)) ] | add // 0),
+      inputTokens: ([ $rows[].inputTokens // 0 ] | add // 0),
+      outputTokens: ([ $rows[].outputTokens // 0 ] | add // 0),
+      cacheCreationTokens: ([ $rows[].cacheCreationTokens // 0 ] | add // 0),
+      cacheReadTokens: ([ $rows[].cacheReadTokens // 0 ] | add // 0)
+    }
+'
+
+HISTORY_INPUT='
+  (type == "object")
+  and (.schemaVersion == 8)
+  and ((.sources | type) == "array")
+  and ((.defaultSources | type) == "array")
+  and ((.sourceMeta | type) == "object")
+  and ((.sessions | type) == "array")
+  and ((.daily | type) == "array")
+  and all(.daily[];
+    ((.period | type) == "string")
+    and ((.bySource | type) == "object")
+    and ((.hours | type) == "array")
+    and ((.hours | length) == 24)
+    and ((.projects | type) == "array")
+    and all(.bySource[];
+      (type == "array")
+      and all(.[];
+        all([
+          .inputTokens // 0,
+          .outputTokens // 0,
+          .cacheCreationTokens // 0,
+          .cacheReadTokens // 0,
+          .cost // 0
+        ][]; type == "number" and isfinite and . >= 0))))
+'
+
 FLEET='
   def dedupe: reduce .[] as $x ([]; if index($x) then . else . + [$x] end);
   def qualify:
@@ -1585,6 +1720,16 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   fi
   mv "$TMP/merged.json" "$TMP/usage.json"
   _phase "merge" "hours + projects merged"
+fi
+
+if [ -s "$OUT" ] && jq -e "$HISTORY_INPUT" "$OUT" >/dev/null 2>&1; then
+  if ! jq -n --slurpfile previous "$OUT" --slurpfile fresh "$TMP/usage.json" \
+    "$HISTORY" >"$TMP/history.json"; then
+    _error "usage history merge failed; previous data preserved"
+    exit 1
+  fi
+  mv "$TMP/history.json" "$TMP/usage.json"
+  _phase "history" "$(jq '.daily | length' "$TMP/usage.json") days retained"
 fi
 
 if [ "$HAS_MACHINES" = "1" ]; then

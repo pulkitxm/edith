@@ -266,6 +266,7 @@ public enum Guide {
         ed music volume 0.4
         ed music players                every player, and which one is active
         ed calendar ls --days 7
+        ed herdr ls                     live Herdr sessions here and over SSH
         ed permissions ls
         ed permissions request calendar
         ```
@@ -280,6 +281,10 @@ public enum Guide {
         Calendar runs through the menu bar app, because the calendar grant lives there.
         If the app is not running those commands exit 4 and say so rather than
         pretending.
+
+        `ed herdr ls` asks `herdr` on this Mac and on every configured SSH machine.
+        A missing binary is an empty host, not an error. `ed herdr command <pane>`
+        prints the attach line, `ssh -tt` when the pane is remote.
 
         ## The desk
 

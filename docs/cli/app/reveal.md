@@ -8,7 +8,7 @@ ed app reveal [<section>] [--tab <tab>] [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<section>` | `home`, `dashboard`, `music`, `calendar`, `system`, `machines`, `companion`, `extensions`, `settings`, `about` | none | The sidebar section to show. Without it the window comes up where it already was, and the answer names that section. |
+| `<section>` | `home`, `dashboard`, `herdr`, `music`, `calendar`, `system`, `machines`, `companion`, `extensions`, `settings`, `about` | none | The sidebar section to show. Without it the window comes up where it already was, and the answer names that section. |
 | `--tab` | section-specific | none | A tab inside the section. `companion` has `chat`, `capture`, `desk`, `library`, `mind`, `setup`, `settings`; `settings` has `general`, `permissions`, `shortcuts`, `terminal`, `icloud`, `updates`. |
 | `--json` | flag | off | Emit JSON on stdout. |
 

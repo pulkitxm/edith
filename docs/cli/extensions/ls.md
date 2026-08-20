@@ -17,6 +17,7 @@ order:
 $ ed extensions ls
 ID           STATE  GROUP      NAME
 usage        on     Agent      Agent Usage
+herdr        off    Agent      Herdr
 system       on     System     System
 machines     on     System     Machines
 companion    off    Agent      Companion
@@ -64,27 +65,21 @@ first two rows:
     "title": "Agent Usage"
   },
   {
-    "enabled": true,
+    "enabled": false,
     "featured": true,
-    "group": "System",
-    "id": "system",
-    "key": "tabSystemEnabled",
+    "group": "Agent",
+    "id": "herdr",
+    "key": "tabHerdrEnabled",
     "missingRequiredPermissions": [],
-    "optionalCapabilities": [
-      "preventSleep",
-      "inputSuppression"
-    ],
-    "optionalPermissions": [
-      "accessibility",
-      "inputMonitoring"
-    ],
+    "optionalCapabilities": [],
+    "optionalPermissions": [],
     "requiredCapabilities": [
-      "runningApplications"
+      "herdrSessions"
     ],
     "requiredPermissions": [],
     "requiredTools": [],
-    "summary": "Running apps, prevent sleep, and the keyboard-cleaning lock.",
-    "title": "System"
+    "summary": "Live Herdr sessions on this Mac and your SSH machines.",
+    "title": "Herdr"
   }
 ]
 ```

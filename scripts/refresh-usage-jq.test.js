@@ -62,6 +62,7 @@ const GITHUB = extractBlock("GITHUB");
 const CWD_CACHE = extractBlock("CWD_CACHE");
 const ASSEMBLE = extractBlock("ASSEMBLE");
 const VALIDATE = extractBlock("VALIDATE");
+const HISTORY = extractBlock("HISTORY");
 const WALK = extractBlock("WALK");
 const WALKC = extractBlock("WALKC");
 const CODEX_DETAILS = extractBlock("CODEX_DETAILS");
@@ -107,6 +108,7 @@ function runCollectorFixture({
   failNormalization = false,
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
+  existingUsage,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
   const home = join(root, "home");
@@ -181,7 +183,7 @@ function runCollectorFixture({
       );
     }
   }
-  const existing = '{"sentinel":"preserved"}\n';
+  const existing = existingUsage ?? '{"sentinel":"preserved"}\n';
   writeFileSync(join(output, "usage.json"), existing);
   if (machineJSON !== undefined) {
     const machines = join(output, "machines");
@@ -1355,6 +1357,148 @@ describe("usage pipeline", () => {
     expect(out.sessions).toHaveLength(2);
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
   });
+
+  test("keeps old source days while fresh overlapping rows stay authoritative", () => {
+    const breakdown = (modelName, inputTokens) => ({
+      modelName,
+      inputTokens,
+      outputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+      cost: inputTokens / 100,
+    });
+    const previous = assemble(
+      [
+        {
+          source: "cli",
+          label: "Claude Code",
+          norm: [
+            { period: "2026-05-15", breakdowns: [breakdown("opus", 100)] },
+            { period: "2026-07-15", breakdowns: [breakdown("opus", 200)] },
+          ],
+        },
+        {
+          source: "cowork",
+          label: "Cowork",
+          norm: [
+            {
+              period: "2026-07-15",
+              breakdowns: [breakdown("sonnet", 30)],
+            },
+          ],
+        },
+        {
+          source: "machine:machine-id:cli",
+          label: "Claude Code · old machine",
+          norm: [
+            {
+              period: "2026-05-15",
+              breakdowns: [breakdown("opus", 999)],
+            },
+          ],
+        },
+      ],
+      [
+        { id: "old-cli", source: "cli" },
+        { id: "old-cowork", source: "cowork" },
+        { id: "old-machine", source: "machine:machine-id:cli" },
+      ],
+    );
+    const fresh = assemble(
+      [
+        {
+          source: "cli",
+          label: "Claude Code",
+          norm: [{ period: "2026-07-15", breakdowns: [breakdown("opus", 20)] }],
+        },
+        {
+          source: "cursor",
+          label: "Cursor Agent",
+          norm: [
+            {
+              period: "2026-08-19",
+              breakdowns: [breakdown("cursor-model", 40)],
+            },
+          ],
+        },
+      ],
+      [
+        { id: "new-cli", source: "cli" },
+        { id: "new-cursor", source: "cursor" },
+      ],
+    );
+    const [out] = jq(HISTORY, "null", [
+      "--argjson",
+      "previous",
+      JSON.stringify([previous]),
+      "--argjson",
+      "fresh",
+      JSON.stringify([fresh]),
+    ]);
+
+    expect(out.daily.map((day) => day.period)).toEqual([
+      "2026-05-15",
+      "2026-07-15",
+      "2026-08-19",
+    ]);
+    expect(out.sources).toEqual(["cli", "cowork", "cursor"]);
+    expect(out.daily[0].bySource.cli[0].inputTokens).toBe(100);
+    expect(out.daily[0].bySource).not.toHaveProperty("machine:machine-id:cli");
+    expect(out.daily[1].bySource.cli[0].inputTokens).toBe(20);
+    expect(out.daily[1].bySource.cowork[0].inputTokens).toBe(30);
+    expect(out.daily[2].bySource.cursor[0].inputTokens).toBe(40);
+    expect(out.totals.tokens).toBe(190);
+    expect(out.sessions).toEqual([
+      { id: "new-cli", source: "cli" },
+      { id: "old-cli", source: "cli" },
+      { id: "old-cowork", source: "cowork" },
+      { id: "new-cursor", source: "cursor" },
+    ]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
+  });
+
+  test("collector retains a valid older report on successful refresh", () => {
+    const previous = assemble(
+      [
+        {
+          source: "cli",
+          label: "Claude Code",
+          norm: [
+            {
+              period: "2026-07-01",
+              breakdowns: [
+                {
+                  modelName: "opus",
+                  inputTokens: 100,
+                  outputTokens: 0,
+                  cacheCreationTokens: 0,
+                  cacheReadTokens: 0,
+                  cost: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      [{ id: "old-session", source: "cli" }],
+    );
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      existingUsage: `${JSON.stringify(previous)}\n`,
+    });
+    expect(result.exitCode).toBe(0);
+    const report = JSON.parse(result.output);
+    expect(report.daily.map((day) => day.period)).toEqual([
+      "2026-07-01",
+      "2026-08-07",
+    ]);
+    expect(report.totals.tokens).toBe(101);
+    expect(report.sessions).toContainEqual({
+      id: "old-session",
+      source: "cli",
+    });
+    expect(result.stdout).toContain("phase\thistory\t2 days retained");
+  }, 15_000);
 
   test("mixed-model unattributed cost row does not double source tokens", () => {
     const norm = jq(

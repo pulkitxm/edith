@@ -341,7 +341,7 @@ struct AppRevealCommand: AsyncParsableCommand {
         help: ArgumentHelp(
             "The section to show; without it the window comes up where it was.",
             discussion:
-                "One of home, dashboard, music, calendar, system, machines, companion, "
+                "One of home, dashboard, herdr, music, calendar, system, machines, companion, "
                 + "extensions, settings, about."))
     var section: String?
 

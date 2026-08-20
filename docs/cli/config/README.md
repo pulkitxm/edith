@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 213 settings in 24
+reads, and `ed config` is that surface from the command line: 214 settings in 25
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -185,6 +185,12 @@ not here cannot be set, and `import` skips it.
 | `machinesNotifyDiskFull` | bool | none | shared | Notify when a machine's disk crosses the threshold, or a filesystem stops responding. |
 | `machinesDiskThreshold` | number | `90` | shared | Disk usage percentage that triggers the disk alert. |
 
+### `herdr`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `tabHerdrEnabled` | bool | `false` | shared | Herdr extension: live sessions on this Mac and SSH machines. |
+
 ### `companion`
 
 | Key | Type | Default | Scope | What it controls |
@@ -331,6 +337,7 @@ not here cannot be set, and `import` skips it.
 | `presenterBlurUsage` | bool | none | shared | Blur usage percentages. |
 | `presenterBlurMusic` | bool | none | shared | Blur track names. |
 | `presenterBlurCalendar` | bool | none | shared | Blur calendar entries. |
+| `presenterBlurAgents` | bool | none | shared | Hide live Herdr titles and blur attached terminals. |
 | `presenterHotKeyCode` | int | none | shared | Virtual key code of the presenter shortcut. |
 | `presenterHotKeyMods` | int | none | shared | Carbon modifier mask of the presenter shortcut. |
 | `presenterHotKeyLabel` | string | none | shared | Printable label for the presenter shortcut. |
@@ -446,13 +453,14 @@ as writable objects, so a document that validates against the schema can still
 contain a key `import` will skip.
 
 **`ed schema` is the machine-readable half of this page.** It prints a JSON
-Schema for the `import` document: the 190 writable keys as properties,
+Schema for the `import` document: the 191 writable keys as properties,
 `additionalProperties: false`, the `enum` for each of the 19 keys with an
 allowed list, the default where the catalogue declares one, and `x-group`,
 `x-scope` and `x-format` annotations. A `csv` setting is typed as a string with
 `"x-format": "comma-separated"`; a `stringList` is an array of strings.
 
 **Extensions are settings, with better manners.** `tabUsageEnabled`,
+`tabHerdrEnabled`,
 `tabSystemEnabled`, `tabMachinesEnabled`, `tabCompanionEnabled`,
 `menuBarSystemStats`, `micMuteEnabled`, `lidAwakeEnabled`, `tabMusicEnabled`,
 `tabCalendarEnabled`, `notchShelfEnabled`, `clipboardEnabled`,

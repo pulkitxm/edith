@@ -6,6 +6,7 @@ import Testing
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
         "tabUsageEnabled",
+        "tabHerdrEnabled",
         "tabSystemEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
@@ -35,7 +36,10 @@ import Testing
     @Test func featuredEntriesArePresent() {
         let featuredIdentifiers = Set(
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
-        #expect(featuredIdentifiers == ["usage", "system", "machines", "notchShelf", "clipboard"])
+        #expect(
+            featuredIdentifiers == [
+                "usage", "herdr", "system", "machines", "notchShelf", "clipboard",
+            ])
     }
 
     @Test func toolRequirementsMatchExtensionDependencies() {
@@ -69,6 +73,7 @@ import Testing
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
             "usage": [],
+            "herdr": [],
             "system": [],
             "machines": [],
             "companion": [],
@@ -85,6 +90,7 @@ import Testing
         ]
         let optional: [String: [ExtensionPermission]] = [
             "usage": [.notifications],
+            "herdr": [],
             "system": [.accessibility, .inputMonitoring],
             "machines": [.notifications],
             "companion": [],
@@ -202,6 +208,7 @@ import Testing
 
         let expected: [String: Bool] = [
             "tabUsageEnabled": false,
+            "tabHerdrEnabled": false,
             "tabSystemEnabled": true,
             "tabMachinesEnabled": false,
             "tabCompanionEnabled": false,

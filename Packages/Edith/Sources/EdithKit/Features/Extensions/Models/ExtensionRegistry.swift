@@ -101,6 +101,10 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
 }
 
 public extension ExtensionRegistryEntry {
+    var logoName: String? {
+        id == "herdr" ? "herdr" : nil
+    }
+
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]

@@ -17,6 +17,7 @@ struct ExtensionPreview: View {
     private func preview(phase: Double) -> some View {
         switch entry.id {
         case "usage": usagePreview(phase: phase)
+        case "herdr": herdrPreview(phase: phase)
         case "system": systemPreview(phase: phase)
         case "machines": machinesPreview(phase: phase)
         case "systemStats": systemStatsPreview(phase: phase)
@@ -55,6 +56,31 @@ struct ExtensionPreview: View {
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .padding(.horizontal, UIScale.pt(15))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func herdrPreview(phase: Double) -> some View {
+        let pulse = CGFloat(0.45 + (sin(phase * 2.1) + 1) * 0.25)
+        return HStack(alignment: .top, spacing: UIScale.pt(6)) {
+            ForEach(0..<3) { column in
+                VStack(spacing: UIScale.pt(4)) {
+                    Capsule()
+                        .fill(column == 1 ? brandAccent : DashSkin.inkFaint(dark))
+                        .frame(width: UIScale.pt(18), height: UIScale.pt(3))
+                    RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
+                        .fill(DashSkin.paper2(dark))
+                        .frame(
+                            width: UIScale.pt(28),
+                            height: UIScale.pt(
+                                column == 1 ? 18 + pulse * 8 : 14 + CGFloat(column) * 3)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
+                                .strokeBorder(DashSkin.lineStrong(dark))
+                        }
+                }
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -436,8 +462,7 @@ struct ExtensionPreview: View {
                 .fill(brandAccent.opacity(0.1))
             RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .strokeBorder(brandAccent.opacity(0.18))
-            Image(systemName: entry.symbolName)
-                .font(.system(size: UIScale.pt(22), weight: .semibold))
+            AppGlyph(entry, size: UIScale.pt(22), weight: .semibold)
                 .foregroundStyle(brandAccent)
         }
         .frame(width: UIScale.pt(46), height: UIScale.pt(42))

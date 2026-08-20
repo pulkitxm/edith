@@ -27,11 +27,12 @@ launches. Nothing in this group waits on the app, and nothing in it can exit 4.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Fourteen entries, in this order:
+walks, and its order is the order `ls` prints. Fifteen entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
+| `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
@@ -46,13 +47,14 @@ walks, and its order is the order `ls` prints. Fourteen entries, in this order:
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same fourteen, with what each one is made of. `Key` is the preference the app
+The same fifteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-five the welcome tour shows before you ask it for all of them.
+six the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools |
 | --- | --- | --- | --- | --- | --- |
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` |
+| `herdr` | `tabHerdrEnabled` | yes | none | none | none |
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none |
@@ -74,6 +76,7 @@ the current platform, and which missing implementations merely degrade it:
 | ID | Required capabilities | Optional capabilities |
 | --- | --- | --- |
 | `usage` | `usageCollection` | `notifications` |
+| `herdr` | `herdrSessions` | none |
 | `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
 | `machines` | `machineManagement` | `notifications` |
 | `companion` | `companionService` | none |
@@ -119,7 +122,7 @@ failure mode between "the id exists" and "the boolean is written".
   question from the catalogue's fallback instead, which is `true` for
   `tabUsageEnabled` and `tabSystemEnabled`, so on a Mac where Edith has never
   run those two disagree. Upgrading from an older Edith writes a concrete value
-  for all fourteen keys on the next launch and they agree again; a fresh install
+  for all fifteen keys on the next launch and they agree again; a fresh install
   only writes the keys you turn on, so an untouched `tabUsageEnabled` keeps
   disagreeing until something writes it.
 - Every extension is also an ordinary `ed config` boolean, and both paths write
