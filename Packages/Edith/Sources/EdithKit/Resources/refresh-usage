@@ -565,6 +565,16 @@ VALIDATE='
     and (.bySource | detailSources)
     and ($node.tokens == ([ $node.bySource[].tokens ] | add // 0))
     and near($node.cost; ([ $node.bySource[].cost ] | add // 0));
+  def summarizeDetail($entries):
+    reduce $entries[] as $entry ({};
+      .[$entry.key] = ((.[$entry.key] // {cost: 0, tokens: 0})
+        | .cost += ($entry.value.cost // 0)
+        | .tokens += ($entry.value.tokens // 0)));
+  def boundedBy($detail; $authoritative):
+    all($detail | to_entries[];
+      .value.tokens <= ($authoritative[.key].tokens // 0)
+      and (.value.cost <= ($authoritative[.key].cost // 0)
+        or near(.value.cost; ($authoritative[.key].cost // 0))));
   def sourceTotals:
     reduce (.daily[] | .bySource | to_entries[]) as $source ({};
       .[$source.key] = ((.[$source.key] // {cost: 0, tokens: 0})
@@ -594,12 +604,16 @@ VALIDATE='
               tokens: ([.[].value.tokens // 0] | add // 0),
               cost: ([.[].value.cost // 0] | add // 0)
             }}) | from_entries) as $detail
+      | summarizeDetail([ ($day.hours // [])[].bySource | to_entries[] ]) as $hourDetail
       | ((.hours | type) == "array") and ((.hours | length) == 24)
       and ((.projects | type) == "array")
       and all(.hours[];
-        detailNode
+        . as $hour
+        | summarizeDetail([ ($hour.byPath // {})[].bySource | to_entries[] ]) as $pathDetail
+        | detailNode
         and ((.byPath | type) == "object")
-        and all(.byPath[]; detailNode))
+        and all(.byPath[]; detailNode)
+        and boundedBy($pathDetail; $hour.bySource))
       and all(.projects[];
         ((.repositoryID | type) == "string")
         and ((.repositoryName | type) == "string")
@@ -608,10 +622,8 @@ VALIDATE='
         and detailNode
         and ((.chats | type) == "array")
         and ((.worktrees | type) == "array"))
-      and all($detail | to_entries[];
-        .value.tokens <= ($authoritative[.key].tokens // 0)
-        and (.value.cost <= ($authoritative[.key].cost // 0)
-          or near(.value.cost; ($authoritative[.key].cost // 0)))))
+      and boundedBy($hourDetail; $authoritative)
+      and boundedBy($detail; $authoritative))
     and all($rows[];
       all([.inputTokens, .outputTokens, .cacheCreationTokens, .cacheReadTokens, .cost][];
         nonnegativeNumber))

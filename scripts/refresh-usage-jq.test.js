@@ -2418,6 +2418,19 @@ describe("FLEET", () => {
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
   });
 
+  test("validation rejects usage duplicated across hours", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    out.daily[0].hours[1] = structuredClone(out.daily[0].hours[0]);
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
+  test("validation rejects usage duplicated across paths", () => {
+    const out = fleet([localDoc(), machineDoc()]);
+    const firstPath = Object.values(out.daily[0].hours[0].byPath)[0];
+    out.daily[0].hours[0].byPath["/duplicate"] = firstPath;
+    expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(1);
+  });
+
   test("two machines never collide, and days only one of them has survive", () => {
     const other = machineDoc({
       machine: {
