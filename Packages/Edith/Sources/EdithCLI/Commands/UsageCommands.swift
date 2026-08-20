@@ -259,6 +259,12 @@ struct UsageProjectsCommand: AsyncParsableCommand {
     @Option(help: "Show at most this many repositories.")
     var limit: Int?
 
+    mutating func validate() throws {
+        if let limit, limit <= 0 {
+            throw ValidationError("--limit must be greater than zero")
+        }
+    }
+
     func run() async throws {
         try await execute {
             guard let value = UsageRange(rawValue: range.lowercased()) else {
