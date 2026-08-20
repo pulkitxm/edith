@@ -349,6 +349,17 @@ describe("WALK", () => {
     expect(deduped[0].out).toBe(207);
   });
 
+  test("the same record id from different sources remains independently counted", () => {
+    const cli = walk([assistant()], "cli")[0];
+    const cowork = walk([assistant()], "cowork")[0];
+    const [deduped] = jq(DEDUP, JSON.stringify([cli, cowork]));
+    expect(deduped).toHaveLength(2);
+    expect(deduped.map((record) => record.src).sort()).toEqual([
+      "cli",
+      "cowork",
+    ]);
+  });
+
   test("timezone offset shifts date and hour", () => {
     const [rec] = walk(
       [assistant({ timestamp: "2026-06-10T23:30:00Z" })],
@@ -1546,6 +1557,7 @@ describe("usage pipeline", () => {
       outputTokens: 0,
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
+      bySource: { codex: { cost: 0, tokens: 0 } },
     });
     expect(out.sessions).toEqual([]);
     expect(jqExit(VALIDATE, JSON.stringify(out))).toBe(0);
@@ -1580,6 +1592,9 @@ describe("usage pipeline", () => {
       (value) => value.totals.outputTokens++,
       (value) => value.totals.cacheCreationTokens++,
       (value) => value.totals.cacheReadTokens++,
+      (value) => value.totals.bySource.codex.tokens++,
+      (value) => (value.totals.bySource.codex.cost += 1),
+      (value) => delete value.totals.bySource.codex,
       (value) => (value.daily[0].bySource.codex[0].inputTokens = -1),
       (value) => value.daily.push(structuredClone(value.daily[0])),
       (value) => value.sources.push("codex"),
