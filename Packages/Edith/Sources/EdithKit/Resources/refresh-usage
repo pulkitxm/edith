@@ -234,7 +234,14 @@ ASSEMBLE='
         inputTokens: ([ $all[].inputTokens ] | add // 0),
         outputTokens: ([ $all[].outputTokens ] | add // 0),
         cacheCreationTokens: ([ $all[].cacheCreationTokens ] | add // 0),
-        cacheReadTokens: ([ $all[].cacheReadTokens ] | add // 0)
+        cacheReadTokens: ([ $all[].cacheReadTokens ] | add // 0),
+        bySource: (reduce $srcs[] as $source ({};
+          .[$source.source] = {
+            cost: ([ $source.norm[].breakdowns[].cost ] | add // 0),
+            tokens: ([ $source.norm[].breakdowns[]
+              | (.inputTokens + .outputTokens + .cacheCreationTokens + .cacheReadTokens) ]
+              | add // 0)
+          }))
       },
       daily: ( $byDate | to_entries | sort_by(.key) | map({ period: .key, bySource: .value }) ),
       sessions: [ $ss[0][] | .sessions[] ]
@@ -339,6 +346,7 @@ HISTORY='
           end ]
     }
   | ([ .daily[].bySource[][] ]) as $rows
+  | ([ .daily[].bySource | to_entries[] ]) as $sourceRows
   | .totals = {
       cost: ([ $rows[].cost // 0 ] | add // 0),
       tokens: ([ $rows[] | ((.inputTokens // 0) + (.outputTokens // 0)
@@ -346,7 +354,13 @@ HISTORY='
       inputTokens: ([ $rows[].inputTokens // 0 ] | add // 0),
       outputTokens: ([ $rows[].outputTokens // 0 ] | add // 0),
       cacheCreationTokens: ([ $rows[].cacheCreationTokens // 0 ] | add // 0),
-      cacheReadTokens: ([ $rows[].cacheReadTokens // 0 ] | add // 0)
+      cacheReadTokens: ([ $rows[].cacheReadTokens // 0 ] | add // 0),
+      bySource: (reduce $sourceRows[] as $source ({};
+        .[$source.key] = ((.[$source.key] // {cost: 0, tokens: 0})
+          | .cost += ([ $source.value[].cost // 0 ] | add // 0)
+          | .tokens += ([ $source.value[] | ((.inputTokens // 0) + (.outputTokens // 0)
+              + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0)) ] | add // 0)))
+        )
     }
 '
 
@@ -502,6 +516,7 @@ FLEET='
         | sort_by(.period) )
     }
   | ( [ .daily[].bySource[][] ] ) as $all
+  | ([ .daily[].bySource | to_entries[] ]) as $sourceRows
   | .totals = {
       cost: ([ $all[].cost // 0 ] | add // 0),
       tokens: ([ $all[] | ((.inputTokens // 0) + (.outputTokens // 0)
@@ -509,7 +524,13 @@ FLEET='
       inputTokens: ([ $all[].inputTokens // 0 ] | add // 0),
       outputTokens: ([ $all[].outputTokens // 0 ] | add // 0),
       cacheCreationTokens: ([ $all[].cacheCreationTokens // 0 ] | add // 0),
-      cacheReadTokens: ([ $all[].cacheReadTokens // 0 ] | add // 0)
+      cacheReadTokens: ([ $all[].cacheReadTokens // 0 ] | add // 0),
+      bySource: (reduce $sourceRows[] as $source ({};
+        .[$source.key] = ((.[$source.key] // {cost: 0, tokens: 0})
+          | .cost += ([ $source.value[].cost // 0 ] | add // 0)
+          | .tokens += ([ $source.value[] | ((.inputTokens // 0) + (.outputTokens // 0)
+              + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0)) ] | add // 0)))
+        )
     }
 '
 
@@ -517,7 +538,7 @@ EMPTY='
   {
     schemaVersion: 8, generatedAt: $now, sources: [], defaultSources: [], sourceMeta: {},
     totals: { cost: 0, tokens: 0, inputTokens: 0, outputTokens: 0,
-      cacheCreationTokens: 0, cacheReadTokens: 0 },
+      cacheCreationTokens: 0, cacheReadTokens: 0, bySource: {} },
     daily: [], sessions: []
   }
 '
@@ -544,7 +565,25 @@ VALIDATE='
     and (.bySource | detailSources)
     and ($node.tokens == ([ $node.bySource[].tokens ] | add // 0))
     and near($node.cost; ([ $node.bySource[].cost ] | add // 0));
-  [ .daily[].bySource[][] ] as $rows
+  def summarizeDetail($entries):
+    reduce $entries[] as $entry ({};
+      .[$entry.key] = ((.[$entry.key] // {cost: 0, tokens: 0})
+        | .cost += ($entry.value.cost // 0)
+        | .tokens += ($entry.value.tokens // 0)));
+  def boundedBy($detail; $authoritative):
+    all($detail | to_entries[];
+      .value.tokens <= ($authoritative[.key].tokens // 0)
+      and (.value.cost <= ($authoritative[.key].cost // 0)
+        or near(.value.cost; ($authoritative[.key].cost // 0))));
+  def sourceTotals:
+    reduce (.daily[] | .bySource | to_entries[]) as $source ({};
+      .[$source.key] = ((.[$source.key] // {cost: 0, tokens: 0})
+        | .cost += ([ $source.value[].cost // 0 ] | add // 0)
+        | .tokens += ([ $source.value[] | ((.inputTokens // 0) + (.outputTokens // 0)
+            + (.cacheCreationTokens // 0) + (.cacheReadTokens // 0)) ] | add // 0)));
+  . as $root
+  | [ .daily[].bySource[][] ] as $rows
+  | sourceTotals as $sourceTotals
   | ([ .daily[].period ] | length) as $dayCount
   | ([ .daily[].period ] | unique | length) as $uniqueDayCount
   | (.schemaVersion == 8)
@@ -565,12 +604,16 @@ VALIDATE='
               tokens: ([.[].value.tokens // 0] | add // 0),
               cost: ([.[].value.cost // 0] | add // 0)
             }}) | from_entries) as $detail
+      | summarizeDetail([ ($day.hours // [])[].bySource | to_entries[] ]) as $hourDetail
       | ((.hours | type) == "array") and ((.hours | length) == 24)
       and ((.projects | type) == "array")
       and all(.hours[];
-        detailNode
+        . as $hour
+        | summarizeDetail([ ($hour.byPath // {})[].bySource | to_entries[] ]) as $pathDetail
+        | detailNode
         and ((.byPath | type) == "object")
-        and all(.byPath[]; detailNode))
+        and all(.byPath[]; detailNode)
+        and boundedBy($pathDetail; $hour.bySource))
       and all(.projects[];
         ((.repositoryID | type) == "string")
         and ((.repositoryName | type) == "string")
@@ -579,10 +622,8 @@ VALIDATE='
         and detailNode
         and ((.chats | type) == "array")
         and ((.worktrees | type) == "array"))
-      and all($detail | to_entries[];
-        .value.tokens <= ($authoritative[.key].tokens // 0)
-        and (.value.cost <= ($authoritative[.key].cost // 0)
-          or near(.value.cost; ($authoritative[.key].cost // 0)))))
+      and boundedBy($hourDetail; $authoritative)
+      and boundedBy($detail; $authoritative))
     and all($rows[];
       all([.inputTokens, .outputTokens, .cacheCreationTokens, .cacheReadTokens, .cost][];
         nonnegativeNumber))
@@ -590,6 +631,11 @@ VALIDATE='
     and ((.totals.outputTokens // -1) == tokenSum($rows; "outputTokens"))
     and ((.totals.cacheCreationTokens // -1) == tokenSum($rows; "cacheCreationTokens"))
     and ((.totals.cacheReadTokens // -1) == tokenSum($rows; "cacheReadTokens"))
+    and ((.totals.bySource | type) == "object")
+    and ((.totals.bySource | keys) == ($sourceTotals | keys))
+    and all($sourceTotals | to_entries[];
+      .value.tokens == ($root.totals.bySource[.key].tokens // -1)
+      and near(.value.cost; ($root.totals.bySource[.key].cost // -1)))
     and near((.totals.cost // -1); ([ $rows[].cost ] | add // 0))
     and ((.totals.tokens // -1) ==
       (tokenSum($rows; "inputTokens") + tokenSum($rows; "outputTokens")
@@ -1253,7 +1299,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   '
 
   DEDUP='
-    group_by(.id)
+    group_by([.src, .id])
     | map(max_by([.tok, .ts]))
   '
 

@@ -257,7 +257,13 @@ struct UsageProjectsCommand: AsyncParsableCommand {
     var range: String = "all"
 
     @Option(help: "Show at most this many repositories.")
-    var limit: Int = 25
+    var limit: Int?
+
+    mutating func validate() throws {
+        if let limit, limit <= 0 {
+            throw ValidationError("--limit must be greater than zero")
+        }
+    }
 
     func run() async throws {
         try await execute {
@@ -267,10 +273,16 @@ struct UsageProjectsCommand: AsyncParsableCommand {
                     hint: "ranges: "
                         + UsageRange.allCases.map(\.rawValue).joined(separator: ", "))
             }
-            let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let document = try UsageDocument.load()
-            let projects = UsageAnalysis.byProject(UsageAnalysis.days(document, range: value))
-                .prefix(limit)
+            let allProjects = UsageAnalysis.byProject(
+                UsageAnalysis.days(document, range: value))
+            let projects: [UsageProjectSummary]
+            if let requested = self.limit {
+                let limit = try ArgumentChecks.positive(requested, "--limit")
+                projects = Array(allProjects.prefix(limit))
+            } else {
+                projects = allProjects
+            }
             guard !json else {
                 CLIOut.json(.array(projects.map(\.json)))
                 return
