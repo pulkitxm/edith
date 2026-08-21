@@ -108,9 +108,10 @@ end-user deployment and data model are in the
 
 ## Checks
 
-Run `make ci` before pushing. The pre-push hook runs the applicable macOS, site,
-script and policy gates in parallel. Companion changes have additional commands
-below and a dedicated CI job.
+CI runs the applicable macOS, site, script and policy gates for every pull
+request and push to `main`. Run `make ci` when you want the full check suite on
+demand. Companion changes have additional commands below and a dedicated CI
+job.
 
 | Target | What it does |
 | --- | --- |
@@ -124,13 +125,13 @@ below and a dedicated CI job.
 | `make ci-swift-lint` | `swift format lint --strict` over `Sources`, `Tests` and `Package.swift`. |
 | `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all five Xcode targets and runs the privileged-helper SwiftPM embed phase. |
 | `make ci-swift-test` | The Swift test suite, through `Packages/Edith/test.sh`. |
-| `make ci-swift-check` | The three above. They share nothing, so CI and the pre-push hook run them in parallel. |
+| `make ci-swift-check` | The three above as one on-demand local target. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
 
 For Companion backend changes, run the Clippy and Cargo tests shown above. CI also
 applies every migration to a real
-pgvector database. These checks are not part of `make ci` or the pre-push hook.
+pgvector database. These checks are not part of `make ci`.
 
 Other targets: `make build`, `make install`, `make reset`, `make reinstall`,
 `make icon`, `make site-dev` (serves `apps/site` on port 8000), `make loc`,
