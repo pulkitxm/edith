@@ -101,7 +101,11 @@ struct AttentionPage: View {
         switch store.selectedSection {
         case .overview: AttentionOverviewView(store: store)
         case .timeline: AttentionTimelineView(store: store)
-        default: AttentionPrototypePlaceholder(section: store.selectedSection)
+        case .insights: AttentionInsightsView(store: store)
+        case .focus: AttentionFocusView(store: store)
+        case .library: AttentionLibraryView(store: store)
+        case .music: AttentionMusicView(store: store)
+        case .settings: AttentionPrototypePlaceholder(section: store.selectedSection)
         }
     }
 
