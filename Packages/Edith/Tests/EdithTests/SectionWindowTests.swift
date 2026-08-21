@@ -100,12 +100,13 @@ import Testing
 
 @Suite struct FinderKeyTests {
     private func event(
-        keyCode: UInt16, characters: String = "", modifiers: NSEvent.ModifierFlags = []
+        keyCode: UInt16, characters: String = "", modifiers: NSEvent.ModifierFlags = [],
+        isARepeat: Bool = false
     ) -> NSEvent {
         NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
             windowNumber: 0, context: nil, characters: characters,
-            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode)!
+            charactersIgnoringModifiers: characters, isARepeat: isARepeat, keyCode: keyCode)!
     }
 
     @Test func returnRenamesAndCommandReturnOpens() {
@@ -152,6 +153,16 @@ import Testing
         #expect(
             FinderKey.resolve(event: event(keyCode: 18, characters: "1", modifiers: .command))
                 == .iconView)
+    }
+
+    @Test func repeatedCommandPasteIsIgnored() {
+        #expect(
+            FinderKey.resolve(
+                event: event(keyCode: 9, characters: "v", modifiers: .command)) == .paste)
+        let repeated = event(
+            keyCode: 9, characters: "v", modifiers: .command, isARepeat: true)
+        #expect(FinderKey.shouldSuppress(event: repeated))
+        #expect(FinderKey.resolve(event: repeated) == nil)
     }
 
     @Test func plainLettersTypeSelect() {

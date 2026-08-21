@@ -6,13 +6,17 @@ import Testing
 @testable import Edith
 
 @MainActor
-private func sandbox() throws -> (model: FinderModel, root: URL) {
+private func sandbox(
+    commandRunner: ((String) async -> Result<String, Error>)? = nil
+) throws -> (model: FinderModel, root: URL) {
     let base = FileManager.default.temporaryDirectory
         .appendingPathComponent("edith-finder-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
     let root = URL(fileURLWithPath: (base.path as NSString).resolvingSymlinksInPath)
     let session = MachinesModel.shared.session(for: MachinesModel.localMachineID)
-    return (FinderModel(session: session, path: root.path), root)
+    return (
+        FinderModel(session: session, path: root.path, commandRunner: commandRunner), root
+    )
 }
 
 private func write(_ name: String, into root: URL, contents: String = "x") throws {
@@ -63,6 +67,38 @@ private actor PausedFinderSearch {
         resultWaiters.removeAll()
         for waiter in waiters { waiter.resume(returning: results) }
     }
+}
+
+private actor PausedFinderCommand {
+    private var started = false
+    private var released = false
+    private var calls = 0
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var resultWaiters: [CheckedContinuation<Result<String, Error>, Never>] = []
+
+    func run(_ command: String) async -> Result<String, Error> {
+        calls += 1
+        started = true
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+        if released { return .success("") }
+        return await withCheckedContinuation { resultWaiters.append($0) }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func finish() {
+        released = true
+        let waiters = resultWaiters
+        resultWaiters.removeAll()
+        for waiter in waiters { waiter.resume(returning: .success("")) }
+    }
+
+    func callCount() -> Int { calls }
 }
 
 @Suite(.serialized) @MainActor struct FinderRenameTests {
@@ -306,6 +342,36 @@ private actor PausedFinderSearch {
         #expect(await eventually { exists("inner/dragged.txt", in: root) })
         #expect(!exists("dragged.txt", in: root))
     }
+
+    @Test func overlappingPasteRequestsRunOneFileCommand() async throws {
+        let command = PausedFinderCommand()
+        let (model, root) = try sandbox { value in await command.run(value) }
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("copying.txt", into: root)
+        await model.load()
+
+        model.selection = Set(model.entries.map(\.path))
+        model.copySelection(operation: .copy)
+        let first = Task { @MainActor in await model.paste() }
+        await command.waitUntilStarted()
+        #expect(model.pasteInProgress)
+
+        var secondReturned = false
+        let second = Task { @MainActor in
+            await model.paste()
+            secondReturned = true
+        }
+        #expect(await eventually(timeout: .seconds(1)) { secondReturned })
+        #expect(await command.callCount() == 1)
+
+        await command.finish()
+        await first.value
+        await second.value
+        #expect(!model.pasteInProgress)
+
+        await model.paste()
+        #expect(await command.callCount() == 2)
+    }
 }
 
 @Suite(.serialized) @MainActor struct FinderSearchTests {
@@ -352,9 +418,9 @@ private actor PausedFinderSearch {
 
         let pausedSearch = PausedFinderSearch()
         let session = MachinesModel.shared.session(for: MachinesModel.localMachineID)
-        let model = FinderModel(session: session, path: first.path) { _, _ in
-            await pausedSearch.run()
-        }
+        let model = FinderModel(
+            session: session, path: first.path,
+            localSearch: { _, _ in await pausedSearch.run() })
         model.searchQuery = "needle"
         let task = Task { await model.runSearch() }
         await pausedSearch.waitUntilStarted()

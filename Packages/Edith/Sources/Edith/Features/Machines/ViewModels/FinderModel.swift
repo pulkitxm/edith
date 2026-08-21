@@ -25,6 +25,7 @@ final class FinderModel {
     var infoTarget: RemoteFileEntry?
     var showSidebar = true
     var progress: FileOperationProgress?
+    private(set) var pasteInProgress = false
     var pendingConflict: PendingConflict?
     var scrollTarget: String?
     static var clipboard: FileClipboard?
@@ -64,6 +65,7 @@ final class FinderModel {
     private var flashToken = 0
     private var searchToken = 0
     private var searchTask: Task<Void, Never>?
+    private let commandRunner: (String) async -> Result<String, Error>
     private let localSearch: @Sendable (String, String) async -> [RemoteFileEntry]
     private var folderSizes: [String: Int64] = [:]
     private var folderCounts: [String: Int] = [:]
@@ -72,6 +74,7 @@ final class FinderModel {
 
     init(
         session: MachineSession, path: String? = nil,
+        commandRunner: ((String) async -> Result<String, Error>)? = nil,
         localSearch: @escaping @Sendable (String, String) async -> [RemoteFileEntry] = {
             root, query in
             await Task.detached(priority: .userInitiated) {
@@ -80,6 +83,10 @@ final class FinderModel {
         }
     ) {
         self.session = session
+        self.commandRunner =
+            commandRunner ?? { command in
+                await session.runCommand(command, timeout: 120)
+            }
         self.localSearch = localSearch
         self.path =
             path
@@ -167,7 +174,9 @@ final class FinderModel {
     }
 
     func paste() async {
-        guard let clipboard = Self.clipboard else { return }
+        guard let clipboard = Self.clipboard, !pasteInProgress else { return }
+        pasteInProgress = true
+        defer { pasteInProgress = false }
         guard clipboard.machineID == session.machine.id else {
             errorMessage = "Copying between machines is not supported yet."
             return
@@ -736,7 +745,7 @@ final class FinderModel {
     }
 
     private func run(_ command: String, reload: Bool) async {
-        let result = await session.runCommand(command, timeout: 120)
+        let result = await commandRunner(command)
         var failureMessage: String?
         if case let .failure(failure) = result {
             failureMessage = failure.localizedDescription

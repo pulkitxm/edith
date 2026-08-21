@@ -165,7 +165,9 @@ struct FinderBody: View {
                 .keyboardShortcut("c", modifiers: .command)
             Button("") { model.copySelection(operation: .move) }
                 .keyboardShortcut("x", modifiers: .command)
-            Button("") { Task { await model.paste() } }.keyboardShortcut("v", modifiers: .command)
+            Button("") { Task { await model.paste() } }
+                .keyboardShortcut("v", modifiers: .command)
+                .disabled(model.pasteInProgress)
             Button("") { model.copyPaths() }
                 .keyboardShortcut("c", modifiers: [.command, .option])
             Button("") { model.showInfo() }.keyboardShortcut("i", modifiers: .command)

@@ -32,7 +32,14 @@ enum FinderKey: Equatable {
     case cancel
     case type(String)
 
+    static func shouldSuppress(event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return event.isARepeat && flags.contains(.command)
+            && event.charactersIgnoringModifiers?.lowercased() == "v"
+    }
+
     static func resolve(event: NSEvent) -> FinderKey? {
+        guard !shouldSuppress(event: event) else { return nil }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let command = flags.contains(.command)
         let shift = flags.contains(.shift)
@@ -110,6 +117,7 @@ final class FinderKeyView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if FinderKey.shouldSuppress(event: event) { return }
         guard !isEditing(), !FinderKeyView.isTextEditing(in: window),
             let key = FinderKey.resolve(event: event),
             onKey?(key) == true
