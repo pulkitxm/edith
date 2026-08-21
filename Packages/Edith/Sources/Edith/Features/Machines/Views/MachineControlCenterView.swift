@@ -1,5 +1,200 @@
 import EdithKit
+import Observation
 import SwiftUI
+
+private enum MachineControlConnectionPhase: Hashable {
+    case available
+    case connecting
+    case unavailable
+}
+
+@MainActor
+@Observable
+final class MachineControlCenterModel {
+    let session: MachineSession
+
+    var snapshot: MachineControlSnapshot?
+    var brightness = 0
+    var volume = 0
+    var keyboardBacklight = 0
+    var muted = false
+    var wifiEnabled = false
+    var bluetoothEnabled = false
+    var airplaneMode = false
+    var doNotDisturb = false
+    var isRefreshing = false
+    var hasLoaded = false
+    var requiresConnection = false
+    var isApplyingControl = false
+    var isApplyingProfile = false
+    var resultMessage: String?
+    var resultFailed = false
+    var selectedProfile = ""
+    var duration = MachineProfileDuration.untilChanged
+
+    private var refreshPending = false
+
+    init(session: MachineSession) {
+        self.session = session
+    }
+
+    var isBusy: Bool {
+        isRefreshing || isApplyingControl || isApplyingProfile
+            || session.isApplyingPlatformProfile
+    }
+
+    fileprivate func prepare(for phase: MachineControlConnectionPhase) async {
+        switch phase {
+        case .available:
+            await refresh(reportFailure: true, clearsMessage: hasLoaded)
+        case .connecting:
+            snapshot = nil
+            hasLoaded = false
+            requiresConnection = false
+            resultMessage = nil
+            resultFailed = false
+        case .unavailable:
+            snapshot = nil
+            hasLoaded = true
+            requiresConnection = true
+            resultMessage = nil
+            resultFailed = false
+        }
+    }
+
+    func refresh(reportFailure: Bool, clearsMessage: Bool) async {
+        guard !isRefreshing else {
+            refreshPending = true
+            return
+        }
+        if clearsMessage { resultMessage = nil }
+        guard session.isLocal || session.state.isConnected else {
+            snapshot = nil
+            requiresConnection = true
+            if reportFailure { resultFailed = false }
+            hasLoaded = true
+            return
+        }
+        requiresConnection = false
+        isRefreshing = true
+        defer {
+            isRefreshing = false
+            hasLoaded = true
+            if refreshPending {
+                refreshPending = false
+                Task { await refresh(reportFailure: true, clearsMessage: true) }
+            }
+        }
+        switch await session.runCommand(MachineControlCenterCommands.statusCommand, timeout: 20) {
+        case let .success(output):
+            guard session.isLocal || session.state.isConnected else {
+                snapshot = nil
+                requiresConnection = true
+                return
+            }
+            requiresConnection = false
+            if reportFailure { resultFailed = false }
+            apply(MachineControlCenterCommands.parseStatus(output))
+        case let .failure(error):
+            snapshot = nil
+            if !session.isLocal && !session.state.isConnected {
+                requiresConnection = true
+                resultFailed = false
+                resultMessage = nil
+                return
+            }
+            guard reportFailure else { return }
+            resultFailed = true
+            resultMessage = PowerOutcome.explain(error)
+        }
+    }
+
+    func perform(_ action: MachineControlAction, success: String) {
+        guard !isBusy else { return }
+        resultMessage = nil
+        isApplyingControl = true
+        Task {
+            let shouldAttachSudoPassword =
+                !session.isLocal
+                && MachineControlCenterCommands.shouldAttachSudoPassword(
+                    for: action, platform: snapshot?.platform)
+            let stdin =
+                shouldAttachSudoPassword
+                ? SudoPassword.stdin(machineID: session.machine.id) : nil
+            let command = MachineControlCenterCommands.command(
+                for: action, withSudoPassword: stdin != nil,
+                usingLocalAuthorization: session.isLocal)
+            switch await session.runCommand(command, stdin: stdin, timeout: 30) {
+            case .success:
+                resultFailed = false
+                resultMessage = success
+                if !canDisconnect(action) || session.state.isConnected {
+                    await refresh(reportFailure: false, clearsMessage: false)
+                }
+            case let .failure(error):
+                if canDisconnect(action), PowerOutcome.hostWentAway(error),
+                    MachineControlCenterCommands.disruptiveOperationStarted(error)
+                {
+                    resultFailed = false
+                    resultMessage = success
+                } else {
+                    resultFailed = true
+                    resultMessage = PowerOutcome.explain(error)
+                    if let snapshot { apply(snapshot) }
+                    await refresh(reportFailure: false, clearsMessage: false)
+                }
+            }
+            isApplyingControl = false
+        }
+    }
+
+    func synchronizeProfileSelection() {
+        guard let profile = session.slow?.platformProfile else { return }
+        if !profile.choices.contains(selectedProfile) {
+            selectedProfile = profile.current
+        }
+    }
+
+    func applyProfile() {
+        guard !selectedProfile.isEmpty, !isBusy else { return }
+        resultMessage = nil
+        isApplyingProfile = true
+        Task {
+            switch await session.setPlatformProfile(selectedProfile, duration: duration) {
+            case .success:
+                resultFailed = false
+                resultMessage =
+                    duration == .untilChanged
+                    ? "Switched to \(profileLabel(selectedProfile))"
+                    : "Switched to \(profileLabel(selectedProfile)) for \(duration.label.lowercased())"
+            case let .failure(error):
+                resultFailed = true
+                resultMessage = PowerOutcome.explain(error)
+            }
+            isApplyingProfile = false
+        }
+    }
+
+    private func apply(_ next: MachineControlSnapshot) {
+        snapshot = next
+        if let value = next.brightness { brightness = value }
+        if let value = next.volume { volume = value }
+        if let value = next.keyboardBacklight { keyboardBacklight = value }
+        if let value = next.muted { muted = value }
+        if let value = next.wifiEnabled { wifiEnabled = value }
+        if let value = next.bluetoothEnabled { bluetoothEnabled = value }
+        if let value = next.airplaneMode { airplaneMode = value }
+        if let value = next.doNotDisturb { doNotDisturb = value }
+    }
+
+    private func canDisconnect(_ action: MachineControlAction) -> Bool {
+        action == .setWiFiEnabled(false) || action == .setAirplaneMode(true)
+    }
+
+    private func profileLabel(_ value: String) -> String {
+        value.replacingOccurrences(of: "-", with: " ").capitalized
+    }
+}
 
 private enum MachineControlConfirmation {
     case disableWiFi
@@ -24,20 +219,32 @@ struct MachineControlCenterButton: View {
     let session: MachineSession
     let dark: Bool
 
+    @State private var model: MachineControlCenterModel
     @State private var presented = false
     @State private var hovering = false
+
+    init(session: MachineSession, dark: Bool) {
+        self.session = session
+        self.dark = dark
+        _model = State(initialValue: MachineControlCenterModel(session: session))
+    }
+
+    private var connectionPhase: MachineControlConnectionPhase {
+        if session.isLocal || session.state.isConnected { return .available }
+        if session.state.isBusy { return .connecting }
+        return .unavailable
+    }
 
     var body: some View {
         Button {
             presented.toggle()
         } label: {
-            Label("Control Center", systemImage: "switch.2")
+            Image(systemName: "switch.2")
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .foregroundStyle(
                     hovering ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
                 )
-                .padding(.horizontal, UIScale.pt(9))
-                .frame(height: UIScale.pt(24))
+                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                 .background(
                     hovering ? Color.primary.opacity(0.06) : DashSkin.paper2(dark),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(7))
@@ -49,59 +256,48 @@ struct MachineControlCenterButton: View {
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Machine controls")
         .onHover { hovering = $0 }
         .pointerCursor()
         .help("Control this machine's hardware and wireless settings")
+        .task(id: connectionPhase) {
+            await model.prepare(for: connectionPhase)
+        }
         .popover(isPresented: $presented, arrowEdge: .top) {
-            MachineControlCenterView(session: session)
+            MachineControlCenterView(model: model)
         }
     }
 }
 
 struct MachineControlCenterView: View {
     let session: MachineSession
-    let loadsOnAppear: Bool
-
-    @State private var snapshot: MachineControlSnapshot?
-    @State private var brightness = 0
-    @State private var volume = 0
-    @State private var keyboardBacklight = 0
-    @State private var muted = false
-    @State private var wifiEnabled = false
-    @State private var bluetoothEnabled = false
-    @State private var airplaneMode = false
-    @State private var doNotDisturb = false
-    @State private var isRefreshing = false
-    @State private var refreshPending = false
-    @State private var hasLoaded = false
-    @State private var requiresConnection = false
-    @State private var isApplyingControl = false
-    @State private var isApplyingProfile = false
-    @State private var resultMessage: String?
-    @State private var resultFailed = false
-    @State private var selectedProfile = ""
-    @State private var duration = MachineProfileDuration.untilChanged
+    @Bindable var model: MachineControlCenterModel
     @State private var confirmation: MachineControlConfirmation?
     @State private var hoveredRow: String?
 
     @Environment(\.colorScheme) private var scheme
 
-    init(session: MachineSession, loadsOnAppear: Bool = true) {
+    init(session: MachineSession) {
         self.session = session
-        self.loadsOnAppear = loadsOnAppear
+        _model = Bindable(wrappedValue: MachineControlCenterModel(session: session))
+    }
+
+    init(model: MachineControlCenterModel) {
+        session = model.session
+        _model = Bindable(wrappedValue: model)
     }
 
     private var dark: Bool { scheme == .dark }
+    private var snapshot: MachineControlSnapshot? { model.snapshot }
     private var profile: MachinePlatformProfile? { session.slow?.platformProfile }
     private var fans: [MachineFan] { session.slow?.fans ?? [] }
     private var hasControls: Bool { snapshot.map { !$0.isEmpty } ?? false }
     private var hasCooling: Bool { !fans.isEmpty || profile != nil }
-    private var isBusy: Bool {
-        isRefreshing || isApplyingControl || isApplyingProfile || session.isApplyingPlatformProfile
-    }
+    private var isBusy: Bool { model.isBusy }
     private var controlsDisabled: Bool { isBusy || !session.state.isConnected }
-    private var busyLabel: String { isRefreshing ? "Refreshing" : "Updating" }
+    private var busyLabel: String { model.isRefreshing ? "Refreshing" : "Updating" }
     private var scrollHeight: CGFloat {
+        if !model.hasLoaded { return UIScale.pt(316) }
         var height: CGFloat = 0
         if snapshot?.brightness != nil { height += 66 }
         if snapshot?.volume != nil { height += 66 }
@@ -116,7 +312,7 @@ struct MachineControlCenterView: View {
             height += 22 + CGFloat(fans.count) * 36
             if profile != nil { height += 128 }
         }
-        if resultMessage != nil { height += 44 }
+        if model.resultMessage != nil { height += 44 }
         return UIScale.pt(min(max(height, 72), 520))
     }
 
@@ -126,15 +322,13 @@ struct MachineControlCenterView: View {
             Divider().padding(.top, UIScale.pt(10))
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(0)) {
-                    if (loadsOnAppear && !hasLoaded && snapshot == nil)
-                        || (isRefreshing && snapshot == nil)
-                    {
+                    if !model.hasLoaded {
                         loadingState
-                    } else if requiresConnection || (!hasControls && !hasCooling) {
+                    } else if model.requiresConnection || (!hasControls && !hasCooling) {
                         unavailableState
                     } else {
                         availableControls
-                        if let resultMessage {
+                        if let resultMessage = model.resultMessage {
                             Divider().padding(.leading, UIScale.pt(8))
                             resultRow(resultMessage)
                         }
@@ -145,20 +339,8 @@ struct MachineControlCenterView: View {
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(330))
-        .task {
-            guard loadsOnAppear else { return }
-            await refresh(reportFailure: true, clearsMessage: false)
-        }
-        .onAppear { synchronizeProfileSelection() }
-        .onChange(of: profile) { _, _ in synchronizeProfileSelection() }
-        .onChange(of: session.state.isConnected) { _, connected in
-            if connected {
-                Task { await refresh(reportFailure: true, clearsMessage: true) }
-            } else if !session.isLocal {
-                snapshot = nil
-                requiresConnection = true
-            }
-        }
+        .onAppear { model.synchronizeProfileSelection() }
+        .onChange(of: profile) { _, _ in model.synchronizeProfileSelection() }
         .confirmationDialog(
             confirmation?.title ?? "Confirm network change",
             isPresented: Binding(
@@ -181,15 +363,10 @@ struct MachineControlCenterView: View {
             Image(systemName: "switch.2")
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(DashSkin.accent(dark))
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text("Control Center")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text(session.machine.name)
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
-            }
+            Text(session.machine.name)
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
+                .lineLimit(1)
             Spacer(minLength: 0)
             if isBusy {
                 HStack(spacing: UIScale.pt(4)) {
@@ -202,7 +379,7 @@ struct MachineControlCenterView: View {
                 }
             }
             Button {
-                Task { await refresh(reportFailure: true, clearsMessage: true) }
+                Task { await model.refresh(reportFailure: true, clearsMessage: true) }
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
@@ -218,39 +395,61 @@ struct MachineControlCenterView: View {
     }
 
     private var loadingState: some View {
-        HStack(spacing: UIScale.pt(9)) {
-            ProgressView().controlSize(.small)
-            Text("Checking available controls…")
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
+        VStack(spacing: UIScale.pt(0)) {
+            ForEach(0..<6, id: \.self) { index in
+                VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                    HStack(spacing: UIScale.pt(9)) {
+                        SkeletonBlock(width: 18, height: 18, corner: 5)
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 86 : 112,
+                            height: 10
+                        )
+                        Spacer(minLength: 0)
+                        if index < 2 {
+                            SkeletonBlock(width: 34, height: 9)
+                        } else {
+                            SkeletonBlock(width: 28, height: 16, corner: 8)
+                        }
+                    }
+                    if index < 2 {
+                        SkeletonBlock(height: 6, corner: 3)
+                            .padding(.leading, UIScale.pt(27))
+                    }
+                }
+                .padding(.horizontal, UIScale.pt(8))
+                .padding(.vertical, UIScale.pt(index < 2 ? 9 : 10))
+                if index < 5 {
+                    Divider().padding(.leading, UIScale.pt(36))
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(18))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading available controls")
     }
 
     private var unavailableState: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Label(
-                requiresConnection
+                model.requiresConnection
                     ? "Connect to discover controls"
-                    : resultFailed ? "Controls unavailable" : "No controls available",
-                systemImage: requiresConnection
+                    : model.resultFailed ? "Controls unavailable" : "No controls available",
+                systemImage: model.requiresConnection
                     ? "bolt.horizontal.circle"
-                    : resultFailed ? "exclamationmark.triangle" : "switch.2"
+                    : model.resultFailed ? "exclamationmark.triangle" : "switch.2"
             )
             .font(.system(size: UIScale.pt(12.5), weight: .medium))
-            .foregroundStyle(resultFailed ? DashSkin.danger : DashSkin.ink(dark))
+            .foregroundStyle(model.resultFailed ? DashSkin.danger : DashSkin.ink(dark))
             Text(
-                resultMessage
-                    ?? (requiresConnection
+                model.resultMessage
+                    ?? (model.requiresConnection
                         ? "Reconnect this machine to check its available settings."
                         : "This machine did not report any supported controls.")
             )
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .fixedSize(horizontal: false, vertical: true)
-            if requiresConnection {
+            if model.requiresConnection {
                 Button(session.state.isBusy ? "Connecting…" : "Connect") {
                     session.retry()
                 }
@@ -269,29 +468,36 @@ struct MachineControlCenterView: View {
     private var availableControls: some View {
         if snapshot?.brightness != nil {
             sliderRow(
-                "Brightness", symbol: "sun.max", value: $brightness,
-                onCommit: { perform(.setBrightness(brightness), success: "Brightness updated") })
+                "Brightness", symbol: "sun.max", value: $model.brightness,
+                onCommit: {
+                    model.perform(
+                        .setBrightness(model.brightness), success: "Brightness updated")
+                })
         }
         if snapshot?.volume != nil {
             if hasControl(before: 1) { controlDivider }
             sliderRow(
-                "Volume", symbol: "speaker.wave.2", value: $volume,
-                onCommit: { perform(.setVolume(volume), success: "Volume updated") })
+                "Volume", symbol: "speaker.wave.2", value: $model.volume,
+                onCommit: {
+                    model.perform(.setVolume(model.volume), success: "Volume updated")
+                })
         }
         if snapshot?.muted != nil {
             if hasControl(before: 2) { controlDivider }
-            toggleRow("Mute", symbol: muted ? "speaker.slash.fill" : "speaker.slash", value: muted)
-            {
-                muted = $0
-                perform(.setMuted($0), success: $0 ? "Audio muted" : "Audio unmuted")
+            toggleRow(
+                "Mute", symbol: model.muted ? "speaker.slash.fill" : "speaker.slash",
+                value: model.muted
+            ) {
+                model.muted = $0
+                model.perform(.setMuted($0), success: $0 ? "Audio muted" : "Audio unmuted")
             }
         }
         if snapshot?.wifiEnabled != nil {
             if hasControl(before: 3) { controlDivider }
-            toggleRow("Wi-Fi", symbol: "wifi", value: wifiEnabled) { next in
+            toggleRow("Wi-Fi", symbol: "wifi", value: model.wifiEnabled) { next in
                 if next {
-                    wifiEnabled = true
-                    perform(.setWiFiEnabled(true), success: "Wi-Fi turned on")
+                    model.wifiEnabled = true
+                    model.perform(.setWiFiEnabled(true), success: "Wi-Fi turned on")
                 } else {
                     confirmation = .disableWiFi
                 }
@@ -299,31 +505,32 @@ struct MachineControlCenterView: View {
         }
         if snapshot?.bluetoothEnabled != nil {
             if hasControl(before: 4) { controlDivider }
-            toggleRow("Bluetooth", symbol: "wave.3.right", value: bluetoothEnabled) {
-                bluetoothEnabled = $0
-                perform(
+            toggleRow("Bluetooth", symbol: "wave.3.right", value: model.bluetoothEnabled) {
+                model.bluetoothEnabled = $0
+                model.perform(
                     .setBluetoothEnabled($0),
                     success: $0 ? "Bluetooth turned on" : "Bluetooth turned off")
             }
         }
         if snapshot?.airplaneMode != nil {
             if hasControl(before: 5) { controlDivider }
-            toggleRow("Airplane mode", symbol: "airplane", value: airplaneMode) { next in
+            toggleRow("Airplane mode", symbol: "airplane", value: model.airplaneMode) { next in
                 if next {
                     confirmation = .enableAirplaneMode
                 } else {
-                    airplaneMode = false
-                    perform(.setAirplaneMode(false), success: "Airplane mode turned off")
+                    model.airplaneMode = false
+                    model.perform(
+                        .setAirplaneMode(false), success: "Airplane mode turned off")
                 }
             }
         }
         if snapshot?.doNotDisturb != nil {
             if hasControl(before: 6) { controlDivider }
             toggleRow(
-                "Do Not Disturb", symbol: "moon.fill", value: doNotDisturb
+                "Do Not Disturb", symbol: "moon.fill", value: model.doNotDisturb
             ) {
-                doNotDisturb = $0
-                perform(
+                model.doNotDisturb = $0
+                model.perform(
                     .setDoNotDisturb($0),
                     success: $0 ? "Do Not Disturb turned on" : "Do Not Disturb turned off")
             }
@@ -331,10 +538,10 @@ struct MachineControlCenterView: View {
         if snapshot?.keyboardBacklight != nil {
             if hasControl(before: 7) { controlDivider }
             sliderRow(
-                "Keyboard lighting", symbol: "keyboard", value: $keyboardBacklight,
+                "Keyboard lighting", symbol: "keyboard", value: $model.keyboardBacklight,
                 onCommit: {
-                    perform(
-                        .setKeyboardBacklight(keyboardBacklight),
+                    model.perform(
+                        .setKeyboardBacklight(model.keyboardBacklight),
                         success: "Keyboard lighting updated")
                 })
         }
@@ -469,7 +676,7 @@ struct MachineControlCenterView: View {
                     .font(.system(size: UIScale.pt(12.5)))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer(minLength: 0)
-                Picker("Profile", selection: $selectedProfile) {
+                Picker("Profile", selection: $model.selectedProfile) {
                     ForEach(profile.choices, id: \.self) { choice in
                         Text(profileLabel(choice)).tag(choice)
                     }
@@ -489,7 +696,7 @@ struct MachineControlCenterView: View {
                     .font(.system(size: UIScale.pt(12.5)))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer(minLength: 0)
-                Picker("Duration", selection: $duration) {
+                Picker("Duration", selection: $model.duration) {
                     ForEach(MachineProfileDuration.allCases, id: \.rawValue) { option in
                         Text(option.label).tag(option)
                     }
@@ -506,9 +713,9 @@ struct MachineControlCenterView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(2)
                 Spacer(minLength: 0)
-                Button("Apply") { applyProfile() }
+                Button("Apply") { model.applyProfile() }
                     .controlSize(.small)
-                    .disabled(selectedProfile.isEmpty || controlsDisabled)
+                    .disabled(model.selectedProfile.isEmpty || controlsDisabled)
                     .pointerCursor()
             }
         }
@@ -518,14 +725,17 @@ struct MachineControlCenterView: View {
 
     private func resultRow(_ message: String) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(7)) {
-            Image(systemName: resultFailed ? "exclamationmark.triangle" : "checkmark.circle.fill")
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            Image(
+                systemName: model.resultFailed
+                    ? "exclamationmark.triangle" : "checkmark.circle.fill"
+            )
+            .font(.system(size: UIScale.pt(10.5), weight: .medium))
             Text(message)
                 .font(.system(size: UIScale.pt(10.5)))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(resultFailed ? DashSkin.danger : DashSkin.sage)
+        .foregroundStyle(model.resultFailed ? DashSkin.danger : DashSkin.sage)
         .padding(.horizontal, UIScale.pt(8))
         .padding(.top, UIScale.pt(9))
     }
@@ -543,143 +753,18 @@ struct MachineControlCenterView: View {
         }
     }
 
-    private func refresh(reportFailure: Bool, clearsMessage: Bool) async {
-        guard !isRefreshing else {
-            refreshPending = true
-            return
-        }
-        if clearsMessage { resultMessage = nil }
-        guard session.isLocal || session.state.isConnected else {
-            snapshot = nil
-            requiresConnection = true
-            if reportFailure { resultFailed = false }
-            hasLoaded = true
-            return
-        }
-        requiresConnection = false
-        isRefreshing = true
-        defer {
-            isRefreshing = false
-            hasLoaded = true
-            if refreshPending {
-                refreshPending = false
-                Task { await refresh(reportFailure: true, clearsMessage: true) }
-            }
-        }
-        switch await session.runCommand(MachineControlCenterCommands.statusCommand, timeout: 20) {
-        case let .success(output):
-            guard session.isLocal || session.state.isConnected else {
-                snapshot = nil
-                requiresConnection = true
-                return
-            }
-            requiresConnection = false
-            if reportFailure { resultFailed = false }
-            apply(MachineControlCenterCommands.parseStatus(output))
-        case let .failure(error):
-            snapshot = nil
-            if !session.isLocal && !session.state.isConnected {
-                requiresConnection = true
-                resultFailed = false
-                resultMessage = nil
-                return
-            }
-            guard reportFailure else { return }
-            resultFailed = true
-            resultMessage = explain(error)
-        }
-    }
-
-    private func apply(_ next: MachineControlSnapshot) {
-        snapshot = next
-        if let value = next.brightness { brightness = value }
-        if let value = next.volume { volume = value }
-        if let value = next.keyboardBacklight { keyboardBacklight = value }
-        if let value = next.muted { muted = value }
-        if let value = next.wifiEnabled { wifiEnabled = value }
-        if let value = next.bluetoothEnabled { bluetoothEnabled = value }
-        if let value = next.airplaneMode { airplaneMode = value }
-        if let value = next.doNotDisturb { doNotDisturb = value }
-    }
-
-    private func perform(_ action: MachineControlAction, success: String) {
-        guard !isBusy else { return }
-        resultMessage = nil
-        isApplyingControl = true
-        Task {
-            let shouldAttachSudoPassword =
-                !session.isLocal
-                && MachineControlCenterCommands.shouldAttachSudoPassword(
-                    for: action, platform: snapshot?.platform)
-            let stdin =
-                shouldAttachSudoPassword
-                ? SudoPassword.stdin(machineID: session.machine.id) : nil
-            let command = MachineControlCenterCommands.command(
-                for: action, withSudoPassword: stdin != nil,
-                usingLocalAuthorization: session.isLocal)
-            switch await session.runCommand(command, stdin: stdin, timeout: 30) {
-            case .success:
-                resultFailed = false
-                resultMessage = success
-                if !canDisconnect(action) || session.state.isConnected {
-                    await refresh(reportFailure: false, clearsMessage: false)
-                }
-            case let .failure(error):
-                if canDisconnect(action), PowerOutcome.hostWentAway(error),
-                    MachineControlCenterCommands.disruptiveOperationStarted(error)
-                {
-                    resultFailed = false
-                    resultMessage = success
-                } else {
-                    resultFailed = true
-                    resultMessage = explain(error)
-                    if let snapshot { apply(snapshot) }
-                    await refresh(reportFailure: false, clearsMessage: false)
-                }
-            }
-            isApplyingControl = false
-        }
-    }
-
     private func applyConfirmedNetworkChange() {
         let confirmed = confirmation
         confirmation = nil
         switch confirmed {
         case .disableWiFi:
-            wifiEnabled = false
-            perform(.setWiFiEnabled(false), success: "Wi-Fi turned off")
+            model.wifiEnabled = false
+            model.perform(.setWiFiEnabled(false), success: "Wi-Fi turned off")
         case .enableAirplaneMode:
-            airplaneMode = true
-            perform(.setAirplaneMode(true), success: "Airplane mode turned on")
+            model.airplaneMode = true
+            model.perform(.setAirplaneMode(true), success: "Airplane mode turned on")
         case nil:
             break
-        }
-    }
-
-    private func synchronizeProfileSelection() {
-        guard let profile else { return }
-        if !profile.choices.contains(selectedProfile) {
-            selectedProfile = profile.current
-        }
-    }
-
-    private func applyProfile() {
-        guard !selectedProfile.isEmpty, !isBusy else { return }
-        resultMessage = nil
-        isApplyingProfile = true
-        Task {
-            switch await session.setPlatformProfile(selectedProfile, duration: duration) {
-            case .success:
-                resultFailed = false
-                resultMessage =
-                    duration == .untilChanged
-                    ? "Switched to \(profileLabel(selectedProfile))"
-                    : "Switched to \(profileLabel(selectedProfile)) for \(duration.label.lowercased())"
-            case let .failure(error):
-                resultFailed = true
-                resultMessage = explain(error)
-            }
-            isApplyingProfile = false
         }
     }
 
@@ -705,15 +790,7 @@ struct MachineControlCenterView: View {
         return available.prefix(index).contains(true)
     }
 
-    private func canDisconnect(_ action: MachineControlAction) -> Bool {
-        action == .setWiFiEnabled(false) || action == .setAirplaneMode(true)
-    }
-
     private func profileLabel(_ value: String) -> String {
         value.replacingOccurrences(of: "-", with: " ").capitalized
-    }
-
-    private func explain(_ error: Error) -> String {
-        PowerOutcome.explain(error)
     }
 }

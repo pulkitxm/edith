@@ -172,7 +172,7 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
             machine: Machine(name: "This Mac", host: "localhost"), local: true)
         #expect(
             renders(
-                MachineControlCenterView(session: session, loadsOnAppear: false),
+                MachineControlCenterView(session: session),
                 width: 360, height: 400))
         try await Task.sleep(for: .milliseconds(100))
         #expect(session.state == .disconnected)

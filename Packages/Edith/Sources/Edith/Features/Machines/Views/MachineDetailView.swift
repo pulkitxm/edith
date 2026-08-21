@@ -78,6 +78,7 @@ struct MachineDetailView: View {
             Spacer(minLength: 0)
             ConnectionPill(session: session, dark: dark)
             MachineControlCenterButton(session: session, dark: dark)
+                .id(session.id)
             if !session.isLocal {
                 MachinePowerControls(session: session, model: model, dark: dark)
             }
