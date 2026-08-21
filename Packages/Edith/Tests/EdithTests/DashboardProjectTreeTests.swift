@@ -273,7 +273,9 @@ import Testing
         m.projSortAscending = true
         m.projListOpen = true
         m.projExpanded = ["proj:x"]
+        m.range = .today
         m.reset()
+        #expect(m.range == .all)
         #expect(m.projSortKey == .cost)
         #expect(m.projSortAscending == false)
         #expect(m.projListOpen == false)

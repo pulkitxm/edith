@@ -162,7 +162,6 @@ not here cannot be set, and `import` skips it.
 | `dashKnownSources` | csv | none | shared | Sources seen so far, used to auto-select newly discovered ones. |
 | `dashSourceSelectionVersion` | int | none | shared | Schema version of the stored source selection. |
 | `dashModels` | string | none | shared | Model filter for the dashboard charts. |
-| `dashBillingDay` | int | `26` | shared | Day of month the billing cycle starts on. |
 | `dashSort` | string | `cost` | shared | Model table sort column. |
 | `dashSortAsc` | bool | `false` | shared | Sort the model table ascending. |
 | `dashHeatMetric` | string: `tokens`, `cost` | `tokens` | shared | Metric the activity heatmap colours by. |

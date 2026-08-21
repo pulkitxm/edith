@@ -280,19 +280,7 @@ struct DashboardView: View {
                 rangeButton("Yesterday", .yesterday)
                 rangeButton("Week", .thisWeek)
                 rangeButton("Last week", .lastWeek)
-                rangeButton("Cycle", .cycle(nil))
                 rangeButton("All", .all)
-                if !model.cycleOptions.isEmpty {
-                    Menu {
-                        ForEach(model.cycleOptions) { c in
-                            Button(c.label) { model.range = .cycle(c.id) }
-                        }
-                    } label: {
-                        Label("Cycle", systemImage: "calendar").font(.system(size: UIScale.pt(11)))
-                    }
-                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                    .modifier(FilterChip(dark: dark))
-                }
                 if !model.monthOptions.isEmpty {
                     Menu {
                         ForEach(model.monthOptions, id: \.self) { m in
@@ -315,7 +303,6 @@ struct DashboardView: View {
                 modelMenu
                 projectMenu
                 sourceMenu
-                billingDayControl
                 customRange
             }
         }
@@ -323,34 +310,6 @@ struct DashboardView: View {
         .pageGutter(compactLayout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical)
-    }
-
-    private var billingDayControl: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Text("Billing day \(model.billingDay)")
-                .font(.system(size: UIScale.pt(11)))
-                .monospacedDigit()
-            HStack(spacing: UIScale.pt(2)) {
-                billingDayStep("minus", enabled: model.billingDay > 1) { model.billingDay -= 1 }
-                billingDayStep("plus", enabled: model.billingDay < 31) { model.billingDay += 1 }
-            }
-        }
-        .pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
-    }
-
-    private func billingDayStep(_ systemImage: String, enabled: Bool, action: @escaping () -> Void)
-        -> some View
-    {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: UIScale.pt(9), weight: .semibold))
-                .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-        }
-        .buttonStyle(.plain)
-        .pointerCursor()
-        .opacity(enabled ? 1 : 0.3)
-        .disabled(!enabled)
     }
 
     private var customRange: some View {
@@ -413,7 +372,7 @@ struct DashboardView: View {
     private func isActive(_ r: DashRange) -> Bool {
         switch (model.range, r) {
         case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
-            (.lastWeek, .lastWeek), (.all, .all), (.cycle, .cycle):
+            (.lastWeek, .lastWeek), (.all, .all):
             return true
         default: return false
         }

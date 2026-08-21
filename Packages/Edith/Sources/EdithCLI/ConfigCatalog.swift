@@ -317,9 +317,6 @@ public enum ConfigCatalog {
             "dashModels", .string, group: "dashboard",
             summary: "Model filter for the dashboard charts."),
         SettingDefinition(
-            "dashBillingDay", .int, group: "dashboard",
-            summary: "Day of month the billing cycle starts on.", fallback: .int(26)),
-        SettingDefinition(
             "dashSort", .string, group: "dashboard", summary: "Model table sort column.",
             fallback: .string("cost")),
         SettingDefinition(
