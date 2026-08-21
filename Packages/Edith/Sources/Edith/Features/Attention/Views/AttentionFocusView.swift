@@ -37,13 +37,22 @@ struct AttentionFocusView: View {
     private var sessionHero: some View {
         if let template = activeTemplate {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                let elapsed = max(0, context.date.timeIntervalSince(store.focusStartedAt ?? context.date))
+                let elapsed = max(
+                    0, context.date.timeIntervalSince(store.focusStartedAt ?? context.date))
                 HStack(spacing: UIScale.pt(18)) {
                     ZStack {
                         Circle().stroke(DashSkin.line(dark), lineWidth: UIScale.pt(7))
                         Circle()
-                            .trim(from: 0, to: template.durationMinutes.map { min(1, elapsed / Double($0 * 60)) } ?? 0.72)
-                            .stroke(DashSkin.accentDeep(dark), style: StrokeStyle(lineWidth: UIScale.pt(7), lineCap: .round))
+                            .trim(
+                                from: 0,
+                                to: template.durationMinutes.map {
+                                    min(1, elapsed / Double($0 * 60))
+                                } ?? 0.72
+                            )
+                            .stroke(
+                                DashSkin.accentDeep(dark),
+                                style: StrokeStyle(lineWidth: UIScale.pt(7), lineCap: .round)
+                            )
                             .rotationEffect(.degrees(-90))
                         Image(systemName: template.symbol)
                             .font(.system(size: UIScale.pt(24), weight: .medium))
@@ -71,7 +80,10 @@ struct AttentionFocusView: View {
                     }
                 }
                 .padding(UIScale.pt(18))
-                .widgetBar(cornerRadius: 16, fill: DashSkin.paper2(dark), stroke: DashSkin.accent(dark).opacity(0.32), shadow: .black.opacity(dark ? 0.3 : 0.05))
+                .widgetBar(
+                    cornerRadius: 16, fill: DashSkin.paper2(dark),
+                    stroke: DashSkin.accent(dark).opacity(0.32),
+                    shadow: .black.opacity(dark ? 0.3 : 0.05))
             }
         } else {
             HStack(spacing: UIScale.pt(18)) {
@@ -95,7 +107,9 @@ struct AttentionFocusView: View {
                     .pointerCursor()
             }
             .padding(UIScale.pt(18))
-            .widgetBar(cornerRadius: 16, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark), shadow: .black.opacity(dark ? 0.3 : 0.05))
+            .widgetBar(
+                cornerRadius: 16, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark),
+                shadow: .black.opacity(dark ? 0.3 : 0.05))
         }
     }
 
@@ -120,13 +134,17 @@ struct AttentionFocusView: View {
                         Text(template.name)
                             .font(.system(size: UIScale.pt(12), weight: .semibold))
                             .foregroundStyle(DashSkin.ink(dark))
-                        Text("\(template.allowedCategoryIDs.count) allowed categories · \(template.intervention)")
-                            .font(.system(size: UIScale.pt(9.5)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
+                        Text(
+                            "\(template.allowedCategoryIDs.count) allowed categories · \(template.intervention)"
+                        )
+                        .font(.system(size: UIScale.pt(9.5)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                     .padding(UIScale.pt(13))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .widgetBar(cornerRadius: 13, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark), shadow: .clear)
+                    .widgetBar(
+                        cornerRadius: 13, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark),
+                        shadow: .clear)
                 }
                 .buttonStyle(.plain)
                 .disabled(activeTemplate != nil)
@@ -136,21 +154,33 @@ struct AttentionFocusView: View {
     }
 
     private var sessionHistory: some View {
-        AttentionPanel(title: "Recent sessions", subtitle: "Intentional work, interruptions, and delegated runtime") {
+        AttentionPanel(
+            title: "Recent sessions",
+            subtitle: "Intentional work, interruptions, and delegated runtime"
+        ) {
             VStack(spacing: 0) {
                 ForEach(Array(store.visibleFocusSessions.suffix(8).reversed())) { session in
                     HStack(spacing: UIScale.pt(10)) {
                         Circle()
                             .trim(from: 0, to: session.focusRatio)
-                            .stroke(DashSkin.sage, style: StrokeStyle(lineWidth: UIScale.pt(4), lineCap: .round))
+                            .stroke(
+                                DashSkin.sage,
+                                style: StrokeStyle(lineWidth: UIScale.pt(4), lineCap: .round)
+                            )
                             .rotationEffect(.degrees(-90))
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                            .overlay(Text("\(Int(session.focusRatio * 100))").font(.system(size: UIScale.pt(7), weight: .bold)))
+                            .overlay(
+                                Text("\(Int(session.focusRatio * 100))").font(
+                                    .system(size: UIScale.pt(7), weight: .bold)))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(session.name).font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                            Text(AttentionTime.day(session.start) + " · " + AttentionTime.duration(session.duration, compact: true))
-                                .font(.system(size: UIScale.pt(8.5)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
+                            Text(session.name).font(
+                                .system(size: UIScale.pt(10.5), weight: .semibold))
+                            Text(
+                                AttentionTime.day(session.start) + " · "
+                                    + AttentionTime.duration(session.duration, compact: true)
+                            )
+                            .font(.system(size: UIScale.pt(8.5)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         Spacer()
                         Text("\(session.interruptions) interruptions")
@@ -165,18 +195,22 @@ struct AttentionFocusView: View {
     }
 
     private var focusTrend: some View {
-        AttentionPanel(title: "Focus quality", subtitle: "Transparent daily ratio, not a hidden score") {
+        AttentionPanel(
+            title: "Focus quality", subtitle: "Transparent daily ratio, not a hidden score"
+        ) {
             Chart(store.dailySummaries) { summary in
                 LineMark(
                     x: .value("Date", summary.date, unit: .day),
-                    y: .value("Ratio", ratio(summary)))
-                    .foregroundStyle(DashSkin.sage)
-                    .interpolationMethod(.catmullRom)
+                    y: .value("Ratio", ratio(summary))
+                )
+                .foregroundStyle(DashSkin.sage)
+                .interpolationMethod(.catmullRom)
                 AreaMark(
                     x: .value("Date", summary.date, unit: .day),
-                    y: .value("Ratio", ratio(summary)))
-                    .foregroundStyle(DashSkin.sage.opacity(0.12))
-                    .interpolationMethod(.catmullRom)
+                    y: .value("Ratio", ratio(summary))
+                )
+                .foregroundStyle(DashSkin.sage.opacity(0.12))
+                .interpolationMethod(.catmullRom)
             }
             .chartYScale(domain: 0.4...1)
             .chartYAxis {

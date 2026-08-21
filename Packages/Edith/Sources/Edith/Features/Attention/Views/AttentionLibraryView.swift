@@ -27,7 +27,9 @@ struct AttentionLibraryView: View {
             rulePreview
         }
         .onAppear {
-            if store.selectedIdentityID == nil { store.selectedIdentityID = store.filteredIdentities.first?.id }
+            if store.selectedIdentityID == nil {
+                store.selectedIdentityID = store.filteredIdentities.first?.id
+            }
         }
     }
 
@@ -37,13 +39,16 @@ struct AttentionLibraryView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: UIScale.pt(360))
             Picker("Kind", selection: $store.libraryKind) {
-                ForEach(["All"] + AttentionCategoryKind.allCases.map(\.title), id: \.self) { Text($0) }
+                ForEach(["All"] + AttentionCategoryKind.allCases.map(\.title), id: \.self) {
+                    Text($0)
+                }
             }
             .labelsHidden()
             .frame(width: UIScale.pt(145))
             Spacer()
             AttentionBadge(
-                text: "\(store.identities.filter { $0.categoryID == "uncategorized" }.count) UNCATEGORIZED",
+                text:
+                    "\(store.identities.filter { $0.categoryID == "uncategorized" }.count) UNCATEGORIZED",
                 color: DashSkin.warn)
         }
     }
@@ -102,7 +107,8 @@ struct AttentionLibraryView: View {
             .padding(UIScale.pt(8))
             .background(
                 selected ? DashSkin.accent(dark).opacity(0.08) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -117,10 +123,13 @@ struct AttentionLibraryView: View {
                     HStack(spacing: UIScale.pt(10)) {
                         Image(systemName: identity.symbol)
                             .font(.system(size: UIScale.pt(21)))
-                            .foregroundStyle(AttentionPalette.category(identity.categoryID, dark: dark))
+                            .foregroundStyle(
+                                AttentionPalette.category(identity.categoryID, dark: dark)
+                            )
                             .frame(width: UIScale.pt(46), height: UIScale.pt(46))
                             .background(
-                                AttentionPalette.category(identity.categoryID, dark: dark).opacity(0.1),
+                                AttentionPalette.category(identity.categoryID, dark: dark).opacity(
+                                    0.1),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(AttentionTime.duration(identity.totalSeconds, compact: true))
@@ -134,7 +143,8 @@ struct AttentionLibraryView: View {
                     surfaceSection("Native applications", values: identity.nativeApplications)
                     surfaceSection("Web domains", values: identity.domains)
                     Picker("Category", selection: $pendingCategoryID) {
-                        ForEach(store.categories) { category in Text(category.path).tag(category.id) }
+                        ForEach(store.categories) { category in Text(category.path).tag(category.id)
+                        }
                     }
                     Button("Preview historical change") { store.showRulePreview = true }
                         .buttonStyle(.borderedProminent)
@@ -168,7 +178,9 @@ struct AttentionLibraryView: View {
     }
 
     private var categoryPanel: some View {
-        AttentionPanel(title: "Category system", subtitle: "Every label is editable and profile-aware") {
+        AttentionPanel(
+            title: "Category system", subtitle: "Every label is editable and profile-aware"
+        ) {
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: UIScale.pt(160)), spacing: UIScale.pt(10))],
                 spacing: UIScale.pt(10)
@@ -182,7 +194,8 @@ struct AttentionLibraryView: View {
                                 AttentionPalette.kind(category.kind, dark: dark).opacity(0.1),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(category.path).font(.system(size: UIScale.pt(10.5), weight: .medium))
+                            Text(category.path).font(
+                                .system(size: UIScale.pt(10.5), weight: .medium))
                             Text(category.kind.title)
                                 .font(.system(size: UIScale.pt(8.5)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
@@ -190,7 +203,9 @@ struct AttentionLibraryView: View {
                         Spacer()
                     }
                     .padding(UIScale.pt(9))
-                    .background(DashSkin.grid(dark).opacity(0.38), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                    .background(
+                        DashSkin.grid(dark).opacity(0.38),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
                 }
             }
         }
@@ -201,16 +216,24 @@ struct AttentionLibraryView: View {
         if let identity = store.selectedIdentity {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 Text("Preview category rule").font(DashSkin.serif(24))
-                Text("Assign \(identity.name) to \(store.category(for: pendingCategoryID)?.path ?? "Uncategorized")")
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                Text(
+                    "Assign \(identity.name) to \(store.category(for: pendingCategoryID)?.path ?? "Uncategorized")"
+                )
+                .font(.system(size: UIScale.pt(12), weight: .medium))
                 HStack(spacing: UIScale.pt(12)) {
-                    previewMetric("Segments", "\(store.segments.filter { $0.service == identity.name }.count)")
-                    previewMetric("Historical time", AttentionTime.duration(identity.totalSeconds, compact: true))
+                    previewMetric(
+                        "Segments", "\(store.segments.filter { $0.service == identity.name }.count)"
+                    )
+                    previewMetric(
+                        "Historical time",
+                        AttentionTime.duration(identity.totalSeconds, compact: true))
                     previewMetric("Conflicts", "0")
                 }
-                Text("The raw application, URL, profile, and timing observations remain unchanged. This action creates a reversible rule transaction.")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.secondary)
+                Text(
+                    "The raw application, URL, profile, and timing observations remain unchanged. This action creates a reversible rule transaction."
+                )
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(.secondary)
                 HStack {
                     Spacer()
                     Button("Cancel") { store.showRulePreview = false }

@@ -29,7 +29,8 @@ struct AttentionMusicView: View {
         }
         return grouped.map { key, sessions in
             let seconds = sessions.reduce(0) { $0 + $1.playedSeconds }
-            let completion = sessions.reduce(0) { $0 + $1.completion } / Double(max(1, sessions.count))
+            let completion =
+                sessions.reduce(0) { $0 + $1.completion } / Double(max(1, sessions.count))
             let first = sessions[0]
             let subtitle: String
             switch store.musicGrouping {
@@ -74,10 +75,24 @@ struct AttentionMusicView: View {
             columns: [GridItem(.adaptive(minimum: UIScale.pt(150)), spacing: UIScale.pt(10))],
             spacing: UIScale.pt(10)
         ) {
-            AttentionMetricCard(metric: AttentionMetric(id: "listening", title: "Listening", value: AttentionTime.duration(total, compact: true), detail: "Concurrent with your attention", symbol: "headphones"))
-            AttentionMetricCard(metric: AttentionMetric(id: "tracks", title: "Unique tracks", value: "\(unique)", detail: "Ranked by played seconds", symbol: "music.note.list"))
-            AttentionMetricCard(metric: AttentionMetric(id: "background", title: "Background", value: total > 0 ? "\(Int((total - foreground) / total * 100))%" : "0%", detail: "Not counted as primary context", symbol: "waveform"))
-            AttentionMetricCard(metric: AttentionMetric(id: "completion", title: "Completion", value: "91%", detail: "Average playback completion", symbol: "checkmark.circle"))
+            AttentionMetricCard(
+                metric: AttentionMetric(
+                    id: "listening", title: "Listening",
+                    value: AttentionTime.duration(total, compact: true),
+                    detail: "Concurrent with your attention", symbol: "headphones"))
+            AttentionMetricCard(
+                metric: AttentionMetric(
+                    id: "tracks", title: "Unique tracks", value: "\(unique)",
+                    detail: "Ranked by played seconds", symbol: "music.note.list"))
+            AttentionMetricCard(
+                metric: AttentionMetric(
+                    id: "background", title: "Background",
+                    value: total > 0 ? "\(Int((total - foreground) / total * 100))%" : "0%",
+                    detail: "Not counted as primary context", symbol: "waveform"))
+            AttentionMetricCard(
+                metric: AttentionMetric(
+                    id: "completion", title: "Completion", value: "91%",
+                    detail: "Average playback completion", symbol: "checkmark.circle"))
         }
     }
 
@@ -86,14 +101,16 @@ struct AttentionMusicView: View {
             Chart(store.dailySummaries) { summary in
                 BarMark(
                     x: .value("Date", summary.date, unit: .day),
-                    y: .value("Hours", summary.musicSeconds / 3600))
-                    .foregroundStyle(Color.pink.opacity(0.75))
-                    .cornerRadius(2)
+                    y: .value("Hours", summary.musicSeconds / 3600)
+                )
+                .foregroundStyle(Color.pink.opacity(0.75))
+                .cornerRadius(2)
                 LineMark(
                     x: .value("Date", summary.date, unit: .day),
-                    y: .value("Focus association", min(4.5, summary.focusSeconds / 7200)))
-                    .foregroundStyle(DashSkin.sage)
-                    .interpolationMethod(.catmullRom)
+                    y: .value("Focus association", min(4.5, summary.focusSeconds / 7200))
+                )
+                .foregroundStyle(DashSkin.sage)
+                .interpolationMethod(.catmullRom)
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: store.selectedRange == .month ? 5 : 1)) {
@@ -122,7 +139,8 @@ struct AttentionMusicView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                ForEach(Array(aggregates.prefix(10).enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(aggregates.prefix(10).enumerated()), id: \.element.id) {
+                    index, item in
                     Button {
                         selectedMusicID = item.id
                     } label: {
@@ -131,10 +149,15 @@ struct AttentionMusicView: View {
                                 .font(DashSkin.mono(9.5, weight: .semibold))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(18))
-                            Image(systemName: store.musicGrouping == "Artists" ? "person.wave.2" : "music.note")
-                                .foregroundStyle(Color.pink)
-                                .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-                                .background(Color.pink.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+                            Image(
+                                systemName: store.musicGrouping == "Artists"
+                                    ? "person.wave.2" : "music.note"
+                            )
+                            .foregroundStyle(Color.pink)
+                            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                            .background(
+                                Color.pink.opacity(0.1),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(item.title)
                                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
@@ -151,8 +174,10 @@ struct AttentionMusicView: View {
                         }
                         .padding(UIScale.pt(7))
                         .background(
-                            selectedAggregate?.id == item.id ? Color.pink.opacity(0.08) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                            selectedAggregate?.id == item.id
+                                ? Color.pink.opacity(0.08) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        )
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -182,11 +207,14 @@ struct AttentionMusicView: View {
                     detailRow("Completion", "\(Int(item.completion * 100))%")
                     detailRow("Primary source", "Apple Music")
                     detailRow("Common context", "Xcode")
-                    Text("Listening overlapped with 78% of your longest focus blocks. This is an association based on 23 comparable sessions.")
-                        .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                        .padding(UIScale.pt(10))
-                        .background(Color.pink.opacity(0.07), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                    Text(
+                        "Listening overlapped with 78% of your longest focus blocks. This is an association based on 23 comparable sessions."
+                    )
+                    .font(.system(size: UIScale.pt(9.5)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .padding(UIScale.pt(10))
+                    .background(
+                        Color.pink.opacity(0.07), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                 }
             }
         }

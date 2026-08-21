@@ -34,7 +34,9 @@ struct AttentionInsightsView: View {
             trendPanel
         }
         .onAppear {
-            if store.selectedInsightID == nil { store.selectedInsightID = filteredInsights.first?.id }
+            if store.selectedInsightID == nil {
+                store.selectedInsightID = filteredInsights.first?.id
+            }
         }
     }
 
@@ -50,12 +52,15 @@ struct AttentionInsightsView: View {
                         .buttonStyle(.plain)
                         .font(.system(size: UIScale.pt(10.5), weight: .medium))
                         .foregroundStyle(
-                            store.insightFilter == filter ? Color.white : DashSkin.inkSoft(dark))
+                            store.insightFilter == filter ? Color.white : DashSkin.inkSoft(dark)
+                        )
                         .padding(.horizontal, UIScale.pt(10))
                         .frame(height: UIScale.pt(27))
                         .background(
-                            store.insightFilter == filter ? DashSkin.accentDeep(dark) : DashSkin.paper2(dark),
-                            in: Capsule())
+                            store.insightFilter == filter
+                                ? DashSkin.accentDeep(dark) : DashSkin.paper2(dark),
+                            in: Capsule()
+                        )
                         .overlay {
                             if store.insightFilter != filter {
                                 Capsule().strokeBorder(DashSkin.line(dark))
@@ -71,7 +76,9 @@ struct AttentionInsightsView: View {
     }
 
     private var insightList: some View {
-        AttentionPanel(title: "What changed", subtitle: "Deterministic insights with confidence and evidence") {
+        AttentionPanel(
+            title: "What changed", subtitle: "Deterministic insights with confidence and evidence"
+        ) {
             VStack(spacing: UIScale.pt(8)) {
                 ForEach(filteredInsights) { insight in
                     insightButton(insight)
@@ -111,7 +118,8 @@ struct AttentionInsightsView: View {
             .padding(UIScale.pt(9))
             .background(
                 selected ? DashSkin.accent(dark).opacity(0.08) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+                in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+            )
             .overlay {
                 if selected {
                     RoundedRectangle(cornerRadius: UIScale.pt(10))
@@ -147,11 +155,15 @@ struct AttentionInsightsView: View {
                     evidenceRow("Context segments", "\(store.visibleSegments.count)")
                     evidenceRow("Listening sessions", "\(store.visibleMedia.count)")
                     evidenceRow("Focus sessions", "\(store.visibleFocusSessions.count)")
-                    Text("This insight uses local aggregates. Open the timeline to inspect the underlying intervals.")
-                        .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .padding(UIScale.pt(10))
-                        .background(DashSkin.grid(dark).opacity(0.5), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                    Text(
+                        "This insight uses local aggregates. Open the timeline to inspect the underlying intervals."
+                    )
+                    .font(.system(size: UIScale.pt(9.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .padding(UIScale.pt(10))
+                    .background(
+                        DashSkin.grid(dark).opacity(0.5),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                     Button("Inspect on timeline") { store.selectedSection = .timeline }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -179,15 +191,17 @@ struct AttentionInsightsView: View {
             Chart(store.dailySummaries) { summary in
                 BarMark(
                     x: .value("Date", summary.date, unit: .day),
-                    y: .value("Focus hours", summary.focusSeconds / 3600))
-                    .foregroundStyle(DashSkin.sage.opacity(0.72))
-                    .cornerRadius(2)
+                    y: .value("Focus hours", summary.focusSeconds / 3600)
+                )
+                .foregroundStyle(DashSkin.sage.opacity(0.72))
+                .cornerRadius(2)
                 LineMark(
                     x: .value("Date", summary.date, unit: .day),
-                    y: .value("Switches", Double(summary.switches) / 4))
-                    .foregroundStyle(DashSkin.accentDeep(dark))
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
+                    y: .value("Switches", Double(summary.switches) / 4)
+                )
+                .foregroundStyle(DashSkin.accentDeep(dark))
+                .interpolationMethod(.catmullRom)
+                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: store.selectedRange == .month ? 5 : 1)) {
