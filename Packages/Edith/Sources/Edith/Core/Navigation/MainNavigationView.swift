@@ -762,14 +762,14 @@ struct MainWindowView: View {
                 preventSleep.toggle()
             },
         ]
-        VStack(spacing: UIScale.pt(10)) {
+        VStack(spacing: UIScale.pt(8)) {
             if systemEnabled {
-                if sidebarWidth > 250 {
-                    HStack(spacing: UIScale.pt(10)) {
+                if sidebarWidth < UIScale.pt(220) {
+                    tiles[0]; tiles[1]
+                } else {
+                    HStack(spacing: UIScale.pt(8)) {
                         tiles[0]; tiles[1]
                     }
-                } else {
-                    tiles[0]; tiles[1]
                 }
             }
             if presenterEnabled {
@@ -901,12 +901,12 @@ struct MainWindowView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: UIScale.pt(8)) {
+            VStack(spacing: UIScale.pt(4)) {
                 Image(systemName: icon)
-                    .font(.system(size: UIScale.pt(21)))
+                    .font(.system(size: UIScale.pt(14)))
                     .symbolEffect(.bounce, value: trigger)
                 Text(title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
@@ -914,7 +914,7 @@ struct MainWindowView: View {
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
             .background(
                 active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(14))
+                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
             )
             .contentShape(Rectangle())
         }
