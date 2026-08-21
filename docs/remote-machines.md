@@ -27,6 +27,7 @@ The fleet view summarizes reachability and live resource use. Select a host for:
 - file browsing, search, preview, upload, download, copy, move and deletion;
 - Docker Compose groups, containers, resource use, configuration and log streams;
 - saved commands and port forwards;
+- a capability-aware Control Center for display, audio, wireless, keyboard and cooling settings;
 - wake-on-LAN, restart and shutdown controls.
 
 Command-click a machine chip to open it in a separate window. Workspace mode saves
@@ -51,10 +52,11 @@ host, and removing the host from Edith does not stop or delete its containers.
 
 ## Fans and thermal profiles
 
-Fan RPM is read-only. Thermal profile control appears only when a Linux host exposes
-both `/sys/firmware/acpi/platform_profile` and its choices file. Edith offers the
-profiles the kernel reports, rather than assuming names such as balanced or
-performance.
+Open Control Center from the machine toolbar to see fan RPM and thermal profile
+controls. Fan RPM is read-only. Thermal profile control appears only when a Linux
+host exposes both `/sys/firmware/acpi/platform_profile` and its choices file. Edith
+offers the profiles the kernel reports, rather than assuming names such as balanced
+or performance.
 
 A profile can remain active until changed or automatically revert after 15 minutes,
 30 minutes, 1 hour or 2 hours. Timed changes use `systemd-run` on the host. They need
