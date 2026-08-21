@@ -76,6 +76,23 @@ extension EnvironmentValues {
     }
 }
 
+struct SectionHeading: View {
+    let title: String
+    let dark: Bool
+
+    init(_ title: String, dark: Bool) {
+        self.title = title
+        self.dark = dark
+    }
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+            .tracking(1.2)
+            .foregroundStyle(DashSkin.inkFaint(dark))
+    }
+}
+
 struct SkinCard<Content: View>: View {
     let title: String
     var note: String? = nil
