@@ -72,6 +72,7 @@ struct MachineControlCenterView: View {
     @State private var airplaneMode = false
     @State private var doNotDisturb = false
     @State private var isRefreshing = false
+    @State private var refreshPending = false
     @State private var hasLoaded = false
     @State private var requiresConnection = false
     @State private var isApplyingControl = false
@@ -133,8 +134,12 @@ struct MachineControlCenterView: View {
         .onAppear { synchronizeProfileSelection() }
         .onChange(of: profile) { _, _ in synchronizeProfileSelection() }
         .onChange(of: session.state.isConnected) { _, connected in
-            guard connected, requiresConnection else { return }
-            Task { await refresh(reportFailure: true, clearsMessage: true) }
+            if connected {
+                Task { await refresh(reportFailure: true, clearsMessage: true) }
+            } else if !session.isLocal {
+                snapshot = nil
+                requiresConnection = true
+            }
         }
         .confirmationDialog(
             confirmation?.title ?? "Confirm network change",
@@ -521,9 +526,13 @@ struct MachineControlCenterView: View {
     }
 
     private func refresh(reportFailure: Bool, clearsMessage: Bool) async {
-        guard !isRefreshing else { return }
+        guard !isRefreshing else {
+            refreshPending = true
+            return
+        }
         if clearsMessage { resultMessage = nil }
         guard session.isLocal || session.state.isConnected else {
+            snapshot = nil
             requiresConnection = true
             if reportFailure { resultFailed = false }
             hasLoaded = true
@@ -534,12 +543,29 @@ struct MachineControlCenterView: View {
         defer {
             isRefreshing = false
             hasLoaded = true
+            if refreshPending {
+                refreshPending = false
+                Task { await refresh(reportFailure: true, clearsMessage: true) }
+            }
         }
         switch await session.runCommand(MachineControlCenterCommands.statusCommand, timeout: 20) {
         case let .success(output):
+            guard session.isLocal || session.state.isConnected else {
+                snapshot = nil
+                requiresConnection = true
+                return
+            }
+            requiresConnection = false
             if reportFailure { resultFailed = false }
             apply(MachineControlCenterCommands.parseStatus(output))
         case let .failure(error):
+            snapshot = nil
+            if !session.isLocal && !session.state.isConnected {
+                requiresConnection = true
+                resultFailed = false
+                resultMessage = nil
+                return
+            }
             guard reportFailure else { return }
             resultFailed = true
             resultMessage = explain(error)
@@ -563,9 +589,16 @@ struct MachineControlCenterView: View {
         resultMessage = nil
         isApplyingControl = true
         Task {
-            let stdin = SudoPassword.stdin(machineID: session.machine.id)
+            let shouldAttachSudoPassword =
+                !session.isLocal
+                && MachineControlCenterCommands.shouldAttachSudoPassword(
+                    for: action, platform: snapshot?.platform)
+            let stdin =
+                shouldAttachSudoPassword
+                ? SudoPassword.stdin(machineID: session.machine.id) : nil
             let command = MachineControlCenterCommands.command(
-                for: action, withSudoPassword: stdin != nil)
+                for: action, withSudoPassword: stdin != nil,
+                usingLocalAuthorization: session.isLocal)
             switch await session.runCommand(command, stdin: stdin, timeout: 30) {
             case .success:
                 resultFailed = false
@@ -574,7 +607,9 @@ struct MachineControlCenterView: View {
                     await refresh(reportFailure: false, clearsMessage: false)
                 }
             case let .failure(error):
-                if canDisconnect(action), PowerOutcome.hostWentAway(error) {
+                if canDisconnect(action), PowerOutcome.hostWentAway(error),
+                    MachineControlCenterCommands.disruptiveOperationStarted(error)
+                {
                     resultFailed = false
                     resultMessage = success
                 } else {

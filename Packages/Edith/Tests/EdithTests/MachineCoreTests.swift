@@ -372,7 +372,8 @@ import Testing
         let command = try #require(
             MachineThermalControls.setProfile(
                 "performance", duration: .thirtyMinutes, withSudoPassword: true))
-        #expect(command.hasPrefix("sudo -S -p ''"))
+        #expect(command.hasPrefix("/usr/bin/sudo -S -p ''"))
+        #expect(command.contains("exec </dev/null"))
         #expect(command.contains("--on-active=1800s"))
         #expect(command.contains(MachineThermalControls.revertUnit))
         #expect(command.contains("/run/edith-platform-profile-original"))
@@ -384,6 +385,7 @@ import Testing
     @Test func parsesACompleteSnapshot() {
         let snapshot = MachineControlCenterCommands.parseStatus(
             """
+            EDITH_CONTROL_PLATFORM=linux
             EDITH_CONTROL_BRIGHTNESS=61
             EDITH_CONTROL_VOLUME=42
             EDITH_CONTROL_KEYBOARD_BACKLIGHT=18
@@ -397,6 +399,7 @@ import Testing
         #expect(
             snapshot
                 == MachineControlSnapshot(
+                    platform: .linux,
                     brightness: 61,
                     volume: 42,
                     keyboardBacklight: 18,
@@ -487,13 +490,125 @@ import Testing
             for: .setAirplaneMode(true), withSudoPassword: true)
         let nonInteractiveCommand = MachineControlCenterCommands.command(
             for: .setWiFiEnabled(false), withSudoPassword: false)
+        let passwordWiFiCommand = MachineControlCenterCommands.command(
+            for: .setWiFiEnabled(false), withSudoPassword: true)
 
-        #expect(passwordCommand.contains("sudo -S -p '' rfkill block all"))
-        #expect(nonInteractiveCommand.contains("sudo -n rfkill block wlan"))
+        #expect(
+            passwordCommand.contains("/usr/bin/sudo -S -p '' sh -c 'exec </dev/null;"))
+        #expect(passwordCommand.contains("exec rfkill \"$1\" all"))
+        #expect(
+            nonInteractiveCommand.contains("/usr/bin/sudo -n sh -c 'exec </dev/null;"))
+        #expect(nonInteractiveCommand.contains("exec rfkill \"$1\" wlan"))
+        #expect(
+            passwordWiFiCommand.contains(
+                "/usr/bin/sudo -S -p '' sh -c 'exec </dev/null;"))
+        #expect(passwordWiFiCommand.contains("exec networksetup -setairportpower"))
         #expect(!passwordCommand.contains("eval"))
         #expect(!nonInteractiveCommand.contains("eval"))
-        #expect(passwordCommand.contains(">/dev/null 2>&1"))
-        #expect(nonInteractiveCommand.contains(">/dev/null 2>&1"))
+        #expect(passwordCommand.contains(">/dev/null"))
+        #expect(!passwordCommand.contains("rfkill block all >/dev/null 2>&1"))
+        #expect(!nonInteractiveCommand.contains("rfkill block wlan >/dev/null 2>&1"))
+    }
+
+    @Test func attachesSudoPasswordsOnlyToActionsThatCanUseThem() {
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setVolume(50), platform: .linux))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setMuted(true), platform: nil))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setDoNotDisturb(true), platform: .linux))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setBrightness(50), platform: .darwin))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setBluetoothEnabled(true), platform: .darwin))
+        #expect(
+            MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setBrightness(50), platform: .linux))
+        #expect(
+            MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setWiFiEnabled(false), platform: .darwin))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setAirplaneMode(true), platform: nil))
+    }
+
+    @Test func protectsSudoInputFromUnprivilegedFallbacks() {
+        let brightness = MachineControlCenterCommands.command(
+            for: .setBrightness(50), withSudoPassword: true)
+        let wifi = MachineControlCenterCommands.command(
+            for: .setWiFiEnabled(true), withSudoPassword: true)
+        let bluetooth = MachineControlCenterCommands.command(
+            for: .setBluetoothEnabled(true), withSudoPassword: true)
+
+        #expect(
+            brightness.contains(
+                "brightnessctl -c backlight set \"${level}%\" >/dev/null 2>&1 </dev/null"))
+        #expect(wifi.contains("nmcli radio wifi on >/dev/null 2>&1 </dev/null"))
+        #expect(
+            wifi.contains("networksetup -listallhardwareports </dev/null 2>/dev/null"))
+        #expect(bluetooth.contains("bluetoothctl power on >/dev/null 2>&1 </dev/null"))
+        #expect(bluetooth.contains("/usr/bin/sudo -S -p '' sh -c"))
+        #expect(bluetooth.contains("exec </dev/null"))
+    }
+
+    @Test func usesLocalMacAuthorizationForWiFi() {
+        let command = MachineControlCenterCommands.command(
+            for: .setWiFiEnabled(false), withSudoPassword: false,
+            usingLocalAuthorization: true)
+
+        #expect(command.contains("with administrator privileges"))
+        #expect(command.contains("EDITH_WIFI_DEVICE=\"$wifi_device\""))
+        #expect(
+            !command.contains(
+                "/usr/bin/sudo -n sh -c 'exec </dev/null; exec networksetup"))
+    }
+
+    @Test func verifiesBluetoothAndActiveGnomeState() {
+        let bluetooth = MachineControlCenterCommands.command(
+            for: .setBluetoothEnabled(true), withSudoPassword: true)
+        let doNotDisturb = MachineControlCenterCommands.command(
+            for: .setDoNotDisturb(true), withSudoPassword: false)
+
+        #expect(bluetooth.contains("Powered: $2"))
+        #expect(bluetooth.contains("Soft blocked: $4"))
+        #expect(bluetooth.contains("rfkill unblock bluetooth"))
+        #expect(bluetooth.contains("Bluetooth state did not change."))
+        #expect(doNotDisturb.contains("NameHasOwner org.gnome.Shell"))
+        #expect(doNotDisturb.contains("Do Not Disturb setting did not change."))
+        #expect(
+            MachineControlCenterCommands.statusCommand.contains(
+                "NameHasOwner org.gnome.Shell"))
+    }
+
+    @Test func marksOnlyDisruptiveNetworkOperations() {
+        let wifiOff = MachineControlCenterCommands.command(
+            for: .setWiFiEnabled(false), withSudoPassword: true)
+        let wifiOn = MachineControlCenterCommands.command(
+            for: .setWiFiEnabled(true), withSudoPassword: true)
+        let airplaneOn = MachineControlCenterCommands.command(
+            for: .setAirplaneMode(true), withSudoPassword: true)
+        let markedError = SSHConnectionError.commandFailed(
+            command: "control", status: 255,
+            stderr: "\(MachineControlCenterCommands.disruptiveMarker)\nconnection closed")
+        let unmarkedError = SSHConnectionError.commandFailed(
+            command: "control", status: 255, stderr: "connection closed")
+
+        #expect(wifiOff.contains(MachineControlCenterCommands.disruptiveMarker))
+        #expect(!wifiOn.contains(MachineControlCenterCommands.disruptiveMarker))
+        #expect(airplaneOn.contains(MachineControlCenterCommands.disruptiveMarker))
+        #expect(
+            wifiOff.contains(
+                "\(MachineControlCenterCommands.disruptiveMarker) >&2; exec networksetup"))
+        #expect(
+            airplaneOn.contains(
+                "\(MachineControlCenterCommands.disruptiveMarker) >&2; exec rfkill"))
+        #expect(MachineControlCenterCommands.disruptiveOperationStarted(markedError))
+        #expect(!MachineControlCenterCommands.disruptiveOperationStarted(unmarkedError))
     }
 
     @Test func keepsPreferredBackendsAheadOfFallbacks() throws {
@@ -528,6 +643,10 @@ import Testing
 
         #expect(status.contains("XDG_RUNTIME_DIR"))
         #expect(status.contains("DBUS_SESSION_BUS_ADDRESS"))
+        #expect(
+            status.contains(
+                "PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin"
+            ))
         #expect(status.contains("gsettings get org.gnome.desktop.notifications show-banners"))
         #expect(status.contains("brightness -l"))
         #expect(status.contains("osascript -e"))
@@ -558,6 +677,11 @@ import Testing
                         for: action, withSudoPassword: true),
                 ]
             }
+            + [
+                MachineControlCenterCommands.command(
+                    for: .setWiFiEnabled(true), withSudoPassword: false,
+                    usingLocalAuthorization: true)
+            ]
 
         for command in commands {
             let process = Process()

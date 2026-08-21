@@ -1,6 +1,12 @@
 import Foundation
 
+public enum MachineControlPlatform: String, Equatable, Sendable {
+    case linux
+    case darwin
+}
+
 public struct MachineControlSnapshot: Equatable, Sendable {
+    public var platform: MachineControlPlatform?
     public var brightness: Int?
     public var volume: Int?
     public var keyboardBacklight: Int?
@@ -11,7 +17,7 @@ public struct MachineControlSnapshot: Equatable, Sendable {
     public var doNotDisturb: Bool?
 
     public init(
-        brightness: Int? = nil,
+        platform: MachineControlPlatform? = nil, brightness: Int? = nil,
         volume: Int? = nil,
         keyboardBacklight: Int? = nil,
         muted: Bool? = nil,
@@ -20,6 +26,7 @@ public struct MachineControlSnapshot: Equatable, Sendable {
         airplaneMode: Bool? = nil,
         doNotDisturb: Bool? = nil
     ) {
+        self.platform = platform
         self.brightness = brightness
         self.volume = volume
         self.keyboardBacklight = keyboardBacklight
@@ -49,8 +56,11 @@ public enum MachineControlAction: Equatable, Sendable {
 }
 
 public enum MachineControlCenterCommands {
+    public static let disruptiveMarker = "EDITH_CONTROL_DISRUPTIVE_READY"
+
     public static let statusCommand = """
         export LC_ALL=C
+        export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin
 
         emit_level() {
             case "$2" in
@@ -79,7 +89,7 @@ public enum MachineControlCenterCommands {
         }
 
         prepare_linux_desktop() {
-            uid=$(id -u 2>/dev/null || true)
+            uid=$(id -u </dev/null 2>/dev/null || true)
             case "$uid" in
                 ''|*[!0-9]*) return ;;
             esac
@@ -93,7 +103,11 @@ public enum MachineControlCenterCommands {
             fi
         }
 
-        platform=$(uname -s 2>/dev/null || true)
+        platform=$(uname -s </dev/null 2>/dev/null || true)
+        case "$platform" in
+            Linux) printf 'EDITH_CONTROL_PLATFORM=linux\n' ;;
+            Darwin) printf 'EDITH_CONTROL_PLATFORM=darwin\n' ;;
+        esac
 
         if [ "$platform" = Linux ]; then
             prepare_linux_desktop
@@ -118,7 +132,7 @@ public enum MachineControlCenterCommands {
                 for backlight in /sys/class/backlight/*; do
                     [ -d "$backlight" ] || continue
                     current=$(cat "$backlight/brightness" 2>/dev/null || true)
-                    maximum=$(cat "$backlight/max_brightness" 2>/dev/null || true)
+                    maximum=$(cat "$backlight/max_brightness" </dev/null 2>/dev/null || true)
                     case "$current:$maximum" in
                         *[!0-9:]*|:*|*:) continue ;;
                     esac
@@ -260,7 +274,7 @@ public enum MachineControlCenterCommands {
                 fi
                 if [ "$keyboard_done" -eq 0 ]; then
                     current=$(cat "$keyboard_path/brightness" 2>/dev/null || true)
-                    maximum=$(cat "$keyboard_path/max_brightness" 2>/dev/null || true)
+                    maximum=$(cat "$keyboard_path/max_brightness" </dev/null 2>/dev/null || true)
                     case "$current:$maximum" in
                         *[!0-9:]*|:*|*:) ;;
                         *)
@@ -284,12 +298,15 @@ public enum MachineControlCenterCommands {
                 emit_bool AIRPLANE_MODE "$airplane"
             fi
 
-            if command -v gsettings >/dev/null 2>&1; then
-                banners=$(gsettings get org.gnome.desktop.notifications show-banners 2>/dev/null || true)
-                case "$banners" in
-                    true) emit_bool DO_NOT_DISTURB 0 ;;
-                    false) emit_bool DO_NOT_DISTURB 1 ;;
-                esac
+            if command -v gsettings >/dev/null 2>&1 && command -v gdbus >/dev/null 2>&1; then
+                gnome_owner=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.gnome.Shell </dev/null 2>/dev/null || true)
+                if [ "$gnome_owner" = "(true,)" ]; then
+                    banners=$(gsettings get org.gnome.desktop.notifications show-banners </dev/null 2>/dev/null || true)
+                    case "$banners" in
+                        true) emit_bool DO_NOT_DISTURB 0 ;;
+                        false) emit_bool DO_NOT_DISTURB 1 ;;
+                    esac
+                fi
             fi
         elif [ "$platform" = Darwin ]; then
             if command -v brightness >/dev/null 2>&1; then
@@ -358,6 +375,8 @@ public enum MachineControlCenterCommands {
             let value = String(parts[1])
 
             switch key {
+            case "EDITH_CONTROL_PLATFORM":
+                snapshot.platform = MachineControlPlatform(rawValue: value)
             case "EDITH_CONTROL_BRIGHTNESS":
                 if let parsed = level(value) { snapshot.brightness = parsed }
             case "EDITH_CONTROL_VOLUME":
@@ -382,10 +401,29 @@ public enum MachineControlCenterCommands {
         return snapshot
     }
 
+    public static func shouldAttachSudoPassword(
+        for action: MachineControlAction, platform: MachineControlPlatform?
+    ) -> Bool {
+        guard let platform else { return false }
+        switch action {
+        case .setVolume, .setMuted, .setDoNotDisturb:
+            return false
+        case .setWiFiEnabled:
+            return true
+        case .setBrightness, .setKeyboardBacklight, .setBluetoothEnabled, .setAirplaneMode:
+            return platform == .linux
+        }
+    }
+
+    public static func disruptiveOperationStarted(_ error: Error) -> Bool {
+        error.localizedDescription.contains(disruptiveMarker)
+    }
+
     public static func command(
-        for action: MachineControlAction, withSudoPassword: Bool
+        for action: MachineControlAction, withSudoPassword: Bool,
+        usingLocalAuthorization: Bool = false
     ) -> String {
-        let sudoCommand = withSudoPassword ? "sudo -S -p ''" : "sudo -n"
+        let sudoCommand = withSudoPassword ? "/usr/bin/sudo -S -p ''" : "/usr/bin/sudo -n"
         let linux: String
         let darwin: String
 
@@ -394,43 +432,43 @@ public enum MachineControlCenterCommands {
             let value = clamped(requested)
             linux = """
                 level=\(value)
-                if command -v brightnessctl >/dev/null 2>&1 && brightnessctl -c backlight set "${level}%" >/dev/null 2>&1; then
+                if command -v brightnessctl >/dev/null 2>&1 && brightnessctl -c backlight set "${level}%" >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
                 for backlight in /sys/class/backlight/*; do
                     [ -d "$backlight" ] || continue
-                    maximum=$(cat "$backlight/max_brightness" 2>/dev/null || true)
+                    maximum=$(cat "$backlight/max_brightness" </dev/null 2>/dev/null || true)
                     case "$maximum" in
                         ''|*[!0-9]*) continue ;;
                     esac
                     [ "$maximum" -gt 0 ] 2>/dev/null || continue
                     raw=$(((level * maximum + 50) / 100))
-                    \(sudoCommand) sh -c 'printf "%s\\n" "$1" > "$2"' sh "$raw" "$backlight/brightness" >/dev/null 2>&1 && exit 0
+                    \(sudoCommand) sh -c 'exec </dev/null; printf "%s\\n" "$1" > "$2"' sh "$raw" "$backlight/brightness" >/dev/null && exit 0
                 done
                 exit 4
                 """
             darwin = """
                 command -v brightness >/dev/null 2>&1 || exit 4
-                brightness \(Double(value) / 100) >/dev/null 2>&1
+                brightness \(Double(value) / 100) >/dev/null </dev/null
                 """
         case .setVolume(let requested):
             let value = clamped(requested)
             linux = """
                 level=\(value)
-                if command -v wpctl >/dev/null 2>&1 && wpctl set-volume @DEFAULT_AUDIO_SINK@ "${level}%" >/dev/null 2>&1; then
+                if command -v wpctl >/dev/null 2>&1 && wpctl set-volume @DEFAULT_AUDIO_SINK@ "${level}%" >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
-                if command -v pactl >/dev/null 2>&1 && pactl set-sink-volume @DEFAULT_SINK@ "${level}%" >/dev/null 2>&1; then
+                if command -v pactl >/dev/null 2>&1 && pactl set-sink-volume @DEFAULT_SINK@ "${level}%" >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
-                if command -v amixer >/dev/null 2>&1 && amixer set Master "${level}%" >/dev/null 2>&1; then
+                if command -v amixer >/dev/null 2>&1 && amixer set Master "${level}%" >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
                 exit 4
                 """
             darwin = """
                 command -v osascript >/dev/null 2>&1 || exit 4
-                osascript -e 'set volume output volume \(value)' >/dev/null 2>&1
+                osascript -e 'set volume output volume \(value)' >/dev/null </dev/null
                 """
         case .setKeyboardBacklight(let requested):
             let value = clamped(requested)
@@ -443,56 +481,71 @@ public enum MachineControlCenterCommands {
                         *kbd_backlight*|*kbd-backlight*|*keyboard_backlight*|*keyboard-backlight*) ;;
                         *) continue ;;
                     esac
-                    if command -v brightnessctl >/dev/null 2>&1 && brightnessctl -d "$keyboard_name" set "${level}%" >/dev/null 2>&1; then
+                    if command -v brightnessctl >/dev/null 2>&1 && brightnessctl -d "$keyboard_name" set "${level}%" >/dev/null 2>&1 </dev/null; then
                         exit 0
                     fi
-                    maximum=$(cat "$keyboard_path/max_brightness" 2>/dev/null || true)
+                    maximum=$(cat "$keyboard_path/max_brightness" </dev/null 2>/dev/null || true)
                     case "$maximum" in
                         ''|*[!0-9]*) continue ;;
                     esac
                     [ "$maximum" -gt 0 ] 2>/dev/null || continue
                     raw=$(((level * maximum + 50) / 100))
-                    \(sudoCommand) sh -c 'printf "%s\\n" "$1" > "$2"' sh "$raw" "$keyboard_path/brightness" >/dev/null 2>&1 && exit 0
+                    \(sudoCommand) sh -c 'exec </dev/null; printf "%s\\n" "$1" > "$2"' sh "$raw" "$keyboard_path/brightness" >/dev/null && exit 0
                 done
                 exit 4
                 """
             darwin = """
                 command -v mac-brightnessctl >/dev/null 2>&1 || exit 4
-                mac-brightnessctl \(Double(value) / 100) >/dev/null 2>&1
+                mac-brightnessctl \(Double(value) / 100) >/dev/null </dev/null
                 """
         case .setMuted(let muted):
             let wpctlValue = muted ? "1" : "0"
             let amixerValue = muted ? "mute" : "unmute"
             let osascriptValue = muted ? "true" : "false"
             linux = """
-                if command -v wpctl >/dev/null 2>&1 && wpctl set-mute @DEFAULT_AUDIO_SINK@ \(wpctlValue) >/dev/null 2>&1; then
+                if command -v wpctl >/dev/null 2>&1 && wpctl set-mute @DEFAULT_AUDIO_SINK@ \(wpctlValue) >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
-                if command -v pactl >/dev/null 2>&1 && pactl set-sink-mute @DEFAULT_SINK@ \(wpctlValue) >/dev/null 2>&1; then
+                if command -v pactl >/dev/null 2>&1 && pactl set-sink-mute @DEFAULT_SINK@ \(wpctlValue) >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
-                if command -v amixer >/dev/null 2>&1 && amixer set Master \(amixerValue) >/dev/null 2>&1; then
+                if command -v amixer >/dev/null 2>&1 && amixer set Master \(amixerValue) >/dev/null 2>&1 </dev/null; then
                     exit 0
                 fi
                 exit 4
                 """
             darwin = """
                 command -v osascript >/dev/null 2>&1 || exit 4
-                osascript -e 'set volume output muted \(osascriptValue)' >/dev/null 2>&1
+                osascript -e 'set volume output muted \(osascriptValue)' >/dev/null </dev/null
                 """
         case .setWiFiEnabled(let enabled):
             let nmcliValue = enabled ? "on" : "off"
             let rfkillValue = enabled ? "unblock" : "block"
+            let disruptiveOutput =
+                enabled ? "" : "printf '\(disruptiveMarker)\\n'"
+            let disruptiveScript =
+                enabled ? "" : "printf \"%s\\n\" \(disruptiveMarker) >&2; "
             linux = """
-                if command -v nmcli >/dev/null 2>&1 && nmcli radio wifi \(nmcliValue) >/dev/null 2>&1; then
-                    exit 0
+                if command -v nmcli >/dev/null 2>&1; then
+                    \(disruptiveOutput)
+                    if nmcli radio wifi \(nmcliValue) >/dev/null 2>&1 </dev/null; then
+                        exit 0
+                    fi
                 fi
                 command -v rfkill >/dev/null 2>&1 || exit 4
-                \(sudoCommand) rfkill \(rfkillValue) wlan >/dev/null 2>&1
+                \(sudoCommand) sh -c 'exec </dev/null; \(disruptiveScript)exec rfkill "$1" wlan' sh \(rfkillValue) >/dev/null
                 """
+            let darwinSetPower =
+                usingLocalAuthorization
+                ? """
+                    command -v osascript >/dev/null 2>&1 || exit 4
+                    \(disruptiveOutput)
+                    EDITH_WIFI_DEVICE="$wifi_device" EDITH_WIFI_POWER=\(nmcliValue) osascript -e 'do shell script ("/usr/sbin/networksetup -setairportpower " & quoted form of (system attribute "EDITH_WIFI_DEVICE") & " " & quoted form of (system attribute "EDITH_WIFI_POWER")) with administrator privileges' >/dev/null </dev/null
+                    """
+                : "\(sudoCommand) sh -c 'exec </dev/null; \(disruptiveScript)exec networksetup -setairportpower \"$1\" \"$2\"' sh \"$wifi_device\" \(nmcliValue) >/dev/null"
             darwin = """
                 command -v networksetup >/dev/null 2>&1 || exit 4
-                wifi_device=$(networksetup -listallhardwareports 2>/dev/null | awk '
+                wifi_device=$(networksetup -listallhardwareports </dev/null 2>/dev/null | awk '
                     $0 == "Hardware Port: Wi-Fi" || $0 == "Hardware Port: AirPort" {
                         if (getline > 0 && $1 == "Device:") print $2
                         exit
@@ -501,35 +554,67 @@ public enum MachineControlCenterCommands {
                 case "$wifi_device" in
                     ''|*[!A-Za-z0-9._-]*) exit 4 ;;
                 esac
-                networksetup -setairportpower "$wifi_device" \(nmcliValue) >/dev/null 2>&1
+                \(darwinSetPower)
                 """
         case .setBluetoothEnabled(let enabled):
             let bluetoothctlValue = enabled ? "on" : "off"
             let blueutilValue = enabled ? "1" : "0"
             let rfkillValue = enabled ? "unblock" : "block"
+            let expectedPower = enabled ? "yes" : "no"
+            let expectedBlocked = enabled ? "no" : "yes"
             linux = """
-                if command -v bluetoothctl >/dev/null 2>&1 && bluetoothctl power \(bluetoothctlValue) >/dev/null 2>&1; then
-                    exit 0
+                if command -v bluetoothctl >/dev/null 2>&1; then
+                    if bluetoothctl power \(bluetoothctlValue) >/dev/null 2>&1 </dev/null && bluetoothctl show </dev/null 2>/dev/null | grep -Fq 'Powered: \(expectedPower)'; then
+                        exit 0
+                    fi
                 fi
-                command -v rfkill >/dev/null 2>&1 || exit 4
-                \(sudoCommand) rfkill \(rfkillValue) bluetooth >/dev/null 2>&1
+                \(sudoCommand) sh -c '
+                    exec </dev/null
+                    if command -v bluetoothctl >/dev/null 2>&1; then
+                        if [ "$1" = on ] && command -v rfkill >/dev/null 2>&1; then
+                            rfkill unblock bluetooth >/dev/null 2>&1 || true
+                        fi
+                        bluetoothctl power "$1" >/dev/null 2>&1 || true
+                        state=$(bluetoothctl show 2>/dev/null)
+                        case "$state" in
+                            *"Powered: $2"*) exit 0 ;;
+                        esac
+                    fi
+                    command -v rfkill >/dev/null 2>&1 || { printf "Bluetooth control failed.\\n" >&2; exit 4; }
+                    rfkill "$3" bluetooth >/dev/null || exit 4
+                    state=$(rfkill list bluetooth 2>/dev/null)
+                    case "$state" in
+                        *"Soft blocked: $4"*) exit 0 ;;
+                        *) printf "Bluetooth state did not change.\\n" >&2; exit 4 ;;
+                    esac
+                ' sh \(bluetoothctlValue) \(expectedPower) \(rfkillValue) \(expectedBlocked)
                 """
             darwin = """
                 command -v blueutil >/dev/null 2>&1 || exit 4
-                blueutil -p \(blueutilValue) >/dev/null 2>&1
+                blueutil -p \(blueutilValue) >/dev/null </dev/null
                 """
         case .setAirplaneMode(let enabled):
             let rfkillValue = enabled ? "block" : "unblock"
+            let disruptiveScript =
+                enabled ? "printf \"%s\\n\" \(disruptiveMarker) >&2; " : ""
             linux = """
                 command -v rfkill >/dev/null 2>&1 || exit 4
-                \(sudoCommand) rfkill \(rfkillValue) all >/dev/null 2>&1
+                \(sudoCommand) sh -c 'exec </dev/null; \(disruptiveScript)exec rfkill "$1" all' sh \(rfkillValue) >/dev/null
                 """
             darwin = "exit 4"
         case .setDoNotDisturb(let enabled):
             let banners = enabled ? "false" : "true"
             linux = """
                 command -v gsettings >/dev/null 2>&1 || exit 4
-                gsettings set org.gnome.desktop.notifications show-banners \(banners) >/dev/null 2>&1
+                command -v gdbus >/dev/null 2>&1 || exit 4
+                gnome_owner=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.gnome.Shell </dev/null 2>/dev/null || true)
+                [ "$gnome_owner" = "(true,)" ] || exit 4
+                gsettings set org.gnome.desktop.notifications show-banners \(banners) >/dev/null </dev/null
+                actual=$(gsettings get org.gnome.desktop.notifications show-banners </dev/null 2>/dev/null || true)
+                if [ "$actual" != \(banners) ]; then
+                    printf 'Do Not Disturb setting did not change.\n' >&2
+                    exit 4
+                fi
                 """
             darwin = "exit 4"
         }
@@ -557,9 +642,10 @@ public enum MachineControlCenterCommands {
     private static func platformCommand(linux: String, darwin: String) -> String {
         """
         export LC_ALL=C
-        platform=$(uname -s 2>/dev/null || true)
+        export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin:/usr/local/sbin
+        platform=$(uname -s </dev/null 2>/dev/null || true)
         if [ "$platform" = Linux ]; then
-            uid=$(id -u 2>/dev/null || true)
+            uid=$(id -u </dev/null 2>/dev/null || true)
             case "$uid" in
                 ''|*[!0-9]*) ;;
                 *)

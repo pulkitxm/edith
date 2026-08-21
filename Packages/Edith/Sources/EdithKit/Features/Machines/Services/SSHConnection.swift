@@ -76,7 +76,7 @@ private final class ResumeGate: @unchecked Sendable {
     }
 }
 
-private final class PipeBuffer: @unchecked Sendable {
+final class PipeBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
 

@@ -82,6 +82,7 @@ public enum MachineThermalControls {
                 """
         }
         let script = """
+            exec </dev/null
             path=\(path)
             state=\(state)
             unit=\(unit)
@@ -95,8 +96,8 @@ public enum MachineThermalControls {
             """
         let quoted = ShellQuote.quote(script)
         if withSudoPassword {
-            return "sudo -S -p '' sh -c \(quoted) 2>&1"
+            return "/usr/bin/sudo -S -p '' sh -c \(quoted) 2>&1"
         }
-        return "if [ -w \(path) ]; then sh -c \(quoted); else sudo -n sh -c \(quoted); fi 2>&1"
+        return "if [ -w \(path) ]; then sh -c \(quoted); else /usr/bin/sudo -n sh -c \(quoted); fi 2>&1"
     }
 }
