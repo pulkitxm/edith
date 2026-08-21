@@ -386,6 +386,8 @@ import Testing
         let snapshot = MachineControlCenterCommands.parseStatus(
             """
             EDITH_CONTROL_PLATFORM=linux
+            EDITH_CONTROL_BATTERY_LEVEL=73
+            EDITH_CONTROL_BATTERY_PLUGGED_IN=1
             EDITH_CONTROL_BRIGHTNESS=61
             EDITH_CONTROL_VOLUME=42
             EDITH_CONTROL_KEYBOARD_BACKLIGHT=18
@@ -400,6 +402,8 @@ import Testing
             snapshot
                 == MachineControlSnapshot(
                     platform: .linux,
+                    batteryLevel: 73,
+                    batteryPluggedIn: true,
                     brightness: 61,
                     volume: 42,
                     keyboardBacklight: 18,
@@ -417,10 +421,21 @@ import Testing
             "banner text\nEDITH_CONTROL_WIFI_ENABLED=1\nunknown=value\n")
 
         #expect(snapshot.wifiEnabled == true)
+        #expect(snapshot.batteryLevel == nil)
         #expect(snapshot.brightness == nil)
         #expect(snapshot.volume == nil)
         #expect(!snapshot.isEmpty)
         #expect(MachineControlCenterCommands.parseStatus("banner text").isEmpty)
+    }
+
+    @Test func parsesBatteryOnlySnapshots() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            "EDITH_CONTROL_BATTERY_LEVEL=70\nEDITH_CONTROL_BATTERY_PLUGGED_IN=0\n")
+
+        #expect(snapshot.batteryLevel == 70)
+        #expect(snapshot.batteryPluggedIn == false)
+        #expect(!snapshot.hasControlSettings)
+        #expect(!snapshot.isEmpty)
     }
 
     @Test func preservesZeroLevelsAndFalseFlags() {
@@ -444,6 +459,8 @@ import Testing
         let snapshot = MachineControlCenterCommands.parseStatus(
             """
             EDITH_CONTROL_BRIGHTNESS=-1
+            EDITH_CONTROL_BATTERY_LEVEL=101
+            EDITH_CONTROL_BATTERY_PLUGGED_IN=charging
             EDITH_CONTROL_VOLUME=101
             EDITH_CONTROL_KEYBOARD_BACKLIGHT=half
             EDITH_CONTROL_MUTED=true
@@ -633,6 +650,7 @@ import Testing
         #expect(nmcli.lowerBound < wifiRfkill.lowerBound)
         #expect(bluetoothctl.lowerBound < bluetoothRfkill.lowerBound)
         #expect(status.contains("brightnessctl -c backlight"))
+        #expect(status.contains("/sys/class/power_supply/*"))
         #expect(status.contains("/sys/class/backlight/*"))
         #expect(status.contains("brightnessctl -d \"$keyboard_name\""))
         #expect(status.contains("/sys/class/leds/*"))
@@ -649,6 +667,7 @@ import Testing
             ))
         #expect(status.contains("gsettings get org.gnome.desktop.notifications show-banners"))
         #expect(status.contains("brightness -l"))
+        #expect(status.contains("pmset -g batt"))
         #expect(status.contains("osascript -e"))
         #expect(status.contains("networksetup -getairportpower"))
         #expect(status.contains("blueutil -p"))

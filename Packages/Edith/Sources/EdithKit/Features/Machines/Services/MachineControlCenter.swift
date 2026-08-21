@@ -7,6 +7,8 @@ public enum MachineControlPlatform: String, Equatable, Sendable {
 
 public struct MachineControlSnapshot: Equatable, Sendable {
     public var platform: MachineControlPlatform?
+    public var batteryLevel: Int?
+    public var batteryPluggedIn: Bool?
     public var brightness: Int?
     public var volume: Int?
     public var keyboardBacklight: Int?
@@ -17,7 +19,10 @@ public struct MachineControlSnapshot: Equatable, Sendable {
     public var doNotDisturb: Bool?
 
     public init(
-        platform: MachineControlPlatform? = nil, brightness: Int? = nil,
+        platform: MachineControlPlatform? = nil,
+        batteryLevel: Int? = nil,
+        batteryPluggedIn: Bool? = nil,
+        brightness: Int? = nil,
         volume: Int? = nil,
         keyboardBacklight: Int? = nil,
         muted: Bool? = nil,
@@ -27,6 +32,8 @@ public struct MachineControlSnapshot: Equatable, Sendable {
         doNotDisturb: Bool? = nil
     ) {
         self.platform = platform
+        self.batteryLevel = batteryLevel
+        self.batteryPluggedIn = batteryPluggedIn
         self.brightness = brightness
         self.volume = volume
         self.keyboardBacklight = keyboardBacklight
@@ -37,10 +44,14 @@ public struct MachineControlSnapshot: Equatable, Sendable {
         self.doNotDisturb = doNotDisturb
     }
 
+    public var hasControlSettings: Bool {
+        brightness != nil || volume != nil || keyboardBacklight != nil || muted != nil
+            || wifiEnabled != nil || bluetoothEnabled != nil || airplaneMode != nil
+            || doNotDisturb != nil
+    }
+
     public var isEmpty: Bool {
-        brightness == nil && volume == nil && keyboardBacklight == nil && muted == nil
-            && wifiEnabled == nil && bluetoothEnabled == nil && airplaneMode == nil
-            && doNotDisturb == nil
+        !hasControlSettings && batteryLevel == nil
     }
 }
 
@@ -111,6 +122,42 @@ public enum MachineControlCenterCommands {
 
         if [ "$platform" = Linux ]; then
             prepare_linux_desktop
+
+            battery_path=
+            for power_supply in /sys/class/power_supply/*; do
+                [ -d "$power_supply" ] || continue
+                power_type=$(cat "$power_supply/type" </dev/null 2>/dev/null || true)
+                if [ "$power_type" = Battery ]; then
+                    battery_path=$power_supply
+                    break
+                fi
+            done
+            if [ -n "$battery_path" ]; then
+                battery_level=$(cat "$battery_path/capacity" </dev/null 2>/dev/null || true)
+                emit_level BATTERY_LEVEL "$battery_level"
+                battery_plugged_in=
+                for power_supply in /sys/class/power_supply/*; do
+                    [ -d "$power_supply" ] || continue
+                    power_type=$(cat "$power_supply/type" </dev/null 2>/dev/null || true)
+                    case "$power_type" in
+                        Mains|USB|USB_C|USB_PD|Wireless)
+                            online=$(cat "$power_supply/online" </dev/null 2>/dev/null || true)
+                            case "$online" in
+                                1) battery_plugged_in=1; break ;;
+                                0) [ -n "$battery_plugged_in" ] || battery_plugged_in=0 ;;
+                            esac
+                            ;;
+                    esac
+                done
+                if [ -z "$battery_plugged_in" ]; then
+                    battery_status=$(cat "$battery_path/status" </dev/null 2>/dev/null || true)
+                    case "$battery_status" in
+                        Charging|Full|'Not charging') battery_plugged_in=1 ;;
+                        Discharging) battery_plugged_in=0 ;;
+                    esac
+                fi
+                emit_bool BATTERY_PLUGGED_IN "$battery_plugged_in"
+            fi
 
             brightness_done=0
             if command -v brightnessctl >/dev/null 2>&1; then
@@ -309,6 +356,21 @@ public enum MachineControlCenterCommands {
                 fi
             fi
         elif [ "$platform" = Darwin ]; then
+            if command -v pmset >/dev/null 2>&1; then
+                battery_output=$(pmset -g batt 2>/dev/null || true)
+                battery_level=$(printf '%s\n' "$battery_output" | awk '
+                    match($0, /[0-9]+%/) { print substr($0, RSTART, RLENGTH - 1); exit }
+                ')
+                if [ -n "$battery_level" ]; then
+                    emit_level BATTERY_LEVEL "$battery_level"
+                    power_source=$(printf '%s\n' "$battery_output" | awk 'NR == 1 { print; exit }')
+                    case "$power_source" in
+                        *"'AC Power'"*) emit_bool BATTERY_PLUGGED_IN 1 ;;
+                        *"'Battery Power'"*) emit_bool BATTERY_PLUGGED_IN 0 ;;
+                    esac
+                fi
+            fi
+
             if command -v brightness >/dev/null 2>&1; then
                 fraction=$(brightness -l 2>/dev/null | awk '
                     $0 ~ /brightness [0-9]+([.][0-9]+)?$/ { print $NF; exit }
@@ -377,6 +439,10 @@ public enum MachineControlCenterCommands {
             switch key {
             case "EDITH_CONTROL_PLATFORM":
                 snapshot.platform = MachineControlPlatform(rawValue: value)
+            case "EDITH_CONTROL_BATTERY_LEVEL":
+                if let parsed = level(value) { snapshot.batteryLevel = parsed }
+            case "EDITH_CONTROL_BATTERY_PLUGGED_IN":
+                if let parsed = flag(value) { snapshot.batteryPluggedIn = parsed }
             case "EDITH_CONTROL_BRIGHTNESS":
                 if let parsed = level(value) { snapshot.brightness = parsed }
             case "EDITH_CONTROL_VOLUME":
