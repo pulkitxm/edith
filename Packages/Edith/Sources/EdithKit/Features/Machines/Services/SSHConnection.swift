@@ -95,6 +95,9 @@ final class PipeBuffer: @unchecked Sendable {
 }
 
 public actor SSHConnection {
+    private static let processTimeoutQueue = DispatchQueue(
+        label: "com.pulkit.edith.process-timeout", qos: .userInitiated)
+
     public let machine: Machine
 
     private var masterProcess: Process?
@@ -519,7 +522,7 @@ public actor SSHConnection {
             let timeoutWorkItem = DispatchWorkItem {
                 if process.isRunning {
                     process.terminate()
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                    processTimeoutQueue.asyncAfter(deadline: .now() + 2) {
                         if process.isRunning {
                             kill(process.processIdentifier, SIGKILL)
                         }
@@ -527,8 +530,7 @@ public actor SSHConnection {
                 }
             }
             gate.install(timeoutWorkItem)
-            DispatchQueue.global(qos: .utility).asyncAfter(
-                deadline: .now() + timeout, execute: timeoutWorkItem)
+            processTimeoutQueue.asyncAfter(deadline: .now() + timeout, execute: timeoutWorkItem)
         }
     }
 
