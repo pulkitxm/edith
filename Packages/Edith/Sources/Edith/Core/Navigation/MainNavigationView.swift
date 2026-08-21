@@ -113,34 +113,6 @@ enum Brand {
     }()
 }
 
-private struct SidebarToggleButton: View {
-    @Binding var sidebarOpen: Bool
-    @State private var hovering = false
-
-    var body: some View {
-        Button {
-            sidebarOpen.toggle()
-        } label: {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: UIScale.pt(15), weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-                .padding(UIScale.pt(4))
-                .background(
-                    .primary.opacity(hovering ? 0.07 : 0),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous)
-                )
-        }
-        .buttonStyle(.plain)
-        .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous))
-        .onHover { hovering = $0 }
-        .pointerCursor()
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .help("Toggle sidebar (⌘B)")
-        .accessibilityLabel(sidebarOpen ? "Hide Sidebar" : "Show Sidebar")
-    }
-}
-
 private struct SidebarNavRow: View {
     let item: MainDestination
     let selected: Bool
@@ -536,16 +508,10 @@ struct MainWindowView: View {
         NavigationSplitView(columnVisibility: columnVisibility) {
             sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 350)
-                .toolbar(removing: .sidebarToggle)
         } detail: {
             detailColumn()
         }
         .navigationSplitViewStyle(.prominentDetail)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                SidebarToggleButton(sidebarOpen: $sidebarOpen)
-            }
-        }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen
