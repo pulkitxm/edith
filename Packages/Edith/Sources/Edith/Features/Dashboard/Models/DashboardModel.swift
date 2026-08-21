@@ -715,7 +715,10 @@ final class DashboardModel {
         loading = true
         defer { loading = false }
         let d = preferences
-        if let rs = d.string(forKey: "dashRange") { range = decodeRange(rs) }
+        if let rs = d.string(forKey: "dashRange") {
+            range = decodeRange(rs)
+            d.set(encodeRange(range), forKey: "dashRange")
+        }
         let validSources = Set(allSources.map(\.id))
         let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
         let savedKnownSources = d.string(forKey: "dashKnownSources").flatMap(Self.decodeSet)

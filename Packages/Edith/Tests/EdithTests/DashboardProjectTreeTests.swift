@@ -282,6 +282,19 @@ import Testing
         #expect(m.projExpanded.isEmpty)
     }
 
+    @Test func retiredCycleRangeNormalizesToAll() throws {
+        let suite = "DashboardProjectTreeTests.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        preferences.set("cycle:2026-06-01", forKey: "dashRange")
+        let parsed = try JSONDecoder().decode(
+            DashUsage.self,
+            from: Data(usage(daily: day("2026-06-01", projects: "")).utf8))
+        let m = DashboardModel(preferences: preferences)
+        m.ingest(parsed)
+        #expect(m.range == .all)
+        #expect(preferences.string(forKey: "dashRange") == "all")
+    }
+
     @Test func missingHourlyDetailRemainsUnattributed() throws {
         let d = day(
             "2026-06-01",
