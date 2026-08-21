@@ -549,6 +549,11 @@ struct MainWindowView: View {
         scheme == .dark ? .black.opacity(0.55) : .black.opacity(0.16)
     }
 
+    private var detailBackground: Color {
+        destination.usesPaperBackground
+            ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor)
+    }
+
     private var detailCorner: CGFloat { sidebarOpen ? 12 : 0 }
 
     private func mainArea(_ bandHeight: CGFloat) -> some View {
@@ -607,15 +612,13 @@ struct MainWindowView: View {
     private func detailColumn(_ bandHeight: CGFloat) -> some View {
         GeometryReader { geo in
             VStack(spacing: UIScale.pt(0)) {
-                band(
-                    destination.usesPaperBackground
-                        ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor),
-                    height: bandHeight)
+                band(detailBackground, height: bandHeight)
                 detail
                     .tint(theme)
             }
             .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
         }
+        .background(detailBackground)
     }
 
     private var footerVisible: Bool {

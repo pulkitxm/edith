@@ -6,7 +6,9 @@ import Testing
 @testable import EdithHelper
 
 @MainActor
-private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 700) -> Bool {
+private func renderedBitmap(
+    _ view: some View, width: CGFloat = 900, height: CGFloat = 700
+) -> NSBitmapImageRep? {
     let host = NSHostingView(
         rootView:
             view
@@ -21,8 +23,14 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     window.contentView = host
     window.layoutIfNeeded()
     host.layoutSubtreeIfNeeded()
-    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return false }
+    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
     host.cacheDisplay(in: host.bounds, to: rep)
+    return rep
+}
+
+@MainActor
+private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 700) -> Bool {
+    guard let rep = renderedBitmap(view, width: width, height: height) else { return false }
     return rep.pixelsWide > 0 && rep.pixelsHigh > 0
 }
 
@@ -84,6 +92,40 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
 
     @Test func extensionsPaneRenders() {
         #expect(renders(ExtensionsPane()))
+    }
+
+    @Test func closedSidebarIsCoveredByDetailBackground() throws {
+        let sectionKey = AppStorageKeys.General.mainWindowSection
+        let sidebarKey = AppStorageKeys.General.mainSidebarOpen
+        let savedSection = SharedDefaults.store.object(forKey: sectionKey)
+        let savedSidebar = SharedDefaults.store.object(forKey: sidebarKey)
+        defer {
+            if let savedSection {
+                SharedDefaults.store.set(savedSection, forKey: sectionKey)
+            } else {
+                SharedDefaults.store.removeObject(forKey: sectionKey)
+            }
+            if let savedSidebar {
+                SharedDefaults.store.set(savedSidebar, forKey: sidebarKey)
+            } else {
+                SharedDefaults.store.removeObject(forKey: sidebarKey)
+            }
+        }
+        SharedDefaults.store.set(MainDestination.extensions.rawValue, forKey: sectionKey)
+        SharedDefaults.store.set(false, forKey: sidebarKey)
+
+        let bitmap = try #require(renderedBitmap(MainWindowView(updater: smokeUpdater())))
+        let scaleX = CGFloat(bitmap.pixelsWide) / 900
+        let scaleY = CGFloat(bitmap.pixelsHigh) / 700
+        let leftColor = try #require(
+            bitmap.colorAt(x: Int(10 * scaleX), y: Int(350 * scaleY))?.usingColorSpace(.deviceRGB)
+        )
+        let rightColor = try #require(
+            bitmap.colorAt(x: Int(890 * scaleX), y: Int(350 * scaleY))?.usingColorSpace(.deviceRGB)
+        )
+        #expect(abs(leftColor.redComponent - rightColor.redComponent) < 0.01)
+        #expect(abs(leftColor.greenComponent - rightColor.greenComponent) < 0.01)
+        #expect(abs(leftColor.blueComponent - rightColor.blueComponent) < 0.01)
     }
 
     @Test func shortcutsSettingsTabRenders() {
