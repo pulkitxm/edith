@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 const expectedActions = new Map([
   [
@@ -45,6 +45,7 @@ const workflows = readdirSync(".github/workflows")
     text: readFileSync(`.github/workflows/${name}`, "utf8"),
   }));
 const lockfile = readFileSync("bun.lock", "utf8");
+const packageManifest = JSON.parse(readFileSync("package.json", "utf8"));
 
 test("workflow actions use approved immutable revisions", () => {
   const seen = new Set();
@@ -74,7 +75,12 @@ test("workflow validation uses current stable tooling", () => {
 });
 
 test("the lockfile carries Linux workflow executables", () => {
-  expect(lockfile).toContain('"lefthook-linux-arm64"');
-  expect(lockfile).toContain('"lefthook-linux-x64"');
   expect(lockfile).toContain('"@biomejs/cli-linux-x64"');
+});
+
+test("the repository installs no local Git hooks", () => {
+  expect(existsSync("lefthook.yml")).toBeFalse();
+  expect(packageManifest.scripts?.prepare).toBeUndefined();
+  expect(packageManifest.devDependencies?.lefthook).toBeUndefined();
+  expect(lockfile).not.toContain('"lefthook');
 });

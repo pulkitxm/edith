@@ -86,7 +86,7 @@ jobs:
           area workflows '^\.github/workflows/'
           area promo '^apps/promo-video/'
           area site '^apps/site/'
-          area scripts '^(scripts/|Casks/|README\.md$|Makefile$|lefthook\.yml$|package\.json$|bun\.lock$|biome\.json$)'
+          area scripts '^(scripts/|Casks/|README\.md$|Makefile$|package\.json$|bun\.lock$|biome\.json$)'
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
