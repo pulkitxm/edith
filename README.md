@@ -1,5 +1,7 @@
 # <img src="Packages/Edith/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
 
+> Even Dead, I'm The Hero
+
 A native desktop control center for macOS. Edith replaces a shelf of
 single-purpose utilities and idles at about 22 MB.
 
