@@ -48,6 +48,39 @@ public struct AttentionMedia: Codable, Equatable, Sendable {
     }
 }
 
+public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
+    public var timestamp: Date
+    public var duration: TimeInterval
+    public var presence: AttentionPresence
+    public var appName: String
+    public var bundleID: String?
+    public var url: String?
+    public var domain: String?
+    public var title: String?
+    public var faviconURL: String?
+    public var browserProfile: String?
+    public var media: [AttentionMedia]
+
+    public init(
+        timestamp: Date, duration: TimeInterval, presence: AttentionPresence,
+        appName: String, bundleID: String? = nil, url: String? = nil,
+        domain: String? = nil, title: String? = nil, faviconURL: String? = nil,
+        browserProfile: String? = nil, media: [AttentionMedia] = []
+    ) {
+        self.timestamp = timestamp
+        self.duration = duration
+        self.presence = presence
+        self.appName = appName
+        self.bundleID = bundleID
+        self.url = url
+        self.domain = domain
+        self.title = title
+        self.faviconURL = faviconURL
+        self.browserProfile = browserProfile
+        self.media = media
+    }
+}
+
 public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var startedAt: Date
