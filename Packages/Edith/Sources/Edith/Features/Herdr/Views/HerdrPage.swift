@@ -12,8 +12,8 @@ struct HerdrPage: View {
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
 
-    init(store: HerdrStore = .shared) {
-        _store = State(initialValue: store)
+    @MainActor init(store: HerdrStore? = nil) {
+        _store = State(initialValue: store ?? .shared)
     }
 
     private var dark: Bool { scheme == .dark }
