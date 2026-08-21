@@ -548,7 +548,8 @@ import Testing
             .setAirplaneMode(true),
             .setDoNotDisturb(true),
         ]
-        let commands = [MachineControlCenterCommands.statusCommand]
+        let commands =
+            [MachineControlCenterCommands.statusCommand]
             + actions.flatMap { action in
                 [
                     MachineControlCenterCommands.command(
