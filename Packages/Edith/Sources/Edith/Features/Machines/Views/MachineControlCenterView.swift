@@ -75,7 +75,10 @@ final class MachineControlCenterModel {
         {
             return
         }
-        Task { await refresh(reportFailure: false, clearsMessage: false) }
+        let clearsFailure = resultFailed
+        Task {
+            await refresh(reportFailure: clearsFailure, clearsMessage: clearsFailure)
+        }
     }
 
     func refresh(reportFailure: Bool, clearsMessage: Bool) async {
