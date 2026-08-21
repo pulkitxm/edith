@@ -13,6 +13,7 @@ final class AttentionTrackingService {
     private var lastHeartbeatAt = Date()
     private var locked = false
     private var server: AttentionIngestionServer?
+    private var lastBackupAt = Date.distantPast
 
     init(repository: AttentionRepository = AttentionRepository()) {
         self.repository = repository
@@ -28,6 +29,7 @@ final class AttentionTrackingService {
         timer = nil
         server?.stop()
         server = nil
+        backupIfNeeded(force: true)
         let center = NSWorkspace.shared.notificationCenter
         observers.forEach(center.removeObserver)
         observers.removeAll()
@@ -45,6 +47,7 @@ final class AttentionTrackingService {
             server = nil
             startServer()
         }
+        backupIfNeeded(force: true)
     }
 
     private func startTimer() {
@@ -100,6 +103,7 @@ final class AttentionTrackingService {
 
     private func writeHeartbeat(now: Date = Date()) {
         let duration = min(30, max(0, now.timeIntervalSince(lastHeartbeatAt)))
+        backupIfNeeded()
         guard settings.trackingEnabled, duration > 0.2,
             let app = NSWorkspace.shared.frontmostApplication
         else {
@@ -135,5 +139,15 @@ final class AttentionTrackingService {
                 window as! AXUIElement, kAXTitleAttribute as CFString, &titleValue) == .success
         else { return nil }
         return (titleValue as? String).map { String($0.prefix(500)) }
+    }
+
+    private func backupIfNeeded(force: Bool = false) {
+        guard settings.iCloudBackupEnabled,
+            force || Date().timeIntervalSince(lastBackupAt) >= 900
+        else { return }
+        lastBackupAt = Date()
+        DispatchQueue.global(qos: .utility).async {
+            _ = try? AttentionCloudBackup().backup()
+        }
     }
 }
