@@ -32,7 +32,9 @@ final class MachineControlCenterModel {
     var selectedProfile = ""
     var duration = MachineProfileDuration.untilChanged
 
-    private var refreshPending = false
+    @ObservationIgnored private var refreshGeneration = 0
+    @ObservationIgnored private var refreshPending = false
+    @ObservationIgnored private var lastRefreshStartedAt: Date?
 
     init(session: MachineSession) {
         self.session = session
@@ -44,6 +46,9 @@ final class MachineControlCenterModel {
     }
 
     fileprivate func prepare(for phase: MachineControlConnectionPhase) async {
+        refreshGeneration &+= 1
+        refreshPending = false
+        isRefreshing = false
         switch phase {
         case .available:
             await refresh(reportFailure: true, clearsMessage: hasLoaded)
@@ -62,7 +67,19 @@ final class MachineControlCenterModel {
         }
     }
 
+    func refreshIfStale(maxAge: TimeInterval = 15) {
+        guard session.isLocal || session.state.isConnected else { return }
+        guard hasLoaded, !requiresConnection, !isBusy else { return }
+        if let lastRefreshStartedAt,
+            Date().timeIntervalSince(lastRefreshStartedAt) < maxAge
+        {
+            return
+        }
+        Task { await refresh(reportFailure: false, clearsMessage: false) }
+    }
+
     func refresh(reportFailure: Bool, clearsMessage: Bool) async {
+        let generation = refreshGeneration
         guard !isRefreshing else {
             refreshPending = true
             return
@@ -76,16 +93,22 @@ final class MachineControlCenterModel {
             return
         }
         requiresConnection = false
+        lastRefreshStartedAt = Date()
         isRefreshing = true
         defer {
-            isRefreshing = false
-            hasLoaded = true
-            if refreshPending {
-                refreshPending = false
-                Task { await refresh(reportFailure: true, clearsMessage: true) }
+            if generation == refreshGeneration, !Task.isCancelled {
+                isRefreshing = false
+                hasLoaded = true
+                if refreshPending {
+                    refreshPending = false
+                    Task { await refresh(reportFailure: true, clearsMessage: true) }
+                }
             }
         }
-        switch await session.runCommand(MachineControlCenterCommands.statusCommand, timeout: 20) {
+        let result = await session.runCommand(
+            MachineControlCenterCommands.statusCommand, timeout: 20)
+        guard generation == refreshGeneration, !Task.isCancelled else { return }
+        switch result {
         case let .success(output):
             guard session.isLocal || session.state.isConnected else {
                 snapshot = nil
@@ -96,8 +119,8 @@ final class MachineControlCenterModel {
             if reportFailure { resultFailed = false }
             apply(MachineControlCenterCommands.parseStatus(output))
         case let .failure(error):
-            snapshot = nil
             if !session.isLocal && !session.state.isConnected {
+                snapshot = nil
                 requiresConnection = true
                 resultFailed = false
                 resultMessage = nil
@@ -257,7 +280,10 @@ struct MachineControlCenterButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Machine controls")
-        .onHover { hovering = $0 }
+        .onHover {
+            hovering = $0
+            if $0 { model.refreshIfStale() }
+        }
         .pointerCursor()
         .help("Control this machine's hardware and wireless settings")
         .task(id: connectionPhase) {
@@ -298,6 +324,10 @@ struct MachineControlCenterView: View {
     private var busyLabel: String { model.isRefreshing ? "Refreshing" : "Updating" }
     private var scrollHeight: CGFloat {
         if !model.hasLoaded { return UIScale.pt(316) }
+        if model.requiresConnection { return UIScale.pt(116) }
+        if !hasControls, !hasCooling {
+            return UIScale.pt(model.resultMessage == nil ? 86 : 104)
+        }
         var height: CGFloat = 0
         if snapshot?.brightness != nil { height += 66 }
         if snapshot?.volume != nil { height += 66 }
