@@ -36,6 +36,7 @@ struct DetachedSectionView: View {
     private var detail: some View {
         switch controller.destination {
         case .home: HomePage()
+        case .attention: AttentionPage()
         case .dashboard: DashboardView()
         case .herdr: HerdrPage()
         case .music: MusicPage()
