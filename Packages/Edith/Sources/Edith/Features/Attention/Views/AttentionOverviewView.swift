@@ -2,6 +2,11 @@ import Charts
 import EdithKit
 import SwiftUI
 
+private struct AttentionServiceTotal {
+    let identity: AttentionIdentity
+    let seconds: TimeInterval
+}
+
 struct AttentionOverviewView: View {
     @Bindable var store: AttentionMockStore
     @Environment(\.colorScheme) private var scheme
@@ -10,7 +15,17 @@ struct AttentionOverviewView: View {
 
     private var dark: Bool { scheme == .dark }
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: UIScale.pt(10)), count: compactLayout ? 2 : 4)
+        Array(
+            repeating: GridItem(.flexible(), spacing: UIScale.pt(10)), count: compactLayout ? 2 : 4)
+    }
+    private var topServiceTotals: [AttentionServiceTotal] {
+        let grouped = Dictionary(grouping: store.visibleSegments, by: \.service)
+        return store.identities.compactMap { identity in
+            let seconds = grouped[identity.name]?.reduce(0) { $0 + $1.duration } ?? 0
+            guard seconds > 0 else { return nil }
+            return AttentionServiceTotal(identity: identity, seconds: seconds)
+        }
+        .sorted { $0.seconds > $1.seconds }
     }
 
     var body: some View {
@@ -50,24 +65,28 @@ struct AttentionOverviewView: View {
                 Chart(store.dailySummaries) { summary in
                     BarMark(
                         x: .value("Date", summary.date, unit: .day),
-                        y: .value("Hours", summary.focusSeconds / 3600))
-                        .foregroundStyle(DashSkin.sage)
-                        .cornerRadius(2)
+                        y: .value("Hours", summary.focusSeconds / 3600)
+                    )
+                    .foregroundStyle(DashSkin.sage)
+                    .cornerRadius(2)
                     BarMark(
                         x: .value("Date", summary.date, unit: .day),
-                        y: .value("Hours", summary.distractingSeconds / 3600))
-                        .foregroundStyle(DashSkin.danger)
-                        .cornerRadius(2)
+                        y: .value("Hours", summary.distractingSeconds / 3600)
+                    )
+                    .foregroundStyle(DashSkin.danger)
+                    .cornerRadius(2)
                     BarMark(
                         x: .value("Date", summary.date, unit: .day),
-                        y: .value("Hours", summary.entertainmentSeconds / 3600))
-                        .foregroundStyle(Color.indigo)
-                        .cornerRadius(2)
+                        y: .value("Hours", summary.entertainmentSeconds / 3600)
+                    )
+                    .foregroundStyle(Color.indigo)
+                    .cornerRadius(2)
                     BarMark(
                         x: .value("Date", summary.date, unit: .day),
-                        y: .value("Hours", summary.awaySeconds / 3600))
-                        .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.6))
-                        .cornerRadius(2)
+                        y: .value("Hours", summary.awaySeconds / 3600)
+                    )
+                    .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.6))
+                    .cornerRadius(2)
                     if let chartSelection {
                         RuleMark(x: .value("Selected", chartSelection, unit: .day))
                             .foregroundStyle(DashSkin.ink(dark).opacity(0.25))
@@ -75,7 +94,11 @@ struct AttentionOverviewView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: store.selectedRange == .month ? .day : .day, count: store.selectedRange == .month ? 5 : 1)) { value in
+                    AxisMarks(
+                        values: .stride(
+                            by: store.selectedRange == .month ? .day : .day,
+                            count: store.selectedRange == .month ? 5 : 1)
+                    ) { value in
                         AxisValueLabel(format: .dateTime.day().month(.abbreviated))
                             .font(.system(size: UIScale.pt(9)))
                         AxisGridLine().foregroundStyle(DashSkin.line(dark).opacity(0.35))
@@ -108,9 +131,10 @@ struct AttentionOverviewView: View {
             action: { store.selectedSection = .library }
         ) {
             VStack(spacing: 0) {
-                ForEach(Array(store.identities.sorted { $0.totalSeconds > $1.totalSeconds }.prefix(6).enumerated()), id: \.element.id) { index, identity in
+                ForEach(Array(topServiceTotals.prefix(6).enumerated()), id: \.element.identity.id) {
+                    index, total in
                     Button {
-                        store.selectedIdentityID = identity.id
+                        store.selectedIdentityID = total.identity.id
                         store.selectedSection = .library
                     } label: {
                         HStack(spacing: UIScale.pt(10)) {
@@ -118,19 +142,24 @@ struct AttentionOverviewView: View {
                                 .font(DashSkin.mono(10, weight: .semibold))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(18))
-                            Image(systemName: identity.symbol)
-                                .foregroundStyle(AttentionPalette.category(identity.categoryID, dark: dark))
+                            Image(systemName: total.identity.symbol)
+                                .foregroundStyle(
+                                    AttentionPalette.category(total.identity.categoryID, dark: dark)
+                                )
                                 .frame(width: UIScale.pt(20))
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                                Text(identity.name)
+                                Text(total.identity.name)
                                     .font(.system(size: UIScale.pt(11.5), weight: .medium))
                                     .foregroundStyle(DashSkin.ink(dark))
-                                Text(store.category(for: identity.categoryID)?.path ?? "Uncategorized")
-                                    .font(.system(size: UIScale.pt(9.5)))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                Text(
+                                    store.category(for: total.identity.categoryID)?.path
+                                        ?? "Uncategorized"
+                                )
+                                .font(.system(size: UIScale.pt(9.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                             }
                             Spacer()
-                            Text(AttentionTime.duration(identity.totalSeconds, compact: true))
+                            Text(AttentionTime.duration(total.seconds, compact: true))
                                 .font(DashSkin.mono(10, weight: .medium))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }
@@ -153,17 +182,21 @@ struct AttentionOverviewView: View {
             VStack(spacing: UIScale.pt(15)) {
                 concurrentRow(
                     symbol: "gearshape.2.fill", title: "Delegated work",
-                    value: AttentionTime.duration(store.dailySummaries.reduce(0) { $0 + $1.automationSeconds }, compact: true),
+                    value: AttentionTime.duration(
+                        store.dailySummaries.reduce(0) { $0 + $1.automationSeconds }, compact: true),
                     detail: "Agent runtime while your context moved elsewhere", color: Color.purple)
                 Divider().overlay(DashSkin.line(dark))
                 concurrentRow(
                     symbol: "music.note", title: "Listening time",
-                    value: AttentionTime.duration(store.dailySummaries.reduce(0) { $0 + $1.musicSeconds }, compact: true),
-                    detail: "\(store.visibleMedia.count) exact playback sessions", color: Color.pink)
+                    value: AttentionTime.duration(
+                        store.dailySummaries.reduce(0) { $0 + $1.musicSeconds }, compact: true),
+                    detail: "\(store.visibleMedia.count) exact playback sessions", color: Color.pink
+                )
                 Divider().overlay(DashSkin.line(dark))
                 concurrentRow(
                     symbol: "play.rectangle.fill", title: "Passive video",
-                    value: AttentionTime.duration(store.dailySummaries.reduce(0) { $0 + $1.passiveSeconds }, compact: true),
+                    value: AttentionTime.duration(
+                        store.dailySummaries.reduce(0) { $0 + $1.passiveSeconds }, compact: true),
                     detail: "Playback advancing with no recent input", color: Color.indigo)
             }
         }
@@ -215,16 +248,24 @@ struct AttentionOverviewView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .padding(UIScale.pt(14))
-            .background(DashSkin.accent(dark).opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
-            .overlay(RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.accent(dark).opacity(0.2)))
+            .background(
+                DashSkin.accent(dark).opacity(0.08),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(14))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(
+                    DashSkin.accent(dark).opacity(0.2)))
         }
         .buttonStyle(.plain)
         .pointerCursor()
     }
 
     private var rangeSubtitle: String {
-        guard let first = store.visibleDates.first, let last = store.visibleDates.last else { return "" }
+        guard let first = store.visibleDates.first, let last = store.visibleDates.last else {
+            return ""
+        }
         if store.selectedRange == .day { return AttentionTime.day(last) }
-        return "\(first.formatted(.dateTime.month(.abbreviated).day())) to \(last.formatted(.dateTime.month(.abbreviated).day()))"
+        return
+            "\(first.formatted(.dateTime.month(.abbreviated).day())) to \(last.formatted(.dateTime.month(.abbreviated).day()))"
     }
 }

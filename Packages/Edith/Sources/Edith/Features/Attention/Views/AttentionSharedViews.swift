@@ -136,13 +136,15 @@ struct AttentionSectionTabs: View {
                         .font(.system(size: UIScale.pt(11.5), weight: .medium))
                         .foregroundStyle(
                             store.selectedSection == section
-                                ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                                ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
+                        )
                         .padding(.horizontal, UIScale.pt(11))
                         .frame(height: UIScale.pt(30))
                         .background(
                             store.selectedSection == section
                                 ? DashSkin.paper2(dark) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        )
                         .overlay {
                             if store.selectedSection == section {
                                 RoundedRectangle(cornerRadius: UIScale.pt(8))
@@ -173,12 +175,14 @@ struct AttentionRangePicker: View {
                 .buttonStyle(.plain)
                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                 .foregroundStyle(
-                    store.selectedRange == range ? Color.white : DashSkin.inkSoft(dark))
+                    store.selectedRange == range ? Color.white : DashSkin.inkSoft(dark)
+                )
                 .padding(.horizontal, UIScale.pt(9))
                 .frame(height: UIScale.pt(26))
                 .background(
                     store.selectedRange == range ? DashSkin.accentDeep(dark) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                )
                 .pointerCursor()
             }
         }
@@ -224,8 +228,9 @@ struct AttentionPrototypePlaceholder: View {
     var body: some View {
         ContentUnavailableView(
             section.title, systemImage: section.symbol,
-            description: Text("This part of the interactive mock is being assembled."))
-            .frame(maxWidth: .infinity, minHeight: UIScale.pt(360))
-            .foregroundStyle(DashSkin.inkSoft(dark))
+            description: Text("This part of the interactive mock is being assembled.")
+        )
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(360))
+        .foregroundStyle(DashSkin.inkSoft(dark))
     }
 }

@@ -53,7 +53,8 @@ struct AttentionTimelineView: View {
                         .frame(width: UIScale.pt(34), height: UIScale.pt(42))
                         .background(
                             selected ? DashSkin.accentDeep(dark) : DashSkin.paper2(dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                        )
                         .overlay {
                             if !selected {
                                 RoundedRectangle(cornerRadius: UIScale.pt(9))
@@ -89,10 +90,11 @@ struct AttentionTimelineView: View {
     private var filteredSegments: [AttentionSegment] {
         switch store.timelineFilter {
         case "Focus only": store.daySegments.filter { $0.focusSession != nil }
-        case "Entertainment": store.daySegments.filter {
-            store.category(for: $0.categoryID)?.kind == .entertainment
-                || store.category(for: $0.categoryID)?.kind == .distracting
-        }
+        case "Entertainment":
+            store.daySegments.filter {
+                store.category(for: $0.categoryID)?.kind == .entertainment
+                    || store.category(for: $0.categoryID)?.kind == .distracting
+            }
         case "Uncertain": store.daySegments.filter { $0.presence == .uncertain }
         default: store.daySegments
         }
@@ -104,39 +106,48 @@ struct AttentionTimelineView: View {
                 RectangleMark(
                     xStart: .value("Start", segment.start),
                     xEnd: .value("End", segment.end),
-                    y: .value("Lane", "Context"))
-                    .foregroundStyle(AttentionPalette.category(segment.categoryID, dark: dark))
-                    .cornerRadius(3)
+                    y: .value("Lane", "Context")
+                )
+                .foregroundStyle(AttentionPalette.category(segment.categoryID, dark: dark))
+                .cornerRadius(3)
                 RectangleMark(
                     xStart: .value("Start", segment.start),
                     xEnd: .value("End", segment.end),
-                    y: .value("Lane", "Presence"))
-                    .foregroundStyle(AttentionPalette.presence(segment.presence, dark: dark))
-                    .cornerRadius(3)
+                    y: .value("Lane", "Presence")
+                )
+                .foregroundStyle(AttentionPalette.presence(segment.presence, dark: dark))
+                .cornerRadius(3)
                 if segment.focusSession != nil {
                     RectangleMark(
                         xStart: .value("Start", segment.start),
                         xEnd: .value("End", segment.end),
-                        y: .value("Lane", "Focus"))
-                        .foregroundStyle(DashSkin.sage)
-                        .cornerRadius(3)
+                        y: .value("Lane", "Focus")
+                    )
+                    .foregroundStyle(DashSkin.sage)
+                    .cornerRadius(3)
                 }
                 if segment.automation != nil {
                     RectangleMark(
                         xStart: .value("Start", segment.start),
                         xEnd: .value("End", segment.end),
-                        y: .value("Lane", "Automation"))
-                        .foregroundStyle(Color.purple)
-                        .cornerRadius(3)
+                        y: .value("Lane", "Automation")
+                    )
+                    .foregroundStyle(Color.purple)
+                    .cornerRadius(3)
                 }
             }
-            ForEach(store.mediaSessions.filter { store.calendar.isDate($0.start, inSameDayAs: store.selectedDate) }) { session in
+            ForEach(
+                store.mediaSessions.filter {
+                    store.calendar.isDate($0.start, inSameDayAs: store.selectedDate)
+                }
+            ) { session in
                 RectangleMark(
                     xStart: .value("Start", session.start),
                     xEnd: .value("End", session.end),
-                    y: .value("Lane", "Media"))
-                    .foregroundStyle(Color.pink)
-                    .cornerRadius(3)
+                    y: .value("Lane", "Media")
+                )
+                .foregroundStyle(Color.pink)
+                .cornerRadius(3)
             }
             if let selectedTimestamp {
                 RuleMark(x: .value("Selected", selectedTimestamp))
@@ -165,8 +176,10 @@ struct AttentionTimelineView: View {
     }
 
     private var dayDomain: ClosedRange<Date> {
-        let start = store.calendar.date(bySettingHour: 8, minute: 0, second: 0, of: store.selectedDate)!
-        let end = store.calendar.date(bySettingHour: 23, minute: 30, second: 0, of: store.selectedDate)!
+        let start = store.calendar.date(
+            bySettingHour: 8, minute: 0, second: 0, of: store.selectedDate)!
+        let end = store.calendar.date(
+            bySettingHour: 23, minute: 30, second: 0, of: store.selectedDate)!
         return start...end
     }
 
@@ -211,9 +224,11 @@ struct AttentionTimelineView: View {
                 VStack(alignment: .trailing, spacing: UIScale.pt(3)) {
                     Text(AttentionTime.duration(segment.duration, compact: true))
                         .font(DashSkin.mono(10, weight: .semibold))
-                    Text("\(AttentionTime.clock(segment.start)) - \(AttentionTime.clock(segment.end))")
-                        .font(.system(size: UIScale.pt(8.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(
+                        "\(AttentionTime.clock(segment.start)) - \(AttentionTime.clock(segment.end))"
+                    )
+                    .font(.system(size: UIScale.pt(8.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
             .foregroundStyle(DashSkin.ink(dark))
@@ -221,7 +236,8 @@ struct AttentionTimelineView: View {
             .padding(.vertical, UIScale.pt(8))
             .background(
                 selected ? DashSkin.accent(dark).opacity(0.09) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -235,10 +251,13 @@ struct AttentionTimelineView: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(13)) {
                     HStack(spacing: UIScale.pt(10)) {
                         Image(systemName: segment.presence.symbol)
-                            .foregroundStyle(AttentionPalette.presence(segment.presence, dark: dark))
+                            .foregroundStyle(
+                                AttentionPalette.presence(segment.presence, dark: dark)
+                            )
                             .frame(width: UIScale.pt(34), height: UIScale.pt(34))
                             .background(
-                                AttentionPalette.presence(segment.presence, dark: dark).opacity(0.12),
+                                AttentionPalette.presence(segment.presence, dark: dark).opacity(
+                                    0.12),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(segment.service)
@@ -250,15 +269,21 @@ struct AttentionTimelineView: View {
                     }
                     inspectorRow("Application", segment.application)
                     inspectorRow("Surface", surfaceLabel(segment))
-                    inspectorRow("Category", store.category(for: segment.categoryID)?.path ?? "Uncategorized")
+                    inspectorRow(
+                        "Category", store.category(for: segment.categoryID)?.path ?? "Uncategorized"
+                    )
                     inspectorRow("Confidence", "\(Int(segment.confidence * 100))%")
                     if let focus = segment.focusSession { inspectorRow("Focus", focus) }
-                    if let automation = segment.automation { inspectorRow("Automation", automation) }
+                    if let automation = segment.automation {
+                        inspectorRow("Automation", automation)
+                    }
                     Text(explanation(segment))
                         .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .padding(UIScale.pt(10))
-                        .background(DashSkin.grid(dark).opacity(0.55), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                        .background(
+                            DashSkin.grid(dark).opacity(0.55),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                     Button("Correct this interval") { store.showCorrection = true }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -297,9 +322,11 @@ struct AttentionTimelineView: View {
     private func explanation(_ segment: AttentionSegment) -> String {
         switch segment.presence {
         case .active: "Recent input and a foreground context change confirm interactive presence."
-        case .passive: "Video progress and audio continued while the active display had no recent input."
+        case .passive:
+            "Video progress and audio continued while the active display had no recent input."
         case .away: "The Mac was locked, asleep, or past the configured idle threshold."
-        case .uncertain: "Playback continued without enough presence evidence. Edith keeps this separate until corrected."
+        case .uncertain:
+            "Playback continued without enough presence evidence. Edith keeps this separate until corrected."
         }
     }
 }
@@ -314,9 +341,11 @@ private struct AttentionCorrectionSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             Text("Correct interval").font(DashSkin.serif(24))
             if let segment = store.selectedSegment {
-                Text("\(segment.service), \(AttentionTime.clock(segment.start)) to \(AttentionTime.clock(segment.end))")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.secondary)
+                Text(
+                    "\(segment.service), \(AttentionTime.clock(segment.start)) to \(AttentionTime.clock(segment.end))"
+                )
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.secondary)
             }
             Picker("Presence", selection: $presence) {
                 ForEach(AttentionPresence.allCases) { state in Text(state.title).tag(state) }

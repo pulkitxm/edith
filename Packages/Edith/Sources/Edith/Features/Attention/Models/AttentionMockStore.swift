@@ -107,7 +107,8 @@ final class AttentionMockStore {
 
     var filteredIdentities: [AttentionIdentity] {
         identities.filter { identity in
-            let matchesSearch = librarySearch.isEmpty
+            let matchesSearch =
+                librarySearch.isEmpty
                 || identity.name.localizedCaseInsensitiveContains(librarySearch)
                 || identity.domains.contains { $0.localizedCaseInsensitiveContains(librarySearch) }
                 || identity.nativeApplications.contains {
@@ -132,42 +133,54 @@ final class AttentionMockStore {
         return [
             AttentionInsight(
                 id: "focus-window", symbol: "sun.max.fill", title: "Your clearest focus window",
-                detail: "Deep work is 27% longer between 9:30 AM and noon, based on 24 comparable sessions.",
+                detail:
+                    "Deep work is 27% longer between 9:30 AM and noon, based on 24 comparable sessions.",
                 value: "+27%", category: "Focus", confidence: 0.93),
             AttentionInsight(
                 id: "recovery", symbol: "arrow.uturn.backward.circle.fill",
                 title: "Interruptions are getting easier to recover from",
-                detail: "Median recovery is \(averageRecovery) minutes, down from 14 minutes at the start of this period.",
+                detail:
+                    "Median recovery is \(averageRecovery) minutes, down from 14 minutes at the start of this period.",
                 value: "\(averageRecovery)m", category: "Attention", confidence: 0.89),
             AttentionInsight(
                 id: "social", symbol: "bubble.left.and.bubble.right.fill",
                 title: "Communication creates most short switches",
-                detail: "WhatsApp and Slack account for 41% of context changes, but only 18% of active time.",
+                detail:
+                    "WhatsApp and Slack account for 41% of context changes, but only 18% of active time.",
                 value: "41%", category: "Distraction", confidence: 0.96),
             AttentionInsight(
                 id: "automation", symbol: "gearshape.2.fill",
                 title: "Delegated work returned meaningful time",
-                detail: "Agents ran for \(AttentionTime.duration(automation, compact: true)) while your attention moved elsewhere.",
+                detail:
+                    "Agents ran for \(AttentionTime.duration(automation, compact: true)) while your attention moved elsewhere.",
                 value: AttentionTime.duration(automation, compact: true), category: "Automation",
                 confidence: 0.99),
             AttentionInsight(
-                id: "music", symbol: "music.note", title: "Instrumental music accompanies longer blocks",
-                detail: "Sessions with instrumental playlists were 19% longer across \(visibleMedia.count) listening sessions.",
-                value: AttentionTime.duration(music, compact: true), category: "Music", confidence: 0.78),
+                id: "music", symbol: "music.note",
+                title: "Instrumental music accompanies longer blocks",
+                detail:
+                    "Sessions with instrumental playlists were 19% longer across \(visibleMedia.count) listening sessions.",
+                value: AttentionTime.duration(music, compact: true), category: "Music",
+                confidence: 0.78),
             AttentionInsight(
                 id: "entertainment", symbol: "play.rectangle.fill",
                 title: "Entertainment stayed inside your evening budget",
-                detail: "Foreground entertainment used \(AttentionTime.duration(distraction, compact: true)) across this range.",
+                detail:
+                    "Foreground entertainment used \(AttentionTime.duration(distraction, compact: true)) across this range.",
                 value: "86%", category: "Entertainment", confidence: 0.91),
             AttentionInsight(
                 id: "coverage", symbol: "checkmark.seal.fill", title: "Tracking coverage is strong",
-                detail: "\(Int(active > 0 ? 96 : 0))% of present time has high-confidence context and profile information.",
+                detail:
+                    "\(Int(active > 0 ? 96 : 0))% of present time has high-confidence context and profile information.",
                 value: "96%", category: "Quality", confidence: 0.98),
             AttentionInsight(
                 id: "best-day", symbol: "trophy.fill", title: "Best focus day",
-                detail: strongest.map { "\(AttentionTime.day($0.date)) held your longest combined intentional work." }
+                detail: strongest.map {
+                    "\(AttentionTime.day($0.date)) held your longest combined intentional work."
+                }
                     ?? "No focus sessions in this range.",
-                value: strongest.map { AttentionTime.duration($0.focusSeconds, compact: true) } ?? "0m",
+                value: strongest.map { AttentionTime.duration($0.focusSeconds, compact: true) }
+                    ?? "0m",
                 category: "Focus", confidence: 0.95),
         ]
     }
@@ -180,10 +193,12 @@ final class AttentionMockStore {
         let uncertain = summaries.reduce(0) { $0 + $1.uncertainSeconds }
         return [
             AttentionMetric(
-                id: "active", title: "Present", value: AttentionTime.duration(active, compact: true),
+                id: "active", title: "Present",
+                value: AttentionTime.duration(active, compact: true),
                 detail: "Interactive and passive", symbol: "person.fill.checkmark"),
             AttentionMetric(
-                id: "focus", title: "Intentional", value: AttentionTime.duration(focus, compact: true),
+                id: "focus", title: "Intentional",
+                value: AttentionTime.duration(focus, compact: true),
                 detail: active > 0 ? "\(Int(focus / active * 100))% of present time" : "No data",
                 symbol: "scope"),
             AttentionMetric(
@@ -253,7 +268,8 @@ final class AttentionMockStore {
         guard let index = identities.firstIndex(where: { $0.id == identityID }) else { return }
         identities[index].categoryID = categoryID
         identities[index].ruleSource = "User rule"
-        for segmentIndex in segments.indices where segments[segmentIndex].service == identities[index].name {
+        for segmentIndex in segments.indices
+        where segments[segmentIndex].service == identities[index].name {
             segments[segmentIndex].categoryID = categoryID
         }
         showRulePreview = false
@@ -264,7 +280,9 @@ final class AttentionMockStore {
         guard let index = browserProfiles.firstIndex(where: { $0.id == profileID }) else { return }
         browserProfiles[index].connected.toggle()
         browserProfiles[index].lastSeen = lastDate
-        toast = browserProfiles[index].connected ? "Browser profile connected" : "Browser profile paused"
+        toast =
+            browserProfiles[index].connected
+            ? "Browser profile connected" : "Browser profile paused"
     }
 
     func toggleDeepMode(_ profileID: UUID) {
@@ -304,46 +322,122 @@ final class AttentionMockStore {
 
     private static func makeCategories() -> [AttentionCategory] {
         [
-            AttentionCategory(id: "work-coding", name: "Coding", parent: "Work", kind: .productive, symbol: "chevron.left.forwardslash.chevron.right"),
-            AttentionCategory(id: "work-research", name: "Research", parent: "Work", kind: .productive, symbol: "doc.text.magnifyingglass"),
-            AttentionCategory(id: "work-design", name: "Design", parent: "Work", kind: .productive, symbol: "paintbrush.pointed"),
-            AttentionCategory(id: "communication-work", name: "Work", parent: "Communication", kind: .neutral, symbol: "bubble.left.and.bubble.right"),
-            AttentionCategory(id: "communication-personal", name: "Personal", parent: "Communication", kind: .neutral, symbol: "person.2"),
-            AttentionCategory(id: "admin", name: "Planning and admin", parent: nil, kind: .neutral, symbol: "checklist"),
-            AttentionCategory(id: "entertainment-video", name: "Video", parent: "Entertainment", kind: .entertainment, symbol: "play.rectangle"),
-            AttentionCategory(id: "entertainment-music", name: "Music", parent: "Entertainment", kind: .entertainment, symbol: "music.note"),
-            AttentionCategory(id: "distraction-social", name: "Social feeds", parent: "Distraction", kind: .distracting, symbol: "rectangle.stack.badge.play"),
-            AttentionCategory(id: "uncategorized", name: "Uncategorized", parent: nil, kind: .neutral, symbol: "questionmark.square.dashed"),
+            AttentionCategory(
+                id: "work-coding", name: "Coding", parent: "Work", kind: .productive,
+                symbol: "chevron.left.forwardslash.chevron.right"),
+            AttentionCategory(
+                id: "work-research", name: "Research", parent: "Work", kind: .productive,
+                symbol: "doc.text.magnifyingglass"),
+            AttentionCategory(
+                id: "work-design", name: "Design", parent: "Work", kind: .productive,
+                symbol: "paintbrush.pointed"),
+            AttentionCategory(
+                id: "communication-work", name: "Work", parent: "Communication", kind: .neutral,
+                symbol: "bubble.left.and.bubble.right"),
+            AttentionCategory(
+                id: "communication-personal", name: "Personal", parent: "Communication",
+                kind: .neutral, symbol: "person.2"),
+            AttentionCategory(
+                id: "admin", name: "Planning and admin", parent: nil, kind: .neutral,
+                symbol: "checklist"),
+            AttentionCategory(
+                id: "entertainment-video", name: "Video", parent: "Entertainment",
+                kind: .entertainment, symbol: "play.rectangle"),
+            AttentionCategory(
+                id: "entertainment-music", name: "Music", parent: "Entertainment",
+                kind: .entertainment, symbol: "music.note"),
+            AttentionCategory(
+                id: "distraction-social", name: "Social feeds", parent: "Distraction",
+                kind: .distracting, symbol: "rectangle.stack.badge.play"),
+            AttentionCategory(
+                id: "uncategorized", name: "Uncategorized", parent: nil, kind: .neutral,
+                symbol: "questionmark.square.dashed"),
         ]
     }
 
     private static func makeSegments(calendar: Calendar, firstDate: Date) -> [AttentionSegment] {
-        let templates: [(Int, Int, String, String, String, String, AttentionPresence, AttentionSurface, String?, String?, Double, String?, String?)] = [
-            (8, 35, "Safari", "Notion", "Daily plan and priorities", "admin", .active, .web, "Safari", "Personal", 0.99, nil, nil),
-            (9, 0, "Xcode", "Xcode", "Edith - Attention architecture", "work-coding", .active, .native, nil, nil, 1, "Build Edith Attention", nil),
-            (10, 25, "Dia", "GitHub", "Review browser bridge changes", "work-coding", .active, .web, "Dia", "Work", 0.99, "Build Edith Attention", nil),
-            (10, 50, "Agent Runner", "Agent Runner", "Implementing browser event schema", "work-coding", .active, .native, nil, nil, 0.96, "Build Edith Attention", "Browser event schema"),
-            (11, 20, "WhatsApp", "WhatsApp", "Work conversations", "communication-work", .active, .web, "Dia", "Work", 0.98, "Build Edith Attention", nil),
-            (11, 35, "Xcode", "Xcode", "Attention timeline views", "work-coding", .active, .native, nil, nil, 1, "Build Edith Attention", "Browser event schema"),
-            (13, 0, "Finder", "Finder", "Lunch break", "admin", .away, .native, nil, nil, 1, nil, nil),
-            (14, 5, "Dia", "Figma", "Attention interaction review", "work-design", .active, .web, "Dia", "Work", 0.99, "Design review", nil),
-            (15, 15, "Slack", "Slack", "Team check-in", "communication-work", .active, .native, nil, nil, 1, nil, nil),
-            (15, 40, "Agent Runner", "Agent Runner", "Running mock data tests", "work-coding", .active, .native, nil, nil, 0.97, "Ship mock", "Mock data tests"),
-            (16, 10, "Dia", "Reddit", "Productivity communities", "distraction-social", .active, .web, "Dia", "Personal", 0.99, "Ship mock", nil),
-            (16, 30, "Xcode", "Xcode", "Focus session polish", "work-coding", .active, .native, nil, nil, 1, "Ship mock", "Mock data tests"),
-            (18, 15, "WhatsApp", "WhatsApp", "Friends and family", "communication-personal", .active, .native, nil, nil, 1, nil, nil),
-            (20, 20, "Chrome", "YouTube", "Product design documentary", "entertainment-video", .passive, .web, "Chrome", "Personal", 0.78, nil, nil),
-            (21, 35, "Chrome", "YouTube", "Video continued while away", "entertainment-video", .uncertain, .web, "Chrome", "Personal", 0.48, nil, nil),
-            (22, 5, "Finder", "Finder", "Mac locked", "admin", .away, .native, nil, nil, 1, nil, nil),
-        ]
+        let templates:
+            [(
+                Int, Int, String, String, String, String, AttentionPresence, AttentionSurface,
+                String?, String?, Double, String?, String?
+            )] = [
+                (
+                    8, 35, "Safari", "Notion", "Daily plan and priorities", "admin", .active, .web,
+                    "Safari", "Personal", 0.99, nil, nil
+                ),
+                (
+                    9, 0, "Xcode", "Xcode", "Edith - Attention architecture", "work-coding",
+                    .active, .native, nil, nil, 1, "Build Edith Attention", nil
+                ),
+                (
+                    10, 25, "Dia", "GitHub", "Review browser bridge changes", "work-coding",
+                    .active, .web, "Dia", "Work", 0.99, "Build Edith Attention", nil
+                ),
+                (
+                    10, 50, "Agent Runner", "Agent Runner", "Implementing browser event schema",
+                    "work-coding", .active, .native, nil, nil, 0.96, "Build Edith Attention",
+                    "Browser event schema"
+                ),
+                (
+                    11, 20, "WhatsApp", "WhatsApp", "Work conversations", "communication-work",
+                    .active, .web, "Dia", "Work", 0.98, "Build Edith Attention", nil
+                ),
+                (
+                    11, 35, "Xcode", "Xcode", "Attention timeline views", "work-coding", .active,
+                    .native, nil, nil, 1, "Build Edith Attention", "Browser event schema"
+                ),
+                (
+                    13, 0, "Finder", "Finder", "Lunch break", "admin", .away, .native, nil, nil, 1,
+                    nil, nil
+                ),
+                (
+                    14, 5, "Dia", "Figma", "Attention interaction review", "work-design", .active,
+                    .web, "Dia", "Work", 0.99, "Design review", nil
+                ),
+                (
+                    15, 15, "Slack", "Slack", "Team check-in", "communication-work", .active,
+                    .native, nil, nil, 1, nil, nil
+                ),
+                (
+                    15, 40, "Agent Runner", "Agent Runner", "Running mock data tests",
+                    "work-coding", .active, .native, nil, nil, 0.97, "Ship mock", "Mock data tests"
+                ),
+                (
+                    16, 10, "Dia", "Reddit", "Productivity communities", "distraction-social",
+                    .active, .web, "Dia", "Personal", 0.99, "Ship mock", nil
+                ),
+                (
+                    16, 30, "Xcode", "Xcode", "Focus session polish", "work-coding", .active,
+                    .native, nil, nil, 1, "Ship mock", "Mock data tests"
+                ),
+                (
+                    18, 15, "WhatsApp", "WhatsApp", "Friends and family", "communication-personal",
+                    .active, .native, nil, nil, 1, nil, nil
+                ),
+                (
+                    20, 20, "Chrome", "YouTube", "Product design documentary",
+                    "entertainment-video", .passive, .web, "Chrome", "Personal", 0.78, nil, nil
+                ),
+                (
+                    21, 35, "Chrome", "YouTube", "Video continued while away",
+                    "entertainment-video", .uncertain, .web, "Chrome", "Personal", 0.48, nil, nil
+                ),
+                (
+                    22, 5, "Finder", "Finder", "Mac locked", "admin", .away, .native, nil, nil, 1,
+                    nil, nil
+                ),
+            ]
         let durations = [25, 82, 22, 26, 12, 72, 58, 61, 19, 27, 17, 83, 24, 73, 28, 65]
         var result: [AttentionSegment] = []
         for day in 0..<31 {
-            guard let date = calendar.date(byAdding: .day, value: day, to: firstDate) else { continue }
+            guard let date = calendar.date(byAdding: .day, value: day, to: firstDate) else {
+                continue
+            }
             let weekday = calendar.component(.weekday, from: date)
             let weekend = weekday == 1 || weekday == 7
+            let reducedWeekend = weekend && day != 30
             for (index, template) in templates.enumerated() {
-                if weekend && index > 7 && index < 12 { continue }
+                if reducedWeekend && index > 7 && index < 12 { continue }
                 if !weekend && index == 13 && day % 4 != 0 { continue }
                 var components = calendar.dateComponents([.year, .month, .day], from: date)
                 components.hour = template.0
@@ -360,14 +454,16 @@ final class AttentionMockStore {
                         service: service, title: template.4, categoryID: category,
                         presence: template.6, surface: template.7, browser: template.8,
                         profile: template.9, confidence: template.10,
-                        focusSession: weekend ? nil : template.11,
-                        automation: weekend ? nil : template.12))
+                        focusSession: reducedWeekend ? nil : template.11,
+                        automation: reducedWeekend ? nil : template.12))
             }
         }
         return result.sorted { $0.start < $1.start }
     }
 
-    private static func makeMediaSessions(calendar: Calendar, firstDate: Date) -> [AttentionMediaSession] {
+    private static func makeMediaSessions(calendar: Calendar, firstDate: Date)
+        -> [AttentionMediaSession]
+    {
         let tracks = [
             ("A Walk", "Tycho", "Dive", 318.0),
             ("Weightless", "Marconi Union", "Weightless", 488.0),
@@ -380,7 +476,9 @@ final class AttentionMockStore {
         ]
         var result: [AttentionMediaSession] = []
         for day in 0..<31 {
-            guard let date = calendar.date(byAdding: .day, value: day, to: firstDate) else { continue }
+            guard let date = calendar.date(byAdding: .day, value: day, to: firstDate) else {
+                continue
+            }
             for slot in 0..<3 {
                 let track = tracks[(day + slot * 3) % tracks.count]
                 var components = calendar.dateComponents([.year, .month, .day], from: date)
@@ -398,19 +496,26 @@ final class AttentionMockStore {
                         playedSeconds: played, durationSeconds: track.3 * Double(repeatCount),
                         source: slot == 2 && day % 3 == 0 ? "Dia" : "Music",
                         profile: slot == 2 && day % 3 == 0 ? "Personal" : nil,
-                        foreground: slot == 2, completed: played / (track.3 * Double(repeatCount)) > 0.9))
+                        foreground: slot == 2,
+                        completed: played / (track.3 * Double(repeatCount)) > 0.9))
             }
         }
         return result
     }
 
-    private static func makeFocusSessions(calendar: Calendar, firstDate: Date) -> [AttentionFocusSession] {
+    private static func makeFocusSessions(calendar: Calendar, firstDate: Date)
+        -> [AttentionFocusSession]
+    {
         var result: [AttentionFocusSession] = []
-        let names = ["Build Edith Attention", "Ship mock", "Research browser tracking", "Design review"]
+        let names = [
+            "Build Edith Attention", "Ship mock", "Research browser tracking", "Design review",
+        ]
         for day in 0..<31 {
-            guard let date = calendar.date(byAdding: .day, value: day, to: firstDate) else { continue }
+            guard let date = calendar.date(byAdding: .day, value: day, to: firstDate) else {
+                continue
+            }
             let weekday = calendar.component(.weekday, from: date)
-            if weekday == 1 || weekday == 7 { continue }
+            if (weekday == 1 || weekday == 7) && day != 30 { continue }
             for slot in 0..<2 {
                 var components = calendar.dateComponents([.year, .month, .day], from: date)
                 components.hour = slot == 0 ? 9 : 15
@@ -422,7 +527,9 @@ final class AttentionMockStore {
                 result.append(
                     AttentionFocusSession(
                         id: UUID(), start: start, end: end, name: names[(day + slot) % names.count],
-                        goal: slot == 0 ? "Complete the highest-impact implementation block" : "Review, refine, and ship",
+                        goal: slot == 0
+                            ? "Complete the highest-impact implementation block"
+                            : "Review, refine, and ship",
                         intendedSeconds: intended, offIntentSeconds: offIntent,
                         interruptions: 1 + (day + slot) % 4,
                         automationSeconds: TimeInterval((18 + (day * 7 + slot * 11) % 44) * 60)))
@@ -436,21 +543,63 @@ final class AttentionMockStore {
     ) -> [AttentionIdentity] {
         let catalog: [(String, String, [String], [String], String, String)] = [
             ("xcode", "Xcode", ["com.apple.dt.Xcode"], [], "hammer.fill", "work-coding"),
-            ("github", "GitHub", [], ["github.com"], "chevron.left.forwardslash.chevron.right", "work-coding"),
-            ("agent-runner", "Agent Runner", ["com.example.agentrunner"], [], "sparkles", "work-coding"),
-            ("whatsapp", "WhatsApp", ["net.whatsapp.WhatsApp"], ["web.whatsapp.com"], "bubble.left.and.bubble.right.fill", "communication-work"),
-            ("slack", "Slack", ["com.tinyspeck.slackmacgap"], ["app.slack.com"], "number.square.fill", "communication-work"),
-            ("figma", "Figma", ["com.figma.Desktop"], ["figma.com"], "paintbrush.pointed.fill", "work-design"),
+            (
+                "github", "GitHub", [], ["github.com"], "chevron.left.forwardslash.chevron.right",
+                "work-coding"
+            ),
+            (
+                "agent-runner", "Agent Runner", ["com.example.agentrunner"], [], "sparkles",
+                "work-coding"
+            ),
+            (
+                "whatsapp", "WhatsApp", ["net.whatsapp.WhatsApp"], ["web.whatsapp.com"],
+                "bubble.left.and.bubble.right.fill", "communication-work"
+            ),
+            (
+                "slack", "Slack", ["com.tinyspeck.slackmacgap"], ["app.slack.com"],
+                "number.square.fill", "communication-work"
+            ),
+            (
+                "figma", "Figma", ["com.figma.Desktop"], ["figma.com"], "paintbrush.pointed.fill",
+                "work-design"
+            ),
             ("notion", "Notion", ["notion.id"], ["notion.so"], "square.text.square.fill", "admin"),
-            ("youtube", "YouTube", [], ["youtube.com"], "play.rectangle.fill", "entertainment-video"),
-            ("apple-music", "Apple Music", ["com.apple.Music"], ["music.apple.com"], "music.note", "entertainment-music"),
-            ("reddit", "Reddit", [], ["reddit.com"], "bubble.left.circle.fill", "distraction-social"),
-            ("readwise", "Readwise Reader", [], ["read.readwise.io"], "book.pages.fill", "work-research"),
-            ("linear", "Linear", ["com.linear"], ["linear.app"], "line.3.horizontal.decrease.circle.fill", "admin"),
-            ("mail", "Mail", ["com.apple.mail"], ["mail.google.com"], "envelope.fill", "communication-work"),
-            ("spotify", "Spotify", ["com.spotify.client"], ["open.spotify.com"], "waveform", "entertainment-music"),
-            ("news", "Hacker News", [], ["news.ycombinator.com"], "newspaper.fill", "uncategorized"),
-            ("unknown", "Localhost tools", [], ["localhost"], "questionmark.square.dashed", "uncategorized"),
+            (
+                "youtube", "YouTube", [], ["youtube.com"], "play.rectangle.fill",
+                "entertainment-video"
+            ),
+            (
+                "apple-music", "Apple Music", ["com.apple.Music"], ["music.apple.com"],
+                "music.note", "entertainment-music"
+            ),
+            (
+                "reddit", "Reddit", [], ["reddit.com"], "bubble.left.circle.fill",
+                "distraction-social"
+            ),
+            (
+                "readwise", "Readwise Reader", [], ["read.readwise.io"], "book.pages.fill",
+                "work-research"
+            ),
+            (
+                "linear", "Linear", ["com.linear"], ["linear.app"],
+                "line.3.horizontal.decrease.circle.fill", "admin"
+            ),
+            (
+                "mail", "Mail", ["com.apple.mail"], ["mail.google.com"], "envelope.fill",
+                "communication-work"
+            ),
+            (
+                "spotify", "Spotify", ["com.spotify.client"], ["open.spotify.com"], "waveform",
+                "entertainment-music"
+            ),
+            (
+                "news", "Hacker News", [], ["news.ycombinator.com"], "newspaper.fill",
+                "uncategorized"
+            ),
+            (
+                "unknown", "Localhost tools", [], ["localhost"], "questionmark.square.dashed",
+                "uncategorized"
+            ),
         ]
         return catalog.map { item in
             let seconds = segments.filter { $0.service == item.1 }.reduce(0) { $0 + $1.duration }
@@ -465,34 +614,88 @@ final class AttentionMockStore {
 
     private static func makeBrowserProfiles(lastDate: Date) -> [AttentionBrowserProfile] {
         [
-            AttentionBrowserProfile(id: UUID(), browser: "Dia", profile: "Work", symbol: "globe", connected: true, deepMode: true, historyImported: true, lastSeen: lastDate.addingTimeInterval(-42), eventCount: 18_492),
-            AttentionBrowserProfile(id: UUID(), browser: "Dia", profile: "Personal", symbol: "globe", connected: true, deepMode: false, historyImported: true, lastSeen: lastDate.addingTimeInterval(-125), eventCount: 8_241),
-            AttentionBrowserProfile(id: UUID(), browser: "Chrome", profile: "Personal", symbol: "network", connected: true, deepMode: true, historyImported: true, lastSeen: lastDate.addingTimeInterval(-310), eventCount: 6_903),
-            AttentionBrowserProfile(id: UUID(), browser: "Chrome", profile: "Testing", symbol: "network", connected: false, deepMode: false, historyImported: false, lastSeen: lastDate.addingTimeInterval(-86_400), eventCount: 0),
-            AttentionBrowserProfile(id: UUID(), browser: "Safari", profile: "Personal", symbol: "safari", connected: true, deepMode: false, historyImported: false, lastSeen: lastDate.addingTimeInterval(-1_804), eventCount: 2_118),
+            AttentionBrowserProfile(
+                id: UUID(), browser: "Dia", profile: "Work", symbol: "globe", connected: true,
+                deepMode: true, historyImported: true, lastSeen: lastDate.addingTimeInterval(-42),
+                eventCount: 18_492),
+            AttentionBrowserProfile(
+                id: UUID(), browser: "Dia", profile: "Personal", symbol: "globe", connected: true,
+                deepMode: false, historyImported: true, lastSeen: lastDate.addingTimeInterval(-125),
+                eventCount: 8_241),
+            AttentionBrowserProfile(
+                id: UUID(), browser: "Chrome", profile: "Personal", symbol: "network",
+                connected: true, deepMode: true, historyImported: true,
+                lastSeen: lastDate.addingTimeInterval(-310), eventCount: 6_903),
+            AttentionBrowserProfile(
+                id: UUID(), browser: "Chrome", profile: "Testing", symbol: "network",
+                connected: false, deepMode: false, historyImported: false,
+                lastSeen: lastDate.addingTimeInterval(-86_400), eventCount: 0),
+            AttentionBrowserProfile(
+                id: UUID(), browser: "Safari", profile: "Personal", symbol: "safari",
+                connected: true, deepMode: false, historyImported: false,
+                lastSeen: lastDate.addingTimeInterval(-1_804), eventCount: 2_118),
         ]
     }
 
     private static func makeFocusTemplates() -> [AttentionFocusTemplate] {
         [
-            AttentionFocusTemplate(id: "flow", name: "Deep work", symbol: "scope", durationMinutes: nil, allowedCategoryIDs: ["work-coding", "work-research", "work-design"], intervention: "Nudge", graceSeconds: 45),
-            AttentionFocusTemplate(id: "sprint", name: "50 minute sprint", symbol: "timer", durationMinutes: 50, allowedCategoryIDs: ["work-coding", "work-design"], intervention: "Observe", graceSeconds: 60),
-            AttentionFocusTemplate(id: "research", name: "Research", symbol: "doc.text.magnifyingglass", durationMinutes: 90, allowedCategoryIDs: ["work-research"], intervention: "Nudge", graceSeconds: 90),
-            AttentionFocusTemplate(id: "strict", name: "Distraction block", symbol: "shield.fill", durationMinutes: 30, allowedCategoryIDs: ["work-coding"], intervention: "Block", graceSeconds: 15),
+            AttentionFocusTemplate(
+                id: "flow", name: "Deep work", symbol: "scope", durationMinutes: nil,
+                allowedCategoryIDs: ["work-coding", "work-research", "work-design"],
+                intervention: "Nudge", graceSeconds: 45),
+            AttentionFocusTemplate(
+                id: "sprint", name: "50 minute sprint", symbol: "timer", durationMinutes: 50,
+                allowedCategoryIDs: ["work-coding", "work-design"], intervention: "Observe",
+                graceSeconds: 60),
+            AttentionFocusTemplate(
+                id: "research", name: "Research", symbol: "doc.text.magnifyingglass",
+                durationMinutes: 90, allowedCategoryIDs: ["work-research"], intervention: "Nudge",
+                graceSeconds: 90),
+            AttentionFocusTemplate(
+                id: "strict", name: "Distraction block", symbol: "shield.fill", durationMinutes: 30,
+                allowedCategoryIDs: ["work-coding"], intervention: "Block", graceSeconds: 15),
         ]
     }
 
     private static func makeSetupSteps() -> [AttentionSetupStep] {
         [
-            AttentionSetupStep(id: "welcome", title: "Private by design", detail: "Review what Attention stores locally and choose your tracking depth.", symbol: "lock.shield.fill", completed: false),
-            AttentionSetupStep(id: "permissions", title: "macOS signals", detail: "Verify application activity, idle time, screen lock, and optional window titles.", symbol: "checkmark.shield.fill", completed: false),
-            AttentionSetupStep(id: "browsers", title: "Browsers and profiles", detail: "Pair Dia, Chrome, and Safari profiles without using Terminal.", symbol: "globe", completed: false),
-            AttentionSetupStep(id: "history", title: "Historical context", detail: "Choose profiles and date ranges for a clearly labeled estimated import.", symbol: "clock.arrow.circlepath", completed: false),
-            AttentionSetupStep(id: "identity", title: "Services and categories", detail: "Approve mappings that unify native applications and websites.", symbol: "square.grid.3x3.fill", completed: false),
-            AttentionSetupStep(id: "music", title: "Music sources", detail: "Test Apple Music, Spotify, and browser media metadata.", symbol: "music.note", completed: false),
-            AttentionSetupStep(id: "focus", title: "Focus preferences", detail: "Choose focus templates, nudges, and entertainment budgets.", symbol: "scope", completed: false),
-            AttentionSetupStep(id: "backup", title: "Encrypted iCloud backup", detail: "Create a recovery key and verify the first local snapshot.", symbol: "icloud.and.arrow.up.fill", completed: false),
-            AttentionSetupStep(id: "calibration", title: "Two-minute calibration", detail: "Switch applications, play media, and confirm every signal arrives.", symbol: "waveform.path.ecg", completed: false),
+            AttentionSetupStep(
+                id: "welcome", title: "Private by design",
+                detail: "Review what Attention stores locally and choose your tracking depth.",
+                symbol: "lock.shield.fill", completed: false),
+            AttentionSetupStep(
+                id: "permissions", title: "macOS signals",
+                detail:
+                    "Verify application activity, idle time, screen lock, and optional window titles.",
+                symbol: "checkmark.shield.fill", completed: false),
+            AttentionSetupStep(
+                id: "browsers", title: "Browsers and profiles",
+                detail: "Pair Dia, Chrome, and Safari profiles without using Terminal.",
+                symbol: "globe", completed: false),
+            AttentionSetupStep(
+                id: "history", title: "Historical context",
+                detail: "Choose profiles and date ranges for a clearly labeled estimated import.",
+                symbol: "clock.arrow.circlepath", completed: false),
+            AttentionSetupStep(
+                id: "identity", title: "Services and categories",
+                detail: "Approve mappings that unify native applications and websites.",
+                symbol: "square.grid.3x3.fill", completed: false),
+            AttentionSetupStep(
+                id: "music", title: "Music sources",
+                detail: "Test Apple Music, Spotify, and browser media metadata.",
+                symbol: "music.note", completed: false),
+            AttentionSetupStep(
+                id: "focus", title: "Focus preferences",
+                detail: "Choose focus templates, nudges, and entertainment budgets.",
+                symbol: "scope", completed: false),
+            AttentionSetupStep(
+                id: "backup", title: "Encrypted iCloud backup",
+                detail: "Create a recovery key and verify the first local snapshot.",
+                symbol: "icloud.and.arrow.up.fill", completed: false),
+            AttentionSetupStep(
+                id: "calibration", title: "Two-minute calibration",
+                detail: "Switch applications, play media, and confirm every signal arrives.",
+                symbol: "waveform.path.ecg", completed: false),
         ]
     }
 }
