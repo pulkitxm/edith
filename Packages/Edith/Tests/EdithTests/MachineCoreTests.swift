@@ -171,6 +171,63 @@ import Testing
     }
 }
 
+@Suite struct SSHClipboardConfigurationTests {
+    private let first = Machine(
+        id: UUID(uuidString: "01010101-0101-0101-0101-010101010101")!, name: "Tuf",
+        host: "10.77.0.2", username: "pulkit", source: .sshConfigAlias("tuf-wired"),
+        sshClipboardEnabled: true)
+
+    @Test func configUsesTheUpstreamSnakeCaseSchema() throws {
+        let config = SSHClipboardConfiguration(
+            nodeID: UUID(uuidString: "02020202-0202-0202-0202-020202020202")!,
+            nodeName: "mac",
+            peers: [SSHClipboardPeerConfiguration(name: "Tuf", sshCommand: "ssh tuf")])
+        let object = try #require(
+            JSONSerialization.jsonObject(with: config.encoded()) as? [String: Any])
+        #expect(object["node_id"] as? String == "02020202-0202-0202-0202-020202020202")
+        #expect(object["node_name"] as? String == "mac")
+        #expect(object["poll_interval_ms"] as? Int == 75)
+        #expect(try SSHClipboardConfiguration.decode(config.encoded()) == config)
+    }
+
+    @Test func sshCommandsPreserveAliasesAndManualPorts() {
+        #expect(
+            SSHClipboardConfiguration.sshCommand(for: first) == "/usr/bin/ssh tuf-wired")
+        let manual = Machine(
+            name: "Build", host: "10.0.0.5", port: 2222, username: "root",
+            sshClipboardEnabled: true)
+        #expect(
+            SSHClipboardConfiguration.sshCommand(for: manual)
+                == "/usr/bin/ssh -p 2222 root@10.0.0.5")
+    }
+
+    @Test func enablingIsIdempotentAndReplacesChangedConnections() {
+        var config = SSHClipboardConfiguration(nodeName: "mac")
+        config.enable(first)
+        config.enable(first)
+        #expect(config.peers.count == 1)
+        var moved = first
+        moved.source = .sshConfigAlias("tuf-wifi")
+        config.enable(moved, replacing: first)
+        #expect(
+            config.peers == [
+                SSHClipboardPeerConfiguration(name: "Tuf", sshCommand: "/usr/bin/ssh tuf-wifi")
+            ])
+    }
+
+    @Test func disablingPreservesUnrelatedPeers() {
+        var config = SSHClipboardConfiguration(
+            nodeName: "mac",
+            peers: [SSHClipboardPeerConfiguration(name: "Other", sshCommand: "ssh other")])
+        config.enable(first)
+        config.disable(first)
+        #expect(
+            config.peers == [
+                SSHClipboardPeerConfiguration(name: "Other", sshCommand: "ssh other")
+            ])
+    }
+}
+
 @Suite @MainActor struct MachineStoreTests {
     private func temporaryStore() -> (MachineStore, URL) {
         let root = FileManager.default.temporaryDirectory
