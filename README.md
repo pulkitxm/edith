@@ -164,3 +164,6 @@ Sparkle, used for in-app updates, is distributed under the MIT licence.
 
 The lid-awake feature was inspired by [Awayke](https://github.com/daemonphantom/Awayke),
 an MIT-licensed macOS utility by daemonphantom.
+
+SSH clipboard synchronization uses [ssh-clipboard](https://github.com/standardagents/ssh-clipboard),
+created by Justin Schroeder and maintained by Standard Agents under the MIT License.
