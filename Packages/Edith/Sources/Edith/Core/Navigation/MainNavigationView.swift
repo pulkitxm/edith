@@ -474,6 +474,12 @@ struct MainWindowView: View {
             if automaticActionsEnabled { refreshPermissionsPill() }
         }
         .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.didResignActiveNotification)
+        ) { _ in
+            dismissCommandHints()
+        }
+        .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)
         ) { _ in
@@ -766,9 +772,7 @@ struct MainWindowView: View {
                     commandHintWork = work
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
                 } else {
-                    commandHintWork?.cancel()
-                    commandHintWork = nil
-                    showShortcutHints = false
+                    dismissCommandHints()
                 }
             }
             return event
@@ -776,12 +780,17 @@ struct MainWindowView: View {
     }
 
     private func removeCommandHintMonitor() {
-        commandHintWork?.cancel()
-        commandHintWork = nil
+        dismissCommandHints()
         if let monitor = commandHintMonitor {
             NSEvent.removeMonitor(monitor)
             commandHintMonitor = nil
         }
+    }
+
+    private func dismissCommandHints() {
+        commandHintWork?.cancel()
+        commandHintWork = nil
+        showShortcutHints = false
     }
 
     private var sidebarFooter: some View {
