@@ -53,17 +53,21 @@ struct AttentionPage: View {
                 HStack(spacing: UIScale.pt(7)) {
                     Button {
                         store.recordingPaused.toggle()
-                        store.toast = store.recordingPaused ? "Mock recording paused" : "Mock recording resumed"
+                        store.toast =
+                            store.recordingPaused
+                            ? "Mock recording paused" : "Mock recording resumed"
                     } label: {
                         Label(
                             store.recordingPaused ? "Resume" : "Recording",
-                            systemImage: store.recordingPaused ? "pause.circle.fill" : "record.circle")
-                            .font(.system(size: UIScale.pt(11), weight: .medium))
-                            .foregroundStyle(store.recordingPaused ? DashSkin.warn : DashSkin.sage)
-                            .padding(.horizontal, UIScale.pt(10))
-                            .frame(height: UIScale.pt(28))
-                            .background(DashSkin.paper2(dark), in: Capsule())
-                            .overlay(Capsule().strokeBorder(DashSkin.line(dark)))
+                            systemImage: store.recordingPaused
+                                ? "pause.circle.fill" : "record.circle"
+                        )
+                        .font(.system(size: UIScale.pt(11), weight: .medium))
+                        .foregroundStyle(store.recordingPaused ? DashSkin.warn : DashSkin.sage)
+                        .padding(.horizontal, UIScale.pt(10))
+                        .frame(height: UIScale.pt(28))
+                        .background(DashSkin.paper2(dark), in: Capsule())
+                        .overlay(Capsule().strokeBorder(DashSkin.line(dark)))
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
