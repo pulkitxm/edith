@@ -296,7 +296,7 @@ enum CatalogSamples {
     @Test func listingReportsEverySettingAsOneJSONArray() async {
         let result = await CLIProbe.run(["config", "ls", "--json"])
         #expect(result.code == 0)
-        let array = try? #require(result.array)
+        let array = result.array
         #expect(array?.count == ConfigCatalog.settings.count)
     }
 
@@ -416,7 +416,7 @@ enum CatalogSamples {
     @Test func theSchemaIsOneJSONDocumentCoveringEveryWritableSetting() async {
         let result = await CLIProbe.run(["schema"])
         #expect(result.code == 0)
-        let object = try? #require(result.object)
+        let object = result.object
         let properties = object?["properties"] as? [String: Any] ?? [:]
         #expect(properties.count == ConfigCatalog.settings.filter { !$0.readOnly }.count)
         #expect(object?["additionalProperties"] as? Bool == false)

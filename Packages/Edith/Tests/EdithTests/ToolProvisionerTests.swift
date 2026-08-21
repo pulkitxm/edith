@@ -34,7 +34,7 @@ private final class CommandRecorder: @unchecked Sendable {
     @Test func presenceCheckShortCircuitsInstallation() async {
         let recorder = CommandRecorder()
         let provisioner = ToolProvisioner { request, onLine in
-            recorder.record(request)
+            _ = recorder.record(request)
             onLine("1.2.3")
             return CLICommandResult(terminationStatus: 0, output: "1.2.3\n")
         }
