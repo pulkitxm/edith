@@ -156,7 +156,6 @@ struct DashUsage: Decodable {
 
 enum DashRange: Equatable {
     case today, yesterday, thisWeek, lastWeek, all
-    case cycle(String?)
     case month(String)
     case custom(String, String)
 }
@@ -396,11 +395,6 @@ struct HeatDay {
     var peakTokens = 0.0
 }
 
-struct CycleOption: Identifiable, Equatable {
-    let id: String
-    let label: String
-}
-
 enum TableColumn: String, CaseIterable {
     case model, cost, share, tokens, input, output, cacheRead, days
 }
@@ -424,11 +418,10 @@ final class DashboardModel {
     static let shared = DashboardModel()
     static let unattributedCostModel = "unattributed-cost"
 
-    var range: DashRange = .cycle(nil) { didSet { persist(); recompute() } }
+    var range: DashRange = .all { didSet { persist(); recompute() } }
     var selectedSources: Set<String> = [] { didSet { persist(); recompute() } }
     var selectedModels: Set<String> = [] { didSet { persist(); recompute() } }
     var selectedPaths: Set<String> = [] { didSet { persist(); recompute() } }
-    var billingDay = 26 { didSet { persist(); rebuildCycles(); recompute() } }
     var sortColumn: TableColumn = .cost { didSet { persist(); resortTotals() } }
     var sortAscending = false { didSet { persist(); resortTotals() } }
     var heatMetric: DashMetric = .tokens { didSet { persist() } }
@@ -470,7 +463,6 @@ final class DashboardModel {
     private(set) var machineCollectionDates: [String: Date] = [:]
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
-    private(set) var cycleOptions: [CycleOption] = []
     private(set) var monthOptions: [String] = []
     private var modelIndex: [String: Int] = [:]
     private var sourceIndex: [String: Int] = [:]
@@ -630,7 +622,6 @@ final class DashboardModel {
             .map { ProjectPath(path: $0.key, name: $0.value.name, tokens: $0.value.tokens) }
             .sorted { ($0.tokens, $1.path) > ($1.tokens, $0.path) }
 
-        rebuildCycles()
         var months = Set<String>()
         for d in parsed.daily where d.period.count >= 7 {
             months.insert(String(d.period.prefix(7)))
@@ -724,7 +715,10 @@ final class DashboardModel {
         loading = true
         defer { loading = false }
         let d = preferences
-        if let rs = d.string(forKey: "dashRange") { range = decodeRange(rs) }
+        if let rs = d.string(forKey: "dashRange") {
+            range = decodeRange(rs)
+            d.set(encodeRange(range), forKey: "dashRange")
+        }
         let validSources = Set(allSources.map(\.id))
         let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
         let savedKnownSources = d.string(forKey: "dashKnownSources").flatMap(Self.decodeSet)
@@ -742,9 +736,6 @@ final class DashboardModel {
         }
         if let raw = d.string(forKey: "dashPaths"), !raw.isEmpty {
             selectedPaths = reconciledPaths(Set(raw.split(separator: "\n").map(String.init)))
-        }
-        if d.object(forKey: "dashBillingDay") != nil {
-            billingDay = min(max(d.integer(forKey: "dashBillingDay"), 1), 31)
         }
         if let sc = d.string(forKey: "dashSort"), let col = TableColumn(rawValue: sc) {
             sortColumn = col
@@ -817,7 +808,6 @@ final class DashboardModel {
         d.set(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
         d.set(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
         d.set(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
-        d.set(billingDay, forKey: "dashBillingDay")
         d.set(sortColumn.rawValue, forKey: "dashSort")
         d.set(sortAscending, forKey: "dashSortAsc")
         d.set(projSortKey.rawValue, forKey: "projSort")
@@ -832,7 +822,6 @@ final class DashboardModel {
         case .thisWeek: return "thisWeek"
         case .lastWeek: return "lastWeek"
         case .all: return "all"
-        case .cycle(let id): return id.map { "cycle:\($0)" } ?? "cycle"
         case .month(let ym): return "month:\(ym)"
         case .custom(let f, let t): return "custom:\(f)~\(t)"
         }
@@ -850,20 +839,18 @@ final class DashboardModel {
         case "thisWeek": return .thisWeek
         case "lastWeek": return .lastWeek
         case "all": return .all
-        case "cycle": return .cycle(nil)
         default:
-            if s.hasPrefix("cycle:") { return .cycle(String(s.dropFirst(6))) }
             if s.hasPrefix("month:") { return .month(String(s.dropFirst(6))) }
             if s.hasPrefix("custom:") {
                 let parts = s.dropFirst(7).split(separator: "~", maxSplits: 1).map(String.init)
                 if parts.count == 2 { return .custom(parts[0], parts[1]) }
             }
-            return .cycle(nil)
+            return .all
         }
     }
 
     func reset() {
-        range = .cycle(nil)
+        range = .all
         selectedSources = Set(defaultSources)
         selectedModels = Set(defaultModels)
         selectedPaths = []
@@ -899,73 +886,6 @@ final class DashboardModel {
 
     func ymd(_ d: Date) -> String { ymdStr(d) }
 
-    private func rebuildCycles() {
-        guard data != nil else { return }
-        let periods = sortedPeriods
-        guard let first = periods.first, let last = periods.last,
-            let earliest = parseYMD(first), let latest = parseYMD(last)
-        else {
-            cycleOptions = []
-            return
-        }
-        var out: [CycleOption] = []
-        var start = cycleStart(earliest)
-        while start <= latest {
-            let end = cycleEnd(start)
-            out.append(CycleOption(id: ymdStr(start), label: cycleLabel(start, end)))
-            start = cal.date(byAdding: .day, value: 1, to: end) ?? latest
-            if start > latest { break }
-            start = cycleStart(start)
-        }
-        cycleOptions = out.reversed()
-    }
-
-    private func daysInMonth(_ date: Date) -> Int {
-        cal.range(of: .day, in: .month, for: date)?.count ?? 30
-    }
-
-    private func anchor(_ date: Date, _ day: Int) -> Date {
-        var comps = cal.dateComponents([.year, .month], from: date)
-        comps.day = min(day, daysInMonth(date))
-        return cal.date(from: comps) ?? date
-    }
-
-    private func cycleStart(_ date: Date) -> Date {
-        let d = cal.component(.day, from: date)
-        let a = min(billingDay, daysInMonth(date))
-        if d >= a { return anchor(date, billingDay) }
-        let prev = cal.date(byAdding: .month, value: -1, to: date) ?? date
-        return anchor(prev, billingDay)
-    }
-
-    private func cycleEnd(_ start: Date) -> Date {
-        let next = cal.date(byAdding: .month, value: 1, to: start) ?? start
-        let a = anchor(next, billingDay)
-        return cal.date(byAdding: .day, value: -1, to: a) ?? start
-    }
-
-    private static let dayMonthFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "d MMM"
-        return f
-    }()
-    private static let yearFmt: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy"
-        return f
-    }()
-
-    private func cycleLabel(_ start: Date, _ end: Date) -> String {
-        let f = Self.dayMonthFmt
-        let yf = Self.yearFmt
-        let sameYear = yf.string(from: start) == yf.string(from: end)
-        let left =
-            sameYear ? f.string(from: start) : "\(f.string(from: start)) \(yf.string(from: start))"
-        return "\(left) – \(f.string(from: end)) \(yf.string(from: end))"
-    }
-
     private func window() -> (from: Date, to: Date)? {
         guard let first = sortedPeriods.first, let last = sortedPeriods.last,
             let earliest = parseYMD(first), let dataLatest = parseYMD(last)
@@ -988,15 +908,12 @@ final class DashboardModel {
             let lastEnd = cal.date(byAdding: .day, value: -1, to: thisStart) ?? thisStart
             let lastStart = cal.date(byAdding: .day, value: -6, to: lastEnd) ?? lastEnd
             return (lastStart, lastEnd)
-        case .cycle(let start):
-            let s = start.flatMap(parseYMD) ?? cycleStart(today)
-            return (s, min(cycleEnd(s), today))
         case .month(let ym):
             guard let d = DateFormatter.monthParser.date(from: ym) else {
                 return (earliest, latest)
             }
             let start = cal.date(from: cal.dateComponents([.year, .month], from: d)) ?? d
-            let end = anchor(cal.date(byAdding: .month, value: 1, to: start) ?? start, 1)
+            let end = cal.date(byAdding: .month, value: 1, to: start) ?? start
             return (start, cal.date(byAdding: .day, value: -1, to: end) ?? start)
         case .custom(let f, let t):
             guard let fd = parseYMD(f), let td = parseYMD(t) else { return (earliest, latest) }
