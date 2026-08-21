@@ -535,14 +535,17 @@ public enum MachineControlCenterCommands {
                 command -v rfkill >/dev/null 2>&1 || exit 4
                 \(sudoCommand) sh -c 'exec </dev/null; \(disruptiveScript)exec rfkill "$1" wlan' sh \(rfkillValue) >/dev/null
                 """
-            let darwinSetPower =
-                usingLocalAuthorization
-                ? """
+            let darwinSetPower: String
+            if usingLocalAuthorization {
+                darwinSetPower = """
                     command -v osascript >/dev/null 2>&1 || exit 4
                     \(disruptiveOutput)
                     EDITH_WIFI_DEVICE="$wifi_device" EDITH_WIFI_POWER=\(nmcliValue) osascript -e 'do shell script ("/usr/sbin/networksetup -setairportpower " & quoted form of (system attribute "EDITH_WIFI_DEVICE") & " " & quoted form of (system attribute "EDITH_WIFI_POWER")) with administrator privileges' >/dev/null </dev/null
                     """
-                : "\(sudoCommand) sh -c 'exec </dev/null; \(disruptiveScript)exec networksetup -setairportpower \"$1\" \"$2\"' sh \"$wifi_device\" \(nmcliValue) >/dev/null"
+            } else {
+                darwinSetPower =
+                    "\(sudoCommand) sh -c 'exec </dev/null; \(disruptiveScript)exec networksetup -setairportpower \"$1\" \"$2\"' sh \"$wifi_device\" \(nmcliValue) >/dev/null"
+            }
             darwin = """
                 command -v networksetup >/dev/null 2>&1 || exit 4
                 wifi_device=$(networksetup -listallhardwareports </dev/null 2>/dev/null | awk '

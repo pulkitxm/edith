@@ -98,6 +98,7 @@ public enum MachineThermalControls {
         if withSudoPassword {
             return "/usr/bin/sudo -S -p '' sh -c \(quoted) 2>&1"
         }
-        return "if [ -w \(path) ]; then sh -c \(quoted); else /usr/bin/sudo -n sh -c \(quoted); fi 2>&1"
+        return "if [ -w \(path) ]; then sh -c \(quoted); "
+            + "else /usr/bin/sudo -n sh -c \(quoted); fi 2>&1"
     }
 }
