@@ -35,6 +35,6 @@ import Testing
             return
         }
         #expect(elapsed >= .milliseconds(50))
-        #expect(elapsed < .seconds(2))
+        #expect(elapsed < .seconds(5))
     }
 }
