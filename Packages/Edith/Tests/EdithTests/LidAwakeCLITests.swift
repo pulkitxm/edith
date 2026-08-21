@@ -48,7 +48,7 @@ import Testing
     }
 
     @Test func statusWorksWithoutTheAppFromStoredState() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.shared.set(true, forKey: LidAwakeState.enabledKey)
             world.shared.set(true, forKey: LidAwakeState.activeKey)
             world.shared.set(LidAwakeSession.oneHour.rawValue, forKey: LidAwakeState.sessionKey)
@@ -77,7 +77,7 @@ import Testing
     }
 
     @Test func onPostsTheChosenSessionAndReportsLiveState() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { name in
                 name == IPC.Name.lidAwakeActionResult
@@ -98,7 +98,7 @@ import Testing
     }
 
     @Test func untilLidReopensIsSentAsItsOwnSession() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { _ in
                 Self.liveReply(active: true, session: .untilLidReopens)
@@ -114,7 +114,7 @@ import Testing
     }
 
     @Test func offWaitsForTheRuntimeResult() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { _ in Self.liveReply(active: false) }
             let result = await CLIProbe.capture(["lid-awake", "off", "--json"])
@@ -125,7 +125,7 @@ import Testing
     }
 
     @Test func runtimeFailuresReachStderrAndExitOne() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { _ in
                 [LidAwakeIPC.okKey: false, LidAwakeIPC.errorKey: "pmset refused"]
@@ -137,7 +137,7 @@ import Testing
     }
 
     @Test func batteryThresholdIsConfiguredLive() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             let result = await CLIProbe.capture(["lid-awake", "battery", "25", "--json"])
             #expect(result.code == 0)
             #expect(world.shared.integer(forKey: LidAwakeState.batteryThresholdKey) == 25)
@@ -155,7 +155,7 @@ import Testing
     }
 
     @Test func restoreOnQuitIsConfiguredLive() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             let result = await CLIProbe.capture([
                 "lid-awake", "restore-on-quit", "false", "--json",
             ])

@@ -101,7 +101,7 @@ import Testing
     ]
 
     @Test func refreshRunsWithoutTheAppAndReportsWhatItCollected() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(false)
             CLIEnvironment.usageRefresh = .scripted(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh", "--json"])
@@ -116,7 +116,7 @@ import Testing
     }
 
     @Test func refreshAttachesToARunOneWhenTheLockIsAlreadyHeld() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.usageRefresh = .scripted(events: Self.run, busy: true)
             let result = await CLIProbe.capture(["usage", "refresh", "--json"])
             #expect(result.code == 0)
@@ -125,7 +125,7 @@ import Testing
     }
 
     @Test func followWithNothingRunningIsUnavailableRatherThanAFreshRun() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.usageRefresh = .scripted(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh", "--follow"])
             #expect(result.code == ExitCodes.unavailable)
@@ -134,7 +134,7 @@ import Testing
     }
 
     @Test func aPipelineFailureIsAnErrorRatherThanASilentSuccess() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.usageRefresh = .scripted(
                 events: [], failure: .reported("no usage found from any source"))
             let result = await CLIProbe.capture(["usage", "refresh"])
@@ -145,7 +145,7 @@ import Testing
     }
 
     @Test func refreshKeepsStdoutCleanForPipes() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.usageRefresh = .scripted(events: Self.run)
             let result = await CLIProbe.capture(["usage", "refresh"])
             #expect(result.code == 0)

@@ -129,7 +129,7 @@ import Testing
     }
 
     @Test func addingAMachinePutsItOnTheListTheAppReads() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             let result = await CLIProbe.capture([
                 "machines", "add", "shed", "--host", "10.0.0.4", "--user", "pi", "--json",
             ])
@@ -143,7 +143,7 @@ import Testing
     }
 
     @Test func aDuplicateNameIsRefusedRatherThanMakingTheNameAmbiguous() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             Self.seed()
             let result = await CLIProbe.capture([
                 "machines", "add", "builder", "--host", "10.0.0.1",
@@ -155,7 +155,7 @@ import Testing
     }
 
     @Test func aPortOutsideTheLegalRangeIsRejectedBeforeAnythingIsWritten() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture([
                 "machines", "add", "shed", "--host", "10.0.0.4", "--port", "70000",
             ])
@@ -165,7 +165,7 @@ import Testing
     }
 
     @Test func aKeyFileThatIsNotThereIsNotFoundRatherThanStoredBlindly() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture([
                 "machines", "add", "shed", "--host", "10.0.0.4", "--key", "/nowhere/id_ed25519",
             ])
@@ -175,7 +175,7 @@ import Testing
     }
 
     @Test func editingChangesOnlyWhatIsNamed() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             Self.seed()
             let before = MachineRegistry.machines()[0]
             let result = await CLIProbe.capture([
@@ -192,7 +192,7 @@ import Testing
     }
 
     @Test func removingWithoutSayingYesTouchesNothing() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             Self.seed()
             let result = await CLIProbe.capture(["machines", "rm", "builder", "--json"])
             #expect(result.code == 0)
@@ -203,7 +203,7 @@ import Testing
     }
 
     @Test func removingTakesTheForwardsAndSnippetsWithIt() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             Self.seed()
             let target = MachineRegistry.machines()[0]
             let other = Machine(name: "Other", host: "10.0.0.5")
@@ -226,7 +226,7 @@ import Testing
     }
 
     @Test func forwardsAreNumberedByLocalPortAndCannotCollide() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             Self.seed()
             for port in ["9090", "8080"] {
                 let added = await CLIProbe.capture([
@@ -257,7 +257,7 @@ import Testing
     }
 
     @Test func aForwardNumberOutsideTheListIsNotFound() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             Self.seed()
             let result = await CLIProbe.capture(["machines", "forwards", "rm", "builder", "4"])
             #expect(result.code == ExitCodes.notFound)
@@ -266,7 +266,7 @@ import Testing
     }
 
     @Test func aSharedSnippetShowsUpOnEveryMachine() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             Self.seed()
             MachineRegistry.add(Machine(name: "Other", host: "10.0.0.5"))
             _ = await CLIProbe.capture([
@@ -289,7 +289,7 @@ import Testing
     }
 
     @Test func theStoreAndTheCLIReadTheSameList() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             _ = await CLIProbe.capture([
                 "machines", "add", "shed", "--host", "10.0.0.4", "--json",
             ])

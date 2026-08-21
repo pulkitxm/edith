@@ -391,7 +391,7 @@ import Testing
 
 @Suite struct MusicCommandEndToEndTests {
     @Test func pauseTargetsSpotifyWhenItIsPlayingAndTheLibraryIsMerelyLoaded() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.shared.set(true, forKey: MusicSession.builtinExtensionKey)
             world.answers { _ in
@@ -416,7 +416,7 @@ import Testing
     }
 
     @Test func pauseTargetsTheLibraryWhenNoExternalPlayerIsRunning() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.shared.set(true, forKey: MusicSession.builtinExtensionKey)
             world.answers { _ in ["track": "Gal ban gyi.mp3", "isPlaying": true] }
@@ -429,7 +429,7 @@ import Testing
     }
 
     @Test func statusWithNoPlayerAtAllExitsUnavailable() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(false)
             world.players([:])
             let result = await CLIProbe.capture(["music", "status"])
@@ -455,7 +455,7 @@ import Testing
     }
 
     @Test func aForcedPlayerThatIsNotRunningIsNeverLaunched() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.players([:])
             let result = await CLIProbe.capture(["music", "play", "--player", "apple"])
             #expect(result.code == ExitCodes.unavailable)
@@ -480,7 +480,7 @@ import Testing
     }
 
     @Test func volumeOutsideZeroToOneIsRejectedBeforeAnyPlayerIsTouched() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.players([
                 .spotify: PlayerSnapshot(player: .spotify, isRunning: true, title: "x")
             ])

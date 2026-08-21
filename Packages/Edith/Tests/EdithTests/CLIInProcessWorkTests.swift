@@ -6,7 +6,7 @@ import Testing
 
 @Suite struct CLIInProcessWorkTests {
     @Test func toolsInstallDoesTheInstallItselfRatherThanAskingTheApp() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(false)
             CLIEnvironment.executableNamed = { _ in nil }
             CLIEnvironment.installTool = { _, log in
@@ -22,7 +22,7 @@ import Testing
     }
 
     @Test func toolsInstallReportsTheManualInstructionWhenItFails() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.executableNamed = { _ in nil }
             CLIEnvironment.installTool = { _, _ in
                 throw ToolInstallFailure.noPackageManager("Claude Code")
@@ -36,7 +36,7 @@ import Testing
     }
 
     @Test func downloadCancelSaysWhenNothingStoppedTheRunningTransfer() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
             let result = await CLIProbe.capture(["download", "cancel", "--json"])
             #expect(result.code == 0)
@@ -87,7 +87,7 @@ import Testing
     }
 
     @Test func limitsRefreshThatGoesUnansweredIsAnErrorRatherThanStaleNumbers() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { _ in nil }
             let result = await CLIProbe.capture(["usage", "limits", "--refresh"])
