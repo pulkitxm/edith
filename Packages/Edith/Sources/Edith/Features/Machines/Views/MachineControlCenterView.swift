@@ -417,7 +417,7 @@ struct MachineControlCenterView: View {
                     }
                 }
                 .padding(.horizontal, UIScale.pt(8))
-                .padding(.vertical, UIScale.pt(index < 2 ? 9 : 10))
+                .padding(.vertical, UIScale.pt(index < 2 ? 17 : 13))
                 if index < 5 {
                     Divider().padding(.leading, UIScale.pt(36))
                 }
