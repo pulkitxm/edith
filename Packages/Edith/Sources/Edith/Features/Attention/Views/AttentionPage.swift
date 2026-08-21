@@ -658,9 +658,9 @@ private struct BrowserInstallCard: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Private local token").font(.system(size: 11, weight: .semibold))
                     HStack {
-                        Text(model.settings.serverToken)
+                        Text(String(repeating: "•", count: 24))
                             .font(.system(size: 11, design: .monospaced))
-                            .lineLimit(1).textSelection(.enabled)
+                            .lineLimit(1)
                         Spacer()
                         Button("Copy") { model.copyToken() }
                     }
