@@ -99,6 +99,9 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             return .init(status: 200, body: ["status": "ok"])
         }
         guard request.method == "POST", request.path == "/v1/heartbeat" else {
+            if request.method == "POST", request.path == "/v1/history" {
+                return historyResponse(for: request)
+            }
             return .init(status: 404, body: ["error": "not found"])
         }
         guard request.headers["x-edith-token"] == settings.serverToken else {
@@ -112,6 +115,42 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         } catch {
             return .init(status: 422, body: ["error": "invalid heartbeat"])
         }
+    }
+
+    private func historyResponse(for request: AttentionHTTPRequest) -> AttentionHTTPResponse {
+        guard request.headers["x-edith-token"] == settings.serverToken else {
+            return .init(status: 401, body: ["error": "unauthorized"])
+        }
+        do {
+            let payload = try Self.decoder.decode(AttentionHistoryImport.self, from: request.body)
+            let visits = payload.visits.compactMap { sanitize(visit: $0) }
+            try repository.importHistory(visits)
+            return .init(
+                status: 202,
+                body: ["status": "accepted", "imported": String(visits.count)])
+        } catch {
+            return .init(status: 422, body: ["error": "invalid history"])
+        }
+    }
+
+    private func sanitize(visit: AttentionHistoryVisit) -> AttentionHistoryVisit? {
+        guard var components = URLComponents(string: visit.url),
+            let host = components.host?.lowercased(), !host.isEmpty
+        else { return nil }
+        components.query = nil
+        components.fragment = nil
+        let storedURL: String
+        switch settings.privacyLevel {
+        case .applications: return nil
+        case .domains: storedURL = host
+        case .detailed: storedURL = components.string ?? host
+        }
+        return AttentionHistoryVisit(
+            url: storedURL,
+            title: settings.privacyLevel == .detailed
+                ? visit.title.map { String($0.prefix(500)) } : nil,
+            lastVisitedAt: visit.lastVisitedAt, visitCount: max(0, visit.visitCount),
+            typedCount: max(0, visit.typedCount), profile: String(visit.profile.prefix(100)))
     }
 
     private func ingest(_ heartbeat: AttentionBrowserHeartbeat) throws {

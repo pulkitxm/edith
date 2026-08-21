@@ -81,6 +81,37 @@ public struct AttentionBrowserHeartbeat: Codable, Equatable, Sendable {
     }
 }
 
+public struct AttentionHistoryVisit: Codable, Equatable, Sendable {
+    public var url: String
+    public var title: String?
+    public var lastVisitedAt: Date
+    public var visitCount: Int
+    public var typedCount: Int
+    public var profile: String
+
+    public init(
+        url: String, title: String? = nil, lastVisitedAt: Date, visitCount: Int,
+        typedCount: Int, profile: String
+    ) {
+        self.url = url
+        self.title = title
+        self.lastVisitedAt = lastVisitedAt
+        self.visitCount = visitCount
+        self.typedCount = typedCount
+        self.profile = profile
+    }
+}
+
+public struct AttentionHistoryImport: Codable, Equatable, Sendable {
+    public var profile: String
+    public var visits: [AttentionHistoryVisit]
+
+    public init(profile: String, visits: [AttentionHistoryVisit]) {
+        self.profile = profile
+        self.visits = visits
+    }
+}
+
 public struct AttentionEvent: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var startedAt: Date

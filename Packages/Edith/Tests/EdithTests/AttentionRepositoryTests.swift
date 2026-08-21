@@ -103,6 +103,25 @@ import Testing
         #expect(summary.music.first?.duration == 120)
     }
 
+    @Test func browserHistoryInventoryDeduplicatesPerProfileWithoutInventingEvents() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let first = AttentionHistoryVisit(
+            url: "example.com", lastVisitedAt: now, visitCount: 2, typedCount: 1,
+            profile: "Default")
+        let updated = AttentionHistoryVisit(
+            url: "example.com", lastVisitedAt: now.addingTimeInterval(60), visitCount: 3,
+            typedCount: 1, profile: "Default")
+        let otherProfile = AttentionHistoryVisit(
+            url: "example.com", lastVisitedAt: now, visitCount: 1, typedCount: 0,
+            profile: "Work")
+        try fixture.repository.importHistory([first])
+        try fixture.repository.importHistory([updated, otherProfile])
+        #expect(fixture.repository.historyVisits().count == 2)
+        #expect(fixture.repository.historyVisits().first?.visitCount == 3)
+        #expect(fixture.repository.hasEvents() == false)
+    }
+
     private func appEvent(start: Date, duration: TimeInterval, name: String) -> AttentionEvent {
         AttentionEvent(
             startedAt: start, duration: duration, source: .application, appName: name,

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Edith Attention Settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="mark">E</div>
+      <div><h1>Edith Attention</h1><p>Private browser activity tracking on this Mac</p></div>
+      <span id="status" class="status">Checking</span>
+    </header>
+
+    <section class="card intro">
+      <div><span class="eyebrow">Connection</span><h2>Connect this profile to Edith</h2><p>Copy the port and private token from Attention settings in Edith. Data is sent only to 127.0.0.1 on this Mac.</p></div>
+      <button id="test" class="primary">Test connection</button>
+    </section>
+
+    <section class="card grid">
+      <label>Profile label<input id="profile" autocomplete="off" placeholder="Work, Personal, Default"></label>
+      <label>Local port<input id="port" type="number" min="1024" max="65535"></label>
+      <label class="wide">Private token<input id="token" type="password" autocomplete="off" placeholder="Paste from Edith"></label>
+      <label>Idle after<select id="idleThreshold"><option value="60">1 minute</option><option value="180">3 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option></select></label>
+      <label class="toggle"><span><strong>Live tracking</strong><small>Send the focused tab every 30 seconds</small></span><input id="enabled" type="checkbox"></label>
+    </section>
+
+    <section class="card">
+      <div class="row"><div><span class="eyebrow">Deep mode</span><h2>Media and listening insight</h2><p>Optional access reads playing audio and video metadata so Edith can summarize tracks, artists, albums, services, and passive playback.</p></div><button id="deep">Enable deep mode</button></div>
+      <div class="privacy"><span>Reads only media elements and Media Session metadata</span><span>Never sends form fields, messages, cookies, or page contents</span></div>
+    </section>
+
+    <section class="card">
+      <div class="row"><div><span class="eyebrow">History inventory</span><h2>Learn the sites in this profile</h2><p>This imports site visits for categorization suggestions. Visit timestamps are not converted into tracked time.</p></div><button id="history">Import 30 days</button></div>
+      <p id="historyResult" class="result"></p>
+    </section>
+
+    <footer><span id="saved">Changes save automatically</span><button id="forget" class="danger">Disconnect profile</button></footer>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@ public struct AttentionRepository: Sendable {
     public var settingsFile: URL { directory.appendingPathComponent("settings.json") }
     public var activeFocusFile: URL { directory.appendingPathComponent("active-focus.json") }
     public var focusHistoryFile: URL { directory.appendingPathComponent("focus.jsonl") }
+    public var browserHistoryFile: URL { directory.appendingPathComponent("browser-history.json") }
     public var lockFile: URL { directory.appendingPathComponent(".lock") }
 
     public func eventFile(for date: Date) -> URL {
@@ -135,6 +136,22 @@ public struct AttentionRepository: Sendable {
         }
     }
 
+    public func importHistory(_ visits: [AttentionHistoryVisit]) throws {
+        try withLock {
+            try prepare()
+            let existing = historyVisitsUnlocked()
+            var merged: [String: AttentionHistoryVisit] = [:]
+            for visit in existing { merged[historyKey(visit)] = visit }
+            for visit in visits { merged[historyKey(visit)] = visit }
+            let values = merged.values.sorted { $0.lastVisitedAt > $1.lastVisitedAt }
+            try encoder.encode(values).write(to: browserHistoryFile, options: .atomic)
+        }
+    }
+
+    public func historyVisits() -> [AttentionHistoryVisit] {
+        withLock { historyVisitsUnlocked() }
+    }
+
     private func appendLine<T: Encodable>(_ value: T, to file: URL) throws {
         let line = try encoder.encode(value) + Data([0x0A])
         if !FileManager.default.fileExists(atPath: file.path) {
@@ -150,6 +167,15 @@ public struct AttentionRepository: Sendable {
     private func prepare() throws {
         try FileManager.default.createDirectory(
             at: eventsDirectory, withIntermediateDirectories: true)
+    }
+
+    private func historyVisitsUnlocked() -> [AttentionHistoryVisit] {
+        guard let data = try? Data(contentsOf: browserHistoryFile) else { return [] }
+        return (try? decoder.decode([AttentionHistoryVisit].self, from: data)) ?? []
+    }
+
+    private func historyKey(_ visit: AttentionHistoryVisit) -> String {
+        visit.profile + "\u{1F}" + visit.url
     }
 
     private func decodeEvents(_ data: Data) -> [AttentionEvent] {
