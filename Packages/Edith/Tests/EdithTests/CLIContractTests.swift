@@ -534,7 +534,7 @@ enum JSONContract {
     @Test func versionReportsItselfAndWhetherTheAppIsUp() async {
         let result = await CLIProbe.run(["version", "--json"])
         #expect(result.code == 0)
-        let object = try? #require(result.object)
+        let object = result.object
         #expect(Set(object?.keys ?? [:].keys) == ["version", "appRunning"])
         #expect(object?["version"] as? String == edithCLIVersion)
         #expect(object?["appRunning"] as? Bool == false)
@@ -603,7 +603,7 @@ enum JSONContract {
     @Test func permissionRowsCarryTheSameFields() async {
         let result = await CLIProbe.run(["permissions", "ls", "--json"])
         #expect(result.code == 0)
-        let object = try? #require(result.object)
+        let object = result.object
         #expect(Set(object?.keys ?? [:].keys) == ["appRunning", "permissions"])
         let rows = object?["permissions"] as? [[String: Any]] ?? []
         let expected: Set<String> = [
@@ -629,7 +629,7 @@ enum JSONContract {
     @Test func diskRowsCarryTheSameFields() async {
         let result = await CLIProbe.run(["system", "disks", "--json"])
         #expect(result.code == 0)
-        let object = try? #require(result.object)
+        let object = result.object
         #expect(
             Set(object?.keys ?? [:].keys)
                 == [

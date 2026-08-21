@@ -11,7 +11,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
     static let shared = ClipboardPanel()
 
     static let width: CGFloat = 450
-    static let maxHeight: CGFloat = 800
+    nonisolated static let maxHeight: CGFloat = 800
     static let willShow = Notification.Name("clipboardPanelWillShow")
 
     weak var store: ClipboardStore? {

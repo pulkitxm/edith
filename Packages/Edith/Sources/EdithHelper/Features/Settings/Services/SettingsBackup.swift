@@ -309,7 +309,7 @@ final class SettingsBackup {
 
     private var debounce: Timer?
     private var sweep: Timer?
-    static let sweepInterval: TimeInterval = 30
+    nonisolated static let sweepInterval: TimeInterval = 30
     private var localFile: URL { AppData.supportDir.appendingPathComponent("settings.json") }
     private var cloudFile: URL { AppData.cloudDir.appendingPathComponent("settings.json") }
 

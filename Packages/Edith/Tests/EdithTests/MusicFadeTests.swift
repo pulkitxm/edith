@@ -78,7 +78,7 @@ import Testing
     }
 
     @Test func movingOntoSomethingThatExistsIsRefusedRatherThanOverwriting() throws {
-        try inTemp { root in
+        inTemp { root in
             let source = makeFile("alpha-song.mp3", in: root)
             let destination = makeFile("Chill/alpha-song.mp3", in: root)
             #expect(throws: MusicLibraryError.self) {
@@ -89,7 +89,7 @@ import Testing
     }
 
     @Test func movingSomewhereItAlreadyIsIsRefusedRatherThanLosingTheFile() throws {
-        try inTemp { root in
+        inTemp { root in
             let source = makeFile("alpha-song.mp3", in: root)
             #expect(throws: MusicLibraryError.self) {
                 _ = try MusicLibrary.relocate(from: source, to: source)

@@ -256,7 +256,7 @@ public final class MachineSession {
         }
     }
 
-    public static let metricsSilenceLimit: TimeInterval = 30
+    public nonisolated static let metricsSilenceLimit: TimeInterval = 30
 
     nonisolated static func metricsRestartDelay(failures: Int) -> TimeInterval {
         let steps = min(max(0, failures), 8)

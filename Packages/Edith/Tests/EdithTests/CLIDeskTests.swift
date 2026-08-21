@@ -48,7 +48,7 @@ import Testing
             "open": IPC.Name.openPanel,
         ]
         for (name, notification) in expected {
-            try await CLIProbe.inWorld { world in
+            await CLIProbe.inWorld { world in
                 world.helperRunning(true)
                 let result = await CLIProbe.capture(["app", name])
                 #expect(result.code == 0, "\(name) exited \(result.code)")
@@ -58,7 +58,7 @@ import Testing
     }
 
     @Test func quitAsksTheMainAppRatherThanTheMenuBar() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             let result = await CLIProbe.capture(["app", "quit", "--json"])
             #expect(result.code == 0)
@@ -68,7 +68,7 @@ import Testing
     }
 
     @Test func anUpdateCheckWaitsForTheAppToFinishAndReportsTheOutcome() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["outcome": "updateFound", "version": "2.1.0"] }
             let result = await CLIProbe.capture(["app", "check-updates", "--json"])
@@ -81,7 +81,7 @@ import Testing
     }
 
     @Test func anUpdateCheckThatGoesQuietIsDiagnosedRatherThanCallingItDone() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.helperRunning(true)
             world.answers { _ in nil }
@@ -92,7 +92,7 @@ import Testing
     }
 
     @Test func noWaitReturnsWithoutClaimingTheCheckFinished() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in nil }
             let result = await CLIProbe.capture(["app", "check-updates", "--no-wait", "--json"])
@@ -236,10 +236,10 @@ import Testing
             #expect(rows.first?["preview"] as? String == "entry number 2")
 
             let byApp = await CLIProbe.capture(["clipboard", "ls", "--search", "tester", "--json"])
-            #expect((byApp.array as? [Any])?.count == 3)
+            #expect(byApp.array?.count == 3)
 
             let miss = await CLIProbe.capture(["clipboard", "ls", "--search", "nope", "--json"])
-            #expect((miss.array as? [Any])?.isEmpty == true)
+            #expect(miss.array?.isEmpty == true)
         }
     }
 
@@ -300,7 +300,7 @@ import Testing
             let removed = await CLIProbe.capture(["clipboard", "rm", "1", "--json"])
             #expect(removed.object?["remaining"] as? Int == 2)
             let after = await CLIProbe.capture(["clipboard", "ls", "--json"])
-            #expect((after.array as? [Any])?.count == 2)
+            #expect(after.array?.count == 2)
             #expect(world.postedNames().contains(IPC.Name.clipboardChanged.rawValue))
         }
     }
@@ -359,11 +359,11 @@ import Testing
     @Test func anEmptyHistoryListsNothingRatherThanFailing() async {
         let result = await CLIProbe.run(["color", "ls", "--json"])
         #expect(result.code == 0)
-        #expect((result.array as? [Any])?.isEmpty == true)
+        #expect(result.array?.isEmpty == true)
     }
 
     @Test func everySwatchCarriesEveryFormat() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             Self.seed(world, count: 2)
             let result = await CLIProbe.capture(["color", "ls", "--json"])
             let rows = result.array as? [[String: Any]] ?? []
@@ -376,7 +376,7 @@ import Testing
     }
 
     @Test func oneFormatPrintsOneColumnOfValues() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             Self.seed(world, count: 2)
             let result = await CLIProbe.capture(["color", "ls", "--format", "hex"])
             #expect(result.code == 0)
@@ -392,7 +392,7 @@ import Testing
     }
 
     @Test func clearingForgetsEverySwatch() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             Self.seed(world, count: 4)
             let result = await CLIProbe.capture(["color", "clear", "--json"])
             #expect(result.object?["removed"] as? Int == 4)
@@ -427,7 +427,7 @@ import Testing
     @Test func anEmptyShelfListsNothingRatherThanFailing() async {
         let result = await CLIProbe.run(["shelf", "ls", "--json"])
         #expect(result.code == 0)
-        #expect((result.array as? [Any])?.isEmpty == true)
+        #expect(result.array?.isEmpty == true)
     }
 
     @Test func itemsAreNewestFirstAndCarryTheirPath() async throws {
@@ -513,7 +513,7 @@ import Testing
     }
 
     @Test func scanningAHomeWithNoCachesFindsNothing() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture(["cleaner", "scan", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["totalBytes"] as? Int == 0)
@@ -620,7 +620,7 @@ import Testing
 
 @Suite struct CLIFinderUndoTests {
     @Test func undoSaysToOpenTheAppWhenItIsClosed() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             MachineRegistry.add(Machine(name: "Builder", host: "10.0.0.9"))
             CLIEnvironment.isMainAppRunning = { false }
             let result = await CLIProbe.capture(["machines", "files", "undo", "builder"])
@@ -632,7 +632,7 @@ import Testing
     }
 
     @Test func undoReportsWhenNoWindowHasAnythingToUndo() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             MachineRegistry.add(Machine(name: "Builder", host: "10.0.0.9"))
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["undone": false, "reason": "nothing to undo"] }
@@ -643,7 +643,7 @@ import Testing
     }
 
     @Test func undoReportsWhatItUndid() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             MachineRegistry.add(Machine(name: "Builder", host: "10.0.0.9"))
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["undone": true, "label": "Undo Move"] }
@@ -657,7 +657,7 @@ import Testing
     }
 
     @Test func aMachineThatDoesNotExistIsNotFoundBeforeTheAppIsAsked() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
             let result = await CLIProbe.capture(["machines", "files", "undo", "nope"])
             #expect(result.code == ExitCodes.notFound)

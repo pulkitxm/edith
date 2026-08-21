@@ -4,6 +4,19 @@ import Testing
 
 @testable import EdithKit
 
+private final class MachineSessionUpdateCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() {
+        lock.withLock { value += 1 }
+    }
+
+    func read() -> Int {
+        lock.withLock { value }
+    }
+}
+
 @Suite struct DockerParsingTests {
     private let psOutput = """
         {"Command":"\\"docker-entrypoint.s…\\"","CreatedAt":"2026-08-01 10:23:45 +0000 UTC",\
@@ -455,14 +468,14 @@ import Testing
 
     @Test func oneSamplePublishesAMetricsUpdate() {
         let session = session()
-        var updates = 0
+        let updates = MachineSessionUpdateCounter()
         withObservationTracking {
             _ = session.sample
         } onChange: {
-            updates += 1
+            updates.increment()
         }
         session.apply(sample: sample(10))
-        #expect(updates == 1)
+        #expect(updates.read() == 1)
     }
 
     @Test func oneMetricsUpdateCarriesEveryHistory() {

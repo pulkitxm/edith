@@ -170,10 +170,7 @@ final class HerdrSocketClient: @unchecked Sendable {
         Task.detached { [weak self] in
             var chunk = [UInt8](repeating: 0, count: 64 * 1024)
             while let self {
-                self.lock.lock()
-                let fd = self.readFD
-                let done = self.closed
-                self.lock.unlock()
+                let (fd, done) = self.lock.withLock { (self.readFD, self.closed) }
                 if done || fd < 0 { return }
                 let count = chunk.withUnsafeMutableBytes { raw -> Int in
                     guard let base = raw.baseAddress else { return -1 }

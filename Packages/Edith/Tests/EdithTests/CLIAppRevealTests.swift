@@ -6,7 +6,7 @@ import Testing
 
 @Suite struct CLIAppRevealTests {
     @Test func revealAsksTheMainWindowForTheSection() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["ok": true, "section": "companion"] }
             let result = await CLIProbe.capture(["app", "reveal", "companion", "--json"])
@@ -19,7 +19,7 @@ import Testing
     }
 
     @Test func aBareRevealJustBringsTheWindowUp() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["ok": true, "section": "machines"] }
             let result = await CLIProbe.capture(["app", "reveal"])
@@ -30,7 +30,7 @@ import Testing
     }
 
     @Test func aTabWithoutASectionIsAUsageError() async throws {
-        try await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { true }
             let result = await CLIProbe.capture(["app", "reveal", "--tab", "chat"])
             #expect(result.code == ExitCodes.usage)
@@ -39,7 +39,7 @@ import Testing
     }
 
     @Test func revealPassesTheTabAlong() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["ok": true, "section": "companion", "tab": "chat"] }
             let result = await CLIProbe.capture(
@@ -52,7 +52,7 @@ import Testing
     }
 
     @Test func aSectionTheAppRefusesIsNotFound() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["ok": false, "error": "no section named nowhere"] }
             let result = await CLIProbe.capture(["app", "reveal", "nowhere"])
@@ -63,7 +63,7 @@ import Testing
     }
 
     @Test func aRevealTheAppNeverAnswersIsDiagnosed() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.helperRunning(true)
             world.answers { _ in nil }
@@ -79,7 +79,7 @@ import Testing
     }
 
     @Test func snapshotListsTheFilesTheAppWrote() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in
                 ["ok": true, "files": "/tmp/edith-snapshots/edith.png"]
@@ -93,7 +93,7 @@ import Testing
     }
 
     @Test func snapshotExpandsTheTildeInTheDirectory() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["ok": true, "files": "/x/edith.png"] }
             let result = await CLIProbe.capture(["app", "snapshot", "--dir", "~/shots"])
@@ -106,7 +106,7 @@ import Testing
     }
 
     @Test func aSnapshotTheAppCouldNotTakeFails() async throws {
-        try await CLIProbe.inWorld { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in ["ok": false, "error": "no visible window rendered"] }
             let result = await CLIProbe.capture(["app", "snapshot"])
