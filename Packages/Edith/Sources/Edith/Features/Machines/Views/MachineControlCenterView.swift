@@ -101,6 +101,24 @@ struct MachineControlCenterView: View {
     }
     private var controlsDisabled: Bool { isBusy || !session.state.isConnected }
     private var busyLabel: String { isRefreshing ? "Refreshing" : "Updating" }
+    private var scrollHeight: CGFloat {
+        var height: CGFloat = 0
+        if snapshot?.brightness != nil { height += 66 }
+        if snapshot?.volume != nil { height += 66 }
+        if snapshot?.muted != nil { height += 44 }
+        if snapshot?.wifiEnabled != nil { height += 44 }
+        if snapshot?.bluetoothEnabled != nil { height += 44 }
+        if snapshot?.airplaneMode != nil { height += 44 }
+        if snapshot?.doNotDisturb != nil { height += 44 }
+        if snapshot?.keyboardBacklight != nil { height += 66 }
+        if hasControls, hasCooling { height += 15 }
+        if hasCooling {
+            height += 22 + CGFloat(fans.count) * 36
+            if profile != nil { height += 128 }
+        }
+        if resultMessage != nil { height += 44 }
+        return UIScale.pt(min(max(height, 72), 520))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
@@ -123,7 +141,7 @@ struct MachineControlCenterView: View {
                     }
                 }
             }
-            .frame(maxHeight: UIScale.pt(560))
+            .frame(height: scrollHeight)
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(330))
