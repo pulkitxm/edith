@@ -22,6 +22,9 @@ struct AttentionPage: View {
         }
         .background(background)
         .overlay(alignment: .bottom) { toast }
+        .sheet(isPresented: $store.showSetup) {
+            AttentionSetupView(store: store)
+        }
         .navigationTitle("Attention")
     }
 
@@ -105,7 +108,7 @@ struct AttentionPage: View {
         case .focus: AttentionFocusView(store: store)
         case .library: AttentionLibraryView(store: store)
         case .music: AttentionMusicView(store: store)
-        case .settings: AttentionPrototypePlaceholder(section: store.selectedSection)
+        case .settings: AttentionSettingsView(store: store)
         }
     }
 
