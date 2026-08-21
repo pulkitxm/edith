@@ -513,9 +513,6 @@ struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.prominentDetail)
         .toolbarBackground(.hidden, for: .windowToolbar)
-        .animation(
-            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen
-        )
     }
 
     private func refreshPermissionsPill() {
