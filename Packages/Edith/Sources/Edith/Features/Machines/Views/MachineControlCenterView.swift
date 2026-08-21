@@ -262,6 +262,16 @@ struct MachineControlCenterButton: View {
     }
 
     var body: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            batteryStatus
+            controlButton
+        }
+        .task(id: connectionPhase) {
+            await model.prepare(for: connectionPhase)
+        }
+    }
+
+    private var controlButton: some View {
         Button {
             presented.toggle()
         } label: {
@@ -289,11 +299,53 @@ struct MachineControlCenterButton: View {
         }
         .pointerCursor()
         .help("Control this machine's hardware and wireless settings")
-        .task(id: connectionPhase) {
-            await model.prepare(for: connectionPhase)
-        }
         .popover(isPresented: $presented, arrowEdge: .top) {
             MachineControlCenterView(model: model)
+        }
+    }
+
+    @ViewBuilder
+    private var batteryStatus: some View {
+        if !model.hasLoaded, connectionPhase != .unavailable {
+            SkeletonBlock(width: 50, height: 24, corner: 7)
+                .accessibilityHidden(true)
+        } else if let level = model.snapshot?.batteryLevel {
+            HStack(spacing: UIScale.pt(4)) {
+                Text("\(level)%")
+                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .monospacedDigit()
+                Image(systemName: batterySymbol(level: level))
+                    .font(.system(size: UIScale.pt(15), weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .foregroundStyle(batteryColor(level: level))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(batteryDescription(level: level))
+            .help(batteryDescription(level: level))
+        }
+    }
+
+    private func batterySymbol(level: Int) -> String {
+        if model.snapshot?.batteryPluggedIn == true { return "battery.100percent.bolt" }
+        switch level {
+        case ..<13: return "battery.0percent"
+        case ..<38: return "battery.25percent"
+        case ..<63: return "battery.50percent"
+        case ..<88: return "battery.75percent"
+        default: return "battery.100percent"
+        }
+    }
+
+    private func batteryColor(level: Int) -> Color {
+        level < 20 && model.snapshot?.batteryPluggedIn != true
+            ? DashSkin.danger : DashSkin.inkSoft(dark)
+    }
+
+    private func batteryDescription(level: Int) -> String {
+        switch model.snapshot?.batteryPluggedIn {
+        case true: "Battery \(level)%, plugged in"
+        case false: "Battery \(level)%, on battery power"
+        case nil: "Battery \(level)%"
         }
     }
 }
@@ -320,7 +372,7 @@ struct MachineControlCenterView: View {
     private var snapshot: MachineControlSnapshot? { model.snapshot }
     private var profile: MachinePlatformProfile? { session.slow?.platformProfile }
     private var fans: [MachineFan] { session.slow?.fans ?? [] }
-    private var hasControls: Bool { snapshot.map { !$0.isEmpty } ?? false }
+    private var hasControls: Bool { snapshot?.hasControlSettings ?? false }
     private var hasCooling: Bool { !fans.isEmpty || profile != nil }
     private var isBusy: Bool { model.isBusy }
     private var controlsDisabled: Bool { isBusy || !session.state.isConnected }
