@@ -118,6 +118,7 @@ private struct SidebarNavRow: View {
     let selected: Bool
     let theme: Color
     let shortcutHint: String?
+    let showShortcutHint: Bool
     let selectionNamespace: Namespace.ID
     let action: () -> Void
     var detach: (() -> Void)?
@@ -145,6 +146,8 @@ private struct SidebarNavRow: View {
                         .font(.system(size: UIScale.pt(11), weight: .medium))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
+                        .opacity(showShortcutHint ? 1 : 0)
+                        .accessibilityHidden(!showShortcutHint)
                 }
             }
             .padding(.vertical, UIScale.pt(8))
@@ -565,6 +568,7 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
+                        showShortcutHint: showShortcutHints,
                         selectionNamespace: sidebarSelectionNamespace,
                         action: { select(item) },
                         detach: { detach(item) })
@@ -579,6 +583,7 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
+                        showShortcutHint: showShortcutHints,
                         selectionNamespace: sidebarSelectionNamespace,
                         action: { select(item) },
                         detach: item == .about ? nil : { detach(item) })
@@ -591,8 +596,6 @@ struct MainWindowView: View {
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: destination
         )
-        .animation(
-            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShortcutHints)
     }
 
     private func select(_ item: MainDestination) {
@@ -624,7 +627,6 @@ struct MainWindowView: View {
     }
 
     private func shortcutHint(for item: MainDestination) -> String? {
-        guard showShortcutHints else { return nil }
         let items = navigableItems
         guard let index = items.firstIndex(of: item) else { return nil }
         if index < WindowKeyCommand.directSelectLimit { return "⌘\(index + 1)" }
@@ -638,6 +640,7 @@ struct MainWindowView: View {
             let code = event.keyCode
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
+                if mods.contains(.command) { hideShortcutHints() }
                 guard !WindowTabs.isTabbed(NSApp.keyWindow) else { return false }
                 if mods.intersection([.command, .control, .option, .shift]) == .command,
                     characters?.lowercased() == "b"
@@ -685,20 +688,23 @@ struct MainWindowView: View {
                         commandHintWork = nil
                     }
                     commandHintWork = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
                 } else {
-                    commandHintWork?.cancel()
-                    commandHintWork = nil
-                    showShortcutHints = false
+                    hideShortcutHints()
                 }
             }
             return event
         }
     }
 
-    private func removeCommandHintMonitor() {
+    private func hideShortcutHints() {
         commandHintWork?.cancel()
         commandHintWork = nil
+        showShortcutHints = false
+    }
+
+    private func removeCommandHintMonitor() {
+        hideShortcutHints()
         if let monitor = commandHintMonitor {
             NSEvent.removeMonitor(monitor)
             commandHintMonitor = nil
