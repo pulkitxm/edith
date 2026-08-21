@@ -556,9 +556,6 @@ struct MainWindowView: View {
             sidebar(bandHeight)
                 .frame(width: displaySidebarWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .offset(x: sidebarOpen ? 0 : -displaySidebarWidth)
-                .opacity(sidebarOpen ? 1 : 0)
-                .allowsHitTesting(sidebarOpen)
 
             detailColumn(bandHeight)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
