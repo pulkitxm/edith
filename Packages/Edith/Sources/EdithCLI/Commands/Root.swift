@@ -45,6 +45,7 @@ public struct EdRoot: AsyncParsableCommand {
             CalendarCommand.self,
             HerdrCommand.self,
             ClipboardCommand.self,
+            AttentionCommand.self,
             DownloadCommand.self,
             AppsCommand.self,
             ToolsCommand.self,
