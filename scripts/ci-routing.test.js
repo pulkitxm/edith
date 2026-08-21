@@ -47,7 +47,6 @@ test("every change area covers its repository inputs", () => {
       "Casks/edith.rb",
       "README.md",
       "Makefile",
-      "lefthook.yml",
       "package.json",
       "bun.lock",
       "biome.json",

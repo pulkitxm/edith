@@ -9,12 +9,10 @@
     "wiki": "bun scripts/sync-wiki.mjs",
     "selftest": "bun scripts/strip-comments.mjs --selftest",
     "lint": "biome check .",
-    "test": "bun test ./scripts",
-    "prepare": "lefthook install"
+    "test": "bun test ./scripts"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",
-    "@biomejs/biome": "2.5.8",
-    "lefthook": "2.1.10"
+    "@biomejs/biome": "2.5.8"
   }
 }

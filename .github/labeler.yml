@@ -15,7 +15,7 @@ promo-video:
       - any-glob-to-any-file: ["apps/promo-video/**"]
 ci:
   - changed-files:
-      - any-glob-to-any-file: [".github/**", "Makefile", "lefthook.yml"]
+      - any-glob-to-any-file: [".github/**", "Makefile"]
 cli:
   - changed-files:
       - any-glob-to-any-file: ["Packages/Edith/Sources/EdithCLI/**", "docs/cli/**"]
