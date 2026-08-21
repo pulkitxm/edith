@@ -49,22 +49,38 @@ struct AttentionSetupView: View {
                         HStack(spacing: UIScale.pt(9)) {
                             ZStack {
                                 Circle()
-                                    .fill(step.completed ? DashSkin.sage : index == store.setupStepIndex ? DashSkin.accentDeep(dark) : DashSkin.grid(dark))
+                                    .fill(
+                                        step.completed
+                                            ? DashSkin.sage
+                                            : index == store.setupStepIndex
+                                                ? DashSkin.accentDeep(dark) : DashSkin.grid(dark)
+                                    )
                                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                                 Image(systemName: step.completed ? "checkmark" : step.symbol)
                                     .font(.system(size: UIScale.pt(9), weight: .bold))
-                                    .foregroundStyle(step.completed || index == store.setupStepIndex ? Color.white : DashSkin.inkFaint(dark))
+                                    .foregroundStyle(
+                                        step.completed || index == store.setupStepIndex
+                                            ? Color.white : DashSkin.inkFaint(dark))
                             }
                             Text(step.title)
-                                .font(.system(size: UIScale.pt(10), weight: index == store.setupStepIndex ? .semibold : .regular))
-                                .foregroundStyle(index == store.setupStepIndex ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                                .font(
+                                    .system(
+                                        size: UIScale.pt(10),
+                                        weight: index == store.setupStepIndex ? .semibold : .regular
+                                    )
+                                )
+                                .foregroundStyle(
+                                    index == store.setupStepIndex
+                                        ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                             Spacer()
                         }
                         .padding(.horizontal, UIScale.pt(8))
                         .frame(height: UIScale.pt(32))
                         .background(
-                            index == store.setupStepIndex ? DashSkin.accent(dark).opacity(0.08) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                            index == store.setupStepIndex
+                                ? DashSkin.accent(dark).opacity(0.08) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        )
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -132,21 +148,32 @@ struct AttentionSetupView: View {
                         preset = option
                     } label: {
                         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                            Image(systemName: option == "Standard" ? "app" : option == "Detailed" ? "doc.text.magnifyingglass" : "waveform.path.ecg")
-                                .font(.system(size: UIScale.pt(20)))
-                                .foregroundStyle(preset == option ? Color.white : DashSkin.accentDeep(dark))
+                            Image(
+                                systemName: option == "Standard"
+                                    ? "app"
+                                    : option == "Detailed"
+                                        ? "doc.text.magnifyingglass" : "waveform.path.ecg"
+                            )
+                            .font(.system(size: UIScale.pt(20)))
+                            .foregroundStyle(
+                                preset == option ? Color.white : DashSkin.accentDeep(dark))
                             Text(option).font(.system(size: UIScale.pt(11), weight: .semibold))
-                            Text(presetDetail(option)).font(.system(size: UIScale.pt(9))).opacity(0.78)
+                            Text(presetDetail(option)).font(.system(size: UIScale.pt(9))).opacity(
+                                0.78)
                         }
                         .foregroundStyle(preset == option ? Color.white : DashSkin.ink(dark))
                         .padding(UIScale.pt(14))
-                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(125), alignment: .topLeading)
+                        .frame(
+                            maxWidth: .infinity, minHeight: UIScale.pt(125), alignment: .topLeading
+                        )
                         .background(
                             preset == option ? DashSkin.accentDeep(dark) : DashSkin.paper2(dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
+                        )
                         .overlay {
                             if preset != option {
-                                RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark))
+                                RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
+                                    DashSkin.line(dark))
                             }
                         }
                     }
@@ -162,11 +189,22 @@ struct AttentionSetupView: View {
 
     private var permissionsStep: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            permissionRow("Application activity", "Frontmost application and activation changes", "Granted", DashSkin.sage)
-            permissionRow("Idle and lock state", "Input age, screen lock, sleep, and wake", "Granted", DashSkin.sage)
-            permissionRow("Accessibility", "Window titles and focused controls", includeTitles ? "Granted" : "Optional", includeTitles ? DashSkin.sage : DashSkin.warn)
-            permissionRow("Screen recording", "Only required for optional local recall", "Not requested", DashSkin.inkFaint(dark))
-            permissionRow("Camera", "Only required for experimental face presence", "Not requested", DashSkin.inkFaint(dark))
+            permissionRow(
+                "Application activity", "Frontmost application and activation changes", "Granted",
+                DashSkin.sage)
+            permissionRow(
+                "Idle and lock state", "Input age, screen lock, sleep, and wake", "Granted",
+                DashSkin.sage)
+            permissionRow(
+                "Accessibility", "Window titles and focused controls",
+                includeTitles ? "Granted" : "Optional",
+                includeTitles ? DashSkin.sage : DashSkin.warn)
+            permissionRow(
+                "Screen recording", "Only required for optional local recall", "Not requested",
+                DashSkin.inkFaint(dark))
+            permissionRow(
+                "Camera", "Only required for experimental face presence", "Not requested",
+                DashSkin.inkFaint(dark))
             Toggle("Include window and page titles", isOn: $includeTitles).toggleStyle(.switch)
             Toggle("Include sanitized URL paths", isOn: $includePaths).toggleStyle(.switch)
         }
@@ -175,7 +213,8 @@ struct AttentionSetupView: View {
     private var browsersStep: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {
-                Text("Detected browser profiles").font(.system(size: UIScale.pt(12), weight: .semibold))
+                Text("Detected browser profiles").font(
+                    .system(size: UIScale.pt(12), weight: .semibold))
                 Spacer()
                 AttentionBadge(text: "NO TERMINAL REQUIRED", color: DashSkin.sage)
             }
@@ -183,11 +222,18 @@ struct AttentionSetupView: View {
                 HStack(spacing: UIScale.pt(11)) {
                     Image(systemName: profile.symbol)
                         .frame(width: UIScale.pt(34), height: UIScale.pt(34))
-                        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                        .background(
+                            Color.primary.opacity(0.05),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text("\(profile.browser) · \(profile.profile)").font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                        Text(profile.connected ? "Companion verified and receiving events" : "Open Extensions, choose Load unpacked, then return here")
-                            .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                        Text("\(profile.browser) · \(profile.profile)").font(
+                            .system(size: UIScale.pt(10.5), weight: .semibold))
+                        Text(
+                            profile.connected
+                                ? "Companion verified and receiving events"
+                                : "Open Extensions, choose Load unpacked, then return here"
+                        )
+                        .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     Spacer()
                     Button(profile.connected ? "Verified" : "Guide me") {
@@ -198,8 +244,12 @@ struct AttentionSetupView: View {
                     .pointerCursor()
                 }
                 .padding(UIScale.pt(10))
-                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-                .overlay(RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark)))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
+                )
             }
         }
     }
@@ -209,27 +259,34 @@ struct AttentionSetupView: View {
             Picker("Import range", selection: $historicalDays) {
                 ForEach(["30 days", "90 days", "1 year", "All available"], id: \.self) { Text($0) }
             }
-            Toggle("Import ActivityWatch categories and events", isOn: $importActivityWatch).toggleStyle(.switch)
+            Toggle("Import ActivityWatch categories and events", isOn: $importActivityWatch)
+                .toggleStyle(.switch)
             setupCheck("5 Chrome profile databases found", true)
             setupCheck("8 Dia profile databases found", true)
             setupCheck("Imported duration will be labeled Historical Estimate", true)
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(DashSkin.warn)
-                Text("A browser visit is not proof of foreground attention. Historical imports never silently alter live focus metrics.")
-                    .font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkSoft(dark))
+                Text(
+                    "A browser visit is not proof of foreground attention. Historical imports never silently alter live focus metrics."
+                )
+                .font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkSoft(dark))
             }
             .padding(UIScale.pt(12))
-            .background(DashSkin.warn.opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            .background(
+                DashSkin.warn.opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         }
     }
 
     private var identityStep: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Text("Suggested unified services").font(.system(size: UIScale.pt(12), weight: .semibold))
+            Text("Suggested unified services").font(
+                .system(size: UIScale.pt(12), weight: .semibold))
             identitySuggestion("WhatsApp", "Native app + web.whatsapp.com", "Communication / Work")
-            identitySuggestion("Apple Music", "Music app + music.apple.com", "Entertainment / Music")
+            identitySuggestion(
+                "Apple Music", "Music app + music.apple.com", "Entertainment / Music")
             identitySuggestion("GitHub", "github.com across Work profiles", "Work / Coding")
-            identitySuggestion("YouTube", "youtube.com video and navigation", "Entertainment / Video")
+            identitySuggestion(
+                "YouTube", "youtube.com video and navigation", "Entertainment / Video")
             HStack {
                 AttentionBadge(text: "14 READY", color: DashSkin.sage)
                 AttentionBadge(text: "2 NEED REVIEW", color: DashSkin.warn)
@@ -245,31 +302,42 @@ struct AttentionSetupView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             sourceTest("Apple Music", "A Walk · Tycho", "Playing · exact progress", DashSkin.sage)
             sourceTest("Spotify", "Ready for playback", "Connected", DashSkin.sage)
-            sourceTest("Dia browser media", "YouTube Music metadata", "Deep mode active", DashSkin.sage)
+            sourceTest(
+                "Dia browser media", "YouTube Music metadata", "Deep mode active", DashSkin.sage)
             sourceTest("Chrome browser media", "No active player", "Waiting", DashSkin.warn)
-            Text("Tracks are ranked by played seconds. Background music remains concurrent and does not become primary attention.")
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkSoft(dark))
+            Text(
+                "Tracks are ranked by played seconds. Background music remains concurrent and does not become primary attention."
+            )
+            .font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 
     private var focusStep: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Text("Choose a starting focus profile").font(.system(size: UIScale.pt(12), weight: .semibold))
+            Text("Choose a starting focus profile").font(
+                .system(size: UIScale.pt(12), weight: .semibold))
             ForEach(store.focusTemplates) { template in
                 HStack(spacing: UIScale.pt(10)) {
-                    Image(systemName: template.symbol).foregroundStyle(DashSkin.accentDeep(dark)).frame(width: UIScale.pt(28))
+                    Image(systemName: template.symbol).foregroundStyle(DashSkin.accentDeep(dark))
+                        .frame(width: UIScale.pt(28))
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(template.name).font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                        Text("\(template.intervention) · \(template.graceSeconds)s grace · \(template.allowedCategoryIDs.count) allowed categories")
-                            .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                        Text(
+                            "\(template.intervention) · \(template.graceSeconds)s grace · \(template.allowedCategoryIDs.count) allowed categories"
+                        )
+                        .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     Spacer()
                     Image(systemName: template.id == "flow" ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(template.id == "flow" ? DashSkin.sage : DashSkin.inkFaint(dark))
+                        .foregroundStyle(
+                            template.id == "flow" ? DashSkin.sage : DashSkin.inkFaint(dark))
                 }
                 .padding(UIScale.pt(10))
-                .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
-                .overlay(RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark)))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark)))
             }
         }
     }
@@ -281,7 +349,8 @@ struct AttentionSetupView: View {
             setupCheck("Snapshots encrypted before entering iCloud Drive", true)
             setupCheck("Recovery key saved in synchronizable Keychain", true)
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                Text("Recovery key").font(.system(size: UIScale.pt(9.5), weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
+                Text("Recovery key").font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                 HStack {
                     Text("EDITH-7K4M-92PF-QX6R-18TW").font(DashSkin.mono(11, weight: .semibold))
                     Spacer()
@@ -292,7 +361,8 @@ struct AttentionSetupView: View {
             }
             .padding(UIScale.pt(12))
             .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-            .overlay(RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark)))
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark)))
         }
     }
 
@@ -311,9 +381,11 @@ struct AttentionSetupView: View {
             calibrationRow("Profile identity", "Dia · Work", "5s")
             calibrationRow("Automation marker", "Browser event schema", "8s")
             calibrationRow("Backup capability", "iCloud available", "10s")
-            Text("Attention is ready. You can change any decision later without losing raw mock observations.")
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(DashSkin.sage)
+            Text(
+                "Attention is ready. You can change any decision later without losing raw mock observations."
+            )
+            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            .foregroundStyle(DashSkin.sage)
         }
     }
 
@@ -345,50 +417,66 @@ struct AttentionSetupView: View {
 
     private func setupCheck(_ title: String, _ complete: Bool) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: complete ? "checkmark.circle.fill" : "circle").foregroundStyle(complete ? DashSkin.sage : DashSkin.inkFaint(dark))
+            Image(systemName: complete ? "checkmark.circle.fill" : "circle").foregroundStyle(
+                complete ? DashSkin.sage : DashSkin.inkFaint(dark))
             Text(title).font(.system(size: UIScale.pt(10.5)))
         }
     }
 
-    private func permissionRow(_ title: String, _ detail: String, _ status: String, _ color: Color) -> some View {
+    private func permissionRow(_ title: String, _ detail: String, _ status: String, _ color: Color)
+        -> some View
+    {
         HStack(spacing: UIScale.pt(11)) {
             Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title).font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                Text(detail).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                Text(detail).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                    DashSkin.inkFaint(dark))
             }
             Spacer()
-            Text(status).font(.system(size: UIScale.pt(9.5), weight: .semibold)).foregroundStyle(color)
+            Text(status).font(.system(size: UIScale.pt(9.5), weight: .semibold)).foregroundStyle(
+                color)
         }
         .padding(UIScale.pt(11))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark)))
     }
 
-    private func identitySuggestion(_ name: String, _ surfaces: String, _ category: String) -> some View {
+    private func identitySuggestion(_ name: String, _ surfaces: String, _ category: String)
+        -> some View
+    {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "square.stack.3d.up.fill").foregroundStyle(DashSkin.accentDeep(dark)).frame(width: UIScale.pt(28))
+            Image(systemName: "square.stack.3d.up.fill").foregroundStyle(DashSkin.accentDeep(dark))
+                .frame(width: UIScale.pt(28))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(name).font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                Text(surfaces).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                Text(surfaces).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                    DashSkin.inkFaint(dark))
             }
             Spacer()
-            Text(category).font(.system(size: UIScale.pt(9.5), weight: .medium)).foregroundStyle(DashSkin.sage)
+            Text(category).font(.system(size: UIScale.pt(9.5), weight: .medium)).foregroundStyle(
+                DashSkin.sage)
         }
         .padding(UIScale.pt(10))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark)))
     }
 
-    private func sourceTest(_ name: String, _ track: String, _ status: String, _ color: Color) -> some View {
+    private func sourceTest(_ name: String, _ track: String, _ status: String, _ color: Color)
+        -> some View
+    {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "music.note").foregroundStyle(Color.pink).frame(width: UIScale.pt(30), height: UIScale.pt(30)).background(Color.pink.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            Image(systemName: "music.note").foregroundStyle(Color.pink).frame(
+                width: UIScale.pt(30), height: UIScale.pt(30)
+            ).background(Color.pink.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(name).font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                Text(track).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                Text(track).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                    DashSkin.inkFaint(dark))
             }
             Spacer()
-            Text(status).font(.system(size: UIScale.pt(9.5), weight: .medium)).foregroundStyle(color)
+            Text(status).font(.system(size: UIScale.pt(9.5), weight: .medium)).foregroundStyle(
+                color)
         }
         .padding(UIScale.pt(11))
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
@@ -401,7 +489,8 @@ struct AttentionSetupView: View {
             Text(signal).font(.system(size: UIScale.pt(10.5), weight: .medium))
             Spacer()
             Text(value).font(.system(size: UIScale.pt(9.5))).foregroundStyle(DashSkin.inkSoft(dark))
-            Text(age).font(DashSkin.mono(8.5)).foregroundStyle(DashSkin.inkFaint(dark)).frame(width: UIScale.pt(24), alignment: .trailing)
+            Text(age).font(DashSkin.mono(8.5)).foregroundStyle(DashSkin.inkFaint(dark)).frame(
+                width: UIScale.pt(24), alignment: .trailing)
         }
         .padding(.vertical, UIScale.pt(5))
     }

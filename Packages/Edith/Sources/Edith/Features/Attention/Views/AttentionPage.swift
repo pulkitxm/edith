@@ -91,12 +91,21 @@ struct AttentionPage: View {
             HStack(spacing: UIScale.pt(10)) {
                 AttentionSectionTabs(store: store)
                 Spacer(minLength: UIScale.pt(8))
-                AttentionRangePicker(store: store)
+                if rangeEnabled {
+                    AttentionRangePicker(store: store)
+                }
             }
         }
         .pageGutter(compactLayout)
         .padding(.top, UIScale.pt(16))
         .padding(.bottom, UIScale.pt(12))
+    }
+
+    private var rangeEnabled: Bool {
+        switch store.selectedSection {
+        case .overview, .timeline, .insights, .focus, .music: true
+        case .library, .settings: false
+        }
     }
 
     @ViewBuilder

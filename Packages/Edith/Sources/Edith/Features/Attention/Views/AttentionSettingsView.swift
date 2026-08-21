@@ -135,7 +135,8 @@ struct AttentionSettingsView: View {
                     .frame(height: UIScale.pt(32))
                     .background(
                         section == item ? DashSkin.accent(dark).opacity(0.1) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    )
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -143,7 +144,9 @@ struct AttentionSettingsView: View {
             }
         }
         .padding(UIScale.pt(8))
-        .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark), shadow: .clear)
+        .widgetBar(
+            cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark),
+            shadow: .clear)
     }
 
     @ViewBuilder
@@ -168,46 +171,72 @@ struct AttentionSettingsView: View {
                 ForEach(["Standard", "Detailed", "Deep Local"], id: \.self) { Text($0) }
             }
             settingDivider
-            settingToggle("Application and service activity", "Foreground context, duration, and native/web surface", .constant(true))
+            settingToggle(
+                "Application and service activity",
+                "Foreground context, duration, and native/web surface", .constant(true))
             settingDivider
-            settingToggle("Window and page titles", "Encrypted detail for better categorization", $trackTitles)
+            settingToggle(
+                "Window and page titles", "Encrypted detail for better categorization", $trackTitles
+            )
             settingDivider
             settingToggle("URL paths", "Domains remain available when this is off", $trackPaths)
             settingDivider
-            settingToggle("Local semantic classification", "Extract page type locally and discard source text", $localSemanticClassification)
+            settingToggle(
+                "Local semantic classification",
+                "Extract page type locally and discard source text", $localSemanticClassification)
             settingDivider
-            settingToggle("Private browsing", "Off by default and excluded from backup", $trackIncognito)
+            settingToggle(
+                "Private browsing", "Off by default and excluded from backup", $trackIncognito)
         }
     }
 
     private var browserSettings: some View {
-        settingsPanel("Browsers & Profiles", "Each profile is paired and controlled independently") {
+        settingsPanel("Browsers & Profiles", "Each profile is paired and controlled independently")
+        {
             ForEach(store.browserProfiles) { profile in
                 VStack(spacing: UIScale.pt(10)) {
                     HStack(spacing: UIScale.pt(11)) {
                         Image(systemName: profile.symbol)
-                            .foregroundStyle(profile.connected ? DashSkin.sage : DashSkin.inkFaint(dark))
+                            .foregroundStyle(
+                                profile.connected ? DashSkin.sage : DashSkin.inkFaint(dark)
+                            )
                             .frame(width: UIScale.pt(32), height: UIScale.pt(32))
-                            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                            .background(
+                                Color.primary.opacity(0.05),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text("\(profile.browser) · \(profile.profile)")
                                 .font(.system(size: UIScale.pt(11), weight: .semibold))
-                            Text(profile.connected ? "\(profile.eventCount.formatted()) events · seen recently" : "Companion not connected")
-                                .font(.system(size: UIScale.pt(9)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
+                            Text(
+                                profile.connected
+                                    ? "\(profile.eventCount.formatted()) events · seen recently"
+                                    : "Companion not connected"
+                            )
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         Spacer()
-                        AttentionBadge(text: profile.connected ? "CONNECTED" : "PAUSED", color: profile.connected ? DashSkin.sage : DashSkin.warn)
-                        Button(profile.connected ? "Pause" : "Connect") { store.toggleBrowser(profile.id) }
-                            .controlSize(.small)
-                            .pointerCursor()
+                        AttentionBadge(
+                            text: profile.connected ? "CONNECTED" : "PAUSED",
+                            color: profile.connected ? DashSkin.sage : DashSkin.warn)
+                        Button(profile.connected ? "Pause" : "Connect") {
+                            store.toggleBrowser(profile.id)
+                        }
+                        .controlSize(.small)
+                        .pointerCursor()
                     }
                     HStack {
-                        Toggle("Deep page context", isOn: Binding(
-                            get: { store.browserProfiles.first { $0.id == profile.id }?.deepMode ?? false },
-                            set: { _ in store.toggleDeepMode(profile.id) }))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
+                        Toggle(
+                            "Deep page context",
+                            isOn: Binding(
+                                get: {
+                                    store.browserProfiles.first { $0.id == profile.id }?.deepMode
+                                        ?? false
+                                },
+                                set: { _ in store.toggleDeepMode(profile.id) })
+                        )
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                         Spacer()
                         if profile.historyImported {
                             Label("History imported", systemImage: "checkmark.circle.fill")
@@ -231,8 +260,12 @@ struct AttentionSettingsView: View {
     }
 
     private var identitySettings: some View {
-        settingsPanel("Identities & Categories", "Rules remain reversible and reclassify derived history") {
-            settingLink("Services", "\(store.identities.count) unified identities", "square.grid.3x3") {
+        settingsPanel(
+            "Identities & Categories", "Rules remain reversible and reclassify derived history"
+        ) {
+            settingLink(
+                "Services", "\(store.identities.count) unified identities", "square.grid.3x3"
+            ) {
                 store.selectedSection = .library
             }
             settingDivider
@@ -240,35 +273,52 @@ struct AttentionSettingsView: View {
                 store.selectedSection = .library
             }
             settingDivider
-            settingLink("Uncategorized", "\(store.identities.filter { $0.categoryID == "uncategorized" }.count) identities need review", "questionmark.square.dashed") {
+            settingLink(
+                "Uncategorized",
+                "\(store.identities.filter { $0.categoryID == "uncategorized" }.count) identities need review",
+                "questionmark.square.dashed"
+            ) {
                 store.libraryKind = "All"
                 store.librarySearch = ""
                 store.selectedSection = .library
             }
             settingDivider
-            settingToggle("Historical rule previews", "Always show affected segments and time before applying", .constant(true))
+            settingToggle(
+                "Historical rule previews",
+                "Always show affected segments and time before applying", .constant(true))
         }
     }
 
     private var musicSettings: some View {
-        settingsPanel("Music", "Listening remains a concurrent lane and never inflates elapsed time") {
-            settingToggle("Apple Music", "Track metadata, progress, pauses, skips, and repeats", $appleMusic)
+        settingsPanel(
+            "Music", "Listening remains a concurrent lane and never inflates elapsed time"
+        ) {
+            settingToggle(
+                "Apple Music", "Track metadata, progress, pauses, skips, and repeats", $appleMusic)
             settingDivider
             settingToggle("Spotify", "Native playback notifications and played seconds", $spotify)
             settingDivider
             settingToggle("Browser media", "Media Session and HTML media progress", $browserMedia)
             settingDivider
-            settingToggle("Associate music with focus", "Show correlations only when sample size is sufficient", .constant(true))
+            settingToggle(
+                "Associate music with focus",
+                "Show correlations only when sample size is sufficient", .constant(true))
         }
     }
 
     private var presenceSettings: some View {
         settingsPanel("Presence", "Keep hard signals separate from likely and uncertain states") {
-            settingToggle("Passive video detection", "Uses playback progress, visibility, audio, and display state", $passiveVideo)
+            settingToggle(
+                "Passive video detection",
+                "Uses playback progress, visibility, audio, and display state", $passiveVideo)
             settingDivider
-            settingToggle("Ask after uncertain intervals", "One small correction prompt when you return", $correctionPrompts)
+            settingToggle(
+                "Ask after uncertain intervals", "One small correction prompt when you return",
+                $correctionPrompts)
             settingDivider
-            settingToggle("Experimental camera presence", "Stores only face-present state and immediately discards frames", $presenceCamera)
+            settingToggle(
+                "Experimental camera presence",
+                "Stores only face-present state and immediately discards frames", $presenceCamera)
             settingDivider
             settingValue("Interactive idle threshold", "3 minutes")
             settingDivider
@@ -277,10 +327,14 @@ struct AttentionSettingsView: View {
     }
 
     private var focusSettings: some View {
-        settingsPanel("Focus", "Define intent per session rather than judging every category globally") {
-            settingToggle("Focus nudges", "Notify only after sustained off-intent activity", $focusNudges)
+        settingsPanel(
+            "Focus", "Define intent per session rather than judging every category globally"
+        ) {
+            settingToggle(
+                "Focus nudges", "Notify only after sustained off-intent activity", $focusNudges)
             settingDivider
-            settingToggle("Browser blocking", "Requires an additional browser capability", $focusBlocking)
+            settingToggle(
+                "Browser blocking", "Requires an additional browser capability", $focusBlocking)
             settingDivider
             settingValue("Default grace period", "45 seconds")
             settingDivider
@@ -293,14 +347,20 @@ struct AttentionSettingsView: View {
     }
 
     private var privacySettings: some View {
-        settingsPanel("Privacy & Retention", "Exclusions are applied before observations reach storage") {
-            settingValuePicker("Core observations", $observationRetention, ["90 days", "1 year", "Forever"])
+        settingsPanel(
+            "Privacy & Retention", "Exclusions are applied before observations reach storage"
+        ) {
+            settingValuePicker(
+                "Core observations", $observationRetention, ["90 days", "1 year", "Forever"])
             settingDivider
-            settingValuePicker("Titles and paths", $detailedRetention, ["7 days", "30 days", "90 days", "1 year"])
+            settingValuePicker(
+                "Titles and paths", $detailedRetention, ["7 days", "30 days", "90 days", "1 year"])
             settingDivider
             settingValue("Never track", "Password managers, banking, and 4 custom rules")
             settingDivider
-            settingToggle("Include private browsing", "Requires separate opt-in in each browser", $trackIncognito)
+            settingToggle(
+                "Include private browsing", "Requires separate opt-in in each browser",
+                $trackIncognito)
             settingDivider
             Button("Review and delete data") { store.toast = "Mock deletion review opened" }
                 .buttonStyle(.bordered)
@@ -311,10 +371,16 @@ struct AttentionSettingsView: View {
     }
 
     private var backupSettings: some View {
-        settingsPanel("Encrypted iCloud Backup", "The live database remains local and only encrypted snapshots are copied") {
-            settingToggle("Back up Attention data", "Last verified today at 6:42 PM · 184 MB", $backupEnabled)
+        settingsPanel(
+            "Encrypted iCloud Backup",
+            "The live database remains local and only encrypted snapshots are copied"
+        ) {
+            settingToggle(
+                "Back up Attention data", "Last verified today at 6:42 PM · 184 MB", $backupEnabled)
             settingDivider
-            settingToggle("Include deep page data", "Adds approximately 62 MB to this snapshot", $backupDeepData)
+            settingToggle(
+                "Include deep page data", "Adds approximately 62 MB to this snapshot",
+                $backupDeepData)
             settingDivider
             settingValue("Recovery key", "Saved in iCloud Keychain")
             settingDivider
@@ -337,14 +403,23 @@ struct AttentionSettingsView: View {
     }
 
     private var automationSettings: some View {
-        settingsPanel("CLI & Automation", "Setup remains UI-only. These permissions apply after onboarding") {
-            settingToggle("Read aggregate summaries", "Categories, services, domains, and durations", $cliAggregates)
+        settingsPanel(
+            "CLI & Automation", "Setup remains UI-only. These permissions apply after onboarding"
+        ) {
+            settingToggle(
+                "Read aggregate summaries", "Categories, services, domains, and durations",
+                $cliAggregates)
             settingDivider
-            settingToggle("Read detailed URLs and titles", "Sensitive detail remains off unless explicitly granted", $cliDetails)
+            settingToggle(
+                "Read detailed URLs and titles",
+                "Sensitive detail remains off unless explicitly granted", $cliDetails)
             settingDivider
-            settingToggle("Propose category rules", "Agents can create preview plans", $cliProposals)
+            settingToggle(
+                "Propose category rules", "Agents can create preview plans", $cliProposals)
             settingDivider
-            settingToggle("Apply reviewed plans", "Transactions remain revisioned, idempotent, and undoable", $cliWrites)
+            settingToggle(
+                "Apply reviewed plans", "Transactions remain revisioned, idempotent, and undoable",
+                $cliWrites)
             settingDivider
             HStack {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -375,12 +450,16 @@ struct AttentionSettingsView: View {
             diagnosticRow("iCloud backup", "Verified", "Today, 6:42 PM", DashSkin.sage)
             settingDivider
             HStack {
-                Button("Run two-minute calibration") { store.resetSetup(); store.setupStepIndex = store.setupSteps.count - 1 }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                Button("Export redacted diagnostics") { store.toast = "Redacted diagnostic bundle prepared" }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                Button("Run two-minute calibration") {
+                    store.resetSetup(); store.setupStepIndex = store.setupSteps.count - 1
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                Button("Export redacted diagnostics") {
+                    store.toast = "Redacted diagnostic bundle prepared"
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 Spacer()
             }
             .pointerCursor()
@@ -397,11 +476,14 @@ struct AttentionSettingsView: View {
         Divider().overlay(DashSkin.line(dark).opacity(0.65))
     }
 
-    private func settingToggle(_ title: String, _ detail: String, _ binding: Binding<Bool>) -> some View {
+    private func settingToggle(_ title: String, _ detail: String, _ binding: Binding<Bool>)
+        -> some View
+    {
         HStack(spacing: UIScale.pt(14)) {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
-                Text(detail).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                Text(detail).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                    DashSkin.inkFaint(dark))
             }
             Spacer()
             Toggle("", isOn: binding)
@@ -421,7 +503,9 @@ struct AttentionSettingsView: View {
         .padding(.vertical, UIScale.pt(4))
     }
 
-    private func settingValuePicker(_ title: String, _ binding: Binding<String>, _ values: [String]) -> some View {
+    private func settingValuePicker(_ title: String, _ binding: Binding<String>, _ values: [String])
+        -> some View
+    {
         HStack {
             Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
             Spacer()
@@ -438,13 +522,17 @@ struct AttentionSettingsView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: symbol).foregroundStyle(DashSkin.accentDeep(dark)).frame(width: UIScale.pt(20))
+                Image(systemName: symbol).foregroundStyle(DashSkin.accentDeep(dark)).frame(
+                    width: UIScale.pt(20))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
-                    Text(detail).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(detail).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                        DashSkin.inkFaint(dark))
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: UIScale.pt(9), weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
+                Image(systemName: "chevron.right").font(
+                    .system(size: UIScale.pt(9), weight: .semibold)
+                ).foregroundStyle(DashSkin.inkFaint(dark))
             }
             .contentShape(Rectangle())
         }
@@ -452,13 +540,17 @@ struct AttentionSettingsView: View {
         .pointerCursor()
     }
 
-    private func diagnosticRow(_ title: String, _ status: String, _ time: String, _ color: Color) -> some View {
+    private func diagnosticRow(_ title: String, _ status: String, _ time: String, _ color: Color)
+        -> some View
+    {
         HStack(spacing: UIScale.pt(10)) {
             Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
             Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
             Spacer()
-            Text(status).font(.system(size: UIScale.pt(9.5), weight: .medium)).foregroundStyle(color)
-            Text(time).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark)).frame(width: UIScale.pt(105), alignment: .trailing)
+            Text(status).font(.system(size: UIScale.pt(9.5), weight: .medium)).foregroundStyle(
+                color)
+            Text(time).font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(105), alignment: .trailing)
         }
         .padding(.vertical, UIScale.pt(4))
     }
