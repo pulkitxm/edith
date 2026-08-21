@@ -226,6 +226,14 @@ import Testing
                 SSHClipboardPeerConfiguration(name: "Other", sshCommand: "ssh other")
             ])
     }
+
+    @Test func remoteInstallPlacesTheNativeBinaryOnTheManagedPath() {
+        let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.8")
+        #expect(command.contains("vendor/$os-$arch/ssh-clipboard"))
+        #expect(command.contains("$HOME/.local/bin/ssh-clipboard"))
+        #expect(command.contains("chmod 755"))
+        #expect(command.contains("mv \"$temporary\""))
+    }
 }
 
 @Suite @MainActor struct MachineStoreTests {

@@ -210,7 +210,7 @@ public actor SSHClipboardManager {
         let expected = "ssh-clipboard \(version)"
         if inspect.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) != expected {
             let install = try await connection.run(
-                "command -v npm >/dev/null 2>&1 && npm install --no-audit --no-fund --prefix \"$HOME/.local\" ssh-clipboard@\(version)",
+                Self.remoteInstallCommand(version: version),
                 timeout: 180)
             guard install.succeeded else {
                 throw SSHClipboardManagerError.remoteCommandFailed(
@@ -252,10 +252,57 @@ public actor SSHClipboardManager {
                 homeDirectory.appendingPathComponent(".local").path,
                 "ssh-clipboard@\(Self.packageVersion)",
             ])
+        try installLocalVendorBinary()
         guard let installed = existingLocalExecutable() else {
             throw SSHClipboardManagerError.missingLocalExecutable
         }
         return installed
+    }
+
+    static func remoteInstallCommand(version: String) -> String {
+        """
+        set -eu
+        command -v npm >/dev/null 2>&1
+        npm install --no-audit --no-fund --prefix "$HOME/.local" ssh-clipboard@\(version) >/dev/null
+        os=$(uname -s | tr '[:upper:]' '[:lower:]')
+        arch=$(uname -m)
+        case "$arch" in
+          x86_64|amd64) arch=amd64;;
+          aarch64|arm64) arch=arm64;;
+          *) exit 65;;
+        esac
+        source="$HOME/.local/node_modules/ssh-clipboard/vendor/$os-$arch/ssh-clipboard"
+        test -x "$source"
+        mkdir -p "$HOME/.local/bin"
+        temporary="$HOME/.local/bin/.ssh-clipboard.new.$$"
+        trap 'rm -f "$temporary"' EXIT
+        cp "$source" "$temporary"
+        chmod 755 "$temporary"
+        mv "$temporary" "$HOME/.local/bin/ssh-clipboard"
+        trap - EXIT
+        """
+    }
+
+    private func installLocalVendorBinary() throws {
+        #if arch(arm64)
+        let architecture = "arm64"
+        #else
+        let architecture = "amd64"
+        #endif
+        let source = homeDirectory.appendingPathComponent(
+            ".local/node_modules/ssh-clipboard/vendor/darwin-\(architecture)/ssh-clipboard")
+        guard fileManager.isExecutableFile(atPath: source.path) else {
+            throw SSHClipboardManagerError.missingLocalExecutable
+        }
+        let directory = homeDirectory.appendingPathComponent(".local/bin")
+        let destination = directory.appendingPathComponent("ssh-clipboard")
+        let temporary = directory.appendingPathComponent(".ssh-clipboard.new")
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? fileManager.removeItem(at: temporary)
+        try fileManager.copyItem(at: source, to: temporary)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temporary.path)
+        try? fileManager.removeItem(at: destination)
+        try fileManager.moveItem(at: temporary, to: destination)
     }
 
     private func existingLocalExecutable() -> URL? {
