@@ -131,7 +131,8 @@ import Testing
         let machine = Machine(
             name: "Tuf", host: "192.168.1.12", port: 2222, username: "pulkit",
             auth: .keyFile(path: "/tmp/key", hasPassphrase: true),
-            source: .sshConfigAlias("tuf"), wakeMACAddress: "aa:bb:cc:dd:ee:ff",
+            source: .sshConfigAlias("tuf"), sshClipboardEnabled: true,
+            wakeMACAddress: "aa:bb:cc:dd:ee:ff",
             createdAt: Date(timeIntervalSince1970: 1_754_000_000))
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -140,6 +141,20 @@ import Testing
         let decoded = try decoder.decode(
             Machine.self, from: encoder.encode(machine))
         #expect(decoded == machine)
+    }
+
+    @Test func machinesWithoutClipboardPreferenceDecodeAsDisabled() throws {
+        let machine = Machine(name: "Tuf", host: "192.168.1.12")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoder.encode(machine)) as? [String: Any])
+        object.removeValue(forKey: "sshClipboardEnabled")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(
+            Machine.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(!decoded.sshClipboardEnabled)
     }
 
     @Test func askpassUsage() {

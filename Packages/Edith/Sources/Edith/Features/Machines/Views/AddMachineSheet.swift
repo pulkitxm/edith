@@ -48,6 +48,7 @@ struct AddMachineSheet: View {
     @State private var sudoPassword = ""
     @State private var sudoPasswordStored = false
     @State private var forgetSudoPassword = false
+    @State private var sshClipboardEnabled = false
     @State private var testState = TestState.idle
     @State private var testTask: Task<Void, Never>?
 
@@ -88,6 +89,7 @@ struct AddMachineSheet: View {
                         manualSection
                     }
                     authSection
+                    sshClipboardSection
                     sudoSection
                     testSection
                 }
@@ -96,7 +98,7 @@ struct AddMachineSheet: View {
             Divider()
             footerBar
         }
-        .frame(width: UIScale.pt(560), height: UIScale.pt(620))
+        .frame(width: UIScale.pt(560), height: UIScale.pt(690))
         .background(DashSkin.paper(dark))
         .onAppear(perform: load)
         .onDisappear { testTask?.cancel() }
@@ -224,6 +226,30 @@ struct AddMachineSheet: View {
         }
     }
 
+    private var sshClipboardSection: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            eyebrow("SSH CLIPBOARD")
+            Toggle("Sync clipboard with this machine", isOn: $sshClipboardEnabled)
+                .toggleStyle(.switch)
+                .disabled(authKind != .agent)
+            Text(sshClipboardHelp)
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var sshClipboardHelp: String {
+        if authKind != .agent {
+            return "Clipboard sync requires passwordless SSH through your SSH agent or SSH config."
+        }
+        if sshClipboardEnabled {
+            return
+                "Saving installs or repairs the background service on both machines and starts syncing automatically."
+        }
+        return "Clipboard sync is disabled for this machine."
+    }
+
     private var testSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(10)) {
@@ -321,6 +347,7 @@ struct AddMachineSheet: View {
         host = editing.host
         port = String(editing.port)
         username = editing.username
+        sshClipboardEnabled = editing.sshClipboardEnabled
         if case let .sshConfigAlias(alias) = editing.source {
             selectedAlias = alias
         }
@@ -379,6 +406,7 @@ struct AddMachineSheet: View {
             id: editing?.id ?? UUID(), name: name.trimmingCharacters(in: .whitespaces),
             host: host.trimmingCharacters(in: .whitespaces), port: Int(port) ?? 22,
             username: username.trimmingCharacters(in: .whitespaces), auth: auth, source: source,
+            sshClipboardEnabled: authKind == .agent && sshClipboardEnabled,
             wakeMACAddress: editing?.wakeMACAddress, createdAt: editing?.createdAt ?? Date())
     }
 
