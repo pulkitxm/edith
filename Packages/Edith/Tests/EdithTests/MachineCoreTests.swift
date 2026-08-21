@@ -379,6 +379,196 @@ import Testing
         #expect(!command.contains("performance;"))
     }
 }
+
+@Suite struct MachineControlCenterCommandsTests {
+    @Test func parsesACompleteSnapshot() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_BRIGHTNESS=61
+            EDITH_CONTROL_VOLUME=42
+            EDITH_CONTROL_KEYBOARD_BACKLIGHT=18
+            EDITH_CONTROL_MUTED=1
+            EDITH_CONTROL_WIFI_ENABLED=0
+            EDITH_CONTROL_BLUETOOTH_ENABLED=1
+            EDITH_CONTROL_AIRPLANE_MODE=0
+            EDITH_CONTROL_DO_NOT_DISTURB=1
+            """)
+
+        #expect(
+            snapshot
+                == MachineControlSnapshot(
+                    brightness: 61,
+                    volume: 42,
+                    keyboardBacklight: 18,
+                    muted: true,
+                    wifiEnabled: false,
+                    bluetoothEnabled: true,
+                    airplaneMode: false,
+                    doNotDisturb: true
+                ))
+        #expect(!snapshot.isEmpty)
+    }
+
+    @Test func parsesSparseSnapshots() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            "banner text\nEDITH_CONTROL_WIFI_ENABLED=1\nunknown=value\n")
+
+        #expect(snapshot.wifiEnabled == true)
+        #expect(snapshot.brightness == nil)
+        #expect(snapshot.volume == nil)
+        #expect(!snapshot.isEmpty)
+        #expect(MachineControlCenterCommands.parseStatus("banner text").isEmpty)
+    }
+
+    @Test func preservesZeroLevelsAndFalseFlags() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_BRIGHTNESS=0
+            EDITH_CONTROL_VOLUME=0
+            EDITH_CONTROL_KEYBOARD_BACKLIGHT=0
+            EDITH_CONTROL_MUTED=0
+            EDITH_CONTROL_WIFI_ENABLED=0
+            """)
+
+        #expect(snapshot.brightness == 0)
+        #expect(snapshot.volume == 0)
+        #expect(snapshot.keyboardBacklight == 0)
+        #expect(snapshot.muted == false)
+        #expect(snapshot.wifiEnabled == false)
+    }
+
+    @Test func ignoresMalformedValues() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_BRIGHTNESS=-1
+            EDITH_CONTROL_VOLUME=101
+            EDITH_CONTROL_KEYBOARD_BACKLIGHT=half
+            EDITH_CONTROL_MUTED=true
+            EDITH_CONTROL_WIFI_ENABLED=2
+            EDITH_CONTROL_BLUETOOTH_ENABLED=
+            EDITH_CONTROL_AIRPLANE_MODE=no
+            EDITH_CONTROL_DO_NOT_DISTURB=-1
+            """)
+
+        #expect(snapshot.isEmpty)
+    }
+
+    @Test func malformedDuplicatesDoNotEraseValidValues() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_BRIGHTNESS=34
+            EDITH_CONTROL_BRIGHTNESS=too-bright
+            EDITH_CONTROL_WIFI_ENABLED=0
+            EDITH_CONTROL_WIFI_ENABLED=unknown
+            """)
+
+        #expect(snapshot.brightness == 34)
+        #expect(snapshot.wifiEnabled == false)
+    }
+
+    @Test func clampsNumericActions() {
+        let lowBrightness = MachineControlCenterCommands.command(
+            for: .setBrightness(-20), withSudoPassword: false)
+        let highVolume = MachineControlCenterCommands.command(
+            for: .setVolume(140), withSudoPassword: false)
+        let highKeyboard = MachineControlCenterCommands.command(
+            for: .setKeyboardBacklight(Int.max), withSudoPassword: false)
+
+        #expect(lowBrightness.contains("level=0"))
+        #expect(lowBrightness.contains("brightness 0.0"))
+        #expect(highVolume.contains("level=100"))
+        #expect(highVolume.contains("output volume 100"))
+        #expect(highKeyboard.contains("level=100"))
+        #expect(highKeyboard.contains("mac-brightnessctl 1.0"))
+    }
+
+    @Test func buildsPrivilegeModesWithoutDynamicExecutables() {
+        let passwordCommand = MachineControlCenterCommands.command(
+            for: .setAirplaneMode(true), withSudoPassword: true)
+        let nonInteractiveCommand = MachineControlCenterCommands.command(
+            for: .setWiFiEnabled(false), withSudoPassword: false)
+
+        #expect(passwordCommand.contains("sudo -S -p '' rfkill block all"))
+        #expect(nonInteractiveCommand.contains("sudo -n rfkill block wlan"))
+        #expect(!passwordCommand.contains("eval"))
+        #expect(!nonInteractiveCommand.contains("eval"))
+        #expect(passwordCommand.contains(">/dev/null 2>&1"))
+        #expect(nonInteractiveCommand.contains(">/dev/null 2>&1"))
+    }
+
+    @Test func keepsPreferredBackendsAheadOfFallbacks() throws {
+        let status = MachineControlCenterCommands.statusCommand
+        let wpctl = try #require(status.range(of: "command -v wpctl"))
+        let pactl = try #require(status.range(of: "command -v pactl"))
+        let amixer = try #require(status.range(of: "command -v amixer"))
+        let nmcli = try #require(status.range(of: "command -v nmcli"))
+        let wifiRfkill = try #require(
+            status.range(of: "command -v rfkill", range: nmcli.upperBound..<status.endIndex))
+        let bluetoothStart = try #require(status.range(of: "bluetooth_done=0"))
+        let bluetoothctl = try #require(
+            status.range(
+                of: "command -v bluetoothctl",
+                range: bluetoothStart.upperBound..<status.endIndex))
+        let bluetoothRfkill = try #require(
+            status.range(
+                of: "command -v rfkill", range: bluetoothctl.upperBound..<status.endIndex))
+
+        #expect(wpctl.lowerBound < pactl.lowerBound)
+        #expect(pactl.lowerBound < amixer.lowerBound)
+        #expect(nmcli.lowerBound < wifiRfkill.lowerBound)
+        #expect(bluetoothctl.lowerBound < bluetoothRfkill.lowerBound)
+        #expect(status.contains("brightnessctl -c backlight"))
+        #expect(status.contains("/sys/class/backlight/*"))
+        #expect(status.contains("brightnessctl -d \"$keyboard_name\""))
+        #expect(status.contains("/sys/class/leds/*"))
+    }
+
+    @Test func includesSupportedPlatformToolsAndDesktopEnvironmentDefaults() {
+        let status = MachineControlCenterCommands.statusCommand
+
+        #expect(status.contains("XDG_RUNTIME_DIR"))
+        #expect(status.contains("DBUS_SESSION_BUS_ADDRESS"))
+        #expect(status.contains("gsettings get org.gnome.desktop.notifications show-banners"))
+        #expect(status.contains("brightness -l"))
+        #expect(status.contains("osascript -e"))
+        #expect(status.contains("networksetup -getairportpower"))
+        #expect(status.contains("blueutil -p"))
+        #expect(status.contains("command -v mac-brightnessctl"))
+        #expect(status.contains("$1 == \"Current\" && $2 == \"brightness:\""))
+    }
+
+    @Test func emitsValidShellCommands() throws {
+        let actions: [MachineControlAction] = [
+            .setBrightness(50),
+            .setVolume(50),
+            .setKeyboardBacklight(50),
+            .setMuted(true),
+            .setWiFiEnabled(true),
+            .setBluetoothEnabled(true),
+            .setAirplaneMode(true),
+            .setDoNotDisturb(true),
+        ]
+        let commands = [MachineControlCenterCommands.statusCommand]
+            + actions.flatMap { action in
+                [
+                    MachineControlCenterCommands.command(
+                        for: action, withSudoPassword: false),
+                    MachineControlCenterCommands.command(
+                        for: action, withSudoPassword: true),
+                ]
+            }
+
+        for command in commands {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-n", "-c", command]
+            try process.run()
+            process.waitUntilExit()
+            #expect(process.terminationStatus == 0)
+        }
+    }
+}
+
 @Suite struct MachineResourcePolicyTests {
     @Test func processSamplingStartsImmediatelyAndThenUsesTheStride() {
         let decisions = (0..<12).filter {
