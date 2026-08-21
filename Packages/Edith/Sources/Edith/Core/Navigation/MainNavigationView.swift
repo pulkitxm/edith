@@ -14,7 +14,7 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, dashboard, herdr, music, calendar, system, machines, companion
+    case home, attention, dashboard, herdr, music, calendar, system, machines, companion
     case extensions, settings, about
 
     var id: String { rawValue }
@@ -22,6 +22,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: return "Home"
+        case .attention: return "Attention"
         case .dashboard: return "Agent Usage"
         case .herdr: return "Herdr"
         case .music: return "Music"
@@ -38,6 +39,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .home: return "house.fill"
+        case .attention: return "hourglass"
         case .dashboard: return "chart.bar.fill"
         case .herdr: return "rectangle.split.3x1.fill"
         case .music: return "music.note"
@@ -59,7 +61,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .dashboard, .herdr, .music, .calendar, .system, .machines, .companion,
+        .home, .attention, .dashboard, .herdr, .music, .calendar, .system, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -1101,6 +1103,7 @@ struct MainWindowView: View {
     private var detail: some View {
         switch destination {
         case .home: HomePage()
+        case .attention: AttentionPage()
         case .dashboard: DashboardView()
         case .herdr: HerdrPage()
         case .music: MusicPage()
