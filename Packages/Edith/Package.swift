@@ -29,7 +29,7 @@ let targets: [Target] = [
     .target(
         name: "EdithKit",
         dependencies: ["EdithCore"],
-        resources: [.process("Resources")],
+        resources: [.process("Resources"), .copy("ChromeExtension")],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(

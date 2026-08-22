@@ -56,4 +56,17 @@ import Testing
     @Test func resolvesTheCollectorScriptInThisBuild() {
         #expect(MachineCollector.script() != nil)
     }
+
+    @Test func includesTheAttentionBrowserExtension() throws {
+        let directory = try #require(AttentionExtensionInstaller.bundledDirectory)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("manifest.json").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("service-worker.js").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent("settings.html").path))
+    }
 }

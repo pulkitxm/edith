@@ -17,6 +17,7 @@ final class AppServices {
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
+    private(set) var attention: AttentionTrackingService?
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -164,6 +165,16 @@ final class AppServices {
         if !statsOn, let stats = systemStats {
             stats.shutdown()
             systemStats = nil
+        }
+
+        let attentionSettings = AttentionRepository().loadSettings()
+        let attentionOn =
+            attentionSettings.trackingEnabled || attentionSettings.browserTrackingEnabled
+        if attentionOn, attention == nil { attention = AttentionTrackingService() }
+        if attentionOn { attention?.sync(attentionSettings) }
+        if !attentionOn, let service = attention {
+            service.shutdown()
+            attention = nil
         }
 
         usage?.syncStatusItem()

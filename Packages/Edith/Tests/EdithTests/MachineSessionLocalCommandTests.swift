@@ -25,7 +25,7 @@ import Testing
     }
 
     @Test func terminatesLongRunningCommands() async {
-        let result = await session().runCommand("exec sleep 5", timeout: 0.1)
+        let result = await session().runCommand("exec sleep 300", timeout: 0.1)
         guard case .failure = result else {
             Issue.record("expected the command to time out")
             return
