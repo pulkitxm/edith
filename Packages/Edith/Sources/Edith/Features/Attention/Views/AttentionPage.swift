@@ -28,14 +28,18 @@ struct AttentionPage: View {
                     },
                     accessory: {
                         if !model.needsSetup {
-                            Picker("Section", selection: $model.section) {
-                                ForEach(AttentionPageSection.allCases) { section in
-                                    Text(section.title).tag(section)
+                            HStack(spacing: 0) {
+                                Picker("Section", selection: $model.section) {
+                                    ForEach(AttentionPageSection.allCases) { section in
+                                        Text(section.title).tag(section)
+                                    }
                                 }
+                                .labelsHidden()
+                                .pickerStyle(.segmented)
+                                .frame(maxWidth: compact ? .infinity : 500, alignment: .leading)
+                                Spacer(minLength: 0)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(maxWidth: 500)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     })
 
