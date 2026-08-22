@@ -18,6 +18,7 @@ struct ExtensionPreview: View {
         switch entry.id {
         case "usage": usagePreview(phase: phase)
         case "herdr": herdrPreview(phase: phase)
+        case "quinjet": quinjetPreview(phase: phase)
         case "system": systemPreview(phase: phase)
         case "machines": machinesPreview(phase: phase)
         case "systemStats": systemStatsPreview(phase: phase)
@@ -81,6 +82,45 @@ struct ExtensionPreview: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func quinjetPreview(phase: Double) -> some View {
+        let highlighted = sin(phase * 1.4) > 0.1
+        return HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: UIScale.pt(15)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text("edith")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text("local project")
+                    .font(DashSkin.mono(7))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: UIScale.pt(3)) {
+                Text("2 worktrees")
+                    .font(.system(size: UIScale.pt(9), weight: .semibold))
+                    .foregroundStyle(highlighted ? brandAccent : DashSkin.ink(dark))
+                Text("opened recently")
+                    .font(.system(size: UIScale.pt(7.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(7))
+            .background(
+                highlighted ? brandAccent.opacity(0.12) : Color.clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .strokeBorder(
+                        highlighted ? brandAccent.opacity(0.7) : DashSkin.lineStrong(dark))
+            }
+        }
+        .padding(.horizontal, UIScale.pt(12))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

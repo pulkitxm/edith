@@ -24,7 +24,10 @@ final class TerminalSessionHolder {
 
     private var delegateBox: TerminalProcessDelegate?
 
-    func start(executable: String, arguments: [String], environment: [String]) {
+    func start(
+        executable: String, arguments: [String], environment: [String],
+        currentDirectory: String? = nil
+    ) {
         guard !started else { return }
         started = true
         exitMessage = nil
@@ -39,13 +42,19 @@ final class TerminalSessionHolder {
         delegateBox = delegate
         terminalView.processDelegate = delegate
         terminalView.startProcess(
-            executable: executable, args: arguments, environment: environment)
+            executable: executable, args: arguments, environment: environment,
+            currentDirectory: currentDirectory)
     }
 
-    func restart(executable: String, arguments: [String], environment: [String]) {
+    func restart(
+        executable: String, arguments: [String], environment: [String],
+        currentDirectory: String? = nil
+    ) {
         terminalView.terminate()
         started = false
-        start(executable: executable, arguments: arguments, environment: environment)
+        start(
+            executable: executable, arguments: arguments, environment: environment,
+            currentDirectory: currentDirectory)
     }
 
     func stop() {
@@ -63,6 +72,13 @@ final class TerminalSessionHolder {
             dark
             ? NSColor(calibratedRed: 0.92, green: 0.9, blue: 0.86, alpha: 1) : .black
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+    }
+
+    func registerOSCHandler(code: Int, handler: @escaping @MainActor (String) -> Void) {
+        terminalView.terminal.registerOscHandler(code: code) { bytes in
+            guard let payload = String(bytes: bytes, encoding: .utf8) else { return }
+            Task { @MainActor in handler(payload) }
+        }
     }
 }
 
