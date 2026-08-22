@@ -16,4 +16,13 @@ import EdithKit
         #expect(MachineStatusStyle.detail(.disconnected) == "Not connected")
         #expect(MachineStatusStyle.detail(.connected(latencyMillis: nil)) == "Connected")
     }
+
+    @Test func clipboardStatesExposeUsefulStatus() {
+        #expect(SSHClipboardSyncState.disabled.label == "Clipboard sync disabled")
+        #expect(SSHClipboardSyncState.configuring.symbol == "arrow.triangle.2.circlepath")
+        #expect(SSHClipboardSyncState.active.label == "Clipboard sync active")
+        #expect(
+            SSHClipboardSyncState.failed("offline").label
+                == "Clipboard sync failed: offline")
+    }
 }

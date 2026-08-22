@@ -10,6 +10,7 @@ final class MachinesModel {
 
     private(set) var store = MachineStore()
     private(set) var sessions: [UUID: MachineSession] = [:]
+    private(set) var sshClipboardStates: [UUID: SSHClipboardSyncState] = [:]
     var selection: UUID?
 
     static let localMachineID = UUID(uuidString: "00000000-0000-0000-0000-0000000000ED")!
@@ -70,22 +71,33 @@ final class MachinesModel {
     func add(_ machine: Machine) {
         store.add(machine)
         selection = machine.id
-        session(for: machine.id).start()
+        let session = session(for: machine.id)
+        session.start()
+        reconcileSSHClipboard(machine, connection: session.connectionRef)
     }
 
     func update(_ machine: Machine) {
+        let previous = store.machine(id: machine.id)
         store.update(machine)
         if let session = sessions[machine.id] {
             session.stop()
             sessions[machine.id] = nil
         }
-        _ = session(for: machine.id)
+        let session = session(for: machine.id)
+        reconcileSSHClipboard(
+            machine, replacing: previous,
+            connection: machine.sshClipboardEnabled ? session.connectionRef : nil)
     }
 
     func remove(id: UUID) {
+        let machine = store.machine(id: id)
         sessions[id]?.stop()
         sessions[id] = nil
         store.remove(id: id)
+        if var machine {
+            machine.sshClipboardEnabled = false
+            reconcileSSHClipboard(machine, replacing: machine)
+        }
         ensureSelection()
     }
 
@@ -160,6 +172,37 @@ final class MachinesModel {
         }
     }
 
+    func reconcileSSHClipboards() {
+        for machine in store.machines where machine.sshClipboardEnabled {
+            if sshClipboardStates[machine.id] == .active
+                || sshClipboardStates[machine.id] == .configuring
+            {
+                continue
+            }
+            reconcileSSHClipboard(machine, connection: session(for: machine.id).connectionRef)
+        }
+    }
+
+    func sshClipboardState(for machine: Machine) -> SSHClipboardSyncState {
+        sshClipboardStates[machine.id] ?? (machine.sshClipboardEnabled ? .configuring : .disabled)
+    }
+
+    private func reconcileSSHClipboard(
+        _ machine: Machine, replacing previous: Machine? = nil,
+        connection: SSHConnection? = nil
+    ) {
+        sshClipboardStates[machine.id] = machine.sshClipboardEnabled ? .configuring : .disabled
+        Task {
+            do {
+                try await SSHClipboardManager.shared.reconcile(
+                    machine, replacing: previous, connection: connection)
+                sshClipboardStates[machine.id] = machine.sshClipboardEnabled ? .active : .disabled
+            } catch {
+                sshClipboardStates[machine.id] = .failed(error.localizedDescription)
+            }
+        }
+    }
+
     func wake(machine: Machine) -> String {
         guard let mac = machine.wakeMACAddress,
             let packet = WakeOnLAN.magicPacket(macAddress: mac)
@@ -167,6 +210,31 @@ final class MachinesModel {
             return "No MAC address stored for this machine yet."
         }
         return MagicPacket.send(packet) ?? "Sent a wake packet to \(mac)."
+    }
+}
+
+enum SSHClipboardSyncState: Equatable {
+    case disabled
+    case configuring
+    case active
+    case failed(String)
+
+    var label: String {
+        switch self {
+        case .disabled: return "Clipboard sync disabled"
+        case .configuring: return "Setting up clipboard sync"
+        case .active: return "Clipboard sync active"
+        case let .failed(message): return "Clipboard sync failed: \(message)"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .disabled: return "clipboard"
+        case .configuring: return "arrow.triangle.2.circlepath"
+        case .active: return "clipboard.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
     }
 }
 

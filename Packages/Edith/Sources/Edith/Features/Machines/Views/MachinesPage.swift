@@ -67,6 +67,7 @@ struct MachinesPage: View {
         .onAppear {
             guard connectionsEnabled else { return }
             model.connectAll()
+            model.reconcileSSHClipboards()
             model.restoreSelection(storedSelection)
             model.startSelected()
             reconcileTab()
@@ -123,6 +124,7 @@ struct MachinesPage: View {
                         MachineChip(
                             machine: machine,
                             session: model.session(for: machine.id),
+                            sshClipboardState: model.sshClipboardState(for: machine),
                             selected: mode == .machine && model.selection == machine.id,
                             isLocal: model.isLocal(machine.id), dark: dark,
                             onSelect: {
@@ -205,6 +207,7 @@ struct MachinesPage: View {
 private struct MachineChip: View {
     let machine: Machine
     let session: MachineSession
+    let sshClipboardState: SSHClipboardSyncState
     let selected: Bool
     let isLocal: Bool
     let dark: Bool
@@ -227,9 +230,17 @@ private struct MachineChip: View {
                 }
             }
         ) {
-            Circle()
-                .fill(MachineStatusStyle.color(session.state, dark: dark))
-                .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+            HStack(spacing: UIScale.pt(6)) {
+                if machine.sshClipboardEnabled {
+                    Image(systemName: sshClipboardState.symbol)
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(sshClipboardColor)
+                        .help(sshClipboardState.label)
+                }
+                Circle()
+                    .fill(MachineStatusStyle.color(session.state, dark: dark))
+                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+            }
         }
         .help("\(machine.name) (⌘-click to open in its own window)")
         .contextMenu {
@@ -242,7 +253,21 @@ private struct MachineChip: View {
                 }
                 Divider()
                 Button("Remove", role: .destructive, action: onRemove)
+                if machine.sshClipboardEnabled {
+                    Divider()
+                    Button(sshClipboardState.label) {}
+                        .disabled(true)
+                }
             }
+        }
+    }
+
+    private var sshClipboardColor: Color {
+        switch sshClipboardState {
+        case .active: return DashSkin.ok
+        case .configuring: return DashSkin.gold
+        case .failed: return DashSkin.danger
+        case .disabled: return DashSkin.inkFaint(dark)
         }
     }
 }

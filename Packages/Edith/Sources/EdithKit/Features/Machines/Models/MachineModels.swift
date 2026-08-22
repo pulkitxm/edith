@@ -35,13 +35,15 @@ public struct Machine: Codable, Identifiable, Equatable, Hashable, Sendable {
     public var username: String
     public var auth: MachineAuth
     public var source: MachineSource
+    public var sshClipboardEnabled: Bool
     public var wakeMACAddress: String?
     public var createdAt: Date
 
     public init(
         id: UUID = UUID(), name: String, host: String, port: Int = 22, username: String = "",
         auth: MachineAuth = .agent, source: MachineSource = .manual,
-        wakeMACAddress: String? = nil, createdAt: Date = Date()
+        sshClipboardEnabled: Bool = false, wakeMACAddress: String? = nil,
+        createdAt: Date = Date()
     ) {
         self.id = id
         self.name = name
@@ -50,8 +52,51 @@ public struct Machine: Codable, Identifiable, Equatable, Hashable, Sendable {
         self.username = username
         self.auth = auth
         self.source = source
+        self.sshClipboardEnabled = sshClipboardEnabled
         self.wakeMACAddress = wakeMACAddress
         self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case host
+        case port
+        case username
+        case auth
+        case source
+        case sshClipboardEnabled
+        case wakeMACAddress
+        case createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        host = try values.decode(String.self, forKey: .host)
+        port = try values.decode(Int.self, forKey: .port)
+        username = try values.decode(String.self, forKey: .username)
+        auth = try values.decode(MachineAuth.self, forKey: .auth)
+        source = try values.decode(MachineSource.self, forKey: .source)
+        sshClipboardEnabled =
+            try values.decodeIfPresent(Bool.self, forKey: .sshClipboardEnabled) ?? false
+        wakeMACAddress = try values.decodeIfPresent(String.self, forKey: .wakeMACAddress)
+        createdAt = try values.decode(Date.self, forKey: .createdAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(name, forKey: .name)
+        try values.encode(host, forKey: .host)
+        try values.encode(port, forKey: .port)
+        try values.encode(username, forKey: .username)
+        try values.encode(auth, forKey: .auth)
+        try values.encode(source, forKey: .source)
+        try values.encode(sshClipboardEnabled, forKey: .sshClipboardEnabled)
+        try values.encodeIfPresent(wakeMACAddress, forKey: .wakeMACAddress)
+        try values.encode(createdAt, forKey: .createdAt)
     }
 
     public static func missing(id: UUID) -> Machine {
