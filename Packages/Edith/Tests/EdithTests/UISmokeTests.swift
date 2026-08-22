@@ -167,6 +167,17 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
         #expect(session.state == .disconnected)
     }
 
+    @Test func machineControlCenterRendersWithoutStartingCommands() async throws {
+        let session = MachineSession(
+            machine: Machine(name: "This Mac", host: "localhost"), local: true)
+        #expect(
+            renders(
+                MachineControlCenterView(session: session),
+                width: 360, height: 400))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(session.state == .disconnected)
+    }
+
     @Test func terminalSettingsTabRenders() {
         let saved = SharedDefaults.store.string(forKey: "settingsTab")
         defer {

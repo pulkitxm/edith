@@ -44,7 +44,7 @@ This command exits 4 when the machine cannot be reached or does not expose both
 platform profile sysfs files. An unknown or ambiguous machine exits 3. It does
 not need sudo and does not change the machine.
 
-Fan RPM is streamed into the Cooling card in the app by the normal machine
-metrics connection. The status command focuses on the writable profile state.
+Fan RPM is streamed into Control Center in the app by the normal machine metrics
+connection. The status command focuses on the writable profile state.
 
 [Back to `ed machines thermal`](./README.md) or [all CLI commands](../README.md).
