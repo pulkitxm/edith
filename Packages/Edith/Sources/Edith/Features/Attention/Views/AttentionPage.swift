@@ -384,11 +384,7 @@ private struct AttentionTimelineView: View {
                 ForEach(Array(model.events.enumerated()), id: \.element.id) { index, event in
                     if index > 0 { Divider() }
                     HStack(spacing: 12) {
-                        Image(systemName: eventIcon(event))
-                            .foregroundStyle(
-                                event.presence == .active ? Color.accentColor : .secondary
-                            )
-                            .frame(width: 26)
+                        AttentionEventIcon(event: event)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(eventTitle(event)).lineLimit(1)
                             Text(eventDetail(event))
@@ -408,15 +404,6 @@ private struct AttentionTimelineView: View {
         }
     }
 
-    private func eventIcon(_ event: AttentionEvent) -> String {
-        switch event.source {
-        case .application: return "macwindow"
-        case .browser: return "globe"
-        case .media: return event.media?.kind == "audio" ? "music.note" : "play.rectangle"
-        case .manual: return "hand.tap"
-        }
-    }
-
     private func eventTitle(_ event: AttentionEvent) -> String {
         event.media?.title ?? event.domain ?? event.appName ?? "Unknown activity"
     }
@@ -427,6 +414,133 @@ private struct AttentionTimelineView: View {
             event.media?.artist, event.windowTitle,
         ].compactMap { $0 }
         return parts.joined(separator: " · ")
+    }
+}
+
+enum AttentionEventIconDescriptor: Equatable {
+    case application(bundleID: String?)
+    case website(URL?)
+    case symbol(String)
+
+    init(event: AttentionEvent) {
+        switch event.source {
+        case .application:
+            self = .application(bundleID: event.bundleID)
+        case .browser:
+            self = .website(Self.remoteURL(event.faviconURL))
+        case .media:
+            self = .symbol(event.media?.kind == "audio" ? "music.note" : "play.rectangle")
+        case .manual:
+            self = .symbol("hand.tap")
+        }
+    }
+
+    init(entity: AttentionEntity) {
+        if let faviconURL = Self.remoteURL(entity.faviconURL) {
+            self = .website(faviconURL)
+        } else if let bundleID = entity.bundleID, !bundleID.isEmpty {
+            self = .application(bundleID: bundleID)
+        } else {
+            switch entity.source {
+            case .application:
+                self = .application(bundleID: nil)
+            case .browser:
+                self = .website(nil)
+            case .media:
+                self = .symbol("music.note")
+            case .manual:
+                self = .symbol("hand.tap")
+            }
+        }
+    }
+
+    private static func remoteURL(_ value: String?) -> URL? {
+        guard let value, let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+            scheme == "https" || scheme == "http"
+        else { return nil }
+        return url
+    }
+}
+
+private struct AttentionEventIcon: View {
+    let event: AttentionEvent
+
+    var body: some View {
+        AttentionResolvedIcon(
+            descriptor: AttentionEventIconDescriptor(event: event),
+            fallbackColor: event.presence == .active ? .accentColor : .secondary)
+    }
+}
+
+private struct AttentionResolvedIcon: View {
+    let descriptor: AttentionEventIconDescriptor
+    let fallbackColor: Color
+    @State private var faviconImage: NSImage?
+
+    private var faviconURL: URL? {
+        guard case .website(let url) = descriptor else { return nil }
+        return url
+    }
+
+    var body: some View {
+        Group {
+            switch descriptor {
+            case .application(let bundleID):
+                if let icon = AttentionApplicationIcon.resolve(bundleID: bundleID) {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                } else {
+                    fallback("macwindow")
+                }
+            case .website(let url):
+                if url != nil, let faviconImage {
+                    Image(nsImage: faviconImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .padding(3)
+                } else {
+                    fallback("globe")
+                }
+            case .symbol(let systemName):
+                fallback(systemName)
+            }
+        }
+        .frame(width: 26, height: 26)
+        .accessibilityHidden(true)
+        .task(id: faviconURL) {
+            faviconImage = nil
+            guard let faviconURL,
+                let data = await AttentionFaviconStore.shared.data(for: faviconURL),
+                !Task.isCancelled
+            else { return }
+            faviconImage = NSImage(data: data)
+        }
+    }
+
+    private func fallback(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(fallbackColor)
+    }
+}
+
+@MainActor
+private enum AttentionApplicationIcon {
+    private static var cache: [String: NSImage] = [:]
+
+    static func resolve(bundleID: String?) -> NSImage? {
+        guard let bundleID, !bundleID.isEmpty else { return nil }
+        if let cached = cache[bundleID] { return cached }
+        let icon =
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
+                NSWorkspace.shared.icon(forFile: $0.path)
+            }
+        if let icon { cache[bundleID] = icon }
+        return icon
     }
 }
 
@@ -840,8 +954,9 @@ private struct EntityRow: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8).fill(categoryColor.opacity(0.13))
-                Image(systemName: entity.source == .browser ? "globe" : "app.fill")
-                    .foregroundStyle(categoryColor)
+                AttentionResolvedIcon(
+                    descriptor: AttentionEventIconDescriptor(entity: entity),
+                    fallbackColor: categoryColor)
             }
             .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 4) {

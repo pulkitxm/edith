@@ -37,12 +37,17 @@ public struct AttentionAnalyzer: Sendable {
                 previousID = resolved.id
                 if var existing = totals[resolved.id] {
                     existing.duration += duration
+                    if event.source == .application {
+                        existing.bundleID = event.bundleID ?? existing.bundleID
+                    }
                     existing.faviconURL = event.faviconURL ?? existing.faviconURL
                     totals[resolved.id] = existing
                 } else {
                     totals[resolved.id] = AttentionEntity(
                         id: resolved.id, name: resolved.name, category: resolved.category,
-                        source: event.source, duration: duration, faviconURL: event.faviconURL)
+                        source: event.source, duration: duration,
+                        bundleID: event.source == .application ? event.bundleID : nil,
+                        faviconURL: event.faviconURL)
                 }
             }
         }

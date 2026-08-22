@@ -342,17 +342,19 @@ public struct AttentionEntity: Codable, Equatable, Identifiable, Sendable {
     public var category: AttentionCategory
     public var source: AttentionEventSource
     public var duration: TimeInterval
+    public var bundleID: String?
     public var faviconURL: String?
 
     public init(
         id: String, name: String, category: AttentionCategory, source: AttentionEventSource,
-        duration: TimeInterval, faviconURL: String? = nil
+        duration: TimeInterval, bundleID: String? = nil, faviconURL: String? = nil
     ) {
         self.id = id
         self.name = name
         self.category = category
         self.source = source
         self.duration = duration
+        self.bundleID = bundleID
         self.faviconURL = faviconURL
     }
 }

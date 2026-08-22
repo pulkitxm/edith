@@ -64,6 +64,57 @@ import Testing
         #expect(AttentionViewRange.month.interval(now: now).duration >= 29 * 86_400)
     }
 
+    @Test func timelineIconsUseApplicationBundlesAndWebsiteFavicons() {
+        let now = Date()
+        let application = AttentionEvent(
+            startedAt: now, duration: 30, source: .application, appName: "Music",
+            bundleID: "com.apple.Music")
+        let website = AttentionEvent(
+            startedAt: now, duration: 30, source: .browser, domain: "meet.google.com",
+            faviconURL: "https://meet.google.com/favicon.ico")
+
+        #expect(
+            AttentionEventIconDescriptor(event: application)
+                == .application(bundleID: "com.apple.Music"))
+        #expect(
+            AttentionEventIconDescriptor(event: website)
+                == .website(URL(string: "https://meet.google.com/favicon.ico")))
+    }
+
+    @Test func timelineIconsRejectLocalFaviconSchemesAndKeepSourceFallbacks() {
+        let now = Date()
+        let website = AttentionEvent(
+            startedAt: now, duration: 30, source: .browser, domain: "settings",
+            faviconURL: "file:///tmp/favicon.ico")
+        let media = AttentionEvent(
+            startedAt: now, duration: 30, source: .media,
+            media: AttentionMedia(
+                title: "Track", service: "Music", kind: "audio", playing: true))
+        let manual = AttentionEvent(startedAt: now, duration: 30, source: .manual)
+
+        #expect(AttentionEventIconDescriptor(event: website) == .website(nil))
+        #expect(AttentionEventIconDescriptor(event: media) == .symbol("music.note"))
+        #expect(AttentionEventIconDescriptor(event: manual) == .symbol("hand.tap"))
+    }
+
+    @Test func summaryIconsPreferFaviconsThenApplicationBundles() {
+        let category = AttentionSettings.defaultCategories[0]
+        let website = AttentionEntity(
+            id: "github", name: "github.com", category: category, source: .browser,
+            duration: 30, bundleID: "com.google.Chrome",
+            faviconURL: "https://github.com/favicon.ico")
+        let application = AttentionEntity(
+            id: "edith", name: "Edith", category: category, source: .application,
+            duration: 30, bundleID: "com.pulkit.edith")
+
+        #expect(
+            AttentionEventIconDescriptor(entity: website)
+                == .website(URL(string: "https://github.com/favicon.ico")))
+        #expect(
+            AttentionEventIconDescriptor(entity: application)
+                == .application(bundleID: "com.pulkit.edith"))
+    }
+
     private func fixture() -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-attention-page-\(UUID().uuidString)")

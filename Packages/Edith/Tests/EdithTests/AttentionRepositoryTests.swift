@@ -96,6 +96,10 @@ import Testing
         #expect(summary.communicationDuration == 30)
         #expect(summary.entities.first { $0.name == "WhatsApp" }?.duration == 30)
         #expect(summary.entities.first { $0.name == "Google Chrome" }?.duration == 30)
+        #expect(summary.entities.first { $0.name == "WhatsApp" }?.bundleID == nil)
+        #expect(
+            summary.entities.first { $0.name == "Google Chrome" }?.bundleID
+                == "com.google.Chrome")
     }
 
     @Test func idleMovieIsNotEngagedEntertainmentAndMusicRemainsVisible() {
