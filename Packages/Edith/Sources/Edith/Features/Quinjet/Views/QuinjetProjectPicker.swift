@@ -210,55 +210,77 @@ struct QuinjetWorktreePicker: View {
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
+    private var availableWorktrees: [QuinjetWorktree] { worktrees.filter(\.canOpen) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Text(projectName)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text("Choose a worktree")
-                .font(.system(size: UIScale.pt(10.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Divider().opacity(0.5)
-            ScrollView {
-                LazyVStack(spacing: UIScale.pt(3)) {
-                    ForEach(worktrees.filter(\.canOpen)) { worktree in
-                        Button {
-                            select(worktree)
-                        } label: {
-                            HStack(spacing: UIScale.pt(9)) {
-                                Image(
-                                    systemName: selectedPath == worktree.path
-                                        ? "checkmark.circle.fill" : "arrow.triangle.branch"
-                                )
-                                .foregroundStyle(
-                                    selectedPath == worktree.path
-                                        ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                                    Text(worktree.displayName)
-                                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                                        .foregroundStyle(DashSkin.ink(dark))
-                                    Text(worktree.path)
-                                        .font(DashSkin.mono(9))
-                                        .foregroundStyle(DashSkin.inkFaint(dark))
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, UIScale.pt(7))
-                            .padding(.vertical, UIScale.pt(6))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(QuinjetWorktreeRowStyle(dark: dark))
-                        .pointerCursor()
-                    }
-                }
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(8)) {
+                Text(projectName)
+                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(worktreeCount)
+                    .font(DashSkin.mono(9.5, weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
-            .frame(maxHeight: UIScale.pt(300))
+            Divider().opacity(0.5)
+            if availableWorktrees.count > 5 {
+                ScrollView { rows }
+                    .frame(height: UIScale.pt(250))
+            } else {
+                rows
+            }
         }
-        .padding(UIScale.pt(13))
-        .frame(width: UIScale.pt(390))
+        .padding(UIScale.pt(12))
+        .frame(width: UIScale.pt(330))
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var rows: some View {
+        LazyVStack(spacing: UIScale.pt(3)) {
+            ForEach(availableWorktrees) { worktree in
+                Button {
+                    select(worktree)
+                } label: {
+                    HStack(spacing: UIScale.pt(9)) {
+                        Image(
+                            systemName: selectedPath == worktree.path
+                                ? "checkmark.circle.fill" : "arrow.triangle.branch"
+                        )
+                        .font(.system(size: UIScale.pt(11), weight: .medium))
+                        .foregroundStyle(
+                            selectedPath == worktree.path
+                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                        )
+                        .frame(width: UIScale.pt(15))
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text(worktree.displayName)
+                                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                                .foregroundStyle(DashSkin.ink(dark))
+                            Text(worktree.path)
+                                .font(DashSkin.mono(8.5))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, UIScale.pt(8))
+                    .padding(.vertical, UIScale.pt(7))
+                    .frame(minHeight: UIScale.pt(42))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(QuinjetWorktreeRowStyle(dark: dark))
+                .pointerCursor()
+            }
+        }
+    }
+
+    private var worktreeCount: String {
+        let count = availableWorktrees.count
+        return count == 1 ? "1 worktree" : "\(count) worktrees"
     }
 }
 
@@ -292,9 +314,16 @@ private struct QuinjetWorktreeRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                hovering ? DashSkin.inkFaint(dark).opacity(0.13) : Color.clear,
+                hovering
+                    ? Color(red: 0.78, green: 0.67, blue: 0.49).opacity(dark ? 0.16 : 0.13)
+                    : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(7))
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    .strokeBorder(
+                        hovering ? DashSkin.accent(dark).opacity(0.3) : Color.clear)
+            }
             .onHover { hovering = $0 }
     }
 }
