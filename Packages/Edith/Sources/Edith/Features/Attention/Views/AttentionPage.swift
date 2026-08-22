@@ -384,11 +384,7 @@ private struct AttentionTimelineView: View {
                 ForEach(Array(model.events.enumerated()), id: \.element.id) { index, event in
                     if index > 0 { Divider() }
                     HStack(spacing: 12) {
-                        Image(systemName: eventIcon(event))
-                            .foregroundStyle(
-                                event.presence == .active ? Color.accentColor : .secondary
-                            )
-                            .frame(width: 26)
+                        AttentionEventIcon(event: event)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(eventTitle(event)).lineLimit(1)
                             Text(eventDetail(event))
@@ -408,15 +404,6 @@ private struct AttentionTimelineView: View {
         }
     }
 
-    private func eventIcon(_ event: AttentionEvent) -> String {
-        switch event.source {
-        case .application: return "macwindow"
-        case .browser: return "globe"
-        case .media: return event.media?.kind == "audio" ? "music.note" : "play.rectangle"
-        case .manual: return "hand.tap"
-        }
-    }
-
     private func eventTitle(_ event: AttentionEvent) -> String {
         event.media?.title ?? event.domain ?? event.appName ?? "Unknown activity"
     }
@@ -427,6 +414,93 @@ private struct AttentionTimelineView: View {
             event.media?.artist, event.windowTitle,
         ].compactMap { $0 }
         return parts.joined(separator: " · ")
+    }
+}
+
+enum AttentionEventIconDescriptor: Equatable {
+    case application(bundleID: String?)
+    case website(URL?)
+    case symbol(String)
+
+    init(event: AttentionEvent) {
+        switch event.source {
+        case .application:
+            self = .application(bundleID: event.bundleID)
+        case .browser:
+            self = .website(Self.remoteURL(event.faviconURL))
+        case .media:
+            self = .symbol(event.media?.kind == "audio" ? "music.note" : "play.rectangle")
+        case .manual:
+            self = .symbol("hand.tap")
+        }
+    }
+
+    private static func remoteURL(_ value: String?) -> URL? {
+        guard let value, let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+            scheme == "https" || scheme == "http"
+        else { return nil }
+        return url
+    }
+}
+
+private struct AttentionEventIcon: View {
+    let event: AttentionEvent
+
+    private var descriptor: AttentionEventIconDescriptor {
+        AttentionEventIconDescriptor(event: event)
+    }
+
+    var body: some View {
+        Group {
+            switch descriptor {
+            case .application(let bundleID):
+                if let icon = AttentionApplicationIcon.resolve(bundleID: bundleID) {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                } else {
+                    fallback("macwindow")
+                }
+            case .website(let url):
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                } placeholder: {
+                    fallback("globe")
+                }
+                .padding(3)
+            case .symbol(let systemName):
+                fallback(systemName)
+            }
+        }
+        .frame(width: 26, height: 26)
+        .accessibilityHidden(true)
+    }
+
+    private func fallback(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(event.presence == .active ? Color.accentColor : .secondary)
+    }
+}
+
+@MainActor
+private enum AttentionApplicationIcon {
+    private static var cache: [String: NSImage] = [:]
+
+    static func resolve(bundleID: String?) -> NSImage? {
+        guard let bundleID, !bundleID.isEmpty else { return nil }
+        if let cached = cache[bundleID] { return cached }
+        let icon =
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
+                NSWorkspace.shared.icon(forFile: $0.path)
+            }
+        if let icon { cache[bundleID] = icon }
+        return icon
     }
 }
 
