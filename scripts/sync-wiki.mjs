@@ -111,6 +111,21 @@ function childOrder(root, groupDir, names) {
   return [...known, ...names.filter((n) => !known.includes(n))];
 }
 
+function markdownFiles(root, dir) {
+  const files = [];
+  for (const entry of readdirSync(path.join(root, dir), {
+    withFileTypes: true,
+  })) {
+    if (entry.isDirectory()) {
+      for (const child of markdownFiles(root, `${dir}/${entry.name}`))
+        files.push(`${entry.name}/${child}`);
+    } else if (entry.name.endsWith(".md")) {
+      files.push(entry.name);
+    }
+  }
+  return files;
+}
+
 export function collect(root = repoRoot) {
   const docs = [];
   for (const section of SECTIONS) {
@@ -150,9 +165,7 @@ export function collect(root = repoRoot) {
     for (const dir of entries.filter((e) => e.isDirectory())) {
       const groupDir = `${section.dir}/${dir.name}`;
       const groupSlug = `${section.prefix}-${slugSuffix(dir.name)}`;
-      const files = readdirSync(path.join(root, groupDir))
-        .filter((f) => f.endsWith(".md"))
-        .sort();
+      const files = markdownFiles(root, groupDir).sort();
       if (files.some(isReadme)) {
         docs.push({
           src: `${groupDir}/README.md`,
@@ -165,16 +178,19 @@ export function collect(root = repoRoot) {
           isGroup: true,
         });
       }
-      const leaves = files
-        .filter((f) => !isReadme(f))
+      const rootLeaves = files
+        .filter((f) => !f.includes("/") && !isReadme(f))
         .map((f) => f.replace(/\.md$/, ""));
-      for (const [index, leaf] of childOrder(
-        root,
-        groupDir,
-        leaves,
-      ).entries()) {
+      const orderedRoot = childOrder(root, groupDir, rootLeaves).map(
+        (leaf) => `${leaf}.md`,
+      );
+      const nested = files.filter((f) => f.includes("/")).sort();
+      for (const [index, file] of [...orderedRoot, ...nested].entries()) {
+        const parts = file.replace(/\.md$/, "").split("/");
+        if (parts.at(-1)?.toLowerCase() === "readme") parts.pop();
+        const leaf = parts.join("-");
         docs.push({
-          src: `${groupDir}/${leaf}.md`,
+          src: `${groupDir}/${file}`,
           slug: `${groupSlug}-${slugSuffix(leaf)}`,
           title: displayTitle(leaf),
           section: section.label,
