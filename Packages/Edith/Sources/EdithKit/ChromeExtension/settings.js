@@ -62,22 +62,29 @@ async function toggleDeep() {
   await renderDeep()
 }
 
-async function testConnection() {
-  save()
-  await new Promise(resolve => setTimeout(resolve, 350))
+async function testConnection(interactive = true) {
+  if (interactive) {
+    save()
+    await new Promise(resolve => setTimeout(resolve, 350))
+  }
   const values = await chrome.storage.local.get(defaults)
   const button = document.getElementById("test")
-  button.disabled = true
-  button.textContent = "Testing"
+  if (interactive) {
+    button.disabled = true
+    button.textContent = "Testing"
+  }
   try {
     const response = await fetch(`http://127.0.0.1:${values.port}/v1/health`)
     if (!response.ok) throw new Error(`Edith returned ${response.status}`)
     await chrome.storage.local.set({ connectionStatus: "connected", lastConnectedAt: new Date().toISOString(), lastError: "" })
+    await chrome.runtime.sendMessage({ type: "edith-heartbeat-now" }).catch(() => {})
   } catch (error) {
     await chrome.storage.local.set({ connectionStatus: "offline", lastError: String(error.message || error) })
   }
-  button.disabled = false
-  button.textContent = "Test connection"
+  if (interactive) {
+    button.disabled = false
+    button.textContent = "Test connection"
+  }
   await renderStatus()
 }
 
@@ -119,4 +126,5 @@ document.getElementById("deep").addEventListener("click", toggleDeep)
 document.getElementById("test").addEventListener("click", testConnection)
 document.getElementById("history").addEventListener("click", importHistory)
 document.getElementById("forget").addEventListener("click", forget)
-load()
+load().then(() => testConnection(false))
+setInterval(() => testConnection(false), 5000)
