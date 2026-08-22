@@ -435,6 +435,25 @@ enum AttentionEventIconDescriptor: Equatable {
         }
     }
 
+    init(entity: AttentionEntity) {
+        if let faviconURL = Self.remoteURL(entity.faviconURL) {
+            self = .website(faviconURL)
+        } else if let bundleID = entity.bundleID, !bundleID.isEmpty {
+            self = .application(bundleID: bundleID)
+        } else {
+            switch entity.source {
+            case .application:
+                self = .application(bundleID: nil)
+            case .browser:
+                self = .website(nil)
+            case .media:
+                self = .symbol("music.note")
+            case .manual:
+                self = .symbol("hand.tap")
+            }
+        }
+    }
+
     private static func remoteURL(_ value: String?) -> URL? {
         guard let value, let url = URL(string: value), let scheme = url.scheme?.lowercased(),
             scheme == "https" || scheme == "http"
@@ -445,11 +464,18 @@ enum AttentionEventIconDescriptor: Equatable {
 
 private struct AttentionEventIcon: View {
     let event: AttentionEvent
-    @State private var faviconImage: NSImage?
 
-    private var descriptor: AttentionEventIconDescriptor {
-        AttentionEventIconDescriptor(event: event)
+    var body: some View {
+        AttentionResolvedIcon(
+            descriptor: AttentionEventIconDescriptor(event: event),
+            fallbackColor: event.presence == .active ? .accentColor : .secondary)
     }
+}
+
+private struct AttentionResolvedIcon: View {
+    let descriptor: AttentionEventIconDescriptor
+    let fallbackColor: Color
+    @State private var faviconImage: NSImage?
 
     private var faviconURL: URL? {
         guard case .website(let url) = descriptor else { return nil }
@@ -497,7 +523,7 @@ private struct AttentionEventIcon: View {
     private func fallback(_ systemName: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 17, weight: .medium))
-            .foregroundStyle(event.presence == .active ? Color.accentColor : .secondary)
+            .foregroundStyle(fallbackColor)
     }
 }
 
@@ -928,8 +954,9 @@ private struct EntityRow: View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8).fill(categoryColor.opacity(0.13))
-                Image(systemName: entity.source == .browser ? "globe" : "app.fill")
-                    .foregroundStyle(categoryColor)
+                AttentionResolvedIcon(
+                    descriptor: AttentionEventIconDescriptor(entity: entity),
+                    fallbackColor: categoryColor)
             }
             .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 4) {
