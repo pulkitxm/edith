@@ -31,6 +31,13 @@ private final class CommandRecorder: @unchecked Sendable {
             homebrewArguments: ["install", "--cask", "test-tool"],
             npmPackage: "@example/test-tool", instruction: "Install Test Tool manually."))
 
+    private let homebrewTool = CLIToolSpec(
+        id: "brew-tool", displayName: "Brew Tool", why: "Supports the test feature.",
+        presenceStrategy: .executable(name: "brew-tool", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "example/tap/brew-tool"],
+            instruction: "Install Brew Tool manually."))
+
     @Test func presenceCheckShortCircuitsInstallation() async {
         let recorder = CommandRecorder()
         let provisioner = ToolProvisioner { request, onLine in
@@ -142,6 +149,30 @@ private final class CommandRecorder: @unchecked Sendable {
         #expect(
             recorder.count {
                 $0.arguments == ["brew", "install", "--cask", "test-tool"]
+            } == 1)
+    }
+
+    @Test func homebrewOnlyInstallUsesConfiguredFormula() async {
+        let recorder = CommandRecorder()
+        let provisioner = ToolProvisioner { request, _ in
+            let occurrence = recorder.record(request)
+            if request.arguments == ["brew-tool", "--version"] {
+                return CLICommandResult(
+                    terminationStatus: occurrence == 1 ? 127 : 0,
+                    output: occurrence == 1 ? "" : "1.0.0\n")
+            }
+            if request.arguments == ["brew", "--version"] {
+                return CLICommandResult(terminationStatus: 0, output: "Homebrew 5\n")
+            }
+            return CLICommandResult(terminationStatus: 0, output: "installed\n")
+        }
+
+        await provisioner.provision(homebrewTool).value
+
+        #expect(provisioner.state(for: homebrewTool) == .installed)
+        #expect(
+            recorder.count {
+                $0.arguments == ["brew", "install", "example/tap/brew-tool"]
             } == 1)
     }
 }

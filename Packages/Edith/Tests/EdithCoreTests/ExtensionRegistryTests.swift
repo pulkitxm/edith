@@ -16,5 +16,6 @@ import Testing
 
         #expect(toolsByExtension["usage"] == ["claude", "codex"])
         #expect(toolsByExtension["music"] == ["yt-dlp"])
+        #expect(toolsByExtension["quinjet"] == ["quinjet"])
     }
 }

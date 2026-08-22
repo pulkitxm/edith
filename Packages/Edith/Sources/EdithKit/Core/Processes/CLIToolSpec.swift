@@ -21,6 +21,7 @@ public enum CLIToolPresenceStrategy: Equatable, Sendable {
 
 public enum CLIToolInstallStrategy: Equatable, Sendable {
     case standaloneBinary(url: URL, destinationName: String, instruction: String)
+    case homebrew(arguments: [String], instruction: String)
     case packageManagers(
         homebrewArguments: [String], npmPackage: String, instruction: String
     )
@@ -28,6 +29,8 @@ public enum CLIToolInstallStrategy: Equatable, Sendable {
     public var instruction: String {
         switch self {
         case let .standaloneBinary(_, _, instruction):
+            return instruction
+        case let .homebrew(_, instruction):
             return instruction
         case let .packageManagers(_, _, instruction):
             return instruction
@@ -94,6 +97,14 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             instruction:
                 "Install with `brew install --cask codex` or `npm install -g @openai/codex`."
         ))
+
+    public static let quinjet = CLIToolSpec(
+        id: "quinjet", displayName: "Quinjet",
+        why: "Powers local pull request review and live workspace changes.",
+        presenceStrategy: .executable(name: "quinjet", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "pulkitxm/tap/quinjet"],
+            instruction: "Install with `brew install pulkitxm/tap/quinjet`."))
 }
 
 public enum CLIToolEnvironment {
@@ -132,6 +143,7 @@ public enum CLIToolEnvironment {
         var directories = [
             AppData.supportDir.appendingPathComponent("bin").path,
             home.appendingPathComponent(".local/bin").path,
+            home.appendingPathComponent(".cargo/bin").path,
             home.appendingPathComponent(".nvm/current/bin").path,
             "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
         ]

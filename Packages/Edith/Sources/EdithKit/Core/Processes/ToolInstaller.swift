@@ -2,6 +2,7 @@ import Foundation
 
 public enum ToolInstallFailure: Error, CustomStringConvertible, Equatable {
     case noPackageManager(String)
+    case homebrewUnavailable(String)
     case commandFailed(String, Int32)
     case unverified(String)
 
@@ -9,6 +10,8 @@ public enum ToolInstallFailure: Error, CustomStringConvertible, Equatable {
         switch self {
         case let .noPackageManager(name):
             return "Neither Homebrew nor npm is available for installing \(name)."
+        case let .homebrewUnavailable(name):
+            return "Homebrew is required for installing \(name)."
         case let .commandFailed(command, status):
             return "\(command) exited with status \(status)."
         case let .unverified(name):
@@ -57,6 +60,9 @@ public struct ToolInstaller: Sendable {
         case let .standaloneBinary(url, destinationName, _):
             try await installStandaloneBinary(
                 url: url, destinationName: destinationName, log: log)
+        case let .homebrew(arguments, _):
+            try await installHomebrew(
+                arguments: arguments, displayName: tool.displayName, log: log)
         case let .packageManagers(homebrewArguments, npmPackage, _):
             try await installPackage(
                 homebrewArguments: homebrewArguments, npmPackage: npmPackage,
@@ -66,6 +72,16 @@ public struct ToolInstaller: Sendable {
             throw ToolInstallFailure.unverified(tool.displayName)
         }
         return version
+    }
+
+    private func installHomebrew(
+        arguments: [String], displayName: String, log: @escaping Log
+    ) async throws {
+        guard await isPresent("brew", log: log) else {
+            throw ToolInstallFailure.homebrewUnavailable(displayName)
+        }
+        log("Running brew " + arguments.joined(separator: " "))
+        try await requireSuccess(env(["brew"] + arguments), named: "brew", log: log)
     }
 
     private func installStandaloneBinary(
