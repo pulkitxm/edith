@@ -62,8 +62,13 @@ final class AttentionTrackingService {
     private func startServer() {
         guard settings.browserTrackingEnabled else { return }
         let server = AttentionIngestionServer(repository: repository, settings: settings)
-        try? server.start()
-        self.server = server
+        do {
+            try server.start()
+            self.server = server
+        } catch {
+            Log.lifecycle.error(
+                "attention server failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func installObservers() {

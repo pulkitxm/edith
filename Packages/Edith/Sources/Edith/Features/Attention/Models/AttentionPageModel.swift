@@ -249,14 +249,6 @@ final class AttentionPageModel {
             browserConnected = false
             return
         }
-        var request = URLRequest(
-            url: AttentionIngestionServer.healthURL(port: settings.serverPort))
-        request.timeoutInterval = 2
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            browserConnected = (response as? HTTPURLResponse)?.statusCode == 200
-        } catch {
-            browserConnected = false
-        }
+        browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
     }
 }

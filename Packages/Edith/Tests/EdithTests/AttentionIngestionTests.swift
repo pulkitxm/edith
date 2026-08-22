@@ -57,6 +57,42 @@ import Testing
         #expect(text.contains("Content-Length: \(Data(parts[1].utf8).count)"))
     }
 
+    @Test func liveLoopbackServerAcceptsHealthAndHeartbeat() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-attention-server-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = AttentionRepository(root: root)
+        let settings = AttentionSettings(
+            browserTrackingEnabled: true, serverPort: 0, serverToken: "local-secret")
+        let server = AttentionIngestionServer(repository: repository, settings: settings)
+        try server.start()
+        defer { server.stop() }
+
+        for _ in 0..<100 where server.state == .starting {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(server.state == .ready)
+        let port = try #require(server.boundPort)
+        #expect(await AttentionIngestionServer.isHealthy(port: port))
+
+        var request = URLRequest(
+            url: URL(string: "http://127.0.0.1:\(port)/v1/heartbeat")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("local-secret", forHTTPHeaderField: "X-Edith-Token")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        request.httpBody = try encoder.encode(sampleHeartbeat())
+        let (_, response) = try await URLSession.shared.data(for: request)
+        #expect((response as? HTTPURLResponse)?.statusCode == 202)
+
+        let events = repository.events(
+            from: now.addingTimeInterval(-1), to: now.addingTimeInterval(1))
+        #expect(events.count == 1)
+        #expect(events.first?.domain == "music.youtube.com")
+        #expect(events.first?.browserProfile == "Default")
+    }
+
     private func sampleHeartbeat() -> AttentionBrowserHeartbeat {
         AttentionBrowserHeartbeat(
             timestamp: now, duration: 15, presence: .active, appName: "Chrome",

@@ -226,11 +226,19 @@ struct AttentionStatusCommand: AsyncParsableCommand {
             let focus = repository.activeFocus()
             let events = repository.events(
                 from: Date().addingTimeInterval(-86_400), to: Date())
+            let browserServerReady: Bool
+            if settings.browserTrackingEnabled {
+                browserServerReady = await AttentionIngestionServer.isHealthy(
+                    port: settings.serverPort, timeout: 0.5)
+            } else {
+                browserServerReady = false
+            }
             if json {
                 CLIOut.json(
                     .object([
                         "trackingEnabled": .bool(settings.trackingEnabled),
                         "browserTrackingEnabled": .bool(settings.browserTrackingEnabled),
+                        "browserServerReady": .bool(browserServerReady),
                         "privacyLevel": .string(settings.privacyLevel.rawValue),
                         "windowTitlesEnabled": .bool(settings.windowTitlesEnabled),
                         "iCloudBackupEnabled": .bool(settings.iCloudBackupEnabled),
@@ -520,10 +528,24 @@ struct AttentionDoctorCommand: AsyncParsableCommand {
     func run() async throws {
         let repository = AttentionCLI.repository
         let settings = repository.loadSettings()
+        let browserServerReady: Bool
+        if settings.browserTrackingEnabled {
+            browserServerReady = await AttentionIngestionServer.isHealthy(
+                port: settings.serverPort, timeout: 0.5)
+        } else {
+            browserServerReady = false
+        }
         let checks: [(String, Bool, String)] = [
             ("helper", AppBridge.helperIsRunning, "Edith menu bar process"),
             ("application tracking", settings.trackingEnabled, "macOS foreground collector"),
-            ("browser tracking", settings.browserTrackingEnabled, "local browser server"),
+            (
+                "browser tracking", browserServerReady,
+                browserServerReady
+                    ? "local server is accepting connections"
+                    : settings.browserTrackingEnabled
+                        ? "enabled but local server is unavailable"
+                        : "local browser server is disabled"
+            ),
             (
                 "extension bundle", AttentionExtensionInstaller.bundledDirectory != nil,
                 "packaged Chrome extension"

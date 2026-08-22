@@ -656,6 +656,10 @@ private struct BrowserInstallCard: View {
             if showToken {
                 Divider()
                 VStack(alignment: .leading, spacing: 7) {
+                    Text("Local port").font(.system(size: 11, weight: .semibold))
+                    Text(String(model.settings.serverPort))
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
                     Text("Private local token").font(.system(size: 11, weight: .semibold))
                     HStack {
                         Text(String(repeating: "•", count: 24))

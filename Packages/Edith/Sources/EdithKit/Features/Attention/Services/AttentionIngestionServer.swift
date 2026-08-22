@@ -15,6 +15,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
     private var listener: NWListener?
     private let stateLock = NSLock()
     private var storedState: State = .stopped
+    private var storedPort: UInt16?
 
     public init(
         repository: AttentionRepository = AttentionRepository(), settings: AttentionSettings
@@ -27,6 +28,10 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         stateLock.withLock { storedState }
     }
 
+    public var boundPort: UInt16? {
+        stateLock.withLock { storedPort }
+    }
+
     public func start() throws {
         guard listener == nil else { return }
         guard let port = NWEndpoint.Port(rawValue: settings.serverPort) else {
@@ -34,11 +39,13 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         }
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
-        let listener = try NWListener(using: parameters, on: port)
+        let listener = try NWListener(using: parameters)
         setState(.starting)
         listener.stateUpdateHandler = { [weak self] state in
             switch state {
-            case .ready: self?.setState(.ready)
+            case .ready:
+                self?.setPort(listener.port?.rawValue)
+                self?.setState(.ready)
             case let .failed(error): self?.setState(.failed(error.localizedDescription))
             case .cancelled: self?.setState(.stopped)
             default: break
@@ -54,6 +61,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
     public func stop() {
         listener?.cancel()
         listener = nil
+        setPort(nil)
         setState(.stopped)
     }
 
@@ -61,8 +69,23 @@ public final class AttentionIngestionServer: @unchecked Sendable {
         URL(string: "http://127.0.0.1:\(port)/v1/health")!
     }
 
+    public static func isHealthy(port: UInt16, timeout: TimeInterval = 2) async -> Bool {
+        var request = URLRequest(url: healthURL(port: port))
+        request.timeoutInterval = timeout
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
+    }
+
     private func setState(_ value: State) {
         stateLock.withLock { storedState = value }
+    }
+
+    private func setPort(_ value: UInt16?) {
+        stateLock.withLock { storedPort = value }
     }
 
     private func accept(_ connection: NWConnection) {
