@@ -115,10 +115,16 @@ final class AttentionPageModel {
     }
 
     func completeSetup(applicationTracking: Bool, browserTracking: Bool) {
+        settings.isEnabled = applicationTracking || browserTracking
         settings.trackingEnabled = applicationTracking
         settings.browserTrackingEnabled = browserTracking
         saveSettings()
         section = .overview
+    }
+
+    func setAttentionEnabled(_ enabled: Bool) {
+        settings.isEnabled = enabled
+        saveSettings()
     }
 
     func installExtension() {
@@ -245,7 +251,7 @@ final class AttentionPageModel {
     }
 
     func checkBrowser() async {
-        guard settings.browserTrackingEnabled else {
+        guard settings.isEnabled, settings.browserTrackingEnabled else {
             browserConnected = false
             return
         }

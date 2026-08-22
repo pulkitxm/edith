@@ -37,7 +37,8 @@ final class AttentionTrackingService {
 
     func sync(_ nextSettings: AttentionSettings) {
         let serverChanged =
-            settings.browserTrackingEnabled != nextSettings.browserTrackingEnabled
+            settings.isEnabled != nextSettings.isEnabled
+            || settings.browserTrackingEnabled != nextSettings.browserTrackingEnabled
             || settings.serverPort != nextSettings.serverPort
             || settings.serverToken != nextSettings.serverToken
         writeHeartbeat()
@@ -60,7 +61,7 @@ final class AttentionTrackingService {
     }
 
     private func startServer() {
-        guard settings.browserTrackingEnabled else { return }
+        guard settings.isEnabled, settings.browserTrackingEnabled else { return }
         let server = AttentionIngestionServer(repository: repository, settings: settings)
         do {
             try server.start()
@@ -109,7 +110,7 @@ final class AttentionTrackingService {
     private func writeHeartbeat(now: Date = Date()) {
         let duration = min(30, max(0, now.timeIntervalSince(lastHeartbeatAt)))
         backupIfNeeded()
-        guard settings.trackingEnabled, duration > 0.2,
+        guard settings.isEnabled, settings.trackingEnabled, duration > 0.2,
             let app = NSWorkspace.shared.frontmostApplication
         else {
             lastHeartbeatAt = now

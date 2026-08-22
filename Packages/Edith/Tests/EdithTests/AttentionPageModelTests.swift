@@ -22,10 +22,24 @@ import Testing
         let model = AttentionPageModel(repository: fixture.repository)
         model.completeSetup(applicationTracking: true, browserTracking: false)
         let settings = fixture.repository.loadSettings()
+        #expect(settings.isEnabled)
         #expect(settings.trackingEnabled)
         #expect(settings.browserTrackingEnabled == false)
         #expect(model.needsSetup == false)
         #expect(model.hasActivity == false)
+    }
+
+    @Test func masterSwitchStopsCollectionWithoutLosingSourceChoices() {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.completeSetup(applicationTracking: true, browserTracking: true)
+        model.setAttentionEnabled(false)
+        let settings = fixture.repository.loadSettings()
+        #expect(settings.isEnabled == false)
+        #expect(settings.trackingEnabled)
+        #expect(settings.browserTrackingEnabled)
+        #expect(model.browserConnected == false)
     }
 
     @Test func categoryMenuReclassifiesExistingEntity() throws {

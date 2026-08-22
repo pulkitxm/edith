@@ -227,7 +227,7 @@ struct AttentionStatusCommand: AsyncParsableCommand {
             let events = repository.events(
                 from: Date().addingTimeInterval(-86_400), to: Date())
             let browserServerReady: Bool
-            if settings.browserTrackingEnabled {
+            if settings.isEnabled, settings.browserTrackingEnabled {
                 browserServerReady = await AttentionIngestionServer.isHealthy(
                     port: settings.serverPort, timeout: 0.5)
             } else {
@@ -236,6 +236,7 @@ struct AttentionStatusCommand: AsyncParsableCommand {
             if json {
                 CLIOut.json(
                     .object([
+                        "enabled": .bool(settings.isEnabled),
                         "trackingEnabled": .bool(settings.trackingEnabled),
                         "browserTrackingEnabled": .bool(settings.browserTrackingEnabled),
                         "browserServerReady": .bool(browserServerReady),
@@ -249,8 +250,13 @@ struct AttentionStatusCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out("application tracking: \(settings.trackingEnabled ? "on" : "off")")
-            CLIOut.out("browser tracking: \(settings.browserTrackingEnabled ? "on" : "off")")
+            CLIOut.out("attention: \(settings.isEnabled ? "on" : "off")")
+            CLIOut.out(
+                "application tracking: \(settings.isEnabled && settings.trackingEnabled ? "on" : "off")"
+            )
+            CLIOut.out(
+                "browser tracking: \(settings.isEnabled && settings.browserTrackingEnabled ? "on" : "off")"
+            )
             CLIOut.out("privacy: \(settings.privacyLevel.rawValue)")
             CLIOut.out("events in last 24h: \(events.count)")
             CLIOut.out("history inventory: \(repository.historyVisits().count) sites")
@@ -529,22 +535,32 @@ struct AttentionDoctorCommand: AsyncParsableCommand {
         let repository = AttentionCLI.repository
         let settings = repository.loadSettings()
         let browserServerReady: Bool
-        if settings.browserTrackingEnabled {
+        if settings.isEnabled, settings.browserTrackingEnabled {
             browserServerReady = await AttentionIngestionServer.isHealthy(
                 port: settings.serverPort, timeout: 0.5)
         } else {
             browserServerReady = false
         }
+        let disabled = !settings.isEnabled
         let checks: [(String, Bool, String)] = [
             ("helper", AppBridge.helperIsRunning, "Edith menu bar process"),
-            ("application tracking", settings.trackingEnabled, "macOS foreground collector"),
             (
-                "browser tracking", browserServerReady,
-                browserServerReady
-                    ? "local server is accepting connections"
-                    : settings.browserTrackingEnabled
-                        ? "enabled but local server is unavailable"
-                        : "local browser server is disabled"
+                "attention", true,
+                disabled ? "disabled by master switch" : "enabled by master switch"
+            ),
+            (
+                "application tracking", disabled || settings.trackingEnabled,
+                disabled ? "disabled by master switch" : "macOS foreground collector"
+            ),
+            (
+                "browser tracking", disabled || browserServerReady,
+                disabled
+                    ? "disabled by master switch"
+                    : browserServerReady
+                        ? "local server is accepting connections"
+                        : settings.browserTrackingEnabled
+                            ? "enabled but local server is unavailable"
+                            : "local browser server is disabled"
             ),
             (
                 "extension bundle", AttentionExtensionInstaller.bundledDirectory != nil,

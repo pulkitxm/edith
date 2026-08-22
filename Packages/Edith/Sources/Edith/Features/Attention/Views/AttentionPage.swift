@@ -198,10 +198,15 @@ private struct AttentionCollectingView: View {
                         .font(.system(size: 30, weight: .medium))
                         .foregroundStyle(Color.accentColor)
                 }
-                Text("Collecting your first real activity")
-                    .font(DashSkin.serif(24))
                 Text(
-                    "Use your Mac normally. The overview appears after the first genuine foreground heartbeat arrives."
+                    model.settings.isEnabled
+                        ? "Collecting your first real activity" : "Attention is disabled"
+                )
+                .font(DashSkin.serif(24))
+                Text(
+                    model.settings.isEnabled
+                        ? "Use your Mac normally. The overview appears after the first genuine foreground heartbeat arrives."
+                        : "Attention is completely disabled. Existing history and settings remain on this Mac."
                 )
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -209,13 +214,15 @@ private struct AttentionCollectingView: View {
                 HStack(spacing: 12) {
                     StatusPill(
                         title: "Applications",
-                        state: model.settings.trackingEnabled ? "Listening" : "Off",
-                        good: model.settings.trackingEnabled)
+                        state: model.settings.isEnabled && model.settings.trackingEnabled
+                            ? "Listening" : "Off",
+                        good: model.settings.isEnabled && model.settings.trackingEnabled)
                     StatusPill(
                         title: "Browser",
                         state: model.browserConnected
                             ? "Connected"
-                            : model.settings.browserTrackingEnabled ? "Waiting" : "Off",
+                            : model.settings.isEnabled && model.settings.browserTrackingEnabled
+                                ? "Waiting" : "Off",
                         good: model.browserConnected)
                 }
                 Button("Review setup") { model.section = .settings }
@@ -509,17 +516,36 @@ private struct AttentionSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             AttentionCard {
+                Toggle(
+                    isOn: Binding(
+                        get: { model.settings.isEnabled },
+                        set: { model.setAttentionEnabled($0) })
+                ) {
+                    SettingsTitle(
+                        "Enable Attention",
+                        subtitle:
+                            "Master switch for all collection. Turning it off stops application tracking and the local browser server without deleting history."
+                    )
+                }
+                .toggleStyle(.switch)
+            }
+
+            AttentionCard {
                 SettingsTitle(
                     "Sources",
                     subtitle: "Every setting required to start and stop collection is here.")
                 Toggle("Track foreground applications", isOn: $model.settings.trackingEnabled)
+                    .disabled(!model.settings.isEnabled)
                 Toggle("Run local browser server", isOn: $model.settings.browserTrackingEnabled)
+                    .disabled(!model.settings.isEnabled)
                 Picker("Privacy level", selection: $model.settings.privacyLevel) {
                     Text("Applications only").tag(AttentionPrivacyLevel.applications)
                     Text("Domains").tag(AttentionPrivacyLevel.domains)
                     Text("Detailed").tag(AttentionPrivacyLevel.detailed)
                 }
+                .disabled(!model.settings.isEnabled)
                 Toggle("Store window and page titles", isOn: $model.settings.windowTitlesEnabled)
+                    .disabled(!model.settings.isEnabled)
                 HStack {
                     Picker("Idle after", selection: $model.settings.idleThreshold) {
                         Text("1 minute").tag(TimeInterval(60))
@@ -533,6 +559,7 @@ private struct AttentionSettingsView: View {
                         Button("Accessibility access") { model.requestAccessibility() }
                     }
                 }
+                .disabled(!model.settings.isEnabled)
             }
 
             BrowserInstallCard(model: model, showToken: true)
@@ -634,7 +661,8 @@ private struct BrowserInstallCard: View {
                 Spacer()
                 StatusPill(
                     title: "Local server",
-                    state: model.browserConnected ? "Connected" : "Waiting",
+                    state: !model.settings.isEnabled
+                        ? "Disabled" : model.browserConnected ? "Connected" : "Waiting",
                     good: model.browserConnected)
             }
             Divider()

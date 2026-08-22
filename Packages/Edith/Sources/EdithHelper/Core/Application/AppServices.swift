@@ -169,7 +169,8 @@ final class AppServices {
 
         let attentionSettings = AttentionRepository().loadSettings()
         let attentionOn =
-            attentionSettings.trackingEnabled || attentionSettings.browserTrackingEnabled
+            attentionSettings.isEnabled
+            && (attentionSettings.trackingEnabled || attentionSettings.browserTrackingEnabled)
         if attentionOn, attention == nil { attention = AttentionTrackingService() }
         if attentionOn { attention?.sync(attentionSettings) }
         if !attentionOn, let service = attention {
