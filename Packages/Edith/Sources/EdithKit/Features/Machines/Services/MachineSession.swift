@@ -563,51 +563,49 @@ public final class MachineSession {
     private func runLocalCommand(
         _ command: String, stdin: Data?, timeout: TimeInterval
     ) async -> Result<String, Error> {
-        await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", command]
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", command]
+        let pipe = Pipe()
+        let buffer = PipeBuffer()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = {
+            PipeReading.consume($0, receive: buffer.append)
+        }
+        let stdinPipe: Pipe?
+        if stdin != nil {
             let pipe = Pipe()
-            let buffer = PipeBuffer()
-            process.standardOutput = pipe
-            process.standardError = pipe
-            pipe.fileHandleForReading.readabilityHandler = {
-                PipeReading.consume($0, receive: buffer.append)
-            }
-            let stdinPipe: Pipe?
-            if stdin != nil {
-                let pipe = Pipe()
-                stdinPipe = pipe
-                process.standardInput = pipe
-            } else {
-                stdinPipe = nil
-                process.standardInput = FileHandle.nullDevice
-            }
-            do {
-                try process.run()
-            } catch {
-                pipe.fileHandleForReading.readabilityHandler = nil
-                return .failure(error)
-            }
-            if let stdin, let stdinPipe {
-                stdinPipe.fileHandleForWriting.write(stdin)
-                try? stdinPipe.fileHandleForWriting.close()
-            }
-            let status = await withTaskCancellationHandler {
-                await SSHConnection.waitForExit(process, timeout: timeout)
-            } onCancel: {
-                process.terminate()
-            }
+            stdinPipe = pipe
+            process.standardInput = pipe
+        } else {
+            stdinPipe = nil
+            process.standardInput = FileHandle.nullDevice
+        }
+        do {
+            try process.run()
+        } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
-            buffer.append(pipe.fileHandleForReading.readDataToEndOfFile())
-            let text = String(decoding: buffer.snapshot(), as: UTF8.self)
-            guard status == 0 else {
-                return .failure(
-                    SSHConnectionError.commandFailed(
-                        command: command, status: status, stderr: text))
-            }
-            return .success(text)
-        }.value
+            return .failure(error)
+        }
+        if let stdin, let stdinPipe {
+            stdinPipe.fileHandleForWriting.write(stdin)
+            try? stdinPipe.fileHandleForWriting.close()
+        }
+        let status = await withTaskCancellationHandler {
+            await SSHConnection.waitForExit(process, timeout: timeout)
+        } onCancel: {
+            process.terminate()
+        }
+        pipe.fileHandleForReading.readabilityHandler = nil
+        buffer.append(pipe.fileHandleForReading.readDataToEndOfFile())
+        let text = String(decoding: buffer.snapshot(), as: UTF8.self)
+        guard status == 0 else {
+            return .failure(
+                SSHConnectionError.commandFailed(
+                    command: command, status: status, stderr: text))
+        }
+        return .success(text)
     }
 
     public func refreshServices() async {
