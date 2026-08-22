@@ -61,6 +61,23 @@ import Testing
             ).count == 1)
     }
 
+    @Test func existingSettingsEnableTheMasterSwitchWhenACollectorWasActive() throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let encoded = try JSONEncoder().encode(
+            AttentionSettings(isEnabled: true, trackingEnabled: true))
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "enabled")
+        try FileManager.default.createDirectory(
+            at: fixture.repository.directory, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: object).write(
+            to: fixture.repository.settingsFile)
+        let settings = fixture.repository.loadSettings()
+        #expect(settings.isEnabled)
+        #expect(settings.trackingEnabled)
+    }
+
     @Test func browserDetailReplacesEnclosingBrowserWithoutDoubleCounting() {
         let settings = AttentionSettings()
         let events = [

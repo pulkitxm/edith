@@ -1,6 +1,6 @@
 # `ed attention doctor`
 
-Checks the menu bar helper, native collector setting, browser server setting,
+Checks the Attention master switch, menu bar helper, native collector setting, browser server setting,
 packaged extension resources, and local event store.
 
 ```

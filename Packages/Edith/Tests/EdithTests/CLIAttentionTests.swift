@@ -63,4 +63,25 @@ import Testing
             #expect(stop.object?["endedAt"] is String)
         }
     }
+
+    @Test func statusAndDoctorCheckTheLiveBrowserServer() async throws {
+        try await CLIProbe.inWorld { world in
+            let repository = AttentionRepository(root: world.sandbox)
+            try repository.saveSettings(
+                AttentionSettings(isEnabled: true, browserTrackingEnabled: true, serverPort: 0))
+
+            let status = await CLIProbe.capture(["attention", "status", "--json"])
+            #expect(status.object?["enabled"] as? Bool == true)
+            #expect(status.object?["browserTrackingEnabled"] as? Bool == true)
+            #expect(status.object?["browserServerReady"] as? Bool == false)
+
+            let doctor = await CLIProbe.capture(["attention", "doctor", "--json"])
+            #expect(doctor.object?["ok"] as? Bool == false)
+            let checks = doctor.object?["checks"] as? [[String: Any]]
+            let browser = checks?.first { $0["name"] as? String == "browser tracking" }
+            #expect(browser?["ok"] as? Bool == false)
+            #expect(
+                browser?["detail"] as? String == "enabled but local server is unavailable")
+        }
+    }
 }

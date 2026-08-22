@@ -217,6 +217,7 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
 }
 
 public struct AttentionSettings: Codable, Equatable, Sendable {
+    public var isEnabled: Bool
     public var trackingEnabled: Bool
     public var browserTrackingEnabled: Bool
     public var idleThreshold: TimeInterval
@@ -229,13 +230,15 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
     public var rules: [AttentionIdentityRule]
 
     public init(
-        trackingEnabled: Bool = false, browserTrackingEnabled: Bool = false,
+        isEnabled: Bool = false, trackingEnabled: Bool = false,
+        browserTrackingEnabled: Bool = false,
         idleThreshold: TimeInterval = 300, privacyLevel: AttentionPrivacyLevel = .domains,
         windowTitlesEnabled: Bool = false, iCloudBackupEnabled: Bool = false,
         serverPort: UInt16 = 52728, serverToken: String = UUID().uuidString,
         categories: [AttentionCategory] = AttentionSettings.defaultCategories,
         rules: [AttentionIdentityRule] = AttentionSettings.defaultRules
     ) {
+        self.isEnabled = isEnabled
         self.trackingEnabled = trackingEnabled
         self.browserTrackingEnabled = browserTrackingEnabled
         self.idleThreshold = idleThreshold
@@ -246,6 +249,37 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         self.serverToken = serverToken
         self.categories = categories
         self.rules = rules
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled = "enabled"
+        case trackingEnabled
+        case browserTrackingEnabled
+        case idleThreshold
+        case privacyLevel
+        case windowTitlesEnabled
+        case iCloudBackupEnabled
+        case serverPort
+        case serverToken
+        case categories
+        case rules
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        trackingEnabled = try container.decode(Bool.self, forKey: .trackingEnabled)
+        browserTrackingEnabled = try container.decode(Bool.self, forKey: .browserTrackingEnabled)
+        isEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .isEnabled)
+            ?? (trackingEnabled || browserTrackingEnabled)
+        idleThreshold = try container.decode(TimeInterval.self, forKey: .idleThreshold)
+        privacyLevel = try container.decode(AttentionPrivacyLevel.self, forKey: .privacyLevel)
+        windowTitlesEnabled = try container.decode(Bool.self, forKey: .windowTitlesEnabled)
+        iCloudBackupEnabled = try container.decode(Bool.self, forKey: .iCloudBackupEnabled)
+        serverPort = try container.decode(UInt16.self, forKey: .serverPort)
+        serverToken = try container.decode(String.self, forKey: .serverToken)
+        categories = try container.decode([AttentionCategory].self, forKey: .categories)
+        rules = try container.decode([AttentionIdentityRule].self, forKey: .rules)
     }
 
     public static let defaultCategories = [

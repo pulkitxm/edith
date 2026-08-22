@@ -61,6 +61,14 @@ test("a command page nests under its group", () => {
   expect(ps.parent).toBe("CLI-Machines-Docker");
 });
 
+test("a nested command page stays under its top level group", () => {
+  const start = docs.find((d) => d.src === "docs/cli/attention/focus/start.md");
+  expect(start.slug).toBe("CLI-Attention-Focus-Start");
+  expect(start.title).toBe("Focus Start");
+  expect(start.depth).toBe(1);
+  expect(start.parent).toBe("CLI-Attention");
+});
+
 test("a group README keeps the group slug", () => {
   const group = docs.find(
     (d) => d.src === "docs/cli/machines-docker/README.md",

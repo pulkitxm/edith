@@ -8,7 +8,7 @@ session.
 ed attention status [--json]
 ```
 
-The JSON object contains `trackingEnabled`, `browserTrackingEnabled`,
+The JSON object contains the master `enabled` state, `trackingEnabled`, `browserTrackingEnabled`,
 `privacyLevel`, `windowTitlesEnabled`, `iCloudBackupEnabled`,
 `eventsLast24Hours`, `historySites`, `helperRunning`, and `focus`. The focus value
 is `null` when no session is active.

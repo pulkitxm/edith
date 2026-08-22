@@ -92,14 +92,20 @@ function scheduleHeartbeat() {
   setTimeout(heartbeat, 200)
 }
 
-chrome.runtime.onInstalled.addListener(async details => {
-  await chrome.alarms.create("attention-heartbeat", { periodInMinutes: 0.5 })
+function ensureHeartbeatAlarm() {
+  chrome.alarms.get("attention-heartbeat", alarm => {
+    if (!alarm) chrome.alarms.create("attention-heartbeat", { periodInMinutes: 0.5 })
+  })
+}
+
+chrome.runtime.onInstalled.addListener(details => {
+  ensureHeartbeatAlarm()
   if (details.reason === "install") chrome.runtime.openOptionsPage()
   scheduleHeartbeat()
 })
 
-chrome.runtime.onStartup.addListener(async () => {
-  await chrome.alarms.create("attention-heartbeat", { periodInMinutes: 0.5 })
+chrome.runtime.onStartup.addListener(() => {
+  ensureHeartbeatAlarm()
   scheduleHeartbeat()
 })
 
@@ -116,7 +122,13 @@ chrome.windows.onFocusChanged.addListener(scheduleHeartbeat)
 chrome.idle.onStateChanged.addListener(scheduleHeartbeat)
 
 chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message.type === "edith-heartbeat-now") {
+    scheduleHeartbeat()
+    return
+  }
   if (message.type !== "edith-media" || sender.tab?.id == null) return
   chrome.storage.session.set({ [`media:${sender.tab.id}`]: message.media || [] })
   scheduleHeartbeat()
 })
+
+ensureHeartbeatAlarm()
