@@ -135,7 +135,9 @@ xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   build
 
 BUILT="$DERIVED/Build/Products/$CONFIG/Edith.app"
+BUILT_HELPER="$DERIVED/Build/Products/$CONFIG/EdithHelper.app"
 test -d "$BUILT" || { echo "build did not produce $BUILT" >&2; exit 1; }
+test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exit 1; }
 
 SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
 SWIFT_CONFIGURATION=debug
@@ -152,6 +154,11 @@ PRIVILEGED_HELPER="$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edi
 LAUNCH_DAEMONS="$HELPER/Contents/Library/LaunchDaemons"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
+
+rm -rf "$HELPER"
+ditto "$BUILT_HELPER" "$HELPER"
+mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' "$HELPER/Contents/Info.plist"
 
 rm -rf "$APP/Contents/Library/PrivilegedHelperTools" "$APP/Contents/Library/LaunchDaemons"
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
