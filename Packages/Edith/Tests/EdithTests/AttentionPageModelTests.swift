@@ -97,6 +97,24 @@ import Testing
         #expect(AttentionEventIconDescriptor(event: manual) == .symbol("hand.tap"))
     }
 
+    @Test func summaryIconsPreferFaviconsThenApplicationBundles() {
+        let category = AttentionSettings.defaultCategories[0]
+        let website = AttentionEntity(
+            id: "github", name: "github.com", category: category, source: .browser,
+            duration: 30, bundleID: "com.google.Chrome",
+            faviconURL: "https://github.com/favicon.ico")
+        let application = AttentionEntity(
+            id: "edith", name: "Edith", category: category, source: .application,
+            duration: 30, bundleID: "com.pulkit.edith")
+
+        #expect(
+            AttentionEventIconDescriptor(entity: website)
+                == .website(URL(string: "https://github.com/favicon.ico")))
+        #expect(
+            AttentionEventIconDescriptor(entity: application)
+                == .application(bundleID: "com.pulkit.edith"))
+    }
+
     private func fixture() -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-attention-page-\(UUID().uuidString)")
