@@ -131,7 +131,8 @@ import Testing
         let machine = Machine(
             name: "Tuf", host: "192.168.1.12", port: 2222, username: "pulkit",
             auth: .keyFile(path: "/tmp/key", hasPassphrase: true),
-            source: .sshConfigAlias("tuf"), wakeMACAddress: "aa:bb:cc:dd:ee:ff",
+            source: .sshConfigAlias("tuf"), sshClipboardEnabled: true,
+            wakeMACAddress: "aa:bb:cc:dd:ee:ff",
             createdAt: Date(timeIntervalSince1970: 1_754_000_000))
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -140,6 +141,20 @@ import Testing
         let decoded = try decoder.decode(
             Machine.self, from: encoder.encode(machine))
         #expect(decoded == machine)
+    }
+
+    @Test func machinesWithoutClipboardPreferenceDecodeAsDisabled() throws {
+        let machine = Machine(name: "Tuf", host: "192.168.1.12")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoder.encode(machine)) as? [String: Any])
+        object.removeValue(forKey: "sshClipboardEnabled")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(
+            Machine.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(!decoded.sshClipboardEnabled)
     }
 
     @Test func askpassUsage() {
@@ -153,6 +168,71 @@ import Testing
         let forward = PortForward(
             machineID: UUID(), localPort: 8080, remoteHost: "localhost", remotePort: 3000)
         #expect(forward.forwardSpec == "127.0.0.1:8080:localhost:3000")
+    }
+}
+
+@Suite struct SSHClipboardConfigurationTests {
+    private let first = Machine(
+        id: UUID(uuidString: "01010101-0101-0101-0101-010101010101")!, name: "Tuf",
+        host: "10.77.0.2", username: "pulkit", source: .sshConfigAlias("tuf-wired"),
+        sshClipboardEnabled: true)
+
+    @Test func configUsesTheUpstreamSnakeCaseSchema() throws {
+        let config = SSHClipboardConfiguration(
+            nodeID: UUID(uuidString: "02020202-0202-0202-0202-020202020202")!,
+            nodeName: "mac",
+            peers: [SSHClipboardPeerConfiguration(name: "Tuf", sshCommand: "ssh tuf")])
+        let object = try #require(
+            JSONSerialization.jsonObject(with: config.encoded()) as? [String: Any])
+        #expect(object["node_id"] as? String == "02020202-0202-0202-0202-020202020202")
+        #expect(object["node_name"] as? String == "mac")
+        #expect(object["poll_interval_ms"] as? Int == 75)
+        #expect(try SSHClipboardConfiguration.decode(config.encoded()) == config)
+    }
+
+    @Test func sshCommandsPreserveAliasesAndManualPorts() {
+        #expect(
+            SSHClipboardConfiguration.sshCommand(for: first) == "/usr/bin/ssh tuf-wired")
+        let manual = Machine(
+            name: "Build", host: "10.0.0.5", port: 2222, username: "root",
+            sshClipboardEnabled: true)
+        #expect(
+            SSHClipboardConfiguration.sshCommand(for: manual)
+                == "/usr/bin/ssh -p 2222 root@10.0.0.5")
+    }
+
+    @Test func enablingIsIdempotentAndReplacesChangedConnections() {
+        var config = SSHClipboardConfiguration(nodeName: "mac")
+        config.enable(first)
+        config.enable(first)
+        #expect(config.peers.count == 1)
+        var moved = first
+        moved.source = .sshConfigAlias("tuf-wifi")
+        config.enable(moved, replacing: first)
+        #expect(
+            config.peers == [
+                SSHClipboardPeerConfiguration(name: "Tuf", sshCommand: "/usr/bin/ssh tuf-wifi")
+            ])
+    }
+
+    @Test func disablingPreservesUnrelatedPeers() {
+        var config = SSHClipboardConfiguration(
+            nodeName: "mac",
+            peers: [SSHClipboardPeerConfiguration(name: "Other", sshCommand: "ssh other")])
+        config.enable(first)
+        config.disable(first)
+        #expect(
+            config.peers == [
+                SSHClipboardPeerConfiguration(name: "Other", sshCommand: "ssh other")
+            ])
+    }
+
+    @Test func remoteInstallPlacesTheNativeBinaryOnTheManagedPath() {
+        let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.8")
+        #expect(command.contains("vendor/$os-$arch/ssh-clipboard"))
+        #expect(command.contains("$HOME/.local/bin/ssh-clipboard"))
+        #expect(command.contains("chmod 755"))
+        #expect(command.contains("mv \"$temporary\""))
     }
 }
 
