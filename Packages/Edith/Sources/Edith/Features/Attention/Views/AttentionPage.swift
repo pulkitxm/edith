@@ -445,9 +445,15 @@ enum AttentionEventIconDescriptor: Equatable {
 
 private struct AttentionEventIcon: View {
     let event: AttentionEvent
+    @State private var faviconImage: NSImage?
 
     private var descriptor: AttentionEventIconDescriptor {
         AttentionEventIconDescriptor(event: event)
+    }
+
+    private var faviconURL: URL? {
+        guard case .website(let url) = descriptor else { return nil }
+        return url
     }
 
     var body: some View {
@@ -463,21 +469,29 @@ private struct AttentionEventIcon: View {
                     fallback("macwindow")
                 }
             case .website(let url):
-                AsyncImage(url: url) { image in
-                    image
+                if url != nil, let faviconImage {
+                    Image(nsImage: faviconImage)
                         .resizable()
                         .interpolation(.high)
                         .scaledToFit()
-                } placeholder: {
+                        .padding(3)
+                } else {
                     fallback("globe")
                 }
-                .padding(3)
             case .symbol(let systemName):
                 fallback(systemName)
             }
         }
         .frame(width: 26, height: 26)
         .accessibilityHidden(true)
+        .task(id: faviconURL) {
+            faviconImage = nil
+            guard let faviconURL,
+                let data = await AttentionFaviconStore.shared.data(for: faviconURL),
+                !Task.isCancelled
+            else { return }
+            faviconImage = NSImage(data: data)
+        }
     }
 
     private func fallback(_ systemName: String) -> some View {
