@@ -286,6 +286,31 @@ public enum Guide {
         A missing binary is an empty host, not an error. `ed herdr command <pane>`
         prints the attach line, `ssh -tt` when the pane is remote.
 
+        ## Attention and focus
+
+        Attention data is local files, so agents can inspect and categorize it with
+        the app closed. Initial collection, privacy and browser permissions stay in
+        the guided Attention screen.
+
+        ```
+        ed attention status --json
+        ed attention summary --range today --json
+        ed attention timeline --range 24h --limit 100 --json
+        ed attention music --range 30d --json
+        ed attention categories ls --json
+        ed attention categories set web:example.com focus --name Example
+        ed attention focus start --for 25m --name "Write proposal"
+        ed attention focus status --json
+        ed attention focus stop
+        ed attention doctor --json
+        ```
+
+        Summary entities carry stable IDs. Passing one to `categories set` changes
+        the identity rule, so past and future events are reclassified without raw
+        history being rewritten. Browser intervals replace the enclosing browser app
+        in summaries, avoiding double counting. Idle video is not engaged
+        entertainment, while audio listening remains available under `music`.
+
         ## The desk
 
         Everything the UI parks somewhere is readable, and most of it without the app

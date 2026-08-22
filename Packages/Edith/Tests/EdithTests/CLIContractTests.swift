@@ -20,6 +20,23 @@ struct JSONCase {
 enum JSONContract {
     static let cases: [JSONCase] = [
         JSONCase("ed version", ["version", "--json"]),
+        JSONCase("ed attention status", ["attention", "status", "--json"]),
+        JSONCase("ed attention summary", ["attention", "summary", "--json"]),
+        JSONCase("ed attention timeline", ["attention", "timeline", "--json"]),
+        JSONCase("ed attention music", ["attention", "music", "--json"]),
+        JSONCase("ed attention categories ls", ["attention", "categories", "ls", "--json"]),
+        JSONCase(
+            "ed attention categories set",
+            ["attention", "categories", "set", "app:com.example.App", "focus", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed attention focus status", ["attention", "focus", "status", "--json"]),
+        JSONCase(
+            "ed attention focus start", ["attention", "focus", "start", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed attention focus stop", ["attention", "focus", "stop", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed attention doctor", ["attention", "doctor", "--json"]),
         JSONCase("ed install", ["install", "--json"], mutatesTheMachine: true),
         JSONCase("ed uninstall", ["uninstall", "--json"], mutatesTheMachine: true),
         JSONCase(
