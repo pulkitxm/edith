@@ -69,6 +69,15 @@ enum UIParity {
         UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
 
+        UICapability(
+            "Attention categories", "classify an application or website",
+            ["attention", "categories", "set", "app:com.example.App", "focus"]),
+        UICapability(
+            "Attention focus card", "start a focus session",
+            ["attention", "focus", "start", "--for", "25m", "--name", "Focus"]),
+        UICapability(
+            "Attention focus card", "finish a focus session", ["attention", "focus", "stop"]),
+
         UICapability("Colour picker", "forget the picked colours", ["color", "clear"]),
 
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),

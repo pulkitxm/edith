@@ -102,6 +102,10 @@ public enum CompletionEngine {
         case .shell: return ["zsh", "bash", "fish"]
         case .group: return ConfigCatalog.groups
         case .usageRange: return UsageRange.allCases.map(\.rawValue)
+        case .attentionRange:
+            return ["today", "yesterday", "24h", "7d", "30d", "week", "month", "all"]
+        case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
+        case .attentionEntity: return []
         case .appAction: return AppActions.all.map(\.name)
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)

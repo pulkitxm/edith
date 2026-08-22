@@ -35,6 +35,7 @@ key.
 | [`ed calendar`](./calendar/README.md) | Your agenda |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
+| [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | The colour picker's swatch history |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |

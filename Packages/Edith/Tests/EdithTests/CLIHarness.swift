@@ -62,6 +62,7 @@ final class CLIWorld: @unchecked Sendable {
         try? FileManager.default.createDirectory(
             at: sandbox, withIntermediateDirectories: true)
         ClipboardPaths.root = sandbox
+        AttentionPaths.root = sandbox
         MachinePaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         CLIEnvironment.homeDirectory = sandbox
@@ -148,6 +149,7 @@ final class CLIWorld: @unchecked Sendable {
         standard.removePersistentDomain(forName: suite + ".standard")
         pasteboard.clearContents()
         CLIEnvironment.reset()
+        AttentionPaths.root = AppData.supportDir
     }
 }
 

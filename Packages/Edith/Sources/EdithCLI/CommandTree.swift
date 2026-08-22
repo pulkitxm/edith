@@ -15,6 +15,9 @@ public enum ArgumentKind: Equatable, Sendable {
     case shell
     case group
     case usageRange
+    case attentionRange
+    case attentionEntity
+    case attentionCategory
     case localPath
     case remotePath
     case container
@@ -365,6 +368,47 @@ public enum CommandTree {
                     CommandNode(
                         "clear", "Forget the whole history.",
                         options: ["--json", "--help", "--keep-pinned"]),
+                ]),
+            CommandNode(
+                "attention", "Local attention, application, website, music and focus data.",
+                children: [
+                    CommandNode("status", "Show tracking, data and focus state.", options: common),
+                    CommandNode(
+                        "summary", "Summarize focus, distraction and top destinations.",
+                        options: ["--json", "--help", "--range"], arguments: [.attentionRange]),
+                    CommandNode(
+                        "timeline", "List raw observed attention events.",
+                        options: ["--json", "--help", "--range", "--limit"],
+                        arguments: [.attentionRange]),
+                    CommandNode(
+                        "music", "Summarize tracks, artists, albums and listening time.",
+                        options: ["--json", "--help", "--range", "--limit"],
+                        arguments: [.attentionRange]),
+                    CommandNode(
+                        "categories", "List categories or classify an entity.",
+                        children: [
+                            CommandNode(
+                                "ls", "List categories and identity rules.", aliases: ["list"],
+                                options: common),
+                            CommandNode(
+                                "set", "Assign an entity ID to a category.",
+                                options: ["--json", "--help", "--name"],
+                                arguments: [.attentionEntity, .attentionCategory]),
+                        ]),
+                    CommandNode(
+                        "focus", "Start, inspect or finish a focus session.",
+                        children: [
+                            CommandNode(
+                                "status", "Show the active focus session.", options: common),
+                            CommandNode(
+                                "start", "Start a named focus session.",
+                                options: ["--json", "--help", "--for", "--name"]),
+                            CommandNode(
+                                "stop", "Finish the active focus session.", aliases: ["end"],
+                                options: common),
+                        ]),
+                    CommandNode(
+                        "doctor", "Check collectors, data and extension files.", options: common),
                 ]),
             CommandNode(
                 "color", "The colours picked with the colour picker.", aliases: ["colour"],
