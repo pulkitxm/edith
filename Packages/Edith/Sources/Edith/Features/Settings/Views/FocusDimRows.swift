@@ -28,8 +28,11 @@ struct FocusDimRows: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Slider(value: $intensity, in: FocusDimMath.intensityRange)
-                    .pointerCursor()
+                Slider(
+                    value: $intensity.configured(AppStorageKeys.FocusDim.intensity),
+                    in: FocusDimMath.intensityRange
+                )
+                .pointerCursor()
                 Text("How dark the background gets.")
                     .settingsCaption()
             }
@@ -39,13 +42,21 @@ struct FocusDimRows: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Slider(value: $animationDuration, in: FocusDimMath.animationDurationRange)
-                    .pointerCursor()
+                Slider(
+                    value: $animationDuration.configured(
+                        AppStorageKeys.FocusDim.animationDuration),
+                    in: FocusDimMath.animationDurationRange
+                )
+                .pointerCursor()
                 Text("How quickly the dim follows you when switching apps.")
                     .settingsCaption()
             }
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Picker("Other displays", selection: $otherDisplaysMode) {
+                Picker(
+                    "Other displays",
+                    selection: $otherDisplaysMode.configured(
+                        AppStorageKeys.FocusDim.otherDisplaysMode)
+                ) {
                     Text("Highlight front window").tag(FocusDimDisplayMode.perScreenFront)
                     Text("Dim unfocused fully").tag(FocusDimDisplayMode.dimUnfocused)
                 }

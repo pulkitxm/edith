@@ -26,6 +26,10 @@ struct UpdateSchedulePanel: View {
                 }
                 editingCustom = false
                 clampNotice = nil
+                guard
+                    (try? ConfigurationExecutor.application.set(
+                        .double(value), forKey: AppStorageKeys.Update.checkInterval)) != nil
+                else { return }
                 updater.checkInterval = value
             })
     }
@@ -33,7 +37,13 @@ struct UpdateSchedulePanel: View {
     private var automaticChecks: Binding<Bool> {
         Binding(
             get: { updater.automaticallyChecksForUpdates },
-            set: { updater.automaticallyChecksForUpdates = $0 })
+            set: { value in
+                guard
+                    (try? ConfigurationExecutor.application.set(
+                        .bool(value), forKey: AppStorageKeys.Update.automaticChecks)) != nil
+                else { return }
+                updater.automaticallyChecksForUpdates = value
+            })
     }
 
     private func commitCustomSeconds() {
@@ -44,6 +54,10 @@ struct UpdateSchedulePanel: View {
             return
         }
         let clamped = UpdateCheckInterval.clamp(entered)
+        guard
+            (try? ConfigurationExecutor.application.set(
+                .double(clamped), forKey: AppStorageKeys.Update.checkInterval)) != nil
+        else { return }
         updater.checkInterval = clamped
         customSeconds = String(Int(clamped))
         clampNotice = UpdateCheckInterval.clampNotice(entered: entered, applied: clamped)

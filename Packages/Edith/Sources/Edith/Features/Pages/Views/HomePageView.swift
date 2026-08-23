@@ -554,7 +554,8 @@ private struct QuickActionsCard: View {
                         icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",
                         sub: "Stop this Mac from sleeping", active: preventSleep
                     ) {
-                        preventSleep.toggle()
+                        $preventSleep.configured(AppStorageKeys.General.preventSleep).wrappedValue
+                            .toggle()
                     }
                 }
                 if presenterEnabled {

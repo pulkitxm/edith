@@ -26,13 +26,16 @@ struct ColorPickerRows: View {
                         InfoDot("Summons the magnifier from anywhere.")
                     }
                 }
-                Picker("Copy format", selection: $copyFormat) {
+                Picker(
+                    "Copy format",
+                    selection: $copyFormat.configured(AppStorageKeys.ColorPicker.copyFormat)
+                ) {
                     ForEach(ColorCopyFormat.allCases, id: \.self) { format in
                         Text(format.displayName).tag(format)
                     }
                 }
                 .pointerCursor()
-                Picker(selection: $profile) {
+                Picker(selection: $profile.configured(AppStorageKeys.ColorPicker.profile)) {
                     ForEach(ColorProfile.allCases, id: \.self) { option in
                         Text(option.displayName).tag(option)
                     }
@@ -45,7 +48,10 @@ struct ColorPickerRows: View {
                     }
                 }
                 .pointerCursor()
-                Stepper(value: $historySize, in: 1...100) {
+                Stepper(
+                    value: $historySize.configured(AppStorageKeys.ColorPicker.historySize),
+                    in: 1...100
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("History size: \(historySize)")
                         InfoDot("How many past colors to keep.")

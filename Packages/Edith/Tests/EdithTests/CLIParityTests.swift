@@ -542,6 +542,17 @@ enum UIParity {
                 ])
     }
 
+    @Test func everyConfigurationLeafDeclaresItsSharedOperation() {
+        let declared = Set(ConfigurationOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["config", "ls"], ["config", "get"], ["config", "set"],
+                    ["config", "unset"], ["config", "describe"], ["config", "export"],
+                    ["config", "import"],
+                ])
+    }
+
     @Test func everyMutatingCommandIsClaimedByAUIAction() {
         let claimed = Set(UIParity.capabilities.map { Self.commandPath($0.cli) })
         var orphans: [String] = []

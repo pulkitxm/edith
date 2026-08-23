@@ -1,6 +1,12 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Update {
+        public static let automaticChecks = "SUEnableAutomaticChecks"
+        public static let checkInterval = "SUScheduledCheckInterval"
+        public static let automaticDownloads = "SUAutomaticallyUpdate"
+    }
+
     public enum General {
         public static let editMainWindowFullScreen = "EdithMainWindowFullScreen"
         public static let appearance = "appearance"
