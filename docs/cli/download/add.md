@@ -59,8 +59,9 @@ they were parsed:
 ]
 ```
 
-The `index` here counts within what was just added, not the position in the
-queue. Read `ed download ls --json` if you need queue positions.
+The `index` is the new record's position in the full queue, exactly as the next
+`ed download ls --json` reports it. The stable ID disambiguates records when
+two URLs were queued at the same instant.
 
 Examples:
 

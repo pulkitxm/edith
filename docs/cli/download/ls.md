@@ -24,11 +24,9 @@ they were queued, newest first. That number is what `ed download rm`,
 entry 1 renumbers everything below it, so read the list again between two
 edits rather than counting down from an old listing.
 
-That number counts through the whole queue, so take it from a bare `ls` or from
-`ls --limit <n>`, which shows a prefix of the same list. Never take it from
-`ls --active`: that numbers only what it prints, so its entry 1 is the first
-unfinished download, while `rm 1` and `retry 1` mean the first entry in the
-queue whatever state it is in.
+That number always counts through the whole queue. A filtered `ls --active`
+therefore keeps the same numbers as a bare `ls`, even when finished records are
+hidden, so every displayed number remains a valid target for another command.
 
 `--active` filters on "not finished", and an interrupted download counts as
 finished, so a paused or cancelled entry does not appear even though its file

@@ -220,7 +220,7 @@ public enum DownloadOperationExecution {
     ) throws -> DownloadRecord {
         let records = DownloadQueue.load(from: file)
         guard !records.isEmpty else { throw DownloadOperationError.empty }
-        guard records.indices.contains(index - 1) else {
+        guard index > 0, index <= records.count else {
             throw DownloadOperationError.missingIndex(index, count: records.count)
         }
         return records[index - 1]

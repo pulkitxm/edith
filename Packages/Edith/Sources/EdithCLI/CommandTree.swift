@@ -423,7 +423,7 @@ public enum CommandTree {
                         arguments: [.historyIndex]),
                     CommandNode(
                         "clear", "Forget what has finished.",
-                        options: ["--json", "--help", "--everything", "--yes"]),
+                        options: ["--json", "--help", "--yes"]),
                     CommandNode(
                         "cancel", "Stop active downloads and keep their history.", options: common,
                         arguments: [.historyIndex]),

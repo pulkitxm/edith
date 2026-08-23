@@ -89,6 +89,9 @@ import Testing
         #expect(throws: DownloadOperationError.self) {
             try DownloadOperationExecution.cancel(index: 2, file: sandbox.queue)
         }
+        #expect(throws: DownloadOperationError.self) {
+            try DownloadOperationExecution.record(at: Int.min, file: sandbox.queue)
+        }
     }
 
     @Test func startupRecoveryInterruptsInFlightWorkButKeepsQueuedWork() throws {

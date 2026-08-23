@@ -47,6 +47,10 @@ enum DownloadBridge {
         ])
     }
 
+    static func index(of record: DownloadRecord, in records: [DownloadRecord]) -> Int {
+        (records.firstIndex { $0.id == record.id } ?? -1) + 1
+    }
+
     static func announce() {
         AppBridge.post(IPC.Name.downloadQueueChanged)
     }
@@ -97,13 +101,16 @@ struct DownloadListCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
-            let all = DownloadOperationExecution.list(
-                activeOnly: active, limit: 0, file: DownloadBridge.file)
-            let shown = DownloadOperationExecution.list(
-                activeOnly: active, limit: limit, file: DownloadBridge.file)
+            let records = DownloadOperationExecution.list(limit: 0, file: DownloadBridge.file)
+            let all = active ? records.filter { !$0.isFinished } : records
+            let shown = limit == 0 ? all : Array(all.prefix(limit))
             guard !json else {
                 CLIOut.json(
-                    .array(shown.enumerated().map { DownloadBridge.json($1, index: $0 + 1) }))
+                    .array(
+                        shown.map {
+                            DownloadBridge.json(
+                                $0, index: DownloadBridge.index(of: $0, in: records))
+                        }))
                 return
             }
             guard !shown.isEmpty else {
@@ -113,9 +120,10 @@ struct DownloadListCommand: AsyncParsableCommand {
             CLIOut.out(
                 TextTable.render(
                     headers: ["#", "STATE", "KIND", "WHAT"],
-                    rows: shown.enumerated().map { offset, record in
+                    rows: shown.map { record in
                         [
-                            String(offset + 1), record.state, record.kind?.rawValue ?? "audio",
+                            String(DownloadBridge.index(of: record, in: records)), record.state,
+                            record.kind?.rawValue ?? "audio",
                             record.title,
                         ]
                     }))
@@ -185,10 +193,15 @@ struct DownloadAddCommand: AsyncParsableCommand {
             }
             let added = try DownloadOperationExecution.enqueue(
                 urls: parsed, prefix: prefix, kind: wanted, file: DownloadBridge.file)
+            let records = DownloadBridge.records()
             DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
-                    .array(added.enumerated().map { DownloadBridge.json($1, index: $0 + 1) }))
+                    .array(
+                        added.map {
+                            DownloadBridge.json(
+                                $0, index: DownloadBridge.index(of: $0, in: records))
+                        }))
                 return
             }
             for record in added { CLIOut.out("queued \(record.url.absoluteString)") }
@@ -303,16 +316,13 @@ struct DownloadClearCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Flag(help: "Clear what is still queued or running too.")
-    var everything = false
-
     @Flag(help: "Actually clear the records. Without this, show a preview.")
     var yes = false
 
     func run() async throws {
         try await execute {
             let records = DownloadBridge.records()
-            let candidates = records.filter { everything || $0.isFinished }
+            let candidates = records.filter(\.isFinished)
             guard yes else {
                 guard !json else {
                     CLIOut.json(
@@ -326,8 +336,7 @@ struct DownloadClearCommand: AsyncParsableCommand {
                 CLIOut.note("nothing was cleared; pass --yes to go ahead")
                 return
             }
-            let result = try DownloadOperationExecution.clear(
-                includeActive: everything, file: DownloadBridge.file)
+            let result = try DownloadOperationExecution.clear(file: DownloadBridge.file)
             DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
