@@ -127,18 +127,21 @@ public struct PermissionOperationEnvironment: @unchecked Sendable {
     public var requestPermission: (ExtensionPermission) -> Bool
     public var refreshStatus: () -> Void
     public var openSettings: (URL) -> Bool
+    public var openPermissionOverview: () -> Bool
     public var recordPrompt: () -> Void
 
     public init(
         defaults: UserDefaults,
         requestPermission: @escaping (ExtensionPermission) -> Bool,
         refreshStatus: @escaping () -> Void, openSettings: @escaping (URL) -> Bool,
+        openPermissionOverview: @escaping () -> Bool = { false },
         recordPrompt: @escaping () -> Void = {}
     ) {
         self.defaults = defaults
         self.requestPermission = requestPermission
         self.refreshStatus = refreshStatus
         self.openSettings = openSettings
+        self.openPermissionOverview = openPermissionOverview
         self.recordPrompt = recordPrompt
     }
 
@@ -151,7 +154,13 @@ public struct PermissionOperationEnvironment: @unchecked Sendable {
                 return false
             },
             refreshStatus: { IPC.post(IPC.Name.requestPermissionsRefresh) },
-            openSettings: { NSWorkspace.shared.open($0) })
+            openSettings: { NSWorkspace.shared.open($0) },
+            openPermissionOverview: {
+                MainActor.assumeIsolated {
+                    MainApp.openSettings(tab: "permissions")
+                    return true
+                }
+            })
     }
 
     public static func status(defaults: UserDefaults) -> PermissionOperationEnvironment {
@@ -226,6 +235,11 @@ public struct PermissionOperationCenter: @unchecked Sendable {
         let opened = environment.openSettings(url)
         guard opened else { throw PermissionOperationError.settingsFailed(permission) }
         return PermissionSettingsResult(permission: permission, url: url, opened: true)
+    }
+
+    @discardableResult
+    public func openPermissionOverview() -> Bool {
+        environment.openPermissionOverview()
     }
 
     public func onboardingDecision(

@@ -89,7 +89,7 @@ struct NotchCameraTab: View {
                     .controlSize(.small)
                     .shelfPointer()
                 Button("All Permissions") {
-                    MainApp.openSettings(tab: "permissions")
+                    PermissionOperationCenter.application.openPermissionOverview()
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))

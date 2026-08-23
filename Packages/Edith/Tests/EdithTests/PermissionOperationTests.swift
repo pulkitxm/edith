@@ -9,6 +9,7 @@ import Testing
         var opened: [URL] = []
         var refreshes = 0
         var prompts = 0
+        var overviews = 0
     }
 
     @Test func statusReadsTheInjectedDefaultsAndFiltersAttention() {
@@ -112,6 +113,17 @@ import Testing
         #expect(result.first { $0.permission == .camera }?.isGranted == true)
     }
 
+    @Test func permissionOverviewUsesTheInjectedNavigation() {
+        let (center, defaults, driver, suite) = makeCenter()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let opened = center.openPermissionOverview()
+
+        #expect(opened)
+        #expect(driver.overviews == 1)
+        #expect(driver.requested.isEmpty)
+    }
+
     @Test func descriptorsAreUniqueAndRoutable() {
         let descriptors = PermissionOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
@@ -166,6 +178,10 @@ import Testing
             refreshStatus: { driver.refreshes += 1 },
             openSettings: { url in
                 driver.opened.append(url)
+                return true
+            },
+            openPermissionOverview: {
+                driver.overviews += 1
                 return true
             },
             recordPrompt: { driver.prompts += 1 })
