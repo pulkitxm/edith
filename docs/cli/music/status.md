@@ -22,6 +22,7 @@ ed music status [--json] [--player <name>]
     "name": "Spotify",
     "player": "spotify",
     "running": true,
+    "trackPath": null,
     "title": "Kerala",
     "volume": 0.65
   },
@@ -35,6 +36,7 @@ ed music status [--json] [--player <name>]
       "name": "Edith",
       "player": "builtin",
       "running": false,
+      "trackPath": null,
       "title": null,
       "volume": null
     },
@@ -46,6 +48,7 @@ ed music status [--json] [--player <name>]
       "name": "Spotify",
       "player": "spotify",
       "running": true,
+      "trackPath": null,
       "title": "Kerala",
       "volume": 0.65
     },
@@ -57,6 +60,7 @@ ed music status [--json] [--player <name>]
       "name": "Apple Music",
       "player": "apple",
       "running": false,
+      "trackPath": null,
       "title": null,
       "volume": null
     }
@@ -69,7 +73,8 @@ ed music status [--json] [--player <name>]
 appear as not running. `active` repeats the winning entry and is `null` when
 nothing qualifies. `title` and `artist` are `null` rather than empty strings
 when the player has no track, and `volume` is `null` when the player did not
-report one.
+report one. `trackPath` is the current relative library path for the built-in
+player and `null` for external players.
 
 ```
 ed music status

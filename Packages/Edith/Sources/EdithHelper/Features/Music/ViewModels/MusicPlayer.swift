@@ -92,8 +92,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             })
         stateRequestObserver = IPC.observe(IPC.Name.requestMusicState) { [weak self] in
             MainActor.assumeIsolated {
-                self?.updateNowPlaying()
-                self?.broadcastState()
+                self?.perform(.status)
             }
         }
         folderChangedIPCObserver = IPC.observe(IPC.Name.musicFolderChanged) { [weak self] in
@@ -184,6 +183,15 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             if let value = info["value"] as? Bool { isShuffling = value }
         default: break
         }
+    }
+
+    func perform(_ request: MusicTransportRequest) {
+        MusicTransportExecution.perform(
+            request, sendCommand: { handleCommand($0) },
+            requestStatus: {
+                updateNowPlaying()
+                broadcastState()
+            })
     }
 
     private func handleRenamed(from: String, to: String) {
@@ -283,27 +291,27 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         center.playCommand.addTarget { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.isPlaying else { return }
-                self.playPause()
+                self.perform(.play)
             }
             return .success
         }
         center.pauseCommand.addTarget { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isPlaying else { return }
-                self.playPause()
+                self.perform(.pause)
             }
             return .success
         }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.playPause() }
+            Task { @MainActor in self?.perform(.toggle) }
             return .success
         }
         center.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.next() }
+            Task { @MainActor in self?.perform(.next) }
             return .success
         }
         center.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.previous() }
+            Task { @MainActor in self?.perform(.previous) }
             return .success
         }
     }

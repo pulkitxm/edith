@@ -61,6 +61,13 @@ enum LibraryBridge {
         AppBridge.post(IPC.Name.musicFolderChanged)
     }
 
+    static func send(_ request: MusicTransportRequest) {
+        MusicTransportExecution.perform(
+            request,
+            sendCommand: { AppBridge.post(IPC.Name.musicCommand, userInfo: $0) },
+            requestStatus: { AppBridge.post(IPC.Name.requestMusicState) })
+    }
+
     static func json(_ track: Track) -> JSONValue {
         .object([
             "path": .string(track.relativePath),
@@ -344,11 +351,7 @@ struct MusicPlayTrackCommand: AsyncParsableCommand {
             try AppBridge.requireHelper("playing from the library")
             guard !folder else {
                 let found = try LibraryBridge.folder(target)
-                AppBridge.post(
-                    IPC.Name.musicCommand,
-                    userInfo: ["action": "playSource"].merging(
-                        MusicSourceRequest.folder(found.relativePath).payload
-                    ) { _, new in new })
+                LibraryBridge.send(.startSource(.folder(found.relativePath)))
                 guard !json else {
                     CLIOut.json(
                         .object([
@@ -360,9 +363,7 @@ struct MusicPlayTrackCommand: AsyncParsableCommand {
                 return
             }
             let track = try LibraryBridge.track(target)
-            AppBridge.post(
-                IPC.Name.musicCommand,
-                userInfo: ["action": "toggle", "track": track.relativePath])
+            LibraryBridge.send(.startTrack(track.relativePath))
             guard !json else {
                 CLIOut.json(LibraryBridge.json(track))
                 return
@@ -386,8 +387,7 @@ struct MusicSeekCommand: AsyncParsableCommand {
         try await execute {
             let fraction = try ArgumentChecks.fraction(position, "position")
             try AppBridge.requireHelper("seeking")
-            AppBridge.post(
-                IPC.Name.musicCommand, userInfo: ["action": "seek", "value": fraction])
+            LibraryBridge.send(.seek(fraction))
             guard !json else {
                 CLIOut.json(.object(["position": .double(fraction)]))
                 return
@@ -409,8 +409,8 @@ struct MusicShuffleCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await MusicToggleState.apply(
-            key: AppStorageKeys.Music.shuffling, action: "shuffle", label: "shuffle", state: state,
-            json: json)
+            key: AppStorageKeys.Music.shuffling, label: "shuffle", state: state, json: json,
+            request: MusicTransportRequest.shuffle)
     }
 }
 
@@ -426,14 +426,15 @@ struct MusicRepeatCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await MusicToggleState.apply(
-            key: AppStorageKeys.Music.looping, action: "loop", label: "repeat", state: state,
-            json: json)
+            key: AppStorageKeys.Music.looping, label: "repeat", state: state, json: json,
+            request: MusicTransportRequest.repeat)
     }
 }
 
 enum MusicToggleState {
     static func apply(
-        key: String, action: String, label: String, state: String?, json: Bool
+        key: String, label: String, state: String?, json: Bool,
+        request: (Bool) -> MusicTransportRequest
     ) async throws {
         try await execute {
             let defaults = CLIEnvironment.standardDefaults
@@ -451,8 +452,7 @@ enum MusicToggleState {
                     "\(state) is not on or off", hint: "pass on, off, true or false")
             }
             defaults.set(wanted, forKey: key)
-            AppBridge.post(
-                IPC.Name.musicCommand, userInfo: ["action": action, "value": wanted])
+            LibraryBridge.send(request(wanted))
             guard !json else {
                 CLIOut.json(.object([label: .bool(wanted)]))
                 return

@@ -299,6 +299,8 @@ public enum Guide {
         ed music play|pause|stop|toggle|next|previous
         ed music volume 0.4
         ed music players                every player, and which one is active
+        ed music open-current           open whichever player is active
+        ed music reveal-current         reveal the library track or open its player
         ed music favorite <track>       keep or remove with unfavorite
         ed music reveal <track> | open  Finder actions from the Music page
         ed calendar ls --days 7
