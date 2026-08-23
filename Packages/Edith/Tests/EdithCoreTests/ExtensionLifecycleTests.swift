@@ -71,9 +71,10 @@ import Testing
                 == .uninstalled)
         #expect(
             ExtensionLifecycleState.loading(extensionID: "usage").runtimePhase == .loading)
-        #expect(ExtensionRuntimePhase.allCases.map(\.rawValue) == [
-            "installed", "uninstalled", "empty", "loading", "unsupported", "error",
-        ])
+        #expect(
+            ExtensionRuntimePhase.allCases.map(\.rawValue) == [
+                "installed", "uninstalled", "empty", "loading", "unsupported", "error",
+            ])
     }
 
     @Test func reportsRoundTripWithStructuredChecks() throws {
