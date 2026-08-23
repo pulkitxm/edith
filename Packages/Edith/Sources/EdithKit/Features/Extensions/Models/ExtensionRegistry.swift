@@ -11,6 +11,7 @@ public typealias ExtensionLifecycleCheck = EdithCore.ExtensionLifecycleCheck
 public typealias ExtensionLifecycleCheckStatus = EdithCore.ExtensionLifecycleCheckStatus
 public typealias ExtensionLifecycleInstruction = EdithCore.ExtensionLifecycleInstruction
 public typealias ExtensionLifecycleIssue = EdithCore.ExtensionLifecycleIssue
+public typealias ExtensionLifecyclePhase = EdithCore.ExtensionLifecyclePhase
 public typealias ExtensionLifecycleReport = EdithCore.ExtensionLifecycleReport
 public typealias ExtensionLifecycleState = EdithCore.ExtensionLifecycleState
 

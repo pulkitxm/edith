@@ -14,30 +14,31 @@ ed extensions info <id> [--json]
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emit JSON on stdout instead of the indented block |
 
-The human form is the title, the summary, then a fixed set of labelled rows. The
+The human form is the title, the lifecycle value, then labelled rows and the
+shared workflow, setup, verification and documentation guidance. The
 `needs` row appears only when the extension has required permissions and the
-`asks for` row only when it has optional ones, so a plain extension prints four
-rows:
+`asks for` row only when it has optional ones. `state` is the computed lifecycle
+phase, not just the stored on or off switch:
 
 ```
 $ ed extensions info clipboard
 Clipboard
-  Clipboard history with instant paste.
+  Keep recent clipboard entries searchable and paste them without context switching.
   id       clipboard
   key      clipboardEnabled
   group    Utilities
-  state    on
+  state    Ready
   asks for Accessibility
 ```
 
 ```
 $ ed extensions info calendar
 Calendar
-  Shows your schedule in the panel and the app.
+  See upcoming events beside your work and jump into the next meeting.
   id       calendar
   key      tabCalendarEnabled
   group    Media
-  state    off
+  state    Disabled
   needs    Calendar
 ```
 
@@ -45,29 +46,14 @@ Calendar
 `Screen Recording`), while `--json` prints the ids `ed permissions request`
 accepts (`inputMonitoring`, `screenRecording`).
 
-```json
-{
-  "enabled": false,
-  "featured": false,
-  "group": "Media",
-  "id": "music",
-  "key": "tabMusicEnabled",
-  "missingRequiredPermissions": [],
-  "optionalCapabilities": [
-    "mediaControls"
-  ],
-  "optionalPermissions": [],
-  "requiredCapabilities": [
-    "localMusicPlayback"
-  ],
-  "requiredPermissions": [],
-  "requiredTools": [
-    "yt-dlp"
-  ],
-  "summary": "Plays your local music folder, with media keys.",
-  "title": "Music"
-}
-```
+The JSON object retains the registry fields documented by `ls` and adds:
+
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `lifecycle` | object | Value, workflows, prerequisites, CLI examples, docs, recovery and verification metadata |
+| `state` | object | Phase, summary and structured issues |
+| `checks` | array | Every readiness check with status, detail and optional recovery command |
+| `verified` | boolean | True only when every required check passes |
 
 ```
 ed extensions info notchShelf
@@ -75,9 +61,9 @@ ed extensions info music --json
 ed extensions info tabMachinesEnabled
 ```
 
-`info` is a pure read: no key is written and no notification is posted.
-The human form does not print capabilities or required tools. Use `--json` when
-you need those fields.
+`info` is a pure read: no key is written and no notification is posted. It runs
+the same readiness probe as `status`, `verify`, `doctor`, and the Extensions
+settings sheet. Use `--json` for the complete machine-readable contract.
 
 ## Where to go next
 

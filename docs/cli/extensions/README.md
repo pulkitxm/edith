@@ -9,10 +9,11 @@ been granted yet, and because the registry knows the readable name, the group
 and the permission list that a bare key does not.
 
 Everything here reads and writes
-`UserDefaults(suiteName: "com.pulkit.edith.shared")`, so all four commands work
-whether or not Edith is running. A write posts `settingsChanged`, so a running
-app picks the change up live and a closed one picks it up the next time it
-launches. Nothing in this group waits on the app, and nothing in it can exit 4.
+`UserDefaults(suiteName: "com.pulkit.edith.shared")`, so every settings command
+works whether or not Edith is running. A write posts `settingsChanged`, so a
+running app picks the change up live and a closed one picks it up the next time
+it launches. Readiness commands also inspect the tools, permissions, helper,
+platform support, configured machines and available backends an extension uses.
 
 ## At a glance
 
@@ -23,6 +24,10 @@ launches. Nothing in this group waits on the app, and nothing in it can exit 4.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
+| `ed extensions status [id]` | Summarises readiness for one extension or all sixteen |
+| `ed extensions setup <id>` | Enables one and reports the setup that remains |
+| `ed extensions verify <id>` | Runs every readiness check for one extension |
+| `ed extensions doctor [id]` | Diagnoses one extension or all sixteen, with recovery commands |
 
 ## The registry
 
@@ -106,17 +111,41 @@ fails with the full list of ids rather than guessing.
 - [`ed extensions enable`](./enable.md)
 - [`ed extensions disable`](./disable.md)
 - [`ed extensions info`](./info.md)
+- [`ed extensions status`](./status.md)
+- [`ed extensions setup`](./setup.md)
+- [`ed extensions verify`](./verify.md)
+- [`ed extensions doctor`](./doctor.md)
+
+## Readiness states
+
+`info`, `status`, `setup`, `verify` and `doctor` use one readiness probe. The
+Extensions settings sheet renders the same report. Its phases are stable JSON
+values:
+
+| Phase | Meaning |
+| --- | --- |
+| `disabled` | The extension is off, so dependent checks are skipped |
+| `needsSetup` | The extension is on but a permission, tool, helper, machine, or backend is missing |
+| `ready` | Every required check passed |
+| `degraded` | Required checks passed, but an optional check or part of a backend is unhealthy |
+| `unavailable` | The current platform does not implement a required capability |
+| `failed` | A configured backend or runtime dependency failed |
+
+Each check has a `passed`, `warning`, `failed`, or `skipped` status. Failed
+checks carry a `recoveryCommand` where the CLI can name a safe next action.
+`verified` is true only when the phase is `ready`.
 
 ## Exit codes
 
 | Code | When |
 | --- | --- |
-| 0 | the extension was listed, described, enabled or disabled, including when `enable` had to warn about a missing permission |
-| 2 | the command line was wrong: an unknown flag, or `enable`, `disable` or `info` with no id |
+| 0 | the command completed, including a readiness report whose `verified` field is false |
+| 2 | the command line was wrong: an unknown flag, or a command that requires an id did not get one |
 | 3 | no extension matches the id you named, by id or by defaults key |
 
-Nothing in this group produces 1 or 4. There is no app to be unavailable and no
-failure mode between "the id exists" and "the boolean is written".
+An unhealthy extension is data, not a command failure. This keeps JSON intact
+for agents and scripts. Read `verified`, `state.phase`, `checks`, and
+`remediation` to decide what to do next.
 
 ## Notes and gotchas
 
@@ -139,6 +168,9 @@ failure mode between "the id exists" and "the boolean is written".
   live TCC state, because a command line process cannot read another
   application's grants. If a note names a permission you know you have already
   granted, run `ed permissions refresh` and try again.
+- `setup` never opens the app, a permission prompt, or another interactive UI.
+  It installs tools only when `--install-tools` is explicit. Use `--dry-run` to
+  project the enabled state and required tool plan without changing anything.
 - `bluetooth` and `automation` are granted by macOS on first use and have no
   mirrored key, so they are always reported as not granted. That is why they
   appear only as optional permissions, on `notchShelf`, and never in
@@ -162,5 +194,5 @@ failure mode between "the id exists" and "the boolean is written".
 - [`ed permissions`](../permissions/README.md) for granting what an extension needs
 - [`ed config`](../config/README.md) for the settings an extension exposes once it is on
 - [`ed tools`](../tools/README.md) for the command line tools `requiredTools` names
-- [Quinjet setup](../../quinjet.md) for terminal, theme, install and verification details
+- [Quinjet setup](https://github.com/pulkitxm/edith/blob/main/docs/quinjet.md) for terminal, theme, install and verification details
 - [All `ed` commands](../README.md)
