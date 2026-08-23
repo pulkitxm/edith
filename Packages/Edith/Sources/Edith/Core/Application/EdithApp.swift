@@ -12,6 +12,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var appStarted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchTrace = PerformanceTrace.begin(.startup, "main.launch")
+        defer { PerformanceTrace.end(launchTrace) }
         applyAppearance(
             SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         InputFocus.install()
@@ -38,6 +40,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             Task { await dashboard.load() }
         }
         showInitialWindow()
+        PerformanceTrace.event(.mainThread, "main.initialWindow")
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
             NSApp.terminate(nil)
         }
