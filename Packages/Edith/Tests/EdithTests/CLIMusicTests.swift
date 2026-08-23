@@ -85,16 +85,15 @@ import Testing
                 Self.snapshot(.apple, running: false),
             ])
             Issue.record("resolution should have failed")
-        } catch let failure as CLIFailure {
-            #expect(failure.kind == .unavailable)
-            #expect(failure.message.contains("no music player"))
+        } catch let failure as MusicTransportError {
+            #expect(failure == .noPlayer)
         } catch {
             Issue.record("unexpected error \(error)")
         }
     }
 
     @Test func anEmptyObservationIsUnavailable() {
-        #expect(throws: CLIFailure.self) { try MusicTargeting.resolve([]) }
+        #expect(throws: MusicTransportError.self) { try MusicTargeting.resolve([]) }
     }
 
     @Test func forcingAPlayerOverridesEvenALoudlyPlayingOne() throws {
@@ -111,20 +110,19 @@ import Testing
             _ = try MusicTargeting.resolve(
                 [Self.snapshot(.apple, running: false)], forced: .apple)
             Issue.record("resolution should have failed")
-        } catch let failure as CLIFailure {
-            #expect(failure.kind == .unavailable)
-            #expect(failure.message.contains("Apple Music is not running"))
+        } catch let failure as MusicTransportError {
+            #expect(failure == .playerNotRunning(.apple))
         } catch {
             Issue.record("unexpected error \(error)")
         }
     }
 
-    @Test func forcingAPlayerThatWasNeverObservedIsNotFound() {
+    @Test func forcingAPlayerThatWasNeverObservedIsNotRunning() {
         do {
             _ = try MusicTargeting.resolve([Self.snapshot(.spotify)], forced: .apple)
             Issue.record("resolution should have failed")
-        } catch let failure as CLIFailure {
-            #expect(failure.kind == .notFound)
+        } catch let failure as MusicTransportError {
+            #expect(failure == .playerNotRunning(.apple))
         } catch {
             Issue.record("unexpected error \(error)")
         }
@@ -265,7 +263,7 @@ import Testing
 @Suite struct MusicSessionTests {
     @Test func theBuiltInStopBothPausesAndRewinds() {
         #expect(
-            MusicSession.builtinCommands(.stop) == [
+            MusicTransportExecution.builtinCommands(.stop) == [
                 BuiltinCommand("pause"), BuiltinCommand("seek", value: 0),
             ])
     }
@@ -278,22 +276,29 @@ import Testing
             .play, .pause, .stop, .toggle, .next, .previous, .volume(0.5),
         ]
         for action in actions {
-            for command in MusicSession.builtinCommands(action) {
+            for command in MusicTransportExecution.builtinCommands(action) {
                 #expect(known.contains(command.action), "\(command.action) is not handled")
             }
         }
     }
 
     @Test func playAndPauseAreNeverTheSameCommandAsToggle() {
-        #expect(MusicSession.builtinCommands(.play) != MusicSession.builtinCommands(.toggle))
-        #expect(MusicSession.builtinCommands(.pause) != MusicSession.builtinCommands(.toggle))
-        #expect(MusicSession.builtinCommands(.pause) != MusicSession.builtinCommands(.play))
+        #expect(
+            MusicTransportExecution.builtinCommands(.play)
+                != MusicTransportExecution.builtinCommands(.toggle))
+        #expect(
+            MusicTransportExecution.builtinCommands(.pause)
+                != MusicTransportExecution.builtinCommands(.toggle))
+        #expect(
+            MusicTransportExecution.builtinCommands(.pause)
+                != MusicTransportExecution.builtinCommands(.play))
     }
 
     @Test func volumeTravelsAsAFraction() {
-        #expect(MusicSession.builtinCommands(.volume(0.25)).first?.value == 0.25)
+        #expect(MusicTransportExecution.builtinCommands(.volume(0.25)).first?.value == 0.25)
         #expect(
-            MusicSession.builtinCommands(.volume(0.25)).first?.userInfo["value"] as? Double
+            MusicTransportExecution.builtinCommands(.volume(0.25)).first?.userInfo["value"]
+                as? Double
                 == 0.25)
     }
 
@@ -306,6 +311,7 @@ import Testing
         #expect(snapshot.isRunning)
         #expect(snapshot.title == "Gal ban gyi.mp3")
         #expect(snapshot.volume == 0.4)
+        #expect(snapshot.trackPath == "albums/Gal ban gyi.mp3")
     }
 
     @Test func anEmptyBuiltInReplyIsRunningButIdle() {
@@ -340,6 +346,136 @@ import Testing
         }
         #expect(fields["active"] == .null)
         #expect(fields["player"] == .null)
+    }
+}
+
+@Suite struct MusicTransportExecutionTests {
+    @Test func everyTransportDescriptorIsRegistered() {
+        for operation in MusicTransportOperation.allCases {
+            #expect(
+                UserOperationCatalog.descriptor(id: operation.descriptor.id) == operation.descriptor
+            )
+            #expect(
+                UserOperationCatalog.descriptor(cli: operation.descriptor.cli)
+                    == operation.descriptor)
+        }
+    }
+
+    @Test func everyCurrentTrackDescriptorIsRegistered() {
+        for operation in MusicCurrentOperation.allCases {
+            #expect(
+                UserOperationCatalog.descriptor(id: operation.descriptor.id) == operation.descriptor
+            )
+            #expect(
+                UserOperationCatalog.descriptor(cli: operation.descriptor.cli)
+                    == operation.descriptor)
+        }
+    }
+
+    @Test func currentTrackRevealUsesTheLibraryPath() throws {
+        var opened: [MusicPlayer] = []
+        var revealed: [String] = []
+        let result = try MusicCurrentOperationExecution.perform(
+            .revealCurrent,
+            target: MusicCurrentTarget(player: .builtin, trackPath: "Focus/a.mp3"),
+            openPlayer: {
+                opened.append($0)
+                return true
+            },
+            revealTrack: {
+                revealed.append($0)
+                return true
+            })
+        #expect(opened.isEmpty)
+        #expect(revealed == ["Focus/a.mp3"])
+        #expect(result.revealed)
+        #expect(result.trackPath == "Focus/a.mp3")
+    }
+
+    @Test func externalRevealFallsBackToOpeningItsPlayer() throws {
+        var opened: [MusicPlayer] = []
+        let result = try MusicCurrentOperationExecution.perform(
+            .revealCurrent, target: MusicCurrentTarget(player: .spotify),
+            openPlayer: {
+                opened.append($0)
+                return true
+            },
+            revealTrack: { _ in false })
+        #expect(opened == [.spotify])
+        #expect(!result.revealed)
+    }
+
+    @Test func failedCurrentTrackActionsRemainTyped() {
+        #expect(throws: MusicCurrentOperationError.openFailed(.apple)) {
+            try MusicCurrentOperationExecution.perform(
+                .openCurrent, target: MusicCurrentTarget(player: .apple),
+                openPlayer: { _ in false }, revealTrack: { _ in false })
+        }
+        #expect(throws: MusicCurrentOperationError.revealFailed("missing.mp3")) {
+            try MusicCurrentOperationExecution.perform(
+                .revealCurrent,
+                target: MusicCurrentTarget(player: .builtin, trackPath: "missing.mp3"),
+                openPlayer: { _ in false }, revealTrack: { _ in false })
+        }
+    }
+
+    @Test func libraryRequestsProduceTheHelperPayloads() throws {
+        let track = try #require(
+            MusicTransportExecution.payloads(for: .startTrack("Focus/a.mp3")).first)
+        #expect(track["action"] as? String == "toggle")
+        #expect(track["track"] as? String == "Focus/a.mp3")
+
+        let source = try #require(
+            MusicTransportExecution.payloads(
+                for: .startSource(.folder("Focus"), start: "Focus/a.mp3")
+            ).first)
+        #expect(source["action"] as? String == "playSource")
+        #expect(source[MusicSourceRequest.kindKey] as? String == "folder")
+        #expect(source[MusicSourceRequest.pathKey] as? String == "Focus")
+        #expect(source["start"] as? String == "Focus/a.mp3")
+
+        let seek = try #require(MusicTransportExecution.payloads(for: .seek(2)).first)
+        let volume = try #require(MusicTransportExecution.payloads(for: .volume(-1)).first)
+        #expect(seek["value"] as? Double == 1)
+        #expect(volume["value"] as? Double == 0)
+    }
+
+    @Test func stopShuffleAndRepeatUseTheExistingHelperVerbs() {
+        let stop = MusicTransportExecution.payloads(for: .stop)
+        #expect(stop.count == 2)
+        #expect(stop[0]["action"] as? String == "pause")
+        #expect(stop[1]["action"] as? String == "seek")
+        #expect(stop[1]["value"] as? Double == 0)
+        #expect(
+            MusicTransportExecution.payloads(for: .shuffle(true)).first?["action"] as? String
+                == "shuffle")
+        #expect(
+            MusicTransportExecution.payloads(for: .repeat(false)).first?["action"] as? String
+                == "loop")
+    }
+
+    @Test func statusUsesTheReadAdapterWithoutSendingACommand() {
+        var commands = 0
+        var reads = 0
+        MusicTransportExecution.perform(
+            .status, sendCommand: { _ in commands += 1 }, requestStatus: { reads += 1 })
+        #expect(commands == 0)
+        #expect(reads == 1)
+    }
+
+    @Test func targetAdapterSeparatesBuiltInAndExternalExecution() throws {
+        var builtIn: [BuiltinCommand] = []
+        var external: [(PlayerAction, MusicPlayer)] = []
+        try MusicTransportExecution.perform(
+            .stop, on: .builtin, sendBuiltin: { builtIn.append($0) },
+            sendExternal: { external.append(($0, $1)) })
+        try MusicTransportExecution.perform(
+            .next, on: .spotify, sendBuiltin: { builtIn.append($0) },
+            sendExternal: { external.append(($0, $1)) })
+        #expect(builtIn == [BuiltinCommand("pause"), BuiltinCommand("seek", value: 0)])
+        #expect(external.count == 1)
+        #expect(external.first?.0 == .next)
+        #expect(external.first?.1 == .spotify)
     }
 }
 
@@ -384,7 +520,7 @@ import Testing
         #expect(
             Set(fields.keys) == [
                 "player", "name", "running", "isPlaying", "title", "artist",
-                "elapsedSeconds", "durationSeconds", "volume",
+                "elapsedSeconds", "durationSeconds", "volume", "trackPath",
             ])
     }
 }
@@ -424,7 +560,43 @@ import Testing
             let result = await CLIProbe.capture(["music", "pause"])
             #expect(result.code == 0)
             #expect(result.stdout == "paused  (Edith)\n")
-            #expect(world.postedNames().contains(IPC.Name.musicCommand.rawValue))
+            let payload = world.postedPayloads(for: IPC.Name.musicCommand).last
+            #expect(payload?["action"] as? String == "pause")
+        }
+    }
+
+    @Test func builtInStatusRequestsStateThroughTheSharedReadAdapter() async throws {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.shared.set(true, forKey: MusicSession.builtinExtensionKey)
+            world.answers { _ in ["track": "Focus.mp3", "isPlaying": false] }
+            world.players([:])
+            let result = await CLIProbe.capture(["music", "status", "--player", "builtin"])
+            #expect(result.code == 0)
+            #expect(world.postedNames().contains(IPC.Name.requestMusicState.rawValue))
+        }
+    }
+
+    @Test func seekShuffleAndRepeatPostTheirSharedPayloads() async throws {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            let seek = await CLIProbe.capture(["music", "seek", "0.25", "--json"])
+            let shuffle = await CLIProbe.capture(["music", "shuffle", "on", "--json"])
+            let repeated = await CLIProbe.capture(["music", "repeat", "off", "--json"])
+            #expect(seek.code == 0)
+            #expect(seek.object?["position"] as? Double == 0.25)
+            #expect(shuffle.code == 0)
+            #expect(shuffle.object?["shuffle"] as? Bool == true)
+            #expect(repeated.code == 0)
+            #expect(repeated.object?["repeat"] as? Bool == false)
+            let payloads = world.postedPayloads(for: IPC.Name.musicCommand)
+            #expect(payloads.count == 3)
+            #expect(payloads[0]["action"] as? String == "seek")
+            #expect(payloads[0]["value"] as? Double == 0.25)
+            #expect(payloads[1]["action"] as? String == "shuffle")
+            #expect(payloads[1]["value"] as? Bool == true)
+            #expect(payloads[2]["action"] as? String == "loop")
+            #expect(payloads[2]["value"] as? Bool == false)
         }
     }
 

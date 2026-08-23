@@ -143,7 +143,7 @@ final class MusicRemote {
             info: { [weak self] info in
                 MainActor.assumeIsolated { self?.apply(info) }
             })
-        IPC.post(IPC.Name.requestMusicState)
+        send(.status)
         folderObserver = NotificationCenter.default.addObserver(
             forName: .musicFolderChangedLocally, object: nil, queue: .main
         ) { [weak self] _ in
@@ -311,7 +311,7 @@ final class MusicRemote {
     }
 
     func playFavourites() {
-        send("playSource", MusicSourceRequest.favourites.payload)
+        send(.startSource(.favourites))
     }
 
     func playFolder(_ folder: MusicFolder) { playAll(under: folder.relativePath) }
@@ -319,7 +319,7 @@ final class MusicRemote {
     func playCurrentFolder() { playAll(under: folderPath) }
 
     private func playAll(under relativePath: String) {
-        send("playSource", MusicSourceRequest.folder(relativePath).payload)
+        send(.startSource(.folder(relativePath)))
     }
 
     func apply(_ info: [AnyHashable: Any]) {
@@ -366,7 +366,7 @@ final class MusicRemote {
         isPlaying = false
         if sameTrack, length > 0 { seek(to: position / length) }
         if resumes { resumePlayback() }
-        IPC.post(IPC.Name.requestMusicState)
+        send(.status)
     }
 
     func videoPlaybackChanged() {
@@ -385,7 +385,14 @@ final class MusicRemote {
         }
     }
 
-    private func send(_ action: String, _ extra: [String: Any] = [:]) {
+    private func send(_ request: MusicTransportRequest) {
+        MusicTransportExecution.perform(
+            request,
+            sendCommand: { IPC.post(IPC.Name.musicCommand, userInfo: $0) },
+            requestStatus: { IPC.post(IPC.Name.requestMusicState) })
+    }
+
+    private func sendLibraryChange(_ action: String, _ extra: [String: Any]) {
         var info: [String: Any] = ["action": action]
         info.merge(extra) { a, _ in a }
         IPC.post(IPC.Name.musicCommand, userInfo: info)
@@ -393,30 +400,27 @@ final class MusicRemote {
 
     func toggle(_ track: Track) {
         if showingFavourites, currentFile != track.relativePath {
-            send(
-                "playSource",
-                MusicSourceRequest.favourites.payload.merging(
-                    ["start": track.relativePath]) { _, new in new })
+            send(.startSource(.favourites, start: track.relativePath))
             return
         }
-        send("toggle", ["track": track.relativePath])
+        send(.startTrack(track.relativePath))
     }
     func playPause() {
         if let videoSession {
             videoSession.toggle()
             return
         }
-        send("playPause")
+        send(.toggle)
     }
-    func pausePlayback() { send("pause") }
-    func resumePlayback() { send("resume") }
+    func pausePlayback() { send(.pause) }
+    func resumePlayback() { send(.play) }
     func next() {
         leaveVideo()
-        send("next")
+        send(.next)
     }
     func previous() {
         leaveVideo()
-        send("previous")
+        send(.previous)
     }
     func seek(to fraction: Double) {
         let clamped = min(max(fraction, 0), 1)
@@ -430,14 +434,14 @@ final class MusicRemote {
             elapsedTimestamp = Date().timeIntervalSince1970
             seekTick += 1
         }
-        send("seek", ["value": clamped])
+        send(.seek(clamped))
     }
     func setVolume(_ value: Double) {
         volume = value
-        send("volume", ["value": value])
+        send(.volume(value))
     }
-    func toggleLoop() { send("loop", ["value": !looping]) }
-    func toggleShuffle() { send("shuffle", ["value": !shuffling]) }
+    func toggleLoop() { send(.repeat(!looping)) }
+    func toggleShuffle() { send(.shuffle(!shuffling)) }
 
     func delete(_ track: Track) {
         guard (try? MusicLibrary.trash(track)) != nil else { return }
@@ -447,7 +451,7 @@ final class MusicRemote {
 
     func rename(_ track: Track, to name: String) {
         guard let move = try? MusicLibrary.rename(track, to: name) else { return }
-        send("renamed", ["from": move.from, "to": move.to])
+        sendLibraryChange("renamed", ["from": move.from, "to": move.to])
         refreshAfterFileChange()
     }
 
@@ -485,7 +489,7 @@ final class MusicRemote {
         guard let move = try? MusicLibrary.move(track, toFolder: folderRelativePath) else {
             return false
         }
-        send("renamed", ["from": move.from, "to": move.to])
+        sendLibraryChange("renamed", ["from": move.from, "to": move.to])
         return true
     }
 
@@ -497,7 +501,7 @@ final class MusicRemote {
         if let playing = currentFile,
             playing == folder.relativePath || playing.hasPrefix(folder.relativePath + "/")
         {
-            send(
+            sendLibraryChange(
                 "renamed",
                 ["from": playing, "to": newPath + playing.dropFirst(folder.relativePath.count)])
         }

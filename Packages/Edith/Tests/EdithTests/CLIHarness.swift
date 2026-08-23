@@ -158,6 +158,12 @@ final class CLIWorld: @unchecked Sendable {
         return posted.map(\.name.rawValue)
     }
 
+    func postedPayloads(for name: Notification.Name) -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return posted.filter { $0.name == name }.map(\.info)
+    }
+
     func recordedScripts() -> [String] {
         lock.lock()
         defer { lock.unlock() }

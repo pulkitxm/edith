@@ -1,21 +1,6 @@
 import EdithKit
 import Foundation
 
-public struct BuiltinCommand: Equatable, Sendable {
-    public let action: String
-    public let value: Double?
-
-    public init(_ action: String, value: Double? = nil) {
-        self.action = action
-        self.value = value
-    }
-
-    public var userInfo: [String: Any] {
-        guard let value else { return ["action": action] }
-        return ["action": action, "value": value]
-    }
-}
-
 public enum MusicMemory {
     public static let key = "cliActivePlayer"
 
@@ -32,18 +17,6 @@ public enum MusicMemory {
 public enum MusicSession {
     public static let builtinExtensionKey = AppStorageKeys.Tabs.musicEnabled
 
-    public static func builtinCommands(_ action: PlayerAction) -> [BuiltinCommand] {
-        switch action {
-        case .play: return [BuiltinCommand("resume")]
-        case .pause: return [BuiltinCommand("pause")]
-        case .stop: return [BuiltinCommand("pause"), BuiltinCommand("seek", value: 0)]
-        case .toggle: return [BuiltinCommand("playPause")]
-        case .next: return [BuiltinCommand("next")]
-        case .previous: return [BuiltinCommand("previous")]
-        case let .volume(level): return [BuiltinCommand("volume", value: level)]
-        }
-    }
-
     public static func decodeBuiltin(_ payload: [AnyHashable: Any]) -> PlayerSnapshot {
         let track = payload["track"] as? String ?? ""
         return PlayerSnapshot(
@@ -52,7 +25,8 @@ public enum MusicSession {
             title: track.isEmpty ? "" : (track as NSString).lastPathComponent,
             elapsedSeconds: payload["elapsed"] as? Double ?? 0,
             durationSeconds: payload["duration"] as? Double ?? 0,
-            volume: payload["volume"] as? Double)
+            volume: payload["volume"] as? Double,
+            trackPath: track.isEmpty ? nil : track)
     }
 
     public static var builtinIsReachable: Bool {
@@ -65,7 +39,12 @@ public enum MusicSession {
         guard
             let payload = await AppBridge.awaitReply(
                 IPC.Name.musicState, timeout: timeout,
-                trigger: { AppBridge.post(IPC.Name.requestMusicState) })
+                trigger: {
+                    MusicTransportExecution.perform(
+                        .status,
+                        sendCommand: { AppBridge.post(IPC.Name.musicCommand, userInfo: $0) },
+                        requestStatus: { AppBridge.post(IPC.Name.requestMusicState) })
+                })
         else { return PlayerSnapshot(player: .builtin) }
         return decodeBuiltin(payload)
     }
@@ -90,8 +69,13 @@ public enum MusicSession {
         let players = forced.map { [$0] } ?? MusicPlayer.allCases
         let observed = await snapshots(players)
         let all = forced == nil ? observed : observed + missing(from: observed)
-        let resolved = try MusicTargeting.resolve(
-            observed, forced: forced, preferred: MusicMemory.last)
+        let resolved: PlayerSnapshot
+        do {
+            resolved = try MusicTargeting.resolve(
+                observed, forced: forced, preferred: MusicMemory.last)
+        } catch let error as MusicTransportError {
+            throw error.cliFailure
+        }
         return (resolved, all)
     }
 
@@ -102,16 +86,13 @@ public enum MusicSession {
     }
 
     public static func send(_ action: PlayerAction, to player: MusicPlayer) async throws {
-        guard player == .builtin else {
-            try ExternalPlayers.send(action, to: player)
-            return
-        }
-        guard builtinIsReachable else {
+        guard player != .builtin || builtinIsReachable else {
             throw AppBridge.silence("Edith's own player", extensionKey: builtinExtensionKey)
         }
-        for command in builtinCommands(action) {
-            AppBridge.post(IPC.Name.musicCommand, userInfo: command.userInfo)
-        }
+        try MusicTransportExecution.perform(
+            action, on: player,
+            sendBuiltin: { AppBridge.post(IPC.Name.musicCommand, userInfo: $0.userInfo) },
+            sendExternal: { try ExternalPlayers.send($0, to: $1) })
     }
 
     public static func report(active: PlayerSnapshot?, all: [PlayerSnapshot]) -> JSONValue {

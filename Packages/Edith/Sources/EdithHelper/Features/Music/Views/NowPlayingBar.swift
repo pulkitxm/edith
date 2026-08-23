@@ -40,7 +40,7 @@ struct NowPlayingBar: View {
                     Spacer(minLength: 8)
                     PlaybackWave(playing: player.isPlaying, color: theme.opacity(0.9))
                     Button {
-                        player.previous()
+                        player.perform(.previous)
                     } label: {
                         Image(systemName: "backward.fill")
                             .font(.system(size: 12))
@@ -48,7 +48,7 @@ struct NowPlayingBar: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     Button {
-                        player.playPause()
+                        player.perform(.toggle)
                     } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 15))
@@ -56,7 +56,7 @@ struct NowPlayingBar: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     Button {
-                        player.next()
+                        player.perform(.next)
                     } label: {
                         Image(systemName: "forward.fill")
                             .font(.system(size: 12))
@@ -64,7 +64,7 @@ struct NowPlayingBar: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     Button {
-                        player.isShuffling.toggle()
+                        player.perform(.shuffle(!player.isShuffling))
                     } label: {
                         Image(systemName: "shuffle")
                             .font(.system(size: 12))
@@ -75,7 +75,7 @@ struct NowPlayingBar: View {
                         player.isShuffling
                             ? "Shuffling this folder and everything in it" : "Play in order")
                     Button {
-                        player.isLooping.toggle()
+                        player.perform(.repeat(!player.isLooping))
                     } label: {
                         Image(systemName: "repeat")
                             .font(.system(size: 12))
@@ -83,11 +83,16 @@ struct NowPlayingBar: View {
                     }
                     .buttonStyle(HoverButtonStyle())
                     .help(player.isLooping ? "Repeating this track" : "Play through the queue")
-                    Slider(value: $player.volume, in: 0...1)
-                        .controlSize(.mini)
-                        .tint(theme)
-                        .frame(width: 60)
-                        .pointerCursor()
+                    Slider(
+                        value: Binding(
+                            get: { player.volume },
+                            set: { player.perform(.volume($0)) }),
+                        in: 0...1
+                    )
+                    .controlSize(.mini)
+                    .tint(theme)
+                    .frame(width: 60)
+                    .pointerCursor()
                 }
                 scrubber
             }
@@ -128,7 +133,8 @@ struct NowPlayingBar: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { dragFraction = min(max($0.location.x / geo.size.width, 0), 1) }
                     .onEnded { value in
-                        player.seek(to: min(max(value.location.x / geo.size.width, 0), 1))
+                        player.perform(
+                            .seek(min(max(value.location.x / geo.size.width, 0), 1)))
                         dragFraction = nil
                     }
             )
