@@ -60,9 +60,10 @@ Both commands accept these options:
 
 | Name | Values | Default | What it does |
 | --- | --- | --- | --- |
-| `--theme <name>` | `quinjet`, `catppuccin`, `dracula`, `everforest`, `gruvbox`, `nord`, `one`, `rose-pine`, `solarized`, `tokyo-night`, `ayu`, `monokai`, `github` | `quinjet` | Select the Quinjet theme |
-| `--appearance <value>` | `light`, `dark` | `dark` | Select the theme appearance |
-| `--cmux` | flag | off | Build or run a cmux launch request |
+| `--theme <name>` | `quinjet`, `catppuccin`, `dracula`, `everforest`, `gruvbox`, `nord`, `one`, `rose-pine`, `solarized`, `tokyo-night`, `ayu`, `monokai`, `github` | saved app theme | Select the Quinjet theme |
+| `--appearance <value>` | `light`, `dark` | current app appearance | Select the theme appearance |
+| `--cmux` | flag | saved app terminal | Force a cmux launch request |
+| `--embedded` | flag | saved app terminal | Force a current-terminal launch request |
 | `--machine <name>` | configured machine or `local` | `local` | Select the worktree host |
 | `--json` | flag | off | Emit stable JSON on stdout |
 
@@ -71,7 +72,7 @@ The app's terminal and theme menus persist through
 Restarting, switching worktrees, and showing a review in cmux reuse `launch`
 with the selected path and options.
 
-cmux must be installed in `/Applications` or `~/Applications`. If it is not,
+cmux must be installed in `/Applications`. If it is not,
 `launch --cmux` exits 4 with a hint to omit `--cmux`. `open --cmux` remains safe
 and prints the cmux-targeted Quinjet command without asking cmux to run it.
 

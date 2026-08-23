@@ -46,6 +46,30 @@ public struct QuinjetLaunchConfiguration: Equatable, Sendable {
 
     public static let `default` = QuinjetLaunchConfiguration(
         terminal: .embedded, theme: .quinjet, appearance: .dark)
+
+    public static func preferred(
+        sharedDefaults: UserDefaults, standardDefaults: UserDefaults
+    ) -> QuinjetLaunchConfiguration {
+        let terminal =
+            QuinjetTerminal(
+                rawValue: sharedDefaults.string(forKey: AppStorageKeys.Quinjet.terminal) ?? "")
+            ?? .embedded
+        let theme =
+            QuinjetTheme(
+                rawValue: sharedDefaults.string(forKey: AppStorageKeys.Quinjet.theme) ?? "")
+            ?? .quinjet
+        let appearance: QuinjetAppearance
+        switch sharedDefaults.string(forKey: AppStorageKeys.General.appearance) {
+        case "light": appearance = .light
+        case "dark": appearance = .dark
+        default:
+            appearance =
+                standardDefaults.string(forKey: "AppleInterfaceStyle") == "Dark"
+                ? .dark : .light
+        }
+        return QuinjetLaunchConfiguration(
+            terminal: terminal, theme: theme, appearance: appearance)
+    }
 }
 
 public struct QuinjetLaunchRequest: Equatable, Sendable {

@@ -563,7 +563,7 @@ public enum CommandTree {
                         "open", "Print a Quinjet launch request without running it.",
                         options: [
                             "--json", "--help", "--machine", "--theme", "--appearance",
-                            "--cmux",
+                            "--cmux", "--embedded",
                         ],
                         optionValues: [
                             "--machine": .quinjetMachine, "--theme": .quinjetTheme,
@@ -573,7 +573,7 @@ public enum CommandTree {
                         "launch", "Launch a Quinjet review session.",
                         options: [
                             "--json", "--help", "--machine", "--theme", "--appearance",
-                            "--cmux",
+                            "--cmux", "--embedded",
                         ],
                         optionValues: [
                             "--machine": .quinjetMachine, "--theme": .quinjetTheme,

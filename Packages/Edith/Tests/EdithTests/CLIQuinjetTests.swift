@@ -199,6 +199,44 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         #expect(!request.arguments.contains("--client"))
     }
 
+    @Test func omittedLaunchOptionsUseAppPreferencesAndAllowExplicitTerminalOverride() async throws
+    {
+        let preferred = await CLIProbe.runInWorld([
+            "quinjet", "open", "/work/edith", "--json",
+        ]) { world in
+            world.shared.set("cmux", forKey: AppStorageKeys.Quinjet.terminal)
+            world.shared.set("dracula", forKey: AppStorageKeys.Quinjet.theme)
+            world.shared.set("dark", forKey: AppStorageKeys.General.appearance)
+            CLIEnvironment.executableNamed = { _ in URL(fileURLWithPath: "/opt/bin/quinjet") }
+            QuinjetCLIEnvironment.client = { Self.client(path: "/work/edith") }
+        }
+
+        #expect(preferred.code == 0)
+        #expect(preferred.object?["terminal"] as? String == "cmux")
+        #expect((preferred.object?["arguments"] as? [String])?.contains("dracula") == true)
+        #expect((preferred.object?["arguments"] as? [String])?.contains("dark") == true)
+
+        let overridden = await CLIProbe.runInWorld([
+            "quinjet", "open", "/work/edith", "--embedded", "--json",
+        ]) { world in
+            world.shared.set("cmux", forKey: AppStorageKeys.Quinjet.terminal)
+            CLIEnvironment.executableNamed = { _ in URL(fileURLWithPath: "/opt/bin/quinjet") }
+            QuinjetCLIEnvironment.client = { Self.client(path: "/work/edith") }
+        }
+
+        #expect(overridden.code == 0)
+        #expect(overridden.object?["terminal"] as? String == "current")
+    }
+
+    @Test func conflictingTerminalOverridesAreRejected() async {
+        let result = await CLIProbe.runInWorld([
+            "quinjet", "open", "/work/edith", "--cmux", "--embedded",
+        ]) { _ in }
+
+        #expect(result.code == ExitCodes.usage)
+        #expect(result.stderr.contains("cannot be used together"))
+    }
+
     @Test func jsonLaunchKeepsChildOutputOffStdout() async throws {
         let result = await CLIProbe.runInWorld([
             "quinjet", "launch", "/tmp", "--json",

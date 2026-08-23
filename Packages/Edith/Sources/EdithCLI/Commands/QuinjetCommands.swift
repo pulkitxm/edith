@@ -20,26 +20,38 @@ struct QuinjetTargetOptions: ParsableArguments {
 
 struct QuinjetLaunchOptions: ParsableArguments {
     @Option(help: "Quinjet theme name.")
-    var theme = QuinjetTheme.quinjet.rawValue
+    var theme: String?
 
     @Option(help: "Choose `light` or `dark`.")
-    var appearance = QuinjetAppearance.dark.rawValue
+    var appearance: String?
 
     @Flag(name: .long, help: "Open the session in cmux.")
     var cmux = false
 
+    @Flag(name: .long, help: "Open the session in the current terminal.")
+    var embedded = false
+
     func configuration() throws -> QuinjetLaunchConfiguration {
-        guard let theme = QuinjetTheme(rawValue: theme) else {
+        guard !(cmux && embedded) else {
+            throw CLIFailure.usage("--cmux and --embedded cannot be used together")
+        }
+        let preferred = QuinjetLaunchConfiguration.preferred(
+            sharedDefaults: CLIEnvironment.sharedDefaults,
+            standardDefaults: CLIEnvironment.standardDefaults)
+        let themeName = theme ?? preferred.theme.rawValue
+        guard let theme = QuinjetTheme(rawValue: themeName) else {
             throw CLIFailure.usage(
-                "unknown Quinjet theme \(theme)",
+                "unknown Quinjet theme \(themeName)",
                 hint: "themes: " + QuinjetTheme.allCases.map(\.rawValue).joined(separator: ", "))
         }
-        guard let appearance = QuinjetAppearance(rawValue: appearance) else {
+        let appearanceName = appearance ?? preferred.appearance.rawValue
+        guard let appearance = QuinjetAppearance(rawValue: appearanceName) else {
             throw CLIFailure.usage(
-                "unknown Quinjet appearance \(appearance)", hint: "choose light or dark")
+                "unknown Quinjet appearance \(appearanceName)", hint: "choose light or dark")
         }
+        let terminal = cmux ? QuinjetTerminal.cmux : embedded ? .embedded : preferred.terminal
         return QuinjetLaunchConfiguration(
-            terminal: cmux ? .cmux : .embedded, theme: theme, appearance: appearance)
+            terminal: terminal, theme: theme, appearance: appearance)
     }
 }
 
