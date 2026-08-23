@@ -70,18 +70,29 @@ public enum ExtensionLiveAdapters {
     ]
 
     public static func provider(
-        defaults: UserDefaults = SharedDefaults.store
+        defaults: UserDefaults = SharedDefaults.store,
+        executableNamed: @escaping @Sendable (String) -> URL? = {
+            CLIToolEnvironment.executable(named: $0)
+        }
     ) -> @Sendable (String) async -> ExtensionAdapterReadiness? {
         let defaults = ExtensionAdapterDefaults(defaults)
-        return { id in await readiness(for: id, defaults: defaults.store) }
+        return {
+            id in
+            await readiness(
+                for: id, defaults: defaults.store, executableNamed: executableNamed)
+        }
     }
 
     public static func readiness(
-        for id: String, defaults: UserDefaults = SharedDefaults.store
+        for id: String, defaults: UserDefaults = SharedDefaults.store,
+        executableNamed: @Sendable (String) -> URL? = {
+            CLIToolEnvironment.executable(named: $0)
+        }
     ) async -> ExtensionAdapterReadiness? {
         switch id {
         case "usage": usageReadiness()
-        case "quinjet": quinjetReadiness(defaults: defaults)
+        case "quinjet":
+            quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
@@ -377,19 +388,22 @@ public enum ExtensionLiveAdapters {
 
     static func presenterReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
         let auto = defaults.object(forKey: AppStorageKeys.Presenter.autoEnabled) as? Bool ?? false
-        let detectors = [
-            AppStorageKeys.Presenter.detectRecording,
-            AppStorageKeys.Presenter.detectScreenSharing,
-            AppStorageKeys.Presenter.detectMirroring,
-        ]
-        let detectionEnabled = detectors.contains {
-            defaults.object(forKey: $0) as? Bool ?? false
+        let detectionEnabled = [
+            (AppStorageKeys.Presenter.detectRecording, true),
+            (AppStorageKeys.Presenter.detectScreenSharing, true),
+            (AppStorageKeys.Presenter.detectMirroring, true),
+        ].contains { key, fallback in
+            defaults.object(forKey: key) as? Bool ?? fallback
         }
         let protected = [
-            AppStorageKeys.Presenter.blurAgents, AppStorageKeys.Presenter.blurCalendar,
-            AppStorageKeys.Presenter.blurMoney, AppStorageKeys.Presenter.blurMusic,
-            AppStorageKeys.Presenter.blurUsage,
-        ].filter { defaults.object(forKey: $0) as? Bool ?? false }.count
+            (AppStorageKeys.Presenter.blurAgents, true),
+            (AppStorageKeys.Presenter.blurCalendar, true),
+            (AppStorageKeys.Presenter.blurMoney, true),
+            (AppStorageKeys.Presenter.blurMusic, true),
+            (AppStorageKeys.Presenter.blurUsage, false),
+        ].filter { key, fallback in
+            defaults.object(forKey: key) as? Bool ?? fallback
+        }.count
         return ExtensionAdapterFacts(
             configured: protected > 0,
             degradedReason: auto && !detectionEnabled

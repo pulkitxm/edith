@@ -219,7 +219,10 @@ public struct ExtensionLifecycleProbe: Sendable {
         checks.append(contentsOf: await optionalToolChecks(entry))
         if policy.requiresHelper { checks.append(helperCheck()) }
         if policy.requiresMachine { checks.append(machineCheck()) }
-        if policy.adapter, let readiness = await environment.adapterReadiness(entry.id) {
+        if policy.adapter {
+            let readiness =
+                await environment.adapterReadiness(entry.id)
+                ?? .failed("No live runtime adapter is registered for \(entry.id).")
             checks.append(adapterCheck(entry, readiness: readiness))
         }
         return report(entry, checks: checks)

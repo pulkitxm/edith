@@ -127,6 +127,29 @@ import Testing
                 (result.object?["remediation"] as? [String])?.contains("ed app relaunch") == true)
         }
     }
+
+    @Test func statusIncludesTheLiveRuntimeAdapter() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.quinjetEnabled)
+            CLIEnvironment.executableNamed = { name in
+                name == "quinjet" ? URL(fileURLWithPath: "/opt/homebrew/bin/quinjet") : nil
+            }
+            CLIEnvironment.extensionToolReadiness = {
+                $0 == "quinjet" ? .installed(version: "quinjet 1.0") : .uninstalled
+            }
+
+            let result = await CLIProbe.capture([
+                "extensions", "status", "quinjet", "--json",
+            ])
+            let checks = result.object?["checks"] as? [[String: Any]]
+
+            #expect(result.code == 0)
+            #expect(
+                checks?.first { $0["id"] as? String == "adapter.quinjet" }?["status"] as? String
+                    == "passed")
+            #expect(result.object?["verified"] as? Bool == true)
+        }
+    }
 }
 
 @Suite(.serialized) struct CLIExtensionMutationProcessTests {
@@ -156,5 +179,23 @@ import Testing
         #expect(json.object?["id"] as? String == "calendar")
         #expect(json.object?["enabled"] as? Bool == false)
         #expect(!defaults.bool(forKey: AppStorageKeys.Tabs.calendarEnabled))
+    }
+
+    @Test func processJSONContainsAnExplicitRuntimeAdapterCheck() throws {
+        let suite = "CLIExtensionRuntimeProcessTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppStorageKeys.Presenter.enabled)
+        defaults.set(true, forKey: AppStorageKeys.Permissions.screenRecordingGranted)
+        var environment = ProcessInfo.processInfo.environment
+        environment["EDITH_TEST_SHARED_DEFAULTS_SUITE"] = suite
+
+        let result = try CLIProcessProbe.run(
+            ["extensions", "status", "presenter", "--json"], environment: environment)
+        let checks = result.object?["checks"] as? [[String: Any]]
+
+        #expect(result.code == 0)
+        #expect(checks?.contains { $0["id"] as? String == "adapter.presenter" } == true)
     }
 }

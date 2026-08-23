@@ -278,11 +278,17 @@ import EdithCore
         defaults.removeObject(forKey: AppStorageKeys.FocusDim.intensity)
         #expect(
             ExtensionLiveAdapters.presenterReadiness(defaults: defaults)
-                == .needsSetup("Presenter has no protected data categories enabled."))
-        defaults.set(true, forKey: AppStorageKeys.Presenter.blurUsage)
+                == .ready("Presenter protects 4 data categories."))
+        for key in [
+            AppStorageKeys.Presenter.blurAgents, AppStorageKeys.Presenter.blurCalendar,
+            AppStorageKeys.Presenter.blurMoney, AppStorageKeys.Presenter.blurMusic,
+            AppStorageKeys.Presenter.blurUsage,
+        ] {
+            defaults.set(false, forKey: key)
+        }
         #expect(
             ExtensionLiveAdapters.presenterReadiness(defaults: defaults)
-                == .ready("Presenter protects 1 data categories."))
+                == .needsSetup("Presenter has no protected data categories enabled."))
 
         defaults.set(Data("broken".utf8), forKey: "colorPickerHistory")
         guard

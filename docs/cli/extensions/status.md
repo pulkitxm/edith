@@ -27,6 +27,10 @@ installed runtime from an uninstalled, empty, loading, unsupported, or failed
 runtime. Each check includes its contributing `runtimePhase`, or `null` when it
 only affects readiness.
 
+The `adapter.<id>` or `backend.<id>` check is the live feature probe. It reads
+the same runtime source the feature uses, such as EventKit, Core Audio,
+Service Management, an extension repository, or a verified executable.
+
 ```
 ed extensions status
 ed extensions status quinjet
@@ -38,5 +42,7 @@ ed extensions status --json | jq '.[] | select(.verified == false)'
 
 - [`ed extensions verify`](./verify.md) for a detailed human report
 - [`ed extensions setup`](./setup.md) for noninteractive setup
+- [Extension runtime detection](./runtime-detection.md) for the probe behind
+  every extension
 - [`ed extensions`](./README.md), the rest of this group
 - [All `ed` commands](../README.md)

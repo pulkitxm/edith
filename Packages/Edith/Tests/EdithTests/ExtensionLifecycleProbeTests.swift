@@ -169,6 +169,17 @@ import EdithCore
         #expect(report.state.issues.first?.id == "backend.companion")
     }
 
+    @Test func aMissingLiveAdapterIsAnExplicitRuntimeFailure() async throws {
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "system" })
+        let report = await probe(helperRunning: true, adapter: nil).report(for: entry)
+
+        #expect(report.state.phase == .failed)
+        #expect(report.state.runtimePhase == .error)
+        #expect(
+            report.state.issues.first { $0.id == "backend.system" }?.detail
+                == "No live runtime adapter is registered for system.")
+    }
+
     @Test func runtimePhasesPreserveReadinessSemantics() async throws {
         let quinjet = try #require(ExtensionRegistry.entries.first { $0.id == "quinjet" })
         let herdr = try #require(ExtensionRegistry.entries.first { $0.id == "herdr" })
@@ -268,7 +279,7 @@ import EdithCore
         enabled: Bool = true, permissions: [ExtensionPermission: Bool] = [:],
         tools: Set<String> = [], helperRunning: Bool = false,
         platform: PlatformCapabilities = .macOS, machineCount: Int = 0,
-        adapter: ExtensionAdapterReadiness? = nil,
+        adapter: ExtensionAdapterReadiness? = .ready("Ready."),
         toolStates: [String: ExtensionToolReadiness] = [:]
     ) -> ExtensionLifecycleProbe {
         ExtensionLifecycleProbe(
