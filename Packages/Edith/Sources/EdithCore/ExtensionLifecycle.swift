@@ -61,6 +61,44 @@ public struct ExtensionLifecycleState: Codable, Equatable, Sendable {
     }
 }
 
+public enum ExtensionLifecycleCheckStatus: String, CaseIterable, Codable, Sendable {
+    case passed
+    case warning
+    case failed
+    case skipped
+}
+
+public struct ExtensionLifecycleCheck: Identifiable, Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let status: ExtensionLifecycleCheckStatus
+    public let detail: String
+    public let recoveryCommand: String?
+
+    public init(
+        id: String, title: String, status: ExtensionLifecycleCheckStatus, detail: String,
+        recoveryCommand: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.status = status
+        self.detail = detail
+        self.recoveryCommand = recoveryCommand
+    }
+}
+
+public struct ExtensionLifecycleReport: Codable, Equatable, Sendable {
+    public let state: ExtensionLifecycleState
+    public let checks: [ExtensionLifecycleCheck]
+
+    public init(state: ExtensionLifecycleState, checks: [ExtensionLifecycleCheck]) {
+        self.state = state
+        self.checks = checks
+    }
+
+    public var verified: Bool { state.phase == .ready }
+}
+
 public struct ExtensionLifecycleInstruction: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let title: String
