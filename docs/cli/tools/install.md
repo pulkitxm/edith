@@ -12,7 +12,7 @@ Arguments:
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<tool>` | one of `yt-dlp`, `claude`, `codex`, or a display name: `yt-dlp`, `Claude Code`, `Codex` | required | Which tool to install. Matched case-insensitively against the id first, then against the display name. |
+| `<tool>` | one of `yt-dlp`, `claude`, `codex`, `quinjet`, or a matching display name | required | Which tool to install. Matched case-insensitively against the id first, then against the display name. |
 
 Options:
 
@@ -21,7 +21,7 @@ Options:
 | `--json` | flag | off | Emits one JSON document on stdout. |
 
 Matching is exact, not by prefix: `CODEX` and `Claude Code` both resolve, `cla`
-and `ytdlp` do not and exit 3 with the three ids as the hint. A display name
+and `ytdlp` do not and exit 3 with the four ids as the hint. A display name
 with a space in it has to be quoted, or the shell hands `ed` a second
 positional and ArgumentParser rejects it with exit 2 before any id is looked
 up.
@@ -58,6 +58,7 @@ Examples:
 ```
 ed tools install yt-dlp
 ed tools install codex --json
+ed tools install quinjet
 ed tools install "Claude Code"
 ```
 
@@ -110,13 +111,14 @@ An id that is not in the catalogue never reaches an install:
 ```
 $ ed tools install ffmpeg
 error: no tool called ffmpeg
-hint: tools: yt-dlp, claude, codex
+hint: tools: yt-dlp, claude, codex, quinjet
 ```
 
 Behaviour: the presence check runs first, so an already-installed tool is
 reported and exits 0 without touching the network. Only the other branch does
 any work, and it does it here: `ToolInstaller` runs `curl`, `chmod` and a move
-for yt-dlp, or `brew` and then `npm` for the two agent CLIs, in this process.
+for yt-dlp, `brew` and then `npm` for the two agent CLIs, or Homebrew for
+Quinjet, in this process.
 Nothing is posted at Edith and no part of it has to be running. Every line those
 commands print is echoed as a `·` row as it arrives, which for the curl progress
 bar is one row per redraw. When they finish, `ed` runs the tool's own

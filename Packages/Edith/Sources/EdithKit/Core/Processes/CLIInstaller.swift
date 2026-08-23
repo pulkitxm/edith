@@ -74,12 +74,20 @@ public enum CLIInstaller {
                 directory: "", message: "the ed binary is not present in this build")
         }
         let target = directory ?? preferredDirectory(fileManager: fileManager)
-        try? fileManager.createDirectory(at: target, withIntermediateDirectories: true)
+        do {
+            try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
+        } catch {
+            return CLIInstallResult(
+                directory: target.path,
+                message: "could not create \(target.path): \(error.localizedDescription)")
+        }
         var result = CLIInstallResult(directory: target.path)
+        var failures: [String] = []
         for name in toolNames {
             let source = tools.appendingPathComponent(sourceName(for: name))
             guard fileManager.isExecutableFile(atPath: source.path) else {
                 result.skipped.append(name)
+                failures.append("\(name) is missing from this build")
                 continue
             }
             let link = target.appendingPathComponent(name)
@@ -88,6 +96,7 @@ public enum CLIInstaller {
             if fileManager.fileExists(atPath: link.path) || existing != nil {
                 guard existing != nil || isOurs(link, fileManager: fileManager) else {
                     result.skipped.append(name)
+                    failures.append("\(link.path) already exists and is not managed by Edith")
                     continue
                 }
                 try? fileManager.removeItem(at: link)
@@ -97,8 +106,10 @@ public enum CLIInstaller {
                 result.linked.append(name)
             } catch {
                 result.skipped.append(name)
+                failures.append("could not link \(name): \(error.localizedDescription)")
             }
         }
+        if !failures.isEmpty { result.message = failures.joined(separator: "; ") }
         return result
     }
 

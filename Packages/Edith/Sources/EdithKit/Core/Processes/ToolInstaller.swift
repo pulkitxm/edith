@@ -38,20 +38,19 @@ public struct ToolInstaller: Sendable {
     public func detectedVersion(of tool: CLIToolSpec, log: @escaping Log = { _ in }) async
         -> String?
     {
-        let name: String
         let arguments: [String]
         switch tool.presenceStrategy {
         case let .executable(executableName, versionArguments):
-            name = executableName
             arguments = [executableName] + versionArguments
         }
-        guard let result = try? await run(env(arguments), log: log),
-            result.terminationStatus == 0
-        else { return nil }
-        let version = result.output.components(separatedBy: .newlines).first {
-            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return version ?? name
+        return await ToolVersionProbe.version(
+            env(arguments, timeout: 5),
+            runCommand: { request, onLine in
+                try await runCommand(request) { line in
+                    log(line)
+                    onLine(line)
+                }
+            })
     }
 
     @discardableResult
@@ -148,10 +147,10 @@ public struct ToolInstaller: Sendable {
         }
     }
 
-    private func env(_ arguments: [String]) -> CLICommandRequest {
+    private func env(_ arguments: [String], timeout: TimeInterval? = nil) -> CLICommandRequest {
         CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/usr/bin/env"), arguments: arguments,
-            environment: CLIToolEnvironment.sanitized())
+            environment: CLIToolEnvironment.sanitized(), timeout: timeout)
     }
 
     private func run(_ request: CLICommandRequest, log: @escaping Log) async throws

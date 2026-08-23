@@ -107,8 +107,8 @@ answer a question, so none of them fails because the app is closed.
 - `--help` works on the group and on every verb, prints on stdout and exits 0.
 - Completion knows the verbs and the flags: `ed dl <TAB>` offers all seven,
   and `ed download ls --<TAB>` offers `--active`, `--limit` and `--json`. It
-  stops there. The number `rm` and `retry` take completes to nothing, and so
-  does `--kind`, so `audio` and `video` have to be typed out.
+  also offers `audio` and `video` after `--kind`. The number `rm` and `retry`
+  take still completes to nothing.
 
 ## Where to go next
 
