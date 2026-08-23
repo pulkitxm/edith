@@ -91,6 +91,10 @@ final class QuinjetFolderPickerModel {
         }
     }
 
+    func waitForInputRefresh() async {
+        await refreshTask?.value
+    }
+
     func navigate(to value: String, recordHistory: Bool = true) async {
         let target = normalizedDirectory(value)
         guard !target.isEmpty else { return }
