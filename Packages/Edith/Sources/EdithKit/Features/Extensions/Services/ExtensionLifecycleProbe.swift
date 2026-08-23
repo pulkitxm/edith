@@ -63,7 +63,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
             switch id {
             case "companion": await companionReadiness()
             case "herdr": await herdrReadiness()
-            default: nil
+            default: await ExtensionLiveAdapters.readiness(for: id)
             }
         })
 
@@ -149,37 +149,37 @@ public struct ExtensionLifecycleProbe: Sendable {
 
     static let policies: [String: Policy] = [
         "usage": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .any, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .any, adapter: true),
         "herdr": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "quinjet": Policy(
-            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "system": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "machines": Policy(
-            requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: true),
         "companion": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "systemStats": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "micMute": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "lidAwake": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "music": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "calendar": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "notchShelf": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "clipboard": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "focusDim": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "presenter": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "colorPicker": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 
     public let environment: ExtensionLifecycleProbeEnvironment

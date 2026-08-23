@@ -17,52 +17,52 @@ import EdithCore
 
     static let matrix = [
         MatrixRow(
-            id: "usage", helper: true, machine: false, toolRule: .any, adapter: false,
+            id: "usage", helper: true, machine: false, toolRule: .any, adapter: true,
             requiredTools: ["claude", "codex"], optionalTools: []),
         MatrixRow(
             id: "herdr", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "quinjet", helper: false, machine: false, toolRule: .all, adapter: false,
+            id: "quinjet", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: ["quinjet"], optionalTools: []),
         MatrixRow(
-            id: "system", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "system", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "machines", helper: true, machine: true, toolRule: .all, adapter: false,
+            id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "companion", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "systemStats", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "systemStats", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "micMute", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "micMute", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "lidAwake", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "lidAwake", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "music", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "music", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["yt-dlp"]),
         MatrixRow(
-            id: "calendar", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "calendar", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "notchShelf", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "notchShelf", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "clipboard", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "clipboard", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "focusDim", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "focusDim", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "presenter", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "presenter", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: false,
+            id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
     ]
 
