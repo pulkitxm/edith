@@ -61,6 +61,9 @@ model choices and recovery.
 See the [remote machines guide](docs/remote-machines.md) for connection, privilege
 and platform details.
 
+See the [Quinjet integration guide](docs/quinjet.md) for project review across
+the local Mac and SSH machines.
+
 **Everything else on the shelf**
 
 - **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
