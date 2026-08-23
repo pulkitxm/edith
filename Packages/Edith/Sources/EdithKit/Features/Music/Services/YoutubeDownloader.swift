@@ -268,10 +268,9 @@ public final class YoutubeDownloader {
     private init() {
         checkAvailability()
         load()
-        if
-            (try? DownloadOperationExecution.cancel(
-                includeQueued: false, reason: "Interrupted").changed) ?? 0 > 0
-        {
+        if (try? DownloadOperationExecution.cancel(
+            includeQueued: false, reason: "Interrupted"
+        ).changed) ?? 0 > 0 {
             load()
             NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
@@ -313,7 +312,8 @@ public final class YoutubeDownloader {
         Task {
             let status = await DownloadToolOperationExecution.status(
                 executable: CLIToolEnvironment.executable(named: "yt-dlp"))
-            unavailableReason = status.installed
+            unavailableReason =
+                status.installed
                 ? nil
                 : "yt-dlp is not installed. Open Music extension settings to install it."
             ytdlpVersion = status.version

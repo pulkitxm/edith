@@ -55,7 +55,8 @@ import Testing
             #expect((added.array?.first as? [String: Any])?["id"] as? String != nil)
             let active = await CLIProbe.capture(["download", "ls", "--active", "--json"])
             let activeRows = active.array as? [[String: Any]]
-            let allRows = (await CLIProbe.capture(["download", "ls", "--json"])).array
+            let allRows =
+                (await CLIProbe.capture(["download", "ls", "--json"])).array
                 as? [[String: Any]]
             #expect(activeRows?.map { $0["index"] as? Int } == allRows?.map { $0["index"] as? Int })
 
