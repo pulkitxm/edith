@@ -21,6 +21,7 @@ ed music players [--json]
     "name": "Edith",
     "player": "builtin",
     "running": true,
+    "trackPath": "albums/alpha-song.mp3",
     "title": "alpha-song.mp3",
     "volume": 0.7
   },
@@ -34,6 +35,7 @@ ed music players [--json]
       "name": "Edith",
       "player": "builtin",
       "running": true,
+      "trackPath": "albums/alpha-song.mp3",
       "title": "alpha-song.mp3",
       "volume": 0.7
     },
@@ -45,6 +47,7 @@ ed music players [--json]
       "name": "Spotify",
       "player": "spotify",
       "running": false,
+      "trackPath": null,
       "title": null,
       "volume": null
     },
@@ -56,6 +59,7 @@ ed music players [--json]
       "name": "Apple Music",
       "player": "apple",
       "running": false,
+      "trackPath": null,
       "title": null,
       "volume": null
     }

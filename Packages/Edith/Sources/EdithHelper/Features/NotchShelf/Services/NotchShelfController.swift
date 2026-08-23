@@ -807,30 +807,71 @@ final class NotchShelfController: FeatureModule {
     }
 
     func openNowPlayingApp() {
-        let source = nowPlaying?.source
+        guard let target = nowPlayingTarget else { return }
         collapseNow()
-        switch source {
-        case .external(let app):
-            guard
-                let url = NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: app.bundleID)
-            else { return }
-            NSWorkspace.shared.openApplication(
-                at: url, configuration: NSWorkspace.OpenConfiguration())
-        case .local:
-            MainApp.openDashboard()
-        case .none:
-            break
-        }
+        performNowPlayingOperation(.openCurrent, target: target)
     }
 
     func openNowPlayingLocation() {
-        guard case .local = nowPlaying?.source, let track = localMusic?.current else {
-            openNowPlayingApp()
+        guard let target = nowPlayingTarget else { return }
+        collapseNow()
+        performNowPlayingOperation(.revealCurrent, target: target)
+    }
+
+    private var nowPlayingTarget: MusicCurrentTarget? {
+        switch nowPlaying?.source {
+        case .local:
+            MusicCurrentTarget(player: .builtin, trackPath: localMusic?.current?.relativePath)
+        case .external(.spotify):
+            MusicCurrentTarget(player: .spotify)
+        case .external(.music):
+            MusicCurrentTarget(player: .apple)
+        case .none:
+            nil
+        }
+    }
+
+    private func performNowPlayingOperation(
+        _ operation: MusicCurrentOperation, target: MusicCurrentTarget
+    ) {
+        do {
+            try MusicCurrentOperationExecution.perform(
+                operation, target: target,
+                openPlayer: { player in
+                    if player == .builtin {
+                        MainApp.open(section: "music")
+                        return true
+                    }
+                    guard let bundleIdentifier = player.bundleIdentifier,
+                        let url = NSWorkspace.shared.urlForApplication(
+                            withBundleIdentifier: bundleIdentifier)
+                    else { return false }
+                    NSWorkspace.shared.openApplication(
+                        at: url, configuration: NSWorkspace.OpenConfiguration())
+                    return true
+                },
+                revealTrack: { trackPath in
+                    MusicReveal.request(trackPath: trackPath)
+                    return true
+                })
+        } catch {
+            presentMusicFailure(error)
+        }
+    }
+
+    private func presentMusicFailure(_ error: Error) {
+        let alert = NotchAlert(
+            id: "music.action", icon: "exclamationmark.circle.fill", tint: "#e0664f",
+            title: "Music action failed", subtitle: error.localizedDescription,
+            priority: .high)
+        guard !alertsEnabled else {
+            postAlert(alert)
             return
         }
-        collapseNow()
-        MusicReveal.request(trackPath: track.relativePath)
+        alertPinned = false
+        currentAlert = alert
+        syncFrames()
+        scheduleAlertHide(after: alert.autoHide)
     }
 
     func nowPlayingPlayPause() {

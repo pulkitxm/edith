@@ -25,7 +25,8 @@ public enum MusicSession {
             title: track.isEmpty ? "" : (track as NSString).lastPathComponent,
             elapsedSeconds: payload["elapsed"] as? Double ?? 0,
             durationSeconds: payload["duration"] as? Double ?? 0,
-            volume: payload["volume"] as? Double)
+            volume: payload["volume"] as? Double,
+            trackPath: track.isEmpty ? nil : track)
     }
 
     public static var builtinIsReachable: Bool {

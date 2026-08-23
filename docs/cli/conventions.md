@@ -342,10 +342,11 @@ ed tuf ls -la /srv
 There are exactly two option groups in the whole CLI, and everything else that
 looks shared is a flag declared again on each command.
 
-`--player` comes from the player group and appears on eight commands:
+`--player` comes from the player group and appears on ten commands:
 `ed music status`, `play`, `pause`, `stop`, `toggle`, `next`, `previous` and
-`volume`. It takes `builtin`, `spotify` or `apple`, and leaving it out means
-whichever player is active. An unknown name exits 3.
+`volume`, plus `open-current` and `reveal-current`. It takes `builtin`,
+`spotify` or `apple`, and leaving it out means whichever player is active. An
+unknown name exits 3.
 
 `--range`, `--source` and `--machine` come from the usage window group and
 appear on three commands: `ed usage summary`, `daily` and `models`. `--range`

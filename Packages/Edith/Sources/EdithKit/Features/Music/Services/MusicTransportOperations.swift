@@ -39,6 +39,24 @@ public enum MusicTransportOperation: String, CaseIterable, Sendable {
     }
 }
 
+public enum MusicCurrentOperation: String, CaseIterable, Sendable {
+    case openCurrent = "open-current"
+    case revealCurrent = "reveal-current"
+
+    public var descriptor: UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "music.current.\(rawValue)"), summary: summary,
+            cli: ["music", rawValue], effect: .interactive)
+    }
+
+    private var summary: String {
+        switch self {
+        case .openCurrent: "Open the player for the current track."
+        case .revealCurrent: "Reveal the current library track or open its player."
+        }
+    }
+}
+
 public enum MusicPlayer: String, CaseIterable, Sendable {
     case builtin
     case spotify
@@ -57,6 +75,14 @@ public enum MusicPlayer: String, CaseIterable, Sendable {
         case .builtin: nil
         case .spotify: "Spotify"
         case .apple: "Music"
+        }
+    }
+
+    public var bundleIdentifier: String? {
+        switch self {
+        case .builtin: nil
+        case .spotify: "com.spotify.client"
+        case .apple: "com.apple.Music"
         }
     }
 
@@ -93,11 +119,12 @@ public struct PlayerSnapshot: Equatable, Sendable {
     public var elapsedSeconds: Double
     public var durationSeconds: Double
     public var volume: Double?
+    public var trackPath: String?
 
     public init(
         player: MusicPlayer, isRunning: Bool = false, isPlaying: Bool = false,
         title: String = "", artist: String = "", elapsedSeconds: Double = 0,
-        durationSeconds: Double = 0, volume: Double? = nil
+        durationSeconds: Double = 0, volume: Double? = nil, trackPath: String? = nil
     ) {
         self.player = player
         self.isRunning = isRunning
@@ -107,9 +134,72 @@ public struct PlayerSnapshot: Equatable, Sendable {
         self.elapsedSeconds = elapsedSeconds
         self.durationSeconds = durationSeconds
         self.volume = volume
+        self.trackPath = trackPath
     }
 
     public var hasTrack: Bool { !title.isEmpty }
+}
+
+public struct MusicCurrentTarget: Equatable, Sendable {
+    public var player: MusicPlayer
+    public var trackPath: String?
+
+    public init(player: MusicPlayer, trackPath: String? = nil) {
+        self.player = player
+        self.trackPath = trackPath
+    }
+}
+
+public struct MusicCurrentOperationResult: Equatable, Sendable {
+    public var operation: MusicCurrentOperation
+    public var player: MusicPlayer
+    public var trackPath: String?
+    public var revealed: Bool
+
+    public init(
+        operation: MusicCurrentOperation, player: MusicPlayer, trackPath: String?, revealed: Bool
+    ) {
+        self.operation = operation
+        self.player = player
+        self.trackPath = trackPath
+        self.revealed = revealed
+    }
+}
+
+public enum MusicCurrentOperationError: LocalizedError, Equatable {
+    case openFailed(MusicPlayer)
+    case revealFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .openFailed(let player): "Could not open \(player.displayName)."
+        case .revealFailed(let path): "Could not reveal \(path)."
+        }
+    }
+}
+
+public enum MusicCurrentOperationExecution {
+    @discardableResult
+    public static func perform(
+        _ operation: MusicCurrentOperation, target: MusicCurrentTarget,
+        openPlayer: (MusicPlayer) -> Bool, revealTrack: (String) -> Bool
+    ) throws -> MusicCurrentOperationResult {
+        if operation == .revealCurrent, target.player == .builtin,
+            let trackPath = target.trackPath, !trackPath.isEmpty
+        {
+            guard revealTrack(trackPath) else {
+                throw MusicCurrentOperationError.revealFailed(trackPath)
+            }
+            return MusicCurrentOperationResult(
+                operation: operation, player: target.player, trackPath: trackPath, revealed: true)
+        }
+        guard openPlayer(target.player) else {
+            throw MusicCurrentOperationError.openFailed(target.player)
+        }
+        return MusicCurrentOperationResult(
+            operation: operation, player: target.player, trackPath: target.trackPath,
+            revealed: false)
+    }
 }
 
 public enum MusicTransportError: LocalizedError, Equatable {

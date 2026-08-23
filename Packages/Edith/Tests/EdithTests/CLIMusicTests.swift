@@ -311,6 +311,7 @@ import Testing
         #expect(snapshot.isRunning)
         #expect(snapshot.title == "Gal ban gyi.mp3")
         #expect(snapshot.volume == 0.4)
+        #expect(snapshot.trackPath == "albums/Gal ban gyi.mp3")
     }
 
     @Test func anEmptyBuiltInReplyIsRunningButIdle() {
@@ -357,6 +358,64 @@ import Testing
             #expect(
                 UserOperationCatalog.descriptor(cli: operation.descriptor.cli)
                     == operation.descriptor)
+        }
+    }
+
+    @Test func everyCurrentTrackDescriptorIsRegistered() {
+        for operation in MusicCurrentOperation.allCases {
+            #expect(
+                UserOperationCatalog.descriptor(id: operation.descriptor.id) == operation.descriptor
+            )
+            #expect(
+                UserOperationCatalog.descriptor(cli: operation.descriptor.cli)
+                    == operation.descriptor)
+        }
+    }
+
+    @Test func currentTrackRevealUsesTheLibraryPath() throws {
+        var opened: [MusicPlayer] = []
+        var revealed: [String] = []
+        let result = try MusicCurrentOperationExecution.perform(
+            .revealCurrent,
+            target: MusicCurrentTarget(player: .builtin, trackPath: "Focus/a.mp3"),
+            openPlayer: {
+                opened.append($0)
+                return true
+            },
+            revealTrack: {
+                revealed.append($0)
+                return true
+            })
+        #expect(opened.isEmpty)
+        #expect(revealed == ["Focus/a.mp3"])
+        #expect(result.revealed)
+        #expect(result.trackPath == "Focus/a.mp3")
+    }
+
+    @Test func externalRevealFallsBackToOpeningItsPlayer() throws {
+        var opened: [MusicPlayer] = []
+        let result = try MusicCurrentOperationExecution.perform(
+            .revealCurrent, target: MusicCurrentTarget(player: .spotify),
+            openPlayer: {
+                opened.append($0)
+                return true
+            },
+            revealTrack: { _ in false })
+        #expect(opened == [.spotify])
+        #expect(!result.revealed)
+    }
+
+    @Test func failedCurrentTrackActionsRemainTyped() {
+        #expect(throws: MusicCurrentOperationError.openFailed(.apple)) {
+            try MusicCurrentOperationExecution.perform(
+                .openCurrent, target: MusicCurrentTarget(player: .apple),
+                openPlayer: { _ in false }, revealTrack: { _ in false })
+        }
+        #expect(throws: MusicCurrentOperationError.revealFailed("missing.mp3")) {
+            try MusicCurrentOperationExecution.perform(
+                .revealCurrent,
+                target: MusicCurrentTarget(player: .builtin, trackPath: "missing.mp3"),
+                openPlayer: { _ in false }, revealTrack: { _ in false })
         }
     }
 
@@ -461,7 +520,7 @@ import Testing
         #expect(
             Set(fields.keys) == [
                 "player", "name", "running", "isPlaying", "title", "artist",
-                "elapsedSeconds", "durationSeconds", "volume",
+                "elapsedSeconds", "durationSeconds", "volume", "trackPath",
             ])
     }
 }

@@ -38,6 +38,7 @@ extension PlayerSnapshot {
             "elapsedSeconds": .double(elapsedSeconds),
             "durationSeconds": .double(durationSeconds),
             "volume": .optional(volume),
+            "trackPath": .optional(trackPath),
         ])
     }
 
@@ -69,6 +70,23 @@ extension MusicTransportError {
             .unavailable(
                 "no music player is running",
                 hint: "open Spotify or Apple Music, or turn on Edith's Music extension")
+        }
+    }
+}
+
+extension MusicCurrentOperationError {
+    public var cliFailure: CLIFailure {
+        switch self {
+        case .openFailed(let player):
+            .unavailable(
+                "could not open \(player.displayName)",
+                hint: player == .builtin
+                    ? "install Edith, then retry"
+                    : "install \(player.displayName), then retry")
+        case .revealFailed(let path):
+            .unavailable(
+                "could not reveal \(path)",
+                hint: "check that the current track still exists, then retry")
         }
     }
 }
