@@ -73,7 +73,9 @@ enum JSONContract {
         JSONCase("ed music rename", ["music", "rename", "nothing-at-all", "New", "--json"]),
         JSONCase("ed music rm", ["music", "rm", "nothing-at-all", "--json"]),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
-        JSONCase("ed tools install", ["tools", "install", "yt-dlp", "--json"]),
+        JSONCase(
+            "ed tools install", ["tools", "install", "yt-dlp", "--json"],
+            mutatesTheMachine: true),
         JSONCase(
             "ed machines broadcast",
             ["machines", "broadcast", "--json", "--only", "nowhere-at-all", "--", "true"]),
@@ -284,7 +286,9 @@ enum JSONContract {
         JSONCase("ed usage models", ["usage", "models", "--json"]),
         JSONCase("ed usage projects", ["usage", "projects", "--json"]),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
-        JSONCase("ed usage refresh", ["usage", "refresh", "--json"]),
+        JSONCase(
+            "ed usage refresh", ["usage", "refresh", "--json"],
+            mutatesTheMachine: true),
         JSONCase(
             "ed usage summary --machine", ["usage", "summary", "--machine", "local", "--json"]),
         JSONCase("ed usage machines ls", ["usage", "machines", "ls", "--json"]),
@@ -361,6 +365,33 @@ enum JSONContract {
         JSONCase(
             "ed machines thermal set",
             ["machines", "thermal", "set", "nowhere-at-all", "balanced", "--json"]),
+        JSONCase(
+            "ed machines control status",
+            ["machines", "control", "status", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines control brightness",
+            ["machines", "control", "brightness", "nowhere-at-all", "50", "--json"]),
+        JSONCase(
+            "ed machines control volume",
+            ["machines", "control", "volume", "nowhere-at-all", "40", "--json"]),
+        JSONCase(
+            "ed machines control mute",
+            ["machines", "control", "mute", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control wifi",
+            ["machines", "control", "wifi", "nowhere-at-all", "off", "--json"]),
+        JSONCase(
+            "ed machines control bluetooth",
+            ["machines", "control", "bluetooth", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control airplane",
+            ["machines", "control", "airplane", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control dnd",
+            ["machines", "control", "dnd", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control keyboard-light",
+            ["machines", "control", "keyboard-light", "nowhere-at-all", "25", "--json"]),
         JSONCase("ed machines kill", ["machines", "kill", "nowhere-at-all", "42", "--json"]),
         JSONCase(
             "ed machines services ls", ["machines", "services", "ls", "nowhere-at-all", "--json"]),
@@ -500,6 +531,16 @@ enum JSONContract {
 }
 
 @Suite struct CLIJSONContractTests {
+    @Test func isolatedCommandsCannotReachLiveRefreshOrInstallServices() async {
+        let refresh = await CLIProbe.run(["usage", "refresh", "--json"])
+        #expect(refresh.code == 0)
+        #expect(refresh.object?["completed"] as? Bool == true)
+
+        let install = await CLIProbe.run(["tools", "install", "yt-dlp", "--json"])
+        #expect(install.code == ExitCodes.unavailable)
+        #expect(install.stdout.isEmpty)
+    }
+
     @Test func everyCommandThatOffersJSONIsCovered() {
         let declared = Set(JSONContract.cases.map(\.label))
         var uncovered: [String] = []

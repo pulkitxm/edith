@@ -28,6 +28,11 @@ public enum MachineSource: Codable, Equatable, Hashable, Sendable {
 }
 
 public struct Machine: Codable, Identifiable, Equatable, Hashable, Sendable {
+    public static let localID = UUID(uuidString: "00000000-0000-0000-0000-0000000000ED")!
+    public static let local = Machine(
+        id: localID, name: "This Mac", host: "localhost", source: .manual,
+        createdAt: Date(timeIntervalSince1970: 0))
+
     public var id: UUID
     public var name: String
     public var host: String

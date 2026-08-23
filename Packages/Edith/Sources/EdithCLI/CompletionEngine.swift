@@ -139,6 +139,7 @@ public enum CompletionEngine {
         case .extensionID: return extensionIDs
         case .toolID: return ToolProvisioning.all.map(\.id)
         case .permission: return ExtensionPermission.allCases.map(\.rawValue)
+        case .onOff: return ["on", "off"]
         case .shell: return ["zsh", "bash", "fish"]
         case .group: return ConfigCatalog.groups
         case .usageRange: return UsageRange.allCases.map(\.rawValue)
