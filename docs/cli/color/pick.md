@@ -65,3 +65,4 @@ sampler opens.
 - [`ed color ls`](./ls.md), to read a completed sample
 - [`ed color`](./README.md), the rest of this group
 - [`ed permissions`](../permissions/README.md), for Screen Recording access
+- [All `ed` commands](../README.md)
