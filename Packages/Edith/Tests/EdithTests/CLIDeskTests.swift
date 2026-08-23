@@ -309,7 +309,7 @@ import Testing
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
             let result = await CLIProbe.capture([
-                "clipboard", "clear", "--keep-pinned", "--json",
+                "clipboard", "clear", "--keep-pinned", "--yes", "--json",
             ])
             #expect(result.object?["remaining"] as? Int == 1)
             let after = await CLIProbe.capture(["clipboard", "ls", "--json"])
@@ -322,7 +322,7 @@ import Testing
     @Test func clearingWithoutKeepingAnythingEmptiesIt() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
-            let result = await CLIProbe.capture(["clipboard", "clear", "--json"])
+            let result = await CLIProbe.capture(["clipboard", "clear", "--yes", "--json"])
             #expect(result.object?["removed"] as? Int == 3)
             #expect(result.object?["remaining"] as? Int == 0)
         }
@@ -394,7 +394,7 @@ import Testing
     @Test func clearingForgetsEverySwatch() async throws {
         await CLIProbe.inWorld { world in
             Self.seed(world, count: 4)
-            let result = await CLIProbe.capture(["color", "clear", "--json"])
+            let result = await CLIProbe.capture(["color", "clear", "--yes", "--json"])
             #expect(result.object?["removed"] as? Int == 4)
             #expect(ColorHistoryStore.load(from: world.shared).isEmpty)
         }
@@ -474,7 +474,7 @@ import Testing
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["one.txt", "two.txt"])
             let gone = ShelfIndex.root.appendingPathComponent("two.txt")
-            let result = await CLIProbe.capture(["shelf", "rm", "1", "--json"])
+            let result = await CLIProbe.capture(["shelf", "rm", "1", "--yes", "--json"])
             #expect(result.object?["remaining"] as? Int == 1)
             #expect(!FileManager.default.fileExists(atPath: gone.path))
         }
@@ -483,7 +483,7 @@ import Testing
     @Test func clearingEmptiesTheWholeShelf() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["a", "b", "c"])
-            let result = await CLIProbe.capture(["shelf", "clear", "--json"])
+            let result = await CLIProbe.capture(["shelf", "clear", "--yes", "--json"])
             #expect(result.object?["removed"] as? Int == 3)
             #expect(ShelfIndex.load().isEmpty)
         }

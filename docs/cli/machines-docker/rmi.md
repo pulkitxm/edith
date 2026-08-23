@@ -3,7 +3,7 @@
 Removes an image. Also answers to `remove-image`.
 
 ```
-ed machines docker rmi [--json] [--force] <machine> <image>
+ed machines docker rmi [--json] [--force] [--yes] <machine> <image>
 ```
 
 ## Arguments
@@ -19,6 +19,7 @@ ed machines docker rmi [--json] [--force] <machine> <image>
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emit JSON on stdout instead of the one-line confirmation. |
 | `--force` | flag | off | Remove it even when a container still refers to it. Adds `-f` to the docker command. |
+| `--yes` | flag | off | Apply the removal. Without it, print the exact plan. |
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
 Human output is one line, `removed image <image>`.
@@ -27,9 +28,15 @@ Human output is one line, `removed image <image>`.
 
 ```json
 {
+  "action": "remove docker image",
+  "applied": false,
+  "changed": false,
   "forced": false,
   "image": "postgres:16",
-  "machine": "Asus TUF 7"
+  "machine": "Asus TUF 7",
+  "targets": [
+    "Asus TUF 7:image:postgres:16"
+  ]
 }
 ```
 
@@ -40,15 +47,15 @@ Human output is one line, `removed image <image>`.
 
 ```
 ed machines tuf docker rmi postgres:16
-ed machines tuf docker rmi de3a4eab8fdf --force
+ed machines tuf docker rmi de3a4eab8fdf --force --yes
 ed machines tuf docker remove-image postgres:16 --json
 ```
 
 ## Behaviour notes
 
-Runs `docker image rm [-f] <image>` under a 120 second ceiling. There is no
-`--yes` on this verb, which is deliberate: an image is re-pullable, unlike a
-volume.
+Runs `docker image rm [-f] <image>` under a 120 second ceiling after `--yes`.
+Without confirmation it reports the resolved machine and image, changes
+nothing, and does not connect.
 
 Without `--force`, docker refuses to remove an image a container still refers
 to, even a stopped one, and that refusal becomes exit 1 with docker's message as

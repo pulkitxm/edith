@@ -5,7 +5,7 @@ Empties the shelf.
 Usage:
 
 ```
-ed shelf clear [--json]
+ed shelf clear [--json] [--yes]
 ```
 
 Options:
@@ -13,9 +13,10 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
+| `--yes` | flag | off | Applies the clear. Without it, prints every exact path. |
 
-There are no positional arguments, no `--yes` guard and no way to keep part of
-the shelf: `clear` empties it the moment you run it.
+There are no positional arguments and no way to keep part of the shelf.
+Without `--yes`, `clear` previews every indexed path and changes nothing.
 
 `--json` shape:
 
@@ -31,11 +32,11 @@ Examples:
 
 ```
 ed shelf clear
-ed shelf clear --json
+ed shelf clear --yes --json
 ```
 
 ```
-$ ed shelf clear
+$ ed shelf clear --yes
 cleared 2 items
 ```
 

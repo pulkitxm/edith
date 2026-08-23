@@ -30,7 +30,7 @@ the UI would act on.
 | `ed clipboard pin <index>` | Keep one entry at the top and out of the retention sweep |
 | `ed clipboard unpin <index>` | Let one entry age out again |
 | `ed clipboard rm <index>` | Forget one entry and delete its blob |
-| `ed clipboard clear` | Forget the whole history |
+| `ed clipboard clear` | Preview forgetting the whole history; `--yes` applies it |
 
 A bare `ed clipboard` runs `ls`. `ls` also answers to `list`, and `stats` also
 answers to `size`.
@@ -109,9 +109,9 @@ hint: pass 0 or more
   they rewrite the index, so `ed` and a running Edith cannot interleave writes.
   Reads do not take the lock, so a very long `ls` can race a capture and simply
   show the older list.
-- **Removal is permanent.** `rm` and `clear` delete blobs, and neither offers a
-  `--yes` gate or a Trash step. There is no `ed clipboard` verb that restores
-  anything.
+- **Removal is permanent.** `rm` deletes one blob immediately. `clear` previews
+  exact ids and needs `--yes`. Neither has a Trash step, and there is no
+  `ed clipboard` verb that restores anything.
 - **The extension does not gate reading.** `ed clipboard ls` reports whatever is
   on disk even with the Clipboard extension off; the extension is what captures
   new entries. `ed extensions enable clipboard` turns capture on, and

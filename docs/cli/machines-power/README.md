@@ -24,11 +24,11 @@ Most of this page is disruptive. Read the next table before you type anything.
 | `ed machines services start` | Yes, it changes a unit's state. No confirmation flag. |
 | `ed machines services stop` | Yes, it changes a unit's state. No confirmation flag. |
 | `ed machines services restart` | Yes, it changes a unit's state. No confirmation flag. |
-| `ed machines kill` | Yes, it signals a live process. No confirmation flag. |
+| `ed machines kill` | Yes. `KILL` previews without `--yes`; catchable signals act immediately. |
 | `ed machines broadcast` | As disruptive as the line you give it, multiplied by every machine you own. No confirmation flag. |
 
-Only `reboot` and `shutdown` have a `--yes` gate. `services stop`, `kill` and
-`broadcast` act the moment you press return.
+`reboot`, `shutdown`, and `kill --signal KILL` have a `--yes` gate. Service
+signals, catchable process signals, and `broadcast` act immediately.
 
 ## At a glance
 
@@ -86,7 +86,7 @@ candidates in the hint, and never guesses.
 
 | Code | When |
 | --- | --- |
-| 0 | The command did what it says. Also the dry run of `reboot` and `shutdown` without `--yes`, `services ls` on a machine with no systemd, and `--help` on any of these. |
+| 0 | The command did what it says. Also previews of `reboot`, `shutdown`, and `kill --signal KILL` without `--yes`, `services ls` on a machine with no systemd, and `--help` on any of these. |
 | 1 | The machine refused a reboot or shutdown; a unit verb failed or came back with a privilege message; `kill` was rejected by the far side or given a pid of zero or less; the wake packet could not be built or sent; `broadcast` had at least one machine return non-zero; `broadcast` was given an empty command. |
 | 2 | The command line was wrong: an unknown flag, a missing machine, unit or command, or a pid that is not an integer. |
 | 3 | The machine name is unknown or an ambiguous prefix; `--signal` named something that is not one of the seven; `broadcast` found no machines configured, or `--only` named a machine that does not exist. |

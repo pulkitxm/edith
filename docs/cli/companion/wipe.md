@@ -26,8 +26,8 @@ ed companion wipe --yes
 
 Wiping cannot be undone, which is why `--yes` is mandatory and why the refusal
 names [`ed companion export`](./export.md) as the step to take first. This
-differs from `ed companion stack down --wipe` in what survives: `stack down
---wipe` destroys the containers and their volumes, models included, while
+differs from `ed companion stack down --wipe --yes` in what survives: confirmed
+`stack down --wipe` destroys the containers and their volumes, models included, while
 `wipe` empties the database and vault through the API and leaves the stack
 running and configured. After a wipe, [`ed companion import`](./import.md) of
 an export brings the memory back.
