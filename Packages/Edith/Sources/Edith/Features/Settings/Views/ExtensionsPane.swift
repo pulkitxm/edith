@@ -1159,9 +1159,7 @@ private struct MusicRows: View {
         Section {
             LabeledContent("Music folder") {
                 Button("Open in Finder") {
-                    try? FileManager.default.createDirectory(
-                        at: Repo.musicDir, withIntermediateDirectories: true)
-                    NSWorkspace.shared.open(Repo.musicDir)
+                    _ = try? AppInspectionCenter().openPath(.music)
                 }
                 .pointerCursor()
             }

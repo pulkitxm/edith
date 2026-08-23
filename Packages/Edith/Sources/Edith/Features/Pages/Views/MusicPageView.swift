@@ -741,9 +741,7 @@ struct MusicPage: View {
             .buttonStyle(HoverButtonStyle())
             .help("New folder")
             Button {
-                try? FileManager.default.createDirectory(
-                    at: Repo.musicDir, withIntermediateDirectories: true)
-                NSWorkspace.shared.open(Repo.musicDir)
+                _ = try? AppInspectionCenter().openPath(.music)
             } label: {
                 Image(systemName: "folder")
             }

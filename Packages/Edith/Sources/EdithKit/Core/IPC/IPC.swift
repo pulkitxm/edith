@@ -99,6 +99,10 @@ public enum IPC {
             "com.pulkit.edith.requestWindowSnapshot")
         public static let windowSnapshotResult = Notification.Name(
             "com.pulkit.edith.windowSnapshotResult")
+        public static let requestAppDiagnostics = Notification.Name(
+            "com.pulkit.edith.requestAppDiagnostics")
+        public static let appDiagnostics = Notification.Name(
+            "com.pulkit.edith.appDiagnostics")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {

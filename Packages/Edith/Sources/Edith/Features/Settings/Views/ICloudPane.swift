@@ -3,6 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct ICloudPane: View {
+    private let inspection = AppInspectionCenter()
     @AppStorage(AppStorageKeys.Backup.icloud, store: SharedDefaults.store) private
         var icloudBackup = true
     @AppStorage(AppStorageKeys.Backup.lastBackupAt, store: SharedDefaults.store) private
@@ -111,16 +112,14 @@ struct ICloudPane: View {
             Section {
                 LabeledContent("App data folder") {
                     Button("Open") {
-                        NSWorkspace.shared.open(AppData.supportDir)
+                        _ = try? inspection.openPath(.appData)
                     }
                     .pointerCursor()
                 }
                 if icloudBackup, cloudAvailable {
                     LabeledContent("iCloud folder") {
                         Button("Open") {
-                            try? FileManager.default.createDirectory(
-                                at: AppData.cloudDir, withIntermediateDirectories: true)
-                            NSWorkspace.shared.open(AppData.cloudDir)
+                            _ = try? inspection.openPath(.icloud)
                         }
                         .pointerCursor()
                     }
