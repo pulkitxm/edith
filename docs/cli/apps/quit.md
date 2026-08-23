@@ -60,11 +60,11 @@ would quit 3 apps: Music, Safari, Spotify; pass --yes to apply
 ```
 
 Previews work while Edith is closed. Applying needs the menu bar helper because
-the Automation grant belongs to Edith rather than the `ed` process:
+confirmed execution stays in Edith's app-owned operation path:
 
 ```
 $ ed apps quit Spotify --yes
-asked Edith to quit Spotify
+Edith accepted quit for 1 of 1 apps
 ```
 
 If the helper is closed, only the confirmed form exits 4:
@@ -76,17 +76,19 @@ hint: start Edith, then retry
 
 ## `--json` shape
 
-Preview and apply use the same stable object. `applied` says whether the request
-was sent. `changed` is the number of exact targets handed to Edith, not proof
-that every app has already closed. `targets` contains the same rows as
-`ed apps ls`.
+Preview and apply use the same stable object. `applied` says whether execution
+was requested. `acknowledged` says whether Edith answered. `requested` is the
+exact target count and `changed` is how many termination requests macOS
+accepted. Neither count proves that every app has already closed.
 
 ```json
 {
+  "acknowledged": false,
   "applied": false,
   "changed": 0,
   "force": false,
   "operation": "apps.quit",
+  "requested": 1,
   "targets": [
     {
       "active": false,
@@ -102,10 +104,12 @@ With `--yes`, the same plan becomes:
 
 ```json
 {
+  "acknowledged": true,
   "applied": true,
   "changed": 1,
   "force": false,
   "operation": "apps.quit",
+  "requested": 1,
   "targets": [
     {
       "active": false,
@@ -124,15 +128,14 @@ resolution, protected-app filtering, exact target planning, and execution. The
 System page's confirmation dialogs supply the confirmation that `--yes`
 supplies on the command line.
 
-Confirmed CLI execution sends one `com.pulkit.edith.requestQuitApps`
-notification with the exact planned PIDs and the force mode. The helper does not
-recompute an `--all` selection, so an app launched after the preview cannot be
-quit accidentally. It validates protected bundle ids again before calling
-`terminate()` or `forceTerminate()`.
+Confirmed CLI execution sends the exact planned PIDs, force mode and a unique
+request id. The helper validates protected bundle ids again, calls `terminate()`
+or `forceTerminate()`, and replies with the matching request id and accepted
+count. A missing reply exits 4 instead of claiming success.
 
-The request is fire and forget. An app with unsaved changes may show a save
-dialog and remain open after `ed` exits 0. Check the list again when a script
-needs to know whether the target closed:
+An app with unsaved changes may show a save dialog and remain open after macOS
+accepts the termination request. Check the list again when a script needs to
+know whether the target closed:
 
 ```
 ed apps quit Spotify --yes

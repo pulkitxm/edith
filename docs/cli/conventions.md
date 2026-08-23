@@ -420,7 +420,7 @@ is a local question that needs no permission and no round trip.
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
 | `ed permissions settings` | no | opens the matching System Settings pane locally and never relaunches Edith |
 | `ed usage limits --refresh` | menu bar | only the app polls the providers again; without `--refresh`, `limits` reads the file |
-| `ed apps quit --yes` | menu bar | applying a quit uses the app's Automation grant; previews only read the process table |
+| `ed apps quit --yes` | menu bar | applying a quit runs through the app-owned operation path and waits for acknowledgement; previews only read the process table |
 | `ed music start`, `ed music seek` | menu bar | both drive Edith's own player, which lives in the helper |
 | `ed music play`, `pause`, `stop`, `toggle`, `next`, `previous`, `volume` | menu bar, only for Edith's own player | against Spotify or Apple Music these go through AppleScript and need only that app |
 | `ed machines files undo` | main window | the undo history belongs to an open Finder window and lives in memory |

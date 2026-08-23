@@ -6,14 +6,14 @@ everything at once. Reach for it when you want the list without opening a
 window, or when a script needs a quiet desktop before something noisy runs.
 
 Listing and quit planning read the process table directly and need nothing.
-Applying a quit needs `--yes` and the Edith menu bar helper because the
-Automation grant belongs to Edith rather than to a command line process.
+Applying a quit needs `--yes` and the Edith menu bar helper because confirmed
+execution stays in the same app-owned path as the System page.
 
 ## At a glance
 
 | Command | What it does |
 | --- | --- |
-| `ed apps ls` | Lists every app with a Dock presence, with its pid and bundle id. Runs when you type `ed apps` with no subcommand, and answers to `ed apps list`. |
+| `ed apps ls` | Lists every app with a Dock presence, with its pid, CPU, memory and bundle id. Runs when you type `ed apps` with no subcommand, and answers to `ed apps list`. |
 | `ed apps quit` | Previews or applies an exact plan for one app by name, bundle id or prefix, or everything except Finder and Edith with `--all`. |
 
 ## Commands
@@ -25,11 +25,11 @@ Automation grant belongs to Edith rather than to a command line process.
 
 | Code | When |
 | --- | --- |
-| 0 | The list or preview was printed, or the confirmed quit request was posted. `--help` and `--version` also exit 0. |
+| 0 | The list or preview was printed, or Edith acknowledged a confirmed quit request. `--help` and `--version` also exit 0. |
 | 1 | `ed apps quit` was given neither an app name nor `--all`, was given both, or named a protected app. |
 | 2 | The command line was wrong in the ordinary way: an unknown flag, a second positional argument, or a value the parser could not read. |
 | 3 | The named app is not running, or the name is a prefix that matches more than one running app. |
-| 4 | A confirmed `ed apps quit --yes` was run while the Edith menu bar app was not running. Previews do not need it. |
+| 4 | A confirmed `ed apps quit --yes` could not reach the Edith menu bar app or the app did not acknowledge it. Previews do not need Edith. |
 
 `ed apps ls` only ever exits 0 or 2. Code 1 is otherwise the catch-all for an
 unexpected error escaping either command, and nothing on the listing path throws
@@ -57,6 +57,9 @@ one.
   changes nothing, and works while Edith is closed.
 - The confirmed command sends the exact PIDs in the plan. The helper does not
   recompute `--all`, so an app launched after planning cannot be included.
+- Confirmed commands wait for a correlated helper reply. Exit 0 means Edith
+  received the exact plan and reports how many termination requests macOS
+  accepted. It does not mean each process has finished closing.
 - An empty app name matches every app rather than none, because the empty string
   is a prefix of everything: `ed apps quit ""` exits 3 and lists all of them. It
   is a harmless way to see the resolver's ambiguity message.
@@ -69,11 +72,9 @@ one.
 - Both commands see only apps with a Dock presence. Menu bar agents, helpers and
   daemons are invisible to `ls` and unreachable by `quit`, which is also why
   `ed apps quit --all` never touches the menu bar helper it is talking to.
-- The UI path and CLI path funnel through the same running-app operation center, so
-  the System page's per-row quit button, its `Quit all apps` header button and
-  these commands cannot disagree about what is protected or about what `--force`
-  means. The difference is which process runs it: the UI quits from the main
-  window's process, `ed` quits from the menu bar helper's.
+- The UI path and CLI path funnel through the same running-app operation center,
+  including resource sampling, protected targets and quit execution. The UI
+  quits from the main window process and `ed` asks the menu bar helper.
 - The UI asks before it acts, with a confirmation dialog naming the app or the
   count. `--yes` is the command line equivalent for both named and all-app
   quits.
