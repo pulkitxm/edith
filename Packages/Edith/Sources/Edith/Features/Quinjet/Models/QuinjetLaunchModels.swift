@@ -178,7 +178,7 @@ enum QuinjetCMUXLauncher {
 
     static func launch(
         quinjet: URL, arguments: [String], currentDirectory: String?, replacing workspaceID: String?
-    ) throws -> String {
+    ) async throws -> String {
         guard executable != nil else { throw QuinjetLaunchError.cmuxUnavailable }
         var command = "exec \(shellCommand(executable: quinjet.path, arguments: arguments))"
         if let currentDirectory {
@@ -199,10 +199,10 @@ enum QuinjetCMUXLauncher {
             "return id of quinjetWorkspace",
             "end tell",
         ]
-        return try execute(statements.joined(separator: "\n"))
+        return try await execute(statements.joined(separator: "\n"))
     }
 
-    static func focus(workspaceID: String) throws {
+    static func focus(workspaceID: String) async throws {
         let statements = [
             "tell application id \"com.cmuxterm.app\"", "activate",
             "repeat with cmuxWindow in windows",
@@ -211,14 +211,14 @@ enum QuinjetCMUXLauncher {
             "select tab cmuxWorkspace", "return id of cmuxWorkspace", "end if", "end repeat",
             "end repeat", "error \"workspace is no longer open\"", "end tell",
         ]
-        _ = try execute(statements.joined(separator: "\n"))
+        _ = try await execute(statements.joined(separator: "\n"))
     }
 
-    static func close(workspaceID: String) throws {
+    static func close(workspaceID: String) async throws {
         let statements =
             ["tell application id \"com.cmuxterm.app\""]
             + closeStatements(workspaceID: workspaceID) + ["return \"closed\"", "end tell"]
-        _ = try execute(statements.joined(separator: "\n"))
+        _ = try await execute(statements.joined(separator: "\n"))
     }
 
     static func shellCommand(executable: String, arguments: [String]) -> String {
@@ -245,16 +245,26 @@ enum QuinjetCMUXLauncher {
         ]
     }
 
-    private static func execute(_ source: String) throws -> String {
-        guard let script = NSAppleScript(source: source) else {
-            throw QuinjetLaunchError.cmuxLaunchFailed("the launch request was invalid")
+    private static func execute(_ source: String) async throws -> String {
+        try await QuinjetBackgroundOperation.run {
+            guard let script = NSAppleScript(source: source) else {
+                throw QuinjetLaunchError.cmuxLaunchFailed("the launch request was invalid")
+            }
+            var details: NSDictionary?
+            let result = script.executeAndReturnError(&details)
+            if let details {
+                let message = details[NSAppleScript.errorMessage] as? String ?? "unknown error"
+                throw QuinjetLaunchError.cmuxLaunchFailed(message)
+            }
+            return result.stringValue ?? ""
         }
-        var details: NSDictionary?
-        let result = script.executeAndReturnError(&details)
-        if let details {
-            let message = details[NSAppleScript.errorMessage] as? String ?? "unknown error"
-            throw QuinjetLaunchError.cmuxLaunchFailed(message)
-        }
-        return result.stringValue ?? ""
+    }
+}
+
+enum QuinjetBackgroundOperation {
+    static func run<Value: Sendable>(
+        _ operation: @escaping @Sendable () throws -> Value
+    ) async throws -> Value {
+        try await Task.detached(priority: .userInitiated, operation: operation).value
     }
 }
