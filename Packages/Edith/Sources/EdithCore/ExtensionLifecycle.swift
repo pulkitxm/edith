@@ -125,7 +125,7 @@ public enum ExtensionLifecycleCatalog {
             prerequisites: [
                 instruction(
                     "provider", "Sign in to an agent CLI",
-                    "Install and authenticate Claude Code, Codex, or both.",
+                    "Install and authenticate the agent CLIs you use.",
                     "ed tools ls --json")
             ],
             examples: ["ed extensions enable usage", "ed usage limits --json"],
