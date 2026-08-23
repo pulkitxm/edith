@@ -273,6 +273,23 @@ import Testing
         #expect(!tab.holder.started)
     }
 
+    @Test func changingTerminalSettingsReconfiguresTheOpenProject() throws {
+        let model = QuinjetPageModel(client: client)
+        let tab = try #require(model.selectedTab)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main, Self.feature], in: tab,
+            launchEnabled: false)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .cmux, theme: .dracula, appearance: .light)
+
+        model.apply(configuration, launchEnabled: false)
+
+        #expect(tab.worktree == Self.main)
+        #expect(tab.worktrees == [Self.main, Self.feature])
+        #expect(tab.launchConfiguration == configuration)
+        #expect(!tab.holder.started)
+    }
+
     @Test func terminalRoutesManagedOSCSequence() async {
         let holder = TerminalSessionHolder()
         var action: QuinjetHostAction?

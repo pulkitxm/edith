@@ -9,6 +9,7 @@ struct QuinjetPage: View {
     private var themeName = QuinjetTheme.quinjet.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +28,9 @@ struct QuinjetPage: View {
         .task {
             guard automaticActionsEnabled else { return }
             await model.refreshProjects()
+        }
+        .onChange(of: configuration) { _, configuration in
+            model.apply(configuration, launchEnabled: launchEnabled)
         }
         .onDisappear { model.stopAll() }
     }
@@ -118,7 +122,9 @@ struct QuinjetPage: View {
         if tab.worktree == nil {
             QuinjetProjectPicker(model: model, tab: tab)
         } else {
-            QuinjetTerminalWorkspace(model: model, tab: tab)
+            QuinjetTerminalWorkspace(
+                model: model, tab: tab,
+                useEmbedded: { terminalName = QuinjetTerminal.embedded.rawValue })
         }
     }
 }
@@ -201,6 +207,7 @@ private struct QuinjetTabButton: View {
 private struct QuinjetTerminalWorkspace: View {
     let model: QuinjetPageModel
     @Bindable var tab: QuinjetTab
+    let useEmbedded: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -319,17 +326,41 @@ private struct QuinjetTerminalWorkspace: View {
     }
 
     private var externalWorkspace: some View {
-        ContentUnavailableView {
-            Label("Running in cmux", systemImage: "macwindow.on.rectangle")
-        } description: {
-            Text("Quinjet is running in cmux with the selected project and theme.")
-        } actions: {
-            Button("Open again in cmux", action: restart)
-                .buttonStyle(QuinjetToolbarButtonStyle())
-                .pointerCursor()
+        let palette = TerminalPalette.quinjet(
+            theme: tab.launchConfiguration.theme,
+            appearance: tab.launchConfiguration.appearance)
+        return ZStack {
+            Color(nsColor: palette.background)
+            VStack(spacing: UIScale.pt(18)) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: UIScale.pt(30), weight: .medium))
+                    .foregroundStyle(Color(nsColor: palette.caret))
+                VStack(spacing: UIScale.pt(6)) {
+                    Text("Open in cmux")
+                        .font(.system(size: UIScale.pt(22), weight: .bold))
+                    Text(tab.title)
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    Text(tab.worktree?.path ?? "")
+                        .font(DashSkin.mono(10.5))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(Color(nsColor: palette.foreground))
+                HStack(spacing: UIScale.pt(10)) {
+                    Button("Show in cmux", action: restart)
+                        .buttonStyle(QuinjetToolbarButtonStyle())
+                        .pointerCursor()
+                    Button("Use embedded terminal", action: useEmbedded)
+                        .buttonStyle(QuinjetToolbarButtonStyle())
+                        .pointerCursor()
+                }
+                Text("Theme: \(tab.launchConfiguration.theme.label)")
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.65))
+            }
+            .padding(UIScale.pt(30))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
     }
 
     private func restart() {

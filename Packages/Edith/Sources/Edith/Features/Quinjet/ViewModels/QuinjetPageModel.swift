@@ -235,6 +235,18 @@ final class QuinjetPageModel {
         }
     }
 
+    func apply(
+        _ configuration: QuinjetLaunchConfiguration, launchEnabled: Bool
+    ) {
+        guard let tab = selectedTab, let worktree = tab.worktree,
+            tab.launchConfiguration != configuration
+        else { return }
+        open(
+            worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
+            remote: tab.remote, in: tab, launchEnabled: launchEnabled,
+            configuration: configuration)
+    }
+
     func stopAll() {
         for tab in tabs { tab.holder.stop() }
     }
