@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithCLI
+@testable import EdithCore
 @testable import EdithKit
 
 struct UICapability {
@@ -14,6 +15,12 @@ struct UICapability {
         self.surface = surface
         self.action = action
         self.cli = cli
+    }
+
+    init(_ registered: RegisteredUserInterfaceAction) {
+        surface = registered.surface
+        action = registered.action
+        cli = registered.cli
     }
 
     var label: String { (["ed"] + cli).joined(separator: " ") }
@@ -45,7 +52,7 @@ enum UIParity {
             "the Docker window never pulls images, for a project or otherwise",
     ]
 
-    static let capabilities: [UICapability] = [
+    static let auditedCapabilities: [UICapability] = [
         UICapability(
             "Settings", "change any preference the panes write", ["config", "set", "theme", "dim"]),
         UICapability(
@@ -520,6 +527,15 @@ enum UIParity {
             "Quinjet cmux workspace", "show the external review",
             ["quinjet", "focus", "1"]),
     ]
+
+    static let legacyCapabilities = auditedCapabilities.filter { capability in
+        !UserInterfaceActionCatalog.actions.contains {
+            capability.cli.starts(with: $0.operation.cli)
+        }
+    }
+
+    static let capabilities =
+        UserInterfaceActionCatalog.actions.map(UICapability.init) + legacyCapabilities
 }
 
 @Suite struct CLIParityTests {
@@ -561,6 +577,8 @@ enum UIParity {
 
     @Test func everyMappedCommandIsAlsoInTheCompletionTree() {
         for capability in UIParity.capabilities {
+            let expected = Self.commandPath(capability.cli).split(separator: " ").dropFirst().map(
+                String.init)
             var node = CommandTree.root
             var walked: [String] = []
             for word in capability.cli where !word.hasPrefix("-") {
@@ -569,8 +587,9 @@ enum UIParity {
                 walked.append(word)
             }
             #expect(
-                !walked.isEmpty,
-                "`\(capability.label)` is missing from CommandTree, so it will not complete")
+                walked == expected,
+                "`\(capability.label)` does not reach its exact CommandTree route")
+            #expect(node.children.isEmpty, "`\(capability.label)` does not complete to a leaf")
         }
     }
 
@@ -588,6 +607,64 @@ enum UIParity {
             #expect(walked == descriptor.cli, "\(label) is incomplete in CommandTree")
             #expect(node.children.isEmpty, "\(label) resolves to a command group, not a leaf")
         }
+    }
+
+    @Test func productionRegistryClassifiesEverySharedOperationExactlyOnce() {
+        let registrations = UserOperationCatalog.registrations
+        let descriptors = registrations.map(\.descriptor)
+        #expect(descriptors == UserOperationCatalog.descriptors)
+        #expect(Set(descriptors.map(\.id)).count == descriptors.count)
+        #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+
+        let actionIDs = UserInterfaceActionCatalog.actions.map(\.operation.id)
+        let commandLineOnlyIDs = UserOperationCatalog.commandLineOnly.map(\.descriptor.id)
+        #expect(Set(actionIDs).isDisjoint(with: commandLineOnlyIDs))
+        #expect(Set(actionIDs + commandLineOnlyIDs) == Set(descriptors.map(\.id)))
+    }
+
+    @Test func productionUIActionsCarryARegisteredOperationAndCompleteInvocation() {
+        for action in UserInterfaceActionCatalog.actions {
+            #expect(UserOperationCatalog.descriptor(id: action.operation.id) == action.operation)
+            #expect(UserOperationCatalog.descriptor(cli: action.operation.cli) == action.operation)
+            #expect(!action.surface.isEmpty)
+            #expect(action.action.count > 3)
+            #expect(action.cli.starts(with: action.operation.cli))
+            #expect(action.cli.count >= action.operation.cli.count)
+        }
+    }
+
+    @Test func commandLineOnlyOperationsExplainWhyTheyHaveNoUIAction() {
+        for registration in UserOperationCatalog.commandLineOnly {
+            guard case let .commandLineOnly(reason) = registration.exposure else {
+                Issue.record("\(registration.descriptor.id.rawValue) is not command-line only")
+                continue
+            }
+            #expect(reason.count > 20)
+        }
+    }
+
+    @Test func presentationOnlyStateIsExplicitAndHasNoOperationRoute() {
+        let states = UserInterfaceActionCatalog.presentationOnly
+        #expect(!states.isEmpty)
+        #expect(Set(states.map(\.state)).count == states.count)
+        for state in states {
+            #expect(!state.surface.isEmpty)
+            #expect(!state.state.isEmpty)
+            #expect(state.reason.count > 20)
+        }
+    }
+
+    @Test func legacyInventoryContainsOnlyOperationsAwaitingSharedDescriptors() {
+        for capability in UIParity.legacyCapabilities {
+            #expect(
+                !UserInterfaceActionCatalog.actions.contains {
+                    capability.cli.starts(with: $0.operation.cli)
+                },
+                "\(capability.label) is duplicated after joining the production registry")
+        }
+        #expect(
+            UIParity.capabilities.count
+                == UserInterfaceActionCatalog.actions.count + UIParity.legacyCapabilities.count)
     }
 
     @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {
