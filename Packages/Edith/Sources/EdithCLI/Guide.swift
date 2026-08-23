@@ -195,6 +195,25 @@ public enum Guide {
         ed tuf cd                               back to the home directory
         ```
 
+        ## Quinjet review workspaces
+
+        Quinjet discovery and launch use the same request builder as Edith's Quinjet
+        page. `--machine` accepts a configured machine or `local`, and remote requests
+        reuse Edith's shared SSH control socket.
+
+        ```
+        ed quinjet projects                     recent local projects
+        ed quinjet projects --machine build     recent projects on build
+        ed quinjet worktrees ~/code/edith       every worktree in one project
+        ed quinjet open ~/code/edith            print the launch command, do not run it
+        ed quinjet launch ~/code/edith          launch in the current terminal
+        ed quinjet launch ~/code/edith --cmux   launch in cmux
+        ```
+
+        `open` is always safe to inspect or pipe. It resolves the worktree and prints
+        the exact quoted command without starting Quinjet. `launch` is the explicit
+        execution boundary. Both accept `--theme`, `--appearance` and `--json`.
+
         ## Companion memory
 
         The companion stores Markdown notes as append-only episodes. `ed` can choose

@@ -93,6 +93,15 @@ import Testing
         #expect(flags.candidates == ["--until-lid-reopens"])
     }
 
+    @Test func quinjetOperationsAndLaunchOptionsComplete() {
+        let commands = Self.plan(["ed", "quinjet", ""], 2)
+        #expect(commands.candidates == ["projects", "worktrees", "open", "launch"])
+        let appearance = Self.plan(["ed", "quinjet", "launch", "--a"], 3)
+        #expect(appearance.candidates == ["--appearance"])
+        let target = Self.plan(["ed", "quinjet", "projects", "--m"], 3)
+        #expect(target.candidates == ["--machine"])
+    }
+
     @Test func machineNamesCompleteInsideTheMachinesTree() {
         let result = Self.plan(["ed", "machines", "docker", "ps", ""], 4)
         #expect(result.candidates.contains("tuf"))
