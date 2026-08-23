@@ -217,7 +217,11 @@ private struct QuinjetRemoteProjectPicker: View {
 
     private func entryRow(_ entry: RemoteFileEntry) -> some View {
         Button {
-            picker.select(entry)
+            if entry.isDirectory || entry.kind == .symlink {
+                Task { await picker.navigate(to: entry.path) }
+            } else {
+                picker.select(entry)
+            }
         } label: {
             HStack(spacing: UIScale.pt(11)) {
                 Image(systemName: entry.isDirectory ? "folder.fill" : "doc")
@@ -244,11 +248,6 @@ private struct QuinjetRemoteProjectPicker: View {
             QuinjetFolderRowStyle(selected: picker.selectedEntry == entry, dark: dark)
         )
         .pointerCursor()
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                guard entry.isDirectory || entry.kind == .symlink else { return }
-                Task { await picker.navigate(to: entry.path) }
-            })
     }
 
     private var shortcuts: some View {
