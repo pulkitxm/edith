@@ -128,5 +128,6 @@ public enum CLIEnvironment {
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        QuinjetCLIEnvironment.reset()
     }
 }

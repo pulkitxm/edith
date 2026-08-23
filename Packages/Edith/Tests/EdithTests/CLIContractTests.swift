@@ -344,6 +344,32 @@ enum JSONContract {
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
         JSONCase(
             "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
+        JSONCase("ed quinjet projects", ["quinjet", "projects", "--json"]),
+        JSONCase(
+            "ed quinjet worktrees",
+            ["quinjet", "worktrees", "/tmp/edith-no-project", "--json"]),
+        JSONCase(
+            "ed quinjet open", ["quinjet", "open", "/tmp/edith-no-project", "--json"]),
+        JSONCase(
+            "ed quinjet launch", ["quinjet", "launch", "/tmp/edith-no-project", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed quinjet status", ["quinjet", "status", "--json"]),
+        JSONCase("ed quinjet sessions", ["quinjet", "sessions", "--json"]),
+        JSONCase(
+            "ed quinjet new", ["quinjet", "new", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet focus", ["quinjet", "focus", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet close", ["quinjet", "close", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet restart", ["quinjet", "restart", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet switch", ["quinjet", "switch", "1", "/tmp/worktree", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed machines ls", ["machines", "ls", "--json"]),
         JSONCase("ed machines show", ["machines", "show", "nowhere-at-all", "--json"]),
         JSONCase(

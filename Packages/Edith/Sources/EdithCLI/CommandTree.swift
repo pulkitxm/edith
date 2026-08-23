@@ -25,6 +25,11 @@ public enum ArgumentKind: Equatable, Sendable {
     case attentionEntity
     case attentionCategory
     case downloadKind
+    case quinjetAppearance
+    case quinjetMachine
+    case quinjetPath
+    case quinjetSession
+    case quinjetTheme
     case localPath
     case musicPlayer
     case remotePath
@@ -543,6 +548,62 @@ public enum CommandTree {
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
+                ]),
+            CommandNode(
+                "quinjet", "Discover and open Quinjet review workspaces.",
+                children: [
+                    CommandNode(
+                        "projects", "List recent Quinjet projects.",
+                        options: ["--json", "--help", "--machine"],
+                        optionValues: ["--machine": .quinjetMachine]),
+                    CommandNode(
+                        "worktrees", "List the worktrees in a Quinjet project.",
+                        options: ["--json", "--help", "--machine"],
+                        optionValues: ["--machine": .quinjetMachine],
+                        arguments: [.quinjetPath]),
+                    CommandNode(
+                        "open", "Print a Quinjet launch request without running it.",
+                        options: [
+                            "--json", "--help", "--machine", "--theme", "--appearance",
+                            "--cmux", "--embedded",
+                        ],
+                        optionValues: [
+                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
+                            "--appearance": .quinjetAppearance,
+                        ], arguments: [.quinjetPath]),
+                    CommandNode(
+                        "launch", "Launch a Quinjet review session.",
+                        options: [
+                            "--json", "--help", "--machine", "--theme", "--appearance",
+                            "--cmux", "--embedded",
+                        ],
+                        optionValues: [
+                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
+                            "--appearance": .quinjetAppearance,
+                        ],
+                        arguments: [.quinjetPath]),
+                    CommandNode(
+                        "status", "Show the selected native Quinjet session.",
+                        options: common, arguments: [.quinjetSession]),
+                    CommandNode(
+                        "sessions", "List native Quinjet sessions in the running app.",
+                        aliases: ["list", "ls"], options: common),
+                    CommandNode(
+                        "new", "Create and select a native Quinjet session.",
+                        aliases: ["create"], options: common),
+                    CommandNode(
+                        "focus", "Select and focus a native Quinjet session.",
+                        aliases: ["select"], options: common, arguments: [.quinjetSession]),
+                    CommandNode(
+                        "close", "Close a native Quinjet session.",
+                        options: ["--json", "--help", "--yes"],
+                        arguments: [.quinjetSession], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "restart", "Restart a native Quinjet session in place.",
+                        options: common, arguments: [.quinjetSession]),
+                    CommandNode(
+                        "switch", "Switch a native Quinjet session to another worktree.",
+                        options: common, arguments: [.quinjetSession, .quinjetPath]),
                 ]),
             CommandNode(
                 "machines", "The computers Edith can reach over SSH.",

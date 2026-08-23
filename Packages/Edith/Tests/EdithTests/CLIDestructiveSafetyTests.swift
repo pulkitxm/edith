@@ -26,6 +26,7 @@ import Testing
         "ed machines power shutdown",
         "ed machines rm",
         "ed music rm",
+        "ed quinjet close",
         "ed shelf clear",
         "ed shelf rm",
     ]

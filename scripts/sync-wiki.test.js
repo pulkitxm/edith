@@ -175,14 +175,28 @@ test("the sidebar collapses a group behind its own link", () => {
   expect(sidebar).toContain("- [Conventions](CLI-Conventions)");
 });
 
-test("the sidebar shows one row per group when collapsed", () => {
+test("the sidebar gives every group a direct or collapsible row", () => {
   const sidebar = buildPages().get("_Sidebar.md");
   const groups = docs.filter((d) => d.isGroup).length;
+  const collapsibleGroups = docs.filter(
+    (group) =>
+      group.isGroup &&
+      docs.some((candidate) => candidate.parent === group.slug),
+  );
+  const directGroups = docs.filter(
+    (group) =>
+      group.isGroup &&
+      !docs.some((candidate) => candidate.parent === group.slug),
+  );
   const commands = docs.filter((d) => d.depth === 1).length;
   const opened = sidebar.match(/<details>/g) ?? [];
   const closed = sidebar.match(/<\/details>/g) ?? [];
-  expect(opened.length).toBe(groups);
-  expect(closed.length).toBe(groups);
+  expect(opened.length).toBe(collapsibleGroups.length);
+  expect(closed.length).toBe(collapsibleGroups.length);
+  for (const group of directGroups) {
+    expect(sidebar).toContain(`- [${group.title}](${group.slug})`);
+  }
+  expect(collapsibleGroups.length + directGroups.length).toBe(groups);
   expect(commands).toBeGreaterThan(groups * 2);
 });
 
