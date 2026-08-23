@@ -172,7 +172,8 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         let result = await CLIProbe.runInWorld([
             "quinjet", "launch", "/srv/edith", "--machine", "build", "--theme", "gruvbox",
             "--json",
-        ]) { _ in
+        ]) { world in
+            world.shared.set("dark", forKey: AppStorageKeys.General.appearance)
             CLIEnvironment.executableNamed = { _ in URL(fileURLWithPath: "/opt/bin/quinjet") }
             QuinjetCLIEnvironment.resolveTarget = { _ in
                 QuinjetCommandTarget(
