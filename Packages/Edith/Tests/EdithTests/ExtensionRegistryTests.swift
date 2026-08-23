@@ -7,6 +7,7 @@ import Testing
     private let knownDefaultsKeys: Set<String> = [
         "tabUsageEnabled",
         "tabHerdrEnabled",
+        "tabQuinjetEnabled",
         "tabSystemEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
@@ -38,16 +39,18 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "system", "machines", "notchShelf", "clipboard",
+                "usage", "herdr", "quinjet", "system", "machines", "notchShelf", "clipboard",
             ])
     }
 
     @Test func toolRequirementsMatchExtensionDependencies() {
         let music = ExtensionRegistry.entries.first { $0.id == "music" }!
         let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
+        let quinjet = ExtensionRegistry.entries.first { $0.id == "quinjet" }!
 
         #expect(music.requiredTools == [.youtubeDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
+        #expect(quinjet.requiredTools == [.quinjet])
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
@@ -74,6 +77,7 @@ import Testing
         let required: [String: [ExtensionPermission]] = [
             "usage": [],
             "herdr": [],
+            "quinjet": [],
             "system": [],
             "machines": [],
             "companion": [],
@@ -91,6 +95,7 @@ import Testing
         let optional: [String: [ExtensionPermission]] = [
             "usage": [.notifications],
             "herdr": [],
+            "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
             "machines": [.notifications],
             "companion": [],
@@ -209,6 +214,7 @@ import Testing
         let expected: [String: Bool] = [
             "tabUsageEnabled": false,
             "tabHerdrEnabled": false,
+            "tabQuinjetEnabled": false,
             "tabSystemEnabled": true,
             "tabMachinesEnabled": false,
             "tabCompanionEnabled": false,

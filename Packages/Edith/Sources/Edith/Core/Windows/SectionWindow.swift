@@ -39,6 +39,7 @@ struct DetachedSectionView: View {
         case .attention: AttentionPage()
         case .dashboard: DashboardView()
         case .herdr: HerdrPage()
+        case .quinjet: QuinjetPage()
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()

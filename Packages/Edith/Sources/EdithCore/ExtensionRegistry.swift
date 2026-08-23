@@ -93,6 +93,12 @@ public enum ExtensionRegistry {
             symbolName: "rectangle.split.3x1.fill", group: .agent, featured: true,
             defaultsKey: "tabHerdrEnabled", requiredCapabilities: [.herdrSessions]),
         ExtensionRegistryEntry(
+            id: "quinjet", title: "Quinjet",
+            subtitle: "Review pull requests and live workspace changes in a native terminal.",
+            symbolName: "arrow.triangle.branch", group: .agent, featured: true,
+            defaultsKey: "tabQuinjetEnabled", requiredCapabilities: [.localTerminal],
+            requiredToolIDs: ["quinjet"]),
+        ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
             symbolName: "switch.2", group: .system, featured: true,

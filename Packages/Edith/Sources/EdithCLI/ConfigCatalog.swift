@@ -45,7 +45,8 @@ public struct SettingDefinition: Equatable, Sendable {
 public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "usage", "limits", "menubar", "alerts", "budget", "dashboard",
-        "machines", "herdr", "companion", "finder", "system", "cleaner", "music", "calendar",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
+        "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "micmute", "backup", "permissions",
         "terminal",
@@ -53,8 +54,8 @@ public enum ConfigCatalog {
 
     public static let settings: [SettingDefinition] =
         appearance + panel + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + herdr + companion + finder + system
-        + cleaner
+        + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
+        + system + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
         + backup + permissions + terminal
 
@@ -392,6 +393,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.herdrEnabled, .bool, group: "herdr",
             summary: "Herdr extension: live sessions on this Mac and SSH machines.",
+            fallback: .bool(false))
+    ]
+
+    private static let quinjet: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.quinjetEnabled, .bool, group: "quinjet",
+            summary: "Quinjet extension: pull request and live workspace review.",
             fallback: .bool(false))
     ]
 

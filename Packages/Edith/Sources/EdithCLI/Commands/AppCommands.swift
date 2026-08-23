@@ -341,8 +341,8 @@ struct AppRevealCommand: AsyncParsableCommand {
         help: ArgumentHelp(
             "The section to show; without it the window comes up where it was.",
             discussion:
-                "One of home, dashboard, herdr, music, calendar, system, machines, companion, "
-                + "extensions, settings, about."))
+                "One of home, dashboard, herdr, quinjet, music, calendar, system, machines, "
+                + "companion, extensions, settings, about."))
     var section: String?
 
     @Option(help: "A tab inside the section; companion and settings have them.")

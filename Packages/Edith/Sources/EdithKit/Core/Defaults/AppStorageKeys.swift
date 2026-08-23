@@ -194,6 +194,7 @@ public enum AppStorageKeys {
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"
+        public static let quinjetEnabled = "tabQuinjetEnabled"
         public static let systemEnabled = "tabSystemEnabled"
         public static let usageEnabled = "tabUsageEnabled"
     }
