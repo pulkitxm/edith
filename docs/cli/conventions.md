@@ -59,7 +59,8 @@ than from Foundation, which is never used on the output path:
 The top level is not always an object. Anything that is a list is a list:
 `ed usage limits`, `ed usage projects`, `ed usage sources`, `ed permissions
 refresh`, `ed calendar ls`, `ed clipboard ls`, `ed download ls`, `ed machines
-ls`, `ed extensions ls` and `ed app actions` all emit a top-level array. Others,
+ls`, `ed extensions ls`, `ed app actions`, `ed app paths`, and `ed app links`
+all emit a top-level array. Others,
 `ed version`, `ed permissions ls`, `ed usage summary` and `ed install` among
 them, emit an object.
 
@@ -414,6 +415,7 @@ is a local question that needs no permission and no round trip.
 
 | Command | Needs | Why |
 | --- | --- | --- |
+| `ed app diagnostics` | menu bar | uptime and idle wakeups belong to the live helper process |
 | `ed app clean-keys`, `ed app test-notification`, `ed app open` | menu bar | the helper owns the panel, the keyboard lock and notifications |
 | `ed app quit`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it |
 | `ed calendar ls` | menu bar | the calendar grant belongs to the Edith bundle, not to `ed` |
@@ -431,6 +433,7 @@ is a local question that needs no permission and no round trip.
 | `ed usage machines collect`, `forget` | no | the collector runs over SSH from this process, and the fold back into `usage.json` is the same in-process pipeline `ed usage refresh` runs |
 | `ed system stats`, `ed system disks` | no | the same sampler, run in this process |
 | `ed clipboard`, `ed color`, `ed shelf`, `ed download`, `ed cleaner` | no | stores under Application Support and the shared defaults suite |
+| `ed app info`, `ed app paths`, `ed app links`, `ed app open-path`, `ed app open-link` | no | bundle metadata, known filesystem locations, and fixed or cached links |
 | `ed apps ls`, `ed tools ls`, `ed app actions`, `ed app updates`, `ed app clear-updates` | no | the process table, `PATH`, and a log file |
 | `ed tools install` | no | it fetches and installs the tool itself, then checks the tool landed on `PATH` |
 | `ed music ls`, `mkdir`, `mv`, `rename`, `rm`, `rescan`, `shuffle`, `repeat`, `status`, `players` | no | the library is a folder of files and two defaults keys |

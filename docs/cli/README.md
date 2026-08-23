@@ -25,7 +25,7 @@ key.
 | Page | What it covers |
 | --- | --- |
 | [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
-| [`ed app`](./app/README.md) | One-shot app actions, section reveal, and PNG window snapshots |
+| [`ed app`](./app/README.md) | App identity, diagnostics, paths, external links, and one-shot actions |
 | [`ed extensions`](./extensions/README.md) | Turning Edith's features on and off |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
