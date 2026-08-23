@@ -400,9 +400,9 @@ remote path and a `<local>` is a local one, and `cp`, `mv` and `rm` take several
 of them before the destination, like the shell tools they mirror.
 
 Completion is served by a hand-maintained mirror of this whole tree rather than
-by the parser, so adding a flag means adding it in two places. If a flag
-completes but does not parse, or parses but does not complete, that mirror is
-where the two disagree.
+by the parser, so adding a flag means adding it in two places. Tests compare its
+commands, aliases, flags and typed option values with the parser before the
+binary ships.
 
 ## What needs the app running
 

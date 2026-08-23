@@ -71,6 +71,40 @@ import Testing
         #expect(ToolVersionCache.cached(for: missing) == nil)
     }
 
+    @Test func aBrokenExecutableIsNotReportedInstalled() async throws {
+        try await CLIProbe.inWorld { world in
+            let executable = world.sandbox.appendingPathComponent("quinjet")
+            try Data("#!/bin/sh\necho broken\nexit 7\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: executable.path)
+            CLIEnvironment.executableNamed = { $0 == "quinjet" ? executable : nil }
+
+            let json = await CLIProbe.capture(["tools", "ls", "--json"])
+            let plain = await CLIProbe.capture(["tools", "ls"])
+            let tools = json.array as? [[String: Any]]
+            let quinjet = tools?.first { $0["id"] as? String == "quinjet" }
+
+            #expect(json.code == 0)
+            #expect(quinjet?["installed"] as? Bool == false)
+            #expect(quinjet?["path"] as? String == executable.path)
+            #expect(quinjet?["version"] is NSNull)
+            #expect(plain.stdout.contains("quinjet"))
+            #expect(plain.stdout.contains("broken"))
+        }
+    }
+
+    @Test func toolHelpAndCompletionFollowProvisioningCatalog() async {
+        let help = await CLIProbe.run(["tools", "install", "--help"])
+        let completion = CompletionEngine.plan(
+            CompletionRequest(words: ["ed", "tools", "install", ""], index: 3), machines: [],
+            configKeys: [], extensionIDs: [])
+        let ids = ToolProvisioning.all.map(\.id)
+
+        #expect(help.code == 0)
+        for id in ids { #expect(help.stdout.contains(id)) }
+        #expect(completion.candidates == ids)
+    }
+
     @Test func theCLIAndTheUIAgreeOnHowAPlaySourceIsSpelled() {
         #expect(
             MusicSourceRequest.folder("Albums/Live").payload as? [String: String]
