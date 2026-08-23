@@ -348,6 +348,78 @@ import Testing
     }
 }
 
+@Suite struct MusicTransportExecutionTests {
+    @Test func everyTransportDescriptorIsRegistered() {
+        for operation in MusicTransportOperation.allCases {
+            #expect(
+                UserOperationCatalog.descriptor(id: operation.descriptor.id) == operation.descriptor
+            )
+            #expect(
+                UserOperationCatalog.descriptor(cli: operation.descriptor.cli)
+                    == operation.descriptor)
+        }
+    }
+
+    @Test func libraryRequestsProduceTheHelperPayloads() throws {
+        let track = try #require(
+            MusicTransportExecution.payloads(for: .startTrack("Focus/a.mp3")).first)
+        #expect(track["action"] as? String == "toggle")
+        #expect(track["track"] as? String == "Focus/a.mp3")
+
+        let source = try #require(
+            MusicTransportExecution.payloads(
+                for: .startSource(.folder("Focus"), start: "Focus/a.mp3")
+            ).first)
+        #expect(source["action"] as? String == "playSource")
+        #expect(source[MusicSourceRequest.kindKey] as? String == "folder")
+        #expect(source[MusicSourceRequest.pathKey] as? String == "Focus")
+        #expect(source["start"] as? String == "Focus/a.mp3")
+
+        let seek = try #require(MusicTransportExecution.payloads(for: .seek(2)).first)
+        let volume = try #require(MusicTransportExecution.payloads(for: .volume(-1)).first)
+        #expect(seek["value"] as? Double == 1)
+        #expect(volume["value"] as? Double == 0)
+    }
+
+    @Test func stopShuffleAndRepeatUseTheExistingHelperVerbs() {
+        let stop = MusicTransportExecution.payloads(for: .stop)
+        #expect(stop.count == 2)
+        #expect(stop[0]["action"] as? String == "pause")
+        #expect(stop[1]["action"] as? String == "seek")
+        #expect(stop[1]["value"] as? Double == 0)
+        #expect(
+            MusicTransportExecution.payloads(for: .shuffle(true)).first?["action"] as? String
+                == "shuffle")
+        #expect(
+            MusicTransportExecution.payloads(for: .repeat(false)).first?["action"] as? String
+                == "loop")
+    }
+
+    @Test func statusUsesTheReadAdapterWithoutSendingACommand() {
+        var commands = 0
+        var reads = 0
+        MusicTransportExecution.perform(
+            .status, sendCommand: { _ in commands += 1 }, requestStatus: { reads += 1 })
+        #expect(commands == 0)
+        #expect(reads == 1)
+    }
+
+    @Test func targetAdapterSeparatesBuiltInAndExternalExecution() throws {
+        var builtIn: [BuiltinCommand] = []
+        var external: [(PlayerAction, MusicPlayer)] = []
+        try MusicTransportExecution.perform(
+            .stop, on: .builtin, sendBuiltin: { builtIn.append($0) },
+            sendExternal: { external.append(($0, $1)) })
+        try MusicTransportExecution.perform(
+            .next, on: .spotify, sendBuiltin: { builtIn.append($0) },
+            sendExternal: { external.append(($0, $1)) })
+        #expect(builtIn == [BuiltinCommand("pause"), BuiltinCommand("seek", value: 0)])
+        #expect(external.count == 1)
+        #expect(external.first?.0 == .next)
+        #expect(external.first?.1 == .spotify)
+    }
+}
+
 @Suite struct PlayerSnapshotTextTests {
     @Test func everyStatusLineNamesThePlayerItCameFrom() {
         for player in MusicPlayer.allCases {
@@ -429,7 +501,43 @@ import Testing
             let result = await CLIProbe.capture(["music", "pause"])
             #expect(result.code == 0)
             #expect(result.stdout == "paused  (Edith)\n")
-            #expect(world.postedNames().contains(IPC.Name.musicCommand.rawValue))
+            let payload = world.postedPayloads(for: IPC.Name.musicCommand).last
+            #expect(payload?["action"] as? String == "pause")
+        }
+    }
+
+    @Test func builtInStatusRequestsStateThroughTheSharedReadAdapter() async throws {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.shared.set(true, forKey: MusicSession.builtinExtensionKey)
+            world.answers { _ in ["track": "Focus.mp3", "isPlaying": false] }
+            world.players([:])
+            let result = await CLIProbe.capture(["music", "status", "--player", "builtin"])
+            #expect(result.code == 0)
+            #expect(world.postedNames().contains(IPC.Name.requestMusicState.rawValue))
+        }
+    }
+
+    @Test func seekShuffleAndRepeatPostTheirSharedPayloads() async throws {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            let seek = await CLIProbe.capture(["music", "seek", "0.25", "--json"])
+            let shuffle = await CLIProbe.capture(["music", "shuffle", "on", "--json"])
+            let repeated = await CLIProbe.capture(["music", "repeat", "off", "--json"])
+            #expect(seek.code == 0)
+            #expect(seek.object?["position"] as? Double == 0.25)
+            #expect(shuffle.code == 0)
+            #expect(shuffle.object?["shuffle"] as? Bool == true)
+            #expect(repeated.code == 0)
+            #expect(repeated.object?["repeat"] as? Bool == false)
+            let payloads = world.postedPayloads(for: IPC.Name.musicCommand)
+            #expect(payloads.count == 3)
+            #expect(payloads[0]["action"] as? String == "seek")
+            #expect(payloads[0]["value"] as? Double == 0.25)
+            #expect(payloads[1]["action"] as? String == "shuffle")
+            #expect(payloads[1]["value"] as? Bool == true)
+            #expect(payloads[2]["action"] as? String == "loop")
+            #expect(payloads[2]["value"] as? Bool == false)
         }
     }
 

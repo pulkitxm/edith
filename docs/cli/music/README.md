@@ -99,6 +99,12 @@ hint: open Spotify, then retry
 `start`, `seek`, `shuffle` and `repeat` always mean Edith's own player, because
 they drive the library queue rather than a generic transport.
 
+The command line, Music page, menu bar player, notch controls and media keys use
+the same transport requests. A request therefore keeps the same play, pause,
+stop, track, folder, seek, volume, shuffle and repeat semantics regardless of
+which surface sent it. Scripts can use the commands above noninteractively and
+add `--json` whenever they need stable structured output.
+
 ## Commands
 
 - [`ed music status`](./status.md)
