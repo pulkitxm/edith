@@ -162,6 +162,10 @@ public enum CompletionEngine {
         case .runningApp: return runningApps
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
+        case .colorIndex:
+            return ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).indices.map {
+                String($0 + 1)
+            }
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
         case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)

@@ -6,6 +6,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case runningApp
     case cleanerCategory
     case colorFormat
+    case colorIndex
     case pruneTarget
     case composeProject
     case historyIndex
@@ -513,6 +514,12 @@ public enum CommandTree {
             CommandNode(
                 "color", "The colours picked with the colour picker.", aliases: ["colour"],
                 children: [
+                    CommandNode(
+                        "pick", "Open Edith's system colour sampler.", options: common),
+                    CommandNode(
+                        "copy", "Copy one picked colour to the pasteboard.",
+                        options: ["--json", "--help", "--format"],
+                        optionValues: ["--format": .colorFormat], arguments: [.colorIndex]),
                     CommandNode(
                         "ls", "List picked colours.", aliases: ["list"],
                         options: ["--json", "--help", "--format", "--limit"],
