@@ -213,10 +213,11 @@ public struct AppInspectionCenter {
         [
             AppExternalLink(id: "repository", label: "pulkitxm/edith", url: Self.repositoryURL),
             AppExternalLink(id: "creator", label: "Pulkit", url: Self.creatorURL),
-        ] + contributors.map {
-            AppExternalLink(
-                id: "contributor:\($0.login)", label: $0.login, url: $0.profileURL)
-        }
+        ]
+            + contributors.map {
+                AppExternalLink(
+                    id: "contributor:\($0.login)", label: $0.login, url: $0.profileURL)
+            }
     }
 
     public func openPath(_ id: AppPathID) throws -> AppOpenResult {
@@ -237,9 +238,11 @@ public struct AppInspectionCenter {
     public func openLink(
         _ id: String, contributors: [Contributor] = Contributors.cached()
     ) throws -> AppOpenResult {
-        guard let link = links(contributors: contributors).first(where: {
-            $0.id.caseInsensitiveCompare(id) == .orderedSame
-        }) else { throw AppInspectionError.unknownLink(id) }
+        guard
+            let link = links(contributors: contributors).first(where: {
+                $0.id.caseInsensitiveCompare(id) == .orderedSame
+            })
+        else { throw AppInspectionError.unknownLink(id) }
         let opened = open(link.url)
         guard opened else { throw AppInspectionError.couldNotOpen(link.url.absoluteString) }
         return AppOpenResult(id: link.id, url: link.url, mode: .open, opened: true)

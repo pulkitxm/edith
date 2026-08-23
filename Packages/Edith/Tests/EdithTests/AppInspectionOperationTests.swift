@@ -160,7 +160,8 @@ import Testing
                 creatorURL: AppInspectionCenter.creatorURL),
             processID: 9, uptimeSeconds: 120, idleWakeups: 7)
 
-        let decoded = try #require(AppDiagnosticsPayload.decode(AppDiagnosticsPayload.encode(snapshot)))
+        let decoded = try #require(
+            AppDiagnosticsPayload.decode(AppDiagnosticsPayload.encode(snapshot)))
 
         #expect(decoded == snapshot)
     }

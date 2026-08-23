@@ -61,8 +61,8 @@ public enum CLIEnvironment {
         CompanionClient.endpoint(override: $0)
     }
 
-    nonisolated(unsafe) public static var appInspectionCenter:
-        @Sendable () -> AppInspectionCenter = {
+    nonisolated(unsafe) public static var appInspectionCenter: @Sendable () -> AppInspectionCenter =
+        {
             AppInspectionCenter()
         }
 
