@@ -5,9 +5,13 @@ public enum ArgumentKind: Equatable, Sendable {
     case appAction
     case cleanerCategory
     case colorFormat
+    case colorIndex
     case pruneTarget
     case composeProject
     case historyIndex
+    case shelfItem
+    case musicTrack
+    case calendarEvent
     case configKey
     case configValue
     case extensionID
@@ -21,6 +25,11 @@ public enum ArgumentKind: Equatable, Sendable {
     case attentionEntity
     case attentionCategory
     case downloadKind
+    case quinjetAppearance
+    case quinjetMachine
+    case quinjetPath
+    case quinjetSession
+    case quinjetTheme
     case localPath
     case musicPlayer
     case remotePath
@@ -213,6 +222,9 @@ public enum CommandTree {
                     CommandNode(
                         "refresh", "Ask the app to re-read the real TCC state.",
                         options: ["--json"]),
+                    CommandNode(
+                        "settings", "Open System Settings for a permission.",
+                        options: ["--json"], arguments: [.permission]),
                 ]),
             CommandNode(
                 "usage", "Agent usage, token counts, cost and rate limits.",
@@ -302,8 +314,24 @@ public enum CommandTree {
                         "volume", "Set the player volume from 0 to 1.", options: playback,
                         optionValues: playbackValues),
                     CommandNode(
+                        "open-current", "Open the active music player.", options: playback,
+                        optionValues: playbackValues),
+                    CommandNode(
+                        "reveal-current", "Reveal the current track or open its player.",
+                        options: playback, optionValues: playbackValues),
+                    CommandNode(
                         "start", "Play one track, or a whole folder.",
                         options: ["--json", "--help", "--folder"], arguments: [.free]),
+                    CommandNode(
+                        "favorite", "Add a track to favourites.", aliases: ["favourite"],
+                        options: common, arguments: [.musicTrack]),
+                    CommandNode(
+                        "unfavorite", "Remove a track from favourites.",
+                        aliases: ["unfavourite"], options: common, arguments: [.musicTrack]),
+                    CommandNode(
+                        "reveal", "Reveal a track in Finder.", options: common,
+                        arguments: [.musicTrack]),
+                    CommandNode("open", "Open the music library in Finder.", options: common),
                     CommandNode("rescan", "Read the music folder again.", options: common),
                     CommandNode(
                         "seek", "Jump to a point in the track.", options: common,
@@ -337,7 +365,18 @@ public enum CommandTree {
                 children: [
                     CommandNode(
                         "ls", "Upcoming events.", aliases: ["list"],
-                        options: ["--json", "--days"])
+                        options: ["--json", "--days"]),
+                    CommandNode("open", "Open Calendar.", options: common),
+                    CommandNode(
+                        "join", "Join an event's meeting.", options: common,
+                        arguments: [.calendarEvent]),
+                ]),
+            CommandNode(
+                "presenter", "Manual presenter mode at runtime.",
+                children: [
+                    CommandNode("status", "Show presenter runtime state.", options: common),
+                    CommandNode("start", "Start manual presenter mode.", options: common),
+                    CommandNode("stop", "Stop manual presenter mode.", options: common),
                 ]),
             CommandNode(
                 "herdr", "Live Herdr sessions on this Mac and your SSH machines.",
@@ -378,6 +417,7 @@ public enum CommandTree {
                     CommandNode(
                         "ls", "List the queue.", aliases: ["list"],
                         options: ["--json", "--help", "--active", "--limit"]),
+                    CommandNode("status", "Summarize download states.", options: common),
                     CommandNode(
                         "add", "Queue one or more URLs.",
                         options: ["--json", "--help", "--kind", "--prefix"],
@@ -386,13 +426,22 @@ public enum CommandTree {
                         "retry", "Queue a failed download again.",
                         options: ["--json", "--help", "--all"], arguments: [.historyIndex]),
                     CommandNode(
-                        "rm", "Take one entry out of the queue.", options: common,
-                        arguments: [.historyIndex]),
+                        "rm", "Take one entry out of the queue.",
+                        options: common + ["--yes"],
+                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Forget what has finished.",
-                        options: ["--json", "--help", "--everything"]),
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
-                        "cancel", "Stop downloading and empty the queue.", options: common),
+                        "cancel", "Stop active downloads and keep their history.", options: common,
+                        arguments: [.historyIndex]),
+                    CommandNode(
+                        "open", "Open completed download files.", options: common,
+                        arguments: [.historyIndex]),
+                    CommandNode(
+                        "reveal", "Reveal completed download files.", options: common,
+                        arguments: [.historyIndex]),
                     CommandNode(
                         "tool", "Report or update yt-dlp.",
                         options: ["--json", "--help", "--update"]),
@@ -472,6 +521,12 @@ public enum CommandTree {
                 "color", "The colours picked with the colour picker.", aliases: ["colour"],
                 children: [
                     CommandNode(
+                        "pick", "Open Edith's system colour sampler.", options: common),
+                    CommandNode(
+                        "copy", "Copy one picked colour to the pasteboard.",
+                        options: ["--json", "--help", "--format"],
+                        optionValues: ["--format": .colorFormat], arguments: [.colorIndex]),
+                    CommandNode(
                         "ls", "List picked colours.", aliases: ["list"],
                         options: ["--json", "--help", "--format", "--limit"],
                         optionValues: ["--format": .colorFormat]),
@@ -486,16 +541,25 @@ public enum CommandTree {
                         "ls", "List what is on the shelf.", aliases: ["list"], options: common),
                     CommandNode(
                         "path", "Print the path of one item.", options: common,
-                        arguments: [.historyIndex]),
+                        arguments: [.shelfItem]),
                     CommandNode(
                         "add", "Copy a file onto the shelf.", options: ["--json"],
                         arguments: [.localPath]),
                     CommandNode(
                         "rm", "Take one item off the shelf.", options: ["--json", "--yes"],
-                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
+                        arguments: [.shelfItem], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Empty the shelf.", options: ["--json", "--yes"],
                         destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "open", "Open one shelf item.", options: common,
+                        arguments: [.shelfItem]),
+                    CommandNode(
+                        "reveal", "Reveal one shelf item in Finder.", options: common,
+                        arguments: [.shelfItem]),
+                    CommandNode(
+                        "share", "Open sharing for one shelf item.", options: common,
+                        arguments: [.shelfItem]),
                 ]),
             CommandNode(
                 "cleaner", "The developer caches the disk cleaner can reclaim.",
@@ -513,6 +577,62 @@ public enum CommandTree {
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
+                ]),
+            CommandNode(
+                "quinjet", "Discover and open Quinjet review workspaces.",
+                children: [
+                    CommandNode(
+                        "projects", "List recent Quinjet projects.",
+                        options: ["--json", "--help", "--machine"],
+                        optionValues: ["--machine": .quinjetMachine]),
+                    CommandNode(
+                        "worktrees", "List the worktrees in a Quinjet project.",
+                        options: ["--json", "--help", "--machine"],
+                        optionValues: ["--machine": .quinjetMachine],
+                        arguments: [.quinjetPath]),
+                    CommandNode(
+                        "open", "Print a Quinjet launch request without running it.",
+                        options: [
+                            "--json", "--help", "--machine", "--theme", "--appearance",
+                            "--cmux", "--embedded",
+                        ],
+                        optionValues: [
+                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
+                            "--appearance": .quinjetAppearance,
+                        ], arguments: [.quinjetPath]),
+                    CommandNode(
+                        "launch", "Launch a Quinjet review session.",
+                        options: [
+                            "--json", "--help", "--machine", "--theme", "--appearance",
+                            "--cmux", "--embedded",
+                        ],
+                        optionValues: [
+                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
+                            "--appearance": .quinjetAppearance,
+                        ],
+                        arguments: [.quinjetPath]),
+                    CommandNode(
+                        "status", "Show the selected native Quinjet session.",
+                        options: common, arguments: [.quinjetSession]),
+                    CommandNode(
+                        "sessions", "List native Quinjet sessions in the running app.",
+                        aliases: ["list", "ls"], options: common),
+                    CommandNode(
+                        "new", "Create and select a native Quinjet session.",
+                        aliases: ["create"], options: common),
+                    CommandNode(
+                        "focus", "Select and focus a native Quinjet session.",
+                        aliases: ["select"], options: common, arguments: [.quinjetSession]),
+                    CommandNode(
+                        "close", "Close a native Quinjet session.",
+                        options: ["--json", "--help", "--yes"],
+                        arguments: [.quinjetSession], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "restart", "Restart a native Quinjet session in place.",
+                        options: common, arguments: [.quinjetSession]),
+                    CommandNode(
+                        "switch", "Switch a native Quinjet session to another worktree.",
+                        options: common, arguments: [.quinjetSession, .quinjetPath]),
                 ]),
             CommandNode(
                 "machines", "The computers Edith can reach over SSH.",

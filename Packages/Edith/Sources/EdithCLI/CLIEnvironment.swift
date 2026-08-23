@@ -39,13 +39,20 @@ public enum CLIEnvironment {
         (@Sendable (Notification.Name) -> [AnyHashable: Any]?)?
 
     nonisolated(unsafe) public static var permissionUsages: @Sendable () -> [PermissionUsage] = {
-        PermissionsStatus.usages
+        PermissionOperationCenter(
+            environment: .status(defaults: sharedDefaults)
+        ).status()
+    }
+
+    nonisolated(unsafe) public static var openURL: @Sendable (URL) -> Bool = {
+        NSWorkspace.shared.open($0)
     }
 
     nonisolated(unsafe) public static var homeDirectory: URL =
         FileManager.default.homeDirectoryForCurrentUser
 
     nonisolated(unsafe) public static var clipboardPasteboard: NSPasteboard = .general
+    nonisolated(unsafe) public static var downloadQueueFile: URL = DownloadQueue.file
 
     nonisolated(unsafe) public static var runAppleScript:
         @Sendable (String, TimeInterval) throws -> String = {
@@ -110,11 +117,17 @@ public enum CLIEnvironment {
         deliver = { IPC.post($0, userInfo: $1) }
         homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         clipboardPasteboard = .general
+        downloadQueueFile = DownloadQueue.file
         ClipboardPaths.root = AppData.supportDir
         MachinePaths.root = AppData.supportDir
         ShelfIndex.root = AppData.supportDir.appendingPathComponent("Shelf")
         answer = nil
-        permissionUsages = { PermissionsStatus.usages }
+        permissionUsages = {
+            PermissionOperationCenter(
+                environment: .status(defaults: sharedDefaults)
+            ).status()
+        }
+        openURL = { NSWorkspace.shared.open($0) }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }
@@ -122,5 +135,6 @@ public enum CLIEnvironment {
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
         installedAppURL = { detectedInstalledAppURL() }
         updateHistoryURL = { UpdateCheckLog.url }
+        QuinjetCLIEnvironment.reset()
     }
 }

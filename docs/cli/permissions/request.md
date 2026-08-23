@@ -24,13 +24,17 @@ ed permissions request <permission> [--json]
 ```json
 {
   "granted": false,
-  "permission": "calendar"
+  "permission": "calendar",
+  "relaunch": "none",
+  "relaunchRequired": false,
+  "requested": true
 }
 ```
 
 `permission` is the id you asked for, normalised to the catalogue's spelling.
 `granted` is the mirror re-read after the wait, not a promise that the prompt
-was answered.
+was answered. `relaunch` is either `none` or `edith`. `relaunchRequired` becomes
+true only when the grant landed and its policy requires a fresh Edith process.
 
 ## Examples
 
@@ -81,9 +85,10 @@ calendar not granted yet
 note: finish the prompt in System Settings, then run `ed permissions refresh`
 ```
 
-Accessibility, Input Monitoring and Screen Recording only take effect for a
-process that starts after the grant, so follow a successful request with
-`ed app relaunch --yes`.
+Accessibility, Input Monitoring, Full Disk Access and Screen Recording can need
+a fresh process. The command reports that policy but never relaunches Edith by
+itself. Run `ed app relaunch --yes` explicitly after a successful request when
+`relaunchRequired` is true.
 
 ## Where to go next
 

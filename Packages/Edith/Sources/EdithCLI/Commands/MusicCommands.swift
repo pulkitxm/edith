@@ -1,3 +1,4 @@
+import AppKit
 import ArgumentParser
 import EdithKit
 import Foundation
@@ -19,10 +20,12 @@ struct MusicCommand: AsyncParsableCommand {
             MusicStatusCommand.self, MusicPlayCommand.self, MusicPauseCommand.self,
             MusicStopCommand.self, MusicToggleCommand.self, MusicNextCommand.self,
             MusicPreviousCommand.self, MusicVolumeCommand.self, MusicPlayersCommand.self,
+            MusicOpenCurrentCommand.self, MusicRevealCurrentCommand.self,
             MusicListCommand.self, MusicNewFolderCommand.self, MusicMoveCommand.self,
             MusicRenameCommand.self, MusicRemoveCommand.self, MusicPlayTrackCommand.self,
             MusicSeekCommand.self, MusicShuffleCommand.self, MusicRepeatCommand.self,
-            MusicRescanCommand.self,
+            MusicRescanCommand.self, MusicFavoriteCommand.self, MusicUnfavoriteCommand.self,
+            MusicRevealCommand.self, MusicOpenLibraryCommand.self,
         ],
         defaultSubcommand: MusicStatusCommand.self,
         aliases: ["nowplaying", "np"])
@@ -55,6 +58,58 @@ enum MusicVerb {
             return
         }
         CLIOut.out("\(action.pastTense)  (\(target.snapshot.player.displayName))")
+    }
+}
+
+enum MusicCurrentVerb {
+    static func act(
+        _ operation: MusicCurrentOperation, forced: MusicPlayer?, json: Bool
+    ) async throws {
+        let selected = try await MusicSession.target(forced: forced).snapshot
+        let target = MusicCurrentTarget(player: selected.player, trackPath: selected.trackPath)
+        let result: MusicCurrentOperationResult
+        do {
+            result = try await MainActor.run {
+                try MusicCurrentOperationExecution.perform(
+                    operation, target: target,
+                    openPlayer: { player in
+                        if player == .builtin {
+                            MainApp.open(section: "music")
+                            return true
+                        }
+                        guard let bundleIdentifier = player.bundleIdentifier,
+                            let url = NSWorkspace.shared.urlForApplication(
+                                withBundleIdentifier: bundleIdentifier)
+                        else { return false }
+                        NSWorkspace.shared.openApplication(
+                            at: url, configuration: NSWorkspace.OpenConfiguration())
+                        return true
+                    },
+                    revealTrack: { trackPath in
+                        MusicReveal.request(trackPath: trackPath)
+                        return true
+                    })
+            }
+        } catch let error as MusicCurrentOperationError {
+            throw error.cliFailure
+        }
+        MusicMemory.remember(result.player)
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "operation": .string(result.operation.rawValue),
+                    "player": .string(result.player.rawValue),
+                    "name": .string(result.player.displayName),
+                    "trackPath": .optional(result.trackPath),
+                    "revealed": .bool(result.revealed),
+                ]))
+            return
+        }
+        if result.revealed, let trackPath = result.trackPath {
+            CLIOut.out("revealed \(trackPath)")
+        } else {
+            CLIOut.out("opened \(result.player.displayName)")
+        }
     }
 }
 
@@ -111,6 +166,41 @@ struct MusicPlayersCommand: AsyncParsableCommand {
             CLIOut.out(
                 TextTable.render(
                     headers: ["PLAYER", "STATE", "PLAYBACK", "", "TRACK"], rows: rows))
+        }
+    }
+}
+
+struct MusicOpenCurrentCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open-current", abstract: "Open the active music player.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var choice: PlayerChoice
+
+    func run() async throws {
+        try await execute {
+            try await MusicCurrentVerb.act(
+                .openCurrent, forced: choice.resolved(), json: json)
+        }
+    }
+}
+
+struct MusicRevealCurrentCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reveal-current",
+        abstract: "Reveal the current library track or open its player.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var choice: PlayerChoice
+
+    func run() async throws {
+        try await execute {
+            try await MusicCurrentVerb.act(
+                .revealCurrent, forced: choice.resolved(), json: json)
         }
     }
 }

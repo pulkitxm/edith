@@ -98,6 +98,7 @@ public enum AppBridge {
 
     public static func awaitReply(
         _ name: Notification.Name, timeout: TimeInterval,
+        matching: @escaping ([AnyHashable: Any]) -> Bool = { _ in true },
         trigger: @escaping @Sendable () -> Void
     ) async -> [AnyHashable: Any]? {
         if let answer = CLIEnvironment.answer {
@@ -108,7 +109,8 @@ public enum AppBridge {
         let token = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
         ) { note in
-            waiter.deliver(note.userInfo ?? [:])
+            let payload = note.userInfo ?? [:]
+            if matching(payload) { waiter.deliver(payload) }
         }
         defer { DistributedNotificationCenter.default().removeObserver(token) }
         trigger()

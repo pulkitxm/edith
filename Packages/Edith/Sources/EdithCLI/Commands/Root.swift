@@ -53,6 +53,7 @@ public struct EdRoot: AsyncParsableCommand {
             SystemCommand.self,
             MusicCommand.self,
             CalendarCommand.self,
+            PresenterCommand.self,
             HerdrCommand.self,
             ClipboardCommand.self,
             AttentionCommand.self,
@@ -62,6 +63,7 @@ public struct EdRoot: AsyncParsableCommand {
             ColorCommand.self,
             ShelfCommand.self,
             CleanerCommand.self,
+            QuinjetCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
             CompleteCommand.self,
@@ -339,12 +341,46 @@ struct CompleteCommand: AsyncParsableCommand {
         let machines = MachineDirectory.load()
         let request = CompletionRequest(
             words: CompletionRequest.stripSeparator(words), index: index)
+        let shelfItems = ShelfBridge.items().indices.map { String($0 + 1) }
+        let musicTracks: [String]
+        if request.leading.starts(with: ["music", "favorite"])
+            || request.leading.starts(with: ["music", "favourite"])
+            || request.leading.starts(with: ["music", "unfavorite"])
+            || request.leading.starts(with: ["music", "unfavourite"])
+            || request.leading.starts(with: ["music", "reveal"])
+        {
+            musicTracks =
+                (try? LibraryBridge.requireFolder()) == nil
+                ? [] : TrackMeta.scanMusicFolder().map(\.relativePath)
+        } else {
+            musicTracks = []
+        }
+        let calendarEvents: [String]
+        if request.leading.starts(with: ["calendar", "join"]),
+            let events = try? await CalendarBridge.events(timeout: 0.35)
+        {
+            calendarEvents = events.map(\.id)
+        } else {
+            calendarEvents = []
+        }
+        let quinjetSessionCommands = ["status", "focus", "close", "restart", "switch"]
+        let quinjetSessions: [String]
+        if request.leading.first == "quinjet",
+            request.leading.dropFirst().first.map(quinjetSessionCommands.contains) == true,
+            let result = try? await QuinjetSessionCLI.request(.sessions, timeout: 0.25)
+        {
+            quinjetSessions = result.sessions.map { String($0.index) }
+        } else {
+            quinjetSessions = []
+        }
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
-            extensionIDs: ExtensionRegistry.entries.map(\.id),
+            extensionIDs: ExtensionRegistry.entries.map(\.id), shelfItems: shelfItems,
+            musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
-            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [])
+            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [],
+            quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)

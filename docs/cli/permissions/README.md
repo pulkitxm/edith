@@ -18,6 +18,7 @@ line, without you opening System Settings to find out.
 | `ed permissions ls` | Print every permission with its mirrored state, whether it blocks an enabled extension, and which enabled extensions use it |
 | `ed permissions request <permission>` | Ask the running app to raise the macOS prompt for one permission, wait, then report whether the grant landed |
 | `ed permissions refresh` | Ask the running app to re-read the real TCC state, then print the refreshed mirror |
+| `ed permissions settings <permission>` | Open the matching System Settings pane without requesting or relaunching anything |
 
 `ls` is the default subcommand, so a bare `ed permissions` prints the table.
 `list` is an accepted alias for `ls`.
@@ -38,7 +39,7 @@ full list as the hint.
 | `fullDisk` | Privacy & Security > Full Disk Access | Reach local service credentials and usage data | nothing declares it |
 | `screenRecording` | Privacy & Security > Screen Recording | Detect shared content, and sample colours from the screen | required by `focusDim`, `presenter`, `colorPicker` |
 | `camera` | Privacy & Security > Camera | The Notch Shelf camera preview | optional for `notchShelf` |
-| `bluetooth` | Edith opens no pane, granted on first use | Notch Shelf device connection alerts | optional for `notchShelf` |
+| `bluetooth` | Privacy & Security > Bluetooth, granted on first use | Notch Shelf device connection alerts | optional for `notchShelf` |
 | `automation` | Edith opens no pane, granted on first use | Notch Shelf controlling external playback | optional for `notchShelf` |
 
 For the seven that can be requested, the `reason` string in `--json` is the same
@@ -58,7 +59,7 @@ How each one is observed, and what asking for it actually does:
 | `fullDisk` | `permFullDiskGranted` | try to open `~/Library/Application Support/com.apple.TCC/TCC.db` for reading | open the Full Disk Access pane, because macOS offers no prompt for it |
 | `screenRecording` | `permScreenRecordingGranted` | `CGPreflightScreenCaptureAccess()` | `CGRequestScreenCaptureAccess()`, and open the Screen Recording pane |
 | `camera` | `permCameraGranted` | `AVCaptureDevice` video authorisation | ask `AVCaptureDevice` when the state is undetermined, open the Camera pane otherwise |
-| `bluetooth` | none | not observed | refused, exit 4 |
+| `bluetooth` | none | not observed | refused, exit 4; `settings` can still open its privacy pane |
 | `automation` | none | not observed | refused, exit 4 |
 
 `calendar` is the odd one out in that table. Its mirror is written by the main
@@ -88,6 +89,7 @@ Permissions pane opens with, and is writable.
 - [`ed permissions ls`](./ls.md)
 - [`ed permissions request`](./request.md)
 - [`ed permissions refresh`](./refresh.md)
+- [`ed permissions settings`](./settings.md)
 
 ## Exit codes
 
@@ -96,7 +98,7 @@ Permissions pane opens with, and is writable.
 | 0 | Any successful run, including a `request` whose grant did not land inside the wait |
 | 2 | An unknown flag, or `ed permissions request` with no permission named |
 | 3 | `ed permissions request <permission>` where the id is not one of the nine, with the full list as the hint |
-| 4 | `ed permissions request bluetooth` or `automation`; `request` or `refresh` while the Edith menu bar app is closed |
+| 4 | `ed permissions request bluetooth` or `automation`; `permissions settings automation`; `request` or `refresh` while the Edith menu bar app is closed |
 
 `ed permissions ls` has no failure path and always exits 0.
 
@@ -128,6 +130,8 @@ Permissions pane opens with, and is writable.
 - Both writing verbs talk to the app over its own distributed notification bus
   and neither shells out to it. `request` posts the permission's grant name;
   both post the shared refresh name afterwards.
+- No permission command relaunches Edith. A successful request reports whether
+  the new grant requires `ed app relaunch`, leaving that disruptive action explicit.
 
 ## Where to go next
 

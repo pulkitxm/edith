@@ -554,7 +554,8 @@ private struct QuickActionsCard: View {
                         icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",
                         sub: "Stop this Mac from sleeping", active: preventSleep
                     ) {
-                        preventSleep.toggle()
+                        $preventSleep.configured(AppStorageKeys.General.preventSleep).wrappedValue
+                            .toggle()
                     }
                 }
                 if presenterEnabled {
@@ -562,8 +563,8 @@ private struct QuickActionsCard: View {
                         icon: "person.wave.2", title: "Presenter mode",
                         sub: "Blur sensitive values on screen", active: presenterMode
                     ) {
-                        presenterMode.toggle()
-                        if !presenterMode { IPC.post(IPC.Name.presenterPauseAuto) }
+                        _ = PresenterRuntimeOperationExecution.perform(
+                            presenterMode ? .stop : .start)
                     }
                 }
                 if lidAwakeEnabled {
@@ -718,10 +719,12 @@ private struct MeetingsCard: View {
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
-            Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
-                .buttonStyle(HoverButtonStyle())
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(theme)
+            Button("Grant…") {
+                _ = try? MainPermissionOperations.center.request(.calendar)
+            }
+            .buttonStyle(HoverButtonStyle())
+            .font(.system(size: UIScale.pt(11)))
+            .foregroundStyle(theme)
         }
         .padding(.vertical, UIScale.pt(14))
     }

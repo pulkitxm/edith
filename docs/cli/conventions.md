@@ -342,10 +342,11 @@ ed tuf ls -la /srv
 There are exactly two option groups in the whole CLI, and everything else that
 looks shared is a flag declared again on each command.
 
-`--player` comes from the player group and appears on eight commands:
+`--player` comes from the player group and appears on ten commands:
 `ed music status`, `play`, `pause`, `stop`, `toggle`, `next`, `previous` and
-`volume`. It takes `builtin`, `spotify` or `apple`, and leaving it out means
-whichever player is active. An unknown name exits 3.
+`volume`, plus `open-current` and `reveal-current`. It takes `builtin`,
+`spotify` or `apple`, and leaving it out means whichever player is active. An
+unknown name exits 3.
 
 `--range`, `--source` and `--machine` come from the usage window group and
 appear on three commands: `ed usage summary`, `daily` and `models`. `--range`
@@ -418,6 +419,7 @@ is a local question that needs no permission and no round trip.
 | `ed app quit --yes`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it; the quit preview needs no process |
 | `ed calendar ls` | menu bar | the calendar grant belongs to the Edith bundle, not to `ed` |
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
+| `ed permissions settings` | no | opens the matching System Settings pane locally and never relaunches Edith |
 | `ed usage limits --refresh` | menu bar | only the app polls the providers again; without `--refresh`, `limits` reads the file |
 | `ed apps quit` | menu bar | quitting another app is the app's Automation grant, not `ed`'s |
 | `ed music start`, `ed music seek` | menu bar | both drive Edith's own player, which lives in the helper |

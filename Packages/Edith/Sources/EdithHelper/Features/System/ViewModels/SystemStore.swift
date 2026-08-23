@@ -92,41 +92,27 @@ final class SystemStore: FeatureModule {
     }
 
     func requestInputMonitoring() {
-        PermissionPromptTracker.record()
-        CGRequestListenEventAccess()
-        openInputMonitoringSettings()
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        PermissionsModel.shared.request(.inputMonitoring)
         recheckSoon()
     }
 
     func requestAccessibility() {
-        PermissionPromptTracker.record()
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
-        openAccessibilitySettings()
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        PermissionsModel.shared.request(.accessibility)
         recheckSoon()
     }
 
     func openInputMonitoringSettings() {
-        NSWorkspace.shared.open(
-            URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+        PermissionsModel.shared.openSettings(for: .inputMonitoring)
     }
 
     func openAccessibilitySettings() {
-        NSWorkspace.shared.open(
-            URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        )
+        PermissionsModel.shared.openSettings(for: .accessibility)
     }
 
     private func recheckSoon() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refreshPermissions()
-            IPC.post(IPC.Name.requestPermissionsRefresh)
+            PermissionsModel.shared.refresh()
         }
     }
 

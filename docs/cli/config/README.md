@@ -23,6 +23,11 @@ next time it launches.
 | `ed config export` | Print the settings you have changed as one JSON document |
 | `ed config import` | Apply a JSON document of settings |
 
+The command line and the app settings controls use the same EdithKit executor for
+catalog lookup, type validation, scope selection, persistence, and live change
+notifications. A value accepted in one surface therefore has the same stored shape
+and allowed-value rules in the other.
+
 `ls` is the default subcommand, so a bare `ed config` lists everything, and
 `ed config list` is an accepted spelling of `ls`.
 

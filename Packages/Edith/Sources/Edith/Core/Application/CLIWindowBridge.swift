@@ -19,6 +19,7 @@ enum CLIWindowBridge {
                 AppRuntimeCenter().perform(.snapshot) { snapshot(info) }
             }
         }
+        QuinjetSessionBridge.shared.install()
     }
 
     private static func fail(_ message: String) {

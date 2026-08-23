@@ -45,8 +45,9 @@ public struct CompletionResult: Equatable, Sendable {
 public enum CompletionEngine {
     public static func plan(
         _ request: CompletionRequest, machines: [String], configKeys: [String],
-        extensionIDs: [String], toolIDs: [String] = ToolProvisioning.all.map(\.id),
-        usageSources: [String] = []
+        extensionIDs: [String], shelfItems: [String] = [], musicTracks: [String] = [],
+        calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
+        usageSources: [String] = [], quinjetSessions: [String] = []
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
         let prefix = request.current
@@ -85,7 +86,9 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last), prefix))
+                        previous: positionals.last, shelfItems: shelfItems,
+                        musicTracks: musicTracks, calendarEvents: calendarEvents,
+                        quinjetSessions: quinjetSessions), prefix))
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
@@ -95,7 +98,9 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last), valuePrefix)
+                        previous: positionals.last, shelfItems: shelfItems,
+                        musicTracks: musicTracks, calendarEvents: calendarEvents,
+                        quinjetSessions: quinjetSessions), valuePrefix)
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
@@ -114,9 +119,11 @@ public enum CompletionEngine {
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                previous: positionals.last)
+                previous: positionals.last, shelfItems: shelfItems, musicTracks: musicTracks,
+                calendarEvents: calendarEvents, quinjetSessions: quinjetSessions)
             candidates += values
             if kind == .localPath { wantsFiles = true }
+            if kind == .quinjetPath { wantsFiles = quinjetPathIsLocal(leading) }
         }
         return CompletionResult(
             candidates: filtered(candidates, prefix), wantsFiles: wantsFiles)
@@ -125,7 +132,8 @@ public enum CompletionEngine {
     static func values(
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
-        previous: String?
+        previous: String?, shelfItems: [String] = [], musicTracks: [String] = [],
+        calendarEvents: [String] = [], quinjetSessions: [String] = []
     ) -> [String] {
         switch kind {
         case .machine: return machines
@@ -150,9 +158,21 @@ public enum CompletionEngine {
         case .appAction: return AppActions.all.map(\.name)
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
+        case .colorIndex:
+            return ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).indices.map {
+                String($0 + 1)
+            }
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
+        case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)
+        case .quinjetMachine: return ["local"] + machines
+        case .quinjetPath: return []
+        case .quinjetSession: return quinjetSessions
+        case .quinjetTheme: return QuinjetTheme.allCases.map(\.rawValue)
         case .pruneTarget: return DockerPruneCommand.targets
+        case .shelfItem: return shelfItems
+        case .musicTrack: return musicTracks
+        case .calendarEvent: return calendarEvents
         case .tool: return toolIDs
         case .usageSource: return usageSources
         case .localPath, .remotePath, .container, .composeProject, .historyIndex, .free:
@@ -166,5 +186,16 @@ public enum CompletionEngine {
             guard value.hasPrefix(prefix), seen.insert(value).inserted else { return false }
             return true
         }
+    }
+
+    private static func quinjetPathIsLocal(_ words: [String]) -> Bool {
+        if let assignment = words.last(where: { $0.hasPrefix("--machine=") }) {
+            let machine = String(assignment.dropFirst("--machine=".count))
+            return ["local", "this-mac", "thismac"].contains(machine.lowercased())
+        }
+        guard let option = words.lastIndex(of: "--machine"), option + 1 < words.count else {
+            return true
+        }
+        return ["local", "this-mac", "thismac"].contains(words[option + 1].lowercased())
     }
 }

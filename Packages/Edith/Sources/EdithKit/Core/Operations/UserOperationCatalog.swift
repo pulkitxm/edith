@@ -5,6 +5,19 @@ public enum UserOperationCatalog {
         MachineControlOperation.allCases.map(\.descriptor)
         + ExtensionMutationOperation.allCases.map(\.descriptor)
         + AppRuntimeOperation.allCases.map(\.descriptor)
+        + CalendarEventOperation.allCases.map(\.descriptor)
+        + ShelfItemOperation.allCases.map(\.descriptor)
+        + DownloadOperation.allCases.map(\.descriptor)
+        + MusicLibraryOperation.allCases.map(\.descriptor)
+        + MusicTransportOperation.allCases.map(\.descriptor)
+        + MusicCurrentOperation.allCases.map(\.descriptor)
+        + PresenterRuntimeOperation.allCases.map(\.descriptor)
+        + ConfigurationOperation.allCases.map(\.descriptor)
+        + PermissionOperation.allCases.map(\.descriptor)
+        + ColorPickerOperation.allCases.map(\.descriptor)
+        + ColorSwatchOperation.allCases.map(\.descriptor)
+        + QuinjetOperation.allCases.map(\.descriptor)
+        + QuinjetSessionOperation.allCases.map(\.descriptor)
 
     public static func descriptor(id: UserOperationID) -> UserOperationDescriptor? {
         descriptors.first { $0.id == id }

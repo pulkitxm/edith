@@ -6,7 +6,7 @@ the running menu bar app for the events it holds and prints them. Reach
 for it when you want the next few days on stdout, or as JSON for something else
 to read.
 
-The group has one verb. If the app is closed, the Calendar extension is off, or
+The agenda and join commands need the running app. If the app is closed, the Calendar extension is off, or
 macOS has not granted calendar access, it exits 4 and says which of the three it
 was.
 
@@ -16,12 +16,16 @@ was.
 | --- | --- |
 | `ed calendar` | No subcommand runs `ls`, so a bare `ed calendar` is the upcoming events |
 | `ed calendar ls` | Upcoming events from the running app, as a table or as JSON |
+| `ed calendar open` | Opens the Calendar application |
+| `ed calendar join <event>` | Opens the meeting link for an event ID or unambiguous title |
 
 `ed calendar list` is an alias for `ed calendar ls`.
 
 ## Commands
 
 - [`ed calendar ls`](./ls.md)
+- [`ed calendar open`](./open.md)
+- [`ed calendar join`](./join.md)
 
 ## Exit codes
 

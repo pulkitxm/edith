@@ -40,7 +40,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         isEnabled: { entry in
             SharedDefaults.store.object(forKey: entry.defaultsKey) as? Bool ?? false
         },
-        grantedPermissions: { PermissionsStatus.granted },
+        grantedPermissions: { PermissionOperationCenter.application.grantedPermissions() },
         toolAvailable: { id in
             guard let tool = ToolProvisioning.spec(id: id),
                 case let .executable(name, _) = tool.presenceStrategy

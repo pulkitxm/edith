@@ -207,11 +207,13 @@ import Testing
             .machine, .configKey, .configValue, .extensionID, .permission, .shell, .group,
             .usageRange, .localPath, .remotePath, .container, .appAction, .cleanerCategory,
             .colorFormat, .pruneTarget, .composeProject, .historyIndex, .free,
+            .shelfItem, .musicTrack, .calendarEvent,
         ]
         for kind in kinds {
             let values = CompletionEngine.values(
                 for: kind, machines: Self.machines, configKeys: ConfigCatalog.keys,
-                extensionIDs: ExtensionRegistry.entries.map(\.id), previous: nil)
+                extensionIDs: ExtensionRegistry.entries.map(\.id), previous: nil,
+                shelfItems: ["1"], musicTracks: ["song.mp3"], calendarEvents: ["event-1"])
             switch kind {
             case .configValue, .localPath, .remotePath, .container, .composeProject,
                 .historyIndex, .free:

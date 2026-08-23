@@ -43,15 +43,23 @@ struct NotchShelfRows: View {
     var body: some View {
         Group {
             Section {
-                Toggle("Open when dragging near the notch", isOn: $openOnDrag)
-                    .pointerCursor()
+                Toggle(
+                    "Open when dragging near the notch",
+                    isOn: $openOnDrag.configured(AppStorageKeys.Notch.shelfOpenOnDrag)
+                )
+                .pointerCursor()
                 Text("The island slides out mid-drag so you can drop without clicking first.")
                     .settingsCaption()
-                Toggle("Open on hover", isOn: $openOnHover)
-                    .pointerCursor()
+                Toggle(
+                    "Open on hover",
+                    isOn: $openOnHover.configured(AppStorageKeys.Notch.shelfOpenOnHover)
+                )
+                .pointerCursor()
                 Text("Expand when the mouse rests on the notch, without a drag.")
                     .settingsCaption()
-                Toggle(isOn: $requireOption) {
+                Toggle(
+                    isOn: $requireOption.configured(AppStorageKeys.Notch.shelfRequireOption)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Require \u{2325} to trigger")
                         InfoDot(
@@ -65,7 +73,9 @@ struct NotchShelfRows: View {
             .opacity(enabled ? 1 : 0.5)
 
             Section {
-                Picker(selection: $keepDuration) {
+                Picker(
+                    selection: $keepDuration.configured(AppStorageKeys.Notch.shelfKeepDuration)
+                ) {
                     Text("Forever").tag("forever")
                     Text("1 hour").tag("oneHour")
                     Text("1 day").tag("oneDay")
@@ -80,8 +90,12 @@ struct NotchShelfRows: View {
                     }
                 }
                 .pointerCursor()
-                Toggle("Remove after dragging out", isOn: $removeAfterDragOut)
-                    .pointerCursor()
+                Toggle(
+                    "Remove after dragging out",
+                    isOn: $removeAfterDragOut.configured(
+                        AppStorageKeys.Notch.shelfRemoveAfterDragOut)
+                )
+                .pointerCursor()
                 Text("Treats the shelf as a hand-off tray rather than storage.")
                     .settingsCaption()
             }
@@ -89,53 +103,76 @@ struct NotchShelfRows: View {
             .opacity(enabled ? 1 : 0.5)
 
             Section {
-                Toggle("Show what's playing", isOn: $showMusic)
-                    .pointerCursor()
+                Toggle(
+                    "Show what's playing",
+                    isOn: $showMusic.configured(AppStorageKeys.Notch.shelfShowMusic)
+                )
+                .pointerCursor()
                 Text(
                     "Album art and a live equalizer hug the notch while music plays in the library, Spotify, or Apple Music."
                 )
                 .settingsCaption()
-                Toggle("Notch alerts", isOn: $showAlerts)
-                    .pointerCursor()
+                Toggle(
+                    "Notch alerts",
+                    isOn: $showAlerts.configured(AppStorageKeys.Notch.alertsEnabled)
+                )
+                .pointerCursor()
                 Text(
                     "Drops a brief card from the notch. Alerts that arrive while the notch is open queue up and show after it closes."
                 )
                 .settingsCaption()
                 if showAlerts {
-                    Toggle("Audio output changes", isOn: $alertAudio)
-                        .pointerCursor()
-                    Toggle("Power plugged / unplugged", isOn: $alertPower)
-                        .pointerCursor()
-                    Toggle("Battery low", isOn: $alertBattery)
-                        .pointerCursor()
-                    Toggle("Bluetooth connect / disconnect", isOn: $alertBluetooth)
-                        .pointerCursor()
+                    Toggle(
+                        "Audio output changes",
+                        isOn: $alertAudio.configured(AppStorageKeys.Notch.alertAudio)
+                    )
+                    .pointerCursor()
+                    Toggle(
+                        "Power plugged / unplugged",
+                        isOn: $alertPower.configured(AppStorageKeys.Notch.alertPower)
+                    )
+                    .pointerCursor()
+                    Toggle(
+                        "Battery low",
+                        isOn: $alertBattery.configured(AppStorageKeys.Notch.alertBattery)
+                    )
+                    .pointerCursor()
+                    Toggle(
+                        "Bluetooth connect / disconnect",
+                        isOn: $alertBluetooth.configured(AppStorageKeys.Notch.alertBluetooth)
+                    )
+                    .pointerCursor()
                     if alertBluetooth,
                         bluetoothAuthorization == .denied
                             || bluetoothAuthorization == .restricted
                     {
                         Button("Open Bluetooth Privacy Settings...") {
-                            NSWorkspace.shared.open(
-                                URL(
-                                    string:
-                                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
-                                )!)
+                            _ = try? MainPermissionOperations.center.openSettings(for: .bluetooth)
                         }
                         .pointerCursor()
                     }
                 }
-                Toggle("Per-app volume mixer (beta)", isOn: $audioMixer)
-                    .pointerCursor()
+                Toggle(
+                    "Per-app volume mixer (beta)",
+                    isOn: $audioMixer.configured(AppStorageKeys.Notch.audioMixerEnabled)
+                )
+                .pointerCursor()
                 Text(
                     "Adds an Audio tab to set each app's volume. macOS 14.4+; asks for audio-recording permission the first time. Off by default."
                 )
                 .settingsCaption()
-                Toggle("Show on external displays", isOn: $showOnExternal)
-                    .pointerCursor()
+                Toggle(
+                    "Show on external displays",
+                    isOn: $showOnExternal.configured(AppStorageKeys.Notch.shelfShowOnExternal)
+                )
+                .pointerCursor()
                 Text("Draws a small pill at the top of screens without a notch.")
                     .settingsCaption()
-                Toggle("Haptic feedback", isOn: $haptics)
-                    .pointerCursor()
+                Toggle(
+                    "Haptic feedback",
+                    isOn: $haptics.configured(AppStorageKeys.Notch.shelfHaptics)
+                )
+                .pointerCursor()
                 Text("A small trackpad tap when the shelf reacts.")
                     .settingsCaption()
             }

@@ -27,6 +27,7 @@ enum UIParity {
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
         "check-updates", "collect", "forget", "mount", "unmount",
+        "favorite", "unfavorite", "close",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -58,6 +59,9 @@ enum UIParity {
             ["permissions", "request", "calendar"]),
         UICapability(
             "Permissions pane", "re-read the real permission state", ["permissions", "refresh"]),
+        UICapability(
+            "Permissions pane", "open the relevant System Settings pane",
+            ["permissions", "settings", "calendar"]),
 
         UICapability("Clipboard panel", "click an entry to copy it", ["clipboard", "copy", "1"]),
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),
@@ -69,6 +73,10 @@ enum UIParity {
             "Clipboard panel", "search the history", ["clipboard", "ls", "--search", "x"]),
         UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
+        UICapability("Color Picker menu", "copy a recent colour", ["color", "copy", "1"]),
+        UICapability(
+            "Color Picker settings", "copy a swatch in one format",
+            ["color", "copy", "1", "--format", "hex"]),
 
         UICapability(
             "Attention categories", "classify an application or website",
@@ -81,11 +89,21 @@ enum UIParity {
 
         UICapability(
             "Colour picker", "forget the picked colours", ["color", "clear", "--yes"]),
+        UICapability("Colour picker", "open the system loupe", ["color", "pick"]),
 
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
         UICapability(
             "Notch shelf", "take an item off the shelf", ["shelf", "rm", "1", "--yes"]),
         UICapability("Notch shelf", "empty the shelf", ["shelf", "clear", "--yes"]),
+        UICapability("Notch shelf", "open an item", ["shelf", "open", "1"]),
+        UICapability("Notch shelf", "reveal an item", ["shelf", "reveal", "1"]),
+        UICapability("Notch shelf", "share an item", ["shelf", "share", "1"]),
+
+        UICapability("Calendar page", "open Calendar", ["calendar", "open"]),
+        UICapability("Calendar agenda", "join a meeting", ["calendar", "join", "event"]),
+
+        UICapability("Presenter controls", "start manual mode", ["presenter", "start"]),
+        UICapability("Presenter controls", "stop manual mode", ["presenter", "stop"]),
 
         UICapability("Cleaner card", "reclaim the scanned caches", ["cleaner", "clean"]),
         UICapability(
@@ -294,6 +312,8 @@ enum UIParity {
             "Workspace toolbar", "even out the panes", ["machines", "workspace", "equalize"]),
         UICapability(
             "Download sheet", "cancel running downloads", ["download", "cancel"]),
+        UICapability(
+            "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
             "Permissions pane", "relaunch after granting", ["app", "relaunch", "--yes"]),
@@ -322,6 +342,9 @@ enum UIParity {
         UICapability("Music player", "skip forward", ["music", "next"]),
         UICapability("Music player", "skip back", ["music", "previous"]),
         UICapability("Music player", "change the volume", ["music", "volume", "0.5"]),
+        UICapability("Notch music", "open the current player", ["music", "open-current"]),
+        UICapability(
+            "Notch music", "reveal the current track", ["music", "reveal-current"]),
         UICapability("Music page", "browse the library", ["music", "ls"]),
         UICapability("Music page", "click a track to play it", ["music", "start", "song"]),
         UICapability(
@@ -341,6 +364,10 @@ enum UIParity {
             ["music", "rm", "--folder", "Chill", "--yes"]),
         UICapability("Music footer", "toggle shuffle", ["music", "shuffle", "on"]),
         UICapability("Music footer", "toggle repeat", ["music", "repeat", "on"]),
+        UICapability("Music page", "favourite a track", ["music", "favorite", "song"]),
+        UICapability("Music page", "unfavourite a track", ["music", "unfavorite", "song"]),
+        UICapability("Music page", "reveal a track", ["music", "reveal", "song"]),
+        UICapability("Music page", "open the library", ["music", "open"]),
 
         UICapability(
             "Machine finder", "download a remote file",
@@ -403,8 +430,11 @@ enum UIParity {
 
         UICapability("Download sheet", "start a download", ["download", "add", "https://x/y"]),
         UICapability("Download sheet", "retry a failed item", ["download", "retry", "--all"]),
-        UICapability("Download sheet", "clear the history", ["download", "clear"]),
-        UICapability("Download sheet", "remove one item", ["download", "rm", "1"]),
+        UICapability("Download sheet", "clear the history", ["download", "clear", "--yes"]),
+        UICapability("Download sheet", "remove one item", ["download", "rm", "1", "--yes"]),
+        UICapability("Download sheet", "open a completed result", ["download", "open", "1"]),
+        UICapability(
+            "Download sheet", "reveal a completed result", ["download", "reveal", "1"]),
         UICapability("Download sheet", "update yt-dlp", ["download", "tool", "--update"]),
 
         UICapability(
@@ -447,6 +477,53 @@ enum UIParity {
         UICapability(
             "Herdr session tab", "copy the attach command for a pane",
             ["herdr", "command", "w3:p1N"]),
+        UICapability(
+            "Quinjet page", "list recent review projects", ["quinjet", "projects"]),
+        UICapability(
+            "Quinjet project picker", "list project worktrees",
+            ["quinjet", "worktrees", "/tmp/project"]),
+        UICapability(
+            "Quinjet project picker", "prepare a review launch without running it",
+            ["quinjet", "open", "/tmp/project"]),
+        UICapability(
+            "Quinjet project picker", "launch a review session",
+            ["quinjet", "launch", "/tmp/project"]),
+        UICapability(
+            "Quinjet machine picker", "list recent projects on another machine",
+            ["quinjet", "projects", "--machine", "build"]),
+        UICapability(
+            "Quinjet machine picker", "browse a folder on another machine",
+            ["machines", "files", "ls", "build", "/tmp"]),
+        UICapability(
+            "Quinjet terminal menu", "select the external terminal",
+            ["config", "set", "quinjetTerminal", "cmux"]),
+        UICapability(
+            "Quinjet theme menu", "select the review theme",
+            ["config", "set", "quinjetTheme", "tokyo-night"]),
+        UICapability(
+            "Quinjet tab bar", "list the open native review sessions",
+            ["quinjet", "sessions"]),
+        UICapability(
+            "Quinjet tab bar", "create a native review session",
+            ["quinjet", "new"]),
+        UICapability(
+            "Quinjet workspace", "inspect the active review session",
+            ["quinjet", "status"]),
+        UICapability(
+            "Quinjet tab bar", "select and focus a review session",
+            ["quinjet", "focus", "1"]),
+        UICapability(
+            "Quinjet tab bar", "close a review session",
+            ["quinjet", "close", "1", "--yes"]),
+        UICapability(
+            "Quinjet workspace", "restart the active review in place",
+            ["quinjet", "restart", "1"]),
+        UICapability(
+            "Quinjet worktree picker", "switch an open session in place",
+            ["quinjet", "switch", "1", "/tmp/worktree"]),
+        UICapability(
+            "Quinjet cmux workspace", "show the external review",
+            ["quinjet", "focus", "1"]),
     ]
 }
 
@@ -525,6 +602,27 @@ enum UIParity {
                 == [
                     ["extensions", "enable"], ["extensions", "disable"],
                     ["extensions", "setup"], ["tools", "install"],
+                ])
+    }
+
+    @Test func everyConfigurationLeafDeclaresItsSharedOperation() {
+        let declared = Set(ConfigurationOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["config", "ls"], ["config", "get"], ["config", "set"],
+                    ["config", "unset"], ["config", "describe"], ["config", "export"],
+                    ["config", "import"],
+                ])
+    }
+
+    @Test func everyPermissionLeafDeclaresItsSharedOperation() {
+        let declared = Set(PermissionOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["permissions", "ls"], ["permissions", "request"],
+                    ["permissions", "refresh"], ["permissions", "settings"],
                 ])
     }
 

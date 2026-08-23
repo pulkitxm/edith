@@ -46,6 +46,7 @@ final class NotchShelfController: FeatureModule {
 
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
+    private var shelfOperationObserver: NSObjectProtocol?
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
@@ -70,6 +71,11 @@ final class NotchShelfController: FeatureModule {
             guard let self else { return }
             self.items = self.store.items
         }
+        shelfOperationObserver = IPC.observe(
+            IPC.Name.shelfOperation,
+            info: { [weak self] info in
+                self?.performShelfOperation(info)
+            })
         purgeExpired()
         rebuildPanels()
         screenObserver = NotificationCenter.default.addObserver(
@@ -190,6 +196,8 @@ final class NotchShelfController: FeatureModule {
             NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver)
         }
         spaceObserver = nil
+        if let shelfOperationObserver { IPC.stopObserving(shelfOperationObserver) }
+        shelfOperationObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
         gateWorkItem?.cancel()
@@ -737,7 +745,7 @@ final class NotchShelfController: FeatureModule {
 
     func nowPlayingSeek(_ fraction: Double) {
         guard nowPlayingSeekable else { return }
-        localMusic?.seek(to: fraction)
+        localMusic?.perform(.seek(fraction))
     }
 
     var nowPlayingVolume: Double {
@@ -750,10 +758,10 @@ final class NotchShelfController: FeatureModule {
 
     func setNowPlayingVolume(_ value: Double) {
         switch nowPlaying?.source {
-        case .local: localMusic?.volume = value
+        case .local: localMusic?.perform(.volume(value))
         case .external:
             externalVolume = value
-            external.setVolume(Float(value))
+            external.perform(.volume(value))
         case .none: break
         }
     }
@@ -799,52 +807,93 @@ final class NotchShelfController: FeatureModule {
     }
 
     func openNowPlayingApp() {
-        let source = nowPlaying?.source
+        guard let target = nowPlayingTarget else { return }
         collapseNow()
-        switch source {
-        case .external(let app):
-            guard
-                let url = NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: app.bundleID)
-            else { return }
-            NSWorkspace.shared.openApplication(
-                at: url, configuration: NSWorkspace.OpenConfiguration())
-        case .local:
-            MainApp.openDashboard()
-        case .none:
-            break
-        }
+        performNowPlayingOperation(.openCurrent, target: target)
     }
 
     func openNowPlayingLocation() {
-        guard case .local = nowPlaying?.source, let track = localMusic?.current else {
-            openNowPlayingApp()
+        guard let target = nowPlayingTarget else { return }
+        collapseNow()
+        performNowPlayingOperation(.revealCurrent, target: target)
+    }
+
+    private var nowPlayingTarget: MusicCurrentTarget? {
+        switch nowPlaying?.source {
+        case .local:
+            MusicCurrentTarget(player: .builtin, trackPath: localMusic?.current?.relativePath)
+        case .external(.spotify):
+            MusicCurrentTarget(player: .spotify)
+        case .external(.music):
+            MusicCurrentTarget(player: .apple)
+        case .none:
+            nil
+        }
+    }
+
+    private func performNowPlayingOperation(
+        _ operation: MusicCurrentOperation, target: MusicCurrentTarget
+    ) {
+        do {
+            try MusicCurrentOperationExecution.perform(
+                operation, target: target,
+                openPlayer: { player in
+                    if player == .builtin {
+                        MainApp.open(section: "music")
+                        return true
+                    }
+                    guard let bundleIdentifier = player.bundleIdentifier,
+                        let url = NSWorkspace.shared.urlForApplication(
+                            withBundleIdentifier: bundleIdentifier)
+                    else { return false }
+                    NSWorkspace.shared.openApplication(
+                        at: url, configuration: NSWorkspace.OpenConfiguration())
+                    return true
+                },
+                revealTrack: { trackPath in
+                    MusicReveal.request(trackPath: trackPath)
+                    return true
+                })
+        } catch {
+            presentMusicFailure(error)
+        }
+    }
+
+    private func presentMusicFailure(_ error: Error) {
+        let alert = NotchAlert(
+            id: "music.action", icon: "exclamationmark.circle.fill", tint: "#e0664f",
+            title: "Music action failed", subtitle: error.localizedDescription,
+            priority: .high)
+        guard !alertsEnabled else {
+            postAlert(alert)
             return
         }
-        collapseNow()
-        MusicReveal.request(trackPath: track.relativePath)
+        alertPinned = false
+        currentAlert = alert
+        syncFrames()
+        scheduleAlertHide(after: alert.autoHide)
     }
 
     func nowPlayingPlayPause() {
         switch nowPlaying?.source {
-        case .local: localMusic?.playPause()
-        case .external: external.playPause()
+        case .local: localMusic?.perform(.toggle)
+        case .external: external.perform(.toggle)
         case .none: break
         }
     }
 
     func nowPlayingNext() {
         switch nowPlaying?.source {
-        case .local: localMusic?.next()
-        case .external: external.next()
+        case .local: localMusic?.perform(.next)
+        case .external: external.perform(.next)
         case .none: break
         }
     }
 
     func nowPlayingPrevious() {
         switch nowPlaying?.source {
-        case .local: localMusic?.previous()
-        case .external: external.previous()
+        case .local: localMusic?.perform(.previous)
+        case .external: external.perform(.previous)
         case .none: break
         }
     }
@@ -875,14 +924,12 @@ final class NotchShelfController: FeatureModule {
     }
 
     func open(_ item: ShelfItem) {
-        for member in group(for: item) {
-            NSWorkspace.shared.open(fileURL(for: member))
-        }
+        perform(.open, items: group(for: item), anchor: item)
         collapseNow()
     }
 
     func reveal(_ item: ShelfItem) {
-        NSWorkspace.shared.activateFileViewerSelecting(group(for: item).map { fileURL(for: $0) })
+        perform(.reveal, items: group(for: item), anchor: item)
         collapseNow()
     }
 
@@ -898,6 +945,26 @@ final class NotchShelfController: FeatureModule {
     }
 
     func share(_ item: ShelfItem) {
+        perform(.share, items: group(for: item), anchor: item)
+    }
+
+    private func performShelfOperation(_ info: [AnyHashable: Any]) {
+        guard let request = ShelfItemOperationExecution.request(info) else { return }
+        let members = items.filter { request.itemIDs.contains($0.id) }
+        guard let anchor = members.first else { return }
+        perform(request.operation, items: members, anchor: anchor)
+        if request.operation != .share { collapseNow() }
+    }
+
+    private func perform(
+        _ operation: ShelfItemOperation, items members: [ShelfItem], anchor item: ShelfItem
+    ) {
+        ShelfItemOperationExecution.perform(
+            operation, urls: members.map(fileURL),
+            share: { [weak self] urls in self?.showSharePicker(urls, anchor: item) })
+    }
+
+    private func showSharePicker(_ urls: [URL], anchor item: ShelfItem) {
         let mouse = NSEvent.mouseLocation
         let panel =
             panels.values.first { $0.frame.contains(mouse) }
@@ -911,7 +978,7 @@ final class NotchShelfController: FeatureModule {
             self?.collapseAfterDelay()
         }
         sharePickerDelegate = delegate
-        let picker = NSSharingServicePicker(items: group(for: item).map { fileURL(for: $0) })
+        let picker = NSSharingServicePicker(items: urls)
         picker.delegate = delegate
         let size = view.bounds.size
         let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
