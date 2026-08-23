@@ -63,7 +63,8 @@ enum UIParity {
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),
         UICapability("Clipboard panel", "unpin an entry", ["clipboard", "unpin", "1"]),
         UICapability("Clipboard panel", "delete an entry", ["clipboard", "rm", "1"]),
-        UICapability("Clipboard panel", "clear the history", ["clipboard", "clear"]),
+        UICapability(
+            "Clipboard panel", "clear the history", ["clipboard", "clear", "--yes"]),
         UICapability(
             "Clipboard panel", "search the history", ["clipboard", "ls", "--search", "x"]),
         UICapability(
@@ -78,11 +79,13 @@ enum UIParity {
         UICapability(
             "Attention focus card", "finish a focus session", ["attention", "focus", "stop"]),
 
-        UICapability("Colour picker", "forget the picked colours", ["color", "clear"]),
+        UICapability(
+            "Colour picker", "forget the picked colours", ["color", "clear", "--yes"]),
 
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
-        UICapability("Notch shelf", "take an item off the shelf", ["shelf", "rm", "1"]),
-        UICapability("Notch shelf", "empty the shelf", ["shelf", "clear"]),
+        UICapability(
+            "Notch shelf", "take an item off the shelf", ["shelf", "rm", "1", "--yes"]),
+        UICapability("Notch shelf", "empty the shelf", ["shelf", "clear", "--yes"]),
 
         UICapability("Cleaner card", "reclaim the scanned caches", ["cleaner", "clean"]),
         UICapability(
@@ -120,7 +123,8 @@ enum UIParity {
         UICapability(
             "Companion chat", "list past conversations", ["companion", "conversations"]),
         UICapability(
-            "Companion chat", "delete a conversation", ["companion", "forget", "abc"]),
+            "Companion chat", "delete a conversation",
+            ["companion", "forget", "abc", "--yes"]),
         UICapability(
             "Companion library", "search the memory", ["companion", "search", "warden"]),
         UICapability(
@@ -204,6 +208,33 @@ enum UIParity {
             "Machine cooling", "switch thermal profiles",
             ["machines", "thermal", "set", "box", "performance"]),
         UICapability(
+            "Machine controls", "inspect available live controls",
+            ["machines", "control", "status", "box"]),
+        UICapability(
+            "Machine controls", "set display brightness",
+            ["machines", "control", "brightness", "box", "50"]),
+        UICapability(
+            "Machine controls", "set output volume",
+            ["machines", "control", "volume", "box", "40"]),
+        UICapability(
+            "Machine controls", "mute system audio",
+            ["machines", "control", "mute", "box", "on"]),
+        UICapability(
+            "Machine controls", "turn Wi-Fi off",
+            ["machines", "control", "wifi", "box", "off", "--yes"]),
+        UICapability(
+            "Machine controls", "turn Bluetooth on",
+            ["machines", "control", "bluetooth", "box", "on"]),
+        UICapability(
+            "Machine controls", "turn airplane mode on",
+            ["machines", "control", "airplane", "box", "on", "--yes"]),
+        UICapability(
+            "Machine controls", "turn Do Not Disturb on",
+            ["machines", "control", "dnd", "box", "on"]),
+        UICapability(
+            "Machine controls", "set keyboard backlight brightness",
+            ["machines", "control", "keyboard-light", "box", "25"]),
+        UICapability(
             "Machine tools", "start a systemd unit",
             ["machines", "services", "start", "box", "nginx.service"]),
         UICapability(
@@ -216,7 +247,7 @@ enum UIParity {
             "Machine processes", "end a process with SIGTERM", ["machines", "kill", "box", "42"]),
         UICapability(
             "Machine processes", "force kill a process",
-            ["machines", "kill", "box", "42", "--signal", "KILL"]),
+            ["machines", "kill", "box", "42", "--signal", "KILL", "--yes"]),
         UICapability(
             "Machine tools", "switch a port forward on",
             ["machines", "forwards", "on", "box", "1"]),
@@ -358,9 +389,11 @@ enum UIParity {
             "Docker window", "restart a container",
             ["machines", "docker", "restart", "box", "api"]),
         UICapability(
-            "Docker window", "remove a container", ["machines", "docker", "rm", "box", "api"]),
+            "Docker window", "remove a container",
+            ["machines", "docker", "rm", "box", "api", "--yes"]),
         UICapability(
-            "Docker window", "remove an image", ["machines", "docker", "rmi", "box", "nginx"]),
+            "Docker window", "remove an image",
+            ["machines", "docker", "rmi", "box", "nginx", "--yes"]),
         UICapability(
             "Docker window", "remove a volume",
             ["machines", "docker", "volume-rm", "box", "data"]),

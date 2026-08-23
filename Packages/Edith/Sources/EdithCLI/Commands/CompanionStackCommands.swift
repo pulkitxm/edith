@@ -194,19 +194,32 @@ struct CompanionStackDownCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Also delete its volumes. This destroys stored memory.")
     var wipe = false
 
+    @Flag(help: "Actually delete volumes when --wipe is present.")
+    var yes = false
+
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
     func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
+            let plan =
+                wipe
+                ? CLIDestructivePlan(
+                    action: "stop companion stack and delete volumes",
+                    targets: ["\(deployment.machineName):\(deployment.directory):volumes"],
+                    confirmed: yes, json: json,
+                    fields: ["deployment": CompanionHostsCommand.deploymentJSON(deployment)])
+                : nil
+            guard plan?.shouldApply() ?? true else { return }
             _ = try await CompanionStackRunner.run(
                 CompanionStackCommands.down(
                     directory: deployment.directory,
                     tier: CompanionTier(rawValue: deployment.tier) ?? .cpu,
                     keepData: !wipe),
                 on: deployment, timeout: 300)
-            try await CompanionStackRunner.report(deployment, json: json, verb: "stopped")
+            try await CompanionStackRunner.report(
+                deployment, json: json, verb: "stopped", plan: plan)
         }
     }
 }

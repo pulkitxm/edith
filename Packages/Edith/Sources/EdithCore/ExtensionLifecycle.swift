@@ -98,7 +98,6 @@ public struct ExtensionLifecycleReport: Codable, Equatable, Sendable {
 
     public var verified: Bool { state.phase == .ready }
 }
-
 public struct ExtensionLifecycleInstruction: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let title: String

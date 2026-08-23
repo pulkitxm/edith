@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCore
 @testable import EdithKit
 
 @Suite struct ShellQuoteTests {
@@ -790,6 +791,61 @@ import Testing
             process.waitUntilExit()
             #expect(process.terminationStatus == 0)
         }
+    }
+}
+
+@Suite struct MachineControlOperationTests {
+    @Test func descriptorsAreUniqueCompleteAndClassified() {
+        let descriptors = MachineControlOperation.allCases.map(\.descriptor)
+        #expect(Set(descriptors.map(\.id)).count == descriptors.count)
+        #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+        #expect(descriptors.allSatisfy { $0.cli.starts(with: ["machines", "control"]) })
+        #expect(MachineControlOperation.status.descriptor.effect == .read)
+        #expect(MachineControlOperation.wifi.descriptor.requiresPreview)
+        #expect(MachineControlOperation.airplane.descriptor.requiresPreview)
+        #expect(!MachineControlOperation.volume.descriptor.requiresPreview)
+        #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
+    }
+
+    @Test func statusUsesTheSharedCommandAndParsesItsResult() async throws {
+        var command = ""
+        var timeout: TimeInterval = 0
+        let result = await MachineControlOperationExecution.status { next, stdin, seconds in
+            command = next
+            timeout = seconds
+            #expect(stdin == nil)
+            return .success("EDITH_CONTROL_PLATFORM=linux\nEDITH_CONTROL_VOLUME=37\n")
+        }
+        let snapshot = try result.get()
+        #expect(command == MachineControlCenterCommands.statusCommand)
+        #expect(timeout == 20)
+        #expect(snapshot.platform == .linux)
+        #expect(snapshot.volume == 37)
+    }
+
+    @Test func mutationsUseTheSharedBuilderAndTimeout() async throws {
+        var command = ""
+        var timeout: TimeInterval = 0
+        let result = await MachineControlOperationExecution.perform(
+            .setVolume(41), machineID: Machine.localID, isLocal: true,
+            platform: .darwin
+        ) { next, stdin, seconds in
+            command = next
+            timeout = seconds
+            #expect(stdin == nil)
+            return .success("")
+        }
+        _ = try result.get()
+        #expect(command.contains("output volume 41"))
+        #expect(timeout == 30)
+    }
+
+    @Test func actionMetadataMatchesOnlyDisconnectingChanges() {
+        #expect(MachineControlAction.setWiFiEnabled(false).isDisruptive)
+        #expect(MachineControlAction.setAirplaneMode(true).isDisruptive)
+        #expect(!MachineControlAction.setWiFiEnabled(true).isDisruptive)
+        #expect(!MachineControlAction.setAirplaneMode(false).isDisruptive)
+        #expect(MachineControlAction.setMuted(true).operation == .mute)
     }
 }
 

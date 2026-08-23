@@ -142,25 +142,33 @@ enum CompanionStackRunner {
 
 extension CompanionStackRunner {
     static func report(
-        _ deployment: CompanionDeployment, json: Bool, verb: String
+        _ deployment: CompanionDeployment, json: Bool, verb: String,
+        plan: CLIDestructivePlan? = nil
     ) async throws {
         let services = await services(deployment)
+        let serviceJSON = services.map { service in
+            JSONValue.object([
+                "service": .string(service.service),
+                "status": .string(service.status),
+                "running": .bool(service.running),
+            ])
+        }
+        let running = services.filter(\.running).count
+        if let plan {
+            plan.finish(
+                changed: true,
+                plain: "\(verb) on \(deployment.machineName), \(running) of \(services.count) up",
+                fields: ["services": .array(serviceJSON)])
+            return
+        }
         guard !json else {
             CLIOut.json(
                 .object([
                     "deployment": CompanionHostsCommand.deploymentJSON(deployment),
-                    "services": .array(
-                        services.map { service in
-                            .object([
-                                "service": .string(service.service),
-                                "status": .string(service.status),
-                                "running": .bool(service.running),
-                            ])
-                        }),
+                    "services": .array(serviceJSON),
                 ]))
             return
         }
-        let running = services.filter(\.running).count
         CLIOut.out("\(verb) on \(deployment.machineName), \(running) of \(services.count) up")
     }
 }

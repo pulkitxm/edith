@@ -83,7 +83,6 @@ import Testing
         #expect(try JSONDecoder().decode(ExtensionLifecycleReport.self, from: data) == report)
         #expect(!report.verified)
     }
-
     private func validate(
         _ instructions: [ExtensionLifecycleInstruction], extensionID: String, field: String
     ) {

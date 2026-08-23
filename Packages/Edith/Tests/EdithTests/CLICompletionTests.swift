@@ -73,7 +73,6 @@ import Testing
         let flags = Self.plan(["ed", "extensions", "setup", "--i"], 3)
         #expect(flags.candidates == ["--install-tools"])
     }
-
     @Test func toolIDsCompleteForInstall() {
         let result = Self.plan(["ed", "tools", "install", "q"], 3)
         #expect(result.candidates == ["quinjet"])

@@ -49,8 +49,9 @@ that installation work.
 
 ## `ed companion stack down`
 
-Takes `--wipe` to run `down -v`, deleting the project's named volumes, and
-`--json`. Without it the data survives.
+Takes `--wipe` to plan `down -v`, deleting the project's named volumes, and
+`--json`. The wipe plan changes nothing until `--yes` is also present. A plain
+`down` still stops the stack immediately and preserves its data.
 
 `--wipe` is irreversible. It removes Postgres memory, the vault, Ollama models,
 the speech model and the GPU reranker cache where present. Export with

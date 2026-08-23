@@ -338,22 +338,32 @@ struct ClipboardClearCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually clear it. Without this nothing is touched.")
+    var yes = false
+
     @Flag(help: "Keep pinned entries.")
     var keepPinned = false
 
     func run() async throws {
         try await execute {
-            let outcome = try ClipboardActions.clear(keepingPinned: keepPinned)
+            let entries = ClipboardBridge.entries()
+            let targets = entries.filter { !keepPinned || !$0.pinned }.map(\.id)
+            let plan = CLIDestructivePlan(
+                action: "clear clipboard history", targets: targets, confirmed: yes, json: json,
+                fields: [
+                    "keepPinned": .bool(keepPinned),
+                    "removed": .int(targets.count),
+                    "remaining": .int(entries.count - targets.count),
+                ])
+            guard plan.shouldApply() else { return }
+            let outcome = try ClipboardActions.delete(ids: Set(targets))
             AppBridge.post(IPC.Name.clipboardChanged)
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "removed": .int(outcome.changed),
-                        "remaining": .int(outcome.entries.count),
-                    ]))
-                return
-            }
-            CLIOut.out("cleared \(outcome.changed) entries")
+            plan.finish(
+                changed: outcome.changed > 0, plain: "cleared \(outcome.changed) entries",
+                fields: [
+                    "removed": .int(outcome.changed),
+                    "remaining": .int(outcome.entries.count),
+                ])
         }
     }
 }
@@ -437,16 +447,20 @@ struct ColorClearCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually clear it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            let count = ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).count
+            let swatches = ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults)
+            let plan = CLIDestructivePlan(
+                action: "clear color history", targets: swatches.map { $0.id.uuidString },
+                confirmed: yes, json: json, fields: ["removed": .int(swatches.count)])
+            guard plan.shouldApply() else { return }
             ColorHistoryStore.clear(in: CLIEnvironment.sharedDefaults)
             ConfigStore.announceChange()
-            guard !json else {
-                CLIOut.json(.object(["removed": .int(count)]))
-                return
-            }
-            CLIOut.out("cleared \(count) colours")
+            plan.finish(
+                changed: !swatches.isEmpty, plain: "cleared \(swatches.count) colours")
         }
     }
 }

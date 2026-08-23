@@ -262,18 +262,36 @@ struct DockerInspectCommand: AsyncParsableCommand {
 
 protocol DockerLifecycleCommand: AsyncParsableCommand {
     static var action: String { get }
+    static var isDestructive: Bool { get }
     var json: Bool { get }
+    var confirmed: Bool { get }
     var machine: String { get }
     var containers: [String] { get }
 }
 
 extension DockerLifecycleCommand {
+    static var isDestructive: Bool { false }
+    var confirmed: Bool { true }
+
     func apply() async throws {
         try await execute {
             let action = Self.action
             guard !containers.isEmpty else {
                 throw CLIFailure("name at least one container")
             }
+            let target = try MachineResolver.machine(machine)
+            let plan =
+                Self.isDestructive
+                ? CLIDestructivePlan(
+                    action: action,
+                    targets: containers.map { "\(target.name):container:\($0)" },
+                    confirmed: confirmed, json: json,
+                    fields: [
+                        "machine": .string(target.name),
+                        "containers": .strings(containers),
+                    ])
+                : nil
+            guard plan?.shouldApply() ?? true else { return }
             let runner = try await DockerBridge.runner(machine)
             let result = try await runner.run(
                 DockerCommands.lifecycle(action, ids: containers), timeout: 120)
@@ -281,6 +299,11 @@ extension DockerLifecycleCommand {
                 throw CLIFailure(
                     "docker \(action) failed on \(runner.machine.name)",
                     hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            if let plan {
+                plan.finish(
+                    changed: true, plain: "\(action) \(containers.joined(separator: " "))")
+                return
             }
             guard !json else {
                 CLIOut.json(
@@ -351,9 +374,15 @@ struct DockerRemoveCommand: DockerLifecycleCommand {
     static let configuration = CommandConfiguration(
         commandName: "rm", abstract: "Remove a container, forcing it down first.")
     static let action = "rm"
+    static let isDestructive = true
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
+
+    @Flag(help: "Actually remove them. Without this nothing is touched.")
+    var yes = false
+
+    var confirmed: Bool { yes }
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -405,6 +434,9 @@ struct DockerRemoveImageCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually remove it. Without this nothing is touched.")
+    var yes = false
+
     @Flag(help: "Remove it even when a container still refers to it.")
     var force = false
 
@@ -416,6 +448,16 @@ struct DockerRemoveImageCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
+            let target = try MachineResolver.machine(machine)
+            let plan = CLIDestructivePlan(
+                action: "remove docker image", targets: ["\(target.name):image:\(image)"],
+                confirmed: yes, json: json,
+                fields: [
+                    "machine": .string(target.name),
+                    "image": .string(image),
+                    "forced": .bool(force),
+                ])
+            guard plan.shouldApply() else { return }
             let runner = try await DockerBridge.runner(machine)
             let result = try await runner.run(
                 DockerCommands.removeImage(image, force: force), timeout: 120)
@@ -424,16 +466,7 @@ struct DockerRemoveImageCommand: AsyncParsableCommand {
                     "docker rmi failed on \(runner.machine.name)",
                     hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
             }
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "machine": .string(runner.machine.name),
-                        "image": .string(image),
-                        "forced": .bool(force),
-                    ]))
-                return
-            }
-            CLIOut.out("removed image \(image)")
+            plan.finish(changed: true, plain: "removed image \(image)")
         }
     }
 }

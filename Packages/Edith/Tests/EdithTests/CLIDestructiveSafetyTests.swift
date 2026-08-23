@@ -1,0 +1,251 @@
+import Foundation
+import Testing
+
+@testable import EdithCLI
+@testable import EdithKit
+
+@Suite struct CLIDestructiveSafetyTests {
+    static let destructivePaths: Set<String> = [
+        "ed apps quit",
+        "ed cleaner clean",
+        "ed clipboard clear",
+        "ed color clear",
+        "ed companion erase",
+        "ed companion forget",
+        "ed companion stack down",
+        "ed companion wipe",
+        "ed machines control airplane",
+        "ed machines control wifi",
+        "ed machines docker prune",
+        "ed machines docker rm",
+        "ed machines docker rmi",
+        "ed machines docker volume-rm",
+        "ed machines files rm",
+        "ed machines kill",
+        "ed machines power reboot",
+        "ed machines power shutdown",
+        "ed machines rm",
+        "ed music rm",
+        "ed shelf clear",
+        "ed shelf rm",
+    ]
+
+    static func nodes(
+        under node: CommandNode = CommandTree.root, path: [String] = []
+    ) -> [(String, CommandNode)] {
+        let here = path + [node.name]
+        return [(here.joined(separator: " "), node)]
+            + node.children.flatMap { nodes(under: $0, path: here) }
+    }
+
+    @Test func everyDestructiveLeafDeclaresThePreviewThenYesPolicy() {
+        let nodes = Self.nodes()
+        let marked = Set(
+            nodes.compactMap { path, node in
+                node.destructivePolicy == .previewThenYes ? path : nil
+            })
+        #expect(marked == Self.destructivePaths)
+        for (path, node) in nodes {
+            #expect(
+                node.options.contains("--yes") == (node.destructivePolicy == .previewThenYes),
+                "\(path) has inconsistent destructive metadata")
+            if node.destructivePolicy != nil {
+                #expect(node.children.isEmpty, "\(path) is not a leaf")
+            }
+        }
+    }
+
+    @Test func migratedParsersExposeAnExplicitConfirmationFlag() throws {
+        let docker = try #require(
+            try EdRoot.parseAsRoot(["machines", "docker", "rm", "box", "api", "--yes"])
+                as? DockerRemoveCommand)
+        let image = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "docker", "rmi", "box", "nginx", "--yes",
+            ]) as? DockerRemoveImageCommand)
+        let kill = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "kill", "box", "42", "--signal", "KILL", "--yes",
+            ]) as? MachinesKillCommand)
+        let stack = try #require(
+            try EdRoot.parseAsRoot(["companion", "stack", "down", "--wipe", "--yes"])
+                as? CompanionStackDownCommand)
+        let forget = try #require(
+            try EdRoot.parseAsRoot(["companion", "forget", "abc", "--yes"])
+                as? CompanionForgetCommand)
+        let shelfRemove = try #require(
+            try EdRoot.parseAsRoot(["shelf", "rm", "1", "--yes"])
+                as? ShelfRemoveCommand)
+        let shelfClear = try #require(
+            try EdRoot.parseAsRoot(["shelf", "clear", "--yes"])
+                as? ShelfClearCommand)
+        let clipboard = try #require(
+            try EdRoot.parseAsRoot(["clipboard", "clear", "--yes"])
+                as? ClipboardClearCommand)
+        let color = try #require(
+            try EdRoot.parseAsRoot(["color", "clear", "--yes"])
+                as? ColorClearCommand)
+        #expect(docker.yes && image.yes && kill.yes && stack.yes && forget.yes)
+        #expect(shelfRemove.yes && shelfClear.yes && clipboard.yes && color.yes)
+    }
+
+    @Test func clipboardPreviewPreservesIndexAndBlobsThenConfirmationRemovesOnlyTargets()
+        async throws
+    {
+        try await CLIProbe.inWorld { world in
+            try CLIClipboardTests.seed(world, count: 3)
+            let before = try Data(contentsOf: ClipboardPaths.indexFile)
+            let entries = ClipboardBridge.entries()
+            let blobBytes = try Dictionary(
+                uniqueKeysWithValues: entries.map {
+                    (
+                        $0.id,
+                        try Data(
+                            contentsOf: ClipboardPaths.blobFile(sha256: $0.sha256, ext: $0.ext))
+                    )
+                })
+            let preview = await CLIProbe.capture([
+                "clipboard", "clear", "--keep-pinned", "--json",
+            ])
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect(preview.object?["changed"] as? Bool == false)
+            let targets = Set(preview.object?["targets"] as? [String] ?? [])
+            #expect(targets == Set(entries.filter { !$0.pinned }.map(\.id)))
+            #expect(try Data(contentsOf: ClipboardPaths.indexFile) == before)
+            for entry in entries {
+                #expect(
+                    try Data(
+                        contentsOf: ClipboardPaths.blobFile(
+                            sha256: entry.sha256, ext: entry.ext)) == blobBytes[entry.id])
+            }
+
+            let applied = await CLIProbe.capture([
+                "clipboard", "clear", "--keep-pinned", "--yes", "--json",
+            ])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["changed"] as? Bool == true)
+            let remaining = ClipboardRepository.loadEntries()
+            #expect(remaining.map(\.id) == entries.filter(\.pinned).map(\.id))
+            #expect(Set(entries.map(\.id)).subtracting(remaining.map(\.id)) == targets)
+        }
+    }
+
+    @Test func shelfPreviewPreservesBytesThenConfirmationRemovesOnlyNamedItem() async throws {
+        try await CLIProbe.inWorld { world in
+            try CLIShelfTests.seed(world, names: ["one.txt", "two.txt"])
+            let items = ShelfBridge.items()
+            let beforeIndex = try Data(contentsOf: ShelfIndex.indexFile())
+            let beforeFiles = try Dictionary(
+                uniqueKeysWithValues: items.map {
+                    ($0.id, try Data(contentsOf: ShelfIndex.fileURL(for: $0)))
+                })
+            let preview = await CLIProbe.capture(["shelf", "rm", "1", "--json"])
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect(preview.object?["changed"] as? Bool == false)
+            let target = try #require((preview.object?["targets"] as? [String])?.only)
+            #expect(target == ShelfIndex.fileURL(for: items[0]).path)
+            #expect(try Data(contentsOf: ShelfIndex.indexFile()) == beforeIndex)
+            for item in items {
+                #expect(try Data(contentsOf: ShelfIndex.fileURL(for: item)) == beforeFiles[item.id])
+            }
+
+            let applied = await CLIProbe.capture(["shelf", "rm", "1", "--yes", "--json"])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["changed"] as? Bool == true)
+            #expect(!FileManager.default.fileExists(atPath: target))
+            let kept = try #require(ShelfIndex.load().only)
+            #expect(kept.id == items[1].id)
+            #expect(try Data(contentsOf: ShelfIndex.fileURL(for: kept)) == beforeFiles[kept.id])
+        }
+    }
+
+    @Test func shelfAndColorClearPreviewWithoutChangingTheirStores() async throws {
+        try await CLIProbe.inWorld { world in
+            try CLIShelfTests.seed(world, names: ["one.txt", "two.txt"])
+            CLIColorTests.seed(world, count: 2)
+            let shelfIndex = try Data(contentsOf: ShelfIndex.indexFile())
+            let colorData = try #require(world.shared.data(forKey: "colorPickerHistory"))
+
+            let shelf = await CLIProbe.capture(["shelf", "clear", "--json"])
+            let color = await CLIProbe.capture(["color", "clear", "--json"])
+            #expect(shelf.object?["applied"] as? Bool == false)
+            #expect(color.object?["applied"] as? Bool == false)
+            #expect(try Data(contentsOf: ShelfIndex.indexFile()) == shelfIndex)
+            #expect(world.shared.data(forKey: "colorPickerHistory") == colorData)
+
+            let applied = await CLIProbe.capture(["color", "clear", "--yes", "--json"])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["changed"] as? Bool == true)
+            #expect(ColorHistoryStore.load(from: world.shared).isEmpty)
+            #expect(try Data(contentsOf: ShelfIndex.indexFile()) == shelfIndex)
+        }
+    }
+
+    @Test func remotePreviewsResolveExactTargetsWithoutOpeningAConnection() async {
+        await CLIProbe.inWorld { _ in
+            MachineRegistry.add(Machine(name: "Build Box", host: "192.0.2.7"))
+            let cases: [([String], String)] = [
+                (
+                    ["machines", "docker", "rm", "build", "api", "worker", "--json"],
+                    "Build Box:container:api"
+                ),
+                (
+                    ["machines", "docker", "rmi", "build", "nginx:latest", "--json"],
+                    "Build Box:image:nginx:latest"
+                ),
+                (
+                    ["machines", "kill", "build", "42", "--signal", "KILL", "--json"],
+                    "Build Box:pid:42"
+                ),
+            ]
+            for (arguments, firstTarget) in cases {
+                let result = await CLIProbe.capture(arguments)
+                #expect(result.code == 0, "\(arguments) exited \(result.code)")
+                #expect(result.object?["applied"] as? Bool == false)
+                #expect(result.object?["changed"] as? Bool == false)
+                #expect((result.object?["targets"] as? [String])?.first == firstTarget)
+            }
+        }
+    }
+
+    @Test func companionPreviewsDoNotContactTheServiceOrRunTheStack() async {
+        await CLIProbe.inWorld { _ in
+            let conversation = await CLIProbe.capture([
+                "companion", "forget", "conversation-7", "--json",
+            ])
+            #expect(conversation.code == 0)
+            #expect(conversation.object?["applied"] as? Bool == false)
+            #expect(conversation.object?["targets"] as? [String] == ["conversation-7"])
+
+            CompanionDeploymentStore.save(
+                CompanionDeployment(
+                    machineID: nil, machineName: "This Mac", directory: "/srv/edith",
+                    tier: "cpu"))
+            let stack = await CLIProbe.capture([
+                "companion", "stack", "down", "--wipe", "--json",
+            ])
+            #expect(stack.code == 0)
+            #expect(stack.object?["applied"] as? Bool == false)
+            #expect(stack.object?["changed"] as? Bool == false)
+            #expect(
+                stack.object?["targets"] as? [String]
+                    == ["This Mac:/srv/edith:volumes"])
+        }
+    }
+
+    @Test func plainPreviewNamesTargetsAndExplainsConfirmation() async throws {
+        try await CLIProbe.inWorld { world in
+            try CLIShelfTests.seed(world, names: ["one.txt"])
+            let target = ShelfIndex.root.appendingPathComponent("one.txt").path
+            let result = await CLIProbe.capture(["shelf", "rm", "1"])
+            #expect(result.code == 0)
+            #expect(result.stdout == "would remove shelf item: \(target)\n")
+            #expect(result.stderr == "nothing changed; pass --yes to apply this plan\n")
+            #expect(FileManager.default.fileExists(atPath: target))
+        }
+    }
+}
+
+extension Array {
+    fileprivate var only: Element? { count == 1 ? first : nil }
+}
