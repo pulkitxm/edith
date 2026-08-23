@@ -344,6 +344,15 @@ enum JSONContract {
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
         JSONCase(
             "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
+        JSONCase("ed quinjet projects", ["quinjet", "projects", "--json"]),
+        JSONCase(
+            "ed quinjet worktrees",
+            ["quinjet", "worktrees", "/tmp/edith-no-project", "--json"]),
+        JSONCase(
+            "ed quinjet open", ["quinjet", "open", "/tmp/edith-no-project", "--json"]),
+        JSONCase(
+            "ed quinjet launch", ["quinjet", "launch", "/tmp/edith-no-project", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed machines ls", ["machines", "ls", "--json"]),
         JSONCase("ed machines show", ["machines", "show", "nowhere-at-all", "--json"]),
         JSONCase(
