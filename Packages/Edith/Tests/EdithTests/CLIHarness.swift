@@ -119,6 +119,7 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.usageRefresh = .scripted(events: [])
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
+        }
         CLIEnvironment.openURL = { [weak self] url in
             self?.note(url: url)
             return true
