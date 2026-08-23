@@ -13,13 +13,21 @@ public enum Favourites {
 
     @discardableResult
     public static func toggle(_ relativePath: String) -> Bool {
+        let wanted = !contains(relativePath)
+        _ = set(relativePath, isFavourite: wanted)
+        return wanted
+    }
+
+    @discardableResult
+    public static func set(_ relativePath: String, isFavourite: Bool) -> Bool {
         var list = paths
-        if let index = list.firstIndex(of: relativePath) {
-            list.remove(at: index)
-            save(list)
-            return false
+        let existing = list.firstIndex(of: relativePath)
+        guard (existing != nil) != isFavourite else { return false }
+        if let existing {
+            list.remove(at: existing)
+        } else {
+            list.append(relativePath)
         }
-        list.append(relativePath)
         save(list)
         return true
     }

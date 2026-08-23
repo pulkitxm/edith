@@ -1,4 +1,3 @@
-import AppKit
 import EdithKit
 import SwiftUI
 
@@ -32,7 +31,7 @@ struct CalendarView: View {
             blurEvents: blurCalendar,
             onLoadMore: store.loadMore,
             onOpenMeeting: { url in
-                NSWorkspace.shared.open(url)
+                CalendarEventActions.join(url)
                 dismissPanel()
             }
         )

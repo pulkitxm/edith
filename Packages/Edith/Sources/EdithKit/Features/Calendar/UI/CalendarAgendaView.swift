@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 public struct CalendarAgendaView: View {
@@ -19,7 +18,9 @@ public struct CalendarAgendaView: View {
         accentColor: Color,
         blurEvents: Bool,
         onLoadMore: @escaping () -> Void,
-        onOpenMeeting: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
+        onOpenMeeting: @escaping (URL) -> Void = { url in
+            Task { @MainActor in CalendarEventActions.join(url) }
+        }
     ) {
         self.events = events
         self.style = style

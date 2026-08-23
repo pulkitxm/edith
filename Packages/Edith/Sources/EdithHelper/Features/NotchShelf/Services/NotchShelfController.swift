@@ -46,6 +46,7 @@ final class NotchShelfController: FeatureModule {
 
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
+    private var shelfOperationObserver: NSObjectProtocol?
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
@@ -70,6 +71,11 @@ final class NotchShelfController: FeatureModule {
             guard let self else { return }
             self.items = self.store.items
         }
+        shelfOperationObserver = IPC.observe(
+            IPC.Name.shelfOperation,
+            info: { [weak self] info in
+                self?.performShelfOperation(info)
+            })
         purgeExpired()
         rebuildPanels()
         screenObserver = NotificationCenter.default.addObserver(
@@ -190,6 +196,8 @@ final class NotchShelfController: FeatureModule {
             NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver)
         }
         spaceObserver = nil
+        if let shelfOperationObserver { IPC.stopObserving(shelfOperationObserver) }
+        shelfOperationObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
         gateWorkItem?.cancel()
@@ -875,14 +883,12 @@ final class NotchShelfController: FeatureModule {
     }
 
     func open(_ item: ShelfItem) {
-        for member in group(for: item) {
-            NSWorkspace.shared.open(fileURL(for: member))
-        }
+        perform(.open, items: group(for: item), anchor: item)
         collapseNow()
     }
 
     func reveal(_ item: ShelfItem) {
-        NSWorkspace.shared.activateFileViewerSelecting(group(for: item).map { fileURL(for: $0) })
+        perform(.reveal, items: group(for: item), anchor: item)
         collapseNow()
     }
 
@@ -898,6 +904,26 @@ final class NotchShelfController: FeatureModule {
     }
 
     func share(_ item: ShelfItem) {
+        perform(.share, items: group(for: item), anchor: item)
+    }
+
+    private func performShelfOperation(_ info: [AnyHashable: Any]) {
+        guard let request = ShelfItemOperationExecution.request(info) else { return }
+        let members = items.filter { request.itemIDs.contains($0.id) }
+        guard let anchor = members.first else { return }
+        perform(request.operation, items: members, anchor: anchor)
+        if request.operation != .share { collapseNow() }
+    }
+
+    private func perform(
+        _ operation: ShelfItemOperation, items members: [ShelfItem], anchor item: ShelfItem
+    ) {
+        ShelfItemOperationExecution.perform(
+            operation, urls: members.map(fileURL),
+            share: { [weak self] urls in self?.showSharePicker(urls, anchor: item) })
+    }
+
+    private func showSharePicker(_ urls: [URL], anchor item: ShelfItem) {
         let mouse = NSEvent.mouseLocation
         let panel =
             panels.values.first { $0.frame.contains(mouse) }
@@ -911,7 +937,7 @@ final class NotchShelfController: FeatureModule {
             self?.collapseAfterDelay()
         }
         sharePickerDelegate = delegate
-        let picker = NSSharingServicePicker(items: group(for: item).map { fileURL(for: $0) })
+        let picker = NSSharingServicePicker(items: urls)
         picker.delegate = delegate
         let size = view.bounds.size
         let index = items.firstIndex(where: { $0.id == item.id }) ?? 0

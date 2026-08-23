@@ -562,8 +562,8 @@ private struct QuickActionsCard: View {
                         icon: "person.wave.2", title: "Presenter mode",
                         sub: "Blur sensitive values on screen", active: presenterMode
                     ) {
-                        presenterMode.toggle()
-                        if !presenterMode { IPC.post(IPC.Name.presenterPauseAuto) }
+                        _ = PresenterRuntimeOperationExecution.perform(
+                            presenterMode ? .stop : .start)
                     }
                 }
                 if lidAwakeEnabled {
