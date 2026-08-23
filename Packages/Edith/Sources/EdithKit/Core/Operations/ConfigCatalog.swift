@@ -1,4 +1,3 @@
-import EdithKit
 import Foundation
 
 public struct SettingDefinition: Equatable, Sendable {

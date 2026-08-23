@@ -8,6 +8,7 @@ public enum UserOperationCatalog {
         + ShelfItemOperation.allCases.map(\.descriptor)
         + MusicLibraryOperation.allCases.map(\.descriptor)
         + PresenterRuntimeOperation.allCases.map(\.descriptor)
+        + ConfigurationOperation.allCases.map(\.descriptor)
 
     public static func descriptor(id: UserOperationID) -> UserOperationDescriptor? {
         descriptors.first { $0.id == id }

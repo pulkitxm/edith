@@ -139,7 +139,6 @@ struct ConfigSetCommand: AsyncParsableCommand {
             let parsed = try ConfigValueParser.parse(
                 value, as: found.type, allowed: found.allowed)
             try store.set(parsed, for: found)
-            ConfigStore.announceChange()
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -169,7 +168,6 @@ struct ConfigUnsetCommand: AsyncParsableCommand {
             let found = try definition(key)
             let store = ConfigStore()
             try store.unset(found)
-            ConfigStore.announceChange()
             guard !json else {
                 CLIOut.json(
                     .object(["key": .string(found.key), "value": store.value(for: found)]))
@@ -285,7 +283,7 @@ struct ConfigImportCommand: AsyncParsableCommand {
                     unchanged.append(key)
                     continue
                 }
-                if !dryRun { try store.set(value, for: found) }
+                if !dryRun { try store.set(value, for: found, announce: false) }
                 applied.append(key)
             }
             if !dryRun, !applied.isEmpty { ConfigStore.announceChange() }
@@ -311,37 +309,10 @@ struct ConfigImportCommand: AsyncParsableCommand {
     }
 
     private func coerce(_ raw: Any, to definition: SettingDefinition) throws -> JSONValue {
-        switch definition.type {
-        case .bool:
-            guard let value = raw as? Bool else {
-                throw CLIFailure("\(definition.key) wants a bool")
-            }
-            return .bool(value)
-        case .int:
-            guard let value = raw as? NSNumber else {
-                throw CLIFailure("\(definition.key) wants a number")
-            }
-            return .int(value.intValue)
-        case .number:
-            guard let value = raw as? NSNumber else {
-                throw CLIFailure("\(definition.key) wants a number")
-            }
-            return .double(value.doubleValue)
-        case .string, .csv:
-            guard let value = raw as? String else {
-                throw CLIFailure("\(definition.key) wants a string")
-            }
-            guard definition.allowed.isEmpty || definition.allowed.contains(value) else {
-                throw CLIFailure("\(value) is not allowed for \(definition.key)")
-            }
-            return .string(value)
-        case .stringList:
-            guard let value = raw as? [String] else {
-                throw CLIFailure("\(definition.key) wants an array of strings")
-            }
-            return .strings(value)
-        case .map:
-            throw CLIFailure("\(definition.key) cannot be imported")
+        do {
+            return try ConfigurationValueParser.coerce(raw, to: definition)
+        } catch let error as ConfigurationError {
+            throw CLIFailure(error.message, hint: error.hint)
         }
     }
 }
