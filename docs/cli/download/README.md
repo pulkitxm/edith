@@ -30,7 +30,7 @@ The one binary `ed` runs itself is the yt-dlp that `ed download tool` reports on
 | `ed download open` | Opens the files produced by a completed entry. |
 | `ed download reveal` | Reveals the files produced by a completed entry in Finder. |
 | `ed download tool` | Reports the yt-dlp being used, or runs its self-update. |
-| `ed download cancel` | Stops active work and keeps interrupted entries available to retry. |
+| `ed download cancel` | Stops one numbered download, or all active work when no number is given. |
 
 `ed download list` is the same command as `ed download ls`.
 
@@ -52,10 +52,10 @@ The one binary `ed` runs itself is the yt-dlp that `ed download tool` reports on
 | Code | When this group produces it |
 | --- | --- |
 | 0 | The listing printed, or the queue was changed. Also an empty queue for `ls`, `clear` and `cancel`, `retry --all` with nothing to retry, `tool --json` with yt-dlp missing, and `--help` on the group or any verb. |
-| 1 | `add` found no YouTube URL in its arguments, `retry` was given neither a number nor `--all`, `retry <n>` named an entry that is not `failed` or `interrupted`, or the queue file could not be written. |
+| 1 | `add` found no YouTube URL in its arguments, `retry` was given neither a number nor `--all`, `retry <n>` named an entry that is not retryable, `cancel <n>` named an entry that has finished, or the queue file could not be written. |
 | 2 | `ls --limit` was negative (`--limit cannot be negative`), or the command line was wrong in ArgumentParser's own terms: an unknown flag, `add` with no URL, `rm` with no number, or a number that is not an integer. |
-| 3 | `add --kind` named something other than `audio` or `video`, or `rm <n>` and `retry <n>` named a position outside the queue (`there is no download 9`, with the queue size as the hint). |
-| 4 | `rm`, `retry <n>`, `open` or `reveal` was run against an empty queue, a result is unavailable, or `tool` could not find yt-dlp. |
+| 3 | `add --kind` named something other than `audio` or `video`, or a numbered queue command named a position outside the queue (`there is no download 9`, with the queue size as the hint). |
+| 4 | A numbered queue command was run against an empty queue, a result is unavailable, or `tool` could not find yt-dlp. |
 
 Nothing here exits 4 for the usual reason. No verb in this group asks Edith to
 answer a question, so none of them fails because the app is closed.
@@ -106,12 +106,13 @@ answer a question, so none of them fails because the app is closed.
   never touches your music folder. Use `ed music rm` for the files themselves.
 - `rm` and `clear` are previews unless `--yes` is present. They never delete
   downloaded files. `cancel` acts immediately, but retains affected entries as
-  `interrupted` so `retry` can queue them again.
+  `interrupted` so `retry` can queue them again. Pass the number from `ls` to
+  cancel only that record, or omit it to cancel every active record.
 - `--help` works on the group and on every verb, prints on stdout and exits 0.
 - Completion knows the verbs and their flags: `ed dl <TAB>` offers the full group,
   and `ed download ls --<TAB>` offers `--active`, `--limit` and `--json`. It
-  also offers `audio` and `video` after `--kind`. The number `rm` and `retry`
-  take still completes to nothing.
+  also offers `audio` and `video` after `--kind`. The numbers `rm`, `retry` and
+  `cancel` take still complete to nothing.
 
 ## Where to go next
 

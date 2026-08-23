@@ -32,9 +32,17 @@ with nothing to retry is not an error: it reports 0 and exits 0.
 
 ```json
 {
-  "retried": 2
+  "record": {
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
+    "index": 2,
+    "state": "queued"
+  },
+  "retried": 1
 }
 ```
+
+The `record` field is present for a numbered retry. `--all` returns only the
+count because it can target several records.
 
 Examples:
 

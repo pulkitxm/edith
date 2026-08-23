@@ -35,13 +35,13 @@ import Testing
         }
     }
 
-    @Test func downloadCancelSaysWhenNothingStoppedTheRunningTransfer() async throws {
+    @Test func downloadCancelReportsWhenNoAppWasNotified() async throws {
         await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
             let result = await CLIProbe.capture(["download", "cancel", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["appRunning"] as? Bool == false)
-            #expect(result.object?["stoppedRunning"] as? Bool == false)
+            #expect(result.object?["appNotified"] as? Bool == false)
         }
     }
 
@@ -59,12 +59,41 @@ import Testing
             #expect(status.object?["queued"] as? Int == 2)
             let cancelled = await CLIProbe.capture(["download", "cancel", "--json"])
             #expect(cancelled.object?["cancelled"] as? Int == 2)
+            #expect((cancelled.object?["records"] as? [[String: Any]])?.count == 2)
             let afterCancel = await CLIProbe.capture(["download", "status", "--json"])
             #expect(afterCancel.object?["interrupted"] as? Int == 2)
 
             let retried = await CLIProbe.capture(["download", "retry", "1", "--json"])
             #expect(retried.object?["retried"] as? Int == 1)
             #expect(world.postedNames().contains(IPC.Name.downloadQueueChanged.rawValue))
+        }
+    }
+
+    @Test func downloadCancelTargetsOneRecordAndPostsItsStableIdentity() async throws {
+        try await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            let first = await CLIProbe.capture([
+                "download", "add", "https://youtu.be/one", "--json",
+            ])
+            _ = await CLIProbe.capture(["download", "add", "https://youtu.be/two", "--json"])
+            let id = (first.array?.first as? [String: Any])?["id"] as? String
+            let recordsBefore = DownloadQueue.load(from: CLIEnvironment.downloadQueueFile)
+            let targetIndex = recordsBefore.firstIndex { $0.id.uuidString == id }.map { $0 + 1 }
+
+            let result = await CLIProbe.capture([
+                "download", "cancel", String(targetIndex ?? 0), "--json",
+            ])
+            let records = result.object?["records"] as? [[String: Any]]
+            #expect(result.code == 0)
+            #expect(result.object?["cancelled"] as? Int == 1)
+            #expect(result.object?["appNotified"] as? Bool == true)
+            #expect(records?.first?["id"] as? String == id)
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestDownloadCancel).last?["id"] as? String
+                    == id)
+            let recordsAfter = DownloadQueue.load(from: CLIEnvironment.downloadQueueFile)
+            #expect(recordsAfter.first { $0.id.uuidString == id }?.state == "interrupted")
+            #expect(recordsAfter.first { $0.id.uuidString != id }?.state == "queued")
         }
     }
 

@@ -307,6 +307,8 @@ enum UIParity {
             "Workspace toolbar", "even out the panes", ["machines", "workspace", "equalize"]),
         UICapability(
             "Download sheet", "cancel running downloads", ["download", "cancel"]),
+        UICapability(
+            "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
             "Permissions pane", "relaunch after granting", ["app", "relaunch"]),

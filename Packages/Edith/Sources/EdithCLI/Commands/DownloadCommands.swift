@@ -69,6 +69,8 @@ enum DownloadBridge {
                 hint: "the queue holds \(count), numbered from 1")
         case .notRetryable(let index, let state):
             return CLIFailure("download \(index) is \(state), so there is nothing to retry")
+        case .notCancelable(let index, let state):
+            return CLIFailure("download \(index) is \(state), so there is nothing to cancel")
         case .noResult(let index):
             return .unavailable(
                 "download \(index) has no completed result",
@@ -230,7 +232,12 @@ struct DownloadRetryCommand: AsyncParsableCommand {
             }
             DownloadBridge.announce()
             guard !json else {
-                CLIOut.json(.object(["retried": .int(changed)]))
+                var object: [String: JSONValue] = ["retried": .int(changed)]
+                if let index {
+                    let queued = try DownloadBridge.record(at: index)
+                    object["record"] = DownloadBridge.json(queued, index: index)
+                }
+                CLIOut.json(.object(object))
                 return
             }
             CLIOut.out(changed == 1 ? "queued it again" : "queued \(changed) again")
@@ -280,6 +287,7 @@ struct DownloadRemoveCommand: AsyncParsableCommand {
                     .object([
                         "removed": .int(result.changed), "remaining": .int(result.remaining),
                         "preview": .bool(false),
+                        "record": DownloadBridge.json(record, index: index),
                     ]))
                 return
             }
@@ -387,6 +395,7 @@ enum DownloadResultCommand {
                 CLIOut.json(
                     .object([
                         "index": .int(index),
+                        "id": .string(record.id.uuidString),
                         "action": .string(action == .open ? "open" : "reveal"),
                         "files": .array(urls.map { .string($0.path) }),
                     ]))
@@ -488,33 +497,64 @@ struct DownloadCancelCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Argument(help: "The download number, counting from 1. Omit it to cancel all.")
+    var index: Int?
+
     func run() async throws {
         try await execute {
             let appRunning = AppBridge.mainAppIsRunning
-            let result = try DownloadOperationExecution.cancel(file: DownloadBridge.file)
+            let targets: [(Int, DownloadRecord)]
+            let result: DownloadMutationResult
+            if let index {
+                let record = try DownloadBridge.record(at: index)
+                do {
+                    result = try DownloadOperationExecution.cancel(
+                        index: index, file: DownloadBridge.file)
+                } catch { throw DownloadBridge.failure(error) }
+                targets = [(index, record)]
+            } else {
+                let records = DownloadBridge.records()
+                targets = records.enumerated().compactMap {
+                    $0.element.isFinished ? nil : ($0.offset + 1, $0.element)
+                }
+                result = try DownloadOperationExecution.cancel(file: DownloadBridge.file)
+            }
+            let cancelled = targets.map { index, original in
+                (index, result.records.first { $0.id == original.id } ?? original)
+            }
             guard result.changed > 0 else {
                 guard !json else {
                     CLIOut.json(
                         .object([
-                            "cancelled": .int(0), "stoppedRunning": .bool(false),
+                            "cancelled": .int(0), "appNotified": .bool(false),
                             "appRunning": .bool(appRunning),
+                            "records": .array([]),
                         ]))
                     return
                 }
                 CLIOut.note("nothing is downloading")
                 return
             }
-            if appRunning { AppBridge.post(IPC.Name.requestDownloadCancel) }
+            if appRunning {
+                let info = index == nil ? nil : ["id": cancelled[0].1.id.uuidString]
+                AppBridge.post(IPC.Name.requestDownloadCancel, userInfo: info)
+            }
             DownloadBridge.announce()
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "cancelled": .int(result.changed), "stoppedRunning": .bool(appRunning),
+                        "cancelled": .int(result.changed), "appNotified": .bool(appRunning),
                         "appRunning": .bool(appRunning),
+                        "records": .array(
+                            cancelled.map { DownloadBridge.json($0.1, index: $0.0) }),
                     ]))
                 return
             }
-            CLIOut.out("cancelled \(result.changed)")
+            if let target = cancelled.first, cancelled.count == 1 {
+                CLIOut.out("cancelled \(target.1.title)")
+            } else {
+                CLIOut.out("cancelled \(result.changed)")
+            }
             if !appRunning {
                 CLIOut.note(
                     "Edith was not running, so queued entries were marked interrupted")

@@ -75,6 +75,58 @@ import Testing
         #expect(clearedFinished.remaining == 0)
     }
 
+    @Test func cancellationCanTargetOneStableRecordIdentity() throws {
+        let sandbox = try sandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox.directory) }
+        let first = record(.queued, at: Date(timeIntervalSince1970: 2), id: UUID())
+        let second = record(.resolving, at: Date(timeIntervalSince1970: 1), id: UUID())
+        try DownloadQueue.save([first, second], to: sandbox.queue)
+
+        let result = try DownloadOperationExecution.cancel(id: second.id, file: sandbox.queue)
+        #expect(result.changed == 1)
+        #expect(result.records.first { $0.id == first.id }?.status == .queued)
+        #expect(result.records.first { $0.id == second.id }?.status == .interrupted("Cancelled"))
+        #expect(throws: DownloadOperationError.self) {
+            try DownloadOperationExecution.cancel(index: 2, file: sandbox.queue)
+        }
+    }
+
+    @Test func startupRecoveryInterruptsInFlightWorkButKeepsQueuedWork() throws {
+        let sandbox = try sandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox.directory) }
+        let queued = record(.queued, at: Date(timeIntervalSince1970: 3))
+        let resolving = record(.resolving, at: Date(timeIntervalSince1970: 2))
+        let downloading = record(
+            .downloading(progress: "8%", videoIndex: 0, videoCount: 0),
+            at: Date(timeIntervalSince1970: 1))
+        try DownloadQueue.save([queued, resolving, downloading], to: sandbox.queue)
+
+        let result = try DownloadOperationExecution.cancel(
+            includeQueued: false, reason: "Interrupted", file: sandbox.queue)
+        #expect(result.changed == 2)
+        #expect(result.records.first { $0.id == queued.id }?.status == .queued)
+        #expect(result.records.first { $0.id == resolving.id }?.canRetry == true)
+        #expect(result.records.first { $0.id == downloading.id }?.canRetry == true)
+    }
+
+    @Test func processCancellationOnlyTerminatesTheTargetedRecord() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["10"]
+        try process.run()
+        let current = UUID()
+
+        #expect(
+            !DownloadProcessControl.cancel(
+                currentID: current, targetID: UUID(), terminate: { process.terminate() }))
+        #expect(process.isRunning)
+        #expect(
+            DownloadProcessControl.cancel(
+                currentID: current, targetID: current, terminate: { process.terminate() }))
+        process.waitUntilExit()
+        #expect(!process.isRunning)
+    }
+
     @MainActor
     @Test func resultActionsResolveOnlyExistingCompletedFiles() throws {
         let sandbox = try sandbox()

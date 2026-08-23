@@ -365,6 +365,7 @@ public enum Guide {
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
         ed download retry --all | clear --yes | tool --update
+        ed download cancel 1 | cancel
         ed download open 1 | reveal 1
         ```
 

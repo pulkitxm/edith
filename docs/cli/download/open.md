@@ -20,6 +20,7 @@ action, index and paths:
 {
   "action": "open",
   "files": ["/Users/me/Music/Night Drive.m4a"],
+  "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
   "index": 1
 }
 ```

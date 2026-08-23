@@ -268,7 +268,10 @@ public final class YoutubeDownloader {
     private init() {
         checkAvailability()
         load()
-        if (try? DownloadOperationExecution.cancel(reason: "Interrupted").changed) ?? 0 > 0 {
+        if
+            (try? DownloadOperationExecution.cancel(
+                includeQueued: false, reason: "Interrupted").changed) ?? 0 > 0
+        {
             load()
             NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
@@ -276,8 +279,9 @@ public final class YoutubeDownloader {
         queueObserver = IPC.observe(IPC.Name.downloadQueueChanged) { [weak self] in
             Task { @MainActor in self?.adoptQueueFromDisk() }
         }
-        cancelObserver = IPC.observe(IPC.Name.requestDownloadCancel) { [weak self] in
-            Task { @MainActor in self?.cancelAll() }
+        cancelObserver = IPC.observe(IPC.Name.requestDownloadCancel) { [weak self] info in
+            let targetID = (info["id"] as? String).flatMap(UUID.init(uuidString:))
+            Task { @MainActor in self?.cancel(targetID: targetID) }
         }
         provisioningObserver = NotificationCenter.default.addObserver(
             forName: .cliToolProvisioned, object: nil, queue: .main
@@ -477,6 +481,10 @@ public final class YoutubeDownloader {
         load()
     }
 
+    public func cancel(_ item: DownloadItem) {
+        cancel(targetID: item.id)
+    }
+
     @discardableResult
     public func openResult(_ item: DownloadItem) -> Bool {
         (try? DownloadOperationExecution.open(id: item.id)) != nil
@@ -644,12 +652,16 @@ public final class YoutubeDownloader {
     }
 
     public func cancelAll() {
-        currentProcess?.terminate()
-        currentProcess = nil
-        isRunning = false
-        currentItemID = nil
-        _ = try? DownloadOperationExecution.cancel()
+        cancel(targetID: nil)
+    }
+
+    private func cancel(targetID: UUID?) {
+        _ = try? DownloadOperationExecution.cancel(id: targetID)
         load()
+        let stopped = DownloadProcessControl.cancel(
+            currentID: currentItemID, targetID: targetID,
+            terminate: { currentProcess?.terminate() })
+        if !stopped, !isRunning { processNext() }
     }
 
     nonisolated static func parseProgress(from text: String) -> (

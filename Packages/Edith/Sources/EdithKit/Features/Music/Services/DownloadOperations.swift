@@ -108,6 +108,7 @@ public enum DownloadOperationError: LocalizedError, Equatable {
     case empty
     case missingIndex(Int, count: Int)
     case notRetryable(Int, state: String)
+    case notCancelable(Int, state: String)
     case noResult(Int)
     case missingResult(String)
 
@@ -118,6 +119,8 @@ public enum DownloadOperationError: LocalizedError, Equatable {
             "There is no download \(index); the queue holds \(count)."
         case .notRetryable(let index, let state):
             "Download \(index) is \(state), so there is nothing to retry."
+        case .notCancelable(let index, let state):
+            "Download \(index) is \(state), so there is nothing to cancel."
         case .noResult(let index): "Download \(index) has no completed result."
         case .missingResult(let path): "The completed result is missing at \(path)."
         }
@@ -177,16 +180,33 @@ public enum DownloadOperationExecution {
     }
 
     public static func cancel(
-        reason: String = "Cancelled", file: URL = DownloadQueue.file
+        id: UUID? = nil, includeQueued: Bool = true, reason: String = "Cancelled",
+        file: URL = DownloadQueue.file
     ) throws -> DownloadMutationResult {
         var records = DownloadQueue.load(from: file)
         var changed = 0
-        for index in records.indices where !records[index].isFinished {
+        for index in records.indices where id == nil || records[index].id == id {
+            let cancellable = switch records[index].status {
+            case .queued: includeQueued
+            case .resolving, .downloading: true
+            case .done, .error, .interrupted: false
+            }
+            guard cancellable else { continue }
             records[index].status = .interrupted(reason)
             changed += 1
         }
         if changed > 0 { try DownloadQueue.save(records, to: file) }
         return DownloadMutationResult(changed: changed, records: records)
+    }
+
+    public static func cancel(
+        index: Int, reason: String = "Cancelled", file: URL = DownloadQueue.file
+    ) throws -> DownloadMutationResult {
+        let record = try record(at: index, file: file)
+        guard !record.isFinished else {
+            throw DownloadOperationError.notCancelable(index, state: record.state)
+        }
+        return try cancel(id: record.id, reason: reason, file: file)
     }
 
     public static func remove(
@@ -254,5 +274,15 @@ public enum DownloadOperationExecution {
         let urls = try resultURLs(id: id, root: root, file: file, exists: exists)
         for url in urls { _ = open(url) }
         return urls
+    }
+}
+
+enum DownloadProcessControl {
+    static func cancel(
+        currentID: UUID?, targetID: UUID?, terminate: () -> Void
+    ) -> Bool {
+        guard currentID != nil, targetID == nil || currentID == targetID else { return false }
+        terminate()
+        return true
     }
 }

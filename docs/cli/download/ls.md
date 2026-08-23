@@ -19,8 +19,8 @@ Options:
 There are no positional arguments.
 
 Entries are numbered from 1 in the order they are printed, which is by the time
-they were queued, newest first. That number is what `ed download rm` and
-`ed download retry` take, and it is recomputed on every invocation: removing
+they were queued, newest first. That number is what `ed download rm`,
+`ed download retry` and `ed download cancel` take, and it is recomputed on every invocation: removing
 entry 1 renumbers everything below it, so read the list again between two
 edits rather than counting down from an old listing.
 

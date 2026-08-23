@@ -30,13 +30,18 @@ queue. With `--yes`, it removes the record, never the downloaded file. Use
 ```json
 {
   "preview": false,
+  "record": {
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
+    "index": 2,
+    "state": "done"
+  },
   "remaining": 11,
   "removed": 1
 }
 ```
 
-`removed` counts the records that matched, and `remaining` is what the file
-holds afterwards.
+`record` identifies the exact removed entry. `removed` counts matching records,
+and `remaining` is what the file holds afterwards.
 
 Examples:
 

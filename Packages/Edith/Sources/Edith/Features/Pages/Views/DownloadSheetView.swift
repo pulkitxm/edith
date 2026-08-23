@@ -571,6 +571,17 @@ struct DownloadSheet: View {
             Spacer(minLength: 4)
 
             switch item.status {
+            case .queued, .resolving, .downloading:
+                Button {
+                    downloader.cancel(item)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.red)
+                .pointerCursor()
+                .help("Cancel this download")
             case .error, .interrupted:
                 Button("Retry") {
                     downloader.retry(item)
@@ -598,8 +609,6 @@ struct DownloadSheet: View {
                 .buttonStyle(HoverButtonStyle())
                 .font(.system(size: UIScale.pt(11)))
                 .pointerCursor()
-            default:
-                EmptyView()
             }
 
         }
