@@ -9,13 +9,18 @@ import Testing
         let descriptors =
             CalendarEventOperation.allCases.map(\.descriptor)
             + ShelfItemOperation.allCases.map(\.descriptor)
+            + DownloadOperation.allCases.map(\.descriptor)
             + MusicLibraryOperation.allCases.map(\.descriptor)
             + MusicTransportOperation.allCases.map(\.descriptor)
             + PresenterRuntimeOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
         #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
         #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
-        #expect(descriptors.allSatisfy { !$0.requiresPreview })
+        #expect(
+            Set(descriptors.filter(\.requiresPreview).map(\.id)) == [
+                DownloadOperation.remove.descriptor.id,
+                DownloadOperation.clear.descriptor.id,
+            ])
     }
 
     @MainActor
