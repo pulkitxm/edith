@@ -125,7 +125,7 @@ struct ClipboardRows: View {
                         $autoPaste.configured(AppStorageKeys.Clipboard.autoPaste).wrappedValue =
                             newValue
                         if newValue, !accessibilityGranted {
-                            IPC.post(IPC.Name.grantAccessibility)
+                            _ = try? MainPermissionOperations.center.request(.accessibility)
                         }
                     })
             ) {

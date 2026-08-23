@@ -3,18 +3,9 @@ import Combine
 import EdithKit
 import SwiftUI
 
-enum ExtensionPermissionState {
+@MainActor enum ExtensionPermissionState {
     static func readGrantedPermissions() -> [ExtensionPermission: Bool] {
-        Dictionary(
-            uniqueKeysWithValues: ExtensionPermission.allCases.map { permission in
-                let granted: Bool
-                if let key = permission.grantedDefaultsKey {
-                    granted = SharedDefaults.store.bool(forKey: key)
-                } else {
-                    granted = false
-                }
-                return (permission, granted)
-            })
+        MainPermissionOperations.center.grantedPermissions()
     }
 }
 
@@ -96,7 +87,7 @@ struct ExtensionsPane: View {
         .onAppear {
             guard automaticActionsEnabled else { return }
             refreshPermissionState()
-            IPC.post(IPC.Name.requestPermissionsRefresh)
+            _ = MainPermissionOperations.center.refresh()
             markEnabledExtensionsSeen()
         }
         .onReceive(
@@ -111,7 +102,8 @@ struct ExtensionsPane: View {
         .sheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
                 request: request, grantedPermissions: grantedPermissions,
-                grant: { IPC.post($0) }, cancel: { permissionRequest = nil },
+                grant: { _ = try? MainPermissionOperations.center.request($0) },
+                cancel: { permissionRequest = nil },
                 enable: { enableRequestedExtension(request) },
                 refresh: requestPermissionRefresh)
         }
@@ -256,7 +248,7 @@ struct ExtensionsPane: View {
     }
 
     private func requestPermissionRefresh() {
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        _ = MainPermissionOperations.center.refresh()
         refreshPermissionState()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             guard permissionRequest != nil else { return }
@@ -600,10 +592,13 @@ private struct RequiredPermissionRows: View {
                             Text(permission.displayName)
                             Spacer()
                             if grantedPermissions[permission] != true,
-                                let request = permission.grantRequest
+                                MainPermissionOperations.center.remediation(for: permission).action
+                                    == .request
                             {
-                                Button("Grant...") { IPC.post(request) }
-                                    .pointerCursor()
+                                Button("Grant...") {
+                                    _ = try? MainPermissionOperations.center.request(permission)
+                                }
+                                .pointerCursor()
                             }
                         }
                     }
@@ -613,7 +608,7 @@ private struct RequiredPermissionRows: View {
             }
         }
         .onAppear {
-            IPC.post(IPC.Name.requestPermissionsRefresh)
+            _ = MainPermissionOperations.center.refresh()
             grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
         }
         .onReceive(
@@ -691,7 +686,7 @@ private struct ExtensionPermissionRequest: Identifiable {
 private struct ExtensionPermissionSheet: View {
     let request: ExtensionPermissionRequest
     let grantedPermissions: [ExtensionPermission: Bool]
-    let grant: (Notification.Name) -> Void
+    let grant: (ExtensionPermission) -> Void
     let cancel: () -> Void
     let enable: () -> Void
     let refresh: () -> Void
@@ -787,8 +782,10 @@ private struct ExtensionPermissionSheet: View {
                 Label("Granted", systemImage: "checkmark.circle.fill")
                     .font(.system(size: UIScale.pt(10), weight: .medium))
                     .foregroundStyle(.green)
-            } else if let request = permission.grantRequest {
-                Button("Grant") { grant(request) }
+            } else if MainPermissionOperations.center.remediation(for: permission).action
+                == .request
+            {
+                Button("Grant") { grant(permission) }
                     .controlSize(.small)
                     .pointerCursor()
             }
@@ -1201,7 +1198,7 @@ private struct UsageRows: View {
                     && !SharedDefaults.store.bool(
                         forKey: AppStorageKeys.Permissions.notificationsGranted)
                 {
-                    IPC.post(IPC.Name.grantNotifications)
+                    _ = try? MainPermissionOperations.center.request(.notifications)
                 }
             })
     }

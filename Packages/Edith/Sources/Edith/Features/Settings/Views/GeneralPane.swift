@@ -302,7 +302,7 @@ struct GeneralPane: View {
 
     private func refreshPermissionState() {
         grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        _ = MainPermissionOperations.center.refresh()
     }
 
     private func swatch(_ name: String, color: Color) -> some View {

@@ -8,8 +8,9 @@ ed permissions settings <permission> [--json]
 ```
 
 The permission id is completed from the same nine-value catalogue used by
-`request`. Bluetooth and Automation are granted when their features first run,
-so they have no direct pane and exit 4 with their first-use explanation.
+`request`. Bluetooth is granted when its feature first runs, but its privacy pane
+can still be opened here. Automation has no direct destination and exits 4 with
+its first-use explanation.
 
 ## `--json` shape
 

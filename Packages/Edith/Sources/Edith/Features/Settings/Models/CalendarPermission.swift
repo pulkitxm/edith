@@ -18,14 +18,34 @@ enum CalendarPermission {
         return value
     }
 
-    static func request() {
+    static func performRequest() {
         Task { @MainActor in
             _ = try? await EKEventStore().requestFullAccessToEvents()
             mirror()
         }
-        NSWorkspace.shared.open(
-            URL(
-                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!
-        )
+    }
+}
+
+@MainActor
+enum MainPermissionOperations {
+    static var center: PermissionOperationCenter {
+        PermissionOperationCenter(
+            environment: PermissionOperationEnvironment(
+                defaults: SharedDefaults.store,
+                requestPermission: { permission in
+                    if permission == .calendar {
+                        PermissionPromptTracker.record()
+                        CalendarPermission.performRequest()
+                        return true
+                    }
+                    guard let request = permission.grantRequest else { return false }
+                    IPC.post(request)
+                    return false
+                },
+                refreshStatus: {
+                    CalendarPermission.mirror()
+                    IPC.post(IPC.Name.requestPermissionsRefresh)
+                },
+                openSettings: { NSWorkspace.shared.open($0) }))
     }
 }

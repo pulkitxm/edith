@@ -147,11 +147,7 @@ struct NotchShelfRows: View {
                             || bluetoothAuthorization == .restricted
                     {
                         Button("Open Bluetooth Privacy Settings...") {
-                            NSWorkspace.shared.open(
-                                URL(
-                                    string:
-                                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
-                                )!)
+                            _ = try? MainPermissionOperations.center.openSettings(for: .bluetooth)
                         }
                         .pointerCursor()
                     }

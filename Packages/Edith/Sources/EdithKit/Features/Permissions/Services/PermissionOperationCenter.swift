@@ -124,17 +124,16 @@ public enum PermissionOperationError: LocalizedError, Equatable, Sendable {
 
 public struct PermissionOperationEnvironment: @unchecked Sendable {
     public let defaults: UserDefaults
-    public var requestPermission: @Sendable (ExtensionPermission) -> Bool
-    public var refreshStatus: @Sendable () -> Void
-    public var openSettings: @Sendable (URL) -> Bool
-    public var recordPrompt: @Sendable () -> Void
+    public var requestPermission: (ExtensionPermission) -> Bool
+    public var refreshStatus: () -> Void
+    public var openSettings: (URL) -> Bool
+    public var recordPrompt: () -> Void
 
     public init(
         defaults: UserDefaults,
-        requestPermission: @escaping @Sendable (ExtensionPermission) -> Bool,
-        refreshStatus: @escaping @Sendable () -> Void,
-        openSettings: @escaping @Sendable (URL) -> Bool,
-        recordPrompt: @escaping @Sendable () -> Void = {}
+        requestPermission: @escaping (ExtensionPermission) -> Bool,
+        refreshStatus: @escaping () -> Void, openSettings: @escaping (URL) -> Bool,
+        recordPrompt: @escaping () -> Void = {}
     ) {
         self.defaults = defaults
         self.requestPermission = requestPermission
@@ -170,6 +169,10 @@ public struct PermissionOperationCenter: @unchecked Sendable {
     public func status(filter: PermissionFilter = .all) -> [PermissionUsage] {
         PermissionCatalog.filter(
             PermissionsStatus.usages(defaults: environment.defaults), by: filter)
+    }
+
+    public func grantedPermissions() -> [ExtensionPermission: Bool] {
+        PermissionsStatus.granted(defaults: environment.defaults)
     }
 
     @discardableResult
@@ -253,7 +256,10 @@ public extension ExtensionPermission {
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case .camera:
             destination = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
-        case .bluetooth, .automation:
+        case .bluetooth:
+            destination =
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth"
+        case .automation:
             return nil
         }
         return URL(string: destination)

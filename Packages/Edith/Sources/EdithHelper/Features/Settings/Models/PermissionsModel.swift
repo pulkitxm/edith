@@ -26,7 +26,7 @@ final class PermissionsModel {
         guard ipcTokens.isEmpty else { return }
         let grantTokens = ExtensionPermission.allCases.compactMap { permission in
             permission.grantRequest.map { request in
-                IPC.observe(request) { [weak self] in self?.grant(permission) }
+                IPC.observe(request) { [weak self] in self?.request(permission) }
             }
         }
         let activeToken = NotificationCenter.default.addObserver(
@@ -39,17 +39,47 @@ final class PermissionsModel {
             + grantTokens + [activeToken]
     }
 
-    func grant(_ permission: ExtensionPermission) {
-        PermissionPromptTracker.record()
+    func request(_ permission: ExtensionPermission) {
+        _ = try? operations.request(permission)
+    }
+
+    func openSettings(for permission: ExtensionPermission) {
+        _ = try? operations.openSettings(for: permission)
+    }
+
+    private var operations: PermissionOperationCenter {
+        PermissionOperationCenter(
+            environment: PermissionOperationEnvironment(
+                defaults: SharedDefaults.store,
+                requestPermission: { [weak self] in self?.performRequest($0) ?? false },
+                refreshStatus: { [weak self] in self?.refresh() },
+                openSettings: { NSWorkspace.shared.open($0) },
+                recordPrompt: { PermissionPromptTracker.record() }))
+    }
+
+    private func performRequest(_ permission: ExtensionPermission) -> Bool {
         switch permission {
-        case .calendar: grantCalendar()
-        case .notifications: grantNotifications()
-        case .accessibility: grantAccessibility()
-        case .inputMonitoring: grantInputMonitoring()
-        case .fullDisk: grantFullDisk()
-        case .screenRecording: grantScreenRecording()
-        case .camera: grantCamera()
-        case .bluetooth, .automation: break
+        case .calendar:
+            requestCalendar()
+            return true
+        case .notifications:
+            requestNotifications()
+            return true
+        case .accessibility:
+            requestAccessibility()
+            return true
+        case .inputMonitoring:
+            requestInputMonitoring()
+            return true
+        case .fullDisk:
+            return true
+        case .screenRecording:
+            requestScreenRecording()
+            return true
+        case .camera:
+            return requestCamera()
+        case .bluetooth, .automation:
+            return false
         }
     }
 
@@ -88,62 +118,47 @@ final class PermissionsModel {
 
     var needsAttention: Bool { PermissionsStatus.current }
 
-    func grantCalendar() {
+    private func requestCalendar() {
         Task { @MainActor in
             _ = try? await eventStore.requestFullAccessToEvents()
             refresh()
         }
-        openSecuritySettings("Privacy_Calendars")
     }
 
-    func grantNotifications() {
+    private func requestNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
             _, _ in
             Task { @MainActor in self.refresh() }
         }
-        NSWorkspace.shared.open(
-            URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
     }
 
-    func grantAccessibility() {
+    private func requestAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
-        openSecuritySettings("Privacy_Accessibility")
         refreshAfterGrant()
     }
 
-    func grantInputMonitoring() {
+    private func requestInputMonitoring() {
         CGRequestListenEventAccess()
-        openSecuritySettings("Privacy_ListenEvent")
         refreshAfterGrant()
     }
 
-    func grantFullDisk() {
-        openSecuritySettings("Privacy_AllFiles")
-        refreshAfterGrant()
-    }
-
-    func grantScreenRecording() {
+    private func requestScreenRecording() {
         CGRequestScreenCaptureAccess()
-        openSecuritySettings("Privacy_ScreenCapture")
         refreshAfterGrant()
     }
 
-    func grantCamera() {
+    private func requestCamera() -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { _ in
                 Task { @MainActor in self.refresh() }
             }
+            return false
         default:
-            openSecuritySettings("Privacy_Camera")
             refreshAfterGrant()
+            return true
         }
-    }
-
-    private func openSecuritySettings(_ anchor: String) {
-        NSWorkspace.shared.open(
-            URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!)
     }
 
     private func refreshAfterGrant() {

@@ -63,15 +63,29 @@ import Testing
         #expect(driver.opened.isEmpty)
     }
 
+    @Test func bluetoothRemainsFirstUseButHasASettingsDestination() throws {
+        let (center, defaults, driver, suite) = makeCenter()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let remediation = center.remediation(for: .bluetooth)
+        let settings = try center.openSettings(for: .bluetooth)
+
+        #expect(remediation.action == .firstUse)
+        #expect(remediation.settingsURL == ExtensionPermission.bluetooth.settingsURL)
+        #expect(settings.opened)
+        #expect(driver.opened == [ExtensionPermission.bluetooth.settingsURL!])
+        #expect(driver.requested.isEmpty)
+    }
+
     @Test func firstUsePermissionCannotBeRequestedOrOpened() {
         let (center, defaults, driver, suite) = makeCenter()
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        #expect(throws: PermissionOperationError.firstUse(.bluetooth)) {
-            try center.request(.bluetooth)
+        #expect(throws: PermissionOperationError.firstUse(.automation)) {
+            try center.request(.automation)
         }
-        #expect(throws: PermissionOperationError.noSettings(.bluetooth)) {
-            try center.openSettings(for: .bluetooth)
+        #expect(throws: PermissionOperationError.noSettings(.automation)) {
+            try center.openSettings(for: .automation)
         }
         #expect(driver.requested.isEmpty)
         #expect(driver.opened.isEmpty)
@@ -105,6 +119,34 @@ import Testing
         for descriptor in descriptors {
             #expect(UserOperationCatalog.descriptor(id: descriptor.id) == descriptor)
             #expect(UserOperationCatalog.descriptor(cli: descriptor.cli) == descriptor)
+        }
+    }
+
+    @Test func permissionSurfacesRouteThroughTheSharedOperationLayer() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let paths = [
+            "Edith/Features/Settings/Views/PermissionsPane.swift",
+            "Edith/Features/Onboarding/Views/OnboardingView.swift",
+            "Edith/Features/Settings/Views/ExtensionsPane.swift",
+            "Edith/Features/Settings/Views/ClipboardRows.swift",
+            "Edith/Features/Pages/Views/HomePageView.swift",
+            "EdithHelper/Features/Settings/Models/PermissionsModel.swift",
+            "EdithHelper/Features/System/ViewModels/SystemStore.swift",
+            "EdithHelper/Features/NotchShelf/Views/NotchCameraTab.swift",
+            "EdithHelper/Features/Usage/Services/LimitNotifier.swift",
+        ]
+        for path in paths {
+            let source = try String(
+                contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+            #expect(
+                source.contains("MainPermissionOperations")
+                    || source.contains("PermissionOperationCenter")
+                    || source.contains("PermissionsModel.shared"),
+                "\(path) bypasses the permission operation layer")
         }
     }
 

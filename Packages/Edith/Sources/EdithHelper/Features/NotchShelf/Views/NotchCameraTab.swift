@@ -21,24 +21,24 @@ struct NotchCameraTab: View {
                     .onAppear(perform: refreshDevices)
             case .notDetermined:
                 prompt {
-                    PermissionPromptTracker.record()
-                    AVCaptureDevice.requestAccess(for: .video) { granted in
-                        Task { @MainActor in
-                            status = granted ? .authorized : .denied
-                            IPC.post(IPC.Name.requestPermissionsRefresh)
-                        }
-                    }
+                    PermissionsModel.shared.request(.camera)
                 }
             default:
                 denied
             }
         }
         .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: IPC.Name.permissionsRefreshed)
+        ) { _ in
+            status = AVCaptureDevice.authorizationStatus(for: .video)
+        }
+        .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification)
         ) { _ in
             status = AVCaptureDevice.authorizationStatus(for: .video)
-            IPC.post(IPC.Name.requestPermissionsRefresh)
+            PermissionsModel.shared.refresh()
         }
     }
 
@@ -103,12 +103,7 @@ struct NotchCameraTab: View {
 
     private var denied: some View {
         Button {
-            if let url = URL(
-                string:
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
-            {
-                NSWorkspace.shared.open(url)
-            }
+            PermissionsModel.shared.openSettings(for: .camera)
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: "camera.metering.none").font(.system(size: 20))
