@@ -59,12 +59,11 @@ private final class StreamLines: @unchecked Sendable {
         #expect(statuses.allSatisfy { $0 == 11 })
     }
 
-    @Test func cancellationResumesTheWait() async throws {
+    @Test func cancellationBeforeTheWaitStartsResumesTheWait() async throws {
         let stream = SSHLineStream(
             process: process("sleep 30"), onLine: { _, _ in }, onExit: { _ in })
         try stream.start()
         let task = Task { await stream.waitForExit() }
-        await Task.yield()
         task.cancel()
         #expect(await task.value == 130)
     }

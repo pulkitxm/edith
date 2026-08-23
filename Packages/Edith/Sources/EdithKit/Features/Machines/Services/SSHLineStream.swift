@@ -131,7 +131,11 @@ public final class SSHLineStream: @unchecked Sendable {
     }
 
     public func waitForExit() async -> Int32 {
-        await withTaskCancellationHandler {
+        if Task.isCancelled {
+            cancel()
+            return 130
+        }
+        return await withTaskCancellationHandler {
             await completion.wait()
         } onCancel: {
             cancel()
