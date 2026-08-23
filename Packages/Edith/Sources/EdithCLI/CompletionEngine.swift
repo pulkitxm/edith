@@ -100,7 +100,8 @@ public enum CompletionEngine {
             }
         }
         if prefix.hasPrefix("-") {
-            return CompletionResult(candidates: filtered(node.options, prefix))
+            return CompletionResult(
+                candidates: filtered(node.options + CommandTree.inherited, prefix))
         }
         var candidates = node.children.map(\.name)
         if node.name == "ed" {

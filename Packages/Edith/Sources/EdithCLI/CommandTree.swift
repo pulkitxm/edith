@@ -59,7 +59,8 @@ public struct CommandNode: Equatable, Sendable {
 }
 
 public enum CommandTree {
-    public static let common = ["--json", "--help"]
+    public static let inherited = ["--help"]
+    public static let common = ["--json"] + inherited
     public static let playback = ["--json", "--help", "--player"]
     public static let playbackValues: [String: ArgumentKind] = ["--player": .musicPlayer]
     public static let usageValues: [String: ArgumentKind] = [

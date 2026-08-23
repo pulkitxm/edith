@@ -209,6 +209,18 @@ import Testing
         #expect(typed.stderr.isEmpty)
     }
 
+    @Test func inheritedHelpCompletesOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let result = try CLIProcessProbe.run(
+            ["__complete", "--index", "3", "--", "ed", "music", "status", "--h"],
+            currentDirectory: outside)
+
+        #expect(result.code == 0)
+        #expect(result.stdoutLines == ["--help"])
+        #expect(result.stderr.isEmpty)
+    }
+
     @Test func bashAndZshScriptsInvokeTheRealCompletionEntry() throws {
         let outside = try Self.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: outside) }
