@@ -13,8 +13,17 @@ import Testing
         #expect(!ExtensionPreviewMotionPolicy.animates(hovering: true, reduceMotion: true))
     }
 
-    @Test func restingFrameAndCadenceRemainStable() {
+    @Test func hoverUsesOneTransitionFrameInsteadOfAContinuousTimeline() {
         #expect(ExtensionPreviewMotionPolicy.restingPhase == 1.1)
-        #expect(ExtensionPreviewMotionPolicy.frameInterval == 1.0 / 30)
+        #expect(ExtensionPreviewMotionPolicy.hoverPhase == 2.2)
+        #expect(
+            ExtensionPreviewMotionPolicy.phase(hovering: false, reduceMotion: false)
+                == ExtensionPreviewMotionPolicy.restingPhase)
+        #expect(
+            ExtensionPreviewMotionPolicy.phase(hovering: true, reduceMotion: false)
+                == ExtensionPreviewMotionPolicy.hoverPhase)
+        #expect(
+            ExtensionPreviewMotionPolicy.phase(hovering: true, reduceMotion: true)
+                == ExtensionPreviewMotionPolicy.restingPhase)
     }
 }

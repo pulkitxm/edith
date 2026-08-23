@@ -6,29 +6,17 @@ struct ExtensionPreview: View {
     let dark: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    @State private var animationStartedAt = Date()
 
     var body: some View {
-        Group {
-            if ExtensionPreviewMotionPolicy.animates(
-                hovering: hovering, reduceMotion: reduceMotion)
-            {
-                TimelineView(
-                    .animation(minimumInterval: ExtensionPreviewMotionPolicy.frameInterval)
-                ) { context in
-                    preview(
-                        phase: ExtensionPreviewMotionPolicy.restingPhase
-                            + context.date.timeIntervalSince(animationStartedAt),
-                        animating: true)
-                }
-            } else {
-                preview(phase: ExtensionPreviewMotionPolicy.restingPhase, animating: false)
-            }
-        }
-        .onHover { value in
-            hovering = value
-            if value { animationStartedAt = Date() }
-        }
+        let animates = ExtensionPreviewMotionPolicy.animates(
+            hovering: hovering, reduceMotion: reduceMotion)
+        preview(
+            phase: ExtensionPreviewMotionPolicy.phase(
+                hovering: hovering, reduceMotion: reduceMotion),
+            animating: animates
+        )
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.28), value: hovering)
+        .onHover { hovering = $0 }
         .accessibilityHidden(true)
     }
 
@@ -530,11 +518,15 @@ struct ExtensionPreview: View {
 }
 
 enum ExtensionPreviewMotionPolicy {
-    static let frameInterval: TimeInterval = 1 / 30
     static let restingPhase = 1.1
+    static let hoverPhase = 2.2
 
     static func animates(hovering: Bool, reduceMotion: Bool) -> Bool {
         hovering && !reduceMotion
+    }
+
+    static func phase(hovering: Bool, reduceMotion: Bool) -> Double {
+        animates(hovering: hovering, reduceMotion: reduceMotion) ? hoverPhase : restingPhase
     }
 }
 
