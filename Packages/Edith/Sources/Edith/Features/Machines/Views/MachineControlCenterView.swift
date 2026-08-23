@@ -788,9 +788,13 @@ struct MachineControlCenterView: View {
                 }
                 .labelsHidden()
                 .controlSize(.small)
-                .frame(width: UIScale.pt(132))
+                .frame(width: UIScale.pt(92))
                 .disabled(controlsDisabled)
                 .pointerCursor()
+                Button("Apply") { model.applyProfile() }
+                    .controlSize(.small)
+                    .disabled(model.selectedProfile.isEmpty || controlsDisabled)
+                    .pointerCursor()
             }
             HStack(spacing: UIScale.pt(8)) {
                 Text(profileStatus(profile))
@@ -798,10 +802,6 @@ struct MachineControlCenterView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(2)
                 Spacer(minLength: 0)
-                Button("Apply") { model.applyProfile() }
-                    .controlSize(.small)
-                    .disabled(model.selectedProfile.isEmpty || controlsDisabled)
-                    .pointerCursor()
             }
         }
         .padding(.horizontal, UIScale.pt(8))
