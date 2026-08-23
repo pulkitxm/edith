@@ -35,6 +35,12 @@ public enum UserOperationCatalog {
         + PermissionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + ColorPickerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ColorSwatchOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + QuinjetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -304,6 +310,31 @@ private extension PermissionOperation {
         case .settings:
             userInterface(
                 "Permissions pane", "open the relevant System Settings pane", ["calendar"])
+        }
+    }
+}
+
+private extension ColorPickerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .pick:
+            userInterface("Colour picker", "open the system loupe")
+        }
+    }
+}
+
+private extension ColorSwatchOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .copy:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Color Picker menu", action: "copy a recent colour",
+                    exampleArguments: ["1"]),
+                UserInterfaceActionPlacement(
+                    surface: "Color Picker settings", action: "copy a swatch in one format",
+                    exampleArguments: ["1", "--format", "hex"]),
+            ])
         }
     }
 }

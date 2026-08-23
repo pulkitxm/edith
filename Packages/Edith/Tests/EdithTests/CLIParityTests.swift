@@ -80,6 +80,10 @@ enum UIParity {
             "Clipboard panel", "search the history", ["clipboard", "ls", "--search", "x"]),
         UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
+        UICapability("Color Picker menu", "copy a recent colour", ["color", "copy", "1"]),
+        UICapability(
+            "Color Picker settings", "copy a swatch in one format",
+            ["color", "copy", "1", "--format", "hex"]),
 
         UICapability(
             "Attention categories", "classify an application or website",
@@ -92,6 +96,7 @@ enum UIParity {
 
         UICapability(
             "Colour picker", "forget the picked colours", ["color", "clear", "--yes"]),
+        UICapability("Colour picker", "open the system loupe", ["color", "pick"]),
 
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
         UICapability(

@@ -47,7 +47,7 @@ app.
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
-| [`ed color`](./color/README.md) | The colour picker's swatch history |
+| [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
 | [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |
