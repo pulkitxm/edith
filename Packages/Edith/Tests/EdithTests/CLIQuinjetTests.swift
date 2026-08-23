@@ -310,6 +310,120 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         #expect(result.stderr.contains("omit --cmux"))
     }
 
+    @Test func nativeSessionsHaveStablePlainAndJSONOutput() async throws {
+        try await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in Self.sessionReply(.sessions) }
+
+            let plain = await CLIProbe.capture(["quinjet", "sessions"])
+            let json = await CLIProbe.capture(["quinjet", "sessions", "--json"])
+
+            #expect(plain.code == 0)
+            #expect(plain.stdout.contains("SELECTED"))
+            #expect(plain.stdout.contains("feat/native-sessions"))
+            #expect(json.code == 0)
+            #expect(json.object?["operation"] as? String == "sessions")
+            let sessions = try #require(json.object?["sessions"] as? [[String: Any]])
+            #expect(sessions.map { $0["index"] as? Int } == [1, 2])
+            #expect(sessions[1]["terminal"] as? String == "cmux")
+        }
+    }
+
+    @Test func nativeFocusUsesBoundedAppIPCAndReturnsTheSelectedSession() async throws {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in Self.sessionReply(.focus, selected: 2, affected: 2) }
+
+            let result = await CLIProbe.capture(["quinjet", "focus", "2", "--json"])
+
+            #expect(result.code == 0)
+            #expect(result.object?["operation"] as? String == "focus")
+            #expect(result.object?["selectedSessionID"] as? String == Self.sessionID(2))
+            #expect(world.postedNames() == [IPC.Name.requestQuinjetSessionOperation.rawValue])
+            #expect(
+                world.posted.first?.info[QuinjetSessionIPC.operationKey] as? String == "focus")
+            #expect(world.posted.first?.info[QuinjetSessionIPC.sessionKey] as? String == "2")
+        }
+    }
+
+    @Test func nativeClosePreviewsThenClosesTheResolvedSessionID() async throws {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in
+                let operation =
+                    world.posted.last?.info[QuinjetSessionIPC.operationKey] as? String
+                    ?? "sessions"
+                return operation == "close"
+                    ? Self.sessionReply(.close, selected: 1, affected: 2, count: 1)
+                    : Self.sessionReply(.sessions)
+            }
+
+            let preview = await CLIProbe.capture(["quinjet", "close", "2", "--json"])
+            #expect(preview.code == 0)
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect(preview.object?["sessionID"] as? String == Self.sessionID(2))
+
+            let applied = await CLIProbe.capture([
+                "quinjet", "close", "2", "--yes", "--json",
+            ])
+            #expect(applied.code == 0)
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["closedSessionID"] as? String == Self.sessionID(2))
+            #expect(applied.object?["remaining"] as? Int == 1)
+            #expect(
+                world.posted.last?.info[QuinjetSessionIPC.sessionKey] as? String
+                    == Self.sessionID(2))
+        }
+    }
+
+    @Test func nativeSwitchCarriesTheSessionAndWorktreePath() async {
+        let result = await CLIProbe.runInWorld([
+            "quinjet", "switch", "2", "/work/edith-native", "--json",
+        ]) { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in Self.sessionReply(.switchWorktree, selected: 2, affected: 2) }
+        }
+
+        #expect(result.code == 0)
+        #expect(result.object?["operation"] as? String == "switch")
+    }
+
+    @Test func nativeSessionControlNeedsTheRunningMainWindow() async {
+        let result = await CLIProbe.run(["quinjet", "status"])
+
+        #expect(result.code == ExitCodes.unavailable)
+        #expect(result.stderr.contains("main window"))
+    }
+
+    private static func sessionReply(
+        _ operation: QuinjetSessionOperation, selected: Int = 1, affected: Int? = nil,
+        count: Int = 2
+    ) -> [AnyHashable: Any] {
+        let sessions = (1...count).map { sessionState($0, selected: $0 == selected) }
+        let result = QuinjetSessionResult(
+            operation: operation, selectedSessionID: sessionID(selected),
+            affectedSessionID: affected.map(sessionID), sessions: sessions)
+        let data = try! JSONEncoder().encode(result)
+        return [
+            QuinjetSessionIPC.okKey: true,
+            QuinjetSessionIPC.payloadKey: String(decoding: data, as: UTF8.self),
+        ]
+    }
+
+    private static func sessionState(_ index: Int, selected: Bool) -> QuinjetSessionState {
+        QuinjetSessionState(
+            id: sessionID(index), index: index,
+            title: index == 1 ? "edith · main" : "edith · feat/native-sessions",
+            selected: selected, state: "running", terminal: index == 1 ? "embedded" : "cmux",
+            project: "edith", worktreePath: index == 1 ? "/work/edith" : "/work/edith-native",
+            branch: index == 1 ? "main" : "feat/native-sessions", machine: "This Mac",
+            canClose: true, canRestart: true, exitMessage: nil)
+    }
+
+    private static func sessionID(_ index: Int) -> String {
+        String(format: "00000000-0000-0000-0000-%012d", index)
+    }
+
     private static func client(path: String = "/work/edith") -> QuinjetClient {
         QuinjetClient { arguments in
             guard arguments.contains("worktree") else { return Data(Self.projectsJSON.utf8) }

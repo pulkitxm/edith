@@ -295,7 +295,10 @@ final class QuinjetPageModel {
         _ request: QuinjetSessionRequest
     ) async throws -> QuinjetSessionResult {
         switch request.operation {
-        case .status, .sessions:
+        case .status:
+            let tab = try session(matching: request.session)
+            return sessionResult(for: .status, affected: tab.id)
+        case .sessions:
             return sessionResult(for: request.operation)
         case .focus:
             let tab = try session(matching: request.session)

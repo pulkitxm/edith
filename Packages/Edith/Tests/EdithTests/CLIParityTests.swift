@@ -27,7 +27,7 @@ enum UIParity {
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
         "check-updates", "collect", "forget", "mount", "unmount",
-        "favorite", "unfavorite",
+        "favorite", "unfavorite", "close",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -488,11 +488,26 @@ enum UIParity {
             "Quinjet theme menu", "select the review theme",
             ["config", "set", "quinjetTheme", "tokyo-night"]),
         UICapability(
-            "Quinjet workspace", "restart or switch the active worktree",
-            ["quinjet", "launch", "/tmp/worktree"]),
+            "Quinjet tab bar", "list the open native review sessions",
+            ["quinjet", "sessions"]),
         UICapability(
-            "Quinjet workspace", "show the review in cmux",
-            ["quinjet", "launch", "/tmp/worktree", "--cmux"]),
+            "Quinjet workspace", "inspect the active review session",
+            ["quinjet", "status"]),
+        UICapability(
+            "Quinjet tab bar", "select and focus a review session",
+            ["quinjet", "focus", "1"]),
+        UICapability(
+            "Quinjet tab bar", "close a review session",
+            ["quinjet", "close", "1", "--yes"]),
+        UICapability(
+            "Quinjet workspace", "restart the active review in place",
+            ["quinjet", "restart", "1"]),
+        UICapability(
+            "Quinjet worktree picker", "switch an open session in place",
+            ["quinjet", "switch", "1", "/tmp/worktree"]),
+        UICapability(
+            "Quinjet cmux workspace", "show the external review",
+            ["quinjet", "focus", "1"]),
     ]
 }
 
