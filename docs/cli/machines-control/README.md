@@ -85,3 +85,8 @@ requested value and whether the change was applied.
 | 2 | Arguments were missing or invalid, including a level outside 0 through 100. |
 | 3 | The machine name was not found. |
 | 4 | The machine could not be reached or did not expose the requested control. |
+
+## Where to go next
+
+- [`ed machines`](../machines/README.md) for machine setup and live metrics.
+- [The `ed` command line](../README.md) for the complete reference.
