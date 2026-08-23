@@ -241,8 +241,104 @@ private actor RemoteProbeHarness {
     }
 }
 
+private actor ProjectRefreshHarness {
+    private var requests: [CheckedContinuation<Data, Error>?] = []
+    private var requestWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    func execute(_ arguments: [String]) async throws -> Data {
+        if let marker = arguments.firstIndex(of: "-C"),
+            arguments.indices.contains(marker + 1)
+        {
+            let path = arguments[marker + 1]
+            return try JSONEncoder().encode([
+                QuinjetWorktree(
+                    path: path, head: "1234567890abcdef", branch: "main", current: true,
+                    bare: false, detached: false, locked: nil, prunable: nil)
+            ])
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            requests.append(continuation)
+            let ready = requestWaiters.filter { requests.count >= $0.0 }
+            requestWaiters.removeAll { requests.count >= $0.0 }
+            ready.forEach { $0.1.resume() }
+        }
+    }
+
+    func waitUntilRequested(_ count: Int) async {
+        if requests.count >= count { return }
+        await withCheckedContinuation { requestWaiters.append((count, $0)) }
+    }
+
+    func resolve(_ index: Int, with data: Data) {
+        guard requests.indices.contains(index), let continuation = requests[index] else { return }
+        requests[index] = nil
+        continuation.resume(returning: data)
+    }
+}
+
 @MainActor
 @Suite struct QuinjetPageModelTests {
+    @Test func newestLocalProjectRefreshWins() async throws {
+        let harness = ProjectRefreshHarness()
+        let model = QuinjetPageModel(
+            client: QuinjetClient { arguments in try await harness.execute(arguments) })
+
+        let first = Task { await model.refreshProjects() }
+        await harness.waitUntilRequested(1)
+        let second = Task { await model.refreshProjects() }
+        await harness.waitUntilRequested(2)
+
+        await harness.resolve(1, with: try Self.projectData(name: "new"))
+        await second.value
+        #expect(model.projects.map(\.name) == ["new"])
+
+        await harness.resolve(0, with: try Self.projectData(name: "old"))
+        await first.value
+        #expect(model.projects.map(\.name) == ["new"])
+        #expect(!model.loadingProjects)
+        #expect(model.projectError == nil)
+    }
+
+    @Test func newestRemoteProjectRefreshWins() async throws {
+        let harness = ProjectRefreshHarness()
+        let model = QuinjetPageModel(
+            client: QuinjetClient { arguments in try await harness.execute(arguments) })
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        let first = Task { await model.refreshProjects(for: remote) }
+        await harness.waitUntilRequested(1)
+        let second = Task { await model.refreshProjects(for: remote) }
+        await harness.waitUntilRequested(2)
+
+        await harness.resolve(1, with: try Self.remoteFolderData(path: "/srv/new"))
+        await second.value
+        #expect(model.projects(for: remote).map(\.name) == ["new"])
+
+        await harness.resolve(0, with: try Self.remoteFolderData(path: "/srv/old"))
+        await first.value
+        #expect(model.projects(for: remote).map(\.name) == ["new"])
+        #expect(!model.isLoadingProjects(for: remote))
+        #expect(model.projectError(for: remote) == nil)
+    }
+
+    @Test func cancelledProjectRefreshDoesNotApplyItsResult() async throws {
+        let harness = ProjectRefreshHarness()
+        let model = QuinjetPageModel(
+            client: QuinjetClient { arguments in try await harness.execute(arguments) })
+
+        let request = Task { await model.refreshProjects() }
+        await harness.waitUntilRequested(1)
+        request.cancel()
+        await harness.resolve(0, with: try Self.projectData(name: "cancelled"))
+        await request.value
+
+        #expect(model.projects.isEmpty)
+        #expect(!model.loadingProjects)
+        #expect(model.projectError == nil)
+    }
+
     @Test func embeddedLaunchUsesEdithRoutingAndSelectedTheme() throws {
         let model = QuinjetPageModel(client: client)
         let configuration = QuinjetLaunchConfiguration(
@@ -421,4 +517,25 @@ private actor RemoteProbeHarness {
     private static let feature = QuinjetWorktree(
         path: "/work/edith-quinjet", head: "abcdef1234567890", branch: "feat/quinjet",
         current: false, bare: false, detached: false, locked: nil, prunable: nil)
+
+    private static func projectData(name: String) throws -> Data {
+        try JSONEncoder().encode([
+            QuinjetProject(
+                name: name, commonDir: "/work/\(name)/.git",
+                worktrees: [
+                    QuinjetWorktree(
+                        path: "/work/\(name)", head: "1234567890abcdef", branch: "main",
+                        current: true, bare: false, detached: false, locked: nil, prunable: nil)
+                ])
+        ])
+    }
+
+    private static func remoteFolderData(path: String) throws -> Data {
+        try JSONEncoder().encode(
+            QuinjetRemoteFolders(
+                remotes: [
+                    QuinjetRemoteFolder(
+                        target: "pulkit@build", folder: path, accessible: true, uses: 1)
+                ]))
+    }
 }

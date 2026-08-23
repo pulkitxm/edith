@@ -41,6 +41,8 @@ final class QuinjetPageModel {
     private var remoteProjects: [UUID: [QuinjetProject]] = [:]
     private var loadingRemoteProjects: Set<UUID> = []
     private var remoteProjectErrors: [UUID: String] = [:]
+    private var projectRefreshGeneration = 0
+    private var remoteProjectRefreshGenerations: [UUID: Int] = [:]
 
     init(client: QuinjetClient = .live) {
         self.client = client
@@ -86,24 +88,45 @@ final class QuinjetPageModel {
     }
 
     func refreshProjects() async {
+        projectRefreshGeneration += 1
+        let generation = projectRefreshGeneration
         loadingProjects = true
         projectError = nil
-        defer { loadingProjects = false }
+        defer {
+            if generation == projectRefreshGeneration { loadingProjects = false }
+        }
         do {
-            projects = try await client.recentProjects()
+            let refreshed = try await client.recentProjects()
+            try Task.checkCancellation()
+            guard generation == projectRefreshGeneration else { return }
+            projects = refreshed
+        } catch is CancellationError {
         } catch {
+            guard generation == projectRefreshGeneration else { return }
             projectError = error.localizedDescription
         }
     }
 
     func refreshProjects(for remote: QuinjetRemote) async {
-        loadingRemoteProjects.insert(remote.machineID)
-        remoteProjectErrors[remote.machineID] = nil
-        defer { loadingRemoteProjects.remove(remote.machineID) }
+        let machineID = remote.machineID
+        let generation = (remoteProjectRefreshGenerations[machineID] ?? 0) + 1
+        remoteProjectRefreshGenerations[machineID] = generation
+        loadingRemoteProjects.insert(machineID)
+        remoteProjectErrors[machineID] = nil
+        defer {
+            if generation == remoteProjectRefreshGenerations[machineID] {
+                loadingRemoteProjects.remove(machineID)
+            }
+        }
         do {
-            remoteProjects[remote.machineID] = try await client.recentProjects(remote: remote)
+            let refreshed = try await client.recentProjects(remote: remote)
+            try Task.checkCancellation()
+            guard generation == remoteProjectRefreshGenerations[machineID] else { return }
+            remoteProjects[machineID] = refreshed
+        } catch is CancellationError {
         } catch {
-            remoteProjectErrors[remote.machineID] = error.localizedDescription
+            guard generation == remoteProjectRefreshGenerations[machineID] else { return }
+            remoteProjectErrors[machineID] = error.localizedDescription
         }
     }
 
