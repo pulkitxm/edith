@@ -41,6 +41,7 @@ final class QuinjetSessionBridge {
             operation: operation,
             session: info[QuinjetSessionIPC.sessionKey] as? String,
             worktreePath: info[QuinjetSessionIPC.worktreePathKey] as? String)
+        if operation == .focus { MainWindow.open() }
         Task {
             do {
                 let result = try await model.performSessionOperation(request)
