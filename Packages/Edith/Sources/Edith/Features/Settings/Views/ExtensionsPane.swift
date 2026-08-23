@@ -482,46 +482,149 @@ private struct ExtensionSettingsSheet: View {
 
 private struct ExtensionLifecycleRows: View {
     let entry: ExtensionRegistryEntry
+    @State private var report: ExtensionLifecycleReport?
 
     var body: some View {
-        if let lifecycle = entry.lifecycle {
-            Section("About") {
-                Text(lifecycle.value)
-                ForEach(lifecycle.workflows) { workflow in
-                    instructionRow(workflow)
-                }
-            }
-            Section("Setup") {
-                ForEach(lifecycle.prerequisites) { prerequisite in
-                    instructionRow(prerequisite)
-                }
-            }
-            Section("Command line") {
-                ForEach(lifecycle.cliExamples, id: \.self) { example in
-                    Text(example)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-            }
-            Section("Verify and recover") {
-                ForEach(lifecycle.verification) { verification in
-                    instructionRow(verification)
-                }
-                ForEach(lifecycle.recovery) { recovery in
-                    instructionRow(recovery)
-                }
-                ForEach(lifecycle.documentation) { document in
-                    if let url = URL(
-                        string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
-                    ) {
-                        Link(document.title, destination: url)
+        Group {
+            Section("Readiness") {
+                if let report {
+                    LabeledContent("State") {
+                        Label(
+                            report.state.phase.title,
+                            systemImage: phaseSymbol(report.state.phase)
+                        )
+                        .foregroundStyle(phaseColor(report.state.phase))
+                    }
+                    Text(report.state.summary)
+                        .settingsCaption()
+                    ForEach(report.checks) { check in
+                        checkRow(check)
+                    }
+                    Button("Check again") {
+                        Task { await refresh() }
+                    }
+                    .pointerCursor()
+                } else {
+                    HStack(spacing: UIScale.pt(8)) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Checking readiness...")
+                            .settingsCaption()
                     }
                 }
             }
-        } else {
-            Section("About") {
-                Text(entry.subtitle)
+            if let lifecycle = entry.lifecycle {
+                Section("About") {
+                    Text(lifecycle.value)
+                    ForEach(lifecycle.workflows) { workflow in
+                        instructionRow(workflow)
+                    }
+                }
+                Section("Setup") {
+                    ForEach(lifecycle.prerequisites) { prerequisite in
+                        instructionRow(prerequisite)
+                    }
+                }
+                Section("Command line") {
+                    ForEach(lifecycle.cliExamples, id: \.self) { example in
+                        Text(example)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+                Section("Verify and recover") {
+                    ForEach(lifecycle.verification) { verification in
+                        instructionRow(verification)
+                    }
+                    ForEach(lifecycle.recovery) { recovery in
+                        instructionRow(recovery)
+                    }
+                    ForEach(lifecycle.documentation) { document in
+                        if let url = URL(
+                            string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
+                        ) {
+                            Link(document.title, destination: url)
+                        }
+                    }
+                }
+            } else {
+                Section("About") {
+                    Text(entry.subtitle)
+                }
             }
+        }
+        .task(id: entry.id) { await refresh() }
+    }
+
+    @MainActor private func refresh() async {
+        report = await ExtensionLifecycleProbe().report(for: entry)
+    }
+
+    private func checkRow(_ check: ExtensionLifecycleCheck) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: checkSymbol(check.status))
+                    .foregroundStyle(checkColor(check.status))
+                Text(check.title)
+                    .fontWeight(.medium)
+                Spacer()
+                Text(checkTitle(check.status))
+                    .settingsCaption()
+            }
+            Text(check.detail)
+                .settingsCaption()
+            if let command = check.recoveryCommand {
+                Text(command)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func phaseSymbol(_ phase: ExtensionLifecyclePhase) -> String {
+        switch phase {
+        case .ready: "checkmark.circle.fill"
+        case .degraded: "exclamationmark.triangle.fill"
+        case .failed, .unavailable: "xmark.circle.fill"
+        case .checking: "arrow.clockwise.circle"
+        case .disabled, .enabled, .needsSetup: "circle.dashed"
+        }
+    }
+
+    private func phaseColor(_ phase: ExtensionLifecyclePhase) -> Color {
+        switch phase {
+        case .ready: .green
+        case .degraded: .orange
+        case .failed, .unavailable: .red
+        case .checking, .disabled, .enabled, .needsSetup: .secondary
+        }
+    }
+
+    private func checkSymbol(_ status: ExtensionLifecycleCheckStatus) -> String {
+        switch status {
+        case .passed: "checkmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .failed: "xmark.circle.fill"
+        case .skipped: "minus.circle"
+        }
+    }
+
+    private func checkColor(_ status: ExtensionLifecycleCheckStatus) -> Color {
+        switch status {
+        case .passed: .green
+        case .warning: .orange
+        case .failed: .red
+        case .skipped: .secondary
+        }
+    }
+
+    private func checkTitle(_ status: ExtensionLifecycleCheckStatus) -> String {
+        switch status {
+        case .passed: "Passed"
+        case .warning: "Warning"
+        case .failed: "Failed"
+        case .skipped: "Skipped"
         }
     }
 

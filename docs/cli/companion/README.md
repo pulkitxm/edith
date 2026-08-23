@@ -45,7 +45,7 @@ For the machinery behind these commands, start at
 | `ed companion runs` | Lists background learning runs and per-step outcomes. |
 | `ed companion chat <message>` | Talks with the companion, streamed as it thinks. |
 | `ed companion conversations` | Lists chats, or replays one by id. |
-| `ed companion forget <id>` | Deletes a conversation and its messages. |
+| `ed companion forget <id>` | Previews deleting a conversation; `--yes` applies it. |
 | `ed companion export <dir>` | Saves remembered records as a restorable bundle; `--include-media` also saves originals. |
 | `ed companion import <path>` | Restores a bundle, merging and skipping what already exists. |
 | `ed companion erase <id>` | Deletes one episode and everything derived from it. |

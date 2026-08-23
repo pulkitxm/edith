@@ -3,7 +3,7 @@
 Removes a container, killing it first.
 
 ```
-ed machines docker rm [--json] <machine> <container>...
+ed machines docker rm [--json] [--yes] <machine> <container>...
 ```
 
 ## Arguments
@@ -18,6 +18,7 @@ ed machines docker rm [--json] <machine> <container>...
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emit JSON on stdout instead of the one-line confirmation. |
+| `--yes` | flag | off | Apply the removal. Without it, print the exact plan. |
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
 ## `--json` shape
@@ -25,10 +26,15 @@ ed machines docker rm [--json] <machine> <container>...
 ```json
 {
   "action": "rm",
+  "applied": false,
+  "changed": false,
   "containers": [
     "open-webui"
   ],
-  "machine": "Asus TUF 7"
+  "machine": "Asus TUF 7",
+  "targets": [
+    "Asus TUF 7:container:open-webui"
+  ]
 }
 ```
 
@@ -36,14 +42,15 @@ ed machines docker rm [--json] <machine> <container>...
 
 ```
 ed machines tuf docker rm open-webui
-ed machines tuf docker rm b556d7fef23e --json
+ed machines tuf docker rm b556d7fef23e --yes --json
 ```
 
 ## Behaviour notes
 
 The remote command is `docker rm -f <container>`, so this kills a running
-container and removes it in one step rather than refusing to touch it. There is
-no `--yes` on this verb: it acts immediately, on the first try. The container's
+container and removes it in one step rather than refusing to touch it. Without
+`--yes`, the command prints the resolved machine and every container target,
+changes nothing, and never opens an SSH connection. The container's
 writable layer goes with it, and anything the container wrote outside a volume
 or a bind mount is gone. Named volumes survive, because `-v` is never passed.
 

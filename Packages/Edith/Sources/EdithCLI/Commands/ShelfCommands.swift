@@ -173,21 +173,31 @@ struct ShelfRemoveCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually remove it. Without this nothing is touched.")
+    var yes = false
+
     @Argument(help: "The item number, counting from 1.")
     var index: Int
 
     func run() async throws {
         try await execute {
             let found = try ShelfBridge.item(at: index)
-            try? FileManager.default.removeItem(at: ShelfIndex.fileURL(for: found.item))
-            let kept = found.all.filter { $0.id != found.item.id }
+            let url = ShelfIndex.fileURL(for: found.item)
+            let plan = CLIDestructivePlan(
+                action: "remove shelf item", targets: [url.path], confirmed: yes, json: json,
+                fields: [
+                    "index": .int(index),
+                    "id": .string(found.item.id.uuidString),
+                    "name": .string(found.item.name),
+                ])
+            guard plan.shouldApply() else { return }
+            try? FileManager.default.removeItem(at: url)
+            let kept = ShelfIndex.load().filter { $0.id != found.item.id }
             ShelfIndex.save(kept)
             ShelfBridge.announce()
-            guard !json else {
-                CLIOut.json(.object(["removed": .int(index), "remaining": .int(kept.count)]))
-                return
-            }
-            CLIOut.out("removed \(found.item.name), \(kept.count) left")
+            plan.finish(
+                changed: true, plain: "removed \(found.item.name), \(kept.count) left",
+                fields: ["removed": .int(index), "remaining": .int(kept.count)])
         }
     }
 }
@@ -199,19 +209,26 @@ struct ShelfClearCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually empty it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
             let all = ShelfBridge.items()
+            let ids = Set(all.map(\.id))
+            let plan = CLIDestructivePlan(
+                action: "clear shelf", targets: all.map { ShelfIndex.fileURL(for: $0).path },
+                confirmed: yes, json: json, fields: ["removed": .int(all.count)])
+            guard plan.shouldApply() else { return }
             for item in all {
                 try? FileManager.default.removeItem(at: ShelfIndex.fileURL(for: item))
             }
-            ShelfIndex.save([])
+            let kept = ShelfIndex.load().filter { !ids.contains($0.id) }
+            ShelfIndex.save(kept)
             ShelfBridge.announce()
-            guard !json else {
-                CLIOut.json(.object(["removed": .int(all.count)]))
-                return
-            }
-            CLIOut.out("cleared \(all.count) items")
+            plan.finish(
+                changed: !all.isEmpty, plain: "cleared \(all.count) items",
+                fields: ["remaining": .int(kept.count)])
         }
     }
 }

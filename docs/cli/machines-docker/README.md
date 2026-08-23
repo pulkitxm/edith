@@ -32,10 +32,10 @@ being the usual example.
 | `ed machines docker start` | Starts one or more containers. |
 | `ed machines docker stop` | Stops one or more containers, with a 10 second grace period. |
 | `ed machines docker restart` | Restarts one or more containers, with a 10 second grace period. |
-| `ed machines docker rm` | Removes one or more containers, killing them first. Destructive, and there is no `--yes`. |
+| `ed machines docker rm` | Removes one or more containers, killing them first. Destructive, needs `--yes`. |
 | `ed machines docker pause` | Freezes the processes of one or more containers. |
 | `ed machines docker unpause` | Lets one or more frozen containers run again. |
-| `ed machines docker rmi` | Removes an image. Destructive. Aliased `remove-image`. |
+| `ed machines docker rmi` | Removes an image. Destructive, needs `--yes`. Aliased `remove-image`. |
 | `ed machines docker volume-rm` | Removes a volume and the data in it. Destructive, needs `--yes`. |
 | `ed machines docker prune` | Reclaims space from unused objects. Destructive, needs `--yes`. |
 | `ed machines docker compose ls` | Lists compose projects. Runs when you name no compose subcommand. Aliased `list`. |
@@ -47,13 +47,13 @@ being the usual example.
 
 ## What destroys data, and what guards it
 
-Five verbs remove something, and only `volume-rm` and `prune` ask first. Read
-this table before you script any of them.
+Five verbs remove something. The direct container, image and volume removals,
+plus prune, preview exact targets unless `--yes` is present.
 
 | Command | What disappears | Guard |
 | --- | --- | --- |
-| `ed machines docker rm` | The container, killed first with `docker rm -f`. Anything written inside it and not in a volume goes with it. | none |
-| `ed machines docker rmi` | The image. With `--force`, even while a container still refers to it. | none |
+| `ed machines docker rm` | The container, killed first with `docker rm -f`. Anything written inside it and not in a volume goes with it. | `--yes` |
+| `ed machines docker rmi` | The image. With `--force`, even while a container still refers to it. | `--yes` |
 | `ed machines docker volume-rm` | The volume and every byte in it. This is where databases live. | `--yes` |
 | `ed machines docker prune volumes` | Every volume no container currently uses, and their contents. | `--yes` |
 | `ed machines docker prune images` | Every image no container uses, not only the dangling ones: the command is `docker image prune -af`. | `--yes` |
@@ -62,8 +62,8 @@ this table before you script any of them.
 `prune system`, `prune networks` and `prune builder` remove stopped containers,
 unused networks, dangling images and build cache. `docker system prune -f` is
 what runs for `system`, without `--volumes`, so volume data is never caught by
-it. `prune` and `volume-rm` without `--yes` report what they would do, change
-nothing, and exit 0.
+it. Guarded commands without `--yes` report what they would do, change nothing,
+and exit 0.
 
 ## Commands
 
@@ -94,7 +94,7 @@ nothing, and exit 0.
 
 | Code | When |
 | --- | --- |
-| 0 | The command did what it said. A dry run of `prune` or `volume-rm` also exits 0, having changed nothing, and so do `--help` and `--version`. |
+| 0 | The command did what it said. A guarded preview without `--yes` also exits 0, having changed nothing, and so do `--help` and `--version`. |
 | 1 | Docker ran and refused, or failed: no such container, an image still in use, a volume still attached, a compose file compose could not find. The message names the verb and the machine, and docker's own stderr is the hint. Also a remote command that outran its timeout, and a `logs` stream whose `ssh` would not start. |
 | 2 | `--tail` was negative, or the command line was wrong in the ordinary way: an unknown flag, a missing `<machine>` or `<container>`, a `--tail` that is not a number. |
 | 3 | The machine name matched nothing or matched several; `<what>` was not one of the five prune targets; `<project>` was not in `compose ls`; `inspect` got a zero status and no output. |
