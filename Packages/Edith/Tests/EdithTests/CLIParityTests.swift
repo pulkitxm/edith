@@ -464,6 +464,35 @@ enum UIParity {
         UICapability(
             "Herdr session tab", "copy the attach command for a pane",
             ["herdr", "command", "w3:p1N"]),
+        UICapability(
+            "Quinjet page", "list recent review projects", ["quinjet", "projects"]),
+        UICapability(
+            "Quinjet project picker", "list project worktrees",
+            ["quinjet", "worktrees", "/tmp/project"]),
+        UICapability(
+            "Quinjet project picker", "prepare a review launch without running it",
+            ["quinjet", "open", "/tmp/project"]),
+        UICapability(
+            "Quinjet project picker", "launch a review session",
+            ["quinjet", "launch", "/tmp/project"]),
+        UICapability(
+            "Quinjet machine picker", "list recent projects on another machine",
+            ["quinjet", "projects", "--machine", "build"]),
+        UICapability(
+            "Quinjet machine picker", "browse a folder on another machine",
+            ["machines", "files", "ls", "build", "/tmp"]),
+        UICapability(
+            "Quinjet terminal menu", "select the external terminal",
+            ["config", "set", "quinjetTerminal", "cmux"]),
+        UICapability(
+            "Quinjet theme menu", "select the review theme",
+            ["config", "set", "quinjetTheme", "tokyo-night"]),
+        UICapability(
+            "Quinjet workspace", "restart or switch the active worktree",
+            ["quinjet", "launch", "/tmp/worktree"]),
+        UICapability(
+            "Quinjet workspace", "show the review in cmux",
+            ["quinjet", "launch", "/tmp/worktree", "--cmux"]),
     ]
 }
 
