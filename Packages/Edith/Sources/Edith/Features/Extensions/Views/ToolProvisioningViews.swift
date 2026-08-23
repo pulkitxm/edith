@@ -63,7 +63,10 @@ struct ToolProvisioningPanel: View {
             }
         }
         .padding(UIScale.pt(22))
-        .onAppear { provisioner.provision(tools) }
+        .onAppear {
+            let center = ExtensionMutationCenter.application
+            Task { _ = await center.provision(tools) }
+        }
     }
 
     private var logText: String {
@@ -169,9 +172,12 @@ struct CLIToolStatusSection: View {
                     }
                     Spacer(minLength: 12)
                     if canInstall(tool) {
-                        Button(buttonTitle(for: tool)) { provisioner.provision(tool) }
-                            .controlSize(.small)
-                            .pointerCursor()
+                        Button(buttonTitle(for: tool)) {
+                            let center = ExtensionMutationCenter.application
+                            Task { _ = await center.provision([tool]) }
+                        }
+                        .controlSize(.small)
+                        .pointerCursor()
                     }
                 }
             }

@@ -518,6 +518,16 @@ enum UIParity {
         }
     }
 
+    @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {
+        let declared = Set(ExtensionMutationOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["extensions", "enable"], ["extensions", "disable"],
+                    ["extensions", "setup"], ["tools", "install"],
+                ])
+    }
+
     @Test func everyMutatingCommandIsClaimedByAUIAction() {
         let claimed = Set(UIParity.capabilities.map { Self.commandPath($0.cli) })
         var orphans: [String] = []
