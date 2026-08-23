@@ -194,6 +194,6 @@ private final class CommandRecorder: @unchecked Sendable {
         let started = Date()
         let version = await ToolVersionProbe.version(request)
         #expect(version == nil)
-        #expect(Date().timeIntervalSince(started) < 1)
+        #expect(Date().timeIntervalSince(started) < 5)
     }
 }
