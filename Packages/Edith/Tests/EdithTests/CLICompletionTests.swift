@@ -87,6 +87,15 @@ import Testing
         #expect(result.candidates == ["quinjet"])
     }
 
+    @Test func colorPickerOperationsCompleteUnderColor() {
+        let result = Self.plan(["ed", "color", ""], 2)
+
+        #expect(result.candidates.contains("pick"))
+        #expect(result.candidates.contains("copy"))
+        #expect(result.candidates.contains("ls"))
+        #expect(result.candidates.contains("clear"))
+    }
+
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
         #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])
