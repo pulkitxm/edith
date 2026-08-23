@@ -177,15 +177,10 @@ final class QuinjetPageModel {
         let arguments = launchArguments(
             worktree: worktree, remote: remote, configuration: configuration, managed: true)
         let currentDirectory = remote == nil ? worktree.path : nil
-        if tab.holder.started {
-            tab.holder.restart(
-                executable: executable.path, arguments: arguments, environment: environment,
-                currentDirectory: currentDirectory)
-        } else {
-            tab.holder.start(
-                executable: executable.path, arguments: arguments, environment: environment,
-                currentDirectory: currentDirectory)
-        }
+        tab.holder.reset()
+        tab.holder.start(
+            executable: executable.path, arguments: arguments, environment: environment,
+            currentDirectory: currentDirectory)
     }
 
     func openFolder(

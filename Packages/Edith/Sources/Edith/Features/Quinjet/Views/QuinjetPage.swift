@@ -238,6 +238,7 @@ private struct QuinjetTerminalWorkspace: View {
                         theme: tab.launchConfiguration.theme,
                         appearance: tab.launchConfiguration.appearance)
                 )
+                .id(tab.holder.generation)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 externalWorkspace

@@ -312,6 +312,19 @@ import Testing
         #expect(action == .openNewTab)
     }
 
+    @Test func resettingTerminalClearsMouseTrackingAndCreatesANewView() {
+        let holder = TerminalSessionHolder()
+        let original = holder.terminalView
+        holder.terminalView.feed(text: "\u{1B}[?1003h")
+        #expect(holder.terminalView.terminal.mouseMode == .anyEvent)
+
+        holder.reset()
+
+        #expect(holder.terminalView !== original)
+        #expect(holder.terminalView.terminal.mouseMode == .off)
+        #expect(holder.generation == 1)
+    }
+
     private var client: QuinjetClient {
         let data = (try? JSONEncoder().encode([Self.main, Self.feature])) ?? Data()
         return QuinjetClient { _ in data }
