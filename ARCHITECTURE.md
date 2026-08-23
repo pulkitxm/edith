@@ -36,6 +36,21 @@ automation. Read commands provide JSON, logs use standard error, and exit codes
 carry success or failure. Remote-machine operations execute through SSH using
 the user's configured host and credentials.
 
+### User operation parity
+
+Actionable UI behavior enters `UserOperationCatalog` as a
+`RegisteredUserOperation`. Each registration owns one shared operation
+descriptor and declares either its UI placements with parseable example
+arguments, or a specific reason it is command-line only. The catalog derives
+the UI action registry from those registrations, so the UI inventory, operation
+identity and CLI route cannot drift into separate sources of truth.
+
+`CLIParityTests` resolves every registered route through the argument parser and
+the completion tree. It also keeps the remaining unshared UI inventory visible
+until those paths move behind shared operations. Focus, scrolling, folding,
+local filtering, modal visibility and mouse capture are recorded separately as
+presentation-only state and do not need CLI commands.
+
 ## Companion Boundary
 
 Companion is optional and deployed separately. The macOS app packages runtime
