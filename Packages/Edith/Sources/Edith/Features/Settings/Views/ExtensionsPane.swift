@@ -424,6 +424,13 @@ private struct ExtensionLifecycleRows: View {
                         )
                         .foregroundStyle(phaseColor(report.state.phase))
                     }
+                    LabeledContent("Runtime") {
+                        Label(
+                            report.state.runtimePhase.title,
+                            systemImage: runtimeSymbol(report.state.runtimePhase)
+                        )
+                        .foregroundStyle(runtimeColor(report.state.runtimePhase))
+                    }
                     Text(report.state.summary)
                         .settingsCaption()
                     ForEach(report.checks) { check in
@@ -434,10 +441,11 @@ private struct ExtensionLifecycleRows: View {
                     }
                     .pointerCursor()
                 } else {
+                    let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     HStack(spacing: UIScale.pt(8)) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Checking readiness...")
+                        Text("\(loading.runtimePhase.title) readiness...")
                             .settingsCaption()
                     }
                 }
@@ -527,6 +535,26 @@ private struct ExtensionLifecycleRows: View {
         case .degraded: .orange
         case .failed, .unavailable: .red
         case .checking, .disabled, .enabled, .needsSetup: .secondary
+        }
+    }
+
+    private func runtimeSymbol(_ phase: ExtensionRuntimePhase) -> String {
+        switch phase {
+        case .installed: "checkmark.circle.fill"
+        case .uninstalled: "arrow.down.circle"
+        case .empty: "tray"
+        case .loading: "arrow.clockwise.circle"
+        case .unsupported: "nosign"
+        case .error: "xmark.circle.fill"
+        }
+    }
+
+    private func runtimeColor(_ phase: ExtensionRuntimePhase) -> Color {
+        switch phase {
+        case .installed: .green
+        case .empty: .orange
+        case .error, .unsupported: .red
+        case .loading, .uninstalled: .secondary
         }
     }
 

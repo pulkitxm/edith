@@ -52,17 +52,20 @@ private struct ExtensionMutationWorld {
     func center(granted: [ExtensionPermission: Bool] = [:]) -> ExtensionMutationCenter {
         let defaults = ExtensionMutationDefaults(defaults)
         let availableTools = availableTools
-        let toolAvailable: @Sendable (String) -> Bool = { availableTools.contains($0) }
+        let toolPresent: @Sendable (String) -> Bool = { availableTools.contains($0) }
         let lifecycle = ExtensionLifecycleProbeEnvironment(
             isEnabled: { entry in
                 defaults.store.object(forKey: entry.defaultsKey) as? Bool ?? false
-            }, grantedPermissions: { granted }, toolAvailable: toolAvailable,
+            }, grantedPermissions: { granted },
+            toolReadiness: {
+                toolPresent($0) ? .installed(version: "test") : .uninstalled
+            },
             helperRunning: { true }, platformCapabilities: .macOS, machineCount: { 1 },
             adapterReadiness: { _ in nil })
         return ExtensionMutationCenter(
             environment: ExtensionMutationEnvironment(
                 defaults: defaults.store, announceChange: { recorder.announce() },
-                grantedPermissions: { granted }, toolAvailable: toolAvailable,
+                grantedPermissions: { granted }, toolPresent: toolPresent,
                 installTool: installTool, lifecycle: lifecycle))
     }
 
