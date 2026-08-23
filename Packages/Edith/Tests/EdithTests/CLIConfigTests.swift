@@ -40,6 +40,20 @@ import Testing
         }
     }
 
+    @Test func quinjetLaunchSettingsAreConfigurableAndBackedUp() {
+        let terminal = ConfigCatalog.definition(for: AppStorageKeys.Quinjet.terminal)
+        let theme = ConfigCatalog.definition(for: AppStorageKeys.Quinjet.theme)
+
+        #expect(terminal?.allowed == ["embedded", "cmux"])
+        #expect(terminal?.fallback == .string("embedded"))
+        #expect(theme?.allowed == QuinjetThemeValues.all)
+        #expect(theme?.fallback == .string("quinjet"))
+        #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Quinjet.terminal))
+        #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Quinjet.theme))
+        #expect(SettingsBackup.sharedKeys.contains(AppStorageKeys.Quinjet.terminal))
+        #expect(SettingsBackup.sharedKeys.contains(AppStorageKeys.Quinjet.theme))
+    }
+
     @Test func groupsAreDeclaredForEverySetting() {
         for definition in ConfigCatalog.settings {
             #expect(
@@ -167,6 +181,13 @@ import Testing
         #expect(fields["type"] == .string("integer"))
         #expect(fields["default"] == .int(60))
     }
+}
+
+private enum QuinjetThemeValues {
+    static let all = [
+        "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord", "one",
+        "rose-pine", "solarized", "tokyo-night", "ayu", "monokai", "github",
+    ]
 }
 
 @Suite struct CLIConfigImportComparisonTests {

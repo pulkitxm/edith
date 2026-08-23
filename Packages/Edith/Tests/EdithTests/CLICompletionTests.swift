@@ -65,6 +65,11 @@ import Testing
         #expect(result.candidates == ["clipboard"])
     }
 
+    @Test func toolIDsCompleteForInstall() {
+        let result = Self.plan(["ed", "tools", "install", "q"], 3)
+        #expect(result.candidates == ["quinjet"])
+    }
+
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
         #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])

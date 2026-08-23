@@ -125,7 +125,7 @@ failure mode between "the id exists" and "the boolean is written".
   question from the catalogue's fallback instead, which is `true` for
   `tabUsageEnabled` and `tabSystemEnabled`, so on a Mac where Edith has never
   run those two disagree. Upgrading from an older Edith writes a concrete value
-  for every key on the next launch and they agree again; a fresh install
+  for all sixteen keys on the next launch and they agree again; a fresh install
   only writes the keys you turn on, so an untouched `tabUsageEnabled` keeps
   disagreeing until something writes it.
 - Every extension is also an ordinary `ed config` boolean, and both paths write
@@ -162,4 +162,5 @@ failure mode between "the id exists" and "the boolean is written".
 - [`ed permissions`](../permissions/README.md) for granting what an extension needs
 - [`ed config`](../config/README.md) for the settings an extension exposes once it is on
 - [`ed tools`](../tools/README.md) for the command line tools `requiredTools` names
+- [Tool setup](../tools/README.md) for Quinjet installation and verification details
 - [All `ed` commands](../README.md)
