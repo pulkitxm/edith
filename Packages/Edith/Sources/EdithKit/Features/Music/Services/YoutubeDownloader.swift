@@ -643,7 +643,7 @@ public final class YoutubeDownloader {
         currentProcess = nil
         isRunning = false
         currentItemID = nil
-        guard (try? DownloadOperationExecution.cancel().changed) ?? 0 > 0 else { return }
+        _ = try? DownloadOperationExecution.cancel()
         load()
     }
 
