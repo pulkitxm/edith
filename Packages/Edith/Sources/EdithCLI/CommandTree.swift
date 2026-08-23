@@ -605,14 +605,16 @@ public enum CommandTree {
                             CommandNode(
                                 "wifi", "Turn Wi-Fi on or off.",
                                 options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .onOff]),
+                                arguments: [.machine, .onOff],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "bluetooth", "Turn Bluetooth on or off.", options: common,
                                 arguments: [.machine, .onOff]),
                             CommandNode(
                                 "airplane", "Turn airplane mode on or off.",
                                 options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .onOff]),
+                                arguments: [.machine, .onOff],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "dnd", "Turn Do Not Disturb on or off.", options: common,
                                 arguments: [.machine, .onOff]),
