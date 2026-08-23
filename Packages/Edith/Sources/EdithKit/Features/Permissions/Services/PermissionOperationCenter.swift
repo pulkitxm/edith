@@ -153,6 +153,12 @@ public struct PermissionOperationEnvironment: @unchecked Sendable {
             refreshStatus: { IPC.post(IPC.Name.requestPermissionsRefresh) },
             openSettings: { NSWorkspace.shared.open($0) })
     }
+
+    public static func status(defaults: UserDefaults) -> PermissionOperationEnvironment {
+        PermissionOperationEnvironment(
+            defaults: defaults, requestPermission: { _ in false }, refreshStatus: {},
+            openSettings: { _ in false })
+    }
 }
 
 public struct PermissionOperationCenter: @unchecked Sendable {
