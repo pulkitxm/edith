@@ -18,6 +18,7 @@ line, without you opening System Settings to find out.
 | `ed permissions ls` | Print every permission with its mirrored state, whether it blocks an enabled extension, and which enabled extensions use it |
 | `ed permissions request <permission>` | Ask the running app to raise the macOS prompt for one permission, wait, then report whether the grant landed |
 | `ed permissions refresh` | Ask the running app to re-read the real TCC state, then print the refreshed mirror |
+| `ed permissions settings <permission>` | Open the matching System Settings pane without requesting or relaunching anything |
 
 `ls` is the default subcommand, so a bare `ed permissions` prints the table.
 `list` is an accepted alias for `ls`.
@@ -88,6 +89,7 @@ Permissions pane opens with, and is writable.
 - [`ed permissions ls`](./ls.md)
 - [`ed permissions request`](./request.md)
 - [`ed permissions refresh`](./refresh.md)
+- [`ed permissions settings`](./settings.md)
 
 ## Exit codes
 
@@ -96,7 +98,7 @@ Permissions pane opens with, and is writable.
 | 0 | Any successful run, including a `request` whose grant did not land inside the wait |
 | 2 | An unknown flag, or `ed permissions request` with no permission named |
 | 3 | `ed permissions request <permission>` where the id is not one of the nine, with the full list as the hint |
-| 4 | `ed permissions request bluetooth` or `automation`; `request` or `refresh` while the Edith menu bar app is closed |
+| 4 | `ed permissions request bluetooth` or `automation`; `permissions settings bluetooth` or `automation`; `request` or `refresh` while the Edith menu bar app is closed |
 
 `ed permissions ls` has no failure path and always exits 0.
 
@@ -128,6 +130,8 @@ Permissions pane opens with, and is writable.
 - Both writing verbs talk to the app over its own distributed notification bus
   and neither shells out to it. `request` posts the permission's grant name;
   both post the shared refresh name afterwards.
+- No permission command relaunches Edith. A successful request reports whether
+  the new grant requires `ed app relaunch`, leaving that disruptive action explicit.
 
 ## Where to go next
 

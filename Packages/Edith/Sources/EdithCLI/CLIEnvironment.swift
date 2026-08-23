@@ -42,6 +42,10 @@ public enum CLIEnvironment {
         PermissionsStatus.usages
     }
 
+    nonisolated(unsafe) public static var openURL: @Sendable (URL) -> Bool = {
+        NSWorkspace.shared.open($0)
+    }
+
     nonisolated(unsafe) public static var homeDirectory: URL =
         FileManager.default.homeDirectoryForCurrentUser
 
@@ -107,6 +111,7 @@ public enum CLIEnvironment {
         ShelfIndex.root = AppData.supportDir.appendingPathComponent("Shelf")
         answer = nil
         permissionUsages = { PermissionsStatus.usages }
+        openURL = { NSWorkspace.shared.open($0) }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }

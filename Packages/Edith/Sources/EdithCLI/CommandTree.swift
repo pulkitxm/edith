@@ -209,6 +209,9 @@ public enum CommandTree {
                     CommandNode(
                         "refresh", "Ask the app to re-read the real TCC state.",
                         options: ["--json"]),
+                    CommandNode(
+                        "settings", "Open System Settings for a permission.",
+                        options: ["--json"], arguments: [.permission]),
                 ]),
             CommandNode(
                 "usage", "Agent usage, token counts, cost and rate limits.",

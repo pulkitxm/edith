@@ -85,6 +85,7 @@ final class CLIWorld: @unchecked Sendable {
     let pasteboard: NSPasteboard
     private(set) var posted: [(name: Notification.Name, info: [String: Any])] = []
     private(set) var scripts: [String] = []
+    private(set) var openedURLs: [URL] = []
     private let lock = NSLock()
 
     init(_ label: String = UUID().uuidString) {
@@ -118,6 +119,9 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.usageRefresh = .scripted(events: [])
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
+        CLIEnvironment.openURL = { [weak self] url in
+            self?.note(url: url)
+            return true
         }
         CLIEnvironment.deliver = { [weak self] name, info in
             self?.record(name, info ?? [:])
@@ -140,6 +144,12 @@ final class CLIWorld: @unchecked Sendable {
         lock.unlock()
     }
 
+    private func note(url: URL) {
+        lock.lock()
+        openedURLs.append(url)
+        lock.unlock()
+    }
+
     func postedNames() -> [String] {
         lock.lock()
         defer { lock.unlock() }
@@ -150,6 +160,12 @@ final class CLIWorld: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return scripts
+    }
+
+    func recordedURLs() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return openedURLs
     }
 
     func helperRunning(_ running: Bool) {

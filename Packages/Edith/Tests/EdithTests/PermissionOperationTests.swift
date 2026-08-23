@@ -98,6 +98,16 @@ import Testing
         #expect(result.first { $0.permission == .camera }?.isGranted == true)
     }
 
+    @Test func descriptorsAreUniqueAndRoutable() {
+        let descriptors = PermissionOperation.allCases.map(\.descriptor)
+        #expect(Set(descriptors.map(\.id)).count == descriptors.count)
+        #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+        for descriptor in descriptors {
+            #expect(UserOperationCatalog.descriptor(id: descriptor.id) == descriptor)
+            #expect(UserOperationCatalog.descriptor(cli: descriptor.cli) == descriptor)
+        }
+    }
+
     private func makeCenter(
         shouldOpenSettings: Bool = false
     ) -> (PermissionOperationCenter, UserDefaults, Driver, String) {

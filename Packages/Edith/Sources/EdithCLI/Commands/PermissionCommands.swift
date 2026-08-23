@@ -14,12 +14,27 @@ struct PermissionsCommand: AsyncParsableCommand {
             """,
         subcommands: [
             PermissionsListCommand.self, PermissionsRequestCommand.self,
-            PermissionsRefreshCommand.self,
+            PermissionsRefreshCommand.self, PermissionsSettingsCommand.self,
         ],
         defaultSubcommand: PermissionsListCommand.self)
 }
 
 enum PermissionLookup {
+    static var center: PermissionOperationCenter {
+        PermissionOperationCenter(
+            environment: PermissionOperationEnvironment(
+                defaults: CLIEnvironment.sharedDefaults,
+                requestPermission: { permission in
+                    guard let request = permission.grantRequest else { return false }
+                    CLIEnvironment.deliver(request, nil)
+                    return false
+                },
+                refreshStatus: {
+                    CLIEnvironment.deliver(IPC.Name.requestPermissionsRefresh, nil)
+                },
+                openSettings: { CLIEnvironment.openURL($0) }))
+    }
+
     static func permission(_ name: String) throws -> ExtensionPermission {
         let needle = name.lowercased()
         if let match = ExtensionPermission.allCases.first(where: {
@@ -59,10 +74,7 @@ struct PermissionsListCommand: AsyncParsableCommand {
     var attention = false
 
     func run() async throws {
-        var usages = PermissionsStatus.usages
-        if attention {
-            usages = PermissionCatalog.filter(usages, by: .attention)
-        }
+        let usages = PermissionLookup.center.status(filter: attention ? .attention : .all)
         guard !json else {
             CLIOut.json(
                 .object([
@@ -96,26 +108,33 @@ struct PermissionsRequestCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let value = try PermissionLookup.permission(permission)
-            guard let request = value.grantRequest else {
+            guard value.grantRequest != nil else {
                 throw CLIFailure.unavailable(
                     "\(value.displayName) is granted on first use and cannot be requested",
                     hint: value.firstUseExplanation)
             }
             try AppBridge.requireHelper("requesting a permission")
-            AppBridge.post(request)
+            let request = try PermissionLookup.center.request(value)
             try? await Task.sleep(for: .milliseconds(1500))
-            AppBridge.post(IPC.Name.requestPermissionsRefresh)
+            _ = PermissionLookup.center.refresh()
             try? await Task.sleep(for: .milliseconds(1000))
-            let granted = PermissionsStatus.granted[value] ?? false
+            let granted = PermissionLookup.center.remediation(for: value).granted
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "permission": .string(value.rawValue), "granted": .bool(granted),
+                        "permission": .string(value.rawValue),
+                        "requested": .bool(request.requested),
+                        "granted": .bool(granted),
+                        "relaunch": .string(request.relaunch.rawValue),
+                        "relaunchRequired": .bool(
+                            granted && request.relaunch == .edith),
                     ]))
                 return
             }
             CLIOut.out("\(value.rawValue) \(granted ? "granted" : "not granted yet")")
-            if !granted {
+            if granted, request.relaunch == .edith {
+                CLIOut.note("note: run `ed app relaunch` before using the new grant")
+            } else if !granted {
                 CLIOut.note(
                     "note: finish the prompt in System Settings, then run `ed permissions refresh`")
             }
@@ -133,17 +152,50 @@ struct PermissionsRefreshCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             try AppBridge.requireHelper("refreshing permissions")
-            AppBridge.post(IPC.Name.requestPermissionsRefresh)
+            _ = PermissionLookup.center.refresh()
             try? await Task.sleep(for: .milliseconds(1200))
+            let usages = PermissionLookup.center.status()
             guard !json else {
-                CLIOut.json(
-                    .array(PermissionsStatus.usages.map(PermissionLookup.json)))
+                CLIOut.json(.array(usages.map(PermissionLookup.json)))
                 return
             }
-            let rows = PermissionsStatus.usages.map { usage in
+            let rows = usages.map { usage in
                 [usage.permission.rawValue, usage.isGranted ? "granted" : "no"]
             }
             CLIOut.out(TextTable.render(headers: ["PERMISSION", "STATE"], rows: rows))
+        }
+    }
+}
+
+struct PermissionsSettingsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "settings", abstract: "Open System Settings for a permission.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "The permission id.")
+    var permission: String
+
+    func run() async throws {
+        try await execute {
+            let value = try PermissionLookup.permission(permission)
+            let result: PermissionSettingsResult
+            do {
+                result = try PermissionLookup.center.openSettings(for: value)
+            } catch let error as PermissionOperationError {
+                throw CLIFailure.unavailable(
+                    error.localizedDescription, hint: value.firstUseExplanation)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "permission": .string(value.rawValue), "opened": .bool(result.opened),
+                        "url": .string(result.url.absoluteString),
+                    ]))
+                return
+            }
+            CLIOut.out("opened System Settings for \(value.rawValue)")
         }
     }
 }
