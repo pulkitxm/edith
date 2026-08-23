@@ -34,6 +34,10 @@ it, so `ed np --json` and `ed music --player spotify` both work.
 | `ed music shuffle` | Turn shuffle on or off, or report it. |
 | `ed music repeat` | Turn repeat on or off, or report it. Aliased `loop`. |
 | `ed music rescan` | Read the music folder again after changing it outside Edith. |
+| `ed music favorite <track>` | Add a track to favourites. Aliased `favourite`. |
+| `ed music unfavorite <track>` | Remove a track from favourites. Aliased `unfavourite`. |
+| `ed music reveal <track>` | Reveal a track in Finder. |
+| `ed music open` | Open the music library in Finder. |
 
 ## Players
 
@@ -116,6 +120,10 @@ they drive the library queue rather than a generic transport.
 - [`ed music shuffle`](./shuffle.md)
 - [`ed music repeat`](./repeat.md)
 - [`ed music rescan`](./rescan.md)
+- [`ed music favorite`](./favorite.md)
+- [`ed music unfavorite`](./unfavorite.md)
+- [`ed music reveal`](./reveal.md)
+- [`ed music open`](./open.md)
 
 ## Exit codes
 

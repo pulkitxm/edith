@@ -304,7 +304,9 @@ final class MusicRemote {
     }
 
     func toggleFavourite(_ track: Track) {
-        Favourites.toggle(track.relativePath)
+        let operation: MusicLibraryOperation =
+            favouritePaths.contains(track.relativePath) ? .unfavorite : .favorite
+        _ = MusicLibraryOperationExecution.setFavourite(operation, path: track.relativePath)
         refreshFavourites()
     }
 
@@ -741,9 +743,7 @@ struct MusicPage: View {
             .buttonStyle(HoverButtonStyle())
             .help("New folder")
             Button {
-                try? FileManager.default.createDirectory(
-                    at: Repo.musicDir, withIntermediateDirectories: true)
-                NSWorkspace.shared.open(Repo.musicDir)
+                _ = try? MusicLibraryOperationExecution.openLibrary()
             } label: {
                 Image(systemName: "folder")
             }
@@ -1297,7 +1297,7 @@ private func trackMenu(
     Button("Show Details", action: onOpenDetails)
     Button("Open Enclosing Folder", action: onOpenFolder)
     Button("Show in Finder") {
-        NSWorkspace.shared.activateFileViewerSelecting([track.url])
+        MusicLibraryOperationExecution.reveal(track.url)
     }
     Button("Rename", action: onRename)
     if !moveTargets.isEmpty {

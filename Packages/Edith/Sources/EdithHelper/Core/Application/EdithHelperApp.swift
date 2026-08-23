@@ -393,11 +393,9 @@ enum PresenterHotKey {
             return
         }
         GlobalHotKey.set(id: GlobalHotKey.ID.presenterToggle, keyCode: code, modifiers: mods) {
-            let d = SharedDefaults.store
-            let enabled = !d.bool(forKey: AppStorageKeys.Presenter.mode)
-            d.set(enabled, forKey: AppStorageKeys.Presenter.mode)
-            if !enabled { IPC.post(IPC.Name.presenterPauseAuto) }
-            IPC.post(IPC.Name.settingsChanged)
+            let operation: PresenterRuntimeOperation =
+                PresenterRuntimeOperationExecution.status().manual ? .stop : .start
+            _ = PresenterRuntimeOperationExecution.perform(operation)
         }
     }
 

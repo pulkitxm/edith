@@ -46,7 +46,8 @@ struct PresenterRows: View {
                 }
                 .pointerCursor()
                 .onChange(of: presenterMode) {
-                    if !presenterMode { IPC.post(IPC.Name.presenterPauseAuto) }
+                    _ = PresenterRuntimeOperationExecution.perform(
+                        presenterMode ? .start : .stop)
                 }
                 Toggle("Blur music", isOn: $presenterBlurMusic)
                     .pointerCursor()

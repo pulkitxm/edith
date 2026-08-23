@@ -958,8 +958,7 @@ struct MainWindowView: View {
     }
 
     private func setPresenterMode(_ on: Bool) {
-        presenterMode = on
-        if !on { IPC.post(IPC.Name.presenterPauseAuto) }
+        _ = PresenterRuntimeOperationExecution.perform(on ? .start : .stop)
     }
 
     private func presenterQuickActionToggle(_ title: String, isOn: Binding<Bool>) -> some View {
