@@ -45,6 +45,29 @@ import Testing
             #expect(world.recordedURLs().isEmpty)
         }
     }
+
+    @Test func requestJSONReportsDispatchGrantAndSafeRelaunchPolicy() async {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+
+            let result = await CLIProbe.capture([
+                "permissions", "request", "screenRecording", "--json",
+            ])
+
+            #expect(result.code == 0)
+            #expect(result.object?["permission"] as? String == "screenRecording")
+            #expect(result.object?["requested"] as? Bool == true)
+            #expect(result.object?["granted"] as? Bool == false)
+            #expect(result.object?["relaunch"] as? String == "edith")
+            #expect(result.object?["relaunchRequired"] as? Bool == false)
+            #expect(
+                world.postedNames()
+                    == [
+                        IPC.Name.grantScreenRecording.rawValue,
+                        IPC.Name.requestPermissionsRefresh.rawValue,
+                    ])
+        }
+    }
 }
 
 @Suite struct CLIPermissionProcessTests {
