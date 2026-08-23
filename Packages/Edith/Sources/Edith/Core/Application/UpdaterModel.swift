@@ -63,7 +63,7 @@ final class UpdaterModel: NSObject,
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
 
     func clearCheckHistory() {
-        UpdateCheckLog.clear(at: logURL)
+        _ = AppRuntimeCenter().clearUpdateHistory(url: logURL)
         checkHistory = []
     }
 
@@ -136,12 +136,16 @@ final class UpdaterModel: NSObject,
 
     func checkForUpdates() {
         guard updaterAvailable else { return }
-        updaterController?.checkForUpdates(nil)
+        AppRuntimeCenter().perform(.checkUpdates) {
+            updaterController?.checkForUpdates(nil)
+        }
     }
 
     func checkForUpdatesInBackground() {
         guard updaterAvailable, let updater, !updater.sessionInProgress else { return }
-        updater.checkForUpdatesInBackground()
+        AppRuntimeCenter().perform(.checkUpdates) {
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     func standardUserDriverWillHandleShowingUpdate(

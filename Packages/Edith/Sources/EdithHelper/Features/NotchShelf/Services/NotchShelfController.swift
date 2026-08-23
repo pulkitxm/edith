@@ -770,7 +770,7 @@ final class NotchShelfController: FeatureModule {
 
     func cleanKeyboard() {
         collapseNow()
-        IPC.post(IPC.Name.requestKeyboardClean)
+        AppRuntimeCenter().request(.cleanKeys)
     }
 
     func pickColor() {
