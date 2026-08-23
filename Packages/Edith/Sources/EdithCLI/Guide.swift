@@ -36,6 +36,8 @@ public enum Guide {
         ed extensions ls            every extension and whether it is on
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
+        ed color pick               open Edith's system colour sampler
+        ed color copy 1 --format hex
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -362,8 +364,11 @@ public enum Guide {
         ed apps ls                      what is running here
         ed apps quit Safari | --all --yes
         ed download ls                  the yt-dlp queue
+        ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
-        ed download retry --all | clear | tool --update
+        ed download retry --all | clear --yes | tool --update
+        ed download cancel 1 | cancel
+        ed download open 1 | reveal 1
         ```
 
         ```
@@ -375,6 +380,7 @@ public enum Guide {
         ed clipboard pin 3 | unpin 3
         ed clipboard rm 3 | clear
         ed color ls --format hex        the colours you picked
+        ed color copy 1                 copy the newest using your configured format
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1
@@ -426,6 +432,8 @@ public enum Guide {
           `ed machines disconnect <m>` closes it.
         - Commands that need the app say so and exit 4. That is a signal to start
           Edith, not to retry.
+        - `ed color pick` returns after requesting desktop UI. It never reads stdin,
+          but someone at the logged-in Mac still has to select a colour.
         """
 
     public static let claudeSnippet = """

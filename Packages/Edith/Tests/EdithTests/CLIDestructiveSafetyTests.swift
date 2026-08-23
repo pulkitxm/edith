@@ -14,6 +14,8 @@ import Testing
         "ed companion forget",
         "ed companion stack down",
         "ed companion wipe",
+        "ed download clear",
+        "ed download rm",
         "ed machines control airplane",
         "ed machines control wifi",
         "ed machines docker prune",

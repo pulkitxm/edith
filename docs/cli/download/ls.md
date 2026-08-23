@@ -19,16 +19,14 @@ Options:
 There are no positional arguments.
 
 Entries are numbered from 1 in the order they are printed, which is by the time
-they were queued, newest first. That number is what `ed download rm` and
-`ed download retry` take, and it is recomputed on every invocation: removing
+they were queued, newest first. That number is what `ed download rm`,
+`ed download retry` and `ed download cancel` take, and it is recomputed on every invocation: removing
 entry 1 renumbers everything below it, so read the list again between two
 edits rather than counting down from an old listing.
 
-That number counts through the whole queue, so take it from a bare `ls` or from
-`ls --limit <n>`, which shows a prefix of the same list. Never take it from
-`ls --active`: that numbers only what it prints, so its entry 1 is the first
-unfinished download, while `rm 1` and `retry 1` mean the first entry in the
-queue whatever state it is in.
+That number always counts through the whole queue. A filtered `ls --active`
+therefore keeps the same numbers as a bare `ls`, even when finished records are
+hidden, so every displayed number remains a valid target for another command.
 
 `--active` filters on "not finished", and an interrupted download counts as
 finished, so a paused or cancelled entry does not appear even though its file
@@ -43,6 +41,7 @@ nothing is printed.
 [
   {
     "detail": "Night Drive.m4a",
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
     "index": 1,
     "kind": "audio",
     "queuedAt": "2026-08-07T19:12:44Z",
@@ -79,8 +78,8 @@ reason for `interrupted`, and an empty string for `queued` and `resolving`.
 `title` is the produced file's name without its extension once the download is
 `done`, and the URL itself until then. `kind` is `audio` or `video`, and an
 entry written by an older Edith that recorded no kind reads back as `audio`.
-`queuedAt` is ISO 8601 in UTC. The output filename template the entry was
-queued with is not exposed.
+`queuedAt` is ISO 8601 in UTC. `id` is the stable persisted record identity.
+The output filename template is not exposed.
 
 Examples:
 

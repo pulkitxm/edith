@@ -87,6 +87,15 @@ import Testing
         #expect(result.candidates == ["quinjet"])
     }
 
+    @Test func colorPickerOperationsCompleteUnderColor() {
+        let result = Self.plan(["ed", "color", ""], 2)
+
+        #expect(result.candidates.contains("pick"))
+        #expect(result.candidates.contains("copy"))
+        #expect(result.candidates.contains("ls"))
+        #expect(result.candidates.contains("clear"))
+    }
+
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
         #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])
@@ -172,6 +181,12 @@ import Testing
                 == ColorCopyFormat.allCases.map(\.rawValue))
         #expect(
             Self.plan(["ed", "tools", "install", ""], 3).candidates.contains("quinjet"))
+    }
+
+    @Test func downloadCancellationAcceptsTheSameHistoryIndexAsOtherRecordActions() {
+        let download = CommandTree.root.child("download")
+        #expect(download?.child("cancel")?.arguments == [.historyIndex])
+        #expect(Self.plan(["ed", "download", "cancel", ""], 3).wantsFiles == false)
     }
 
     @Test func typedOptionsWorkAfterOtherOptionsAndWithEqualsSyntax() {
