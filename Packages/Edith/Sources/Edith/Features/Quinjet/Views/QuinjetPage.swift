@@ -25,6 +25,10 @@ struct QuinjetPage: View {
         }
         .background(DashSkin.paper(scheme == .dark))
         .environment(\.quinjetLaunchConfiguration, configuration)
+        .onAppear {
+            model.setSessionLaunchEnabled(launchEnabled)
+            QuinjetSessionBridge.shared.attach(model)
+        }
         .task {
             guard automaticActionsEnabled else { return }
             await model.refreshProjects()
@@ -32,7 +36,13 @@ struct QuinjetPage: View {
         .onChange(of: configuration) { _, configuration in
             model.apply(configuration, launchEnabled: launchEnabled)
         }
-        .onDisappear { model.stopAll() }
+        .onChange(of: launchEnabled) { _, enabled in
+            model.setSessionLaunchEnabled(enabled)
+        }
+        .onDisappear {
+            QuinjetSessionBridge.shared.detach(model)
+            model.stopAll()
+        }
     }
 
     private var tabBar: some View {
@@ -43,12 +53,28 @@ struct QuinjetPage: View {
                         QuinjetTabButton(
                             tab: tab, selected: tab.id == model.selected,
                             canClose: model.tabs.count > 1,
-                            select: { model.selected = tab.id }, close: { model.close(tab) })
+                            select: {
+                                Task {
+                                    try? await model.performSessionOperation(
+                                        QuinjetSessionRequest(
+                                            operation: .focus, session: tab.id.uuidString))
+                                }
+                            },
+                            close: {
+                                Task {
+                                    try? await model.performSessionOperation(
+                                        QuinjetSessionRequest(
+                                            operation: .close, session: tab.id.uuidString))
+                                }
+                            })
                     }
                 }
             }
             Button {
-                model.addPickerTab()
+                Task {
+                    try? await model.performSessionOperation(
+                        QuinjetSessionRequest(operation: .create))
+                }
             } label: {
                 Image(systemName: "plus")
             }
@@ -211,8 +237,6 @@ private struct QuinjetTerminalWorkspace: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @Environment(\.terminalLaunchEnabled) private var launchEnabled
-    @Environment(\.quinjetLaunchConfiguration) private var configuration
 
     private var dark: Bool { scheme == .dark }
 
@@ -313,10 +337,12 @@ private struct QuinjetTerminalWorkspace: View {
                 projectName: tab.projectName ?? "Project", worktrees: tab.worktrees,
                 selectedPath: tab.worktree?.path,
                 select: { worktree in
-                    model.open(
-                        worktree, projectName: tab.projectName ?? "Project",
-                        available: tab.worktrees, remote: tab.remote, in: tab,
-                        launchEnabled: launchEnabled, configuration: configuration)
+                    Task {
+                        try? await model.performSessionOperation(
+                            QuinjetSessionRequest(
+                                operation: .switchWorktree, session: tab.id.uuidString,
+                                worktreePath: worktree.path))
+                    }
                 })
         }
     }
@@ -349,7 +375,11 @@ private struct QuinjetTerminalWorkspace: View {
                 .foregroundStyle(Color(nsColor: palette.foreground))
                 HStack(spacing: UIScale.pt(10)) {
                     Button("Show in cmux") {
-                        model.showInCMUX(tab, launchEnabled: launchEnabled)
+                        Task {
+                            try? await model.performSessionOperation(
+                                QuinjetSessionRequest(
+                                    operation: .focus, session: tab.id.uuidString))
+                        }
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
                     .pointerCursor()
@@ -367,10 +397,9 @@ private struct QuinjetTerminalWorkspace: View {
     }
 
     private func restart() {
-        guard let worktree = tab.worktree else { return }
-        model.open(
-            worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
-            remote: tab.remote, in: tab, launchEnabled: launchEnabled,
-            configuration: configuration)
+        Task {
+            try? await model.performSessionOperation(
+                QuinjetSessionRequest(operation: .restart, session: tab.id.uuidString))
+        }
     }
 }

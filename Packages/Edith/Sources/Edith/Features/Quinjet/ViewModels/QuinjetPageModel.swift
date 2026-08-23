@@ -31,10 +31,14 @@ final class QuinjetTab: Identifiable {
 @MainActor
 @Observable
 final class QuinjetPageModel {
+    typealias ExternalWorkspaceAction = @Sendable (String) async throws -> Void
+
     private let client: QuinjetClient
+    private let focusExternalWorkspace: ExternalWorkspaceAction
+    private let closeExternalWorkspace: ExternalWorkspaceAction
 
     private(set) var tabs: [QuinjetTab]
-    var selected: UUID
+    private(set) var selected: UUID
     private(set) var projects: [QuinjetProject] = []
     private(set) var loadingProjects = false
     var projectError: String?
@@ -44,9 +48,20 @@ final class QuinjetPageModel {
     private var remoteProjectErrors: [UUID: String] = [:]
     private var projectRefreshGeneration = 0
     private var remoteProjectRefreshGenerations: [UUID: Int] = [:]
+    private var sessionLaunchEnabled = false
 
-    init(client: QuinjetClient = .live) {
+    init(
+        client: QuinjetClient = .live,
+        focusExternalWorkspace: @escaping ExternalWorkspaceAction = {
+            try await QuinjetCMUXLauncher.focus(workspaceID: $0)
+        },
+        closeExternalWorkspace: @escaping ExternalWorkspaceAction = {
+            try await QuinjetCMUXLauncher.close(workspaceID: $0)
+        }
+    ) {
         self.client = client
+        self.focusExternalWorkspace = focusExternalWorkspace
+        self.closeExternalWorkspace = closeExternalWorkspace
         let tab = QuinjetTab()
         tabs = [tab]
         selected = tab.id
@@ -139,19 +154,6 @@ final class QuinjetPageModel {
         tabs.append(tab)
         selected = tab.id
         return tab
-    }
-
-    func close(_ tab: QuinjetTab) {
-        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == tab.id }) else {
-            return
-        }
-        tab.holder.stop()
-        tab.externalLaunchGeneration += 1
-        if let workspaceID = tab.externalWorkspaceID {
-            Task { try? await QuinjetCMUXLauncher.close(workspaceID: workspaceID) }
-        }
-        tabs.remove(at: index)
-        if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }
     }
 
     func open(
@@ -267,7 +269,10 @@ final class QuinjetPageModel {
         guard let action = QuinjetHostAction(payload: payload) else { return }
         switch action {
         case .openNewTab:
-            addPickerTab(machineID: tab.remote?.machineID ?? MachinesModel.localMachineID)
+            Task {
+                try? await performSessionOperation(
+                    QuinjetSessionRequest(operation: .create, session: tab.id.uuidString))
+            }
         case .openWorktree:
             Task { await presentWorktrees(for: tab) }
         }
@@ -285,22 +290,51 @@ final class QuinjetPageModel {
             configuration: configuration)
     }
 
-    func showInCMUX(_ tab: QuinjetTab, launchEnabled: Bool) {
-        guard let workspaceID = tab.externalWorkspaceID else {
-            guard let worktree = tab.worktree else { return }
-            open(
-                worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
-                remote: tab.remote, in: tab, launchEnabled: launchEnabled,
-                configuration: tab.launchConfiguration)
-            return
-        }
-        Task { [weak tab] in
-            do {
-                try await QuinjetCMUXLauncher.focus(workspaceID: workspaceID)
-            } catch {
-                guard let tab, tab.externalWorkspaceID == workspaceID else { return }
-                tab.errorMessage = error.localizedDescription
+    func setSessionLaunchEnabled(_ enabled: Bool) {
+        sessionLaunchEnabled = enabled
+    }
+
+    func performSessionOperation(
+        _ request: QuinjetSessionRequest
+    ) async throws -> QuinjetSessionResult {
+        switch request.operation {
+        case .status:
+            let tab = try session(matching: request.session)
+            return sessionResult(for: .status, affected: tab.id)
+        case .sessions:
+            return sessionResult(for: request.operation)
+        case .create:
+            let source = try request.session.map { try session(matching: $0) }
+            let tab = addPickerTab(
+                machineID: source?.remote?.machineID ?? MachinesModel.localMachineID)
+            return sessionResult(for: .create, affected: tab.id)
+        case .focus:
+            let tab = try session(matching: request.session)
+            selected = tab.id
+            if let workspaceID = tab.externalWorkspaceID {
+                do {
+                    try await focusExternalWorkspace(workspaceID)
+                } catch {
+                    tab.errorMessage = error.localizedDescription
+                    throw QuinjetSessionError.operationFailed(error.localizedDescription)
+                }
             }
+            return sessionResult(for: .focus, affected: tab.id)
+        case .close:
+            let tab = try session(matching: request.session)
+            try await closeSession(tab)
+            return sessionResult(for: .close, affected: tab.id)
+        case .restart:
+            let tab = try session(matching: request.session)
+            try restartSession(tab)
+            return sessionResult(for: .restart, affected: tab.id)
+        case .switchWorktree:
+            let tab = try session(matching: request.session)
+            guard let path = request.worktreePath, !path.isEmpty else {
+                throw QuinjetSessionError.worktreeRequired
+            }
+            try await switchSession(tab, to: path)
+            return sessionResult(for: .switchWorktree, affected: tab.id)
         }
     }
 
@@ -313,6 +347,107 @@ final class QuinjetPageModel {
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
         return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+    }
+
+    private func session(matching selector: String?) throws -> QuinjetTab {
+        let query = selector?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if query.isEmpty {
+            guard let selectedTab else { throw QuinjetSessionError.sessionNotFound("selected") }
+            return selectedTab
+        }
+        if let id = UUID(uuidString: query), let tab = tabs.first(where: { $0.id == id }) {
+            return tab
+        }
+        if let index = Int(query), tabs.indices.contains(index - 1) { return tabs[index - 1] }
+        let matches = tabs.filter {
+            $0.title.caseInsensitiveCompare(query) == .orderedSame
+                || $0.worktree?.path == query
+                || $0.worktree?.branch?.caseInsensitiveCompare(query) == .orderedSame
+        }
+        guard matches.count == 1, let tab = matches.first else {
+            throw QuinjetSessionError.sessionNotFound(query)
+        }
+        return tab
+    }
+
+    private func closeSession(_ tab: QuinjetTab) async throws {
+        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == tab.id }) else {
+            throw QuinjetSessionError.lastSession
+        }
+        tab.externalLaunchGeneration += 1
+        if let workspaceID = tab.externalWorkspaceID {
+            do {
+                try await closeExternalWorkspace(workspaceID)
+            } catch {
+                tab.errorMessage = error.localizedDescription
+                throw QuinjetSessionError.operationFailed(error.localizedDescription)
+            }
+        }
+        tab.holder.stop()
+        tabs.remove(at: index)
+        if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }
+    }
+
+    private func restartSession(_ tab: QuinjetTab) throws {
+        guard let worktree = tab.worktree else {
+            throw QuinjetSessionError.reviewUnavailable(tab.title)
+        }
+        open(
+            worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
+            remote: tab.remote, in: tab, launchEnabled: sessionLaunchEnabled,
+            configuration: tab.launchConfiguration)
+    }
+
+    private func switchSession(_ tab: QuinjetTab, to path: String) async throws {
+        do {
+            let selection = try await QuinjetOperationExecution.openSelection(
+                at: path, remote: tab.remote, using: client)
+            open(
+                selection.worktree, projectName: tab.projectName ?? selection.projectName,
+                available: selection.worktrees, remote: tab.remote, in: tab,
+                launchEnabled: sessionLaunchEnabled, configuration: tab.launchConfiguration)
+        } catch let error as QuinjetOperationError {
+            tab.errorMessage = error.localizedDescription
+            throw QuinjetSessionError.worktreeNotFound(error.localizedDescription)
+        } catch {
+            tab.errorMessage = error.localizedDescription
+            throw QuinjetSessionError.operationFailed(error.localizedDescription)
+        }
+    }
+
+    private func sessionResult(
+        for operation: QuinjetSessionOperation, affected: UUID? = nil
+    ) -> QuinjetSessionResult {
+        QuinjetSessionResult(
+            operation: operation, selectedSessionID: selected.uuidString,
+            affectedSessionID: affected?.uuidString,
+            sessions: tabs.enumerated().map { offset, tab in
+                sessionState(tab, index: offset + 1)
+            })
+    }
+
+    private func sessionState(_ tab: QuinjetTab, index: Int) -> QuinjetSessionState {
+        let state: String
+        if tab.worktree == nil {
+            state = "picker"
+        } else if tab.launchConfiguration.terminal == .cmux {
+            state = tab.externalWorkspaceID == nil ? "ready" : "running"
+        } else if tab.holder.started {
+            state = "running"
+        } else if tab.holder.exitMessage != nil {
+            state = "ended"
+        } else {
+            state = "ready"
+        }
+        let terminal =
+            tab.worktree == nil ? nil : tab.launchConfiguration.terminal.rawValue
+        return QuinjetSessionState(
+            id: tab.id.uuidString, index: index, title: tab.title, selected: tab.id == selected,
+            state: state, terminal: terminal,
+            project: tab.projectName, worktreePath: tab.worktree?.path,
+            branch: tab.worktree?.branch, machine: tab.remote?.machineName ?? "This Mac",
+            canClose: tabs.count > 1, canRestart: tab.worktree != nil,
+            exitMessage: tab.holder.exitMessage)
     }
 
 }

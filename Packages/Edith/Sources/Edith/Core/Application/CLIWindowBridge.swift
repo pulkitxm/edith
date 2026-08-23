@@ -15,6 +15,7 @@ enum CLIWindowBridge {
         snapshotObserver = IPC.observe(IPC.Name.requestWindowSnapshot) { info in
             MainActor.assumeIsolated { snapshot(info) }
         }
+        QuinjetSessionBridge.shared.install()
     }
 
     private static func fail(_ message: String) {

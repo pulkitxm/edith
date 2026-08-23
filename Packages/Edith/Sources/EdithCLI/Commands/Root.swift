@@ -363,13 +363,24 @@ struct CompleteCommand: AsyncParsableCommand {
         } else {
             calendarEvents = []
         }
+        let quinjetSessionCommands = ["status", "focus", "close", "restart", "switch"]
+        let quinjetSessions: [String]
+        if request.leading.first == "quinjet",
+            request.leading.dropFirst().first.map(quinjetSessionCommands.contains) == true,
+            let result = try? await QuinjetSessionCLI.request(.sessions, timeout: 0.25)
+        {
+            quinjetSessions = result.sessions.map { String($0.index) }
+        } else {
+            quinjetSessions = []
+        }
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
             extensionIDs: ExtensionRegistry.entries.map(\.id), shelfItems: shelfItems,
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
-            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [])
+            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [],
+            quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)

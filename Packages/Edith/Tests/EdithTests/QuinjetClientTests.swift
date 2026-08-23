@@ -6,14 +6,29 @@ import Testing
 
 @Suite struct QuinjetClientTests {
     @Test func operationDescriptorsAreUniqueAndRegistered() {
-        let descriptors = QuinjetOperation.allCases.map(\.descriptor)
+        let descriptors =
+            QuinjetOperation.allCases.map(\.descriptor)
+            + QuinjetSessionOperation.allCases.map(\.descriptor)
 
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
         #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
         #expect(descriptors.allSatisfy { $0.cli.starts(with: ["quinjet"]) })
         #expect(QuinjetOperation.open.descriptor.effect == .read)
         #expect(QuinjetOperation.launch.descriptor.effect == .interactive)
+        #expect(QuinjetSessionOperation.close.descriptor.effect == .destructive)
+        #expect(QuinjetSessionOperation.close.descriptor.requiresPreview)
         #expect(UserOperationCatalog.descriptors.suffix(descriptors.count) == descriptors[...])
+    }
+
+    @Test func nativeSessionVocabularyHasStableCommandPaths() {
+        #expect(
+            QuinjetSessionOperation.allCases.map(\.descriptor.cli)
+                == [
+                    ["quinjet", "status"], ["quinjet", "sessions"],
+                    ["quinjet", "new"],
+                    ["quinjet", "focus"], ["quinjet", "close"],
+                    ["quinjet", "restart"], ["quinjet", "switch"],
+                ])
     }
 
     @Test func decodesRecentProjectsAndWorktrees() async throws {
@@ -288,8 +303,141 @@ private actor ProjectRefreshHarness {
     }
 }
 
+private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var focused: [String] = []
+    private var closed: [String] = []
+
+    func focus(_ id: String) {
+        lock.lock()
+        focused.append(id)
+        lock.unlock()
+    }
+
+    func close(_ id: String) {
+        lock.lock()
+        closed.append(id)
+        lock.unlock()
+    }
+
+    func values() -> (focused: [String], closed: [String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (focused, closed)
+    }
+}
+
 @MainActor
 @Suite struct QuinjetPageModelTests {
+    @Test func nativeSessionStatusDescribesTheSelectedPicker() async throws {
+        let model = QuinjetPageModel(client: client)
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .status))
+
+        let session = try #require(result.sessions.first)
+        #expect(result.selectedSessionID == session.id)
+        #expect(session.index == 1)
+        #expect(session.title == "New review")
+        #expect(session.selected)
+        #expect(session.state == "picker")
+        #expect(session.terminal == nil)
+        #expect(!session.canClose)
+        #expect(!session.canRestart)
+    }
+
+    @Test func nativeFocusSelectsTheTabAndFocusesItsCMUXWorkspace() async throws {
+        let recorder = QuinjetWorkspaceRecorder()
+        let model = QuinjetPageModel(
+            client: client,
+            focusExternalWorkspace: { recorder.focus($0) },
+            closeExternalWorkspace: { recorder.close($0) })
+        let tab = try #require(model.selectedTab)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .cmux, theme: .quinjet, appearance: .dark)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main], in: tab,
+            launchEnabled: false, configuration: configuration)
+        tab.externalWorkspaceID = "workspace-1"
+        _ = model.addPickerTab()
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .focus, session: "1"))
+
+        #expect(result.selectedSessionID == tab.id.uuidString)
+        #expect(recorder.values().focused == ["workspace-1"])
+        #expect(result.sessions.first?.state == "running")
+        #expect(result.sessions.first?.terminal == "cmux")
+    }
+
+    @Test func nativeCreateAddsASelectedPickerAndKeepsTheOriginalClosable() async throws {
+        let model = QuinjetPageModel(client: client)
+        let original = try #require(model.selectedTab)
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .create))
+
+        #expect(model.tabs.count == 2)
+        #expect(result.operation == .create)
+        #expect(result.affectedSessionID == model.selectedTab?.id.uuidString)
+        #expect(result.selectedSessionID == model.selectedTab?.id.uuidString)
+        #expect(result.sessions.last?.state == "picker")
+        #expect(result.sessions.map(\.canClose) == [true, true])
+
+        _ = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .close, session: original.id.uuidString))
+        #expect(model.tabs.count == 1)
+        #expect(model.selectedTab?.id == result.affectedSessionID.flatMap(UUID.init(uuidString:)))
+    }
+
+    @Test func nativeCloseClosesCMUXBeforeRemovingItsTab() async throws {
+        let recorder = QuinjetWorkspaceRecorder()
+        let model = QuinjetPageModel(
+            client: client,
+            focusExternalWorkspace: { recorder.focus($0) },
+            closeExternalWorkspace: { recorder.close($0) })
+        let tab = try #require(model.selectedTab)
+        tab.externalWorkspaceID = "workspace-1"
+        let remaining = model.addPickerTab()
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .close, session: tab.id.uuidString))
+
+        #expect(recorder.values().closed == ["workspace-1"])
+        #expect(result.affectedSessionID == tab.id.uuidString)
+        #expect(result.sessions.map(\.id) == [remaining.id.uuidString])
+        #expect(result.selectedSessionID == remaining.id.uuidString)
+    }
+
+    @Test func nativeSwitchAndRestartReuseTheSameTab() async throws {
+        let model = QuinjetPageModel(client: client)
+        let tab = try #require(model.selectedTab)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main, Self.feature], in: tab,
+            launchEnabled: false)
+
+        let switched = try await model.performSessionOperation(
+            QuinjetSessionRequest(
+                operation: .switchWorktree, session: "1", worktreePath: Self.feature.path))
+        let restarted = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .restart, session: tab.id.uuidString))
+
+        #expect(model.tabs.count == 1)
+        #expect(model.selectedTab?.id == tab.id)
+        #expect(model.selectedTab?.worktree == Self.feature)
+        #expect(switched.affectedSessionID == tab.id.uuidString)
+        #expect(restarted.sessions.first?.worktreePath == Self.feature.path)
+    }
+
+    @Test func nativeCloseRejectsTheOnlyTab() async throws {
+        let model = QuinjetPageModel(client: client)
+
+        await #expect(throws: QuinjetSessionError.lastSession) {
+            try await model.performSessionOperation(
+                QuinjetSessionRequest(operation: .close, session: "1"))
+        }
+    }
+
     @Test func newestLocalProjectRefreshWins() async throws {
         let harness = ProjectRefreshHarness()
         let model = QuinjetPageModel(
@@ -422,18 +570,19 @@ private actor ProjectRefreshHarness {
                 ])
     }
 
-    @Test func newTabPayloadCreatesAndSelectsPickerTab() throws {
+    @Test func newTabPayloadCreatesAndSelectsPickerTab() async throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)
 
         model.handleHostPayload("quinjet;open-new-tab", from: original)
+        for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }
 
         #expect(model.tabs.count == 2)
         #expect(model.selectedTab?.id != original.id)
         #expect(model.selectedTab?.worktree == nil)
     }
 
-    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() throws {
+    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() async throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)
         let machineID = UUID()
@@ -442,6 +591,7 @@ private actor ProjectRefreshHarness {
             controlPath: "/tmp/edith.sock")
 
         model.handleHostPayload("quinjet;open-new-tab", from: original)
+        for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }
 
         #expect(model.selectedTab?.machineID == machineID)
         #expect(model.selectedTab?.worktree == nil)
