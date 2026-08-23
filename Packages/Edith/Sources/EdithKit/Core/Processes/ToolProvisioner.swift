@@ -85,6 +85,9 @@ private final class CLIStreamingOutput: @unchecked Sendable {
 }
 
 public enum CLICommandRunner {
+    private static let timeoutQueue = DispatchQueue(
+        label: "com.pulkit.edith.cli-command-timeout", qos: .userInitiated)
+
     public static func run(
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
@@ -119,7 +122,7 @@ public enum CLICommandRunner {
                 try process.run()
                 if let timeout = request.timeout {
                     let process = process
-                    DispatchQueue.global(qos: .utility).asyncAfter(
+                    timeoutQueue.asyncAfter(
                         deadline: .now() + max(0.01, timeout)
                     ) {
                         if process.isRunning { process.terminate() }
