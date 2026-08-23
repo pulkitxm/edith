@@ -23,6 +23,8 @@ struct ExtensionsPane: View {
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
         var herdrEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
+        var quinjetEnabled = false
     @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
         var claudeEnabled = true
     @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
@@ -195,7 +197,6 @@ struct ExtensionsPane: View {
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
-        guard entry.id != "calendar" else { return }
         selectedEntry = entry
     }
 
@@ -242,6 +243,7 @@ struct ExtensionsPane: View {
         switch entry.defaultsKey {
         case AppStorageKeys.Tabs.usageEnabled: agentUsageBinding
         case AppStorageKeys.Tabs.herdrEnabled: $herdrEnabled
+        case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled
         case AppStorageKeys.Tabs.systemEnabled: $systemEnabled
         case AppStorageKeys.Tabs.machinesEnabled: $machinesEnabled
         case AppStorageKeys.Tabs.companionEnabled: $companionEnabled
@@ -527,6 +529,7 @@ private struct ExtensionDetailRows: View {
     @ViewBuilder var body: some View {
         switch entry.id {
         case "usage": UsageRows()
+        case "quinjet": QuinjetRows()
         case "system": SystemRows()
         case "machines": MachinesRows()
         case "systemStats": SystemStatsRows()
@@ -540,6 +543,36 @@ private struct ExtensionDetailRows: View {
         case "colorPicker": ColorPickerRows()
         default: EmptyView()
         }
+    }
+}
+
+private struct QuinjetRows: View {
+    @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store) private
+        var terminal = QuinjetTerminal.embedded.rawValue
+    @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store) private
+        var theme = QuinjetTheme.quinjet.rawValue
+
+    var body: some View {
+        CLIToolStatusSection(tools: [.quinjet], extensionEnabled: enabled)
+
+        Section("Launch") {
+            Picker("Terminal", selection: $terminal) {
+                ForEach(QuinjetTerminal.allCases) { option in
+                    Label(option.label, systemImage: option.icon)
+                        .tag(option.rawValue)
+                        .disabled(!option.isAvailable)
+                }
+            }
+            Picker("Theme", selection: $theme) {
+                ForEach(QuinjetTheme.allCases) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

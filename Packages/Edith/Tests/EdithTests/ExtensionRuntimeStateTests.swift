@@ -59,6 +59,22 @@ import Testing
         #expect(!source.contains("availableEntries"))
     }
 
+    @Test func quinjetMarketplaceBindingAndSettingsAreReachable() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("var quinjetEnabled = false"))
+        #expect(source.contains("case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled"))
+        #expect(source.contains("case \"quinjet\": QuinjetRows()"))
+        #expect(source.contains("private struct QuinjetRows: View"))
+        #expect(source.contains("CLIToolStatusSection(tools: [.quinjet]"))
+        #expect(!source.contains("guard entry.id != \"calendar\""))
+    }
+
     @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

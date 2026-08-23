@@ -8,9 +8,9 @@ struct ToolsCommand: AsyncParsableCommand {
         abstract: "The command line tools Edith's extensions rely on.",
         discussion: """
             These are the tools an extension needs before it can do its job: yt-dlp for
-            downloads, and the agent CLIs whose usage the dashboard reads. `ls` checks what
-            is on PATH; `install` fetches the one you name the same way the extension sheet
-            does.
+            downloads, the agent CLIs whose usage the dashboard reads, and Quinjet for pull
+            request review. `ls` checks what is on PATH; `install` fetches the one you name
+            the same way the extension sheet does.
             """,
         subcommands: [ToolsListCommand.self, ToolsInstallCommand.self],
         defaultSubcommand: ToolsListCommand.self)
@@ -122,7 +122,7 @@ struct ToolsInstallCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Argument(help: "The tool id: yt-dlp, claude or codex.")
+    @Argument(help: "The tool id: yt-dlp, claude, codex or quinjet.")
     var tool: String
 
     func run() async throws {

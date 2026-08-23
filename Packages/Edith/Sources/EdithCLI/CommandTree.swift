@@ -11,6 +11,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case configKey
     case configValue
     case extensionID
+    case toolID
     case permission
     case shell
     case group
@@ -303,7 +304,7 @@ public enum CommandTree {
                         aliases: ["list"], options: common),
                     CommandNode(
                         "install", "Install one of the tools.", options: common,
-                        arguments: [.free]),
+                        arguments: [.toolID]),
                 ]),
             CommandNode(
                 "apps", "The applications running on this Mac.",

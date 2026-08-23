@@ -98,6 +98,7 @@ public enum CompletionEngine {
             if !definition.allowed.isEmpty { return definition.allowed }
             return definition.type == .bool ? ["true", "false"] : []
         case .extensionID: return extensionIDs
+        case .toolID: return ToolProvisioning.all.map(\.id)
         case .permission: return ExtensionPermission.allCases.map(\.rawValue)
         case .shell: return ["zsh", "bash", "fish"]
         case .group: return ConfigCatalog.groups

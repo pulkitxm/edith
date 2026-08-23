@@ -18,6 +18,7 @@ $ ed extensions ls
 ID           STATE  GROUP      NAME
 usage        on     Agent      Agent Usage
 herdr        off    Agent      Herdr
+quinjet      off    Agent      Quinjet
 system       on     System     System
 machines     on     System     Machines
 companion    off    Agent      Companion
