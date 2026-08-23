@@ -6,7 +6,7 @@ import Testing
 @Suite struct QuinjetClientTests {
     @Test func decodesRecentProjectsAndWorktrees() async throws {
         let client = QuinjetClient { arguments in
-            #expect(arguments == ["--client", "edith", "project", "list", "--json"])
+            #expect(arguments == ["project", "list", "--json"])
             return Data(Self.projectsJSON.utf8)
         }
 
@@ -23,7 +23,7 @@ import Testing
             #expect(
                 arguments
                     == [
-                        "--client", "edith", "-C", "/work/edith", "worktree", "list", "--json",
+                        "-C", "/work/edith", "worktree", "list", "--json",
                     ])
             return Data(Self.worktreesJSON.utf8)
         }
@@ -41,7 +41,7 @@ import Testing
             #expect(
                 arguments
                     == [
-                        "--client", "edith", "--remote", "pulkit@build", "--ssh-control-path",
+                        "--remote", "pulkit@build", "--ssh-control-path",
                         "/tmp/edith.sock", "-C", "/srv/project", "worktree", "list", "--json",
                     ])
             return Data(Self.worktreesJSON.utf8)
@@ -50,6 +50,30 @@ import Testing
         let worktrees = try await client.worktrees(at: "/srv/project", remote: remote)
 
         #expect(worktrees.filter(\.canOpen).count == 2)
+    }
+
+    @Test func hydratesRecentFoldersFromTheSelectedMachine() async throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+        let client = QuinjetClient { arguments in
+            if arguments == ["remote", "list", "--json"] {
+                return Data(Self.remoteFoldersJSON.utf8)
+            }
+            #expect(
+                arguments
+                    == [
+                        "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith.sock",
+                        "-C", "/srv/edith", "worktree", "list", "--json",
+                    ])
+            return Data(Self.worktreesJSON.utf8)
+        }
+
+        let projects = try await client.recentProjects(remote: remote)
+
+        #expect(projects.count == 1)
+        #expect(projects[0].name == "edith")
+        #expect(projects[0].availableWorktrees.count == 2)
     }
 
     @Test func rejectsUnsupportedOutput() async {
@@ -110,6 +134,25 @@ import Testing
             "prunable": "gitdir is missing"
           }
         ]
+        """
+
+    private static let remoteFoldersJSON = """
+        {
+          "remotes": [
+            {
+              "target": "pulkit@build",
+              "folder": "/srv/edith",
+              "accessible": true,
+              "uses": 12
+            },
+            {
+              "target": "other",
+              "folder": "/srv/other",
+              "accessible": true,
+              "uses": 4
+            }
+          ]
+        }
         """
 }
 
