@@ -237,6 +237,13 @@ import Testing
 }
 
 @Suite struct CLICompletionProcessTests {
+    static var fishExecutable: URL? {
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        return path.split(separator: ":")
+            .map { URL(fileURLWithPath: String($0)).appendingPathComponent("fish") }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
     static func temporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-completion-process-\(UUID().uuidString)")
@@ -303,6 +310,48 @@ import Testing
         #expect(Set(bash.stdoutLines) == Set(MusicPlayer.allCases.map(\.rawValue)))
         #expect(zsh.code == 0)
         #expect(Set(zsh.stdoutLines).isSuperset(of: Set(MusicPlayer.allCases.map(\.rawValue))))
+    }
+
+    @Test(.enabled(if: fishExecutable != nil))
+    func fishLoadsTheInstalledScriptAndCompletesRealCommandLines() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let directory = CompletionScripts.defaultDirectory(for: .fish, home: outside)
+        let script = directory.appendingPathComponent(CompletionScripts.Shell.fish.scriptName)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try CompletionScripts.script(for: .fish, tool: CLIProcessProbe.binary.path)
+            .write(to: script, atomically: true, encoding: .utf8)
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["HOME"] = outside.path
+        environment["XDG_CONFIG_HOME"] = outside.appendingPathComponent(".config").path
+        environment["PATH"] =
+            CLIProcessProbe.binary.deletingLastPathComponent().path + ":"
+            + (environment["PATH"] ?? "")
+        let nested = try Self.fishCompletion(
+            "ed machines docker ", script: script, outside: outside, environment: environment)
+        let inherited = try Self.fishCompletion(
+            "ed music status --h", script: script, outside: outside, environment: environment)
+
+        #expect(
+            script.path == outside.appendingPathComponent(".config/fish/completions/ed.fish").path)
+        #expect(nested.code == 0)
+        #expect(nested.stderr.isEmpty)
+        #expect(nested.stdoutLines.contains("ps"))
+        #expect(nested.stdoutLines.contains("logs"))
+        #expect(inherited.code == 0)
+        #expect(inherited.stderr.isEmpty)
+        #expect(inherited.stdoutLines == ["--help"])
+    }
+
+    static func fishCompletion(
+        _ commandLine: String, script: URL, outside: URL, environment: [String: String]
+    ) throws -> CLIRun {
+        try CLIProcessProbe.run(
+            [
+                "--private", "-c", "source \"$argv[1]\"; complete -C \"$argv[2]\"",
+                script.path, commandLine,
+            ], executable: fishExecutable, currentDirectory: outside, environment: environment)
     }
 
     @Test func everyShellGenerationCarriesAliasesAndTheAbsoluteEntryPath() {
