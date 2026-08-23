@@ -7,8 +7,12 @@ public typealias ExtensionMarketplaceFilter = EdithCore.ExtensionMarketplaceFilt
 public typealias ExtensionRegistryEntry = EdithCore.ExtensionRegistryEntry
 public typealias ExtensionRegistry = EdithCore.ExtensionRegistry
 public typealias ExtensionLifecycleDescriptor = EdithCore.ExtensionLifecycleDescriptor
+public typealias ExtensionLifecycleCheck = EdithCore.ExtensionLifecycleCheck
+public typealias ExtensionLifecycleCheckStatus = EdithCore.ExtensionLifecycleCheckStatus
 public typealias ExtensionLifecycleInstruction = EdithCore.ExtensionLifecycleInstruction
 public typealias ExtensionLifecycleIssue = EdithCore.ExtensionLifecycleIssue
+public typealias ExtensionLifecyclePhase = EdithCore.ExtensionLifecyclePhase
+public typealias ExtensionLifecycleReport = EdithCore.ExtensionLifecycleReport
 public typealias ExtensionLifecycleState = EdithCore.ExtensionLifecycleState
 
 public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {

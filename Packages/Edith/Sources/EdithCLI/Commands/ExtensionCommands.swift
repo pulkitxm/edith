@@ -9,6 +9,8 @@ struct ExtensionsCommand: AsyncParsableCommand {
         subcommands: [
             ExtensionsListCommand.self, ExtensionsEnableCommand.self,
             ExtensionsDisableCommand.self, ExtensionsInfoCommand.self,
+            ExtensionsStatusCommand.self, ExtensionsSetupCommand.self,
+            ExtensionsVerifyCommand.self, ExtensionsDoctorCommand.self,
         ],
         defaultSubcommand: ExtensionsListCommand.self)
 }
@@ -33,8 +35,10 @@ enum ExtensionLookup {
         CLIEnvironment.sharedDefaults.object(forKey: entry.defaultsKey) as? Bool ?? false
     }
 
-    static func json(_ entry: ExtensionRegistryEntry, includeLifecycle: Bool = false) -> JSONValue {
-        let granted = PermissionsStatus.granted
+    static func json(
+        _ entry: ExtensionRegistryEntry, report: ExtensionLifecycleReport? = nil
+    ) -> JSONValue {
+        let granted = grantedPermissions()
         var fields: [String: JSONValue] = [
             "id": .string(entry.id),
             "title": .string(entry.title),
@@ -51,38 +55,37 @@ enum ExtensionLookup {
                 entry.requiredPermissions.filter { granted[$0] != true }.map(\.rawValue)),
             "requiredTools": .strings(entry.requiredTools.map(\.id)),
         ]
-        if includeLifecycle, let lifecycle = entry.lifecycle {
+        if let report, let lifecycle = entry.lifecycle {
             fields["lifecycle"] = lifecycleJSON(lifecycle)
-            fields["state"] = stateJSON(lifecycleState(entry))
+            fields["state"] = stateJSON(report.state)
+            fields["checks"] = checksJSON(report.checks)
+            fields["verified"] = .bool(report.verified)
         }
         return .object(fields)
     }
 
-    static func lifecycleState(_ entry: ExtensionRegistryEntry) -> ExtensionLifecycleState {
-        guard isEnabled(entry) else {
-            return .preference(extensionID: entry.id, enabled: false)
+    static func probe() -> ExtensionLifecycleProbe {
+        var environment = ExtensionLifecycleProbeEnvironment.live
+        environment.isEnabled = { entry in isEnabled(entry) }
+        environment.grantedPermissions = { grantedPermissions() }
+        environment.toolAvailable = { id in
+            guard let tool = ToolProvisioning.spec(id: id),
+                case let .executable(name, _) = tool.presenceStrategy
+            else { return false }
+            return CLIEnvironment.executableNamed(name) != nil
         }
-        let granted = PermissionsStatus.granted
-        var issues = entry.requiredPermissions.filter { granted[$0] != true }.map { permission in
-            ExtensionLifecycleIssue(
-                id: "missing-permission.\(permission.rawValue)",
-                title: "Grant \(permission.displayName)", detail: permission.reason,
-                recoveryCommand: "ed permissions request \(permission.rawValue)")
+        environment.helperRunning = CLIEnvironment.isHelperRunning
+        return ExtensionLifecycleProbe(environment: environment)
+    }
+
+    static func grantedPermissions() -> [ExtensionPermission: Bool] {
+        ExtensionPermission.allCases.reduce(into: [:]) { result, permission in
+            guard let key = permission.grantedDefaultsKey else {
+                result[permission] = false
+                return
+            }
+            result[permission] = CLIEnvironment.sharedDefaults.bool(forKey: key)
         }
-        if entry.requiredTools.count == 1, let tool = entry.requiredTools.first,
-            ToolsBridge.found(tool) == nil
-        {
-            issues.append(
-                ExtensionLifecycleIssue(
-                    id: "missing-tool.\(tool.id)", title: "Install \(tool.displayName)",
-                    detail: tool.why, recoveryCommand: "ed tools install \(tool.id)"))
-        }
-        guard !issues.isEmpty else {
-            return .preference(extensionID: entry.id, enabled: true)
-        }
-        return ExtensionLifecycleState(
-            extensionID: entry.id, phase: .needsSetup,
-            summary: "Enabled, but setup is incomplete.", issues: issues)
     }
 
     private static func lifecycleJSON(_ lifecycle: ExtensionLifecycleDescriptor) -> JSONValue {
@@ -111,6 +114,17 @@ enum ExtensionLookup {
         ])
     }
 
+    static func reportJSON(
+        _ entry: ExtensionRegistryEntry, _ report: ExtensionLifecycleReport
+    ) -> JSONValue {
+        .object([
+            "id": .string(entry.id), "title": .string(entry.title),
+            "verified": .bool(report.verified), "state": stateJSON(report.state),
+            "checks": checksJSON(report.checks),
+            "remediation": .strings(report.state.issues.compactMap(\.recoveryCommand)),
+        ])
+    }
+
     private static func stateJSON(_ state: ExtensionLifecycleState) -> JSONValue {
         .object([
             "extensionID": .string(state.extensionID), "phase": .string(state.phase.rawValue),
@@ -124,6 +138,17 @@ enum ExtensionLookup {
                     ])
                 }),
         ])
+    }
+
+    private static func checksJSON(_ checks: [ExtensionLifecycleCheck]) -> JSONValue {
+        .array(
+            checks.map { check in
+                .object([
+                    "id": .string(check.id), "title": .string(check.title),
+                    "status": .string(check.status.rawValue), "detail": .string(check.detail),
+                    "recoveryCommand": .optional(check.recoveryCommand),
+                ])
+            })
     }
 
     static func setEnabled(_ entry: ExtensionRegistryEntry, _ enabled: Bool) {
@@ -170,7 +195,7 @@ struct ExtensionsEnableCommand: AsyncParsableCommand {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
             ExtensionLookup.setEnabled(entry, true)
-            let granted = PermissionsStatus.granted
+            let granted = ExtensionLookup.grantedPermissions()
             let missing = entry.requiredPermissions.filter { granted[$0] != true }
             guard !json else {
                 CLIOut.json(ExtensionLookup.json(entry))
@@ -222,18 +247,18 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
+            let report = await ExtensionLookup.probe().report(for: entry)
             guard !json else {
-                CLIOut.json(ExtensionLookup.json(entry, includeLifecycle: true))
+                CLIOut.json(ExtensionLookup.json(entry, report: report))
                 return
             }
             let lifecycle = entry.lifecycle
-            let state = ExtensionLookup.lifecycleState(entry)
             CLIOut.out(entry.title)
             CLIOut.out("  " + (lifecycle?.value ?? entry.subtitle))
             CLIOut.out("  id       \(entry.id)")
             CLIOut.out("  key      \(entry.defaultsKey)")
             CLIOut.out("  group    \(entry.group.rawValue)")
-            CLIOut.out("  state    \(state.phase.title)")
+            CLIOut.out("  state    \(report.state.phase.title)")
             if !entry.requiredPermissions.isEmpty {
                 CLIOut.out(
                     "  needs    "
@@ -261,5 +286,168 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
                     "  docs     " + lifecycle.documentation.map(\.path).joined(separator: ", "))
             }
         }
+    }
+}
+
+struct ExtensionsStatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: "Check extension readiness.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "An optional extension id.")
+    var id: String?
+
+    func run() async throws {
+        try await execute {
+            let entries = try selectedEntries(id)
+            let reports = await ExtensionLookup.probe().reports(for: entries)
+            guard !json else {
+                let values = zip(entries, reports).map(ExtensionLookup.reportJSON)
+                CLIOut.json(id == nil ? .array(values) : values[0])
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["ID", "STATE", "DETAIL"],
+                    rows: zip(entries, reports).map { entry, report in
+                        [entry.id, report.state.phase.title, report.state.summary]
+                    }))
+        }
+    }
+}
+
+struct ExtensionsSetupCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "setup", abstract: "Enable an extension and report remaining setup.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(name: .long, help: "Show the projected result without changing settings.")
+    var dryRun = false
+
+    @Flag(name: .long, help: "Install missing required tools without prompting.")
+    var installTools = false
+
+    @Argument(help: "The extension id.")
+    var id: String
+
+    func run() async throws {
+        try await execute {
+            let entry = try ExtensionLookup.entry(id)
+            let wasEnabled = ExtensionLookup.isEnabled(entry)
+            var environment = ExtensionLookup.probe().environment
+            let missingTools = entry.requiredTools.filter { !environment.toolAvailable($0.id) }
+            var installed: [String] = []
+            var failures: [(String, String)] = []
+            if dryRun {
+                let original = environment.isEnabled
+                environment.isEnabled = { candidate in
+                    candidate.id == entry.id ? true : original(candidate)
+                }
+            } else {
+                ExtensionLookup.setEnabled(entry, true)
+                if installTools {
+                    for tool in missingTools {
+                        do {
+                            _ = try await CLIEnvironment.installTool(tool) { line in
+                                if !json { CLIOut.note(line) }
+                            }
+                            installed.append(tool.id)
+                        } catch {
+                            failures.append((tool.id, error.localizedDescription))
+                        }
+                    }
+                }
+            }
+            let report = await ExtensionLifecycleProbe(environment: environment).report(for: entry)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "id": .string(entry.id), "dryRun": .bool(dryRun),
+                        "changed": .bool(!dryRun && !wasEnabled),
+                        "plannedTools": .strings(installTools ? missingTools.map(\.id) : []),
+                        "installedTools": .strings(installed),
+                        "installFailures": .array(
+                            failures.map { id, detail in
+                                .object(["id": .string(id), "detail": .string(detail)])
+                            }),
+                        "report": ExtensionLookup.reportJSON(entry, report),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                dryRun
+                    ? "would enable \(entry.id)"
+                    : wasEnabled ? "\(entry.id) already enabled" : "\(entry.id) enabled")
+            printReport(entry, report)
+            for failure in failures {
+                CLIOut.note("could not install \(failure.0): \(failure.1)")
+            }
+        }
+    }
+}
+
+struct ExtensionsVerifyCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "verify", abstract: "Run every readiness check for one extension.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "The extension id.")
+    var id: String
+
+    func run() async throws {
+        try await execute {
+            let entry = try ExtensionLookup.entry(id)
+            let report = await ExtensionLookup.probe().report(for: entry)
+            guard !json else {
+                CLIOut.json(ExtensionLookup.reportJSON(entry, report))
+                return
+            }
+            printReport(entry, report)
+        }
+    }
+}
+
+struct ExtensionsDoctorCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "doctor", abstract: "Diagnose extension setup and runtime problems.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "An optional extension id.")
+    var id: String?
+
+    func run() async throws {
+        try await execute {
+            let entries = try selectedEntries(id)
+            let reports = await ExtensionLookup.probe().reports(for: entries)
+            guard !json else {
+                let values = zip(entries, reports).map(ExtensionLookup.reportJSON)
+                CLIOut.json(id == nil ? .array(values) : values[0])
+                return
+            }
+            for (entry, report) in zip(entries, reports) {
+                printReport(entry, report)
+            }
+        }
+    }
+}
+
+private func selectedEntries(_ id: String?) throws -> [ExtensionRegistryEntry] {
+    if let id { return [try ExtensionLookup.entry(id)] }
+    return ExtensionRegistry.entries
+}
+
+private func printReport(_ entry: ExtensionRegistryEntry, _ report: ExtensionLifecycleReport) {
+    CLIOut.out("\(entry.id)  \(report.state.phase.title)  \(report.state.summary)")
+    for check in report.checks {
+        CLIOut.out("  \(check.status.rawValue)  \(check.title): \(check.detail)")
+        if let recovery = check.recoveryCommand { CLIOut.out("    \(recovery)") }
     }
 }

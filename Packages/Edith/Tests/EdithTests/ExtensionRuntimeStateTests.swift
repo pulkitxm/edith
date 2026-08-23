@@ -86,6 +86,9 @@ import Testing
         #expect(source.contains("ExtensionLifecycleRows(entry: entry)"))
         #expect(source.contains("if let lifecycle = entry.lifecycle"))
         #expect(source.contains("Text(entry.subtitle)"))
+        #expect(source.contains("ExtensionLifecycleProbe().report(for: entry)"))
+        #expect(source.contains("report.state.phase.title"))
+        #expect(source.contains("ForEach(report.checks)"))
     }
 
     @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {

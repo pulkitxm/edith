@@ -68,6 +68,22 @@ import Testing
                 == .enabled)
     }
 
+    @Test func reportsRoundTripWithStructuredChecks() throws {
+        let report = ExtensionLifecycleReport(
+            state: ExtensionLifecycleState(
+                extensionID: "calendar", phase: .needsSetup, summary: "Calendar access is missing."),
+            checks: [
+                ExtensionLifecycleCheck(
+                    id: "permission.calendar", title: "Calendar access", status: .failed,
+                    detail: "Grant Calendar access.",
+                    recoveryCommand: "ed permissions request calendar")
+            ])
+        let data = try JSONEncoder().encode(report)
+
+        #expect(try JSONDecoder().decode(ExtensionLifecycleReport.self, from: data) == report)
+        #expect(!report.verified)
+    }
+
     private func validate(
         _ instructions: [ExtensionLifecycleInstruction], extensionID: String, field: String
     ) {
