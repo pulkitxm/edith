@@ -38,7 +38,12 @@ public enum MusicSession {
         guard
             let payload = await AppBridge.awaitReply(
                 IPC.Name.musicState, timeout: timeout,
-                trigger: { AppBridge.post(IPC.Name.requestMusicState) })
+                trigger: {
+                    MusicTransportExecution.perform(
+                        .status,
+                        sendCommand: { AppBridge.post(IPC.Name.musicCommand, userInfo: $0) },
+                        requestStatus: { AppBridge.post(IPC.Name.requestMusicState) })
+                })
         else { return PlayerSnapshot(player: .builtin) }
         return decodeBuiltin(payload)
     }

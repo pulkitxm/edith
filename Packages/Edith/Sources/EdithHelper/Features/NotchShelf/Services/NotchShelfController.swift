@@ -745,7 +745,7 @@ final class NotchShelfController: FeatureModule {
 
     func nowPlayingSeek(_ fraction: Double) {
         guard nowPlayingSeekable else { return }
-        localMusic?.seek(to: fraction)
+        localMusic?.perform(.seek(fraction))
     }
 
     var nowPlayingVolume: Double {
@@ -758,10 +758,10 @@ final class NotchShelfController: FeatureModule {
 
     func setNowPlayingVolume(_ value: Double) {
         switch nowPlaying?.source {
-        case .local: localMusic?.volume = value
+        case .local: localMusic?.perform(.volume(value))
         case .external:
             externalVolume = value
-            external.setVolume(Float(value))
+            external.perform(.volume(value))
         case .none: break
         }
     }
@@ -835,24 +835,24 @@ final class NotchShelfController: FeatureModule {
 
     func nowPlayingPlayPause() {
         switch nowPlaying?.source {
-        case .local: localMusic?.playPause()
-        case .external: external.playPause()
+        case .local: localMusic?.perform(.toggle)
+        case .external: external.perform(.toggle)
         case .none: break
         }
     }
 
     func nowPlayingNext() {
         switch nowPlaying?.source {
-        case .local: localMusic?.next()
-        case .external: external.next()
+        case .local: localMusic?.perform(.next)
+        case .external: external.perform(.next)
         case .none: break
         }
     }
 
     func nowPlayingPrevious() {
         switch nowPlaying?.source {
-        case .local: localMusic?.previous()
-        case .external: external.previous()
+        case .local: localMusic?.perform(.previous)
+        case .external: external.perform(.previous)
         case .none: break
         }
     }
