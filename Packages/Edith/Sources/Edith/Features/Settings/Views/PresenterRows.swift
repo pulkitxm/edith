@@ -36,7 +36,9 @@ struct PresenterRows: View {
     var body: some View {
         Group {
             Section {
-                Toggle(isOn: $presenterMode) {
+                Toggle(
+                    isOn: $presenterMode.configured(AppStorageKeys.Presenter.mode)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Manual presenter mode")
                         InfoDot(
@@ -49,22 +51,39 @@ struct PresenterRows: View {
                     _ = PresenterRuntimeOperationExecution.perform(
                         presenterMode ? .start : .stop)
                 }
-                Toggle("Blur music", isOn: $presenterBlurMusic)
-                    .pointerCursor()
-                Toggle("Blur cost figures", isOn: $presenterBlurMoney)
-                    .pointerCursor()
-                Toggle("Blur usage figures", isOn: $presenterBlurUsage)
-                    .pointerCursor()
-                Toggle("Blur calendar events", isOn: $presenterBlurCalendar)
-                    .pointerCursor()
-                Toggle("Blur agents", isOn: $presenterBlurAgents)
-                    .pointerCursor()
+                Toggle(
+                    "Blur music",
+                    isOn: $presenterBlurMusic.configured(AppStorageKeys.Presenter.blurMusic)
+                )
+                .pointerCursor()
+                Toggle(
+                    "Blur cost figures",
+                    isOn: $presenterBlurMoney.configured(AppStorageKeys.Presenter.blurMoney)
+                )
+                .pointerCursor()
+                Toggle(
+                    "Blur usage figures",
+                    isOn: $presenterBlurUsage.configured(AppStorageKeys.Presenter.blurUsage)
+                )
+                .pointerCursor()
+                Toggle(
+                    "Blur calendar events",
+                    isOn: $presenterBlurCalendar.configured(AppStorageKeys.Presenter.blurCalendar)
+                )
+                .pointerCursor()
+                Toggle(
+                    "Blur agents",
+                    isOn: $presenterBlurAgents.configured(AppStorageKeys.Presenter.blurAgents)
+                )
+                .pointerCursor()
             } header: {
                 Text("Manual")
             }
 
             Section {
-                Toggle(isOn: $autoEnabled) {
+                Toggle(
+                    isOn: $autoEnabled.configured(AppStorageKeys.Presenter.autoEnabled)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Auto presenter mode")
                         InfoDot(
@@ -74,7 +93,10 @@ struct PresenterRows: View {
                 }
                 .pointerCursor()
                 Group {
-                    Toggle(isOn: $hideMenuBarNumbers) {
+                    Toggle(
+                        isOn: $hideMenuBarNumbers.configured(
+                            AppStorageKeys.Presenter.hideMenuBarNumbers)
+                    ) {
                         HStack(spacing: UIScale.pt(6)) {
                             Text("Hide menu bar numbers")
                             InfoDot(
@@ -83,14 +105,20 @@ struct PresenterRows: View {
                         }
                     }
                     .pointerCursor()
-                    Toggle(isOn: $detectRecording) {
+                    Toggle(
+                        isOn: $detectRecording.configured(
+                            AppStorageKeys.Presenter.detectRecording)
+                    ) {
                         HStack(spacing: UIScale.pt(6)) {
                             Text("Detect screen recordings")
                             InfoDot("Also blur during QuickTime or ⇧⌘5 recordings.")
                         }
                     }
                     .pointerCursor()
-                    Toggle(isOn: $detectScreenSharing) {
+                    Toggle(
+                        isOn: $detectScreenSharing.configured(
+                            AppStorageKeys.Presenter.detectScreenSharing)
+                    ) {
                         HStack(spacing: UIScale.pt(6)) {
                             Text("Detect macOS Screen Sharing")
                             InfoDot(
@@ -99,7 +127,10 @@ struct PresenterRows: View {
                         }
                     }
                     .pointerCursor()
-                    Toggle(isOn: $detectMirroring) {
+                    Toggle(
+                        isOn: $detectMirroring.configured(
+                            AppStorageKeys.Presenter.detectMirroring)
+                    ) {
                         HStack(spacing: UIScale.pt(6)) {
                             Text("Mirrored display counts")
                             InfoDot(
@@ -121,11 +152,7 @@ struct PresenterRows: View {
 
             Section {
                 Button("Open Screen Recording Settings…") {
-                    NSWorkspace.shared.open(
-                        URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                        )!)
+                    _ = try? MainPermissionOperations.center.openSettings(for: .screenRecording)
                 }
                 .pointerCursor()
             }

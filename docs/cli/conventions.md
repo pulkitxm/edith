@@ -418,6 +418,7 @@ is a local question that needs no permission and no round trip.
 | `ed app quit`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it |
 | `ed calendar ls` | menu bar | the calendar grant belongs to the Edith bundle, not to `ed` |
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
+| `ed permissions settings` | no | opens the matching System Settings pane locally and never relaunches Edith |
 | `ed usage limits --refresh` | menu bar | only the app polls the providers again; without `--refresh`, `limits` reads the file |
 | `ed apps quit` | menu bar | quitting another app is the app's Automation grant, not `ed`'s |
 | `ed music start`, `ed music seek` | menu bar | both drive Edith's own player, which lives in the helper |

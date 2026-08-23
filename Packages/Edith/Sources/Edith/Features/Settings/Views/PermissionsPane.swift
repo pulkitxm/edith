@@ -11,7 +11,7 @@ struct PermissionsPane: View {
         MainDestination.home.rawValue
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
-    @State private var usages: [PermissionUsage] = PermissionsStatus.usages
+    @State private var usages: [PermissionUsage] = MainPermissionOperations.center.status()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -87,7 +87,7 @@ struct PermissionsPane: View {
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.permissionsRefreshed)
         ) { _ in
-            if automaticActionsEnabled { usages = PermissionsStatus.usages }
+            if automaticActionsEnabled { usages = MainPermissionOperations.center.status() }
         }
     }
 
@@ -190,18 +190,11 @@ struct PermissionsPane: View {
     }
 
     private func grant(_ usage: PermissionUsage) {
-        if usage.permission == .calendar {
-            CalendarPermission.request()
-            return
-        }
-        guard let request = usage.permission.grantRequest else { return }
-        IPC.post(request)
+        _ = try? MainPermissionOperations.center.request(usage.permission)
     }
 
     private func refresh() {
-        CalendarPermission.mirror()
-        usages = PermissionsStatus.usages
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        usages = MainPermissionOperations.center.refresh()
     }
 }
 
@@ -272,7 +265,7 @@ private struct PermissionCard: View {
     }
 
     @ViewBuilder private var action: some View {
-        if !usage.isGranted, permission.grantRequest != nil {
+        if MainPermissionOperations.center.remediation(for: permission).action == .request {
             Button("Grant...") { grant(usage) }
                 .pointerCursor()
         }

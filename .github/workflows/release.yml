@@ -301,6 +301,7 @@ jobs:
           test -f release-plists/HelperInfo.plist
 
       - name: Commit and tag the release
+        id: release_state
         if: env.REBUILD == ''
         working-directory: release-source
         run: |
@@ -311,7 +312,13 @@ jobs:
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
           export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
-          ../scripts/publish-release-state.sh cut
+          PUBLISH_STATUS=0
+          ../scripts/publish-release-state.sh cut || PUBLISH_STATUS=$?
+          if [ "$PUBLISH_STATUS" -eq 75 ]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$PUBLISH_STATUS"
 
       - name: Update the rebuilt release checksum
         if: env.REBUILD != ''
@@ -322,6 +329,7 @@ jobs:
           ../scripts/publish-release-state.sh rebuild
 
       - name: Publish the release
+        if: steps.release_state.outputs.superseded != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -335,6 +343,7 @@ jobs:
           fi
 
       - name: Mirror the cask to the tap repository
+        if: steps.release_state.outputs.superseded != 'true'
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |

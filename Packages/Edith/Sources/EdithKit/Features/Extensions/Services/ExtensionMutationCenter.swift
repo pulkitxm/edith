@@ -165,7 +165,9 @@ public struct ExtensionMutationEnvironment: @unchecked Sendable {
     ) -> ExtensionMutationEnvironment {
         let defaultsBox = ExtensionDefaultsBox(defaults)
         let grantedPermissions: @Sendable () -> [ExtensionPermission: Bool] = {
-            OnboardingFlow.grantedPermissions(defaults: defaultsBox.store)
+            PermissionOperationCenter(
+                environment: .status(defaults: defaultsBox.store)
+            ).grantedPermissions()
         }
         let toolAvailable: @Sendable (String) -> Bool = { id in
             guard let tool = ToolProvisioning.spec(id: id),

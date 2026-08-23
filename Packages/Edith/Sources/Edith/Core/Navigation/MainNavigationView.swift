@@ -598,7 +598,7 @@ struct MainWindowView: View {
 
     private func refreshPermissionsPill() {
         CalendarPermission.mirror()
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        _ = MainPermissionOperations.center.refresh()
         permissionsNeedAttention = PermissionsStatus.current
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             permissionsNeedAttention = PermissionsStatus.current
@@ -856,7 +856,7 @@ struct MainWindowView: View {
                 active: preventSleep, trigger: preventSleep ? 1 : 0,
                 help: "Keep this Mac from sleeping until turned off"
             ) {
-                preventSleep.toggle()
+                $preventSleep.configured(AppStorageKeys.General.preventSleep).wrappedValue.toggle()
             },
         ]
         VStack(spacing: UIScale.pt(8)) {
@@ -943,15 +943,25 @@ struct MainWindowView: View {
                 isOn: Binding(get: { presenterMode }, set: { setPresenterMode($0) })
             )
             Divider()
-            presenterQuickActionToggle("Blur music", isOn: $presenterBlurMusic)
+            presenterQuickActionToggle(
+                "Blur music",
+                isOn: $presenterBlurMusic.configured(AppStorageKeys.Presenter.blurMusic))
             Divider()
-            presenterQuickActionToggle("Blur cost figures", isOn: $presenterBlurMoney)
+            presenterQuickActionToggle(
+                "Blur cost figures",
+                isOn: $presenterBlurMoney.configured(AppStorageKeys.Presenter.blurMoney))
             Divider()
-            presenterQuickActionToggle("Blur usage figures", isOn: $presenterBlurUsage)
+            presenterQuickActionToggle(
+                "Blur usage figures",
+                isOn: $presenterBlurUsage.configured(AppStorageKeys.Presenter.blurUsage))
             Divider()
-            presenterQuickActionToggle("Blur calendar events", isOn: $presenterBlurCalendar)
+            presenterQuickActionToggle(
+                "Blur calendar events",
+                isOn: $presenterBlurCalendar.configured(AppStorageKeys.Presenter.blurCalendar))
             Divider()
-            presenterQuickActionToggle("Blur agents", isOn: $presenterBlurAgents)
+            presenterQuickActionToggle(
+                "Blur agents",
+                isOn: $presenterBlurAgents.configured(AppStorageKeys.Presenter.blurAgents))
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))

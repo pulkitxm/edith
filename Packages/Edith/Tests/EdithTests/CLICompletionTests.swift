@@ -10,12 +10,13 @@ import Testing
     static let extensionIDs = ExtensionRegistry.entries.map(\.id)
 
     static func plan(
-        _ words: [String], _ index: Int, usageSources: [String] = []
+        _ words: [String], _ index: Int, usageSources: [String] = [],
+        quinjetSessions: [String] = []
     ) -> CompletionResult {
         CompletionEngine.plan(
             CompletionRequest(words: words, index: index), machines: machines,
             configKeys: ConfigCatalog.keys, extensionIDs: extensionIDs,
-            usageSources: usageSources)
+            usageSources: usageSources, quinjetSessions: quinjetSessions)
     }
 
     @Test func theTopLevelOffersCommandsAndMachines() {
@@ -65,6 +66,13 @@ import Testing
         #expect(result.candidates == ["clipboard"])
     }
 
+    @Test func permissionIDsCompleteForEveryTypedPermissionRoute() {
+        for command in ["request", "settings"] {
+            let result = Self.plan(["ed", "permissions", command, "screen"], 3)
+            #expect(result.candidates == ["screenRecording"])
+        }
+    }
+
     @Test func extensionLifecycleCommandsCompleteIDsAndFlags() {
         for command in ["enable", "disable", "info", "status", "setup", "verify", "doctor"] {
             let ids = Self.plan(["ed", "extensions", command, "quin"], 3)
@@ -84,6 +92,37 @@ import Testing
         #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])
         let flags = Self.plan(["ed", "lid-awake", "on", "--u"], 3)
         #expect(flags.candidates == ["--until-lid-reopens"])
+    }
+
+    @Test func quinjetOperationsAndLaunchOptionsComplete() {
+        let commands = Self.plan(["ed", "quinjet", ""], 2)
+        #expect(
+            commands.candidates
+                == [
+                    "projects", "worktrees", "open", "launch", "status", "sessions",
+                    "new", "focus", "close", "restart", "switch",
+                ])
+        let appearance = Self.plan(["ed", "quinjet", "launch", "--a"], 3)
+        #expect(appearance.candidates == ["--appearance"])
+        let target = Self.plan(["ed", "quinjet", "projects", "--m"], 3)
+        #expect(target.candidates == ["--machine"])
+        let machines = Self.plan(["ed", "quinjet", "projects", "--machine", ""], 4)
+        #expect(machines.candidates.contains("local"))
+        #expect(machines.candidates.contains("tuf"))
+        let themes = Self.plan(["ed", "quinjet", "open", "--theme", "to"], 4)
+        #expect(themes.candidates == ["tokyo-night"])
+        let appearances = Self.plan(["ed", "quinjet", "launch", "--appearance=l"], 3)
+        #expect(appearances.candidates == ["--appearance=light"])
+        #expect(Self.plan(["ed", "quinjet", "open", ""], 3).wantsFiles)
+        #expect(
+            Self.plan(["ed", "quinjet", "open", "--machine", "local", ""], 5).wantsFiles)
+        #expect(
+            !Self.plan(["ed", "quinjet", "open", "--machine", "tuf", ""], 5).wantsFiles)
+        #expect(!Self.plan(["ed", "quinjet", "open", "--machine=tuf", ""], 4).wantsFiles)
+        let sessions = Self.plan(
+            ["ed", "quinjet", "focus", ""], 3, quinjetSessions: ["1", "2"])
+        #expect(sessions.candidates == ["1", "2"])
+        #expect(Self.plan(["ed", "quinjet", "switch", "1", ""], 4).wantsFiles)
     }
 
     @Test func machineNamesCompleteInsideTheMachinesTree() {

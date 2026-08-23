@@ -68,6 +68,7 @@ public final class SSHLineStream: @unchecked Sendable {
     private let stdoutSplitter = LineSplitter()
     private let stderrSplitter = LineSplitter()
     private let completion = StreamCompletion()
+    private let outputQueue = DispatchQueue(label: "com.pulkit.edith.ssh-line-stream.output")
 
     public init(
         process: Process, stdinData: Data? = nil,
@@ -86,14 +87,19 @@ public final class SSHLineStream: @unchecked Sendable {
         let stdout = stdoutSplitter
         let stderr = stderrSplitter
         let deliver = onLine
+        let outputQueue = outputQueue
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            PipeReading.consume(handle) { data in
-                for line in stdout.receive(data) { deliver(line, false) }
+            outputQueue.async {
+                PipeReading.consume(handle) { data in
+                    for line in stdout.receive(data) { deliver(line, false) }
+                }
             }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            PipeReading.consume(handle) { data in
-                for line in stderr.receive(data) { deliver(line, true) }
+            outputQueue.async {
+                PipeReading.consume(handle) { data in
+                    for line in stderr.receive(data) { deliver(line, true) }
+                }
             }
         }
         let finish = onExit
@@ -101,20 +107,22 @@ public final class SSHLineStream: @unchecked Sendable {
         process.terminationHandler = { [stdoutPipe, stderrPipe, completion] finished in
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            for line in stdout.receive(
-                stdoutPipe.fileHandleForReading.readDataToEndOfFile())
-            {
-                deliver(line, false)
+            outputQueue.async {
+                for line in stdout.receive(
+                    stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+                {
+                    deliver(line, false)
+                }
+                for line in stdout.flush() { deliver(line, false) }
+                for line in stderr.receive(
+                    stderrPipe.fileHandleForReading.readDataToEndOfFile())
+                {
+                    deliver(line, true)
+                }
+                for line in stderr.flush() { deliver(line, true) }
+                completion.finish(finished.terminationStatus)
+                finish(finished.terminationStatus)
             }
-            for line in stdout.flush() { deliver(line, false) }
-            for line in stderr.receive(
-                stderrPipe.fileHandleForReading.readDataToEndOfFile())
-            {
-                deliver(line, true)
-            }
-            for line in stderr.flush() { deliver(line, true) }
-            completion.finish(finished.terminationStatus)
-            finish(finished.terminationStatus)
         }
         if let stdinData {
             let stdinPipe = Pipe()
@@ -131,7 +139,11 @@ public final class SSHLineStream: @unchecked Sendable {
     }
 
     public func waitForExit() async -> Int32 {
-        await withTaskCancellationHandler {
+        if Task.isCancelled {
+            cancel()
+            return 130
+        }
+        return await withTaskCancellationHandler {
             await completion.wait()
         } onCancel: {
             cancel()
