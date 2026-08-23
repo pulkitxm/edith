@@ -414,6 +414,13 @@ public enum QuinjetOperationExecution {
             worktree: worktree, worktrees: worktrees)
     }
 
+    public static func terminalEnvironment() -> [String] {
+        var environment = CLIToolEnvironment.sanitized()
+        environment["TERM"] = "xterm-256color"
+        environment["COLORTERM"] = "truecolor"
+        return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+    }
+
     public static func launchRequest(
         executableURL: URL, worktreePath: String, remote: QuinjetRemote?,
         configuration: QuinjetLaunchConfiguration, managedByEdith: Bool,

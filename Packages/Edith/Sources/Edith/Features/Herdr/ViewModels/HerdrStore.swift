@@ -19,8 +19,13 @@ final class HerdrStore {
     var copiedID: String?
     var detailOpen = true
 
+    private let defaults: UserDefaults
     private var connections: [UUID: SSHConnection] = [:]
     private var watchTask: Task<Void, Never>?
+
+    init(defaults: UserDefaults = SharedDefaults.store) {
+        self.defaults = defaults
+    }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
@@ -112,7 +117,12 @@ final class HerdrStore {
     }
 
     func open(_ agent: HerdrAgent) {
-        if tabs.contains(where: { $0.id == agent.id }) {
+        open(agent, showing: nil)
+    }
+
+    func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
+        if let index = tabs.firstIndex(where: { $0.id == agent.id }) {
+            if let view { apply(view, at: index) }
             selectedTab = agent.id
             return
         }
@@ -120,8 +130,31 @@ final class HerdrStore {
             agent.machineIsLocal
             ? nil
             : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
-        tabs.append(HerdrOpenTab(agent: agent, machine: machine, holder: TerminalSessionHolder()))
+        let resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
+        tabs.append(
+            HerdrOpenTab(
+                agent: agent, machine: machine, view: resolved,
+                holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()))
+        if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
         selectedTab = agent.id
+    }
+
+    func view(for id: String) -> HerdrAgentView {
+        tabs.first { $0.id == id }?.view ?? HerdrAgentViews.view(for: id, defaults)
+    }
+
+    func setView(_ view: HerdrAgentView, for id: String) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+            HerdrAgentViews.set(view, for: id, defaults)
+            return
+        }
+        apply(view, at: index)
+    }
+
+    private func apply(_ view: HerdrAgentView, at index: Int) {
+        guard tabs[index].view != view else { return }
+        tabs[index].view = view
+        HerdrAgentViews.set(view, for: tabs[index].id, defaults)
     }
 
     func close(_ id: String) {
@@ -175,6 +208,7 @@ final class HerdrStore {
         for id in ids {
             guard let index = tabs.firstIndex(where: { $0.id == id }) else { continue }
             tabs[index].holder.stop()
+            tabs[index].quinjet.stop()
             tabs.remove(at: index)
         }
         if selectedClosed {
@@ -197,6 +231,25 @@ final class HerdrStore {
         return connection
     }
 
+    func quinjetRemote(for tab: HerdrOpenTab) async throws -> QuinjetRemote? {
+        guard !tab.agent.machineIsLocal else { return nil }
+        guard let machine = tab.machine else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
+        let connection = try await connection(for: machine)
+        return QuinjetRemote(
+            machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
+            controlPath: connection.controlSocketPath)
+    }
+
+    func quinjetConfiguration(appearance: QuinjetAppearance) -> QuinjetLaunchConfiguration {
+        var configuration = QuinjetLaunchConfiguration.preferred(
+            sharedDefaults: defaults, standardDefaults: .standard)
+        configuration.terminal = .embedded
+        configuration.appearance = appearance
+        return configuration
+    }
+
     func copyAttachCommand(for agent: HerdrAgent) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(HerdrAttachCommand.line(for: agent), forType: .string)
@@ -209,9 +262,19 @@ final class HerdrStore {
     }
 }
 
+enum HerdrQuinjetError: LocalizedError {
+    case machineUnavailable
+
+    var errorDescription: String? {
+        "That machine is no longer in Edith."
+    }
+}
+
 struct HerdrOpenTab: Identifiable {
     var id: String { agent.id }
     var agent: HerdrAgent
     var machine: Machine?
+    var view: HerdrAgentView
     let holder: TerminalSessionHolder
+    let quinjet: HerdrQuinjetSession
 }
