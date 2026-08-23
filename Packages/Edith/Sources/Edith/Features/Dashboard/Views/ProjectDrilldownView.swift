@@ -1,4 +1,3 @@
-import AppKit
 import EdithKit
 import SwiftUI
 
@@ -66,8 +65,7 @@ struct ProjectDrilldownView: View {
                                     node: row.node, depth: row.depth, dark: dark, blur: blur,
                                     blurTokens: blurTokens,
                                     expanded: model.projExpanded.contains(row.node.id),
-                                    onToggle: { toggleExpand(row.node.id) },
-                                    onCopy: copyToPasteboard)
+                                    onToggle: { toggleExpand(row.node.id) })
                                 Divider().opacity(0.12)
                             }
                             if nodes.isEmpty {
@@ -234,10 +232,6 @@ struct ProjectDrilldownView: View {
         return out
     }
 
-    private func copyToPasteboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-    }
 }
 
 private struct ProjectRow: View {
@@ -248,7 +242,6 @@ private struct ProjectRow: View {
     let blurTokens: Bool
     let expanded: Bool
     let onToggle: () -> Void
-    let onCopy: (String) -> Void
     @State private var hovering = false
 
     private var hasChildren: Bool { node.children?.isEmpty == false }
@@ -277,11 +270,19 @@ private struct ProjectRow: View {
             Spacer(minLength: 0)
         }
         if let chatId = node.chatId, !chatId.isEmpty {
-            row.contextMenu { Button("Copy chat ID") { onCopy(chatId) } }
-        } else if let repositoryURL {
             row.contextMenu {
-                Button("Open repository") { NSWorkspace.shared.open(repositoryURL) }
-                Button("Copy repository link") { onCopy(repositoryURL.absoluteString) }
+                Button("Copy chat ID") {
+                    _ = try? UsageProjectOperationExecution.copyChatID(chatId)
+                }
+            }
+        } else if let repositoryTarget {
+            row.contextMenu {
+                Button("Open repository") {
+                    _ = try? UsageProjectOperationExecution.openRepository(repositoryTarget)
+                }
+                Button("Copy repository link") {
+                    _ = try? UsageProjectOperationExecution.copyRepositoryLink(repositoryTarget)
+                }
             }
         } else {
             row
@@ -307,9 +308,9 @@ private struct ProjectRow: View {
     }
 
     @ViewBuilder private var nodeLabel: some View {
-        if let repositoryURL {
+        if let repositoryTarget {
             Button {
-                NSWorkspace.shared.open(repositoryURL)
+                _ = try? UsageProjectOperationExecution.openRepository(repositoryTarget)
             } label: {
                 HStack(spacing: UIScale.pt(5)) {
                     iconView
@@ -328,9 +329,14 @@ private struct ProjectRow: View {
         Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1).truncationMode(.tail)
     }
 
-    private var repositoryURL: URL? {
+    private var repositoryTarget: UsageProjectTarget? {
         guard let raw = node.repositoryURL, !raw.isEmpty else { return nil }
-        return URL(string: raw)
+        let target = UsageProjectTarget(
+            repositoryID: node.id, repositoryName: node.label, repositoryURL: raw)
+        guard (try? UsageProjectOperationExecution.repositoryURL(for: target)) != nil else {
+            return nil
+        }
+        return target
     }
 
     @ViewBuilder private var iconView: some View {
@@ -345,7 +351,7 @@ private struct ProjectRow: View {
         .frame(width: UIScale.pt(16), height: UIScale.pt(14), alignment: .leading)
         if let chatId = node.chatId, !chatId.isEmpty {
             Button {
-                onCopy(chatId)
+                _ = try? UsageProjectOperationExecution.copyChatID(chatId)
             } label: {
                 img
             }.buttonStyle(.plain).pointerCursor()
