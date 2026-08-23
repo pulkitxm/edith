@@ -31,6 +31,34 @@ final class QuinjetFolderPickerModel {
         self.listDirectory = listDirectory
     }
 
+    convenience init(session: MachineSession) {
+        self.init(
+            resolveHome: {
+                if session.isLocal {
+                    return FileManager.default.homeDirectoryForCurrentUser.path
+                }
+                if case .disconnected = session.state { session.start() }
+                let deadline = Date().addingTimeInterval(30)
+                while Date() < deadline, !session.state.isConnected {
+                    if let message = session.state.failureMessage {
+                        throw QuinjetMachineError.connectionFailed(message)
+                    }
+                    try await Task.sleep(for: .milliseconds(200))
+                }
+                guard session.state.isConnected else {
+                    throw QuinjetMachineError.connectionTimedOut
+                }
+                let result = await session.runCommand(
+                    FilePlaces.homeDirectoryCommand(), timeout: 20)
+                let home = try result.get().trimmingCharacters(in: .whitespacesAndNewlines)
+                guard home.hasPrefix("/") else { throw QuinjetMachineError.homeUnavailable }
+                return home
+            },
+            listDirectory: { path in
+                try await session.listFiles(path: path).get()
+            })
+    }
+
     var selectedEntry: RemoteFileEntry? {
         guard entries.indices.contains(selectionIndex) else { return nil }
         return entries[selectionIndex]
@@ -95,7 +123,8 @@ final class QuinjetFolderPickerModel {
     }
 
     func completePath() async {
-        let candidate = selectedEntry.flatMap { navigable($0) ? $0 : nil }
+        let candidate =
+            selectedEntry.flatMap { navigable($0) ? $0 : nil }
             ?? entries.first(where: navigable)
         guard let candidate else { return }
         await navigate(to: candidate.path)
@@ -139,7 +168,8 @@ final class QuinjetFolderPickerModel {
             let loaded = try await listDirectory(target)
             guard token == loadToken else { return }
             directory = target
-            entries = loaded
+            entries =
+                loaded
                 .filter { entry in
                     guard let filter, !filter.isEmpty else { return true }
                     return entry.name.range(
@@ -171,5 +201,19 @@ final class QuinjetFolderPickerModel {
     private func entryOrder(_ lhs: RemoteFileEntry, _ rhs: RemoteFileEntry) -> Bool {
         if navigable(lhs) != navigable(rhs) { return navigable(lhs) }
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+}
+
+private enum QuinjetMachineError: LocalizedError {
+    case connectionFailed(String)
+    case connectionTimedOut
+    case homeUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case let .connectionFailed(message): return message
+        case .connectionTimedOut: return "The machine did not connect in time."
+        case .homeUnavailable: return "The machine home directory could not be resolved."
+        }
     }
 }

@@ -14,6 +14,8 @@ final class QuinjetTab: Identifiable {
     var showsWorktrees = false
     var loadingWorktrees = false
     var errorMessage: String?
+    var machineID = MachinesModel.localMachineID
+    var folderPicker: QuinjetFolderPickerModel?
 
     var title: String {
         guard let projectName else { return "New review" }
@@ -69,8 +71,9 @@ final class QuinjetPageModel {
     }
 
     @discardableResult
-    func addPickerTab() -> QuinjetTab {
+    func addPickerTab(machineID: UUID? = nil) -> QuinjetTab {
         let tab = QuinjetTab()
+        tab.machineID = machineID ?? MachinesModel.localMachineID
         tabs.append(tab)
         selected = tab.id
         return tab
@@ -155,7 +158,8 @@ final class QuinjetPageModel {
         tab.errorMessage = nil
         defer { tab.loadingWorktrees = false }
         do {
-            tab.worktrees = try await client.worktrees(at: path, remote: tab.remote).filter(\.canOpen)
+            tab.worktrees = try await client.worktrees(at: path, remote: tab.remote).filter(
+                \.canOpen)
         } catch {
             tab.errorMessage = error.localizedDescription
         }
@@ -165,7 +169,7 @@ final class QuinjetPageModel {
         guard let action = QuinjetHostAction(payload: payload) else { return }
         switch action {
         case .openNewTab:
-            addPickerTab()
+            addPickerTab(machineID: tab.remote?.machineID ?? MachinesModel.localMachineID)
         case .openWorktree:
             Task { await presentWorktrees(for: tab) }
         }

@@ -126,6 +126,20 @@ import Testing
         #expect(model.selectedTab?.worktree == nil)
     }
 
+    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() throws {
+        let model = QuinjetPageModel(client: client)
+        let original = try #require(model.selectedTab)
+        let machineID = UUID()
+        original.remote = QuinjetRemote(
+            machineID: machineID, machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        model.handleHostPayload("quinjet;open-new-tab", from: original)
+
+        #expect(model.selectedTab?.machineID == machineID)
+        #expect(model.selectedTab?.worktree == nil)
+    }
+
     @Test func worktreePayloadPresentsNativePicker() async throws {
         let model = QuinjetPageModel(client: client)
         let tab = try #require(model.selectedTab)
