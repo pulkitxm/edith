@@ -33,6 +33,25 @@ import Testing
         #expect(worktrees.filter(\.canOpen).map(\.branch) == ["main", "feat/quinjet"])
     }
 
+    @Test func requestsWorktreesThroughAnEdithMachineSession() async throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+        let client = QuinjetClient { arguments in
+            #expect(
+                arguments
+                    == [
+                        "--client", "edith", "--remote", "pulkit@build", "--ssh-control-path",
+                        "/tmp/edith.sock", "-C", "/srv/project", "worktree", "list", "--json",
+                    ])
+            return Data(Self.worktreesJSON.utf8)
+        }
+
+        let worktrees = try await client.worktrees(at: "/srv/project", remote: remote)
+
+        #expect(worktrees.filter(\.canOpen).count == 2)
+    }
+
     @Test func rejectsUnsupportedOutput() async {
         let client = QuinjetClient { _ in Data("{}".utf8) }
 

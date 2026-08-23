@@ -11,15 +11,24 @@ struct QuinjetClient: Sendable {
     }
 
     func recentProjects() async throws -> [QuinjetProject] {
-        try decode(
+        return try decode(
             [QuinjetProject].self,
             from: await execute(["--client", "edith", "project", "list", "--json"]))
     }
 
-    func worktrees(at path: String) async throws -> [QuinjetWorktree] {
-        try decode(
+    func worktrees(at path: String, remote: QuinjetRemote? = nil) async throws
+        -> [QuinjetWorktree]
+    {
+        var arguments = ["--client", "edith"]
+        if let remote {
+            arguments += [
+                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
+            ]
+        }
+        arguments += ["-C", path, "worktree", "list", "--json"]
+        return try decode(
             [QuinjetWorktree].self,
-            from: await execute(["--client", "edith", "-C", path, "worktree", "list", "--json"]))
+            from: await execute(arguments))
     }
 
     private func decode<Value: Decodable>(_ type: Value.Type, from data: Data) throws -> Value {

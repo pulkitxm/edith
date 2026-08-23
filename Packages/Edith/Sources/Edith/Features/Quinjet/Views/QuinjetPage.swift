@@ -197,7 +197,8 @@ private struct QuinjetTerminalWorkspace: View {
                 select: { worktree in
                     model.open(
                         worktree, projectName: tab.projectName ?? "Project",
-                        available: tab.worktrees, in: tab, launchEnabled: launchEnabled)
+                        available: tab.worktrees, remote: tab.remote, in: tab,
+                        launchEnabled: launchEnabled)
                 })
         }
     }
@@ -211,6 +212,6 @@ private struct QuinjetTerminalWorkspace: View {
         guard let worktree = tab.worktree else { return }
         model.open(
             worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
-            in: tab, launchEnabled: launchEnabled)
+            remote: tab.remote, in: tab, launchEnabled: launchEnabled)
     }
 }

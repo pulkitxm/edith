@@ -9,6 +9,7 @@ final class QuinjetTab: Identifiable {
     let holder = TerminalSessionHolder()
     var projectName: String?
     var worktree: QuinjetWorktree?
+    var remote: QuinjetRemote?
     var worktrees: [QuinjetWorktree] = []
     var showsWorktrees = false
     var loadingWorktrees = false
@@ -86,10 +87,11 @@ final class QuinjetPageModel {
 
     func open(
         _ worktree: QuinjetWorktree, projectName: String, available: [QuinjetWorktree],
-        in tab: QuinjetTab, launchEnabled: Bool
+        remote: QuinjetRemote? = nil, in tab: QuinjetTab, launchEnabled: Bool
     ) {
         tab.projectName = projectName
         tab.worktree = worktree
+        tab.remote = remote
         tab.worktrees = available.filter(\.canOpen)
         tab.showsWorktrees = false
         tab.errorMessage = nil
@@ -105,22 +107,32 @@ final class QuinjetPageModel {
             self.handleHostPayload(payload, from: tab)
         }
         let environment = terminalEnvironment()
-        let arguments = ["--client", "edith", "-C", worktree.path]
+        var arguments = ["--client", "edith"]
+        if let remote {
+            arguments += [
+                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
+            ]
+        }
+        arguments += ["-C", worktree.path]
+        let currentDirectory = remote == nil ? worktree.path : nil
         if tab.holder.started {
             tab.holder.restart(
                 executable: executable.path, arguments: arguments, environment: environment,
-                currentDirectory: worktree.path)
+                currentDirectory: currentDirectory)
         } else {
             tab.holder.start(
                 executable: executable.path, arguments: arguments, environment: environment,
-                currentDirectory: worktree.path)
+                currentDirectory: currentDirectory)
         }
     }
 
-    func openFolder(_ path: String, in tab: QuinjetTab, launchEnabled: Bool) async {
+    func openFolder(
+        _ path: String, remote: QuinjetRemote? = nil, in tab: QuinjetTab,
+        launchEnabled: Bool
+    ) async {
         projectError = nil
         do {
-            let worktrees = try await client.worktrees(at: path).filter(\.canOpen)
+            let worktrees = try await client.worktrees(at: path, remote: remote).filter(\.canOpen)
             guard let worktree = worktrees.first(where: { $0.path == path }) ?? worktrees.first
             else {
                 projectError = "No open worktree was found in this folder."
@@ -128,9 +140,9 @@ final class QuinjetPageModel {
             }
             let name = URL(fileURLWithPath: path).lastPathComponent
             open(
-                worktree, projectName: name, available: worktrees, in: tab,
+                worktree, projectName: name, available: worktrees, remote: remote, in: tab,
                 launchEnabled: launchEnabled)
-            await refreshProjects()
+            if remote == nil { await refreshProjects() }
         } catch {
             projectError = error.localizedDescription
         }
@@ -143,7 +155,7 @@ final class QuinjetPageModel {
         tab.errorMessage = nil
         defer { tab.loadingWorktrees = false }
         do {
-            tab.worktrees = try await client.worktrees(at: path).filter(\.canOpen)
+            tab.worktrees = try await client.worktrees(at: path, remote: tab.remote).filter(\.canOpen)
         } catch {
             tab.errorMessage = error.localizedDescription
         }
