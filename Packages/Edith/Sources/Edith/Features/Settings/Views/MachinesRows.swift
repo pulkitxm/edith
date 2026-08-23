@@ -16,13 +16,21 @@ struct MachinesRows: View {
 
     var body: some View {
         Section {
-            Toggle("Connect when the page opens", isOn: $autoConnect)
-            Toggle("Notify when a machine goes offline", isOn: $notifyDown)
-            Toggle("Notify when a disk is nearly full or stalled", isOn: $notifyDisk)
+            Toggle(
+                "Connect when the page opens",
+                isOn: $autoConnect.configured(AppStorageKeys.Machines.autoConnect))
+            Toggle(
+                "Notify when a machine goes offline",
+                isOn: $notifyDown.configured(AppStorageKeys.Machines.notifyDown))
+            Toggle(
+                "Notify when a disk is nearly full or stalled",
+                isOn: $notifyDisk.configured(AppStorageKeys.Machines.notifyDiskFull))
             if notifyDisk {
                 HStack {
                     Text("Warn above")
-                    Slider(value: $diskThreshold, in: 70...98, step: 1)
+                    Slider(
+                        value: $diskThreshold.configured(AppStorageKeys.Machines.diskThreshold),
+                        in: 70...98, step: 1)
                     Text("\(Int(diskThreshold))%")
                         .font(DashSkin.mono(11))
                         .monospacedDigit()

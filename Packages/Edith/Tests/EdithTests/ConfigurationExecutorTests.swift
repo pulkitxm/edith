@@ -1,6 +1,8 @@
 import Foundation
+import SwiftUI
 import Testing
 
+@testable import Edith
 @testable import EdithCLI
 @testable import EdithKit
 
@@ -62,6 +64,21 @@ import Testing
         }
     }
 
+    @Test func groupedWritesValidateBeforeChangingAnyKey() throws {
+        let (shared, standard) = Self.stores("grouped")
+        let executor = ConfigurationExecutor(
+            shared: shared, standard: standard, announceChange: {})
+
+        #expect(throws: ConfigurationError.self) {
+            try executor.set([
+                (AppStorageKeys.General.appearance, .string("dark")),
+                (AppStorageKeys.General.preventSleep, .string("true")),
+            ])
+        }
+        #expect(shared.object(forKey: AppStorageKeys.General.appearance) == nil)
+        #expect(shared.object(forKey: AppStorageKeys.General.preventSleep) == nil)
+    }
+
     @Test func everyConfigurationOperationIsRegistered() {
         let descriptors = ConfigurationOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
@@ -73,6 +90,69 @@ import Testing
         #expect(
             Set(descriptors.filter { $0.effect == .write }.map(\.cli))
                 == [["config", "set"], ["config", "unset"], ["config", "import"]])
+    }
+}
+
+@Suite struct ConfigurationUIRoutingTests {
+    static var applicationSources: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith")
+    }
+
+    @MainActor @Test func configurationBindingAppliesOnlyValidatedValues() {
+        let (shared, standard) = ConfigurationExecutorTests.stores("binding")
+        let executor = ConfigurationExecutor(
+            shared: shared, standard: standard, announceChange: {})
+        var value = "system"
+        let binding = Binding<String>(get: { value }, set: { value = $0 })
+            .configured(AppStorageKeys.General.appearance, executor: executor)
+
+        binding.wrappedValue = "purple"
+        #expect(value == "system")
+        #expect(shared.object(forKey: AppStorageKeys.General.appearance) == nil)
+
+        binding.wrappedValue = "dark"
+        #expect(value == "dark")
+        #expect(shared.string(forKey: AppStorageKeys.General.appearance) == "dark")
+    }
+
+    @Test func principalPersistentControlsUseConfigurationBindings() throws {
+        let paths = [
+            "Features/Settings/Views/GeneralPane.swift",
+            "Features/Settings/Views/ICloudPane.swift",
+            "Features/Settings/Views/ExtensionsPane.swift",
+            "Features/Settings/Views/ClipboardRows.swift",
+            "Features/Settings/Views/ColorPickerRows.swift",
+            "Features/Settings/Views/FocusDimRows.swift",
+            "Features/Settings/Views/LidAwakeRows.swift",
+            "Features/Settings/Views/MachinesRows.swift",
+            "Features/Settings/Views/NotchShelfRows.swift",
+            "Features/Settings/Views/PresenterRows.swift",
+            "Features/Settings/Views/TerminalSettingsPane.swift",
+            "Features/Pages/Views/HomePageView.swift",
+            "Core/Navigation/MainNavigationView.swift",
+        ]
+        for path in paths {
+            let source = try String(
+                contentsOf: Self.applicationSources.appendingPathComponent(path), encoding: .utf8)
+            #expect(source.contains(".configured("), "\(path) bypasses ConfigurationBinding")
+        }
+    }
+
+    @Test func hotkeysAndUpdateSchedulingUseTheSharedExecutor() throws {
+        for path in [
+            "Features/Settings/Views/ShortcutsPane.swift",
+            "Features/Settings/Views/UpdateSchedulePanel.swift",
+        ] {
+            let source = try String(
+                contentsOf: Self.applicationSources.appendingPathComponent(path), encoding: .utf8)
+            #expect(
+                source.contains("ConfigurationExecutor.application.set"),
+                "\(path) bypasses ConfigurationExecutor")
+        }
     }
 }
 

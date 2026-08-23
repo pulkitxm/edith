@@ -43,7 +43,7 @@ public struct ConfigStore {
 
     public func isSet(_ definition: SettingDefinition) -> Bool { executor.isSet(definition) }
 
-    public func set(_ value: JSONValue, for definition: SettingDefinition, announce: Bool = true)
+    public func set(_ value: JSONValue, for definition: SettingDefinition, announce: Bool = false)
         throws
     {
         do {
@@ -53,7 +53,7 @@ public struct ConfigStore {
         }
     }
 
-    public func unset(_ definition: SettingDefinition, announce: Bool = true) throws {
+    public func unset(_ definition: SettingDefinition, announce: Bool = false) throws {
         do {
             try executor.unset(definition, announce: announce)
         } catch let error as ConfigurationError {

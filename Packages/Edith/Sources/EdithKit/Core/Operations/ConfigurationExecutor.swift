@@ -248,6 +248,17 @@ public struct ConfigurationExecutor {
         try set(value, for: definition, announce: announce)
     }
 
+    public func set(_ values: [(key: String, value: JSONValue)]) throws {
+        let definitions = try values.map { try definition(for: $0.key) }
+        for (offset, definition) in definitions.enumerated() {
+            try ConfigurationValueParser.validate(values[offset].value, for: definition)
+        }
+        for (offset, definition) in definitions.enumerated() {
+            try set(values[offset].value, for: definition, announce: false)
+        }
+        if !values.isEmpty { announceChange() }
+    }
+
     public func unset(_ definition: SettingDefinition, announce: Bool = true) throws {
         guard !definition.readOnly else {
             throw ConfigurationError("\(definition.key) is read only")

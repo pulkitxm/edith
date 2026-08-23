@@ -21,7 +21,7 @@ struct LidAwakeRows: View {
         Binding(
             get: { LidAwakeSession(rawValue: sessionRaw) ?? .indefinite },
             set: { session in
-                sessionRaw = session.rawValue
+                $sessionRaw.configured(LidAwakeState.sessionKey).wrappedValue = session.rawValue
                 IPC.post(
                     IPC.Name.setLidAwakeSession,
                     userInfo: ["session": session.rawValue])
@@ -50,7 +50,10 @@ struct LidAwakeRows: View {
                     }
                 }
                 .pointerCursor()
-                Picker("Auto-pause below", selection: $batteryThreshold) {
+                Picker(
+                    "Auto-pause below",
+                    selection: $batteryThreshold.configured(LidAwakeState.batteryThresholdKey)
+                ) {
                     Text("Off").tag(0)
                     Text("10% battery").tag(10)
                     Text("20% battery").tag(20)
@@ -61,7 +64,9 @@ struct LidAwakeRows: View {
                     "When the Mac is on battery and reaches this floor, lid awake pauses until it is charged again. Starting it manually below the floor overrides the pause for that discharge."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
-                Toggle(isOn: $restoreOnQuit) {
+                Toggle(
+                    isOn: $restoreOnQuit.configured(LidAwakeState.restoreOnQuitKey)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Restore normal sleep when Edith quits")
                         InfoDot(

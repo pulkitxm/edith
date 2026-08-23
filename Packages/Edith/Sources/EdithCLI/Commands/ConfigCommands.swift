@@ -138,7 +138,7 @@ struct ConfigSetCommand: AsyncParsableCommand {
             let previous = store.value(for: found)
             let parsed = try ConfigValueParser.parse(
                 value, as: found.type, allowed: found.allowed)
-            try store.set(parsed, for: found)
+            try store.set(parsed, for: found, announce: true)
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -167,7 +167,7 @@ struct ConfigUnsetCommand: AsyncParsableCommand {
         try await execute {
             let found = try definition(key)
             let store = ConfigStore()
-            try store.unset(found)
+            try store.unset(found, announce: true)
             guard !json else {
                 CLIOut.json(
                     .object(["key": .string(found.key), "value": store.value(for: found)]))

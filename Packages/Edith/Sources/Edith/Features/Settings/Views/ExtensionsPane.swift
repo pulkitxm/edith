@@ -660,14 +660,16 @@ private struct QuinjetRows: View {
         CLIToolStatusSection(tools: [.quinjet], extensionEnabled: enabled)
 
         Section("Launch") {
-            Picker("Terminal", selection: $terminal) {
+            Picker(
+                "Terminal", selection: $terminal.configured(AppStorageKeys.Quinjet.terminal)
+            ) {
                 ForEach(QuinjetTerminal.allCases) { option in
                     Label(option.label, systemImage: option.icon)
                         .tag(option.rawValue)
                         .disabled(!option.isAvailable)
                 }
             }
-            Picker("Theme", selection: $theme) {
+            Picker("Theme", selection: $theme.configured(AppStorageKeys.Quinjet.theme)) {
                 ForEach(QuinjetTheme.allCases) { option in
                     Text(option.label).tag(option.rawValue)
                 }
@@ -891,23 +893,38 @@ private struct UsageRows: View {
 
         Section {
             Group {
-                Toggle("Claude limits", isOn: $claudeEnabled)
-                    .pointerCursor()
-                Toggle("Codex limits", isOn: $codexEnabled)
-                    .pointerCursor()
-                Toggle("Show limits in the menu bar", isOn: $limitsInMenuBar)
-                    .pointerCursor()
+                Toggle(
+                    "Claude limits",
+                    isOn: $claudeEnabled.configured(AppStorageKeys.Limits.claudeEnabled)
+                )
+                .pointerCursor()
+                Toggle(
+                    "Codex limits",
+                    isOn: $codexEnabled.configured(AppStorageKeys.Limits.codexEnabled)
+                )
+                .pointerCursor()
+                Toggle(
+                    "Show limits in the menu bar",
+                    isOn: $limitsInMenuBar.configured(AppStorageKeys.Limits.inMenuBar)
+                )
+                .pointerCursor()
 
                 if limitsInMenuBar {
                     if claudeEnabled {
                         LimitWindowChipsRow(
-                            title: "Claude shows", provider: .claude, raw: $claudeWindowsRaw)
+                            title: "Claude shows", provider: .claude,
+                            raw: $claudeWindowsRaw.configured(
+                                AppStorageKeys.MenuBar.claudeWindows))
                     }
                     if codexEnabled {
                         LimitWindowChipsRow(
-                            title: "Codex shows", provider: .codex, raw: $codexWindowsRaw)
+                            title: "Codex shows", provider: .codex,
+                            raw: $codexWindowsRaw.configured(AppStorageKeys.MenuBar.codexWindows))
                     }
-                    Picker("Style", selection: $limitsStyleRaw) {
+                    Picker(
+                        "Style",
+                        selection: $limitsStyleRaw.configured(AppStorageKeys.MenuBar.limitsStyle)
+                    ) {
                         Text("Stacked").tag("stacked")
                         Text("Tagged").tag("tagged")
                         Text("Slashes").tag("slash")
@@ -923,30 +940,45 @@ private struct UsageRows: View {
 
                     if isCustomColor {
                         ColorPicker(
-                            "Text (5h / 7d)", selection: hexBinding($subColorHex),
+                            "Text (5h / 7d)",
+                            selection: hexBinding(
+                                $subColorHex.configured(AppStorageKeys.MenuBar.subColorHex)),
                             supportsOpacity: false)
                         ColorPicker(
-                            "Low risk", selection: hexBinding($lowColorHex),
+                            "Low risk",
+                            selection: hexBinding(
+                                $lowColorHex.configured(AppStorageKeys.MenuBar.lowColorHex)),
                             supportsOpacity: false)
                         ColorPicker(
-                            "Medium risk", selection: hexBinding($midColorHex),
+                            "Medium risk",
+                            selection: hexBinding(
+                                $midColorHex.configured(AppStorageKeys.MenuBar.midColorHex)),
                             supportsOpacity: false)
                         ColorPicker(
-                            "High risk", selection: hexBinding($highColorHex),
+                            "High risk",
+                            selection: hexBinding(
+                                $highColorHex.configured(AppStorageKeys.MenuBar.highColorHex)),
                             supportsOpacity: false)
-                        Toggle("Smart color", isOn: $smartColor)
-                            .pointerCursor()
+                        Toggle(
+                            "Smart color",
+                            isOn: $smartColor.configured(AppStorageKeys.General.smartColor)
+                        )
+                        .pointerCursor()
                         if !smartColor {
                             HStack {
                                 Text("Thresholds")
                                 Spacer()
                                 Stepper(
-                                    "Warn \(warnPercent)%", value: $warnPercent,
+                                    "Warn \(warnPercent)%",
+                                    value: $warnPercent.configured(
+                                        AppStorageKeys.Limits.warnPercent),
                                     in: 10...critPercent - 5, step: 5
                                 )
                                 .pointerCursor()
                                 Stepper(
-                                    "Critical \(critPercent)%", value: $critPercent,
+                                    "Critical \(critPercent)%",
+                                    value: $critPercent.configured(
+                                        AppStorageKeys.Limits.critPercent),
                                     in: warnPercent + 5...100, step: 5
                                 )
                                 .pointerCursor()
@@ -979,24 +1011,33 @@ private struct UsageRows: View {
         }
 
         Section {
-            Toggle("Pace my Claude usage", isOn: $budgetEnabled)
-                .pointerCursor()
+            Toggle(
+                "Pace my Claude usage",
+                isOn: $budgetEnabled.configured(AppStorageKeys.Budget.enabled)
+            )
+            .pointerCursor()
             Text(
                 "Set a personal cap under the real limit and get told if you're spending too fast."
             )
             .settingsCaption()
             if budgetEnabled {
-                Picker("Mode", selection: $budgetMode) {
+                Picker(
+                    "Mode", selection: $budgetMode.configured(AppStorageKeys.Budget.mode)
+                ) {
                     Text("Auto daily pace").tag("pace")
                     Text("Cap by a deadline").tag("cap")
                 }.pointerCursor()
-                Picker("Window", selection: $budgetKind) {
+                Picker(
+                    "Window", selection: $budgetKind.configured(AppStorageKeys.Budget.kind)
+                ) {
                     Text("Weekly").tag("weekly")
                     Text("Session (5h)").tag("session")
                 }.pointerCursor()
                 HStack {
                     Text("Cap")
-                    Slider(value: $budgetCap, in: 10...100, step: 5)
+                    Slider(
+                        value: $budgetCap.configured(AppStorageKeys.Budget.capPercent),
+                        in: 10...100, step: 5)
                     Text("\(Int(budgetCap))%").monospacedDigit().frame(
                         width: UIScale.pt(40), alignment: .trailing)
                 }
@@ -1009,7 +1050,10 @@ private struct UsageRows: View {
                                     ? Date(timeIntervalSinceReferenceDate: budgetDeadlineTS)
                                     : Date().addingTimeInterval(2 * 86400)
                             },
-                            set: { budgetDeadlineTS = $0.timeIntervalSinceReferenceDate }),
+                            set: {
+                                $budgetDeadlineTS.configured(AppStorageKeys.Budget.deadline)
+                                    .wrappedValue = $0.timeIntervalSinceReferenceDate
+                            }),
                         displayedComponents: [.date, .hourAndMinute])
                 }
             }
@@ -1023,7 +1067,9 @@ private struct UsageRows: View {
             Toggle("Enable alerts", isOn: alertsBinding)
                 .pointerCursor()
             Group {
-                Toggle(isOn: $trackSession) {
+                Toggle(
+                    isOn: $trackSession.configured(AppStorageKeys.Notify.trackSession)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Session (5h) alerts")
                         InfoDot(
@@ -1032,7 +1078,9 @@ private struct UsageRows: View {
                     }
                 }
                 .pointerCursor()
-                Toggle(isOn: $trackWeekly) {
+                Toggle(
+                    isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Weekly alerts")
                         InfoDot(
@@ -1041,17 +1089,24 @@ private struct UsageRows: View {
                     }
                 }
                 .pointerCursor()
-                Toggle("Back to green", isOn: $recovery)
-                    .pointerCursor()
+                Toggle(
+                    "Back to green",
+                    isOn: $recovery.configured(AppStorageKeys.Notify.recovery)
+                )
+                .pointerCursor()
                 HStack {
                     Text("Pacing margin")
                     Spacer()
                     Stepper(
-                        "±\(Int(pacingMargin)) pp", value: $pacingMargin, in: 5...25, step: 5
+                        "±\(Int(pacingMargin)) pp",
+                        value: $pacingMargin.configured(AppStorageKeys.Limits.pacingMargin),
+                        in: 5...25, step: 5
                     )
                     .pointerCursor()
                 }
-                Toggle(isOn: $pacingWarning) {
+                Toggle(
+                    isOn: $pacingWarning.configured(AppStorageKeys.Notify.pacingWarning)
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Drifting / burning hot")
                         InfoDot(
@@ -1060,12 +1115,22 @@ private struct UsageRows: View {
                     }
                 }
                 .pointerCursor()
-                Toggle("Token expired", isOn: $tokenExpired)
-                    .pointerCursor()
+                Toggle(
+                    "Token expired",
+                    isOn: $tokenExpired.configured(AppStorageKeys.Notify.tokenExpired)
+                )
+                .pointerCursor()
                 HStack {
-                    Toggle("Remind before session reset", isOn: $reminderSession)
-                        .pointerCursor()
-                    Picker("", selection: $reminderSessionOffset) {
+                    Toggle(
+                        "Remind before session reset",
+                        isOn: $reminderSession.configured(AppStorageKeys.Notify.reminderSession)
+                    )
+                    .pointerCursor()
+                    Picker(
+                        "",
+                        selection: $reminderSessionOffset.configured(
+                            AppStorageKeys.Notify.reminderSessionOffsetMin)
+                    ) {
                         Text("5 min").tag(5)
                         Text("15 min").tag(15)
                         Text("30 min").tag(30)
@@ -1074,9 +1139,16 @@ private struct UsageRows: View {
                     .labelsHidden().pointerCursor().disabled(!reminderSession)
                 }
                 HStack {
-                    Toggle("Remind before weekly reset", isOn: $reminderWeekly)
-                        .pointerCursor()
-                    Picker("", selection: $reminderWeeklyOffset) {
+                    Toggle(
+                        "Remind before weekly reset",
+                        isOn: $reminderWeekly.configured(AppStorageKeys.Notify.reminderWeekly)
+                    )
+                    .pointerCursor()
+                    Picker(
+                        "",
+                        selection: $reminderWeeklyOffset.configured(
+                            AppStorageKeys.Notify.reminderWeeklyOffsetMin)
+                    ) {
                         Text("1 h").tag(60)
                         Text("2 h").tag(120)
                         Text("6 h").tag(360)
@@ -1124,7 +1196,7 @@ private struct UsageRows: View {
         Binding(
             get: { notifyMaster },
             set: { enabled in
-                notifyMaster = enabled
+                $notifyMaster.configured(AppStorageKeys.Notify.master).wrappedValue = enabled
                 if enabled
                     && !SharedDefaults.store.bool(
                         forKey: AppStorageKeys.Permissions.notificationsGranted)
@@ -1141,7 +1213,9 @@ private struct UsageRows: View {
     private var colorModeBinding: Binding<String> {
         Binding(
             get: { isCustomColor ? "custom" : menuBarColorMode },
-            set: { menuBarColorMode = $0 })
+            set: {
+                $menuBarColorMode.configured(AppStorageKeys.MenuBar.colorMode).wrappedValue = $0
+            })
     }
 
     private func hexBinding(_ hex: Binding<String>) -> Binding<Color> {
@@ -1161,8 +1235,9 @@ private struct UsageRows: View {
                 menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
                 selectedProvider: selectedProvider))
         enabled = state.enabled
-        limitsInMenuBar = state.menuBarEnabled
-        notifyMaster = state.alertsEnabled
+        $limitsInMenuBar.configured(AppStorageKeys.Limits.inMenuBar).wrappedValue =
+            state.menuBarEnabled
+        $notifyMaster.configured(AppStorageKeys.Notify.master).wrappedValue = state.alertsEnabled
     }
 }
 
@@ -1179,7 +1254,11 @@ private struct SystemStatsRows: View {
                 "Color",
                 selection: Binding(
                     get: { DashPalette.color(statsColorHex) },
-                    set: { statsColorHex = $0.hex6 }),
+                    set: {
+                        $statsColorHex.configured(AppStorageKeys.MenuBar.statsColorHex)
+                            .wrappedValue =
+                            $0.hex6
+                    }),
                 supportsOpacity: false)
             Text("Sampled every couple of seconds; costs nothing measurable.")
                 .settingsCaption()
@@ -1208,8 +1287,11 @@ private struct MusicRows: View {
                 }
                 .pointerCursor()
             }
-            Toggle("Fade between tracks", isOn: $crossfade)
-                .pointerCursor()
+            Toggle(
+                "Fade between tracks",
+                isOn: $crossfade.configured(MusicFade.enabledKey)
+            )
+            .pointerCursor()
             if crossfade {
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     LabeledContent("Fade length") {
@@ -1217,8 +1299,11 @@ private struct MusicRows: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
-                    Slider(value: $crossfadeSeconds, in: MusicFade.secondsRange)
-                        .pointerCursor()
+                    Slider(
+                        value: $crossfadeSeconds.configured(MusicFade.secondsKey),
+                        in: MusicFade.secondsRange
+                    )
+                    .pointerCursor()
                     Text("How long the old track fades out while the next one fades in.")
                         .settingsCaption()
                 }
@@ -1237,8 +1322,11 @@ private struct MicMuteRows: View {
 
     var body: some View {
         Section {
-            Toggle("Show in the menu bar", isOn: $inMenuBar)
-                .pointerCursor()
+            Toggle(
+                "Show in the menu bar",
+                isOn: $inMenuBar.configured(AppStorageKeys.Mic.muteInMenuBar)
+            )
+            .pointerCursor()
             Text("The menu bar icon shows the current mute state and toggles it on click.")
                 .settingsCaption()
         }
@@ -1256,7 +1344,9 @@ private struct SystemRows: View {
 
     var body: some View {
         Section {
-            Toggle(isOn: $preventSleep) {
+            Toggle(
+                isOn: $preventSleep.configured(AppStorageKeys.General.preventSleep)
+            ) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Keep awake")
                     InfoDot(

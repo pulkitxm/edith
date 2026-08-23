@@ -46,7 +46,10 @@ struct ClipboardRows: View {
     private var maxItemMB: Binding<Int> {
         Binding(
             get: { max(1, maxItemBytes / 1_000_000) },
-            set: { maxItemBytes = $0 * 1_000_000 })
+            set: {
+                $maxItemBytes.configured(AppStorageKeys.Clipboard.maxItemBytes).wrappedValue =
+                    $0 * 1_000_000
+            })
     }
 
     var body: some View {
@@ -119,7 +122,8 @@ struct ClipboardRows: View {
                 isOn: Binding(
                     get: { autoPaste },
                     set: { newValue in
-                        autoPaste = newValue
+                        $autoPaste.configured(AppStorageKeys.Clipboard.autoPaste).wrappedValue =
+                            newValue
                         if newValue, !accessibilityGranted {
                             IPC.post(IPC.Name.grantAccessibility)
                         }
@@ -139,8 +143,11 @@ struct ClipboardRows: View {
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.orange)
             }
-            Toggle("Paste without formatting", isOn: $pastePlainText)
-                .pointerCursor()
+            Toggle(
+                "Paste without formatting",
+                isOn: $pastePlainText.configured(AppStorageKeys.Clipboard.pastePlainText)
+            )
+            .pointerCursor()
             Text("Strips fonts, colors and links so pasted text matches the destination.")
                 .settingsCaption()
         } header: {
@@ -150,9 +157,15 @@ struct ClipboardRows: View {
 
     @ViewBuilder private var storageSections: some View {
         Section {
-            Toggle("Files", isOn: $saveFiles).pointerCursor()
-            Toggle("Images", isOn: $saveImages).pointerCursor()
-            Toggle("Text", isOn: $saveText).pointerCursor()
+            Toggle(
+                "Files", isOn: $saveFiles.configured(AppStorageKeys.Clipboard.saveFiles)
+            ).pointerCursor()
+            Toggle(
+                "Images", isOn: $saveImages.configured(AppStorageKeys.Clipboard.saveImages)
+            ).pointerCursor()
+            Toggle(
+                "Text", isOn: $saveText.configured(AppStorageKeys.Clipboard.saveText)
+            ).pointerCursor()
             Text("Change what types of copied content should be stored.")
                 .settingsCaption()
         } header: {
@@ -161,10 +174,15 @@ struct ClipboardRows: View {
         Section {
             LabeledContent {
                 HStack(spacing: UIScale.pt(4)) {
-                    EdithNumberField(value: $maxItems, width: UIScale.pt(64))
-                    Stepper("", value: $maxItems, in: 1...999)
-                        .labelsHidden()
-                        .pointerCursor()
+                    EdithNumberField(
+                        value: $maxItems.configured(AppStorageKeys.Clipboard.maxItems),
+                        width: UIScale.pt(64))
+                    Stepper(
+                        "", value: $maxItems.configured(AppStorageKeys.Clipboard.maxItems),
+                        in: 1...999
+                    )
+                    .labelsHidden()
+                    .pointerCursor()
                 }
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
@@ -184,7 +202,9 @@ struct ClipboardRows: View {
                 }
             }
             .pointerCursor()
-            Picker(selection: $maxAgeDays) {
+            Picker(
+                selection: $maxAgeDays.configured(AppStorageKeys.Clipboard.maxAgeDays)
+            ) {
                 Text("Never").tag(0)
                 Text("7 days").tag(7)
                 Text("30 days").tag(30)
@@ -196,7 +216,10 @@ struct ClipboardRows: View {
                 }
             }
             .pointerCursor()
-            Stepper(value: $checkInterval, in: 0.2...5, step: 0.1) {
+            Stepper(
+                value: $checkInterval.configured(AppStorageKeys.Clipboard.checkInterval),
+                in: 0.2...5, step: 0.1
+            ) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Check interval: \(String(format: "%.1f", checkInterval))s")
                     InfoDot(
@@ -210,7 +233,7 @@ struct ClipboardRows: View {
 
     @ViewBuilder private var appearanceSections: some View {
         Section {
-            Picker(selection: $popupAt) {
+            Picker(selection: $popupAt.configured(AppStorageKeys.Clipboard.popupAt)) {
                 ForEach(ClipboardPopupPosition.allCases) { position in
                     Text(position.title).tag(position.rawValue)
                 }
@@ -223,7 +246,7 @@ struct ClipboardRows: View {
                 }
             }
             .pointerCursor()
-            Picker(selection: $pinTo) {
+            Picker(selection: $pinTo.configured(AppStorageKeys.Clipboard.pinTo)) {
                 Text("Top").tag("top")
                 Text("Bottom").tag("bottom")
             } label: {
@@ -233,7 +256,7 @@ struct ClipboardRows: View {
                 }
             }
             .pointerCursor()
-            Toggle(isOn: $showFooter) {
+            Toggle(isOn: $showFooter.configured(AppStorageKeys.Clipboard.showFooter)) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Show footer")
                     InfoDot("Shows the Clear and Preferences rows at the bottom of the popup.")
@@ -248,7 +271,8 @@ struct ClipboardRows: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 LabeledContent("Ignored apps") {
                     EdithTextField(
-                        placeholder: "com.app.bundleid, com.other.app", text: $ignoredApps)
+                        placeholder: "com.app.bundleid, com.other.app",
+                        text: $ignoredApps.configured(AppStorageKeys.Clipboard.ignoredApps))
                 }
                 Text(
                     "Copies made in these apps are never recorded (password managers are pre-listed)."

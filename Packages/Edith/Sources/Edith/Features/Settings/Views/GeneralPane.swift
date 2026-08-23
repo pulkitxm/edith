@@ -25,9 +25,10 @@ struct SettingsPane: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var tab: Binding<Tab> {
-        Binding(
-            get: { Tab(rawValue: tabRaw) ?? .general },
-            set: { tabRaw = $0.rawValue })
+        let stored = $tabRaw.configured(AppStorageKeys.General.settingsTab)
+        return Binding(
+            get: { Tab(rawValue: stored.wrappedValue) ?? .general },
+            set: { stored.wrappedValue = $0.rawValue })
     }
 
     var body: some View {
@@ -60,7 +61,7 @@ struct SettingsPane: View {
         .navigationTitle("Settings")
         .onAppear {
             if automaticActionsEnabled {
-                tabRaw =
+                $tabRaw.configured(AppStorageKeys.General.settingsTab).wrappedValue =
                     MainNavigationFallback.resolve(
                         mainWindowSection: MainDestination.settings.rawValue, settingsTab: tabRaw
                     ).settingsTab
@@ -80,7 +81,13 @@ private struct UpdatesPane: View {
     private var automaticDownloads: Binding<Bool> {
         Binding(
             get: { updater.automaticallyDownloadsUpdates },
-            set: { updater.automaticallyDownloadsUpdates = $0 })
+            set: { value in
+                guard
+                    (try? ConfigurationExecutor.application.set(
+                        .bool(value), forKey: "SUAutomaticallyUpdate")) != nil
+                else { return }
+                updater.automaticallyDownloadsUpdates = value
+            })
     }
 
     var body: some View {
@@ -162,7 +169,10 @@ struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                Picker("Appearance", selection: $appearance) {
+                Picker(
+                    "Appearance",
+                    selection: $appearance.configured(AppStorageKeys.General.appearance)
+                ) {
                     Text("System").tag("system")
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
@@ -176,7 +186,10 @@ struct GeneralPane: View {
                             "Use accent",
                             isOn: Binding(
                                 get: { themeName == "accent" },
-                                set: { themeName = $0 ? "accent" : lastPaletteTheme })
+                                set: {
+                                    $themeName.configured(AppStorageKeys.General.theme)
+                                        .wrappedValue = $0 ? "accent" : lastPaletteTheme
+                                })
                         )
                         .toggleStyle(.switch)
                         .pointerCursor()
@@ -191,11 +204,14 @@ struct GeneralPane: View {
             }
 
             Section {
-                Toggle("Show Dock icon", isOn: $showDockIcon)
-                    .pointerCursor()
-                    .onChange(of: showDockIcon) { _, on in
-                        NSApp.setActivationPolicy(on ? .regular : .accessory)
-                    }
+                Toggle(
+                    "Show Dock icon",
+                    isOn: $showDockIcon.configured(AppStorageKeys.General.showDockIcon)
+                )
+                .pointerCursor()
+                .onChange(of: showDockIcon) { _, on in
+                    NSApp.setActivationPolicy(on ? .regular : .accessory)
+                }
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "hotKey", defaultLabel: "⌥⌘E")
                 } label: {
@@ -215,7 +231,8 @@ struct GeneralPane: View {
 
             Section {
                 Button {
-                    settingsTab = SettingsPane.Tab.permissions.rawValue
+                    $settingsTab.configured(AppStorageKeys.General.settingsTab).wrappedValue =
+                        SettingsPane.Tab.permissions.rawValue
                 } label: {
                     LabeledContent("Permissions") {
                         HStack(spacing: UIScale.pt(6)) {
@@ -290,8 +307,10 @@ struct GeneralPane: View {
 
     private func swatch(_ name: String, color: Color) -> some View {
         Button {
-            themeName = name
-            lastPaletteTheme = name
+            try? ConfigurationExecutor.application.set([
+                (AppStorageKeys.General.theme, .string(name)),
+                (AppStorageKeys.General.lastPaletteTheme, .string(name)),
+            ])
         } label: {
             ZStack {
                 Circle().fill(color).frame(width: UIScale.pt(20), height: UIScale.pt(20))
