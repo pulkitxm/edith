@@ -209,6 +209,7 @@ public enum Guide {
         ed quinjet launch ~/code/edith          launch in the current terminal
         ed quinjet launch ~/code/edith --cmux   launch in cmux
         ed quinjet sessions                     native tabs in the running Edith page
+        ed quinjet new                          create and select a native picker tab
         ed quinjet focus 2                      select a native tab or cmux workspace
         ed quinjet restart 2                    restart a review in the same tab
         ed quinjet switch 2 ~/code/other        switch a tab to another worktree

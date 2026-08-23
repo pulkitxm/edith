@@ -231,6 +231,7 @@ public enum QuinjetOperation: String, CaseIterable, Equatable, Sendable {
 public enum QuinjetSessionOperation: String, CaseIterable, Codable, Equatable, Sendable {
     case status
     case sessions
+    case create = "new"
     case focus
     case close
     case restart
@@ -242,6 +243,8 @@ public enum QuinjetSessionOperation: String, CaseIterable, Codable, Equatable, S
             descriptor("Show the selected native Quinjet session.", effect: .read)
         case .sessions:
             descriptor("List native Quinjet sessions in the running app.", effect: .read)
+        case .create:
+            descriptor("Create and select a native Quinjet session.", effect: .interactive)
         case .focus:
             descriptor("Select and focus a native Quinjet session.", effect: .interactive)
         case .close:

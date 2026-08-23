@@ -10,6 +10,7 @@ struct QuinjetCommand: AsyncParsableCommand {
             QuinjetProjectsCommand.self, QuinjetWorktreesCommand.self,
             QuinjetOpenCommand.self, QuinjetLaunchCommand.self,
             QuinjetStatusCommand.self, QuinjetSessionsCommand.self,
+            QuinjetNewCommand.self,
             QuinjetFocusCommand.self, QuinjetCloseCommand.self,
             QuinjetRestartCommand.self, QuinjetSwitchCommand.self,
         ],
@@ -232,6 +233,9 @@ enum QuinjetSessionCLI {
             renderStatus(try session(matching: result.affectedSessionID, in: result))
         case .sessions:
             renderSessions(result.sessions)
+        case .create:
+            let state = try session(matching: result.affectedSessionID, in: result)
+            CLIOut.out("created session \(state.index): \(state.title)")
         case .focus:
             let state = try session(matching: result.affectedSessionID, in: result)
             CLIOut.out("selected session \(state.index): \(state.title)")
@@ -341,6 +345,22 @@ struct QuinjetSessionsCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let result = try await QuinjetSessionCLI.request(.sessions)
+            try QuinjetSessionCLI.render(result, json: json)
+        }
+    }
+}
+
+struct QuinjetNewCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "new", abstract: QuinjetSessionOperation.create.descriptor.summary,
+        aliases: ["create"])
+
+    @Flag(name: .long, help: "Emit stable JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let result = try await QuinjetSessionCLI.request(.create)
             try QuinjetSessionCLI.render(result, json: json)
         }
     }

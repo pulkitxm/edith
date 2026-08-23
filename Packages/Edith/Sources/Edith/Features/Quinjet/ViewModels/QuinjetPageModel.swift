@@ -269,7 +269,10 @@ final class QuinjetPageModel {
         guard let action = QuinjetHostAction(payload: payload) else { return }
         switch action {
         case .openNewTab:
-            addPickerTab(machineID: tab.remote?.machineID ?? MachinesModel.localMachineID)
+            Task {
+                try? await performSessionOperation(
+                    QuinjetSessionRequest(operation: .create, session: tab.id.uuidString))
+            }
         case .openWorktree:
             Task { await presentWorktrees(for: tab) }
         }
@@ -300,6 +303,11 @@ final class QuinjetPageModel {
             return sessionResult(for: .status, affected: tab.id)
         case .sessions:
             return sessionResult(for: request.operation)
+        case .create:
+            let source = try request.session.map { try session(matching: $0) }
+            let tab = addPickerTab(
+                machineID: source?.remote?.machineID ?? MachinesModel.localMachineID)
+            return sessionResult(for: .create, affected: tab.id)
         case .focus:
             let tab = try session(matching: request.session)
             selected = tab.id

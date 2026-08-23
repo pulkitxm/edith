@@ -100,7 +100,7 @@ import Testing
             commands.candidates
                 == [
                     "projects", "worktrees", "open", "launch", "status", "sessions",
-                    "focus", "close", "restart", "switch",
+                    "new", "focus", "close", "restart", "switch",
                 ])
         let appearance = Self.plan(["ed", "quinjet", "launch", "--a"], 3)
         #expect(appearance.candidates == ["--appearance"])

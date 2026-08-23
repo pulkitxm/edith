@@ -18,6 +18,7 @@ extension does not have to be enabled.
 | `ed quinjet launch <path>` | Run a standalone Quinjet process in the current terminal or cmux |
 | `ed quinjet status [session]` | Show one native session in the running Edith page |
 | `ed quinjet sessions` | List the native sessions in the running Edith page |
+| `ed quinjet new` | Create and select a native picker tab |
 | `ed quinjet focus <session>` | Select a native tab and focus its cmux workspace when applicable |
 | `ed quinjet close <session>` | Preview or close a native tab and its cmux workspace |
 | `ed quinjet restart [session]` | Restart a native review in the same tab |
@@ -95,6 +96,7 @@ session numbers with a 250 millisecond bound.
 ```sh
 ed quinjet sessions
 ed quinjet status
+ed quinjet new
 ed quinjet focus 2
 ed quinjet restart 2
 ed quinjet switch 2 ~/code/edith-native-sessions
@@ -102,7 +104,9 @@ ed quinjet close 2
 ed quinjet close 2 --yes
 ```
 
-`focus` selects the tab in Edith. For a cmux-backed session it also activates the
+`new`, also available as `create`, adds and selects a picker tab through the same
+app-side operation as the tab bar plus button. `focus` selects the tab in Edith.
+For a cmux-backed session it also activates the
 matching cmux workspace. `close` prints a non-mutating plan unless `--yes` is
 present. A confirmed close terminates the embedded process or closes the exact
 cmux workspace before removing the tab. Edith keeps at least one picker tab, so

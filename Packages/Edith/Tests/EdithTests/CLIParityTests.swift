@@ -491,6 +491,9 @@ enum UIParity {
             "Quinjet tab bar", "list the open native review sessions",
             ["quinjet", "sessions"]),
         UICapability(
+            "Quinjet tab bar", "create a native review session",
+            ["quinjet", "new"]),
+        UICapability(
             "Quinjet workspace", "inspect the active review session",
             ["quinjet", "status"]),
         UICapability(

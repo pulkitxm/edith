@@ -588,6 +588,9 @@ public enum CommandTree {
                         "sessions", "List native Quinjet sessions in the running app.",
                         aliases: ["list", "ls"], options: common),
                     CommandNode(
+                        "new", "Create and select a native Quinjet session.",
+                        aliases: ["create"], options: common),
+                    CommandNode(
                         "focus", "Select and focus a native Quinjet session.",
                         aliases: ["select"], options: common, arguments: [.quinjetSession]),
                     CommandNode(

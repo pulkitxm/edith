@@ -356,6 +356,9 @@ enum JSONContract {
         JSONCase("ed quinjet status", ["quinjet", "status", "--json"]),
         JSONCase("ed quinjet sessions", ["quinjet", "sessions", "--json"]),
         JSONCase(
+            "ed quinjet new", ["quinjet", "new", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
             "ed quinjet focus", ["quinjet", "focus", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase(

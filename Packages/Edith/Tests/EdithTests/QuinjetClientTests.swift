@@ -25,6 +25,7 @@ import Testing
             QuinjetSessionOperation.allCases.map(\.descriptor.cli)
                 == [
                     ["quinjet", "status"], ["quinjet", "sessions"],
+                    ["quinjet", "new"],
                     ["quinjet", "focus"], ["quinjet", "close"],
                     ["quinjet", "restart"], ["quinjet", "switch"],
                 ])
@@ -369,6 +370,26 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
         #expect(result.sessions.first?.terminal == "cmux")
     }
 
+    @Test func nativeCreateAddsASelectedPickerAndKeepsTheOriginalClosable() async throws {
+        let model = QuinjetPageModel(client: client)
+        let original = try #require(model.selectedTab)
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .create))
+
+        #expect(model.tabs.count == 2)
+        #expect(result.operation == .create)
+        #expect(result.affectedSessionID == model.selectedTab?.id.uuidString)
+        #expect(result.selectedSessionID == model.selectedTab?.id.uuidString)
+        #expect(result.sessions.last?.state == "picker")
+        #expect(result.sessions.map(\.canClose) == [true, true])
+
+        _ = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .close, session: original.id.uuidString))
+        #expect(model.tabs.count == 1)
+        #expect(model.selectedTab?.id == result.affectedSessionID.flatMap(UUID.init(uuidString:)))
+    }
+
     @Test func nativeCloseClosesCMUXBeforeRemovingItsTab() async throws {
         let recorder = QuinjetWorkspaceRecorder()
         let model = QuinjetPageModel(
@@ -549,18 +570,19 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
                 ])
     }
 
-    @Test func newTabPayloadCreatesAndSelectsPickerTab() throws {
+    @Test func newTabPayloadCreatesAndSelectsPickerTab() async throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)
 
         model.handleHostPayload("quinjet;open-new-tab", from: original)
+        for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }
 
         #expect(model.tabs.count == 2)
         #expect(model.selectedTab?.id != original.id)
         #expect(model.selectedTab?.worktree == nil)
     }
 
-    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() throws {
+    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() async throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)
         let machineID = UUID()
@@ -569,6 +591,7 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
             controlPath: "/tmp/edith.sock")
 
         model.handleHostPayload("quinjet;open-new-tab", from: original)
+        for _ in 0..<20 where model.tabs.count == 1 { await Task.yield() }
 
         #expect(model.selectedTab?.machineID == machineID)
         #expect(model.selectedTab?.worktree == nil)

@@ -346,6 +346,27 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         }
     }
 
+    @Test func nativeCreateUsesCorrelatedAppIPCAndReturnsTheNewPicker() async throws {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { _ in Self.sessionReply(.create, selected: 3, affected: 3, count: 3) }
+
+            let plain = await CLIProbe.capture(["quinjet", "new"])
+            let json = await CLIProbe.capture(["quinjet", "create", "--json"])
+
+            #expect(plain.code == 0)
+            #expect(plain.stdout.contains("created session 3"))
+            #expect(json.code == 0)
+            #expect(json.object?["operation"] as? String == "new")
+            #expect(json.object?["affectedSessionID"] as? String == Self.sessionID(3))
+            #expect(
+                world.posted.allSatisfy {
+                    $0.info[QuinjetSessionIPC.operationKey] as? String == "new"
+                        && $0.info[QuinjetSessionIPC.requestIDKey] as? String != nil
+                })
+        }
+    }
+
     @Test func nativeClosePreviewsThenClosesTheResolvedSessionID() async throws {
         await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }

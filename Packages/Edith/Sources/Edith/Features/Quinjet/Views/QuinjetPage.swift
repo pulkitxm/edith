@@ -71,7 +71,10 @@ struct QuinjetPage: View {
                 }
             }
             Button {
-                model.addPickerTab()
+                Task {
+                    try? await model.performSessionOperation(
+                        QuinjetSessionRequest(operation: .create))
+                }
             } label: {
                 Image(systemName: "plus")
             }
