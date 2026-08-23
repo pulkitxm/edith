@@ -9,10 +9,13 @@ import Testing
     static let machines = ["Asus TUF 7", "tuf"]
     static let extensionIDs = ExtensionRegistry.entries.map(\.id)
 
-    static func plan(_ words: [String], _ index: Int) -> CompletionResult {
+    static func plan(
+        _ words: [String], _ index: Int, usageSources: [String] = []
+    ) -> CompletionResult {
         CompletionEngine.plan(
             CompletionRequest(words: words, index: index), machines: machines,
-            configKeys: ConfigCatalog.keys, extensionIDs: extensionIDs)
+            configKeys: ConfigCatalog.keys, extensionIDs: extensionIDs,
+            usageSources: usageSources)
     }
 
     @Test func theTopLevelOffersCommandsAndMachines() {
@@ -98,6 +101,38 @@ import Testing
         #expect(result.candidates == ["--json"])
     }
 
+    @Test func completionNeverAddsGlobalsTheParserRejects() {
+        for words in [["ed", "--j"], ["ed", "guide", "--j"], ["ed", "schema", "--j"]] {
+            #expect(Self.plan(words, words.count - 1).candidates.isEmpty)
+        }
+    }
+
+    @Test func typedOptionValuesComeFromTheirDomainModels() {
+        #expect(
+            Self.plan(["ed", "music", "status", "--player", ""], 4).candidates
+                == MusicPlayer.allCases.map(\.rawValue))
+        #expect(
+            Self.plan(["ed", "download", "add", "--kind", ""], 4).candidates
+                == DownloadKind.allCases.map(\.rawValue))
+        #expect(
+            Self.plan(["ed", "color", "ls", "--format", ""], 4).candidates
+                == ColorCopyFormat.allCases.map(\.rawValue))
+        #expect(
+            Self.plan(["ed", "tools", "install", ""], 3).candidates.contains("quinjet"))
+    }
+
+    @Test func typedOptionsWorkAfterOtherOptionsAndWithEqualsSyntax() {
+        let sources = Self.plan(
+            ["ed", "usage", "summary", "--range", "week", "--source", ""], 6,
+            usageSources: ["claude", "codex"])
+        #expect(sources.candidates == ["claude", "codex"])
+        let player = Self.plan(["ed", "music", "status", "--player=sp"], 3)
+        #expect(player.candidates == ["--player=spotify"])
+        let nested = Self.plan(
+            ["ed", "music", "--player", "spotify", "status", "--player", ""], 6)
+        #expect(nested.candidates == MusicPlayer.allCases.map(\.rawValue))
+    }
+
     @Test func localPathsAskTheShellForFiles() {
         let result = Self.plan(["ed", "config", "import", ""], 3)
         #expect(result.wantsFiles)
@@ -144,6 +179,74 @@ import Testing
                 continue
             }
             check(node: child, command: match, path: path + [child.name], missing: &missing)
+        }
+    }
+}
+
+@Suite struct CLICompletionProcessTests {
+    static func temporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-completion-process-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    @Test func completionWorksOutsideARepositoryAndRejectsInvalidGlobals() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let invalid = try CLIProcessProbe.run(
+            ["__complete", "--index", "1", "--", "ed", "--j"],
+            currentDirectory: outside)
+        let typed = try CLIProcessProbe.run(
+            ["__complete", "--index", "4", "--", "ed", "music", "status", "--player", ""],
+            currentDirectory: outside)
+
+        #expect(invalid.code == 0)
+        #expect(invalid.stdout.isEmpty)
+        #expect(invalid.stderr.isEmpty)
+        #expect(typed.code == 0)
+        #expect(Set(typed.stdoutLines) == Set(MusicPlayer.allCases.map(\.rawValue)))
+        #expect(typed.stderr.isEmpty)
+    }
+
+    @Test func bashAndZshScriptsInvokeTheRealCompletionEntry() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let bashScript = outside.appendingPathComponent("ed.bash")
+        let zshScript = outside.appendingPathComponent("_ed")
+        try CompletionScripts.script(for: .bash, tool: CLIProcessProbe.binary.path)
+            .write(to: bashScript, atomically: true, encoding: .utf8)
+        try CompletionScripts.script(for: .zsh, tool: CLIProcessProbe.binary.path)
+            .write(to: zshScript, atomically: true, encoding: .utf8)
+
+        let bash = try CLIProcessProbe.run(
+            [
+                "-c",
+                "source \"$1\"; COMP_WORDS=(ed music status --player \"\"); "
+                    + "COMP_CWORD=4; _ed_complete; printf '%s\\n' \"${COMPREPLY[@]}\"",
+                "completion-test", bashScript.path,
+            ], executable: URL(fileURLWithPath: "/bin/bash"), currentDirectory: outside)
+        let zsh = try CLIProcessProbe.run(
+            [
+                "-c",
+                "compdef() { :; }; compadd() { print -l -- \"$@\"; }; source \"$1\"; "
+                    + "words=(ed music status --player ''); CURRENT=5; _ed_complete",
+                "completion-test", zshScript.path,
+            ], executable: URL(fileURLWithPath: "/bin/zsh"), currentDirectory: outside)
+
+        #expect(bash.code == 0)
+        #expect(Set(bash.stdoutLines) == Set(MusicPlayer.allCases.map(\.rawValue)))
+        #expect(zsh.code == 0)
+        #expect(Set(zsh.stdoutLines).isSuperset(of: Set(MusicPlayer.allCases.map(\.rawValue))))
+    }
+
+    @Test func everyShellGenerationCarriesAliasesAndTheAbsoluteEntryPath() {
+        for shell in CompletionScripts.Shell.allCases {
+            let script = CompletionScripts.script(for: shell, tool: CLIProcessProbe.binary.path)
+            #expect(script.contains(CLIProcessProbe.binary.path))
+            #expect(script.contains("edh"))
+            #expect(script.contains("edith"))
+            #expect(script.contains("__complete"))
         }
     }
 }

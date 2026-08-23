@@ -332,7 +332,9 @@ struct CompleteCommand: AsyncParsableCommand {
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
-            extensionIDs: ExtensionRegistry.entries.map(\.id))
+            extensionIDs: ExtensionRegistry.entries.map(\.id),
+            toolIDs: ToolProvisioning.all.map(\.id),
+            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [])
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)

@@ -135,8 +135,9 @@ $ echo $?
 
 One caveat worth knowing: the tree `__complete` walks is a hand-maintained
 mirror of the command surface rather than something derived from the parser. A
-new flag completes only once it has been added there too, and a group command
-can be offered `--json` and `--help` even where only its subcommands take them.
+new flag completes only once it has been added there too. Tests compare every
+advertised command, alias, flag and typed option with the parser, so completion
+does not offer a spelling the command would reject.
 
 ## The machine shorthand
 

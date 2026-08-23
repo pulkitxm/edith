@@ -276,6 +276,30 @@ enum CommandCrawler {
         #expect(wrong.isEmpty, "completion offers flags the parser rejects: \(wrong)")
     }
 
+    @Test func everyTypedOptionIsAlsoAdvertisedAndAccepted() {
+        var wrong: [String] = []
+        checkTyped(node: CommandTree.root, command: EdRoot.self, path: ["ed"], wrong: &wrong)
+        #expect(wrong.isEmpty, "typed completion metadata names invalid options: \(wrong)")
+    }
+
+    private func checkTyped(
+        node: CommandNode, command: ParsableCommand.Type, path: [String], wrong: inout [String]
+    ) {
+        let real = CommandCrawler.optionNames(of: command)
+        for option in node.optionValues.keys
+        where !node.options.contains(option) || !real.contains(option) {
+            wrong.append((path + [option]).joined(separator: " "))
+        }
+        for child in node.children {
+            guard
+                let match = command.configuration.subcommands.first(where: {
+                    CommandCrawler.name(of: $0) == child.name
+                })
+            else { continue }
+            checkTyped(node: child, command: match, path: path + [child.name], wrong: &wrong)
+        }
+    }
+
     private func check(
         node: CommandNode, command: ParsableCommand.Type, path: [String], wrong: inout [String]
     ) {
