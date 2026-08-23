@@ -73,7 +73,9 @@ enum JSONContract {
         JSONCase("ed music rename", ["music", "rename", "nothing-at-all", "New", "--json"]),
         JSONCase("ed music rm", ["music", "rm", "nothing-at-all", "--json"]),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
-        JSONCase("ed tools install", ["tools", "install", "yt-dlp", "--json"]),
+        JSONCase(
+            "ed tools install", ["tools", "install", "yt-dlp", "--json"],
+            mutatesTheMachine: true),
         JSONCase(
             "ed machines broadcast",
             ["machines", "broadcast", "--json", "--only", "nowhere-at-all", "--", "true"]),
@@ -284,7 +286,9 @@ enum JSONContract {
         JSONCase("ed usage models", ["usage", "models", "--json"]),
         JSONCase("ed usage projects", ["usage", "projects", "--json"]),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
-        JSONCase("ed usage refresh", ["usage", "refresh", "--json"]),
+        JSONCase(
+            "ed usage refresh", ["usage", "refresh", "--json"],
+            mutatesTheMachine: true),
         JSONCase(
             "ed usage summary --machine", ["usage", "summary", "--machine", "local", "--json"]),
         JSONCase("ed usage machines ls", ["usage", "machines", "ls", "--json"]),
@@ -527,6 +531,16 @@ enum JSONContract {
 }
 
 @Suite struct CLIJSONContractTests {
+    @Test func isolatedCommandsCannotReachLiveRefreshOrInstallServices() async {
+        let refresh = await CLIProbe.run(["usage", "refresh", "--json"])
+        #expect(refresh.code == 0)
+        #expect(refresh.object?["completed"] as? Bool == true)
+
+        let install = await CLIProbe.run(["tools", "install", "yt-dlp", "--json"])
+        #expect(install.code == ExitCodes.unavailable)
+        #expect(install.stdout.isEmpty)
+    }
+
     @Test func everyCommandThatOffersJSONIsCovered() {
         let declared = Set(JSONContract.cases.map(\.label))
         var uncovered: [String] = []
