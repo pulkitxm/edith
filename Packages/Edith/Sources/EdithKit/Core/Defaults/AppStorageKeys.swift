@@ -98,6 +98,11 @@ public enum AppStorageKeys {
         public static let tab = "machinesTab"
     }
 
+    public enum Quinjet {
+        public static let terminal = "quinjetTerminal"
+        public static let theme = "quinjetTheme"
+    }
+
     public enum MenuBar {
         public static let claudeWindows = "menuBarClaudeWindows"
         public static let codexWindows = "menuBarCodexWindows"

@@ -11,6 +11,7 @@ struct QuinjetLocalProjectPicker: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
+    @Environment(\.quinjetLaunchConfiguration) private var configuration
 
     private var dark: Bool { scheme == .dark }
 
@@ -110,7 +111,7 @@ struct QuinjetLocalProjectPicker: View {
                                 model.open(
                                     worktree, projectName: project.name,
                                     available: project.availableWorktrees, in: tab,
-                                    launchEnabled: launchEnabled)
+                                    launchEnabled: launchEnabled, configuration: configuration)
                             })
                     }
                 }
@@ -126,7 +127,10 @@ struct QuinjetLocalProjectPicker: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Open in Quinjet"
         guard panel.runModal() == .OK, let path = panel.url?.path else { return }
-        Task { await model.openFolder(path, in: tab, launchEnabled: launchEnabled) }
+        Task {
+            await model.openFolder(
+                path, in: tab, launchEnabled: launchEnabled, configuration: configuration)
+        }
     }
 }
 

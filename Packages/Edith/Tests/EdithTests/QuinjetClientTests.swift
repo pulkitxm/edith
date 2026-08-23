@@ -158,6 +158,62 @@ import Testing
 
 @MainActor
 @Suite struct QuinjetPageModelTests {
+    @Test func embeddedLaunchUsesEdithRoutingAndSelectedTheme() throws {
+        let model = QuinjetPageModel(client: client)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .tokyoNight, appearance: .light)
+
+        let arguments = model.launchArguments(
+            worktree: Self.main, remote: nil, configuration: configuration, managed: true)
+
+        #expect(
+            arguments
+                == [
+                    "--client", "edith", "--theme", "tokyo-night", "--appearance", "light",
+                    "-C", "/work/edith",
+                ])
+    }
+
+    @Test func cmuxLaunchKeepsRemoteSessionWithoutEdithRouting() throws {
+        let model = QuinjetPageModel(client: client)
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith socket")
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .cmux, theme: .gruvbox, appearance: .dark)
+
+        let arguments = model.launchArguments(
+            worktree: Self.main, remote: remote, configuration: configuration, managed: false)
+
+        #expect(
+            arguments
+                == [
+                    "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith socket",
+                    "--theme", "gruvbox", "--appearance", "dark", "-C", "/work/edith",
+                ])
+        #expect(!arguments.contains("--client"))
+    }
+
+    @Test func cmuxCommandQuotesEveryArgument() {
+        let command = QuinjetCMUXLauncher.shellCommand(
+            executable: "/Applications/Quinjet Tools/quinjet",
+            arguments: ["-C", "/work/it's ready"])
+
+        #expect(
+            command
+                == "'/Applications/Quinjet Tools/quinjet' '-C' '/work/it'\\''s ready'")
+    }
+
+    @Test func themeCatalogMatchesQuinjetCapabilities() {
+        #expect(
+            QuinjetTheme.allCases.map(\.rawValue)
+                == [
+                    "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord",
+                    "one", "rose-pine", "solarized", "tokyo-night", "ayu", "monokai",
+                    "github",
+                ])
+    }
+
     @Test func newTabPayloadCreatesAndSelectsPickerTab() throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)

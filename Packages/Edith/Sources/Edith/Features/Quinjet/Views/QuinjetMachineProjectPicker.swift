@@ -89,6 +89,7 @@ private struct QuinjetRemoteProjectPicker: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
+    @Environment(\.quinjetLaunchConfiguration) private var configuration
 
     private var dark: Bool { scheme == .dark }
 
@@ -248,7 +249,7 @@ private struct QuinjetRemoteProjectPicker: View {
                                 model.open(
                                     worktree, projectName: project.name,
                                     available: project.availableWorktrees, remote: remote, in: tab,
-                                    launchEnabled: launchEnabled)
+                                    launchEnabled: launchEnabled, configuration: configuration)
                             })
                     }
                 }
@@ -390,7 +391,8 @@ private struct QuinjetRemoteProjectPicker: View {
         }
         Task {
             await model.openFolder(
-                path, remote: remote, in: tab, launchEnabled: launchEnabled)
+                path, remote: remote, in: tab, launchEnabled: launchEnabled,
+                configuration: configuration)
         }
     }
 

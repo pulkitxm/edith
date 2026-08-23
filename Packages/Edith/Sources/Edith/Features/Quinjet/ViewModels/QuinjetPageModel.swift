@@ -16,6 +16,8 @@ final class QuinjetTab: Identifiable {
     var errorMessage: String?
     var machineID = MachinesModel.localMachineID
     var folderPicker: QuinjetFolderPickerModel?
+    var launchConfiguration = QuinjetLaunchConfiguration.default
+    var externalLaunchMessage: String?
 
     var title: String {
         guard let projectName else { return "New review" }
@@ -124,18 +126,38 @@ final class QuinjetPageModel {
 
     func open(
         _ worktree: QuinjetWorktree, projectName: String, available: [QuinjetWorktree],
-        remote: QuinjetRemote? = nil, in tab: QuinjetTab, launchEnabled: Bool
+        remote: QuinjetRemote? = nil, in tab: QuinjetTab, launchEnabled: Bool,
+        configuration: QuinjetLaunchConfiguration = .default
     ) {
         tab.projectName = projectName
         tab.worktree = worktree
         tab.remote = remote
         tab.worktrees = available.filter(\.canOpen)
+        tab.launchConfiguration = configuration
         tab.showsWorktrees = false
         tab.errorMessage = nil
+        tab.externalLaunchMessage = nil
         selected = tab.id
         guard launchEnabled else { return }
         guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
             tab.errorMessage = QuinjetClientError.notInstalled.localizedDescription
+            return
+        }
+        if configuration.terminal == .cmux {
+            tab.holder.stop()
+            do {
+                try QuinjetCMUXLauncher.launch(
+                    quinjet: executable,
+                    arguments: launchArguments(
+                        worktree: worktree, remote: remote, configuration: configuration,
+                        managed: false),
+                    title: tab.title,
+                    currentDirectory: remote == nil
+                        ? worktree.path : FileManager.default.homeDirectoryForCurrentUser.path)
+                tab.externalLaunchMessage = "Opened in cmux"
+            } catch {
+                tab.errorMessage = error.localizedDescription
+            }
             return
         }
         tab.holder.registerOSCHandler(code: QuinjetHostAction.oscCode) {
@@ -144,13 +166,8 @@ final class QuinjetPageModel {
             self.handleHostPayload(payload, from: tab)
         }
         let environment = terminalEnvironment()
-        var arguments = ["--client", "edith"]
-        if let remote {
-            arguments += [
-                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
-            ]
-        }
-        arguments += ["-C", worktree.path]
+        let arguments = launchArguments(
+            worktree: worktree, remote: remote, configuration: configuration, managed: true)
         let currentDirectory = remote == nil ? worktree.path : nil
         if tab.holder.started {
             tab.holder.restart(
@@ -165,7 +182,7 @@ final class QuinjetPageModel {
 
     func openFolder(
         _ path: String, remote: QuinjetRemote? = nil, in tab: QuinjetTab,
-        launchEnabled: Bool
+        launchEnabled: Bool, configuration: QuinjetLaunchConfiguration = .default
     ) async {
         if remote == nil {
             projectError = nil
@@ -183,7 +200,7 @@ final class QuinjetPageModel {
             let name = URL(fileURLWithPath: path).lastPathComponent
             open(
                 worktree, projectName: name, available: worktrees, remote: remote, in: tab,
-                launchEnabled: launchEnabled)
+                launchEnabled: launchEnabled, configuration: configuration)
             if remote == nil { await refreshProjects() }
         } catch {
             if remote == nil {
@@ -227,5 +244,24 @@ final class QuinjetPageModel {
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
         return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+    }
+
+    func launchArguments(
+        worktree: QuinjetWorktree, remote: QuinjetRemote?,
+        configuration: QuinjetLaunchConfiguration, managed: Bool
+    ) -> [String] {
+        var arguments: [String] = []
+        if managed { arguments += ["--client", "edith"] }
+        if let remote {
+            arguments += [
+                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
+            ]
+        }
+        arguments += [
+            "--theme", configuration.theme.rawValue,
+            "--appearance", configuration.appearance.rawValue,
+            "-C", worktree.path,
+        ]
+        return arguments
     }
 }

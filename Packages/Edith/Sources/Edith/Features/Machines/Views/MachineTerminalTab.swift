@@ -63,14 +63,12 @@ final class TerminalSessionHolder {
         started = false
     }
 
-    func applyTheme(dark: Bool) {
+    func applyTheme(_ palette: TerminalPalette) {
         terminalView.configureNativeColors()
-        terminalView.nativeBackgroundColor =
-            dark
-            ? NSColor(calibratedRed: 0.09, green: 0.08, blue: 0.07, alpha: 1) : .white
-        terminalView.nativeForegroundColor =
-            dark
-            ? NSColor(calibratedRed: 0.92, green: 0.9, blue: 0.86, alpha: 1) : .black
+        terminalView.nativeBackgroundColor = palette.background
+        terminalView.nativeForegroundColor = palette.foreground
+        terminalView.caretColor = palette.caret
+        terminalView.terminal.ansi256PaletteStrategy = .base16LabHarmonious
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     }
 
@@ -100,17 +98,17 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
 
 struct TerminalPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
-    let dark: Bool
+    let palette: TerminalPalette
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
-        holder.applyTheme(dark: dark)
+        holder.applyTheme(palette)
         let view = holder.terminalView
         DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
         return view
     }
 
     func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
-        holder.applyTheme(dark: dark)
+        holder.applyTheme(palette)
     }
 }
 
@@ -134,7 +132,7 @@ struct MachineTerminalTab: View {
     var body: some View {
         VStack(spacing: 0) {
             statusBar
-            TerminalPane(holder: holder, dark: dark)
+            TerminalPane(holder: holder, palette: .edith(dark: dark))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(dark ? Color.black.opacity(0.9) : Color.white)
@@ -214,7 +212,7 @@ struct ContainerTerminalSheet: View {
             }
             .padding(UIScale.pt(14))
             Divider()
-            TerminalPane(holder: holder, dark: dark)
+            TerminalPane(holder: holder, palette: .edith(dark: dark))
         }
         .frame(width: UIScale.pt(760), height: UIScale.pt(520))
         .onAppear(perform: start)
