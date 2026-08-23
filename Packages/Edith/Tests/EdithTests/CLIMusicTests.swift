@@ -85,16 +85,15 @@ import Testing
                 Self.snapshot(.apple, running: false),
             ])
             Issue.record("resolution should have failed")
-        } catch let failure as CLIFailure {
-            #expect(failure.kind == .unavailable)
-            #expect(failure.message.contains("no music player"))
+        } catch let failure as MusicTransportError {
+            #expect(failure == .noPlayer)
         } catch {
             Issue.record("unexpected error \(error)")
         }
     }
 
     @Test func anEmptyObservationIsUnavailable() {
-        #expect(throws: CLIFailure.self) { try MusicTargeting.resolve([]) }
+        #expect(throws: MusicTransportError.self) { try MusicTargeting.resolve([]) }
     }
 
     @Test func forcingAPlayerOverridesEvenALoudlyPlayingOne() throws {
@@ -111,20 +110,19 @@ import Testing
             _ = try MusicTargeting.resolve(
                 [Self.snapshot(.apple, running: false)], forced: .apple)
             Issue.record("resolution should have failed")
-        } catch let failure as CLIFailure {
-            #expect(failure.kind == .unavailable)
-            #expect(failure.message.contains("Apple Music is not running"))
+        } catch let failure as MusicTransportError {
+            #expect(failure == .playerNotRunning(.apple))
         } catch {
             Issue.record("unexpected error \(error)")
         }
     }
 
-    @Test func forcingAPlayerThatWasNeverObservedIsNotFound() {
+    @Test func forcingAPlayerThatWasNeverObservedIsNotRunning() {
         do {
             _ = try MusicTargeting.resolve([Self.snapshot(.spotify)], forced: .apple)
             Issue.record("resolution should have failed")
-        } catch let failure as CLIFailure {
-            #expect(failure.kind == .notFound)
+        } catch let failure as MusicTransportError {
+            #expect(failure == .playerNotRunning(.apple))
         } catch {
             Issue.record("unexpected error \(error)")
         }
@@ -265,7 +263,7 @@ import Testing
 @Suite struct MusicSessionTests {
     @Test func theBuiltInStopBothPausesAndRewinds() {
         #expect(
-            MusicSession.builtinCommands(.stop) == [
+            MusicTransportExecution.builtinCommands(.stop) == [
                 BuiltinCommand("pause"), BuiltinCommand("seek", value: 0),
             ])
     }
@@ -278,22 +276,29 @@ import Testing
             .play, .pause, .stop, .toggle, .next, .previous, .volume(0.5),
         ]
         for action in actions {
-            for command in MusicSession.builtinCommands(action) {
+            for command in MusicTransportExecution.builtinCommands(action) {
                 #expect(known.contains(command.action), "\(command.action) is not handled")
             }
         }
     }
 
     @Test func playAndPauseAreNeverTheSameCommandAsToggle() {
-        #expect(MusicSession.builtinCommands(.play) != MusicSession.builtinCommands(.toggle))
-        #expect(MusicSession.builtinCommands(.pause) != MusicSession.builtinCommands(.toggle))
-        #expect(MusicSession.builtinCommands(.pause) != MusicSession.builtinCommands(.play))
+        #expect(
+            MusicTransportExecution.builtinCommands(.play)
+                != MusicTransportExecution.builtinCommands(.toggle))
+        #expect(
+            MusicTransportExecution.builtinCommands(.pause)
+                != MusicTransportExecution.builtinCommands(.toggle))
+        #expect(
+            MusicTransportExecution.builtinCommands(.pause)
+                != MusicTransportExecution.builtinCommands(.play))
     }
 
     @Test func volumeTravelsAsAFraction() {
-        #expect(MusicSession.builtinCommands(.volume(0.25)).first?.value == 0.25)
+        #expect(MusicTransportExecution.builtinCommands(.volume(0.25)).first?.value == 0.25)
         #expect(
-            MusicSession.builtinCommands(.volume(0.25)).first?.userInfo["value"] as? Double
+            MusicTransportExecution.builtinCommands(.volume(0.25)).first?.userInfo["value"]
+                as? Double
                 == 0.25)
     }
 
