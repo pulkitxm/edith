@@ -1,3 +1,4 @@
+import AppKit
 import EdithCore
 import Foundation
 
@@ -121,6 +122,44 @@ public struct AppRuntimeCenter {
     ) rethrows -> Result {
         willPerform(operation)
         return try action()
+    }
+
+    public func perform<Result>(
+        _ operation: AppRuntimeOperation, action: () async throws -> Result
+    ) async rethrows -> Result {
+        willPerform(operation)
+        return try await action()
+    }
+
+    public func relaunchCurrentApplication(
+        at bundleURL: URL, launch: (URL) -> Void, terminate: () -> Void
+    ) {
+        perform(.relaunch) {
+            launch(bundleURL)
+            terminate()
+        }
+    }
+
+    @MainActor
+    public func relaunchCurrentApplication(at bundleURL: URL = Bundle.main.bundleURL) {
+        relaunchCurrentApplication(
+            at: bundleURL,
+            launch: { url in
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.createsNewApplicationInstance = true
+                NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            },
+            terminate: { NSApp.terminate(nil) })
+    }
+
+    public func quitCompletely(terminate: () -> Void) {
+        request(.quit)
+        terminate()
+    }
+
+    @MainActor
+    public func quitCompletely() {
+        quitCompletely(terminate: { NSApp.terminate(nil) })
     }
 
     public func updateHistory(limit: Int? = nil, url: URL = UpdateCheckLog.url)

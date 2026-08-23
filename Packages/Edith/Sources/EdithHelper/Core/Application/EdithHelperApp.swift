@@ -606,8 +606,7 @@ struct RootView: View {
                 Menu {
                     Button("Close Panel") { dismissPanel() }
                     Button("Quit Edith Completely", role: .destructive) {
-                        AppRuntimeCenter().request(.quit)
-                        NSApp.terminate(nil)
+                        AppRuntimeCenter().quitCompletely()
                     }
                 } label: {
                     Image(systemName: "power")

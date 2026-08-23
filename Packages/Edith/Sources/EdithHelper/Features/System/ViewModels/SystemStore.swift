@@ -88,11 +88,7 @@ final class SystemStore: FeatureModule {
     }
 
     func relaunch() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        task.arguments = ["-n", Bundle.main.bundlePath]
-        try? task.run()
-        NSApp.terminate(nil)
+        AppRuntimeCenter().relaunchCurrentApplication()
     }
 
     func requestInputMonitoring() {

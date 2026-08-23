@@ -57,6 +57,101 @@ import Testing
         #expect(capture.value == "music")
     }
 
+    @Test func relaunchStartsTheBundleBeforeTerminatingThroughTheTypedOperation() {
+        final class Capture {
+            var events: [String] = []
+            var operations: [AppRuntimeOperation] = []
+        }
+        let capture = Capture()
+        let bundle = URL(fileURLWithPath: "/Applications/EdithHelper.app")
+        let center = AppRuntimeCenter(willPerform: { capture.operations.append($0) })
+
+        center.relaunchCurrentApplication(
+            at: bundle,
+            launch: { capture.events.append("launch:\($0.path)") },
+            terminate: { capture.events.append("terminate") })
+
+        #expect(capture.operations == [.relaunch])
+        #expect(capture.events == ["launch:\(bundle.path)", "terminate"])
+    }
+
+    @Test func completeQuitRequestsTheMainAppBeforeTerminatingTheHelper() {
+        final class Capture {
+            var events: [String] = []
+            var operations: [AppRuntimeOperation] = []
+        }
+        let capture = Capture()
+        let center = AppRuntimeCenter(
+            post: { name, _ in capture.events.append("post:\(name.rawValue)") },
+            willPerform: {
+                capture.operations.append($0)
+                capture.events.append("operation:\($0.rawValue)")
+            })
+
+        center.quitCompletely(terminate: { capture.events.append("terminate") })
+
+        #expect(capture.operations == [.quit])
+        #expect(
+            capture.events == [
+                "operation:quit", "post:\(IPC.Name.quitMainApp.rawValue)", "terminate",
+            ])
+    }
+
+    @Test func asynchronousExecutionRecordsTheTypedOperationBeforeWork() async {
+        final class Capture {
+            var events: [String] = []
+        }
+        let capture = Capture()
+        let center = AppRuntimeCenter(willPerform: {
+            capture.events.append("operation:\($0.rawValue)")
+        })
+
+        let value = await center.perform(.relaunch) {
+            await Task.yield()
+            capture.events.append("work")
+            return 7
+        }
+
+        #expect(value == 7)
+        #expect(capture.events == ["operation:relaunch", "work"])
+    }
+
+    @Test func helperLifecycleSurfacesUseTheSharedCenter() throws {
+        let sources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/EdithHelper")
+        let developer = try String(
+            contentsOf: sources.appendingPathComponent(
+                "Features/System/Views/DeveloperPanel.swift"), encoding: .utf8)
+        let system = try String(
+            contentsOf: sources.appendingPathComponent(
+                "Features/System/ViewModels/SystemStore.swift"), encoding: .utf8)
+        let menu = try String(
+            contentsOf: sources.appendingPathComponent("Core/Navigation/StatusItemMenu.swift"),
+            encoding: .utf8)
+        let helper = try String(
+            contentsOf: sources.appendingPathComponent("Core/Application/EdithHelperApp.swift"),
+            encoding: .utf8)
+        let cli = try String(
+            contentsOf: sources.deletingLastPathComponent().appendingPathComponent(
+                "EdithCLI/Commands/AppCommands.swift"), encoding: .utf8)
+
+        #expect(developer.contains("AppRuntimeCenter().relaunchCurrentApplication()"))
+        #expect(system.contains("AppRuntimeCenter().relaunchCurrentApplication()"))
+        #expect(menu.contains("AppRuntimeCenter().quitCompletely()"))
+        #expect(helper.contains("AppRuntimeCenter().quitCompletely()"))
+        #expect(cli.contains("AppActions.runtime.perform(.relaunch)"))
+        #expect(!developer.contains("private func relaunch"))
+        #expect(!developer.contains("NSApp.terminate"))
+        #expect(!developer.contains("NSWorkspace.shared.openApplication"))
+        #expect(!system.contains("task.executableURL"))
+        #expect(!system.contains("NSApp.terminate"))
+        #expect(!menu.contains("NSApp.terminate"))
+        #expect(!helper.contains("NSApp.terminate"))
+    }
+
     @Test func updateHistoryReadsAndClearsThroughTheSameCenter() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let url = root.appendingPathComponent("updates.json")

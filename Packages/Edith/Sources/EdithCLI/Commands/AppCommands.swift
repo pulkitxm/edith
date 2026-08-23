@@ -292,29 +292,31 @@ struct AppRelaunchCommand: AsyncParsableCommand {
                     "Edith is not installed where ed can find it",
                     hint: "it looks in /Applications and alongside this binary")
             }
-            let progress = CLIProgress.forCommand(json: json)
-            AppActions.runtime.request(.quit)
-            progress.begin("waiting for Edith to quit")
-            let stopped = await EdithProcesses.quitAll(within: 8)
-            progress.end()
-            guard stopped else {
-                throw CLIFailure(
-                    "Edith did not quit, so it was not relaunched",
-                    hint: "quit it from the menu bar, then run `ed app relaunch --yes` again")
-            }
-            progress.begin("starting Edith")
-            do {
-                try await EdithProcesses.launch(bundle)
-            } catch {
+            try await AppActions.runtime.perform(.relaunch) {
+                let progress = CLIProgress.forCommand(json: json)
+                AppActions.runtime.request(.quit)
+                progress.begin("waiting for Edith to quit")
+                let stopped = await EdithProcesses.quitAll(within: 8)
                 progress.end()
-                throw CLIFailure(
-                    "could not start Edith: \(error.localizedDescription)",
-                    hint: "open \(bundle.path) from Finder")
+                guard stopped else {
+                    throw CLIFailure(
+                        "Edith did not quit, so it was not relaunched",
+                        hint: "quit it from the menu bar, then run `ed app relaunch --yes` again")
+                }
+                progress.begin("starting Edith")
+                do {
+                    try await EdithProcesses.launch(bundle)
+                } catch {
+                    progress.end()
+                    throw CLIFailure(
+                        "could not start Edith: \(error.localizedDescription)",
+                        hint: "open \(bundle.path) from Finder")
+                }
+                progress.end()
+                plan.finish(
+                    changed: true, plain: "relaunched Edith",
+                    fields: ["relaunched": .bool(true), "path": .string(bundle.path)])
             }
-            progress.end()
-            plan.finish(
-                changed: true, plain: "relaunched Edith",
-                fields: ["relaunched": .bool(true), "path": .string(bundle.path)])
         }
     }
 }
