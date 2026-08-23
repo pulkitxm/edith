@@ -94,14 +94,15 @@ error. `--update` draws no such distinction: with no yt-dlp to update it exits
 4 in both modes, `--json` included. An update that runs and finds nothing newer
 is not that case; it exits 0 and reports `"changed": false`.
 
-Neither form needs Edith running: `ed` runs the binary itself. The version
-string is whatever `yt-dlp --version` writes, on stdout or stderr, trimmed,
-with no check on its exit status, so a copy that is present but broken reports
-its complaint where a version would be. `--update` prints yt-dlp's own output
-verbatim, and falls back to `yt-dlp is <version>` when the update was silent.
-There is no `--yes` guard on `--update`, and a self-update run against a
-Homebrew copy will say what Homebrew's yt-dlp says about being managed
-elsewhere.
+Neither form needs Edith running. The shared Download tool operation runs the
+same binary for the app and CLI, accepts a version only after a successful
+`--version`, and limits probes to five seconds. A broken copy reports as not
+installed instead of treating an error message as its version. Updates have a
+two-minute bound, print yt-dlp's own output, and fall back to `yt-dlp is
+<version>` when the update was silent. A failed update is an error rather than
+a successful unchanged result. There is no `--yes` guard on `--update`, and a
+self-update run against a Homebrew copy will say what Homebrew's yt-dlp says
+about being managed elsewhere.
 
 ## Where to go next
 

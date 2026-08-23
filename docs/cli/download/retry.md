@@ -32,9 +32,17 @@ with nothing to retry is not an error: it reports 0 and exits 0.
 
 ```json
 {
-  "retried": 2
+  "record": {
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
+    "index": 2,
+    "state": "queued"
+  },
+  "retried": 1
 }
 ```
+
+The `record` field is present for a numbered retry. `--all` returns only the
+count because it can target several records.
 
 Examples:
 
@@ -52,10 +60,9 @@ error: download 1 is done, so there is nothing to retry
 Behaviour: `retry` rewrites `downloads.json` when something changed, and posts
 `downloadQueueChanged` either way, so a running Edith picks the work up at once
 rather than waiting for its next look at the file. Retrying
-by number matches on the entry's URL rather than on its position, so if the
-same link failed twice, `ed download retry 3` re-queues both copies and
-`retried` says 2. The "Edith is not running" note applies here too, on the
-human path only.
+by number resolves the selected persisted record ID, so identical URLs remain
+independent. The "Edith is not running" note applies here too, on the human
+path only.
 
 ## Where to go next
 

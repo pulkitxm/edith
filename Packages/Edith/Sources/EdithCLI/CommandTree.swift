@@ -429,6 +429,7 @@ public enum CommandTree {
                     CommandNode(
                         "ls", "List the queue.", aliases: ["list"],
                         options: ["--json", "--help", "--active", "--limit"]),
+                    CommandNode("status", "Summarize download states.", options: common),
                     CommandNode(
                         "add", "Queue one or more URLs.",
                         options: ["--json", "--help", "--kind", "--prefix"],
@@ -437,13 +438,22 @@ public enum CommandTree {
                         "retry", "Queue a failed download again.",
                         options: ["--json", "--help", "--all"], arguments: [.historyIndex]),
                     CommandNode(
-                        "rm", "Take one entry out of the queue.", options: common,
-                        arguments: [.historyIndex]),
+                        "rm", "Take one entry out of the queue.",
+                        options: common + ["--yes"],
+                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Forget what has finished.",
-                        options: ["--json", "--help", "--everything"]),
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
-                        "cancel", "Stop downloading and empty the queue.", options: common),
+                        "cancel", "Stop active downloads and keep their history.", options: common,
+                        arguments: [.historyIndex]),
+                    CommandNode(
+                        "open", "Open completed download files.", options: common,
+                        arguments: [.historyIndex]),
+                    CommandNode(
+                        "reveal", "Reveal completed download files.", options: common,
+                        arguments: [.historyIndex]),
                     CommandNode(
                         "tool", "Report or update yt-dlp.",
                         options: ["--json", "--help", "--update"]),
