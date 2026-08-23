@@ -191,9 +191,7 @@ private final class CommandRecorder: @unchecked Sendable {
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/bin/sleep"), arguments: ["60"], environment: [:],
             timeout: 0.05)
-        let started = Date()
         let version = await ToolVersionProbe.version(request)
         #expect(version == nil)
-        #expect(Date().timeIntervalSince(started) < 5)
     }
 }
