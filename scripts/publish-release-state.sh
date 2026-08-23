@@ -68,7 +68,24 @@ case "$MODE" in
     git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
     git commit -m "Release ${RELEASE_TAG}"
     git tag "$RELEASE_TAG"
-    git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
+    if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
+      exit 0
+    fi
+
+    git fetch origin main
+    REMOTE_TAG_SHA="$(
+      git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" \
+        | awk 'END { print $1 }'
+    )"
+    if [[ -n "$REMOTE_TAG_SHA" ]]; then
+      [[ "$REMOTE_TAG_SHA" == "$(git rev-parse HEAD)" ]] \
+        || { echo "release blocked: $RELEASE_TAG was published from another commit" >&2; exit 1; }
+      exit 0
+    fi
+    [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] \
+      || release_superseded
+    echo "release blocked: release push failed" >&2
+    exit 1
     ;;
   rebuild)
     git switch --detach origin/main
