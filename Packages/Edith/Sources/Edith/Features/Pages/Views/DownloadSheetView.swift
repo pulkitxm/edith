@@ -571,6 +571,17 @@ struct DownloadSheet: View {
             Spacer(minLength: 4)
 
             switch item.status {
+            case .queued, .resolving, .downloading:
+                Button {
+                    downloader.cancel(item)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.red)
+                .pointerCursor()
+                .help("Cancel this download")
             case .error, .interrupted:
                 Button("Retry") {
                     downloader.retry(item)
@@ -580,9 +591,26 @@ struct DownloadSheet: View {
                 .foregroundStyle(theme)
                 .pointerCursor()
                 .disabled(downloader.isRunning)
-            default:
-                EmptyView()
+            case .done:
+                HStack(spacing: UIScale.pt(4)) {
+                    Button {
+                        downloader.openResult(item)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app")
+                    }
+                    .help("Open downloaded file")
+                    Button {
+                        downloader.revealResult(item)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .help("Reveal downloaded file")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: UIScale.pt(11)))
+                .pointerCursor()
             }
+
         }
         .padding(.vertical, UIScale.pt(8))
         .padding(.horizontal, UIScale.pt(10))
@@ -600,6 +628,7 @@ struct DownloadSheet: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if case .done = item.status {
+                downloader.openResult(item)
             } else {
                 logItem = item
             }
@@ -669,9 +698,38 @@ struct DownloadSheet: View {
                 .foregroundStyle(theme)
                 .pointerCursor()
                 .disabled(downloader.isRunning)
+            case .done:
+                HStack(spacing: UIScale.pt(4)) {
+                    Button {
+                        downloader.openResult(item)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app")
+                    }
+                    .help("Open downloaded file")
+                    Button {
+                        downloader.revealResult(item)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .help("Reveal downloaded file")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: UIScale.pt(11)))
+                .pointerCursor()
             default:
                 EmptyView()
             }
+
+            Button {
+                downloader.remove(item)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(HoverButtonStyle())
+            .font(.system(size: UIScale.pt(11)))
+            .foregroundStyle(.red)
+            .pointerCursor()
+            .help("Remove from download history")
         }
         .padding(.vertical, UIScale.pt(5))
         .padding(.horizontal, UIScale.pt(8))
