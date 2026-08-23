@@ -162,5 +162,5 @@ failure mode between "the id exists" and "the boolean is written".
 - [`ed permissions`](../permissions/README.md) for granting what an extension needs
 - [`ed config`](../config/README.md) for the settings an extension exposes once it is on
 - [`ed tools`](../tools/README.md) for the command line tools `requiredTools` names
-- [Quinjet setup](../../quinjet.md) for terminal, theme, install and verification details
+- [Tool setup](../tools/README.md) for Quinjet installation and verification details
 - [All `ed` commands](../README.md)
