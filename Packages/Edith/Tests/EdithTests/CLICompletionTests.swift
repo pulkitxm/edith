@@ -142,6 +142,15 @@ import Testing
             Self.plan(["ed", "tools", "install", ""], 3).candidates.contains("quinjet"))
     }
 
+    @Test func runningApplicationsCompleteForQuit() {
+        let result = CompletionEngine.plan(
+            CompletionRequest(words: ["ed", "apps", "quit", "Sa"], index: 3),
+            machines: [], configKeys: [], extensionIDs: [],
+            runningApps: ["Safari", "Music"])
+
+        #expect(result.candidates == ["Safari"])
+    }
+
     @Test func typedOptionsWorkAfterOtherOptionsAndWithEqualsSyntax() {
         let sources = Self.plan(
             ["ed", "usage", "summary", "--range", "week", "--source", ""], 6,

@@ -432,7 +432,7 @@ enum UIParity {
         UICapability(
             "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
 
-        UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
+        UICapability("System page", "quit one app", ["apps", "quit", "Safari", "--yes"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
         UICapability("Menu bar", "open the panel", ["app", "open"]),

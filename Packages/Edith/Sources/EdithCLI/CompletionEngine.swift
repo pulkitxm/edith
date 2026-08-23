@@ -47,7 +47,7 @@ public enum CompletionEngine {
         _ request: CompletionRequest, machines: [String], configKeys: [String],
         extensionIDs: [String], shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
-        usageSources: [String] = []
+        usageSources: [String] = [], runningApps: [String] = []
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
         let prefix = request.current
@@ -87,7 +87,8 @@ public enum CompletionEngine {
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                         previous: positionals.last, shelfItems: shelfItems,
-                        musicTracks: musicTracks, calendarEvents: calendarEvents), prefix))
+                        musicTracks: musicTracks, calendarEvents: calendarEvents,
+                        runningApps: runningApps), prefix))
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
@@ -98,7 +99,8 @@ public enum CompletionEngine {
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                         previous: positionals.last, shelfItems: shelfItems,
-                        musicTracks: musicTracks, calendarEvents: calendarEvents), valuePrefix)
+                        musicTracks: musicTracks, calendarEvents: calendarEvents,
+                        runningApps: runningApps), valuePrefix)
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
@@ -118,7 +120,7 @@ public enum CompletionEngine {
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                 previous: positionals.last, shelfItems: shelfItems, musicTracks: musicTracks,
-                calendarEvents: calendarEvents)
+                calendarEvents: calendarEvents, runningApps: runningApps)
             candidates += values
             if kind == .localPath { wantsFiles = true }
         }
@@ -130,7 +132,7 @@ public enum CompletionEngine {
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
         previous: String?, shelfItems: [String] = [], musicTracks: [String] = [],
-        calendarEvents: [String] = []
+        calendarEvents: [String] = [], runningApps: [String] = []
     ) -> [String] {
         switch kind {
         case .machine: return machines
@@ -153,6 +155,7 @@ public enum CompletionEngine {
         case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
         case .attentionEntity: return []
         case .appAction: return AppActions.all.map(\.name)
+        case .runningApp: return runningApps
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)

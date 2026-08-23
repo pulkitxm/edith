@@ -3,6 +3,7 @@ import Foundation
 public enum ArgumentKind: Equatable, Sendable {
     case machine
     case appAction
+    case runningApp
     case cleanerCategory
     case colorFormat
     case pruneTarget
@@ -389,7 +390,7 @@ public enum CommandTree {
                     CommandNode(
                         "quit", "Quit one app, or everything else.",
                         options: ["--json", "--help", "--all", "--force", "--yes"],
-                        arguments: [.free], destructivePolicy: .previewThenYes),
+                        arguments: [.runningApp], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "download", "The download queue Edith feeds to yt-dlp.",

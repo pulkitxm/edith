@@ -368,7 +368,8 @@ struct CompleteCommand: AsyncParsableCommand {
             extensionIDs: ExtensionRegistry.entries.map(\.id), shelfItems: shelfItems,
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
-            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [])
+            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [],
+            runningApps: RunningAppOperationCenter().completionValues())
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)

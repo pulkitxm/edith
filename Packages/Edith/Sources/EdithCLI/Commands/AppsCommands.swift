@@ -1,4 +1,3 @@
-import AppKit
 import ArgumentParser
 import EdithKit
 import Foundation
@@ -16,43 +15,67 @@ struct AppsCommand: AsyncParsableCommand {
         defaultSubcommand: AppsListCommand.self)
 }
 
-enum AppsBridge {
-    static func running() -> [NSRunningApplication] {
-        NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular }
-            .sorted {
-                ($0.localizedName ?? "").localizedCaseInsensitiveCompare($1.localizedName ?? "")
-                    == .orderedAscending
-            }
+enum AppsCLI {
+    static var operations: RunningAppOperationCenter {
+        RunningAppOperationCenter(
+            snapshot: CLIEnvironment.runningApps,
+            perform: { targets, force in
+                AppBridge.post(
+                    IPC.Name.requestQuitApps,
+                    userInfo: ["pids": targets.map { Int($0.pid) }, "force": force])
+                return targets.count
+            })
     }
 
-    static func resolve(_ query: String) throws -> NSRunningApplication {
-        let all = running()
-        let needle = query.lowercased()
-        if let exact = all.first(where: { ($0.localizedName ?? "").lowercased() == needle }) {
-            return exact
-        }
-        if let byBundle = all.first(where: { ($0.bundleIdentifier ?? "").lowercased() == needle }) {
-            return byBundle
-        }
-        let prefixed = all.filter { ($0.localizedName ?? "").lowercased().hasPrefix(needle) }
-        if prefixed.count == 1, let only = prefixed.first { return only }
-        if prefixed.count > 1 {
-            throw CLIFailure.notFound(
-                "\(query) matches more than one app",
-                hint: prefixed.compactMap(\.localizedName).joined(separator: ", "))
-        }
-        throw CLIFailure.notFound(
-            "no running app called \(query)", hint: "run `ed apps ls` to see them")
-    }
-
-    static func json(_ app: NSRunningApplication) -> JSONValue {
+    static func json(_ app: RunningAppSnapshot) -> JSONValue {
         .object([
-            "name": .string(app.localizedName ?? ""),
-            "bundleID": .optional(app.bundleIdentifier),
-            "pid": .int(Int(app.processIdentifier)),
-            "active": .bool(app.isActive),
+            "name": .string(app.name),
+            "bundleID": .optional(app.bundleID),
+            "pid": .int(Int(app.pid)),
+            "active": .bool(app.active),
         ])
+    }
+
+    static func plan(
+        _ selection: RunningAppSelection, force: Bool
+    ) throws -> RunningAppQuitPlan {
+        do {
+            return try operations.plan(selection, force: force)
+        } catch let error as RunningAppResolutionError {
+            switch error {
+            case let .notFound(query):
+                throw CLIFailure.notFound(
+                    "no running app called \(query)", hint: "run `ed apps ls` to see them")
+            case let .ambiguous(query, names):
+                throw CLIFailure.notFound(
+                    "\(query) matches more than one app", hint: names.joined(separator: ", "))
+            case let .protected(name):
+                throw CLIFailure("\(name) is protected and cannot be quit")
+            }
+        }
+    }
+
+    static func render(_ outcome: RunningAppQuitOutcome, json: Bool) {
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "operation": .string(RunningAppOperation.quit.descriptor.id.rawValue),
+                    "force": .bool(outcome.plan.force),
+                    "applied": .bool(outcome.applied),
+                    "changed": .int(outcome.changed),
+                    "targets": .array(outcome.plan.targets.map(Self.json)),
+                ]))
+            return
+        }
+        let targets = outcome.plan.targets
+        let names = targets.map(\.name).joined(separator: ", ")
+        if !outcome.applied {
+            let label = targets.count == 1 ? names : "\(targets.count) apps: \(names)"
+            CLIOut.out("would quit \(label); pass --yes to apply")
+            return
+        }
+        let label = targets.count == 1 ? names : "\(targets.count) apps: \(names)"
+        CLIOut.out("asked Edith to quit \(label)")
     }
 }
 
@@ -65,9 +88,9 @@ struct AppsListCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let apps = AppsBridge.running()
+            let apps = AppsCLI.operations.list()
             guard !json else {
-                CLIOut.json(.array(apps.map(AppsBridge.json)))
+                CLIOut.json(.array(apps.map(AppsCLI.json)))
                 return
             }
             CLIOut.out(
@@ -75,8 +98,7 @@ struct AppsListCommand: AsyncParsableCommand {
                     headers: ["NAME", "PID", "BUNDLE"],
                     rows: apps.map {
                         [
-                            $0.localizedName ?? "", String($0.processIdentifier),
-                            $0.bundleIdentifier ?? "",
+                            $0.name, String($0.pid), $0.bundleID ?? "",
                         ]
                     }))
         }
@@ -97,7 +119,7 @@ struct AppsQuitCommand: AsyncParsableCommand {
     @Flag(help: "Force it down rather than asking politely.")
     var force = false
 
-    @Flag(help: "Actually quit. Required with --all.")
+    @Flag(help: "Actually quit. Without this, print the exact plan.")
     var yes = false
 
     @Argument(help: "App name or bundle id.")
@@ -111,41 +133,14 @@ struct AppsQuitCommand: AsyncParsableCommand {
             guard !(all && app != nil) else {
                 throw CLIFailure("--all quits everything, so it takes no app name")
             }
+            let selection: RunningAppSelection = all ? .all : .query(app ?? "")
+            let plan = try AppsCLI.plan(selection, force: force)
+            guard yes else {
+                AppsCLI.render(AppsCLI.operations.apply(plan, confirmed: false), json: json)
+                return
+            }
             try AppBridge.requireHelper("quitting apps")
-            if all {
-                let targets = AppsBridge.running().filter {
-                    $0.bundleIdentifier != "com.apple.finder"
-                        && $0.bundleIdentifier != AppBridge.mainBundleID
-                        && $0.bundleIdentifier != AppBridge.helperBundleID
-                }
-                guard yes else {
-                    guard !json else {
-                        CLIOut.json(
-                            .object(["apps": .int(targets.count), "quit": .bool(false)]))
-                        return
-                    }
-                    CLIOut.out("would quit \(targets.count) app(s)")
-                    CLIOut.note("nothing was quit; pass --yes to go ahead")
-                    return
-                }
-                AppBridge.post(
-                    IPC.Name.requestQuitApps, userInfo: ["all": true, "force": force])
-                guard !json else {
-                    CLIOut.json(.object(["apps": .int(targets.count), "quit": .bool(true)]))
-                    return
-                }
-                CLIOut.out("asked Edith to quit \(targets.count) app(s)")
-                return
-            }
-            let target = try AppsBridge.resolve(app ?? "")
-            AppBridge.post(
-                IPC.Name.requestQuitApps,
-                userInfo: ["pid": Int(target.processIdentifier), "force": force])
-            guard !json else {
-                CLIOut.json(AppsBridge.json(target))
-                return
-            }
-            CLIOut.out("asked Edith to quit \(target.localizedName ?? app ?? "")")
+            AppsCLI.render(AppsCLI.operations.apply(plan, confirmed: true), json: json)
         }
     }
 }
