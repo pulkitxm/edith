@@ -372,9 +372,39 @@ struct ColorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "color",
         abstract: "The colours picked with Edith's colour picker.",
-        subcommands: [ColorPickCommand.self, ColorListCommand.self, ColorClearCommand.self],
+        subcommands: [
+            ColorPickCommand.self, ColorListCommand.self, ColorCopyCommand.self,
+            ColorClearCommand.self,
+        ],
         defaultSubcommand: ColorListCommand.self,
         aliases: ["colour"])
+}
+
+enum ColorBridge {
+    static func format(_ name: String) throws -> ColorCopyFormat {
+        guard let format = ColorCopyFormat(rawValue: name) else {
+            throw CLIFailure.notFound(
+                "no colour format named \(name)",
+                hint: "formats: "
+                    + ColorCopyFormat.allCases.map(\.rawValue).joined(separator: ", "))
+        }
+        return format
+    }
+
+    static func swatch(at index: Int) throws -> ColorSwatch {
+        let history = ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults)
+        guard !history.isEmpty else {
+            throw CLIFailure.unavailable(
+                "the colour history is empty",
+                hint: "run `ed color pick`, then choose a colour")
+        }
+        guard index >= 1, index <= history.count else {
+            throw CLIFailure.notFound(
+                "there is no colour \(index)",
+                hint: "the history holds \(history.count) colours, numbered from 1")
+        }
+        return history[index - 1]
+    }
 }
 
 struct ColorPickCommand: AsyncParsableCommand {
@@ -429,13 +459,7 @@ struct ColorListCommand: AsyncParsableCommand {
             let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
             var chosen: ColorCopyFormat?
             if let format {
-                guard let value = ColorCopyFormat(rawValue: format) else {
-                    throw CLIFailure.notFound(
-                        "no colour format named \(format)",
-                        hint: "formats: "
-                            + ColorCopyFormat.allCases.map(\.rawValue).joined(separator: ", "))
-                }
-                chosen = value
+                chosen = try ColorBridge.format(format)
             }
             let stored = ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults)
             let swatches = limit == 0 ? stored : Array(stored.prefix(limit))
@@ -470,6 +494,60 @@ struct ColorListCommand: AsyncParsableCommand {
             }
             CLIOut.out(
                 TextTable.render(headers: ["HEX", "RGB", "PROFILE", "PICKED"], rows: rows))
+        }
+    }
+}
+
+struct ColorCopyCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy", abstract: "Copy one picked colour to the pasteboard.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Copy as hex, rgb, hsl, swiftUI or nsColor.")
+    var format: String?
+
+    @Argument(help: "The colour number, counting from 1.")
+    var index: Int
+
+    func run() async throws {
+        try await execute {
+            let swatch = try ColorBridge.swatch(at: index)
+            let configured =
+                CLIEnvironment.sharedDefaults.string(
+                    forKey: AppStorageKeys.ColorPicker.copyFormat) ?? ColorCopyFormat.hex.rawValue
+            let chosen =
+                try format.map(ColorBridge.format)
+                ?? ColorCopyFormat(rawValue: configured) ?? .hex
+            let result: ColorSwatchOperationResult
+            do {
+                result = try ColorSwatchOperationExecution.perform(
+                    .copy, swatch: swatch, format: chosen,
+                    write: { value in
+                        CLIEnvironment.clipboardPasteboard.clearContents()
+                        return CLIEnvironment.clipboardPasteboard.setString(
+                            value, forType: .string)
+                    })
+            } catch let error as ColorSwatchOperationError {
+                throw CLIFailure.unavailable(
+                    error.localizedDescription,
+                    hint: "check pasteboard access, then retry")
+            }
+            AppBridge.post(IPC.Name.clipboardChanged)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "operation": .string(result.operation.descriptor.id.rawValue),
+                        "index": .int(index),
+                        "id": .string(result.swatchID.uuidString),
+                        "format": .string(result.format.rawValue),
+                        "value": .string(result.value),
+                        "copied": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("copied colour \(index) as \(result.value)")
         }
     }
 }

@@ -439,6 +439,67 @@ import Testing
         }
     }
 
+    @Test func copyingUsesTheConfiguredFormatAndStableJSON() async throws {
+        await CLIProbe.inWorld { world in
+            Self.seed(world, count: 3)
+            world.shared.set(
+                ColorCopyFormat.rgb.rawValue, forKey: AppStorageKeys.ColorPicker.copyFormat)
+
+            let result = await CLIProbe.capture(["color", "copy", "2", "--json"])
+
+            #expect(result.code == 0)
+            #expect(
+                Set(result.object?.keys ?? [:].keys)
+                    == ["operation", "index", "id", "format", "value", "copied"])
+            #expect(result.object?["operation"] as? String == "color.copy")
+            #expect(result.object?["index"] as? Int == 2)
+            #expect(result.object?["format"] as? String == "rgb")
+            #expect(result.object?["copied"] as? Bool == true)
+            #expect(world.pasteboard.string(forType: .string) == "rgb(26, 128, 255)")
+            #expect(world.postedNames() == [IPC.Name.clipboardChanged.rawValue])
+        }
+    }
+
+    @Test func copyingCanOverrideTheConfiguredFormat() async throws {
+        await CLIProbe.inWorld { world in
+            Self.seed(world, count: 1)
+            world.shared.set(
+                ColorCopyFormat.rgb.rawValue, forKey: AppStorageKeys.ColorPicker.copyFormat)
+
+            let result = await CLIProbe.capture([
+                "color", "copy", "1", "--format", "hex",
+            ])
+
+            #expect(result.code == 0)
+            #expect(result.stdout == "copied colour 1 as #0080FF\n")
+            #expect(world.pasteboard.string(forType: .string) == "#0080FF")
+        }
+    }
+
+    @Test func copyingDiagnosesEmptyAndOutOfRangeHistory() async throws {
+        let empty = await CLIProbe.run(["color", "copy", "1"])
+        #expect(empty.code == ExitCodes.unavailable)
+        #expect(empty.stderr.contains("colour history is empty"))
+
+        await CLIProbe.inWorld { world in
+            Self.seed(world, count: 2)
+            let missing = await CLIProbe.capture(["color", "copy", "3"])
+            #expect(missing.code == ExitCodes.notFound)
+            #expect(missing.stderr.contains("there is no colour 3"))
+            #expect(world.pasteboard.string(forType: .string) == nil)
+        }
+    }
+
+    @Test func copiedColourIndicesCompleteFromTheLiveHistory() async throws {
+        await CLIProbe.inWorld { world in
+            Self.seed(world, count: 3)
+            let result = CompletionEngine.plan(
+                CompletionRequest(words: ["ed", "color", "copy", ""], index: 3),
+                machines: [], configKeys: [], extensionIDs: [])
+            #expect(result.candidates == ["1", "2", "3"])
+        }
+    }
+
     @Test func anUnknownFormatIsNotFoundAndListsTheRealOnes() async {
         let result = await CLIProbe.run(["color", "ls", "--format", "cmyk"])
         #expect(result.code == ExitCodes.notFound)

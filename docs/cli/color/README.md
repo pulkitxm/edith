@@ -3,12 +3,13 @@
 `ed color` opens Edith's system loupe and reads the swatch history it keeps:
 every colour you have sampled, newest first, in whichever of the five
 representations you ask for. Reach for it when you want to start a pick from
-the terminal or move the latest result into a script or stylesheet.
+the terminal, copy a stored swatch, or move the latest result into a script or
+stylesheet.
 
 The history is one key in Edith's shared defaults suite
-(`com.pulkit.edith.shared`), so both verbs work whether or not the app is
-running. `colour` is an accepted spelling of the group, and `ed color` with
-nothing after it is `ed color ls`.
+(`com.pulkit.edith.shared`), so its list, copy, and clear operations work whether
+or not the app is running. `colour` is an accepted spelling of the group, and
+`ed color` with nothing after it is `ed color ls`.
 
 `ed color pick` asks the running menu bar app to open the same `NSColorSampler`
 as the eyedropper and hotkey (`⌃⌥⌘C` unless you have rebound it). The command
@@ -21,6 +22,7 @@ returns once the request is sent, while the pick finishes on the desktop.
 | `ed color` | Runs `ed color ls`, which is the default subcommand. |
 | `ed color pick` | Requests the system colour sampler from the running menu bar app. |
 | `ed color ls` | Lists picked colours, newest first, as a table or as one chosen format per line. |
+| `ed color copy` | Copies one numbered swatch using its configured or requested format. |
 | `ed color clear` | Previews forgetting every picked colour; `--yes` applies it. |
 
 `ed colour` is the same group under its British spelling, and `ed color list`
@@ -30,19 +32,20 @@ is the same command as `ed color ls`.
 
 - [`ed color pick`](./pick.md)
 - [`ed color ls`](./ls.md)
+- [`ed color copy`](./copy.md)
 - [`ed color clear`](./clear.md)
 
 ## Exit codes
 
 | Code | When this group produces it |
 | --- | --- |
-| 0 | The sampler request was sent, the listing printed, or the history was cleared. Also an empty history, and help. |
+| 0 | The sampler request was sent, the listing printed, a swatch was copied, or the history was cleared. Also an empty listing, and help. |
 | 2 | `--limit` was negative (`--limit cannot be negative`), or the command line was wrong in ArgumentParser's own terms: an unknown flag, `--format` or `--limit` with no value, or a `--limit` value that is not an integer. |
-| 3 | `--format` named something that is not `hex`, `rgb`, `hsl`, `swiftUI` or `nsColor`. |
-| 4 | `ed color pick` found the extension off or the menu bar app closed. |
+| 3 | `--format` named something that is not `hex`, `rgb`, `hsl`, `swiftUI` or `nsColor`, or `copy` named an index outside the history. |
+| 4 | `ed color pick` found the extension off or the menu bar app closed, `copy` found an empty history, or the pasteboard refused the value. |
 
-Nothing in this group exits 1. Listing and clearing need no app, while picking
-is an app request and uses exit 4 when it cannot be delivered.
+Nothing in this group exits 1. Listing, copying, and clearing need no app, while
+picking is an app request and uses exit 4 when it cannot be delivered.
 
 ## Notes and gotchas
 
@@ -82,8 +85,8 @@ is an app request and uses exit 4 when it cannot be delivered.
   `ed color ls --json`.
 - What the picker copies to the pasteboard when you sample is a separate
   choice, `ed config set colorPickerCopyFormat hex|rgb|hsl|swiftUI|nsColor`.
-  `--format` here does not change it, and changing it does not change what
-  `ed color ls` prints.
+  `ed color copy` uses that choice unless `--format` overrides it. Changing it
+  does not change what `ed color ls` prints.
 - The picker only runs when its extension is on
   (`ed extensions enable colorPicker`, which is the `colorPickerEnabled`
   setting and wants the Screen Recording permission), but the history outlives
@@ -92,7 +95,7 @@ is an app request and uses exit 4 when it cannot be delivered.
 - The eyedropper's context menu in the menu bar panel lists the last eight
   picks in hex, so `ed color ls --format hex --limit 8` prints exactly what that
   menu shows.
-- `--help` works on the group and on all three verbs, prints on stdout and exits 0.
+- `--help` works on the group and on all four verbs, prints on stdout and exits 0.
 - `ed color pick` is safe to request without a TTY because it never reads stdin,
   but the sampler still requires a person at the logged-in desktop.
 - Completion knows this group: `ed color ls --format <TAB>` offers `hex`,

@@ -36,6 +36,54 @@ public enum ColorPickerOperationExecution {
     }
 }
 
+public enum ColorSwatchOperation: String, CaseIterable, Sendable {
+    case copy
+
+    public var descriptor: UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "color.copy"),
+            summary: "Copy a picked colour to the pasteboard.", cli: ["color", rawValue],
+            effect: .write)
+    }
+}
+
+public struct ColorSwatchOperationResult: Equatable, Sendable {
+    public var operation: ColorSwatchOperation
+    public var swatchID: UUID
+    public var format: ColorCopyFormat
+    public var value: String
+
+    public init(
+        operation: ColorSwatchOperation, swatchID: UUID, format: ColorCopyFormat, value: String
+    ) {
+        self.operation = operation
+        self.swatchID = swatchID
+        self.format = format
+        self.value = value
+    }
+}
+
+public enum ColorSwatchOperationError: LocalizedError, Equatable {
+    case pasteboardRejected
+
+    public var errorDescription: String? {
+        "The pasteboard refused the colour value."
+    }
+}
+
+public enum ColorSwatchOperationExecution {
+    @discardableResult
+    public static func perform(
+        _ operation: ColorSwatchOperation, swatch: ColorSwatch, format: ColorCopyFormat,
+        write: (String) -> Bool
+    ) throws -> ColorSwatchOperationResult {
+        let value = swatch.string(for: format)
+        guard write(value) else { throw ColorSwatchOperationError.pasteboardRejected }
+        return ColorSwatchOperationResult(
+            operation: operation, swatchID: swatch.id, format: format, value: value)
+    }
+}
+
 private extension ColorPickerOperation {
     var notification: Notification.Name {
         switch self {

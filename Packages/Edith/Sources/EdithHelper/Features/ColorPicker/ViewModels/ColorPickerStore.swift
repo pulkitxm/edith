@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class ColorPickerStore: FeatureModule {
     private(set) var history: [ColorSwatch] = []
+    private(set) var copyError: String?
     @ObservationIgnored private var requestObserver: NSObjectProtocol?
 
     init() {
@@ -41,7 +42,7 @@ final class ColorPickerStore: FeatureModule {
     }
 
     func copyDefault(_ swatch: ColorSwatch) {
-        copyToPasteboard(swatch.string(for: format))
+        copy(swatch, as: format)
     }
 
     private func commit(_ color: NSColor) {
@@ -51,15 +52,25 @@ final class ColorPickerStore: FeatureModule {
             green: Double(converted.greenComponent),
             blue: Double(converted.blueComponent),
             profile: profile)
-        copyToPasteboard(swatch.string(for: format))
+        copy(swatch, as: format)
         ColorHistoryStore.add(swatch, limit: historySize)
         history = ColorHistoryStore.load()
         IPC.post(IPC.Name.settingsChanged)
     }
 
-    private func copyToPasteboard(_ string: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
+    private func copy(_ swatch: ColorSwatch, as format: ColorCopyFormat) {
+        do {
+            try ColorSwatchOperationExecution.perform(
+                .copy, swatch: swatch, format: format,
+                write: { value in
+                    NSPasteboard.general.clearContents()
+                    return NSPasteboard.general.setString(value, forType: .string)
+                })
+            copyError = nil
+        } catch {
+            copyError = error.localizedDescription
+            NSSound.beep()
+        }
     }
 
     private var format: ColorCopyFormat {

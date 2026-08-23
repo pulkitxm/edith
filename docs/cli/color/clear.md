@@ -50,10 +50,9 @@ command needs nothing running and exits 0 either way. Clearing an already empty
 history is reported as `cleared 0 colours` rather than as an error. There is no
 per-swatch removal; the history is cleared whole or not at all.
 
-The settings pane has no button for this. Its Recent Colors grid copies a
-swatch in the configured copy format when you click it and offers all five
-formats on right-click, but it cannot forget one, so `ed color clear` is the
-only way to empty the history from any surface.
+The settings pane has no button for this. Its Recent Colors grid and
+`ed color copy` use the same shared copy operation, but neither can forget one,
+so `ed color clear` is the only way to empty the history from any surface.
 
 ## Where to go next
 

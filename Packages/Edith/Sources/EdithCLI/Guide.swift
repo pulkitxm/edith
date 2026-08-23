@@ -37,6 +37,7 @@ public enum Guide {
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
+        ed color copy 1 --format hex
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -374,6 +375,7 @@ public enum Guide {
         ed clipboard pin 3 | unpin 3
         ed clipboard rm 3 | clear
         ed color ls --format hex        the colours you picked
+        ed color copy 1                 copy the newest using your configured format
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1

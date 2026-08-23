@@ -91,6 +91,7 @@ import Testing
         let result = Self.plan(["ed", "color", ""], 2)
 
         #expect(result.candidates.contains("pick"))
+        #expect(result.candidates.contains("copy"))
         #expect(result.candidates.contains("ls"))
         #expect(result.candidates.contains("clear"))
     }
