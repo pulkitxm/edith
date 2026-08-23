@@ -2,12 +2,7 @@ import AppKit
 import EdithKit
 import SwiftUI
 
-enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
-    case embedded
-    case cmux
-
-    var id: String { rawValue }
-
+extension QuinjetTerminal {
     var label: String {
         switch self {
         case .embedded: "Embedded"
@@ -30,23 +25,7 @@ enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum QuinjetTheme: String, CaseIterable, Identifiable, Sendable {
-    case quinjet
-    case catppuccin
-    case dracula
-    case everforest
-    case gruvbox
-    case nord
-    case one
-    case rosePine = "rose-pine"
-    case solarized
-    case tokyoNight = "tokyo-night"
-    case ayu
-    case monokai
-    case github
-
-    var id: String { rawValue }
-
+extension QuinjetTheme {
     var label: String {
         switch self {
         case .quinjet: "Quinjet"
@@ -64,20 +43,6 @@ enum QuinjetTheme: String, CaseIterable, Identifiable, Sendable {
         case .github: "GitHub"
         }
     }
-}
-
-enum QuinjetAppearance: String, Sendable {
-    case light
-    case dark
-}
-
-struct QuinjetLaunchConfiguration: Equatable, Sendable {
-    var terminal: QuinjetTerminal
-    var theme: QuinjetTheme
-    var appearance: QuinjetAppearance
-
-    static let `default` = QuinjetLaunchConfiguration(
-        terminal: .embedded, theme: .quinjet, appearance: .dark)
 }
 
 struct TerminalPalette {
@@ -180,10 +145,8 @@ enum QuinjetCMUXLauncher {
         quinjet: URL, arguments: [String], currentDirectory: String?, replacing workspaceID: String?
     ) async throws -> String {
         guard executable != nil else { throw QuinjetLaunchError.cmuxUnavailable }
-        var command = "exec \(shellCommand(executable: quinjet.path, arguments: arguments))"
-        if let currentDirectory {
-            command = "cd \(shellQuote(currentDirectory)) && \(command)"
-        }
+        let command = QuinjetShellCommand.make(
+            executable: quinjet.path, arguments: arguments, currentDirectory: currentDirectory)
         var statements = ["tell application id \"com.cmuxterm.app\"", "activate"]
         if let workspaceID {
             statements += closeStatements(workspaceID: workspaceID)
@@ -219,14 +182,6 @@ enum QuinjetCMUXLauncher {
             ["tell application id \"com.cmuxterm.app\""]
             + closeStatements(workspaceID: workspaceID) + ["return \"closed\"", "end tell"]
         _ = try await execute(statements.joined(separator: "\n"))
-    }
-
-    static func shellCommand(executable: String, arguments: [String]) -> String {
-        ([executable] + arguments).map(shellQuote).joined(separator: " ")
-    }
-
-    static func shellQuote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     static func appleScriptQuote(_ value: String) -> String {

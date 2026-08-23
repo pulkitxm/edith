@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Edith
+@testable import EdithKit
 
 @Suite struct QuinjetClientTests {
     @Test func decodesRecentProjectsAndWorktrees() async throws {
@@ -340,15 +341,16 @@ private actor ProjectRefreshHarness {
     }
 
     @Test func embeddedLaunchUsesEdithRoutingAndSelectedTheme() throws {
-        let model = QuinjetPageModel(client: client)
         let configuration = QuinjetLaunchConfiguration(
             terminal: .embedded, theme: .tokyoNight, appearance: .light)
 
-        let arguments = model.launchArguments(
-            worktree: Self.main, remote: nil, configuration: configuration, managed: true)
+        let request = QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
+            worktreePath: Self.main.path, remote: nil, configuration: configuration,
+            managedByEdith: true, localHomeDirectory: "/Users/pulkit")
 
         #expect(
-            arguments
+            request.arguments
                 == [
                     "--client", "edith", "-C", "/work/edith", "tui", "--theme",
                     "tokyo-night", "--appearance", "light",
@@ -356,33 +358,35 @@ private actor ProjectRefreshHarness {
     }
 
     @Test func cmuxLaunchKeepsRemoteSessionWithoutEdithRouting() throws {
-        let model = QuinjetPageModel(client: client)
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
             controlPath: "/tmp/edith socket")
         let configuration = QuinjetLaunchConfiguration(
             terminal: .cmux, theme: .gruvbox, appearance: .dark)
 
-        let arguments = model.launchArguments(
-            worktree: Self.main, remote: remote, configuration: configuration, managed: false)
+        let request = QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
+            worktreePath: Self.main.path, remote: remote, configuration: configuration,
+            managedByEdith: false, localHomeDirectory: "/Users/pulkit")
 
         #expect(
-            arguments
+            request.arguments
                 == [
                     "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith socket",
                     "-C", "/work/edith", "tui", "--theme", "gruvbox", "--appearance", "dark",
                 ])
-        #expect(!arguments.contains("--client"))
+        #expect(!request.arguments.contains("--client"))
+        #expect(request.currentDirectory == "/Users/pulkit")
     }
 
     @Test func cmuxCommandQuotesEveryArgument() {
-        let command = QuinjetCMUXLauncher.shellCommand(
+        let command = QuinjetShellCommand.make(
             executable: "/Applications/Quinjet Tools/quinjet",
             arguments: ["-C", "/work/it's ready"])
 
         #expect(
             command
-                == "'/Applications/Quinjet Tools/quinjet' '-C' '/work/it'\\''s ready'")
+                == "exec '/Applications/Quinjet Tools/quinjet' '-C' '/work/it'\\''s ready'")
     }
 
     @Test func cmuxLaunchEscapesAppleScriptText() {

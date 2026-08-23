@@ -97,7 +97,7 @@ final class QuinjetPageModel {
             if generation == projectRefreshGeneration { loadingProjects = false }
         }
         do {
-            let refreshed = try await client.recentProjects()
+            let refreshed = try await QuinjetOperationExecution.projects(using: client)
             try Task.checkCancellation()
             guard generation == projectRefreshGeneration else { return }
             projects = refreshed
@@ -120,7 +120,8 @@ final class QuinjetPageModel {
             }
         }
         do {
-            let refreshed = try await client.recentProjects(remote: remote)
+            let refreshed = try await QuinjetOperationExecution.projects(
+                remote: remote, using: client)
             try Task.checkCancellation()
             guard generation == remoteProjectRefreshGenerations[machineID] else { return }
             remoteProjects[machineID] = refreshed
@@ -174,18 +175,18 @@ final class QuinjetPageModel {
             tab.errorMessage = QuinjetClientError.notInstalled.localizedDescription
             return
         }
+        let request = QuinjetOperationExecution.launchRequest(
+            executableURL: executable, worktreePath: worktree.path, remote: remote,
+            configuration: configuration, managedByEdith: configuration.terminal == .embedded,
+            localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
         if configuration.terminal == .cmux {
             tab.holder.stop()
-            let arguments = launchArguments(
-                worktree: worktree, remote: remote, configuration: configuration, managed: false)
-            let currentDirectory =
-                remote == nil ? worktree.path : FileManager.default.homeDirectoryForCurrentUser.path
             let replacing = tab.externalWorkspaceID
             Task { [weak tab] in
                 do {
                     let workspaceID = try await QuinjetCMUXLauncher.launch(
-                        quinjet: executable, arguments: arguments,
-                        currentDirectory: currentDirectory, replacing: replacing)
+                        quinjet: request.executableURL, arguments: request.arguments,
+                        currentDirectory: request.currentDirectory, replacing: replacing)
                     guard
                         let tab,
                         tab.externalLaunchGeneration == externalLaunchGeneration
@@ -215,13 +216,10 @@ final class QuinjetPageModel {
             self.handleHostPayload(payload, from: tab)
         }
         let environment = terminalEnvironment()
-        let arguments = launchArguments(
-            worktree: worktree, remote: remote, configuration: configuration, managed: true)
-        let currentDirectory = remote == nil ? worktree.path : nil
         tab.holder.reset()
         tab.holder.start(
-            executable: executable.path, arguments: arguments, environment: environment,
-            currentDirectory: currentDirectory)
+            executable: request.executableURL.path, arguments: request.arguments,
+            environment: environment, currentDirectory: request.currentDirectory)
     }
 
     func openFolder(
@@ -234,7 +232,9 @@ final class QuinjetPageModel {
             tab.errorMessage = nil
         }
         do {
-            let worktrees = try await client.worktrees(at: path, remote: remote).filter(\.canOpen)
+            let worktrees = try await QuinjetOperationExecution.worktrees(
+                at: path, remote: remote, using: client
+            ).filter(\.canOpen)
             guard let worktree = worktrees.first(where: { $0.path == path }) ?? worktrees.first
             else {
                 let message = "No open worktree was found in this folder."
@@ -262,8 +262,9 @@ final class QuinjetPageModel {
         tab.errorMessage = nil
         defer { tab.loadingWorktrees = false }
         do {
-            tab.worktrees = try await client.worktrees(at: path, remote: tab.remote).filter(
-                \.canOpen)
+            tab.worktrees = try await QuinjetOperationExecution.worktrees(
+                at: path, remote: tab.remote, using: client
+            ).filter(\.canOpen)
         } catch {
             tab.errorMessage = error.localizedDescription
         }
@@ -321,22 +322,4 @@ final class QuinjetPageModel {
         return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
     }
 
-    func launchArguments(
-        worktree: QuinjetWorktree, remote: QuinjetRemote?,
-        configuration: QuinjetLaunchConfiguration, managed: Bool
-    ) -> [String] {
-        var arguments: [String] = []
-        if managed { arguments += ["--client", "edith"] }
-        if let remote {
-            arguments += [
-                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
-            ]
-        }
-        arguments += ["-C", worktree.path, "tui"]
-        arguments += [
-            "--theme", configuration.theme.rawValue,
-            "--appearance", configuration.appearance.rawValue,
-        ]
-        return arguments
-    }
 }
