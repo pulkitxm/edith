@@ -112,6 +112,26 @@ import Testing
         #expect(missing.opened == [Repo.dataDir])
     }
 
+    @Test func missingUICreatedFoldersAreCreatedBeforeOpening() throws {
+        final class Capture {
+            var created: [URL] = []
+            var opened: [URL] = []
+        }
+        let capture = Capture()
+        let center = AppInspectionCenter(
+            exists: { _ in false }, createDirectory: { capture.created.append($0) },
+            open: {
+                capture.opened.append($0)
+                return true
+            })
+
+        _ = try center.openPath(.icloud)
+        _ = try center.openPath(.music)
+
+        #expect(capture.created == [AppData.cloudDir, Repo.musicDir])
+        #expect(capture.opened == [AppData.cloudDir, Repo.musicDir])
+    }
+
     @Test func openingLinksIsTypedAndReportsFailures() throws {
         final class Capture {
             var opened: [URL] = []

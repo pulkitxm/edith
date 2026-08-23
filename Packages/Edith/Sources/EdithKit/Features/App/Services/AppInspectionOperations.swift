@@ -221,7 +221,7 @@ public struct AppInspectionCenter {
 
     public func openPath(_ id: AppPathID) throws -> AppOpenResult {
         let entry = paths().first { $0.id == id }!
-        if id == .icloud, !entry.exists {
+        if [.icloud, .music].contains(id), !entry.exists {
             try createDirectory(entry.url)
         }
         if id == .refreshLog, entry.exists {
