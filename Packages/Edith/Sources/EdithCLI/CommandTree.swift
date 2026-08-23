@@ -163,6 +163,19 @@ public enum CommandTree {
                     CommandNode(
                         "info", "Describe one extension.", options: common,
                         arguments: [.extensionID]),
+                    CommandNode(
+                        "status", "Check extension readiness.", options: common,
+                        arguments: [.extensionID]),
+                    CommandNode(
+                        "setup", "Enable an extension and report remaining setup.",
+                        options: ["--json", "--help", "--dry-run", "--install-tools"],
+                        arguments: [.extensionID]),
+                    CommandNode(
+                        "verify", "Run readiness checks for one extension.", options: common,
+                        arguments: [.extensionID]),
+                    CommandNode(
+                        "doctor", "Diagnose extension problems.", options: common,
+                        arguments: [.extensionID]),
                 ]),
             CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",

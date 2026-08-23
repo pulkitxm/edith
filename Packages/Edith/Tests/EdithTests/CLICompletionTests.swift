@@ -65,6 +65,15 @@ import Testing
         #expect(result.candidates == ["clipboard"])
     }
 
+    @Test func extensionLifecycleCommandsCompleteIDsAndFlags() {
+        for command in ["status", "setup", "verify", "doctor"] {
+            let ids = Self.plan(["ed", "extensions", command, "quin"], 3)
+            #expect(ids.candidates == ["quinjet"])
+        }
+        let flags = Self.plan(["ed", "extensions", "setup", "--i"], 3)
+        #expect(flags.candidates == ["--install-tools"])
+    }
+
     @Test func toolIDsCompleteForInstall() {
         let result = Self.plan(["ed", "tools", "install", "q"], 3)
         #expect(result.candidates == ["quinjet"])
