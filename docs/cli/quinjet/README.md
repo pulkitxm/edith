@@ -34,6 +34,10 @@ ed quinjet worktrees /srv/edith --machine build --json
 A machine that is asleep or unreachable exits 4 before discovery. An unknown
 machine exits 3.
 
+The native machine picker uses these same project and worktree reads. Its folder
+browser corresponds to `ed machines files ls <machine> <path>`, so Quinjet does
+not duplicate the general remote filesystem command.
+
 ## Planning and launching
 
 `ed quinjet open` is print-only. It resolves the requested project, chooses the
@@ -61,6 +65,11 @@ Both commands accept these options:
 | `--cmux` | flag | off | Build or run a cmux launch request |
 | `--machine <name>` | configured machine or `local` | `local` | Select the worktree host |
 | `--json` | flag | off | Emit stable JSON on stdout |
+
+The app's terminal and theme menus persist through
+`ed config set quinjetTerminal embedded` and `ed config set quinjetTheme <name>`.
+Restarting, switching worktrees, and showing a review in cmux reuse `launch`
+with the selected path and options.
 
 cmux must be installed in `/Applications` or `~/Applications`. If it is not,
 `launch --cmux` exits 4 with a hint to omit `--cmux`. `open --cmux` remains safe
