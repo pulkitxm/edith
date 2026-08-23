@@ -69,8 +69,8 @@ import Testing
         }
     }
 
-    @Test func downloadCancelTargetsOneRecordAndPostsItsStableIdentity() async throws {
-        try await CLIProbe.inWorld { world in
+    @Test func downloadCancelTargetsOneRecordAndPostsItsStableIdentity() async {
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             let first = await CLIProbe.capture([
                 "download", "add", "https://youtu.be/one", "--json",

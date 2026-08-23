@@ -12,11 +12,19 @@ public enum DownloadOperation: String, CaseIterable, Sendable {
     case clear
     case reveal
     case open
+    case tool
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
-            id: UserOperationID(rawValue: "download.queue.\(rawValue)"), summary: summary,
+            id: UserOperationID(rawValue: operationID), summary: summary,
             cli: ["download", command], effect: effect, requiresPreview: requiresPreview)
+    }
+
+    private var operationID: String {
+        switch self {
+        case .tool: "download.tool"
+        default: "download.queue.\(rawValue)"
+        }
     }
 
     private var command: String {
@@ -24,6 +32,7 @@ public enum DownloadOperation: String, CaseIterable, Sendable {
         case .list: "ls"
         case .enqueue: "add"
         case .remove: "rm"
+        case .tool: "tool"
         default: rawValue
         }
     }
@@ -39,6 +48,7 @@ public enum DownloadOperation: String, CaseIterable, Sendable {
         case .clear: "Clear download history."
         case .reveal: "Reveal completed download results in Finder."
         case .open: "Open completed download results."
+        case .tool: "Report or update the yt-dlp installation."
         }
     }
 
@@ -47,12 +57,77 @@ public enum DownloadOperation: String, CaseIterable, Sendable {
         case .list, .status: .read
         case .remove, .clear: .destructive
         case .reveal, .open: .interactive
-        case .enqueue, .cancel, .retry: .write
+        case .enqueue, .cancel, .retry, .tool: .write
         }
     }
 
     private var requiresPreview: Bool {
         self == .remove || self == .clear
+    }
+}
+
+public struct DownloadToolStatus: Equatable, Sendable {
+    public let executable: URL?
+    public let version: String?
+
+    public var installed: Bool { executable != nil && version != nil }
+}
+
+public struct DownloadToolUpdate: Equatable, Sendable {
+    public let executable: URL
+    public let before: String?
+    public let after: String?
+    public let output: String
+
+    public var changed: Bool { before != after }
+}
+
+public enum DownloadToolOperationError: LocalizedError, Equatable {
+    case missing
+    case failed(String, Int32)
+
+    public var errorDescription: String? {
+        switch self {
+        case .missing: "yt-dlp is not installed, so there is nothing to update."
+        case .failed(let output, let status):
+            output.isEmpty ? "yt-dlp update exited with status \(status)." : output
+        }
+    }
+}
+
+public enum DownloadToolOperationExecution {
+    public static func status(
+        executable: URL?, runCommand: @escaping ToolVersionProbe.RunCommand = {
+            try await CLICommandRunner.run($0, onLine: $1)
+        }
+    ) async -> DownloadToolStatus {
+        guard let executable else { return DownloadToolStatus(executable: nil, version: nil) }
+        let request = CLICommandRequest(
+            executableURL: executable, arguments: ["--version"],
+            environment: CLIToolEnvironment.sanitized(), timeout: 5)
+        return DownloadToolStatus(
+            executable: executable,
+            version: await ToolVersionProbe.version(request, runCommand: runCommand))
+    }
+
+    public static func update(
+        executable: URL?, runCommand: @escaping ToolVersionProbe.RunCommand = {
+            try await CLICommandRunner.run($0, onLine: $1)
+        }
+    ) async throws -> DownloadToolUpdate {
+        guard let executable else { throw DownloadToolOperationError.missing }
+        let before = await status(executable: executable, runCommand: runCommand).version
+        let request = CLICommandRequest(
+            executableURL: executable, arguments: ["-U"],
+            environment: CLIToolEnvironment.sanitized(), timeout: 120)
+        let result = try await runCommand(request, { _ in })
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.terminationStatus == 0 else {
+            throw DownloadToolOperationError.failed(output, result.terminationStatus)
+        }
+        let after = await status(executable: executable, runCommand: runCommand).version
+        return DownloadToolUpdate(
+            executable: executable, before: before, after: after, output: output)
     }
 }
 

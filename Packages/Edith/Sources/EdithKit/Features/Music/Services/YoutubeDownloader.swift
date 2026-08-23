@@ -310,34 +310,13 @@ public final class YoutubeDownloader {
 
     public func checkAvailability() {
         ytdlpExecutableCache = nil
-        let (exe, prefix) = ytdlpExecutable()
-        let p = Process()
-        p.executableURL = exe
-        p.arguments = prefix + ["--version"]
-        p.environment = CLIToolEnvironment.sanitized()
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        p.standardOutput = outPipe
-        p.standardError = errPipe
-        do {
-            try p.run()
-            p.waitUntilExit()
-            if p.terminationStatus == 0 {
-                unavailableReason = nil
-                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-                ytdlpVersion = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            } else {
-                unavailableReason =
-                    "yt-dlp is not installed. Open Music extension settings to install it."
-                ytdlpVersion = nil
-                ytdlpExecutableCache = nil
-            }
-        } catch {
-            unavailableReason =
-                "yt-dlp is not installed. Open Music extension settings to install it."
-            ytdlpVersion = nil
-            ytdlpExecutableCache = nil
+        Task {
+            let status = await DownloadToolOperationExecution.status(
+                executable: CLIToolEnvironment.executable(named: "yt-dlp"))
+            unavailableReason = status.installed
+                ? nil
+                : "yt-dlp is not installed. Open Music extension settings to install it."
+            ytdlpVersion = status.version
         }
     }
 
@@ -345,56 +324,21 @@ public final class YoutubeDownloader {
         isUpdatingYTDLP = true
         updateResult = nil
         ytdlpUpdateMessage = nil
-        let (exe, prefix) = ytdlpExecutable()
-        let p = Process()
-        p.executableURL = exe
-        p.arguments = prefix + ["-U"]
-        p.environment = CLIToolEnvironment.sanitized()
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        p.standardOutput = outPipe
-        p.standardError = errPipe
-
-        p.terminationHandler = { [weak self] proc in
-            let out =
-                String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? ""
-            let err =
-                String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? ""
-            Task { @MainActor in
-                guard let self else { return }
-                self.isUpdatingYTDLP = false
-                self.ytdlpExecutableCache = nil
-                if proc.terminationStatus == 0 {
-                    let msg = out.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let text = msg.isEmpty ? "yt-dlp updated" : msg
-                    self.updateResult = .success(text)
-                    self.ytdlpUpdateMessage = text
-                } else {
-                    let msg = err.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let text = msg.isEmpty ? "Update failed" : msg
-                    let error = NSError(
-                        domain: "YTDLP",
-                        code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: text]
-                    )
-                    self.updateResult = .failure(error)
-                    self.ytdlpUpdateMessage = text
-                }
-                self.checkAvailability()
-                completion?(self.updateResult!)
+        Task {
+            do {
+                let update = try await DownloadToolOperationExecution.update(
+                    executable: CLIToolEnvironment.executable(named: "yt-dlp"))
+                let text = update.output.isEmpty ? "yt-dlp updated" : update.output
+                updateResult = .success(text)
+                ytdlpUpdateMessage = text
+                ytdlpVersion = update.after
+                unavailableReason = nil
+            } catch {
+                updateResult = .failure(error)
+                ytdlpUpdateMessage = error.localizedDescription
             }
-        }
-
-        do {
-            try p.run()
-        } catch {
             isUpdatingYTDLP = false
             ytdlpExecutableCache = nil
-            updateResult = .failure(error)
-            ytdlpUpdateMessage = error.localizedDescription
-            checkAvailability()
             completion?(updateResult!)
         }
     }

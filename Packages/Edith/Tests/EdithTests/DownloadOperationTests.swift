@@ -127,6 +127,24 @@ import Testing
         #expect(!process.isRunning)
     }
 
+    @Test func toolStatusAndUpdateUseTheSameInjectedCommandRunner() async throws {
+        let executable = URL(fileURLWithPath: "/tmp/yt-dlp")
+        let run: ToolVersionProbe.RunCommand = { request, _ in
+            let output = request.arguments == ["-U"] ? "updated\n" : "2026.08.23\n"
+            return CLICommandResult(terminationStatus: 0, output: output)
+        }
+
+        let status = await DownloadToolOperationExecution.status(
+            executable: executable, runCommand: run)
+        let update = try await DownloadToolOperationExecution.update(
+            executable: executable, runCommand: run)
+
+        #expect(status.version == "2026.08.23")
+        #expect(update.output == "updated")
+        #expect(update.before == "2026.08.23")
+        #expect(update.after == "2026.08.23")
+    }
+
     @MainActor
     @Test func resultActionsResolveOnlyExistingCompletedFiles() throws {
         let sandbox = try sandbox()

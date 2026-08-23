@@ -421,71 +421,45 @@ struct DownloadToolCommand: AsyncParsableCommand {
         try await execute {
             let executable = CLIEnvironment.executableNamed("yt-dlp")
             guard update else {
-                let version = executable.flatMap(DownloadTool.version(of:))
+                let status = await DownloadToolOperationExecution.status(executable: executable)
                 guard !json else {
                     CLIOut.json(
                         .object([
-                            "installed": .bool(executable != nil),
-                            "path": .optional(executable?.path),
-                            "version": .optional(version),
+                            "installed": .bool(status.installed),
+                            "path": .optional(status.executable?.path),
+                            "version": .optional(status.version),
                         ]))
                     return
                 }
-                guard let executable else {
+                guard let executable = status.executable, status.installed else {
                     throw CLIFailure.unavailable(
                         "yt-dlp is not installed",
                         hint: "install it in Edith under Music, or with `brew install yt-dlp`")
                 }
-                CLIOut.out("\(version ?? "unknown")  \(executable.path)")
+                CLIOut.out("\(status.version ?? "unknown")  \(executable.path)")
                 return
             }
-            guard let executable else {
+            let result: DownloadToolUpdate
+            do {
+                result = try await DownloadToolOperationExecution.update(executable: executable)
+            } catch DownloadToolOperationError.missing {
                 throw CLIFailure.unavailable(
                     "yt-dlp is not installed, so there is nothing to update",
                     hint: "install it in Edith under Music, or with `brew install yt-dlp`")
             }
-            let before = DownloadTool.version(of: executable)
-            let output = DownloadTool.selfUpdate(executable)
-            let after = DownloadTool.version(of: executable)
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "path": .string(executable.path),
-                        "before": .optional(before),
-                        "after": .optional(after),
-                        "changed": .bool(before != after),
+                        "path": .string(result.executable.path),
+                        "before": .optional(result.before),
+                        "after": .optional(result.after),
+                        "changed": .bool(result.changed),
                     ]))
                 return
             }
-            CLIOut.out(output.isEmpty ? "yt-dlp is \(after ?? "unknown")" : output)
+            CLIOut.out(
+                result.output.isEmpty ? "yt-dlp is \(result.after ?? "unknown")" : result.output)
         }
-    }
-}
-
-enum DownloadTool {
-    static func version(of executable: URL) -> String? {
-        let output = run(executable, ["--version"])
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    static func selfUpdate(_ executable: URL) -> String {
-        run(executable, ["-U"]).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func run(_ executable: URL, _ arguments: [String]) -> String {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.environment = CLIToolEnvironment.sanitized()
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        process.standardInput = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return "" }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(decoding: data, as: UTF8.self)
     }
 }
 
