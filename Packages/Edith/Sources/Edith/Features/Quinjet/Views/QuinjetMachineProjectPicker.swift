@@ -186,6 +186,7 @@ private struct QuinjetRemoteProjectPicker: View {
 
     private var currentDirectoryRow: some View {
         Button {
+            picker.selectCurrentDirectory()
             open(picker.directory)
         } label: {
             HStack(spacing: UIScale.pt(11)) {
@@ -212,7 +213,6 @@ private struct QuinjetRemoteProjectPicker: View {
         }
         .buttonStyle(QuinjetFolderRowStyle(selected: picker.selectionIndex == -1, dark: dark))
         .pointerCursor()
-        .simultaneousGesture(TapGesture().onEnded { picker.selectCurrentDirectory() })
     }
 
     private func entryRow(_ entry: RemoteFileEntry) -> some View {
