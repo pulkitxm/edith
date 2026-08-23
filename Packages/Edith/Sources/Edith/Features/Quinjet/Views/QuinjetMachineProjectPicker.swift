@@ -1,6 +1,14 @@
 import EdithKit
 import SwiftUI
 
+private enum QuinjetMachinePickerMode: String, CaseIterable, Identifiable {
+    case recent
+    case browse
+
+    var id: String { rawValue }
+    var title: String { self == .recent ? "Recent projects" : "Browse folders" }
+}
+
 struct QuinjetProjectPicker: View {
     @Bindable var model: QuinjetPageModel
     let tab: QuinjetTab
@@ -12,9 +20,11 @@ struct QuinjetProjectPicker: View {
             if machines.isLocal(tab.machineID) {
                 QuinjetLocalProjectPicker(
                     model: model, tab: tab, machines: machines, selectMachine: select)
-            } else if let machine = selectedMachine, let picker = tab.folderPicker {
+            } else if let machine = selectedMachine, let picker = tab.folderPicker,
+                let remote = remote(for: machine)
+            {
                 QuinjetRemoteProjectPicker(
-                    model: model, tab: tab, machines: machines, machine: machine,
+                    model: model, tab: tab, machines: machines, machine: machine, remote: remote,
                     picker: picker, selectMachine: select)
             } else {
                 ProgressView("Preparing machine")
@@ -33,7 +43,12 @@ struct QuinjetProjectPicker: View {
             select(machines.localMachine)
             return
         }
-        if !machines.isLocal(machine.id), tab.folderPicker == nil { select(machine) }
+        guard !machines.isLocal(machine.id) else { return }
+        if tab.folderPicker == nil {
+            select(machine)
+        } else if let remote = remote(for: machine), model.projects(for: remote).isEmpty {
+            Task { await model.refreshProjects(for: remote) }
+        }
     }
 
     private func select(_ machine: Machine) {
@@ -46,7 +61,17 @@ struct QuinjetProjectPicker: View {
         }
         let picker = QuinjetFolderPickerModel(session: machines.session(for: machine.id))
         tab.folderPicker = picker
-        Task { await picker.start() }
+        Task {
+            await picker.start()
+            if let remote = remote(for: machine) { await model.refreshProjects(for: remote) }
+        }
+    }
+
+    private func remote(for machine: Machine) -> QuinjetRemote? {
+        guard let connection = machines.session(for: machine.id).connectionRef else { return nil }
+        return QuinjetRemote(
+            machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
+            controlPath: connection.controlSocketPath)
     }
 }
 
@@ -55,8 +80,11 @@ private struct QuinjetRemoteProjectPicker: View {
     let tab: QuinjetTab
     let machines: MachinesModel
     let machine: Machine
+    let remote: QuinjetRemote
     @Bindable var picker: QuinjetFolderPickerModel
     let selectMachine: (Machine) -> Void
+
+    @State private var mode = QuinjetMachinePickerMode.recent
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -69,40 +97,71 @@ private struct QuinjetRemoteProjectPicker: View {
             PageHeader {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Open a project")
-                    Text("Browse live folders on \(machine.name)")
-                        .font(.system(size: UIScale.pt(12), weight: .regular))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(
+                        mode == .recent
+                            ? "Recent Quinjet workspaces on \(machine.name)"
+                            : "Browse live folders on \(machine.name)"
+                    )
+                    .font(.system(size: UIScale.pt(12), weight: .regular))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             } trailing: {
                 HStack(spacing: UIScale.pt(8)) {
-                    Button {
-                        Task { await picker.goUp() }
-                    } label: {
-                        Image(systemName: "arrow.up")
+                    if mode == .browse {
+                        Button {
+                            Task { await picker.goUp() }
+                        } label: {
+                            Image(systemName: "arrow.up")
+                        }
+                        .buttonStyle(QuinjetToolbarButtonStyle())
+                        .disabled(picker.directory == "/" || picker.directory.isEmpty)
+                        .help("Parent folder")
                     }
-                    .buttonStyle(QuinjetToolbarButtonStyle())
-                    .disabled(picker.directory == "/" || picker.directory.isEmpty)
-                    .help("Parent folder")
                     Button {
-                        Task { await picker.refresh() }
+                        refresh()
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .help("Refresh folder")
+                    .help(mode == .recent ? "Refresh recent projects" : "Refresh folder")
                 }
             } accessory: {
                 VStack(alignment: .leading, spacing: UIScale.pt(9)) {
                     QuinjetMachineStrip(
                         machines: machines, selection: tab.machineID, select: selectMachine)
-                    pathField
+                    Picker("View", selection: $mode) {
+                        ForEach(QuinjetMachinePickerMode.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    if mode == .recent { searchField } else { pathField }
                 }
             }
 
-            content
-                .pageContent(compact)
+            Group {
+                if mode == .recent { recentContent } else { browserContent }
+            }
+            .pageContent(compact)
         }
         .background(shortcuts)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            TextField("Search projects and worktrees", text: $model.query)
+                .textFieldStyle(.plain)
+        }
+        .padding(.horizontal, UIScale.pt(11))
+        .frame(height: UIScale.pt(36))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(8))
+                .strokeBorder(DashSkin.lineStrong(dark))
+        }
     }
 
     private var pathField: some View {
@@ -149,7 +208,57 @@ private struct QuinjetRemoteProjectPicker: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var recentContent: some View {
+        let projects = model.filteredProjects(for: remote)
+        if model.isLoadingProjects(for: remote), projects.isEmpty {
+            ProgressView("Loading recent projects from \(machine.name)")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = model.projectError(for: remote), projects.isEmpty {
+            ContentUnavailableView {
+                Label("Projects unavailable", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Try again") { Task { await model.refreshProjects(for: remote) } }
+                Button("Browse folders") { mode = .browse }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if projects.isEmpty {
+            ContentUnavailableView {
+                Label(
+                    model.query.isEmpty ? "No recent projects" : "No matching projects",
+                    systemImage: "folder")
+            } description: {
+                Text("Browse a project folder on this machine to open it in Quinjet.")
+            } actions: {
+                Button("Browse folders") { mode = .browse }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.adaptive(minimum: UIScale.pt(330)), spacing: UIScale.pt(14))
+                    ], spacing: UIScale.pt(14)
+                ) {
+                    ForEach(projects) { project in
+                        QuinjetProjectCard(
+                            project: project,
+                            open: { worktree in
+                                model.open(
+                                    worktree, projectName: project.name,
+                                    available: project.availableWorktrees, remote: remote, in: tab,
+                                    launchEnabled: launchEnabled)
+                            })
+                    }
+                }
+                .padding(.top, UIScale.pt(2))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var browserContent: some View {
         if picker.loading, picker.directory.isEmpty {
             ProgressView("Connecting to \(machine.name)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -160,6 +269,15 @@ private struct QuinjetRemoteProjectPicker: View {
                 Text(error)
             } actions: {
                 Button("Try again") { Task { await picker.start() } }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = tab.errorMessage {
+            ContentUnavailableView {
+                Label("Project unavailable", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Dismiss") { tab.errorMessage = nil }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -266,16 +384,21 @@ private struct QuinjetRemoteProjectPicker: View {
     private func open(_ path: String) {
         guard !path.isEmpty else { return }
         let session = machines.session(for: machine.id)
-        guard session.state.isConnected, let connection = session.connectionRef else {
+        guard session.state.isConnected else {
             Task { await picker.start() }
             return
         }
-        let remote = QuinjetRemote(
-            machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
-            controlPath: connection.controlSocketPath)
         Task {
             await model.openFolder(
                 path, remote: remote, in: tab, launchEnabled: launchEnabled)
+        }
+    }
+
+    private func refresh() {
+        if mode == .recent {
+            Task { await model.refreshProjects(for: remote) }
+        } else {
+            Task { await picker.refresh() }
         }
     }
 }

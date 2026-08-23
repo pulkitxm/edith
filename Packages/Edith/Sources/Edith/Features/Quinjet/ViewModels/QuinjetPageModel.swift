@@ -35,6 +35,9 @@ final class QuinjetPageModel {
     private(set) var loadingProjects = false
     var projectError: String?
     var query = ""
+    private var remoteProjects: [UUID: [QuinjetProject]] = [:]
+    private var loadingRemoteProjects: Set<UUID> = []
+    private var remoteProjectErrors: [UUID: String] = [:]
 
     init(client: QuinjetClient = .live) {
         self.client = client
@@ -48,6 +51,26 @@ final class QuinjetPageModel {
     }
 
     var filteredProjects: [QuinjetProject] {
+        filtered(projects)
+    }
+
+    func projects(for remote: QuinjetRemote) -> [QuinjetProject] {
+        remoteProjects[remote.machineID] ?? []
+    }
+
+    func filteredProjects(for remote: QuinjetRemote) -> [QuinjetProject] {
+        filtered(projects(for: remote))
+    }
+
+    func isLoadingProjects(for remote: QuinjetRemote) -> Bool {
+        loadingRemoteProjects.contains(remote.machineID)
+    }
+
+    func projectError(for remote: QuinjetRemote) -> String? {
+        remoteProjectErrors[remote.machineID]
+    }
+
+    private func filtered(_ projects: [QuinjetProject]) -> [QuinjetProject] {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !search.isEmpty else { return projects }
         return projects.filter { project in
@@ -67,6 +90,17 @@ final class QuinjetPageModel {
             projects = try await client.recentProjects()
         } catch {
             projectError = error.localizedDescription
+        }
+    }
+
+    func refreshProjects(for remote: QuinjetRemote) async {
+        loadingRemoteProjects.insert(remote.machineID)
+        remoteProjectErrors[remote.machineID] = nil
+        defer { loadingRemoteProjects.remove(remote.machineID) }
+        do {
+            remoteProjects[remote.machineID] = try await client.recentProjects(remote: remote)
+        } catch {
+            remoteProjectErrors[remote.machineID] = error.localizedDescription
         }
     }
 
@@ -133,12 +167,17 @@ final class QuinjetPageModel {
         _ path: String, remote: QuinjetRemote? = nil, in tab: QuinjetTab,
         launchEnabled: Bool
     ) async {
-        projectError = nil
+        if remote == nil {
+            projectError = nil
+        } else {
+            tab.errorMessage = nil
+        }
         do {
             let worktrees = try await client.worktrees(at: path, remote: remote).filter(\.canOpen)
             guard let worktree = worktrees.first(where: { $0.path == path }) ?? worktrees.first
             else {
-                projectError = "No open worktree was found in this folder."
+                let message = "No open worktree was found in this folder."
+                if remote == nil { projectError = message } else { tab.errorMessage = message }
                 return
             }
             let name = URL(fileURLWithPath: path).lastPathComponent
@@ -147,7 +186,11 @@ final class QuinjetPageModel {
                 launchEnabled: launchEnabled)
             if remote == nil { await refreshProjects() }
         } catch {
-            projectError = error.localizedDescription
+            if remote == nil {
+                projectError = error.localizedDescription
+            } else {
+                tab.errorMessage = error.localizedDescription
+            }
         }
     }
 

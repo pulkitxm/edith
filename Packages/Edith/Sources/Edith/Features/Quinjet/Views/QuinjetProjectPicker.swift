@@ -130,7 +130,7 @@ struct QuinjetLocalProjectPicker: View {
     }
 }
 
-private struct QuinjetProjectCard: View {
+struct QuinjetProjectCard: View {
     let project: QuinjetProject
     let open: (QuinjetWorktree) -> Void
 
