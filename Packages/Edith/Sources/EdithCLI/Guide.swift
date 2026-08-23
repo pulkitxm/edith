@@ -151,6 +151,10 @@ public enum Guide {
         ed machines kill box 4213 --signal KILL
         ed machines thermal status box          active platform profile and choices
         ed machines thermal set box performance --minutes 30
+        ed machines box control status          live brightness, audio and radios
+        ed machines box control volume 40       set output volume to 40 percent
+        ed machines box control wifi off         preview a disruptive Wi-Fi change
+        ed machines box control wifi off --yes   apply it explicitly
         ```
 
         Thermal controls use the Linux platform profile exposed by the machine.

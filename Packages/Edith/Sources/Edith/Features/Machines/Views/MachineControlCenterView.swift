@@ -108,11 +108,13 @@ final class MachineControlCenterModel {
                 }
             }
         }
-        let result = await session.runCommand(
-            MachineControlCenterCommands.statusCommand, timeout: 20)
+        let result = await MachineControlOperationExecution.status {
+            [session] command, stdin, timeout in
+            await session.runCommand(command, stdin: stdin, timeout: timeout)
+        }
         guard generation == refreshGeneration, !Task.isCancelled else { return }
         switch result {
-        case let .success(output):
+        case let .success(status):
             guard session.isLocal || session.state.isConnected else {
                 snapshot = nil
                 requiresConnection = true
@@ -120,7 +122,7 @@ final class MachineControlCenterModel {
             }
             requiresConnection = false
             if reportFailure { resultFailed = false }
-            apply(MachineControlCenterCommands.parseStatus(output))
+            apply(status)
         case let .failure(error):
             if !session.isLocal && !session.state.isConnected {
                 snapshot = nil
@@ -140,17 +142,13 @@ final class MachineControlCenterModel {
         resultMessage = nil
         isApplyingControl = true
         Task {
-            let shouldAttachSudoPassword =
-                !session.isLocal
-                && MachineControlCenterCommands.shouldAttachSudoPassword(
-                    for: action, platform: snapshot?.platform)
-            let stdin =
-                shouldAttachSudoPassword
-                ? SudoPassword.stdin(machineID: session.machine.id) : nil
-            let command = MachineControlCenterCommands.command(
-                for: action, withSudoPassword: stdin != nil,
-                usingLocalAuthorization: session.isLocal)
-            switch await session.runCommand(command, stdin: stdin, timeout: 30) {
+            let result = await MachineControlOperationExecution.perform(
+                action, machineID: session.machine.id, isLocal: session.isLocal,
+                platform: snapshot?.platform
+            ) { [session] command, stdin, timeout in
+                await session.runCommand(command, stdin: stdin, timeout: timeout)
+            }
+            switch result {
             case .success:
                 resultFailed = false
                 resultMessage = success

@@ -115,6 +115,10 @@ final class CLIWorld: @unchecked Sendable {
         }
         CLIEnvironment.answer = { _ in nil }
         CLIEnvironment.permissionUsages = { [] }
+        CLIEnvironment.usageRefresh = .scripted(events: [])
+        CLIEnvironment.installTool = { tool, _ in
+            throw ToolInstallFailure.unverified(tool.displayName)
+        }
         CLIEnvironment.deliver = { [weak self] name, info in
             self?.record(name, info ?? [:])
         }

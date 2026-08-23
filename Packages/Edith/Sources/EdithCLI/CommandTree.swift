@@ -12,6 +12,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case configValue
     case extensionID
     case permission
+    case onOff
     case shell
     case group
     case usageRange
@@ -585,6 +586,39 @@ public enum CommandTree {
                                 "set", "Switch the thermal profile permanently or for a while.",
                                 options: ["--json", "--help", "--minutes"],
                                 arguments: [.machine, .free]),
+                        ]),
+                    CommandNode(
+                        "control", "Inspect and change live machine controls.",
+                        children: [
+                            CommandNode(
+                                "status", "Read the available live controls.",
+                                options: common, arguments: [.machine]),
+                            CommandNode(
+                                "brightness", "Set display brightness.", options: common,
+                                arguments: [.machine, .free]),
+                            CommandNode(
+                                "volume", "Set system output volume.", options: common,
+                                arguments: [.machine, .free]),
+                            CommandNode(
+                                "mute", "Mute or unmute system audio.", options: common,
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
+                                "wifi", "Turn Wi-Fi on or off.",
+                                options: ["--json", "--help", "--yes"],
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
+                                "bluetooth", "Turn Bluetooth on or off.", options: common,
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
+                                "airplane", "Turn airplane mode on or off.",
+                                options: ["--json", "--help", "--yes"],
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
+                                "dnd", "Turn Do Not Disturb on or off.", options: common,
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
+                                "keyboard-light", "Set keyboard backlight brightness.",
+                                options: common, arguments: [.machine, .free]),
                         ]),
                     CommandNode(
                         "workspace", "Saved multi-pane layouts.", aliases: ["workspaces"],

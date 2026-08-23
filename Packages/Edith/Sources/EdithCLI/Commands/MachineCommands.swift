@@ -26,6 +26,7 @@ struct MachinesCommand: AsyncParsableCommand {
             MachinesMetricsCommand.self,
             MachinesExecCommand.self, MachinesFilesCommand.self, MachinesDockerCommand.self,
             MachinesServicesCommand.self, MachinesPowerCommand.self, MachinesThermalCommand.self,
+            MachinesControlCommand.self,
             MachinesKillCommand.self, MachinesBroadcastCommand.self,
             MachinesWorkspaceCommand.self,
             MachinesConnectCommand.self,

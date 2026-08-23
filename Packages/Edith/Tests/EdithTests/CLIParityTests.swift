@@ -208,6 +208,33 @@ enum UIParity {
             "Machine cooling", "switch thermal profiles",
             ["machines", "thermal", "set", "box", "performance"]),
         UICapability(
+            "Machine controls", "inspect available live controls",
+            ["machines", "control", "status", "box"]),
+        UICapability(
+            "Machine controls", "set display brightness",
+            ["machines", "control", "brightness", "box", "50"]),
+        UICapability(
+            "Machine controls", "set output volume",
+            ["machines", "control", "volume", "box", "40"]),
+        UICapability(
+            "Machine controls", "mute system audio",
+            ["machines", "control", "mute", "box", "on"]),
+        UICapability(
+            "Machine controls", "turn Wi-Fi off",
+            ["machines", "control", "wifi", "box", "off", "--yes"]),
+        UICapability(
+            "Machine controls", "turn Bluetooth on",
+            ["machines", "control", "bluetooth", "box", "on"]),
+        UICapability(
+            "Machine controls", "turn airplane mode on",
+            ["machines", "control", "airplane", "box", "on", "--yes"]),
+        UICapability(
+            "Machine controls", "turn Do Not Disturb on",
+            ["machines", "control", "dnd", "box", "on"]),
+        UICapability(
+            "Machine controls", "set keyboard backlight brightness",
+            ["machines", "control", "keyboard-light", "box", "25"]),
+        UICapability(
             "Machine tools", "start a systemd unit",
             ["machines", "services", "start", "box", "nginx.service"]),
         UICapability(
@@ -472,6 +499,22 @@ enum UIParity {
             #expect(
                 !walked.isEmpty,
                 "`\(capability.label)` is missing from CommandTree, so it will not complete")
+        }
+    }
+
+    @Test func everyRegisteredOperationResolvesToAParserAndCompletionLeaf() {
+        for descriptor in UserOperationCatalog.descriptors {
+            let label = (["ed"] + descriptor.cli).joined(separator: " ")
+            #expect(Self.labels.contains(label), "\(label) is not a parser command")
+            var node = CommandTree.root
+            var walked: [String] = []
+            for segment in descriptor.cli {
+                guard let child = node.child(segment) else { break }
+                node = child
+                walked.append(segment)
+            }
+            #expect(walked == descriptor.cli, "\(label) is incomplete in CommandTree")
+            #expect(node.children.isEmpty, "\(label) resolves to a command group, not a leaf")
         }
     }
 
