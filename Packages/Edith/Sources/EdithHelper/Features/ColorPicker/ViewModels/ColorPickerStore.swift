@@ -7,13 +7,19 @@ import Observation
 @Observable
 final class ColorPickerStore: FeatureModule {
     private(set) var history: [ColorSwatch] = []
+    @ObservationIgnored private var requestObserver: NSObjectProtocol?
 
     init() {
         history = ColorHistoryStore.load()
+        requestObserver = IPC.observe(IPC.Name.requestColorPick) { [weak self] in
+            self?.pick()
+        }
     }
 
     func shutdown() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.colorPicker)
+        if let requestObserver { IPC.stopObserving(requestObserver) }
+        requestObserver = nil
     }
 
     func registerHotKey() {
@@ -26,7 +32,7 @@ final class ColorPickerStore: FeatureModule {
     }
 
     func pick() {
-        NSColorSampler().show { [weak self] color in
+        ColorPickerOperationExecution.perform(.pick) { [weak self] color in
             guard let color else { return }
             Task { @MainActor in
                 self?.commit(color)
