@@ -599,3 +599,9 @@ public enum ExtensionLifecycleCatalog {
         ExtensionDocumentationLink(id: id, title: title, path: path)
     }
 }
+
+public extension ExtensionRegistryEntry {
+    var lifecycle: ExtensionLifecycleDescriptor? {
+        ExtensionLifecycleCatalog.descriptor(for: id)
+    }
+}

@@ -75,6 +75,19 @@ import Testing
         #expect(!source.contains("guard entry.id != \"calendar\""))
     }
 
+    @Test func everyExtensionSettingsSheetHasLifecycleContent() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("ExtensionLifecycleRows(entry: entry)"))
+        #expect(source.contains("if let lifecycle = entry.lifecycle"))
+        #expect(source.contains("Text(entry.subtitle)"))
+    }
+
     @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -580,6 +580,25 @@ enum JSONContract {
         }
     }
 
+    @Test func extensionInfoCarriesLifecycleMetadataAndPortableState() async {
+        await CLIProbe.inWorld { _ in
+            let result = await CLIProbe.capture(["extensions", "info", "quinjet", "--json"])
+            #expect(result.code == 0)
+            let lifecycle = result.object?["lifecycle"] as? [String: Any]
+            let state = result.object?["state"] as? [String: Any]
+            #expect(lifecycle?["id"] as? String == "quinjet")
+            #expect((lifecycle?["workflows"] as? [Any])?.isEmpty == false)
+            #expect((lifecycle?["prerequisites"] as? [Any])?.isEmpty == false)
+            #expect((lifecycle?["cliExamples"] as? [Any])?.isEmpty == false)
+            #expect((lifecycle?["documentation"] as? [Any])?.isEmpty == false)
+            #expect((lifecycle?["recovery"] as? [Any])?.isEmpty == false)
+            #expect((lifecycle?["verification"] as? [Any])?.isEmpty == false)
+            #expect(state?["extensionID"] as? String == "quinjet")
+            #expect(state?["phase"] as? String == "disabled")
+            #expect((state?["issues"] as? [Any])?.isEmpty == true)
+        }
+    }
+
     @Test func theExtensionListAndTheHumanTableAgreeOnWhatIsOn() async {
         await CLIProbe.inWorld { _ in
             _ = await CLIProbe.capture(["extensions", "enable", "clipboard"])

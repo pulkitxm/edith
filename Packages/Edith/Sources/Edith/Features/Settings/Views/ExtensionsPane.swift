@@ -396,10 +396,10 @@ private struct ExtensionMarketplaceCard: View {
                     .pointerCursor()
             }
             Button(action: open) {
-                Text(entry.subtitle)
+                Text(entry.lifecycle?.value ?? entry.subtitle)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
@@ -439,6 +439,7 @@ private struct ExtensionSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                ExtensionLifecycleRows(entry: entry)
                 RequiredPermissionRows(permissions: entry.requiredPermissions)
                 ExtensionDetailRows(entry: entry)
             }
@@ -475,6 +476,67 @@ private struct ExtensionSettingsSheet: View {
         case "system": 500
         case "notchShelf", "presenter": 580
         default: 620
+        }
+    }
+}
+
+private struct ExtensionLifecycleRows: View {
+    let entry: ExtensionRegistryEntry
+
+    var body: some View {
+        if let lifecycle = entry.lifecycle {
+            Section("About") {
+                Text(lifecycle.value)
+                ForEach(lifecycle.workflows) { workflow in
+                    instructionRow(workflow)
+                }
+            }
+            Section("Setup") {
+                ForEach(lifecycle.prerequisites) { prerequisite in
+                    instructionRow(prerequisite)
+                }
+            }
+            Section("Command line") {
+                ForEach(lifecycle.cliExamples, id: \.self) { example in
+                    Text(example)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+            Section("Verify and recover") {
+                ForEach(lifecycle.verification) { verification in
+                    instructionRow(verification)
+                }
+                ForEach(lifecycle.recovery) { recovery in
+                    instructionRow(recovery)
+                }
+                ForEach(lifecycle.documentation) { document in
+                    if let url = URL(
+                        string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
+                    ) {
+                        Link(document.title, destination: url)
+                    }
+                }
+            }
+        } else {
+            Section("About") {
+                Text(entry.subtitle)
+            }
+        }
+    }
+
+    private func instructionRow(_ instruction: ExtensionLifecycleInstruction) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            Text(instruction.title)
+                .fontWeight(.medium)
+            Text(instruction.detail)
+                .settingsCaption()
+            if let command = instruction.command {
+                Text(command)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         }
     }
 }

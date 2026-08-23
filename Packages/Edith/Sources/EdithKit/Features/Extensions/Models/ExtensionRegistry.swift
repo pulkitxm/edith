@@ -6,6 +6,10 @@ public typealias ExtensionMarketplaceCategory = EdithCore.ExtensionMarketplaceCa
 public typealias ExtensionMarketplaceFilter = EdithCore.ExtensionMarketplaceFilter
 public typealias ExtensionRegistryEntry = EdithCore.ExtensionRegistryEntry
 public typealias ExtensionRegistry = EdithCore.ExtensionRegistry
+public typealias ExtensionLifecycleDescriptor = EdithCore.ExtensionLifecycleDescriptor
+public typealias ExtensionLifecycleInstruction = EdithCore.ExtensionLifecycleInstruction
+public typealias ExtensionLifecycleIssue = EdithCore.ExtensionLifecycleIssue
+public typealias ExtensionLifecycleState = EdithCore.ExtensionLifecycleState
 
 public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case calendar
