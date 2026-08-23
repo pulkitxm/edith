@@ -208,11 +208,19 @@ public enum Guide {
         ed quinjet open ~/code/edith            print the launch command, do not run it
         ed quinjet launch ~/code/edith          launch in the current terminal
         ed quinjet launch ~/code/edith --cmux   launch in cmux
+        ed quinjet sessions                     native tabs in the running Edith page
+        ed quinjet focus 2                      select a native tab or cmux workspace
+        ed quinjet restart 2                    restart a review in the same tab
+        ed quinjet switch 2 ~/code/other        switch a tab to another worktree
+        ed quinjet close 2                      preview closing a native tab
+        ed quinjet close 2 --yes                close the tab and its process or workspace
         ```
 
         `open` is always safe to inspect or pipe. It resolves the worktree and prints
         the exact quoted command without starting Quinjet. `launch` is the explicit
-        execution boundary. Both accept `--theme`, `--appearance` and `--json`.
+        standalone execution boundary. It never controls a native Edith tab. Native
+        session commands use bounded IPC with the open Quinjet page. Session numbers,
+        ids, exact titles, branches and worktree paths are accepted as selectors.
 
         ## Companion memory
 

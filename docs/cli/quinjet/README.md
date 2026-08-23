@@ -15,7 +15,13 @@ extension does not have to be enabled.
 | `ed quinjet projects` | List recent projects and their worktrees |
 | `ed quinjet worktrees <path>` | List every worktree for a project or worktree path |
 | `ed quinjet open <path>` | Print the exact launch command without running it |
-| `ed quinjet launch <path>` | Run Quinjet in the current terminal or cmux |
+| `ed quinjet launch <path>` | Run a standalone Quinjet process in the current terminal or cmux |
+| `ed quinjet status [session]` | Show one native session in the running Edith page |
+| `ed quinjet sessions` | List the native sessions in the running Edith page |
+| `ed quinjet focus <session>` | Select a native tab and focus its cmux workspace when applicable |
+| `ed quinjet close <session>` | Preview or close a native tab and its cmux workspace |
+| `ed quinjet restart [session]` | Restart a native review in the same tab |
+| `ed quinjet switch <session> <path>` | Switch a native tab to another worktree |
 
 ## Targeting
 
@@ -44,9 +50,10 @@ not duplicate the general remote filesystem command.
 current or first available worktree, constructs the launch request and prints a
 shell-quoted command. It never starts a process or sends AppleScript.
 
-`ed quinjet launch` crosses the execution boundary. The default replaces the
-current command with an interactive Quinjet process attached to the same
-standard input and output. `--cmux` asks cmux to create a workspace instead.
+`ed quinjet launch` crosses the standalone execution boundary. The default
+starts an interactive Quinjet process attached to the same standard input and
+output. `--cmux` asks cmux to create a workspace instead. It does not create or
+control a tab in Edith's native Quinjet page.
 
 ```sh
 ed quinjet open ~/code/edith
@@ -69,12 +76,42 @@ Both commands accept these options:
 
 The app's terminal and theme menus persist through
 `ed config set quinjetTerminal embedded` and `ed config set quinjetTheme <name>`.
-Restarting, switching worktrees, and showing a review in cmux reuse `launch`
-with the selected path and options.
 
 cmux must be installed in `/Applications`. If it is not,
 `launch --cmux` exits 4 with a hint to omit `--cmux`. `open --cmux` remains safe
 and prints the cmux-targeted Quinjet command without asking cmux to run it.
+
+## Native sessions
+
+Native session commands use bounded request and reply IPC with the running main
+app. The Quinjet extension must be enabled and its page must be open. Run
+`ed app reveal quinjet` before using them. A silent or older app exits 4 instead
+of waiting indefinitely.
+
+Each session can be selected by its 1-based number, full id, exact title, exact
+branch, or current worktree path. Shell completion asks the running page for
+session numbers with a 250 millisecond bound.
+
+```sh
+ed quinjet sessions
+ed quinjet status
+ed quinjet focus 2
+ed quinjet restart 2
+ed quinjet switch 2 ~/code/edith-native-sessions
+ed quinjet close 2
+ed quinjet close 2 --yes
+```
+
+`focus` selects the tab in Edith. For a cmux-backed session it also activates the
+matching cmux workspace. `close` prints a non-mutating plan unless `--yes` is
+present. A confirmed close terminates the embedded process or closes the exact
+cmux workspace before removing the tab. Edith keeps at least one picker tab, so
+the only native session cannot be closed.
+
+`restart` preserves the tab id, machine, worktree and saved launch configuration.
+`switch` resolves the new worktree through the same local or remote Quinjet
+client used by the picker, then replaces the review in the same tab. Both route
+through the same app-side operation method used by the corresponding buttons.
 
 ## JSON
 
@@ -96,15 +133,24 @@ interactive input, so stdout remains exactly one JSON document. Use plain
 `launch` for an interactive terminal session. Use `open --json` for a safe
 noninteractive preview, or `launch --cmux --json` to open a separate workspace.
 
+Native session JSON returns `operation`, `selectedSessionID`,
+`affectedSessionID` and `sessions`. Each session has `id`, `index`, `title`,
+`selected`, `state`, `terminal`, `project`, `worktreePath`, `branch`, `machine`,
+`canClose`, `canRestart` and `exitMessage`. Nullable values are JSON null.
+
+The JSON preview from `close` follows the shared destructive-plan contract with
+`action`, `targets`, `applied` and `changed`. A confirmed close additionally
+returns `closedSessionID`, `selectedSessionID` and `remaining`.
+
 ## Exit codes
 
 | Code | When |
 | --- | --- |
-| 0 | Discovery, planning or launching succeeded |
+| 0 | Discovery, planning, launching or native session control succeeded |
 | 1 | Quinjet failed, returned malformed JSON or exited unsuccessfully |
 | 2 | Arguments, theme or appearance were invalid |
-| 3 | The machine or an openable worktree was not found |
-| 4 | Quinjet, cmux or the selected machine was unavailable |
+| 3 | The machine, worktree or native session was not found |
+| 4 | Quinjet, cmux, the selected machine or the running Edith page was unavailable |
 
 A missing Quinjet executable includes the Homebrew install command. A failed
 Quinjet command includes its diagnostic. Malformed JSON suggests updating
