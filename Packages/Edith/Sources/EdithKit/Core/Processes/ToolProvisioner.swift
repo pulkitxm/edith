@@ -5,11 +5,34 @@ public struct CLICommandRequest: Equatable, Sendable {
     public let executableURL: URL
     public let arguments: [String]
     public let environment: [String: String]
+    public let timeout: TimeInterval?
 
-    public init(executableURL: URL, arguments: [String], environment: [String: String]) {
+    public init(
+        executableURL: URL, arguments: [String], environment: [String: String],
+        timeout: TimeInterval? = nil
+    ) {
         self.executableURL = executableURL
         self.arguments = arguments
         self.environment = environment
+        self.timeout = timeout
+    }
+}
+
+public enum ToolVersionProbe {
+    public typealias RunCommand =
+        @Sendable (CLICommandRequest, @escaping @Sendable (String) -> Void) async throws ->
+        CLICommandResult
+
+    public static func version(
+        _ request: CLICommandRequest,
+        runCommand: @escaping RunCommand = { try await CLICommandRunner.run($0, onLine: $1) }
+    ) async -> String? {
+        guard let result = try? await runCommand(request, { _ in }), result.terminationStatus == 0
+        else { return nil }
+        return result.output.components(separatedBy: .newlines).first {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? request.executableURL.lastPathComponent
     }
 }
 
@@ -61,7 +84,35 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     }
 }
 
+private final class CLIProcessTimeout: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private var workItem: DispatchWorkItem?
+
+    func install(_ item: DispatchWorkItem) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else {
+            item.cancel()
+            return false
+        }
+        workItem = item
+        return true
+    }
+
+    func finish() {
+        lock.lock()
+        finished = true
+        workItem?.cancel()
+        workItem = nil
+        lock.unlock()
+    }
+}
+
 public enum CLICommandRunner {
+    private static let timeoutQueue = DispatchQueue(
+        label: "com.pulkit.edith.cli-command-timeout", qos: .userInteractive)
+
     public static func run(
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
@@ -70,17 +121,20 @@ public enum CLICommandRunner {
             let process = Process()
             let pipe = Pipe()
             let output = CLIStreamingOutput()
+            let processTimeout = CLIProcessTimeout()
             process.executableURL = request.executableURL
             process.arguments = request.arguments
             process.environment = request.environment
             process.standardOutput = pipe
             process.standardError = pipe
+            process.standardInput = FileHandle.nullDevice
             pipe.fileHandleForReading.readabilityHandler = { handle in
                 PipeReading.consume(handle) { data in
                     for line in output.receive(data) { onLine(line) }
                 }
             }
             process.terminationHandler = { completedProcess in
+                processTimeout.finish()
                 pipe.fileHandleForReading.readabilityHandler = nil
                 let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
                 for line in output.receive(remaining) { onLine(line) }
@@ -93,6 +147,16 @@ public enum CLICommandRunner {
             }
             do {
                 try process.run()
+                if let timeout = request.timeout {
+                    let process = process
+                    let workItem = DispatchWorkItem {
+                        if process.isRunning { process.terminate() }
+                    }
+                    if processTimeout.install(workItem) {
+                        timeoutQueue.asyncAfter(
+                            deadline: .now() + max(0.01, timeout), execute: workItem)
+                    }
+                }
             } catch {
                 pipe.fileHandleForReading.readabilityHandler = nil
                 continuation.resume(throwing: error)

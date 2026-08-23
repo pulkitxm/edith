@@ -160,14 +160,9 @@ permission to be missing, so there is nothing that can be unavailable.
   stderr is a pipe or a file therefore produces the table and not a single
   progress byte; redirecting stdout alone does not turn it off, because it is
   stderr that is checked.
-- Completion knows less than the commands do. `ed cleaner clean --<TAB>` never
-  offers `--root`, and `ed cleaner clean --category <TAB>` offers nothing at
-  all. The eleven fixed ids hang off `scan`'s first positional slot, and because
-  the engine drops flag words before it counts positionals they surface for
-  `ed cleaner scan --category <TAB>` too, which is the one place they are worth
-  having. The eight project ids are never offered anywhere. All of that is the
-  completion tree being a hand-maintained mirror. The flags themselves work
-  exactly as documented above.
+- Completion offers the eleven fixed category ids after `--category` on both
+  `scan` and `clean`. Project sweep roots are paths selected with `--root`; the
+  shell supplies those rather than the category catalogue.
 - `--help` works on the group and on all four verbs, prints on stdout and exits
   0. `ed cleaner` on its own does not print help: it runs a full scan, because
   `scan` is the default subcommand.

@@ -44,7 +44,7 @@ walks, and its order is the order `ls` prints. Sixteen entries, in this order:
 | --- | --- | --- | --- |
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
-| `quinjet` | Quinjet | Agent | Pull request review and live workspace changes |
+| `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
@@ -61,7 +61,7 @@ walks, and its order is the order `ls` prints. Sixteen entries, in this order:
 
 The same sixteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-six the welcome tour shows before you ask it for all of them.
+seven the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools |
 | --- | --- | --- | --- | --- | --- |

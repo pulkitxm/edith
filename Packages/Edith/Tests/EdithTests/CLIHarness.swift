@@ -54,11 +54,11 @@ enum CLIProcessProbe {
     }
 
     static func run(
-        _ arguments: [String], currentDirectory: URL? = nil,
+        _ arguments: [String], executable: URL? = nil, currentDirectory: URL? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) throws -> CLIRun {
         let process = Process()
-        process.executableURL = binary
+        process.executableURL = executable ?? binary
         process.arguments = arguments
         process.currentDirectoryURL = currentDirectory
         process.environment = environment
