@@ -580,6 +580,24 @@ struct DownloadSheet: View {
                 .foregroundStyle(theme)
                 .pointerCursor()
                 .disabled(downloader.isRunning)
+            case .done:
+                HStack(spacing: UIScale.pt(4)) {
+                    Button {
+                        downloader.openResult(item)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app")
+                    }
+                    .help("Open downloaded file")
+                    Button {
+                        downloader.revealResult(item)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .help("Reveal downloaded file")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: UIScale.pt(11)))
+                .pointerCursor()
             default:
                 EmptyView()
             }
@@ -600,6 +618,7 @@ struct DownloadSheet: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if case .done = item.status {
+                downloader.openResult(item)
             } else {
                 logItem = item
             }
@@ -669,6 +688,24 @@ struct DownloadSheet: View {
                 .foregroundStyle(theme)
                 .pointerCursor()
                 .disabled(downloader.isRunning)
+            case .done:
+                HStack(spacing: UIScale.pt(4)) {
+                    Button {
+                        downloader.openResult(item)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app")
+                    }
+                    .help("Open downloaded file")
+                    Button {
+                        downloader.revealResult(item)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .help("Reveal downloaded file")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: UIScale.pt(11)))
+                .pointerCursor()
             default:
                 EmptyView()
             }

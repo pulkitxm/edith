@@ -171,14 +171,6 @@ public enum DownloadSizeParser {
     }
 }
 
-private struct SavedItem: Codable {
-    let url: URL
-    var status: DownloadStatus
-    var outputFilename: String?
-    var createdAt: Date
-    var kind: DownloadKind?
-}
-
 @MainActor
 @Observable
 public final class YoutubeDownloader {
@@ -201,13 +193,29 @@ public final class YoutubeDownloader {
     private var cancelObserver: NSObjectProtocol?
 
     public struct DownloadItem: Identifiable, Equatable {
-        public let id = UUID()
+        public let id: UUID
         public let url: URL
         public var status: DownloadStatus
         public var outputFilename: String?
         public let createdAt: Date
         public var kind: DownloadKind = .audio
         public var logs: String = ""
+
+        public init(record: DownloadRecord, logs: String = "") {
+            id = record.id
+            url = record.url
+            status = record.status
+            outputFilename = record.outputFilename
+            createdAt = record.createdAt
+            kind = record.kind ?? .audio
+            self.logs = logs
+        }
+
+        public var record: DownloadRecord {
+            DownloadRecord(
+                id: id, url: url, status: status, outputFilename: outputFilename,
+                createdAt: createdAt, kind: kind)
+        }
 
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
             lhs.id == rhs.id
@@ -257,25 +265,11 @@ public final class YoutubeDownloader {
         return URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")
     }
 
-    private var persistenceURL: URL {
-        Repo.dataDir.appendingPathComponent("downloads.json")
-    }
-
     private init() {
         checkAvailability()
         load()
-        var changed = false
-        for i in items.indices {
-            switch items[i].status {
-            case .queued, .resolving, .downloading:
-                items[i].status = .interrupted("Interrupted")
-                changed = true
-            default:
-                break
-            }
-        }
-        if changed {
-            save()
+        if (try? DownloadOperationExecution.cancel(reason: "Interrupted").changed) ?? 0 > 0 {
+            load()
             NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
         }
@@ -295,28 +289,14 @@ public final class YoutubeDownloader {
     }
 
     private func save() {
-        let saved = items.map {
-            SavedItem(
-                url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
-                createdAt: $0.createdAt, kind: $0.kind)
-        }
-        if let data = try? JSONEncoder().encode(saved) {
-            try? FileManager.default.createDirectory(
-                at: Repo.dataDir, withIntermediateDirectories: true)
-            try? data.write(to: persistenceURL, options: .atomic)
-        }
+        try? DownloadQueue.save(items.map(\.record))
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: persistenceURL),
-            let saved = try? JSONDecoder().decode([SavedItem].self, from: data)
-        else { return }
-        items = saved.map {
-            DownloadItem(
-                url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
-                createdAt: $0.createdAt, kind: $0.kind ?? .audio)
+        let logs = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.logs) })
+        items = DownloadOperationExecution.list(limit: 0).map {
+            DownloadItem(record: $0, logs: logs[$0.id] ?? "")
         }
-        .sorted { $0.createdAt > $1.createdAt }
     }
 
     private func adoptQueueFromDisk() {
@@ -430,25 +410,10 @@ public final class YoutubeDownloader {
     }
 
     public func enqueue(urls: [URL], prefix: String, kind: DownloadKind = .audio) {
-        let outputDir = Repo.musicDir
-        try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-
-        let items = urls.map { url -> DownloadItem in
-            let template: String
-            if prefix.isEmpty {
-                template = outputDir.appendingPathComponent("%(title)s.%(ext)s").path
-            } else {
-                template = outputDir.appendingPathComponent("\(prefix)%(title)s.%(ext)s").path
-            }
-            return DownloadItem(
-                url: url, status: .queued, outputFilename: template, createdAt: Date(),
-                kind: kind)
-        }
-        self.items.insert(contentsOf: items, at: 0)
-        save()
-        if !isRunning {
-            processNext()
-        }
+        guard
+            (try? DownloadOperationExecution.enqueue(urls: urls, prefix: prefix, kind: kind)) != nil
+        else { return }
+        adoptQueueFromDisk()
     }
 
     public func estimate(for url: URL) async -> DownloadEstimate? {
@@ -487,33 +452,34 @@ public final class YoutubeDownloader {
     }
 
     public func retry(_ item: DownloadItem) {
-        guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
-        items[idx].status = .queued
-        save()
-        if !isRunning {
-            processNext()
-        }
+        guard (try? DownloadOperationExecution.retry(id: item.id).changed) ?? 0 > 0 else { return }
+        adoptQueueFromDisk()
     }
 
     public func retryAll() {
-        for i in items.indices {
-            switch items[i].status {
-            case .error, .interrupted:
-                items[i].status = .queued
-            default:
-                break
-            }
-        }
-        save()
-        if !isRunning {
-            processNext()
-        }
+        guard (try? DownloadOperationExecution.retry(all: true).changed) ?? 0 > 0 else { return }
+        adoptQueueFromDisk()
     }
 
     public func clearHistory() {
-        cancelAll()
-        items.removeAll()
-        save()
+        currentProcess?.terminate()
+        currentProcess = nil
+        isRunning = false
+        currentItemID = nil
+        guard (try? DownloadOperationExecution.clear(includeActive: true).changed) ?? 0 > 0 else {
+            return
+        }
+        load()
+    }
+
+    @discardableResult
+    public func openResult(_ item: DownloadItem) -> Bool {
+        (try? DownloadOperationExecution.open(id: item.id)) != nil
+    }
+
+    @discardableResult
+    public func revealResult(_ item: DownloadItem) -> Bool {
+        (try? DownloadOperationExecution.reveal(id: item.id)) != nil
     }
 
     private func processNext() {
@@ -675,17 +641,10 @@ public final class YoutubeDownloader {
     public func cancelAll() {
         currentProcess?.terminate()
         currentProcess = nil
-        for i in items.indices {
-            switch items[i].status {
-            case .queued, .resolving, .downloading:
-                items[i].status = .interrupted("Cancelled")
-            default:
-                break
-            }
-        }
         isRunning = false
         currentItemID = nil
-        save()
+        guard (try? DownloadOperationExecution.cancel().changed) ?? 0 > 0 else { return }
+        load()
     }
 
     nonisolated static func parseProgress(from text: String) -> (
