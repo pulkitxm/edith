@@ -29,6 +29,11 @@ verify_cask() {
     || { echo "release blocked: the cask checksum does not match" >&2; exit 1; }
 }
 
+release_superseded() {
+  echo "release superseded: main moved after the release build" >&2
+  exit 75
+}
+
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git fetch origin main --tags
@@ -51,7 +56,7 @@ case "$MODE" in
     [[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]] \
       || { echo "release blocked: checkout does not match the built commit" >&2; exit 1; }
     [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] \
-      || { echo "release blocked: main moved after the release build" >&2; exit 1; }
+      || release_superseded
     [[ -f "$RELEASE_PLISTS_DIR/Info.plist" && -f "$RELEASE_PLISTS_DIR/HelperInfo.plist" ]] \
       || { echo "release blocked: release plists are missing" >&2; exit 1; }
 

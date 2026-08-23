@@ -149,7 +149,7 @@ test("a release cut publishes one atomic commit and retries cleanly", () => {
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(main);
 });
 
-test("a release cut aborts when main moves after the build", () => {
+test("a release cut reports a superseded build without publishing", () => {
   const fixture = createFixture();
   const mover = join(fixture.root, "mover");
   git(fixture.root, "clone", fixture.remote, mover);
@@ -160,8 +160,31 @@ test("a release cut aborts when main moves after the build", () => {
   git(mover, "push", "origin", "main");
 
   const result = publish(fixture, "cut");
-  expect(result.exitCode).not.toBe(0);
-  expect(result.stderr).toContain("main moved after the release build");
+  expect(result.exitCode).toBe(75);
+  expect(result.stderr).toContain(
+    "release superseded: main moved after the release build",
+  );
+  expect(git(fixture.checkout, "status", "--porcelain")).toBe("");
+  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(
+    git(mover, "rev-parse", "HEAD"),
+  );
+  expect(
+    command(fixture.remote, "git", [
+      "show-ref",
+      "--verify",
+      "refs/tags/v0.0.80",
+    ]).exitCode,
+  ).not.toBe(0);
+});
+
+test("a release cut keeps genuine publication failures fatal", () => {
+  const fixture = createFixture();
+  rmSync(join(fixture.plists, "Info.plist"));
+
+  const result = publish(fixture, "cut");
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("release plists are missing");
+  expect(git(fixture.checkout, "status", "--porcelain")).toBe("");
   expect(
     command(fixture.remote, "git", [
       "show-ref",
@@ -205,6 +228,7 @@ test("invalid release metadata cannot mutate release files", () => {
     RELEASE_TAG: "v0.0.81",
   });
   expect(mismatchedTag.exitCode).not.toBe(0);
+  expect(mismatchedTag.exitCode).not.toBe(75);
   expect(mismatchedTag.stderr).toContain("tag and version do not match");
 
   const malformedChecksum = command(fixture.checkout, "bash", [script, "cut"], {
@@ -212,6 +236,7 @@ test("invalid release metadata cannot mutate release files", () => {
     RELEASE_SHA256: "not-a-checksum",
   });
   expect(malformedChecksum.exitCode).not.toBe(0);
+  expect(malformedChecksum.exitCode).not.toBe(75);
   expect(malformedChecksum.stderr).toContain("invalid release checksum");
   expect(
     readFileSync(join(fixture.checkout, "Resources/Info.plist"), "utf8"),
