@@ -61,7 +61,7 @@ struct SystemPage: View {
                 .confirmationDialog(
                     "Quit all apps?", isPresented: $confirmQuitAll, titleVisibility: .visible
                 ) {
-                    Button("Quit \(max(0, model.apps.count - 1)) apps", role: .destructive) {
+                    Button("Quit \(model.quitAllTargetCount) apps", role: .destructive) {
                         model.quitAll()
                     }
                 } message: {
@@ -139,7 +139,9 @@ struct SystemPage: View {
                 .padding(.vertical, UIScale.pt(24))
             }
             ForEach(model.apps) { app in
-                SystemAppRow(app: app, dark: dark) { pendingQuit = app }
+                SystemAppRow(app: app, dark: dark, canQuit: model.canQuit(app)) {
+                    pendingQuit = app
+                }
                 if app.id != model.apps.last?.id {
                     Divider().opacity(0.3)
                 }
@@ -160,6 +162,7 @@ struct SystemPage: View {
 private struct SystemAppRow: View {
     let app: RunningAppRow
     let dark: Bool
+    let canQuit: Bool
     let onQuit: () -> Void
     @State private var hovering = false
 
@@ -187,7 +190,8 @@ private struct SystemAppRow: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .help("Quit \(app.name)")
+            .disabled(!canQuit)
+            .help(canQuit ? "Quit \(app.name)" : "\(app.name) stays open")
         }
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(7))

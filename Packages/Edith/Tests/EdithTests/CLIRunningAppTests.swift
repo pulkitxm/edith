@@ -88,6 +88,15 @@ import Testing
         #expect(object["changed"] as? Int == 0)
     }
 
+    @Test func emptyAllPreviewHasCleanPlainOutput() async {
+        let result = await CLIProbe.runInWorld(["apps", "quit", "--all"]) { _ in
+            CLIEnvironment.runningApps = { [Self.finder] }
+        }
+
+        #expect(result.code == 0)
+        #expect(result.stdout == "would quit 0 apps; pass --yes to apply\n")
+    }
+
     @Test func plainPreviewNamesTheTargetAndConfirmationFlag() async {
         let result = await CLIProbe.runInWorld(["apps", "quit", "Safari"]) { _ in
             CLIEnvironment.runningApps = { [Self.safari] }

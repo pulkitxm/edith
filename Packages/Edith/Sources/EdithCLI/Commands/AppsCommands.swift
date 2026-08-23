@@ -69,12 +69,18 @@ enum AppsCLI {
         }
         let targets = outcome.plan.targets
         let names = targets.map(\.name).joined(separator: ", ")
+        let label: String
+        if targets.isEmpty {
+            label = "0 apps"
+        } else if targets.count == 1 {
+            label = names
+        } else {
+            label = "\(targets.count) apps: \(names)"
+        }
         if !outcome.applied {
-            let label = targets.count == 1 ? names : "\(targets.count) apps: \(names)"
             CLIOut.out("would quit \(label); pass --yes to apply")
             return
         }
-        let label = targets.count == 1 ? names : "\(targets.count) apps: \(names)"
         CLIOut.out("asked Edith to quit \(label)")
     }
 }

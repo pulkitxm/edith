@@ -28,6 +28,15 @@ final class RunningAppsModel {
     private var lastCPU: [pid_t: (time: UInt64, at: Date)] = [:]
     private let operations = RunningAppOperationCenter()
 
+    var quitAllTargetCount: Int {
+        apps.filter { !RunningAppOperationCenter.protectedBundleIDs.contains($0.bundleID ?? "") }
+            .count
+    }
+
+    func canQuit(_ row: RunningAppRow) -> Bool {
+        !RunningAppOperationCenter.protectedBundleIDs.contains(row.bundleID ?? "")
+    }
+
     init() {
         let d = SharedDefaults.store
         if let raw = d.string(forKey: "systemAppsSort"), let key = AppSortKey(rawValue: raw) {
