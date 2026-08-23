@@ -302,8 +302,121 @@ private actor ProjectRefreshHarness {
     }
 }
 
+private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var focused: [String] = []
+    private var closed: [String] = []
+
+    func focus(_ id: String) {
+        lock.lock()
+        focused.append(id)
+        lock.unlock()
+    }
+
+    func close(_ id: String) {
+        lock.lock()
+        closed.append(id)
+        lock.unlock()
+    }
+
+    func values() -> (focused: [String], closed: [String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (focused, closed)
+    }
+}
+
 @MainActor
 @Suite struct QuinjetPageModelTests {
+    @Test func nativeSessionStatusDescribesTheSelectedPicker() async throws {
+        let model = QuinjetPageModel(client: client)
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .status))
+
+        let session = try #require(result.sessions.first)
+        #expect(result.selectedSessionID == session.id)
+        #expect(session.index == 1)
+        #expect(session.title == "New review")
+        #expect(session.selected)
+        #expect(session.state == "picker")
+        #expect(session.terminal == nil)
+        #expect(!session.canClose)
+        #expect(!session.canRestart)
+    }
+
+    @Test func nativeFocusSelectsTheTabAndFocusesItsCMUXWorkspace() async throws {
+        let recorder = QuinjetWorkspaceRecorder()
+        let model = QuinjetPageModel(
+            client: client,
+            focusExternalWorkspace: { recorder.focus($0) },
+            closeExternalWorkspace: { recorder.close($0) })
+        let tab = try #require(model.selectedTab)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .cmux, theme: .quinjet, appearance: .dark)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main], in: tab,
+            launchEnabled: false, configuration: configuration)
+        tab.externalWorkspaceID = "workspace-1"
+        _ = model.addPickerTab()
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .focus, session: "1"))
+
+        #expect(result.selectedSessionID == tab.id.uuidString)
+        #expect(recorder.values().focused == ["workspace-1"])
+        #expect(result.sessions.first?.state == "running")
+        #expect(result.sessions.first?.terminal == "cmux")
+    }
+
+    @Test func nativeCloseClosesCMUXBeforeRemovingItsTab() async throws {
+        let recorder = QuinjetWorkspaceRecorder()
+        let model = QuinjetPageModel(
+            client: client,
+            focusExternalWorkspace: { recorder.focus($0) },
+            closeExternalWorkspace: { recorder.close($0) })
+        let tab = try #require(model.selectedTab)
+        tab.externalWorkspaceID = "workspace-1"
+        let remaining = model.addPickerTab()
+
+        let result = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .close, session: tab.id.uuidString))
+
+        #expect(recorder.values().closed == ["workspace-1"])
+        #expect(result.affectedSessionID == tab.id.uuidString)
+        #expect(result.sessions.map(\.id) == [remaining.id.uuidString])
+        #expect(result.selectedSessionID == remaining.id.uuidString)
+    }
+
+    @Test func nativeSwitchAndRestartReuseTheSameTab() async throws {
+        let model = QuinjetPageModel(client: client)
+        let tab = try #require(model.selectedTab)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main, Self.feature], in: tab,
+            launchEnabled: false)
+
+        let switched = try await model.performSessionOperation(
+            QuinjetSessionRequest(
+                operation: .switchWorktree, session: "1", worktreePath: Self.feature.path))
+        let restarted = try await model.performSessionOperation(
+            QuinjetSessionRequest(operation: .restart, session: tab.id.uuidString))
+
+        #expect(model.tabs.count == 1)
+        #expect(model.selectedTab?.id == tab.id)
+        #expect(model.selectedTab?.worktree == Self.feature)
+        #expect(switched.affectedSessionID == tab.id.uuidString)
+        #expect(restarted.sessions.first?.worktreePath == Self.feature.path)
+    }
+
+    @Test func nativeCloseRejectsTheOnlyTab() async throws {
+        let model = QuinjetPageModel(client: client)
+
+        await #expect(throws: QuinjetSessionError.lastSession) {
+            try await model.performSessionOperation(
+                QuinjetSessionRequest(operation: .close, session: "1"))
+        }
+    }
+
     @Test func newestLocalProjectRefreshWins() async throws {
         let harness = ProjectRefreshHarness()
         let model = QuinjetPageModel(
