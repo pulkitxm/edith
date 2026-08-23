@@ -60,8 +60,9 @@ struct QuinjetPage: View {
     }
 
     private var configuration: QuinjetLaunchConfiguration {
-        QuinjetLaunchConfiguration(
-            terminal: QuinjetTerminal(rawValue: terminalName) ?? .embedded,
+        let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
+        return QuinjetLaunchConfiguration(
+            terminal: storedTerminal.isAvailable ? storedTerminal : .embedded,
             theme: QuinjetTheme(rawValue: themeName) ?? .quinjet,
             appearance: scheme == .dark ? .dark : .light)
     }
@@ -72,7 +73,11 @@ struct QuinjetPage: View {
                 Button {
                     terminalName = terminal.rawValue
                 } label: {
-                    Label(terminal.label, systemImage: terminal.icon)
+                    if terminal == configuration.terminal {
+                        Label(terminal.label, systemImage: "checkmark")
+                    } else {
+                        Label(terminal.label, systemImage: terminal.icon)
+                    }
                 }
                 .disabled(!terminal.isAvailable)
             }
@@ -317,7 +322,7 @@ private struct QuinjetTerminalWorkspace: View {
         ContentUnavailableView {
             Label("Running in cmux", systemImage: "macwindow.on.rectangle")
         } description: {
-            Text("Quinjet is using cmux for this project and keeps cmux's terminal theme.")
+            Text("Quinjet is running in cmux with the selected project and theme.")
         } actions: {
             Button("Open again in cmux", action: restart)
                 .buttonStyle(QuinjetToolbarButtonStyle())
