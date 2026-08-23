@@ -338,6 +338,9 @@ enum UIParity {
         UICapability("Music player", "skip forward", ["music", "next"]),
         UICapability("Music player", "skip back", ["music", "previous"]),
         UICapability("Music player", "change the volume", ["music", "volume", "0.5"]),
+        UICapability("Notch music", "open the current player", ["music", "open-current"]),
+        UICapability(
+            "Notch music", "reveal the current track", ["music", "reveal-current"]),
         UICapability("Music page", "browse the library", ["music", "ls"]),
         UICapability("Music page", "click a track to play it", ["music", "start", "song"]),
         UICapability(

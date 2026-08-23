@@ -342,6 +342,12 @@ enum JSONContract {
         JSONCase("ed music next", ["music", "next", "--json"]),
         JSONCase("ed music previous", ["music", "previous", "--json"]),
         JSONCase("ed music volume", ["music", "volume", "0.5", "--json"]),
+        JSONCase(
+            "ed music open-current", ["music", "open-current", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed music reveal-current", ["music", "reveal-current", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed calendar ls", ["calendar", "ls", "--json"]),
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
         JSONCase(

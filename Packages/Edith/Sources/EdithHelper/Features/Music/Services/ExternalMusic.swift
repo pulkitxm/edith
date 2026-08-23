@@ -105,7 +105,7 @@ final class ExternalMusic {
     }
 
     func handle(command info: [AnyHashable: Any]) {
-        switch info["action"] as? String ?? "" {
+        switch (info["action"] as? String ?? "").lowercased() {
         case "playpause": playPause()
         case "next": next()
         case "previous": previous()
@@ -114,6 +114,11 @@ final class ExternalMusic {
         default: break
         }
         broadcast()
+    }
+
+    func perform(_ request: MusicTransportRequest) {
+        MusicTransportExecution.perform(
+            request, sendCommand: { handle(command: $0) }, requestStatus: broadcast)
     }
 
     func broadcast() {

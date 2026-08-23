@@ -48,7 +48,7 @@ struct TrackRow: View {
 
     var body: some View {
         Button {
-            player.toggle(track)
+            player.perform(.startTrack(track.relativePath))
         } label: {
             HStack(spacing: 10) {
                 Group {

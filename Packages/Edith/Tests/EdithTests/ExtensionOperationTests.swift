@@ -10,6 +10,7 @@ import Testing
             CalendarEventOperation.allCases.map(\.descriptor)
             + ShelfItemOperation.allCases.map(\.descriptor)
             + MusicLibraryOperation.allCases.map(\.descriptor)
+            + MusicTransportOperation.allCases.map(\.descriptor)
             + PresenterRuntimeOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
         #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
