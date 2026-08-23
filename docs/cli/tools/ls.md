@@ -57,7 +57,7 @@ the order is always `yt-dlp`, `claude`, `codex`, `quinjet`.
 ```
 
 `id` is what `install` takes. `name` is the display name the Settings row shows,
-which differs from the id for two of the four. `why` is the sentence under that
+which differs from the id for some tools. `why` is the sentence under that
 name in the same row. A tool that is not installed keeps every key and nulls the
 two that have no answer:
 
@@ -72,8 +72,9 @@ two that have no answer:
 }
 ```
 
-`version` is also `null` when the tool is installed but printed nothing on
-stdout for `--version`.
+For a broken tool, `path` still names the executable while `installed` is false
+and `version` is null. A successful probe that prints no version uses the
+executable name as its version fallback.
 
 Examples:
 
@@ -94,8 +95,9 @@ codex   installed  codex-cli 0.146.0-alpha.9.2  Reads Codex session and weekly l
 quinjet installed  quinjet 1.0.0                 Powers local pull request review and live workspace changes.
 ```
 
-`STATE` is `installed` or `missing`, and a missing tool leaves `VERSION` blank
-rather than printing a placeholder:
+`STATE` is `installed`, `missing` or `broken`. A missing tool has no executable;
+a broken tool exists but timed out or returned a non-zero status from
+`--version`. Both leave `VERSION` blank:
 
 ```
 $ ed tools ls
@@ -114,8 +116,8 @@ cache. The four tools are probed concurrently, one task each, and a tool with
 no cached version, or one whose cached stamp no longer matches the binary's size
 and modification time, is run once, with stdin on `/dev/null` and stderr
 discarded, and waited for, so a cold run is only as slow as the slowest
-`--version` on the machine and there is no timeout. A tool's exit status is ignored: presence is decided by the file being
-executable, and the version is whatever first line came back.
+`--version` on the machine. Each probe stops after five seconds, and only exit
+status 0 counts as installed.
 
 While it probes it says so. A single spinner line on stderr reads
 `probing 4 tools`, carries the seconds elapsed, is rewritten in place and is

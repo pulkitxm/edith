@@ -12,7 +12,7 @@ Arguments:
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<tool>` | one of `yt-dlp`, `claude`, `codex`, `quinjet`, or a corresponding display name | required | Which tool to install. Matched case-insensitively against the id first, then against the display name. |
+| `<tool>` | one of `yt-dlp`, `claude`, `codex`, `quinjet`, or a matching display name | required | Which tool to install. Matched case-insensitively against the id first, then against the display name. |
 
 Options:
 
@@ -117,8 +117,8 @@ hint: tools: yt-dlp, claude, codex, quinjet
 Behaviour: the presence check runs first, so an already-installed tool is
 reported and exits 0 without touching the network. Only the other branch does
 any work, and it does it here: `ToolInstaller` runs `curl`, `chmod` and a move
-for yt-dlp, `brew` and then `npm` for the two agent CLIs, or Homebrew for Quinjet,
-in this process.
+for yt-dlp, `brew` and then `npm` for the two agent CLIs, or Homebrew for
+Quinjet, in this process.
 Nothing is posted at Edith and no part of it has to be running. Every line those
 commands print is echoed as a `·` row as it arrives, which for the curl progress
 bar is one row per redraw. When they finish, `ed` runs the tool's own

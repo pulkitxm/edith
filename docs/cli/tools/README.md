@@ -3,8 +3,8 @@
 `ed tools` answers one question: does this Mac have the command line programs
 Edith's extensions shell out to, and where are they? Four tools are in the
 catalogue, and the catalogue is fixed in the binary: `yt-dlp`, which the Music
-extension and the whole download queue run, and `claude` and `codex`, the agent
-CLIs behind Agent Usage, plus `quinjet` for pull request review.
+extension and the whole download queue run, `claude` and `codex`, the agent
+CLIs behind Agent Usage, and `quinjet`, which powers workspace review.
 
 `ls` looks for each one and asks it for its version. `install` reports the tool
 when it is already there and otherwise fetches it itself, in this process, the
@@ -31,16 +31,15 @@ switched on.
 
 | `id` | Name | Wanted by | Present when | `install` fetches it from |
 | --- | --- | --- | --- | --- |
-| `yt-dlp` | yt-dlp | The Music extension, and everything under `ed download` | an executable called `yt-dlp` is on the assembled PATH | the official release asset `https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos`, downloaded with `curl --fail --location --progress-bar`, made executable, and moved to `~/Library/Application Support/Edith/bin/yt-dlp` |
-| `claude` | Claude Code | The Agent Usage extension | an executable called `claude` is on the assembled PATH | `brew install --cask claude-code`, falling back to `npm install -g @anthropic-ai/claude-code` |
-| `codex` | Codex | The Agent Usage extension, and only while `codexLimitsEnabled` is on, which it is unless you turn it off | an executable called `codex` is on the assembled PATH | `brew install --cask codex`, falling back to `npm install -g @openai/codex` |
-| `quinjet` | Quinjet | The Quinjet extension | an executable called `quinjet` is on the assembled PATH | `brew install pulkitxm/tap/quinjet` |
+| `yt-dlp` | yt-dlp | The Music extension, and everything under `ed download` | `yt-dlp` is on the assembled PATH and answers `--version` successfully | the official release asset `https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos`, downloaded with `curl --fail --location --progress-bar`, made executable, and moved to `~/Library/Application Support/Edith/bin/yt-dlp` |
+| `claude` | Claude Code | The Agent Usage extension | `claude` is on the assembled PATH and answers `--version` successfully | `brew install --cask claude-code`, falling back to `npm install -g @anthropic-ai/claude-code` |
+| `codex` | Codex | The Agent Usage extension, and only while `codexLimitsEnabled` is on, which it is unless you turn it off | `codex` is on the assembled PATH and answers `--version` successfully | `brew install --cask codex`, falling back to `npm install -g @openai/codex` |
+| `quinjet` | Quinjet | The Quinjet extension | an executable called `quinjet` is on the assembled PATH and answers `--version` successfully | `brew install pulkitxm/tap/quinjet` |
 
-The version string in every case is the first line the tool prints for
-`--version`: stdout alone when `ls` reads it, stdout and stderr together when
-`install` verifies what it just did.
+The version string in every case is the first non-empty line the tool prints on
+stdout or stderr for `--version`.
 
-Only `yt-dlp` lands somewhere Edith owns. The other tools go wherever
+Only `yt-dlp` lands somewhere Edith owns. The package-managed tools go wherever
 Homebrew or npm puts them, so the `path` field of `ed tools ls --json` is the
 only reliable answer to which binary is being used. The fallback order is
 Homebrew first and npm second: npm is tried both when `brew --version` fails
@@ -144,13 +143,11 @@ install that did not land.
 
   Update or replace a tool and its stamp stops matching, so the next `ls` probes
   that one again. The four probes run concurrently, so a cold run costs the
-  slowest tool rather than the sum, and there is still no timeout around the
-  call: a tool whose `--version` hangs hangs `ed tools ls` with it.
-- `installed` means a file with that name is executable on the assembled PATH.
-  It is not a claim that the tool runs. The exit status of `--version` is
-  ignored here, while the app's own provisioner treats a non-zero status as
-  missing, so a broken install can read `installed` in `ed tools ls` and still
-  show as missing in Settings.
+  slowest tool rather than the sum. Each probe has a five-second deadline.
+- `installed` means the executable answered `--version` with exit status 0.
+  An executable file that times out or exits non-zero is shown as `broken`,
+  with its path retained and `installed: false` in JSON. The app provisioner
+  uses the same probe contract.
 - `install` is not fire and forget. It runs the download or the package manager
   itself and does not return until the tool has answered `--version`, so a zero
   exit means the tool is there and `ed tools ls` will say so. The Extensions
@@ -167,12 +164,12 @@ install that did not land.
   replaces, so the worst a wrong id can do is exit 3.
 - `codexLimitsEnabled` decides whether the Agent Usage sheet insists on `codex`
   before it considers itself set up. It has no effect on `ed tools`, which
-  lists and installs all four regardless. Turning the Music, Agent Usage or Quinjet
-  extension off does not remove anything either: tools stay installed when the
-  extension that wanted them is disabled.
+  lists and installs all four regardless. Turning the Music, Agent Usage or
+  Quinjet extension off does not remove anything either: tools stay installed
+  when the extension that wanted them is disabled.
 - The relation between tools and extensions is readable from the other side:
   `ed extensions info music --json` reports `"requiredTools": ["yt-dlp"]` and
-  `ed extensions info usage --json` reports `["claude", "codex"]`.
+  `ed extensions info usage --json` reports `["claude", "codex"]`, while
   `ed extensions info quinjet --json` reports `["quinjet"]`.
 - `ed download tool` is the second view of the same yt-dlp. It prints the
   version and path of the binary found on the same assembled PATH, and
@@ -184,10 +181,8 @@ install that did not land.
   name. The Settings row shows the same sentence until it has checked, then
   replaces it with `Installed, <version>` or with the failure and its manual
   instruction.
-- Completion knows the verbs but not the tools. `ed tools <TAB>` offers `ls`
-  and `install`; `ed tools install <TAB>` offers nothing at all, because the
-  completion tree marks that argument free rather than pointing it at the
-  catalogue. Type the id.
+- Completion reads the same provisioning catalogue as help and execution.
+  `ed tools install <TAB>` offers all four ids.
 - Both verbs take `--json` in its usual form, long only, declared per verb.
   There is no `-j`, and `ed tools --json` works only because the bare group
   falls through to `ls`.

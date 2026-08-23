@@ -19,9 +19,13 @@ public enum ArgumentKind: Equatable, Sendable {
     case attentionRange
     case attentionEntity
     case attentionCategory
+    case downloadKind
     case localPath
+    case musicPlayer
     case remotePath
     case container
+    case tool
+    case usageSource
     case free
 }
 
@@ -30,17 +34,20 @@ public struct CommandNode: Equatable, Sendable {
     public let summary: String
     public let aliases: [String]
     public let options: [String]
+    public let optionValues: [String: ArgumentKind]
     public let arguments: [ArgumentKind]
     public let children: [CommandNode]
 
     public init(
         _ name: String, _ summary: String, aliases: [String] = [], options: [String] = [],
-        arguments: [ArgumentKind] = [], children: [CommandNode] = []
+        optionValues: [String: ArgumentKind] = [:], arguments: [ArgumentKind] = [],
+        children: [CommandNode] = []
     ) {
         self.name = name
         self.summary = summary
         self.aliases = aliases
         self.options = options
+        self.optionValues = optionValues
         self.arguments = arguments
         self.children = children
     }
@@ -53,8 +60,13 @@ public struct CommandNode: Equatable, Sendable {
 }
 
 public enum CommandTree {
-    public static let common = ["--json", "--help"]
+    public static let inherited = ["--help"]
+    public static let common = ["--json"] + inherited
     public static let playback = ["--json", "--help", "--player"]
+    public static let playbackValues: [String: ArgumentKind] = ["--player": .musicPlayer]
+    public static let usageValues: [String: ArgumentKind] = [
+        "--range": .usageRange, "--source": .usageSource, "--machine": .machine,
+    ]
 
     public static let root = CommandNode(
         "ed", "The command line for Edith.", options: ["--help", "--version"],
@@ -67,7 +79,7 @@ public enum CommandTree {
                 children: [
                     CommandNode(
                         "install", "Install completions for the detected shells.",
-                        options: ["--json", "--shell"], arguments: [.shell]),
+                        options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
                     CommandNode("zsh", "Print the zsh completion script."),
                     CommandNode("bash", "Print the bash completion script."),
                     CommandNode("fish", "Print the fish completion script."),
@@ -82,7 +94,8 @@ public enum CommandTree {
                 children: [
                     CommandNode(
                         "ls", "List settings and their current values.", aliases: ["list"],
-                        options: ["--json", "--group", "--changed"], arguments: [.group]),
+                        options: ["--json", "--group", "--changed"],
+                        optionValues: ["--group": .group]),
                     CommandNode(
                         "get", "Print one setting.", options: common, arguments: [.configKey]),
                     CommandNode(
@@ -183,16 +196,19 @@ public enum CommandTree {
                     CommandNode(
                         "summary", "Cost and tokens over a window.",
                         options: ["--json", "--range", "--source", "--machine"],
-                        arguments: [.usageRange]),
+                        optionValues: usageValues),
                     CommandNode(
                         "daily", "Per-day cost and tokens.",
-                        options: ["--json", "--range", "--source", "--machine"]),
+                        options: ["--json", "--range", "--source", "--machine"],
+                        optionValues: usageValues),
                     CommandNode(
                         "models", "Cost and tokens per model.",
-                        options: ["--json", "--range", "--source", "--machine"]),
+                        options: ["--json", "--range", "--source", "--machine"],
+                        optionValues: usageValues),
                     CommandNode(
                         "projects", "Cost and tokens per GitHub repository.",
-                        options: ["--json", "--range", "--limit"]),
+                        options: ["--json", "--range", "--limit"],
+                        optionValues: ["--range": .usageRange]),
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),
@@ -231,23 +247,33 @@ public enum CommandTree {
             CommandNode(
                 "music", "Whatever is playing, and playback control.",
                 aliases: ["nowplaying", "np"], options: playback,
+                optionValues: playbackValues,
                 children: [
                     CommandNode(
                         "status", "What is playing right now.", options: playback,
-                        arguments: []),
+                        optionValues: playbackValues),
                     CommandNode("players", "Every player, and which is active.", options: common),
-                    CommandNode("play", "Resume playback.", options: playback),
-                    CommandNode("pause", "Pause playback.", options: playback),
-                    CommandNode("stop", "Stop playback and reset the position.", options: playback),
+                    CommandNode(
+                        "play", "Resume playback.", options: playback,
+                        optionValues: playbackValues),
+                    CommandNode(
+                        "pause", "Pause playback.", options: playback,
+                        optionValues: playbackValues),
+                    CommandNode(
+                        "stop", "Stop playback and reset the position.", options: playback,
+                        optionValues: playbackValues),
                     CommandNode(
                         "toggle", "Toggle play and pause.", aliases: ["playpause"],
-                        options: playback),
-                    CommandNode("next", "Skip to the next track.", options: playback),
+                        options: playback, optionValues: playbackValues),
+                    CommandNode(
+                        "next", "Skip to the next track.", options: playback,
+                        optionValues: playbackValues),
                     CommandNode(
                         "previous", "Go back to the previous track.", aliases: ["prev"],
-                        options: playback),
+                        options: playback, optionValues: playbackValues),
                     CommandNode(
-                        "volume", "Set the player volume from 0 to 1.", options: playback),
+                        "volume", "Set the player volume from 0 to 1.", options: playback,
+                        optionValues: playbackValues),
                     CommandNode(
                         "start", "Play one track, or a whole folder.",
                         options: ["--json", "--help", "--folder"], arguments: [.free]),
@@ -304,7 +330,7 @@ public enum CommandTree {
                         aliases: ["list"], options: common),
                     CommandNode(
                         "install", "Install one of the tools.", options: common,
-                        arguments: [.toolID]),
+                        arguments: [.tool]),
                 ]),
             CommandNode(
                 "apps", "The applications running on this Mac.",
@@ -326,7 +352,8 @@ public enum CommandTree {
                         options: ["--json", "--help", "--active", "--limit"]),
                     CommandNode(
                         "add", "Queue one or more URLs.",
-                        options: ["--json", "--help", "--kind", "--prefix"], arguments: [.free]),
+                        options: ["--json", "--help", "--kind", "--prefix"],
+                        optionValues: ["--kind": .downloadKind], arguments: [.free]),
                     CommandNode(
                         "retry", "Queue a failed download again.",
                         options: ["--json", "--help", "--all"], arguments: [.historyIndex]),
@@ -376,15 +403,16 @@ public enum CommandTree {
                     CommandNode("status", "Show tracking, data and focus state.", options: common),
                     CommandNode(
                         "summary", "Summarize focus, distraction and top destinations.",
-                        options: ["--json", "--help", "--range"], arguments: [.attentionRange]),
+                        options: ["--json", "--help", "--range"],
+                        optionValues: ["--range": .attentionRange]),
                     CommandNode(
                         "timeline", "List raw observed attention events.",
                         options: ["--json", "--help", "--range", "--limit"],
-                        arguments: [.attentionRange]),
+                        optionValues: ["--range": .attentionRange]),
                     CommandNode(
                         "music", "Summarize tracks, artists, albums and listening time.",
                         options: ["--json", "--help", "--range", "--limit"],
-                        arguments: [.attentionRange]),
+                        optionValues: ["--range": .attentionRange]),
                     CommandNode(
                         "categories", "List categories or classify an entity.",
                         children: [
@@ -417,7 +445,7 @@ public enum CommandTree {
                     CommandNode(
                         "ls", "List picked colours.", aliases: ["list"],
                         options: ["--json", "--help", "--format", "--limit"],
-                        arguments: [.colorFormat]),
+                        optionValues: ["--format": .colorFormat]),
                     CommandNode("clear", "Forget every picked colour.", options: ["--json"]),
                 ]),
             CommandNode(
@@ -442,13 +470,14 @@ public enum CommandTree {
                     CommandNode(
                         "scan", "Measure what could be reclaimed.",
                         options: ["--json", "--help", "--category", "--root"],
-                        arguments: [.cleanerCategory]),
+                        optionValues: ["--category": .cleanerCategory]),
                     CommandNode(
                         "categories", "The caches the cleaner knows.", aliases: ["ls"],
                         options: common),
                     CommandNode(
                         "clean", "Move the scanned caches to the Trash.",
-                        options: ["--json", "--help", "--category", "--yes"]),
+                        options: ["--json", "--help", "--category", "--yes"],
+                        optionValues: ["--category": .cleanerCategory]),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
                 ]),
             CommandNode(
