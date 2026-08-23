@@ -362,8 +362,11 @@ public enum Guide {
         ed apps ls                      what is running here
         ed apps quit Safari | --all --yes
         ed download ls                  the yt-dlp queue
+        ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
-        ed download retry --all | clear | tool --update
+        ed download retry --all | clear --yes | tool --update
+        ed download cancel 1 | cancel
+        ed download open 1 | reveal 1
         ```
 
         ```

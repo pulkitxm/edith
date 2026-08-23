@@ -35,13 +35,125 @@ import Testing
         }
     }
 
-    @Test func downloadCancelSaysWhenNothingStoppedTheRunningTransfer() async throws {
+    @Test func downloadCancelReportsWhenNoAppWasNotified() async throws {
         await CLIProbe.inWorld { _ in
             CLIEnvironment.isMainAppRunning = { false }
             let result = await CLIProbe.capture(["download", "cancel", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["appRunning"] as? Bool == false)
-            #expect(result.object?["stoppedRunning"] as? Bool == false)
+            #expect(result.object?["appNotified"] as? Bool == false)
+        }
+    }
+
+    @Test func downloadCommandsShareLifecycleStateAndStableJSON() async throws {
+        await CLIProbe.inWorld { world in
+            let added = await CLIProbe.capture([
+                "download", "add", "https://youtu.be/one", "https://youtu.be/two", "--json",
+            ])
+            #expect(added.code == 0)
+            #expect(added.array?.count == 2)
+            #expect((added.array?.first as? [String: Any])?["id"] as? String != nil)
+            let active = await CLIProbe.capture(["download", "ls", "--active", "--json"])
+            let activeRows = active.array as? [[String: Any]]
+            let allRows =
+                (await CLIProbe.capture(["download", "ls", "--json"])).array
+                as? [[String: Any]]
+            #expect(activeRows?.map { $0["index"] as? Int } == allRows?.map { $0["index"] as? Int })
+
+            let status = await CLIProbe.capture(["download", "status", "--json"])
+            #expect(status.object?["total"] as? Int == 2)
+            #expect(status.object?["queued"] as? Int == 2)
+            let cancelled = await CLIProbe.capture(["download", "cancel", "--json"])
+            #expect(cancelled.object?["cancelled"] as? Int == 2)
+            #expect((cancelled.object?["records"] as? [[String: Any]])?.count == 2)
+            let afterCancel = await CLIProbe.capture(["download", "status", "--json"])
+            #expect(afterCancel.object?["interrupted"] as? Int == 2)
+
+            let retried = await CLIProbe.capture(["download", "retry", "1", "--json"])
+            #expect(retried.object?["retried"] as? Int == 1)
+            #expect(world.postedNames().contains(IPC.Name.downloadQueueChanged.rawValue))
+        }
+    }
+
+    @Test func downloadCancelTargetsOneRecordAndPostsItsStableIdentity() async {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            let first = await CLIProbe.capture([
+                "download", "add", "https://youtu.be/one", "--json",
+            ])
+            _ = await CLIProbe.capture(["download", "add", "https://youtu.be/two", "--json"])
+            let id = (first.array?.first as? [String: Any])?["id"] as? String
+            let recordsBefore = DownloadQueue.load(from: CLIEnvironment.downloadQueueFile)
+            let targetIndex = recordsBefore.firstIndex { $0.id.uuidString == id }.map { $0 + 1 }
+
+            let result = await CLIProbe.capture([
+                "download", "cancel", String(targetIndex ?? 0), "--json",
+            ])
+            let records = result.object?["records"] as? [[String: Any]]
+            #expect(result.code == 0)
+            #expect(result.object?["cancelled"] as? Int == 1)
+            #expect(result.object?["appNotified"] as? Bool == true)
+            #expect(records?.first?["id"] as? String == id)
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestDownloadCancel).last?["id"] as? String
+                    == id)
+            let recordsAfter = DownloadQueue.load(from: CLIEnvironment.downloadQueueFile)
+            #expect(recordsAfter.first { $0.id.uuidString == id }?.state == "interrupted")
+            #expect(recordsAfter.first { $0.id.uuidString != id }?.state == "queued")
+        }
+    }
+
+    @Test func filteredAndAddedRowsKeepTheirFullQueueIndexes() async throws {
+        try await CLIProbe.inWorld { _ in
+            try DownloadQueue.save(
+                [
+                    DownloadRecord(
+                        url: URL(string: "https://youtu.be/done")!, status: .done("done.m4a"),
+                        outputFilename: nil, createdAt: .distantFuture, kind: .audio)
+                ], to: CLIEnvironment.downloadQueueFile)
+            let added = await CLIProbe.capture([
+                "download", "add", "https://youtu.be/active", "--json",
+            ])
+            let active = await CLIProbe.capture(["download", "ls", "--active", "--json"])
+            let addedRow = added.array?.first as? [String: Any]
+            let activeRow = active.array?.first as? [String: Any]
+
+            #expect(addedRow?["index"] as? Int == 2)
+            #expect(activeRow?["index"] as? Int == 2)
+            #expect(activeRow?["id"] as? String == addedRow?["id"] as? String)
+        }
+    }
+
+    @Test func downloadHistoryMutationsPreviewUntilConfirmed() async throws {
+        try await CLIProbe.inWorld { _ in
+            let queue = CLIEnvironment.downloadQueueFile
+            try DownloadQueue.save(
+                [
+                    DownloadRecord(
+                        url: URL(string: "https://youtu.be/one")!, status: .done("one.m4a"),
+                        outputFilename: nil, createdAt: Date(), kind: .audio)
+                ], to: queue)
+
+            let removePreview = await CLIProbe.capture(["download", "rm", "1", "--json"])
+            #expect(removePreview.object?["preview"] as? Bool == true)
+            #expect(removePreview.object?["removed"] as? Int == 0)
+            #expect(DownloadQueue.load(from: queue).count == 1)
+            let remove = await CLIProbe.capture(["download", "rm", "1", "--yes", "--json"])
+            #expect(remove.object?["preview"] as? Bool == false)
+            #expect(remove.object?["removed"] as? Int == 1)
+
+            _ = await CLIProbe.capture(["download", "add", "https://youtu.be/two", "--json"])
+            _ = await CLIProbe.capture(["download", "cancel", "--json"])
+            let clearPreview = await CLIProbe.capture([
+                "download", "clear", "--json",
+            ])
+            #expect(clearPreview.object?["wouldRemove"] as? Int == 1)
+            #expect(DownloadQueue.load(from: queue).count == 1)
+            let clear = await CLIProbe.capture([
+                "download", "clear", "--yes", "--json",
+            ])
+            #expect(clear.object?["removed"] as? Int == 1)
+            #expect(DownloadQueue.load(from: queue).isEmpty)
         }
     }
 

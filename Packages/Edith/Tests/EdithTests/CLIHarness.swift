@@ -102,6 +102,7 @@ final class CLIWorld: @unchecked Sendable {
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         CLIEnvironment.homeDirectory = sandbox
         CLIEnvironment.clipboardPasteboard = pasteboard
+        CLIEnvironment.downloadQueueFile = sandbox.appendingPathComponent("downloads.json")
         shared = UserDefaults(suiteName: suite)!
         standard = UserDefaults(suiteName: suite + ".standard")!
         shared.removePersistentDomain(forName: suite)
