@@ -274,7 +274,7 @@ struct HerdrOpenTab: Identifiable {
     var id: String { agent.id }
     var agent: HerdrAgent
     var machine: Machine?
-    var view: HerdrAgentView
+    var view: HerdrAgentView = .agent
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
 }
