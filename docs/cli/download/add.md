@@ -48,6 +48,7 @@ they were parsed:
 [
   {
     "detail": "",
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
     "index": 1,
     "kind": "audio",
     "queuedAt": "2026-08-07T19:20:31Z",
@@ -58,8 +59,9 @@ they were parsed:
 ]
 ```
 
-The `index` here counts within what was just added, not the position in the
-queue. Read `ed download ls --json` if you need queue positions.
+The `index` is the new record's position in the full queue, exactly as the next
+`ed download ls --json` reports it. The stable ID disambiguates records when
+two URLs were queued at the same instant.
 
 Examples:
 

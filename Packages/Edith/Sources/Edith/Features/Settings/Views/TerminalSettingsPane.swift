@@ -130,7 +130,7 @@ struct TerminalSettingsPane: View {
 
     private var launchSection: some View {
         Section {
-            Toggle(isOn: $autoRefresh) {
+            Toggle(isOn: $autoRefresh.configured(CompletionScripts.autoRefreshKey)) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Keep completions up to date")
                     InfoDot(

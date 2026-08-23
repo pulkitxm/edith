@@ -1,4 +1,3 @@
-import EdithKit
 import Foundation
 
 public struct SettingDefinition: Equatable, Sendable {
@@ -434,14 +433,14 @@ public enum ConfigCatalog {
 
     private static let system: [SettingDefinition] = [
         SettingDefinition(
-            "SUEnableAutomaticChecks", .bool, group: "system",
+            AppStorageKeys.Update.automaticChecks, .bool, group: "system",
             summary: "Check for updates on a schedule.", fallback: .bool(true), scope: .standard),
         SettingDefinition(
-            "SUScheduledCheckInterval", .number, group: "system",
+            AppStorageKeys.Update.checkInterval, .number, group: "system",
             summary: "Seconds between scheduled update checks.", fallback: .double(86_400),
             scope: .standard),
         SettingDefinition(
-            "SUAutomaticallyUpdate", .bool, group: "system",
+            AppStorageKeys.Update.automaticDownloads, .bool, group: "system",
             summary: "Download and install updates automatically.", fallback: .bool(true),
             scope: .standard),
         SettingDefinition(

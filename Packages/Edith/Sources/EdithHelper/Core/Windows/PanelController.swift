@@ -72,14 +72,16 @@ final class PanelController: NSObject {
         return MusicKeyCommand.handle(
             keyCode: code, modifiers: mods, active: music.current != nil,
             .init(
-                playPause: { music.playPause() },
+                playPause: { music.perform(.toggle) },
                 seekBy: { seconds in
                     let duration = music.trackDuration
                     guard duration > 0 else { return }
                     let target = min(max(music.elapsed + seconds, 0), duration)
-                    music.seek(to: target / duration)
+                    music.perform(.seek(target / duration))
                 },
-                volumeBy: { delta in music.volume = min(max(music.volume + delta, 0), 1) }))
+                volumeBy: { delta in
+                    music.perform(.volume(min(max(music.volume + delta, 0), 1)))
+                }))
     }
 
     private func stopEventMonitor() {

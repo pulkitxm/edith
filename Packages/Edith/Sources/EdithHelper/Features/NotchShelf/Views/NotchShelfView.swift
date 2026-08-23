@@ -363,8 +363,8 @@ private struct NotchHomeTab: View {
             }
             if presenterEnabled {
                 actionTile("person.wave.2", "Presenter", active: presenterMode) {
-                    presenterMode.toggle()
-                    if !presenterMode { IPC.post(IPC.Name.presenterPauseAuto) }
+                    _ = PresenterRuntimeOperationExecution.perform(
+                        presenterMode ? .stop : .start)
                     controller.collapseNow()
                 }
             }

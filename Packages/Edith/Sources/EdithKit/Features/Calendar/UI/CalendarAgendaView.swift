@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 public struct CalendarAgendaView: View {
@@ -19,7 +18,9 @@ public struct CalendarAgendaView: View {
         accentColor: Color,
         blurEvents: Bool,
         onLoadMore: @escaping () -> Void,
-        onOpenMeeting: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }
+        onOpenMeeting: @escaping (URL) -> Void = { url in
+            Task { @MainActor in CalendarEventActions.join(url) }
+        }
     ) {
         self.events = events
         self.style = style
@@ -87,11 +88,13 @@ public struct CalendarPermissionPrompt: View {
                 Text("Calendars")
                     .font(.system(size: style.permissionTitleSize))
                 Spacer()
-                Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
-                    .buttonStyle(HoverButtonStyle())
-                    .font(.system(size: style.permissionButtonSize))
-                    .foregroundStyle(accentColor)
-                    .help("Opens System Settings on the right pane")
+                Button("Grant…") {
+                    _ = try? PermissionOperationCenter.application.request(.calendar)
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: style.permissionButtonSize))
+                .foregroundStyle(accentColor)
+                .help("Opens System Settings on the right pane")
             }
         }
         .padding(style.permissionPadding)

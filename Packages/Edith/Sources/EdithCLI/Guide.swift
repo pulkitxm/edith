@@ -36,6 +36,8 @@ public enum Guide {
         ed extensions ls            every extension and whether it is on
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
+        ed color pick               open Edith's system colour sampler
+        ed color copy 1 --format hex
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -195,6 +197,34 @@ public enum Guide {
         ed tuf cd                               back to the home directory
         ```
 
+        ## Quinjet review workspaces
+
+        Quinjet discovery and launch use the same request builder as Edith's Quinjet
+        page. `--machine` accepts a configured machine or `local`, and remote requests
+        reuse Edith's shared SSH control socket.
+
+        ```
+        ed quinjet projects                     recent local projects
+        ed quinjet projects --machine build     recent projects on build
+        ed quinjet worktrees ~/code/edith       every worktree in one project
+        ed quinjet open ~/code/edith            print the launch command, do not run it
+        ed quinjet launch ~/code/edith          launch in the current terminal
+        ed quinjet launch ~/code/edith --cmux   launch in cmux
+        ed quinjet sessions                     native tabs in the running Edith page
+        ed quinjet new                          create and select a native picker tab
+        ed quinjet focus 2                      select a native tab or cmux workspace
+        ed quinjet restart 2                    restart a review in the same tab
+        ed quinjet switch 2 ~/code/other        switch a tab to another worktree
+        ed quinjet close 2                      preview closing a native tab
+        ed quinjet close 2 --yes                close the tab and its process or workspace
+        ```
+
+        `open` is always safe to inspect or pipe. It resolves the worktree and prints
+        the exact quoted command without starting Quinjet. `launch` is the explicit
+        standalone execution boundary. It never controls a native Edith tab. Native
+        session commands use bounded IPC with the open Quinjet page. Session numbers,
+        ids, exact titles, branches and worktree paths are accepted as selectors.
+
         ## Companion memory
 
         The companion stores Markdown notes as append-only episodes. `ed` can choose
@@ -269,10 +299,18 @@ public enum Guide {
         ed music play|pause|stop|toggle|next|previous
         ed music volume 0.4
         ed music players                every player, and which one is active
+        ed music open-current           open whichever player is active
+        ed music reveal-current         reveal the library track or open its player
+        ed music favorite <track>       keep or remove with unfavorite
+        ed music reveal <track> | open  Finder actions from the Music page
         ed calendar ls --days 7
+        ed calendar join <event-id>     open the event's meeting link
+        ed calendar open                open the Calendar application
+        ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed permissions ls
         ed permissions request calendar
+        ed permissions settings screenRecording
         ```
 
         `ed music` targets whatever is actually playing. Spotify and Apple Music are
@@ -326,8 +364,11 @@ public enum Guide {
         ed apps ls                      what is running here
         ed apps quit Safari | --all --yes
         ed download ls                  the yt-dlp queue
+        ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
-        ed download retry --all | clear | tool --update
+        ed download retry --all | clear --yes | tool --update
+        ed download cancel 1 | cancel
+        ed download open 1 | reveal 1
         ```
 
         ```
@@ -339,8 +380,10 @@ public enum Guide {
         ed clipboard pin 3 | unpin 3
         ed clipboard rm 3 | clear
         ed color ls --format hex        the colours you picked
+        ed color copy 1                 copy the newest using your configured format
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
+        ed shelf open 1 | reveal 1 | share 1
         ed cleaner scan                 developer caches worth reclaiming
         ed cleaner clean --yes          moves them to the Trash, never deletes
         ```
@@ -395,6 +438,8 @@ public enum Guide {
           `ed machines disconnect <m>` closes it.
         - Commands that need the app say so and exit 4. That is a signal to start
           Edith, not to retry.
+        - `ed color pick` returns after requesting desktop UI. It never reads stdin,
+          but someone at the logged-in Mac still has to select a colour.
         """
 
     public static let claudeSnippet = """

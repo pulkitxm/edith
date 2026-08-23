@@ -63,10 +63,10 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
         case .denied:
             return "Blocked - enable Edith in System Settings > Notifications"
         case .notDetermined:
-            PermissionPromptTracker.record()
-            let granted =
-                (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
-            IPC.post(IPC.Name.requestPermissionsRefresh)
+            await MainActor.run { PermissionsModel.shared.request(.notifications) }
+            try? await Task.sleep(for: .seconds(1))
+            let refreshed = await center.notificationSettings().authorizationStatus
+            let granted = refreshed == .authorized || refreshed == .provisional
             guard granted else { return "Permission not granted" }
         default:
             break

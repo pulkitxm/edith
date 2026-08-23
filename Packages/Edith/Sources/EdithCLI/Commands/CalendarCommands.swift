@@ -12,8 +12,56 @@ struct CalendarCommand: AsyncParsableCommand {
             extension is off, or macOS has not granted calendar access, this exits 4 and
             says which.
             """,
-        subcommands: [CalendarListCommand.self],
+        subcommands: [
+            CalendarListCommand.self, CalendarOpenCommand.self, CalendarJoinCommand.self,
+        ],
         defaultSubcommand: CalendarListCommand.self)
+}
+
+enum CalendarBridge {
+    static func events(timeout: TimeInterval = 4) async throws -> [CalendarEventPayload] {
+        try AppBridge.requireHelper("reading the calendar")
+        guard
+            let reply = await AppBridge.awaitReply(
+                IPC.Name.calendarEvents, timeout: timeout,
+                trigger: { AppBridge.post(IPC.Name.requestCalendarEvents) })
+        else {
+            throw AppBridge.silence(
+                "the calendar", extensionKey: AppStorageKeys.Tabs.calendarEnabled,
+                permission: "calendar")
+        }
+        switch reply[CalendarEventBridge.statusKey] as? String {
+        case "extensionOff":
+            throw CLIFailure.unavailable(
+                "the Calendar extension is off", hint: "run `ed extensions enable calendar`")
+        case "notAuthorized":
+            throw CLIFailure.unavailable(
+                "macOS has not granted Edith calendar access",
+                hint: "run `ed permissions request calendar`")
+        default:
+            let text = reply[CalendarEventBridge.payloadKey] as? String ?? "[]"
+            return CalendarEventBridge.decode(text)
+        }
+    }
+
+    static func event(_ query: String, in events: [CalendarEventPayload]) throws
+        -> CalendarEventPayload
+    {
+        if let exact = events.first(where: { $0.id == query }) { return exact }
+        let needle = query.lowercased()
+        let exactTitles = events.filter { $0.title.lowercased() == needle }
+        if exactTitles.count == 1, let event = exactTitles.first { return event }
+        let matches = events.filter { $0.title.lowercased().contains(needle) }
+        if matches.count == 1, let event = matches.first { return event }
+        if matches.count > 1 || exactTitles.count > 1 {
+            let found = exactTitles.isEmpty ? matches : exactTitles
+            throw CLIFailure.notFound(
+                "\(query) matches \(found.count) events",
+                hint: found.prefix(5).map { "\($0.id): \($0.title)" }.joined(separator: ", "))
+        }
+        throw CLIFailure.notFound(
+            "no event matching \(query)", hint: "run `ed calendar ls --json` to see event IDs")
+    }
 }
 
 struct CalendarListCommand: AsyncParsableCommand {
@@ -29,30 +77,8 @@ struct CalendarListCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let days = try ArgumentChecks.nonNegative(self.days, "--days")
-            try AppBridge.requireHelper("reading the calendar")
-            guard
-                let reply = await AppBridge.awaitReply(
-                    IPC.Name.calendarEvents, timeout: 4,
-                    trigger: { AppBridge.post(IPC.Name.requestCalendarEvents) })
-            else {
-                throw AppBridge.silence(
-                    "the calendar", extensionKey: AppStorageKeys.Tabs.calendarEnabled,
-                    permission: "calendar")
-            }
-            switch reply[CalendarEventBridge.statusKey] as? String {
-            case "extensionOff":
-                throw CLIFailure.unavailable(
-                    "the Calendar extension is off", hint: "run `ed extensions enable calendar`")
-            case "notAuthorized":
-                throw CLIFailure.unavailable(
-                    "macOS has not granted Edith calendar access",
-                    hint: "run `ed permissions request calendar`")
-            default:
-                break
-            }
-            let text = reply[CalendarEventBridge.payloadKey] as? String ?? "[]"
             let cutoff = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
-            let events = CalendarEventBridge.decode(text).filter { $0.start <= cutoff }
+            let events = try await CalendarBridge.events().filter { $0.start <= cutoff }
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -113,5 +139,61 @@ struct CalendarListCommand: AsyncParsableCommand {
             "role": .string(participant.role),
             "isCurrentUser": .bool(participant.isCurrentUser),
         ])
+    }
+}
+
+struct CalendarOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open Calendar.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let url = await CalendarEventOperationExecution.openCalendar()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("open"), "application": .string(url.path),
+                        "opened": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("opened Calendar")
+        }
+    }
+}
+
+struct CalendarJoinCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "join", abstract: "Join an event's meeting.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Event ID or enough of its title to be unambiguous.")
+    var event: String
+
+    func run() async throws {
+        try await execute {
+            let found = try CalendarBridge.event(event, in: await CalendarBridge.events())
+            guard let value = found.meetingURL, let url = URL(string: value) else {
+                throw CLIFailure.unavailable(
+                    "\(found.title) has no meeting link",
+                    hint: "run `ed calendar ls --json` and choose an event with meetingURL")
+            }
+            let opened = await CalendarEventOperationExecution.join(url)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("join"), "id": .string(found.id),
+                        "title": .string(found.title), "url": .string(url.absoluteString),
+                        "opened": .bool(opened),
+                    ]))
+                return
+            }
+            CLIOut.out("joining \(found.title)")
+        }
     }
 }

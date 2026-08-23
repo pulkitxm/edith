@@ -1,24 +1,23 @@
-import EdithKit
 import Foundation
 
-struct QuinjetClient: Sendable {
-    typealias Execute = @Sendable ([String]) async throws -> Data
+public struct QuinjetClient: Sendable {
+    public typealias Execute = @Sendable ([String]) async throws -> Data
 
     private let execute: Execute
     private let remoteProbeLimit: Int
 
-    init(remoteProbeLimit: Int = 4, execute: @escaping Execute) {
+    public init(remoteProbeLimit: Int = 4, execute: @escaping Execute) {
         self.remoteProbeLimit = max(1, remoteProbeLimit)
         self.execute = execute
     }
 
-    func recentProjects() async throws -> [QuinjetProject] {
-        return try decode(
+    public func recentProjects() async throws -> [QuinjetProject] {
+        try decode(
             [QuinjetProject].self,
             from: await execute(["project", "list", "--json"]))
     }
 
-    func recentProjects(remote: QuinjetRemote) async throws -> [QuinjetProject] {
+    public func recentProjects(remote: QuinjetRemote) async throws -> [QuinjetProject] {
         let folders = try decode(
             QuinjetRemoteFolders.self, from: await execute(["remote", "list", "--json"]))
         let candidates = folders.remotes.filter {
@@ -87,7 +86,7 @@ struct QuinjetClient: Sendable {
         }
     }
 
-    func worktrees(at path: String, remote: QuinjetRemote? = nil) async throws
+    public func worktrees(at path: String, remote: QuinjetRemote? = nil) async throws
         -> [QuinjetWorktree]
     {
         var arguments: [String] = []
@@ -110,14 +109,19 @@ struct QuinjetClient: Sendable {
         }
     }
 
-    static let live = QuinjetClient { arguments in
+    public static let live = QuinjetClient { arguments in
         guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
             throw QuinjetClientError.notInstalled
         }
         let request = CLICommandRequest(
             executableURL: executable, arguments: arguments,
             environment: CLIToolEnvironment.sanitized())
-        let result = try await CLICommandRunner.run(request) { _ in }
+        let result: CLICommandResult
+        do {
+            result = try await CLICommandRunner.run(request) { _ in }
+        } catch {
+            throw QuinjetClientError.launchFailed(error.localizedDescription)
+        }
         guard result.terminationStatus == 0 else {
             throw QuinjetClientError.commandFailed(
                 result.output.trimmingCharacters(in: .whitespacesAndNewlines))

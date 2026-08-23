@@ -22,22 +22,28 @@ The one binary `ed` runs itself is the yt-dlp that `ed download tool` reports on
 | --- | --- |
 | `ed download` | Runs `ed download ls`, which is the default subcommand. |
 | `ed download ls` | Lists the queue, newest first, as a numbered table. |
+| `ed download status` | Summarizes queue lifecycle states. |
 | `ed download add` | Queues one or more YouTube URLs as audio or video. |
 | `ed download retry` | Puts a failed or interrupted entry back in the queue. |
-| `ed download rm` | Takes one entry out of the queue. |
-| `ed download clear` | Forgets what has finished, or the whole queue with `--everything`. |
+| `ed download rm` | Previews removing one entry, then applies it with `--yes`. |
+| `ed download clear` | Previews clearing history, then applies it with `--yes`. |
+| `ed download open` | Opens the files produced by a completed entry. |
+| `ed download reveal` | Reveals the files produced by a completed entry in Finder. |
 | `ed download tool` | Reports the yt-dlp being used, or runs its self-update. |
-| `ed download cancel` | Stops what is downloading and empties everything that has not finished. |
+| `ed download cancel` | Stops one numbered download, or all active work when no number is given. |
 
 `ed download list` is the same command as `ed download ls`.
 
 ## Commands
 
 - [`ed download ls`](./ls.md)
+- [`ed download status`](./status.md)
 - [`ed download add`](./add.md)
 - [`ed download retry`](./retry.md)
 - [`ed download rm`](./rm.md)
 - [`ed download clear`](./clear.md)
+- [`ed download open`](./open.md)
+- [`ed download reveal`](./reveal.md)
 - [`ed download tool`](./tool.md)
 - [`ed download cancel`](./cancel.md)
 
@@ -46,10 +52,10 @@ The one binary `ed` runs itself is the yt-dlp that `ed download tool` reports on
 | Code | When this group produces it |
 | --- | --- |
 | 0 | The listing printed, or the queue was changed. Also an empty queue for `ls`, `clear` and `cancel`, `retry --all` with nothing to retry, `tool --json` with yt-dlp missing, and `--help` on the group or any verb. |
-| 1 | `add` found no YouTube URL in its arguments, `retry` was given neither a number nor `--all`, `retry <n>` named an entry that is not `failed` or `interrupted`, or the queue file could not be written. |
+| 1 | `add` found no YouTube URL in its arguments, `retry` was given neither a number nor `--all`, `retry <n>` named an entry that is not retryable, `cancel <n>` named an entry that has finished, or the queue file could not be written. |
 | 2 | `ls --limit` was negative (`--limit cannot be negative`), or the command line was wrong in ArgumentParser's own terms: an unknown flag, `add` with no URL, `rm` with no number, or a number that is not an integer. |
-| 3 | `add --kind` named something other than `audio` or `video`, or `rm <n>` and `retry <n>` named a position outside the queue (`there is no download 9`, with the queue size as the hint). |
-| 4 | `rm` or `retry <n>` was run against an empty queue (`the download queue is empty`), or `tool` could not find yt-dlp: an error on the human path, and under `--json` too when `--update` was passed. |
+| 3 | `add --kind` named something other than `audio` or `video`, or a numbered queue command named a position outside the queue (`there is no download 9`, with the queue size as the hint). |
+| 4 | A numbered queue command was run against an empty queue, a result is unavailable, or `tool` could not find yt-dlp. |
 
 Nothing here exits 4 for the usual reason. No verb in this group asks Edith to
 answer a question, so none of them fails because the app is closed.
@@ -61,11 +67,8 @@ answer a question, so none of them fails because the app is closed.
   `<repoPath>/apps/dashboard/data` when the `repoPath` setting points at a
   checkout. Both `ed` and the app read and write that one file, and every
   mutation here rewrites it whole and atomically.
-- Order is by queued time, newest first, applied on every read. `ed` does no
-  sorting of its own beyond that, so the numbering is stable between two reads
-  only if nothing was added or removed in between. URLs queued by one `add`
-  share a single timestamp, so their order relative to each other is not
-  defined.
+- Order is by queued time, newest first, with the persisted record ID breaking
+  timestamp ties. Numbering remains stable until the queue changes.
 - Every mutating verb posts `com.pulkit.edith.downloadQueueChanged`, which is
   a fire-and-forget distributed notification. A running Edith reloads the queue
   from disk when it hears it and starts on the next queued item if it is idle,
@@ -101,14 +104,15 @@ answer a question, so none of them fails because the app is closed.
   has no column for it, so `--json` is the only way to read it.
 - Removing an entry never deletes a downloaded file, and clearing the queue
   never touches your music folder. Use `ed music rm` for the files themselves.
-- Nothing in this group has a `--yes` guard. `rm`, `clear`, `clear
-  --everything` and `cancel` all act immediately, unlike `ed music rm` or
-  `ed cleaner clean`.
+- `rm` and `clear` are previews unless `--yes` is present. They never delete
+  downloaded files. `cancel` acts immediately, but retains affected entries as
+  `interrupted` so `retry` can queue them again. Pass the number from `ls` to
+  cancel only that record, or omit it to cancel every active record.
 - `--help` works on the group and on every verb, prints on stdout and exits 0.
-- Completion knows the verbs and the flags: `ed dl <TAB>` offers all seven,
+- Completion knows the verbs and their flags: `ed dl <TAB>` offers the full group,
   and `ed download ls --<TAB>` offers `--active`, `--limit` and `--json`. It
-  also offers `audio` and `video` after `--kind`. The number `rm` and `retry`
-  take still completes to nothing.
+  also offers `audio` and `video` after `--kind`. The numbers `rm`, `retry` and
+  `cancel` take still complete to nothing.
 
 ## Where to go next
 

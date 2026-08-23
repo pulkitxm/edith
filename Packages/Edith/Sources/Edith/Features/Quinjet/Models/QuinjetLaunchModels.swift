@@ -2,12 +2,7 @@ import AppKit
 import EdithKit
 import SwiftUI
 
-enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
-    case embedded
-    case cmux
-
-    var id: String { rawValue }
-
+extension QuinjetTerminal {
     var label: String {
         switch self {
         case .embedded: "Embedded"
@@ -30,23 +25,7 @@ enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum QuinjetTheme: String, CaseIterable, Identifiable, Sendable {
-    case quinjet
-    case catppuccin
-    case dracula
-    case everforest
-    case gruvbox
-    case nord
-    case one
-    case rosePine = "rose-pine"
-    case solarized
-    case tokyoNight = "tokyo-night"
-    case ayu
-    case monokai
-    case github
-
-    var id: String { rawValue }
-
+extension QuinjetTheme {
     var label: String {
         switch self {
         case .quinjet: "Quinjet"
@@ -64,20 +43,6 @@ enum QuinjetTheme: String, CaseIterable, Identifiable, Sendable {
         case .github: "GitHub"
         }
     }
-}
-
-enum QuinjetAppearance: String, Sendable {
-    case light
-    case dark
-}
-
-struct QuinjetLaunchConfiguration: Equatable, Sendable {
-    var terminal: QuinjetTerminal
-    var theme: QuinjetTheme
-    var appearance: QuinjetAppearance
-
-    static let `default` = QuinjetLaunchConfiguration(
-        terminal: .embedded, theme: .quinjet, appearance: .dark)
 }
 
 struct TerminalPalette {
@@ -167,82 +132,29 @@ enum QuinjetLaunchError: LocalizedError {
 
 enum QuinjetCMUXLauncher {
     static var executable: URL? {
-        let candidates = [
-            "/Applications/cmux.app/Contents/Resources/bin/cmux",
-            "/Applications/cmux.app/Contents/MacOS/cmux",
-        ]
-        return candidates.map(URL.init(fileURLWithPath:)).first {
-            FileManager.default.isExecutableFile(atPath: $0.path)
-        }
+        QuinjetCMUX.executable()
     }
 
     static func launch(
         quinjet: URL, arguments: [String], currentDirectory: String?, replacing workspaceID: String?
     ) async throws -> String {
         guard executable != nil else { throw QuinjetLaunchError.cmuxUnavailable }
-        var command = "exec \(shellCommand(executable: quinjet.path, arguments: arguments))"
-        if let currentDirectory {
-            command = "cd \(shellQuote(currentDirectory)) && \(command)"
-        }
-        var statements = ["tell application id \"com.cmuxterm.app\"", "activate"]
-        if let workspaceID {
-            statements += closeStatements(workspaceID: workspaceID)
-        }
-        statements += [
-            "set quinjetWorkspace to new tab",
-            "select tab quinjetWorkspace",
-            "delay 0.5",
-            "set quinjetTerminal to focused terminal of quinjetWorkspace",
-            "focus quinjetTerminal",
-            "input text \(appleScriptQuote(command)) to quinjetTerminal",
-            "perform action \(appleScriptQuote("text:\\x0d")) on quinjetTerminal",
-            "return id of quinjetWorkspace",
-            "end tell",
-        ]
-        return try await execute(statements.joined(separator: "\n"))
+        let request = QuinjetLaunchRequest(
+            executableURL: quinjet, arguments: arguments,
+            currentDirectory: currentDirectory, terminal: .cmux)
+        return try await execute(QuinjetCMUX.launchScript(request: request, replacing: workspaceID))
     }
 
     static func focus(workspaceID: String) async throws {
-        let statements = [
-            "tell application id \"com.cmuxterm.app\"", "activate",
-            "repeat with cmuxWindow in windows",
-            "repeat with cmuxWorkspace in tabs of cmuxWindow",
-            "if id of cmuxWorkspace is \(appleScriptQuote(workspaceID)) then",
-            "select tab cmuxWorkspace", "return id of cmuxWorkspace", "end if", "end repeat",
-            "end repeat", "error \"workspace is no longer open\"", "end tell",
-        ]
-        _ = try await execute(statements.joined(separator: "\n"))
+        _ = try await execute(QuinjetCMUX.focusScript(workspaceID: workspaceID))
     }
 
     static func close(workspaceID: String) async throws {
-        let statements =
-            ["tell application id \"com.cmuxterm.app\""]
-            + closeStatements(workspaceID: workspaceID) + ["return \"closed\"", "end tell"]
-        _ = try await execute(statements.joined(separator: "\n"))
-    }
-
-    static func shellCommand(executable: String, arguments: [String]) -> String {
-        ([executable] + arguments).map(shellQuote).joined(separator: " ")
-    }
-
-    static func shellQuote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        _ = try await execute(QuinjetCMUX.closeScript(workspaceID: workspaceID))
     }
 
     static func appleScriptQuote(_ value: String) -> String {
-        "\""
-            + value.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n") + "\""
-    }
-
-    private static func closeStatements(workspaceID: String) -> [String] {
-        [
-            "repeat with cmuxWindow in windows",
-            "repeat with cmuxWorkspace in tabs of cmuxWindow",
-            "if id of cmuxWorkspace is \(appleScriptQuote(workspaceID)) then",
-            "close tab cmuxWorkspace", "exit repeat", "end if", "end repeat", "end repeat",
-        ]
+        QuinjetCMUX.appleScriptQuote(value)
     }
 
     private static func execute(_ source: String) async throws -> String {

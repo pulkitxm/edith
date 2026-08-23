@@ -103,6 +103,7 @@ final class CLIWorld: @unchecked Sendable {
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         CLIEnvironment.homeDirectory = sandbox
         CLIEnvironment.clipboardPasteboard = pasteboard
+        CLIEnvironment.downloadQueueFile = sandbox.appendingPathComponent("downloads.json")
         shared = UserDefaults(suiteName: suite)!
         standard = UserDefaults(suiteName: suite + ".standard")!
         shared.removePersistentDomain(forName: suite)
@@ -118,7 +119,7 @@ final class CLIWorld: @unchecked Sendable {
             AppInspectionCenter(
                 exists: { _ in false }, createDirectory: { _ in },
                 open: { url in
-                    self?.note(opened: url)
+                    self?.note(url: url)
                     return true
                 },
                 reveal: { self?.note(revealed: $0) }, idleWakeups: { 0 })
@@ -131,6 +132,10 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.usageRefresh = .scripted(events: [])
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
+        }
+        CLIEnvironment.openURL = { [weak self] url in
+            self?.note(url: url)
+            return true
         }
         CLIEnvironment.deliver = { [weak self] name, info in
             self?.record(name, info ?? [:])
@@ -153,7 +158,7 @@ final class CLIWorld: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func note(opened url: URL) {
+    private func note(url: URL) {
         lock.lock()
         openedURLs.append(url)
         lock.unlock()
@@ -164,11 +169,16 @@ final class CLIWorld: @unchecked Sendable {
         revealedURLs.append(urls)
         lock.unlock()
     }
-
     func postedNames() -> [String] {
         lock.lock()
         defer { lock.unlock() }
         return posted.map(\.name.rawValue)
+    }
+
+    func postedPayloads(for name: Notification.Name) -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return posted.filter { $0.name == name }.map(\.info)
     }
 
     func recordedScripts() -> [String] {
@@ -183,6 +193,10 @@ final class CLIWorld: @unchecked Sendable {
         return openedURLs
     }
 
+    func recordedURLs() -> [URL] {
+        opened()
+    }
+
     func revealed() -> [[URL]] {
         lock.lock()
         defer { lock.unlock() }
@@ -194,13 +208,12 @@ final class CLIWorld: @unchecked Sendable {
             AppInspectionCenter(
                 exists: { existing.contains($0) }, createDirectory: { _ in },
                 open: { url in
-                    self?.note(opened: url)
+                    self?.note(url: url)
                     return true
                 },
                 reveal: { self?.note(revealed: $0) }, idleWakeups: { 0 })
         }
     }
-
     func helperRunning(_ running: Bool) {
         CLIEnvironment.isHelperRunning = { running }
     }

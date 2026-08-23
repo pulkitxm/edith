@@ -26,13 +26,16 @@ struct ColorPickerRows: View {
                         InfoDot("Summons the magnifier from anywhere.")
                     }
                 }
-                Picker("Copy format", selection: $copyFormat) {
+                Picker(
+                    "Copy format",
+                    selection: $copyFormat.configured(AppStorageKeys.ColorPicker.copyFormat)
+                ) {
                     ForEach(ColorCopyFormat.allCases, id: \.self) { format in
                         Text(format.displayName).tag(format)
                     }
                 }
                 .pointerCursor()
-                Picker(selection: $profile) {
+                Picker(selection: $profile.configured(AppStorageKeys.ColorPicker.profile)) {
                     ForEach(ColorProfile.allCases, id: \.self) { option in
                         Text(option.displayName).tag(option)
                     }
@@ -45,7 +48,10 @@ struct ColorPickerRows: View {
                     }
                 }
                 .pointerCursor()
-                Stepper(value: $historySize, in: 1...100) {
+                Stepper(
+                    value: $historySize.configured(AppStorageKeys.ColorPicker.historySize),
+                    in: 1...100
+                ) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("History size: \(historySize)")
                         InfoDot("How many past colors to keep.")
@@ -85,6 +91,7 @@ private struct ColorSwatchGrid: View {
 private struct ColorSwatchChip: View {
     let swatch: ColorSwatch
     let defaultFormat: ColorCopyFormat
+    @State private var copyError: String?
 
     var body: some View {
         RoundedRectangle(cornerRadius: UIScale.pt(5))
@@ -102,10 +109,29 @@ private struct ColorSwatchChip: View {
             }
             .help(swatch.string(for: defaultFormat))
             .pointerCursor()
+            .alert(
+                "Could not copy colour",
+                isPresented: Binding(
+                    get: { copyError != nil },
+                    set: { if !$0 { copyError = nil } })
+            ) {
+                Button("OK") { copyError = nil }
+            } message: {
+                Text(copyError ?? "The pasteboard refused the colour value.")
+            }
     }
 
     private func copy(_ format: ColorCopyFormat) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(swatch.string(for: format), forType: .string)
+        do {
+            try ColorSwatchOperationExecution.perform(
+                .copy, swatch: swatch, format: format,
+                write: { value in
+                    NSPasteboard.general.clearContents()
+                    return NSPasteboard.general.setString(value, forType: .string)
+                })
+            copyError = nil
+        } catch {
+            copyError = error.localizedDescription
+        }
     }
 }

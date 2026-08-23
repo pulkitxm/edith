@@ -1,5 +1,48 @@
 import AppKit
+import EdithCore
 import Foundation
+
+public enum CalendarEventOperation: String, CaseIterable, Sendable {
+    case open
+    case join
+
+    public var descriptor: UserOperationDescriptor {
+        switch self {
+        case .open:
+            return UserOperationDescriptor(
+                id: UserOperationID(rawValue: "calendar.event.open"),
+                summary: "Open Calendar.", cli: ["calendar", "open"], effect: .interactive)
+        case .join:
+            return UserOperationDescriptor(
+                id: UserOperationID(rawValue: "calendar.event.join"),
+                summary: "Join an event's meeting.", cli: ["calendar", "join"],
+                effect: .interactive)
+        }
+    }
+}
+
+public enum CalendarEventOperationExecution {
+    @MainActor
+    @discardableResult
+    public static func openCalendar(
+        using open: @MainActor (URL) -> Void = { url in
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        }
+    ) -> URL {
+        open(CalendarEventActions.calendarApplicationURL)
+        return CalendarEventActions.calendarApplicationURL
+    }
+
+    @MainActor
+    @discardableResult
+    public static func join(
+        _ url: URL, using open: @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) -> Bool {
+        open(url)
+    }
+}
 
 public enum CalendarEventActions {
     public static let calendarApplicationURL = URL(
@@ -23,11 +66,13 @@ public enum CalendarEventActions {
 
     @MainActor
     public static func openCalendar() {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.openApplication(
-            at: calendarApplicationURL,
-            configuration: configuration)
+        CalendarEventOperationExecution.openCalendar()
+    }
+
+    @MainActor
+    @discardableResult
+    public static func join(_ url: URL) -> Bool {
+        CalendarEventOperationExecution.join(url)
     }
 
     @MainActor

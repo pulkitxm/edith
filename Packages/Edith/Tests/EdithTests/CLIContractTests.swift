@@ -72,8 +72,20 @@ enum JSONContract {
         JSONCase("ed clipboard unpin", ["clipboard", "unpin", "1", "--json"]),
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
+        JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
+        JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase("ed music ls", ["music", "ls", "--json"]),
         JSONCase("ed music rescan", ["music", "rescan", "--json"]),
+        JSONCase(
+            "ed music favorite", ["music", "favorite", "nothing-at-all", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed music unfavorite", ["music", "unfavorite", "nothing-at-all", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed music reveal", ["music", "reveal", "nothing-at-all", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed music open", ["music", "open", "--json"], mutatesTheMachine: true),
         JSONCase("ed music start", ["music", "start", "nothing-at-all", "--json"]),
         JSONCase("ed music seek", ["music", "seek", "0.5", "--json"]),
         JSONCase("ed music shuffle", ["music", "shuffle", "--json"]),
@@ -82,6 +94,17 @@ enum JSONContract {
         JSONCase("ed music mv", ["music", "mv", "nothing-at-all", "Chill", "--json"]),
         JSONCase("ed music rename", ["music", "rename", "nothing-at-all", "New", "--json"]),
         JSONCase("ed music rm", ["music", "rm", "nothing-at-all", "--json"]),
+        JSONCase("ed music favorite", ["music", "favorite", "nothing-at-all", "--json"]),
+        JSONCase("ed music unfavorite", ["music", "unfavorite", "nothing-at-all", "--json"]),
+        JSONCase("ed music reveal", ["music", "reveal", "nothing-at-all", "--json"]),
+        JSONCase("ed music open", ["music", "open", "--json"], mutatesTheMachine: true),
+        JSONCase("ed presenter status", ["presenter", "status", "--json"]),
+        JSONCase(
+            "ed presenter start", ["presenter", "start", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed presenter stop", ["presenter", "stop", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
         JSONCase(
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
@@ -92,6 +115,7 @@ enum JSONContract {
         JSONCase("ed apps ls", ["apps", "ls", "--json"]),
         JSONCase("ed apps quit", ["apps", "quit", "--all", "--json"]),
         JSONCase("ed download ls", ["download", "ls", "--json"]),
+        JSONCase("ed download status", ["download", "status", "--json"]),
         JSONCase(
             "ed download add", ["download", "add", "https://youtu.be/x", "--json"],
             mutatesTheMachine: true),
@@ -101,13 +125,33 @@ enum JSONContract {
             "ed download clear", ["download", "clear", "--json"], mutatesTheMachine: true),
         JSONCase("ed download tool", ["download", "tool", "--json"]),
         JSONCase("ed download cancel", ["download", "cancel", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed download open", ["download", "open", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed download reveal", ["download", "reveal", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed color pick", ["color", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed color ls", ["color", "ls", "--json"]),
+        JSONCase(
+            "ed color copy", ["color", "copy", "1", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),
+        JSONCase("ed shelf open", ["shelf", "open", "999999", "--json"]),
+        JSONCase("ed shelf reveal", ["shelf", "reveal", "999999", "--json"]),
+        JSONCase("ed shelf share", ["shelf", "share", "999999", "--json"]),
         JSONCase("ed shelf add", ["shelf", "add", "/etc/hosts", "--json"]),
         JSONCase("ed shelf rm", ["shelf", "rm", "1", "--json"]),
         JSONCase("ed shelf clear", ["shelf", "clear", "--json"]),
+        JSONCase("ed shelf open", ["shelf", "open", "1", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed shelf reveal", ["shelf", "reveal", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed shelf share", ["shelf", "share", "1", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed companion status", ["companion", "status", "--json"]),
         JSONCase("ed companion hosts", ["companion", "hosts", "--json"]),
         JSONCase(
@@ -296,6 +340,9 @@ enum JSONContract {
         JSONCase("ed permissions ls", ["permissions", "ls", "--json"]),
         JSONCase("ed permissions request", ["permissions", "request", "calendar", "--json"]),
         JSONCase("ed permissions refresh", ["permissions", "refresh", "--json"]),
+        JSONCase(
+            "ed permissions settings",
+            ["permissions", "settings", "calendar", "--json"], mutatesTheMachine: true),
         JSONCase("ed usage limits", ["usage", "limits", "--json"]),
         JSONCase("ed usage summary", ["usage", "summary", "--json"]),
         JSONCase("ed usage daily", ["usage", "daily", "--json"]),
@@ -331,10 +378,53 @@ enum JSONContract {
         JSONCase("ed music next", ["music", "next", "--json"]),
         JSONCase("ed music previous", ["music", "previous", "--json"]),
         JSONCase("ed music volume", ["music", "volume", "0.5", "--json"]),
+        JSONCase(
+            "ed music open-current", ["music", "open-current", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed music reveal-current", ["music", "reveal-current", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed calendar ls", ["calendar", "ls", "--json"]),
+        JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed calendar join", ["calendar", "join", "event", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed presenter status", ["presenter", "status", "--json"]),
+        JSONCase(
+            "ed presenter start", ["presenter", "start", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed presenter stop", ["presenter", "stop", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
         JSONCase(
             "ed herdr command", ["herdr", "command", "nowhere-at-all", "--json"]),
+        JSONCase("ed quinjet projects", ["quinjet", "projects", "--json"]),
+        JSONCase(
+            "ed quinjet worktrees",
+            ["quinjet", "worktrees", "/tmp/edith-no-project", "--json"]),
+        JSONCase(
+            "ed quinjet open", ["quinjet", "open", "/tmp/edith-no-project", "--json"]),
+        JSONCase(
+            "ed quinjet launch", ["quinjet", "launch", "/tmp/edith-no-project", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed quinjet status", ["quinjet", "status", "--json"]),
+        JSONCase("ed quinjet sessions", ["quinjet", "sessions", "--json"]),
+        JSONCase(
+            "ed quinjet new", ["quinjet", "new", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet focus", ["quinjet", "focus", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet close", ["quinjet", "close", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet restart", ["quinjet", "restart", "1", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quinjet switch", ["quinjet", "switch", "1", "/tmp/worktree", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed machines ls", ["machines", "ls", "--json"]),
         JSONCase("ed machines show", ["machines", "show", "nowhere-at-all", "--json"]),
         JSONCase(

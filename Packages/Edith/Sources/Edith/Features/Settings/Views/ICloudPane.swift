@@ -36,7 +36,7 @@ struct ICloudPane: View {
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: $icloudBackup) {
+                Toggle(isOn: $icloudBackup.configured(AppStorageKeys.Backup.icloud)) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Back up to iCloud")
                         InfoDot(
@@ -55,20 +55,27 @@ struct ICloudPane: View {
             }
 
             Section {
-                Toggle("Settings", isOn: $backupSettings)
-                    .pointerCursor()
-                    .disabled(!icloudBackup)
+                Toggle(
+                    "Settings", isOn: $backupSettings.configured(AppStorageKeys.Backup.settings)
+                )
+                .pointerCursor()
+                .disabled(!icloudBackup)
                 Text("Every preference in this app: toggles, colors, shortcuts, and layouts.")
                     .settingsCaption()
                 if usageEnabled {
-                    Toggle("Usage data", isOn: $backupUsage)
-                        .pointerCursor()
-                        .disabled(!icloudBackup)
+                    Toggle(
+                        "Usage data", isOn: $backupUsage.configured(AppStorageKeys.Backup.usage)
+                    )
+                    .pointerCursor()
+                    .disabled(!icloudBackup)
                     Text("The token and cost history behind the Agent Usage charts.")
                         .settingsCaption()
-                    Toggle("Session history", isOn: $backupLimits)
-                        .pointerCursor()
-                        .disabled(!icloudBackup)
+                    Toggle(
+                        "Session history",
+                        isOn: $backupLimits.configured(AppStorageKeys.Backup.limits)
+                    )
+                    .pointerCursor()
+                    .disabled(!icloudBackup)
                     Text("Rate-limit snapshots that draw the session and weekly limit charts.")
                         .settingsCaption()
                 }
@@ -84,14 +91,19 @@ struct ICloudPane: View {
             if musicEnabled || clipboardEnabled {
                 Section {
                     if musicEnabled {
-                        Toggle("Music folder", isOn: $musicBackup)
-                            .pointerCursor()
-                            .disabled(!icloudBackup || !cloudAvailable)
+                        Toggle(
+                            "Music folder",
+                            isOn: $musicBackup.configured(AppStorageKeys.Music.backup)
+                        )
+                        .pointerCursor()
+                        .disabled(!icloudBackup || !cloudAvailable)
                         Text(musicSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(
                             .secondary)
                     }
                     if clipboardEnabled {
-                        Toggle(isOn: $clipboardBackup) {
+                        Toggle(
+                            isOn: $clipboardBackup.configured(AppStorageKeys.Clipboard.backup)
+                        ) {
                             HStack(spacing: UIScale.pt(6)) {
                                 Text("Clipboard history")
                                 InfoDot(

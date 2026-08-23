@@ -33,7 +33,10 @@ public enum IPC {
         public static let requestTestNotification = Notification.Name(
             "com.pulkit.edith.requestTestNotification")
         public static let clipboardChanged = Notification.Name("com.pulkit.edith.clipboardChanged")
+        public static let requestColorPick = Notification.Name(
+            "com.pulkit.edith.requestColorPick")
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
+        public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
         public static let machinesChanged = Notification.Name("com.pulkit.edith.machinesChanged")
         public static let downloadQueueChanged = Notification.Name(
             "com.pulkit.edith.downloadQueueChanged")
@@ -103,6 +106,10 @@ public enum IPC {
             "com.pulkit.edith.requestAppDiagnostics")
         public static let appDiagnostics = Notification.Name(
             "com.pulkit.edith.appDiagnostics")
+        public static let requestQuinjetSessionOperation = Notification.Name(
+            "com.pulkit.edith.requestQuinjetSessionOperation")
+        public static let quinjetSessionOperationResult = Notification.Name(
+            "com.pulkit.edith.quinjetSessionOperationResult")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {

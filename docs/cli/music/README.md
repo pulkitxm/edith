@@ -24,6 +24,8 @@ it, so `ed np --json` and `ed music --player spotify` both work.
 | `ed music previous` | Go back to the previous track. Aliased `prev`. |
 | `ed music volume` | Set the active player's volume, from 0 to 1. |
 | `ed music players` | Every player Edith can see, and which one is active. |
+| `ed music open-current` | Open the active player, including Edith's Music page. |
+| `ed music reveal-current` | Reveal the current library track, or open its external player. |
 | `ed music ls` | List the library, a folder at a time. Aliased `list`. |
 | `ed music mkdir` | Make a folder in the library. Aliased `newfolder`. |
 | `ed music mv` | Move a track into a folder. Aliased `move`. |
@@ -34,6 +36,10 @@ it, so `ed np --json` and `ed music --player spotify` both work.
 | `ed music shuffle` | Turn shuffle on or off, or report it. |
 | `ed music repeat` | Turn repeat on or off, or report it. Aliased `loop`. |
 | `ed music rescan` | Read the music folder again after changing it outside Edith. |
+| `ed music favorite <track>` | Add a track to favourites. Aliased `favourite`. |
+| `ed music unfavorite <track>` | Remove a track from favourites. Aliased `unfavourite`. |
+| `ed music reveal <track>` | Reveal a track in Finder. |
+| `ed music open` | Open the music library in Finder. |
 
 ## Players
 
@@ -54,7 +60,9 @@ and others do not.
 
 Every AppleScript starts with a `System Events` check for the player's process,
 so a player that is not already open is reported as not running rather than
-launched. Nothing in this group ever opens Spotify or Apple Music for you.
+launched. Transport commands never open Spotify or Apple Music for you.
+`open-current` and the external fallback of `reveal-current` can bring an
+already-running player forward after that same eligibility check.
 
 **Choosing the active player.** With no `--player`, `ed` takes a snapshot of all
 three and scores each one: not running scores 0, running scores 1, plus 2 if it
@@ -90,10 +98,17 @@ error: Spotify is not running
 hint: open Spotify, then retry
 ```
 
-`--player` exists on eight commands only: `status`, `play`, `pause`, `stop`,
-`toggle`, `next`, `previous` and `volume`. `players` always looks at all three.
+`--player` exists on ten commands: `status`, `play`, `pause`, `stop`, `toggle`,
+`next`, `previous`, `volume`, `open-current` and `reveal-current`. `players`
+always looks at all three.
 `start`, `seek`, `shuffle` and `repeat` always mean Edith's own player, because
 they drive the library queue rather than a generic transport.
+
+The command line, Music page, menu bar player, notch controls and media keys use
+the same transport requests. A request therefore keeps the same play, pause,
+stop, track, folder, seek, volume, shuffle and repeat semantics regardless of
+which surface sent it. Scripts can use the commands above noninteractively and
+add `--json` whenever they need stable structured output.
 
 ## Commands
 
@@ -106,6 +121,8 @@ they drive the library queue rather than a generic transport.
 - [`ed music previous`](./previous.md)
 - [`ed music volume`](./volume.md)
 - [`ed music players`](./players.md)
+- [`ed music open-current`](./open-current.md)
+- [`ed music reveal-current`](./reveal-current.md)
 - [`ed music ls`](./ls.md)
 - [`ed music mkdir`](./mkdir.md)
 - [`ed music mv`](./mv.md)
@@ -116,6 +133,10 @@ they drive the library queue rather than a generic transport.
 - [`ed music shuffle`](./shuffle.md)
 - [`ed music repeat`](./repeat.md)
 - [`ed music rescan`](./rescan.md)
+- [`ed music favorite`](./favorite.md)
+- [`ed music unfavorite`](./unfavorite.md)
+- [`ed music reveal`](./reveal.md)
+- [`ed music open`](./open.md)
 
 ## Exit codes
 
