@@ -84,7 +84,7 @@ private struct UpdatesPane: View {
             set: { value in
                 guard
                     (try? ConfigurationExecutor.application.set(
-                        .bool(value), forKey: "SUAutomaticallyUpdate")) != nil
+                        .bool(value), forKey: AppStorageKeys.Update.automaticDownloads)) != nil
                 else { return }
                 updater.automaticallyDownloadsUpdates = value
             })

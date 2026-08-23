@@ -45,9 +45,9 @@ import Testing
         let executor = ConfigurationExecutor(
             shared: shared, standard: standard, announceChange: {})
 
-        try executor.set(.bool(false), forKey: "SUEnableAutomaticChecks")
-        #expect(standard.object(forKey: "SUEnableAutomaticChecks") as? Bool == false)
-        #expect(shared.object(forKey: "SUEnableAutomaticChecks") == nil)
+        try executor.set(.bool(false), forKey: AppStorageKeys.Update.automaticChecks)
+        #expect(standard.object(forKey: AppStorageKeys.Update.automaticChecks) as? Bool == false)
+        #expect(shared.object(forKey: AppStorageKeys.Update.automaticChecks) == nil)
 
         #expect(throws: ConfigurationError.self) {
             try executor.set(.string("false"), forKey: AppStorageKeys.General.preventSleep)

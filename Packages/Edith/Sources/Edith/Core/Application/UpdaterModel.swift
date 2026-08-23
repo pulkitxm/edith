@@ -97,7 +97,7 @@ final class UpdaterModel: NSObject,
             updaterAvailable = false
             return
         }
-        if UserDefaults.standard.object(forKey: "SUAutomaticallyUpdate") == nil {
+        if UserDefaults.standard.object(forKey: AppStorageKeys.Update.automaticDownloads) == nil {
             updater.automaticallyDownloadsUpdates = true
         }
         automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates

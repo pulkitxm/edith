@@ -28,7 +28,7 @@ struct UpdateSchedulePanel: View {
                 clampNotice = nil
                 guard
                     (try? ConfigurationExecutor.application.set(
-                        .double(value), forKey: "SUScheduledCheckInterval")) != nil
+                        .double(value), forKey: AppStorageKeys.Update.checkInterval)) != nil
                 else { return }
                 updater.checkInterval = value
             })
@@ -40,7 +40,7 @@ struct UpdateSchedulePanel: View {
             set: { value in
                 guard
                     (try? ConfigurationExecutor.application.set(
-                        .bool(value), forKey: "SUEnableAutomaticChecks")) != nil
+                        .bool(value), forKey: AppStorageKeys.Update.automaticChecks)) != nil
                 else { return }
                 updater.automaticallyChecksForUpdates = value
             })
@@ -56,7 +56,7 @@ struct UpdateSchedulePanel: View {
         let clamped = UpdateCheckInterval.clamp(entered)
         guard
             (try? ConfigurationExecutor.application.set(
-                .double(clamped), forKey: "SUScheduledCheckInterval")) != nil
+                .double(clamped), forKey: AppStorageKeys.Update.checkInterval)) != nil
         else { return }
         updater.checkInterval = clamped
         customSeconds = String(Int(clamped))
