@@ -32,6 +32,7 @@ enum ProjColumns {
 
 struct ProjectDrilldownView: View {
     @Bindable var model: DashboardModel
+    @State private var actions = UsageProjectActionModel()
     let dark: Bool
     var blur = false
     var blurTokens = false
@@ -54,6 +55,27 @@ struct ProjectDrilldownView: View {
                 }
                 Spacer(minLength: 0)
             }
+            if let message = actions.failureMessage {
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(message).lineLimit(2)
+                    Spacer(minLength: 0)
+                    Button("Dismiss") { actions.dismissFailure() }
+                        .buttonStyle(.plain)
+                        .pointerCursor()
+                }
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.danger)
+                .padding(.horizontal, UIScale.pt(9))
+                .padding(.vertical, UIScale.pt(7))
+                .background(
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .fill(DashSkin.danger.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .stroke(DashSkin.danger.opacity(0.25)))
+            }
             if model.projListOpen {
                 VStack(spacing: UIScale.pt(0)) {
                     headerRow
@@ -65,7 +87,7 @@ struct ProjectDrilldownView: View {
                                     node: row.node, depth: row.depth, dark: dark, blur: blur,
                                     blurTokens: blurTokens,
                                     expanded: model.projExpanded.contains(row.node.id),
-                                    onToggle: { toggleExpand(row.node.id) })
+                                    onToggle: { toggleExpand(row.node.id) }, actions: actions)
                                 Divider().opacity(0.12)
                             }
                             if nodes.isEmpty {
@@ -242,6 +264,7 @@ private struct ProjectRow: View {
     let blurTokens: Bool
     let expanded: Bool
     let onToggle: () -> Void
+    let actions: UsageProjectActionModel
     @State private var hovering = false
 
     private var hasChildren: Bool { node.children?.isEmpty == false }
@@ -272,16 +295,16 @@ private struct ProjectRow: View {
         if let chatId = node.chatId, !chatId.isEmpty {
             row.contextMenu {
                 Button("Copy chat ID") {
-                    _ = try? UsageProjectOperationExecution.copyChatID(chatId)
+                    actions.copyChatID(chatId)
                 }
             }
         } else if let repositoryTarget {
             row.contextMenu {
                 Button("Open repository") {
-                    _ = try? UsageProjectOperationExecution.openRepository(repositoryTarget)
+                    actions.openRepository(repositoryTarget)
                 }
                 Button("Copy repository link") {
-                    _ = try? UsageProjectOperationExecution.copyRepositoryLink(repositoryTarget)
+                    actions.copyRepositoryLink(repositoryTarget)
                 }
             }
         } else {
@@ -310,7 +333,7 @@ private struct ProjectRow: View {
     @ViewBuilder private var nodeLabel: some View {
         if let repositoryTarget {
             Button {
-                _ = try? UsageProjectOperationExecution.openRepository(repositoryTarget)
+                actions.openRepository(repositoryTarget)
             } label: {
                 HStack(spacing: UIScale.pt(5)) {
                     iconView
@@ -333,9 +356,6 @@ private struct ProjectRow: View {
         guard let raw = node.repositoryURL, !raw.isEmpty else { return nil }
         let target = UsageProjectTarget(
             repositoryID: node.id, repositoryName: node.label, repositoryURL: raw)
-        guard (try? UsageProjectOperationExecution.repositoryURL(for: target)) != nil else {
-            return nil
-        }
         return target
     }
 
@@ -351,7 +371,7 @@ private struct ProjectRow: View {
         .frame(width: UIScale.pt(16), height: UIScale.pt(14), alignment: .leading)
         if let chatId = node.chatId, !chatId.isEmpty {
             Button {
-                _ = try? UsageProjectOperationExecution.copyChatID(chatId)
+                actions.copyChatID(chatId)
             } label: {
                 img
             }.buttonStyle(.plain).pointerCursor()
