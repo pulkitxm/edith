@@ -84,6 +84,31 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     }
 }
 
+private final class CLIProcessTimeout: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private var workItem: DispatchWorkItem?
+
+    func install(_ item: DispatchWorkItem) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else {
+            item.cancel()
+            return false
+        }
+        workItem = item
+        return true
+    }
+
+    func finish() {
+        lock.lock()
+        finished = true
+        workItem?.cancel()
+        workItem = nil
+        lock.unlock()
+    }
+}
+
 public enum CLICommandRunner {
     private static let timeoutQueue = DispatchQueue(
         label: "com.pulkit.edith.cli-command-timeout", qos: .userInteractive)
@@ -96,6 +121,7 @@ public enum CLICommandRunner {
             let process = Process()
             let pipe = Pipe()
             let output = CLIStreamingOutput()
+            let processTimeout = CLIProcessTimeout()
             process.executableURL = request.executableURL
             process.arguments = request.arguments
             process.environment = request.environment
@@ -108,6 +134,7 @@ public enum CLICommandRunner {
                 }
             }
             process.terminationHandler = { completedProcess in
+                processTimeout.finish()
                 pipe.fileHandleForReading.readabilityHandler = nil
                 let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
                 for line in output.receive(remaining) { onLine(line) }
@@ -122,10 +149,12 @@ public enum CLICommandRunner {
                 try process.run()
                 if let timeout = request.timeout {
                     let process = process
-                    timeoutQueue.asyncAfter(
-                        deadline: .now() + max(0.01, timeout)
-                    ) {
+                    let workItem = DispatchWorkItem {
                         if process.isRunning { process.terminate() }
+                    }
+                    if processTimeout.install(workItem) {
+                        timeoutQueue.asyncAfter(
+                            deadline: .now() + max(0.01, timeout), execute: workItem)
                     }
                 }
             } catch {
