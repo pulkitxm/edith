@@ -30,7 +30,8 @@ either way. This is the one place `ed` deliberately differs from the switch on
 each row of the Extensions page: the pane refuses the toggle when a required
 permission is missing and opens the permission sheet instead, leaving the switch
 off, while `ed` turns the extension on and tells you what it still needs. The
-extension is on and inert until the grant lands.
+extension is on and inert until the grant lands. Both surfaces execute the same
+EdithKit enable operation with their respective permission policy.
 
 `--json` prints the same record `info` prints, already reflecting the new state,
 and prints no note at all: the missing permissions are in

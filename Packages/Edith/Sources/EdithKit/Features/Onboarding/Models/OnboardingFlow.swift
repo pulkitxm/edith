@@ -102,12 +102,8 @@ public enum OnboardingFlow {
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries,
         defaults: UserDefaults = SharedDefaults.store
     ) {
-        for entry in entries where selectedIDs.contains(entry.id) {
-            defaults.set(true, forKey: entry.defaultsKey)
-            defaults.set(true, forKey: seenKey(for: entry))
-        }
-        defaults.set(icloudBackup, forKey: iCloudBackupKey)
-        defaults.set(true, forKey: completionKey)
+        _ = ExtensionMutationCenter(environment: .local(defaults: defaults)).completeOnboarding(
+            selectedIDs: selectedIDs, icloudBackup: icloudBackup, entries: entries)
     }
 
     public static func skip(defaults: UserDefaults = SharedDefaults.store) {

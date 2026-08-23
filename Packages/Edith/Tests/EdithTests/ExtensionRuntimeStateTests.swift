@@ -91,6 +91,33 @@ import Testing
         #expect(source.contains("ForEach(report.checks)"))
     }
 
+    @Test func everyExtensionMutationSurfaceUsesTheSharedCenter() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let app = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Settings/Views/ExtensionsPane.swift"), encoding: .utf8)
+        let onboarding = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "EdithKit/Features/Onboarding/Models/OnboardingFlow.swift"), encoding: .utf8)
+        let commands = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "EdithCLI/Commands/ExtensionCommands.swift"), encoding: .utf8)
+        let tools = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "EdithCLI/Commands/ToolsCommands.swift"), encoding: .utf8)
+
+        #expect(app.contains("ExtensionMutationCenter.application"))
+        #expect(!app.contains("enabled.wrappedValue ="))
+        #expect(onboarding.contains("ExtensionMutationCenter(environment:"))
+        #expect(commands.contains("mutationCenter().setEnabled"))
+        #expect(commands.contains("mutationCenter().setup"))
+        #expect(tools.contains("mutationCenter().install"))
+    }
+
     @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

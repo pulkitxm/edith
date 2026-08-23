@@ -1,0 +1,202 @@
+import EdithCore
+import Foundation
+import Testing
+
+@testable import EdithKit
+
+private final class ExtensionMutationRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var announcements = 0
+
+    func announce() {
+        lock.lock()
+        announcements += 1
+        lock.unlock()
+    }
+
+    var announcementCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return announcements
+    }
+}
+
+private final class ExtensionMutationDefaults: @unchecked Sendable {
+    let store: UserDefaults
+
+    init(_ store: UserDefaults) {
+        self.store = store
+    }
+}
+
+private struct ExtensionMutationWorld {
+    let suite: String
+    let defaults: UserDefaults
+    let recorder = ExtensionMutationRecorder()
+    let availableTools: Set<String>
+    let installTool: ExtensionMutationEnvironment.InstallTool
+
+    init(
+        availableTools: Set<String> = [],
+        installTool: @escaping ExtensionMutationEnvironment.InstallTool = { tool, _ in
+            tool.id
+        }
+    ) {
+        suite = "ExtensionMutationTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        self.availableTools = availableTools
+        self.installTool = installTool
+    }
+
+    func center(granted: [ExtensionPermission: Bool] = [:]) -> ExtensionMutationCenter {
+        let defaults = ExtensionMutationDefaults(defaults)
+        let availableTools = availableTools
+        let toolAvailable: @Sendable (String) -> Bool = { availableTools.contains($0) }
+        let lifecycle = ExtensionLifecycleProbeEnvironment(
+            isEnabled: { entry in
+                defaults.store.object(forKey: entry.defaultsKey) as? Bool ?? false
+            }, grantedPermissions: { granted }, toolAvailable: toolAvailable,
+            helperRunning: { true }, platformCapabilities: .macOS, machineCount: { 1 },
+            adapterReadiness: { _ in nil })
+        return ExtensionMutationCenter(
+            environment: ExtensionMutationEnvironment(
+                defaults: defaults.store, announceChange: { recorder.announce() },
+                grantedPermissions: { granted }, toolAvailable: toolAvailable,
+                installTool: installTool, lifecycle: lifecycle))
+    }
+
+    func cleanUp() {
+        defaults.removePersistentDomain(forName: suite)
+    }
+}
+
+@Suite struct ExtensionMutationTests {
+    @Test func permissionAwareEnableLeavesBlockedStateUntouched() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "calendar" })
+
+        let outcome = world.center().enablePermissionAware(entry)
+
+        guard case let .needsPermissions(plan) = outcome else {
+            Issue.record("Calendar should wait for its required permission")
+            return
+        }
+        #expect(plan.entry == entry)
+        #expect(plan.required == [.calendar])
+        #expect(world.defaults.object(forKey: entry.defaultsKey) == nil)
+        #expect(world.defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) == nil)
+        #expect(world.recorder.announcementCount == 0)
+    }
+
+    @Test func permissionAwareEnableAppliesAfterTheGrant() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "calendar" })
+
+        let outcome = world.center(granted: [.calendar: true]).enablePermissionAware(entry)
+
+        guard case let .applied(result) = outcome else {
+            Issue.record("Calendar should enable after its required permission is granted")
+            return
+        }
+        #expect(result.changed)
+        #expect(result.missingRequiredPermissions.isEmpty)
+        #expect(world.defaults.bool(forKey: entry.defaultsKey))
+        #expect(world.defaults.bool(forKey: OnboardingFlow.seenKey(for: entry)))
+        #expect(world.recorder.announcementCount == 1)
+    }
+
+    @Test func onboardingWritesOnlyTheSelectedExtensions() {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+
+        let result = world.center().completeOnboarding(
+            selectedIDs: ["usage", "notchShelf"], icloudBackup: false)
+
+        #expect(result.enabledIDs == ["usage", "notchShelf"])
+        #expect(!result.iCloudBackup)
+        #expect(world.defaults.bool(forKey: OnboardingFlow.completionKey))
+        #expect(world.defaults.object(forKey: OnboardingFlow.iCloudBackupKey) as? Bool == false)
+        for entry in ExtensionRegistry.entries {
+            if result.enabledIDs.contains(entry.id) {
+                #expect(world.defaults.object(forKey: entry.defaultsKey) as? Bool == true)
+                #expect(
+                    world.defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) as? Bool
+                        == true)
+            } else {
+                #expect(world.defaults.object(forKey: entry.defaultsKey) == nil)
+                #expect(world.defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) == nil)
+            }
+        }
+    }
+
+    @Test func setupKeepsEnablementAndReportsProvisioningFailures() async throws {
+        let world = ExtensionMutationWorld { tool, _ in
+            throw NSError(
+                domain: "ExtensionMutationTests", code: 7,
+                userInfo: [NSLocalizedDescriptionKey: "could not install \(tool.id)"])
+        }
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "quinjet" })
+
+        let result = await world.center().setup(
+            entry, dryRun: false, installTools: true)
+
+        #expect(result.changed)
+        #expect(world.defaults.bool(forKey: entry.defaultsKey))
+        #expect(result.tools.planned == ["quinjet"])
+        #expect(result.tools.installed.isEmpty)
+        #expect(
+            result.tools.failures == [
+                ExtensionToolFailure(id: "quinjet", detail: "could not install quinjet")
+            ])
+        #expect(result.report.state.phase == .needsSetup)
+    }
+
+    @Test func dryRunDoesNotWriteOrInstall() async throws {
+        let world = ExtensionMutationWorld { _, _ in
+            Issue.record("dry-run attempted an install")
+            return "unexpected"
+        }
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "quinjet" })
+
+        let result = await world.center().setup(
+            entry, dryRun: true, installTools: true)
+
+        #expect(!result.changed)
+        #expect(result.tools.planned == ["quinjet"])
+        #expect(world.defaults.object(forKey: entry.defaultsKey) == nil)
+        #expect(world.recorder.announcementCount == 0)
+    }
+
+    @Test func dependencyStateMatchesTheSettingsPane() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let usage = try #require(ExtensionRegistry.entries.first { $0.id == "usage" })
+        let system = try #require(ExtensionRegistry.entries.first { $0.id == "system" })
+        world.defaults.set(LimitProvider.codex.rawValue, forKey: AppStorageKeys.Limits.provider)
+        world.defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        let center = world.center()
+
+        _ = center.setEnabled(true, for: usage)
+        _ = center.setEnabled(false, for: system)
+
+        #expect(world.defaults.bool(forKey: AppStorageKeys.Limits.codexEnabled))
+        #expect(!world.defaults.bool(forKey: AppStorageKeys.Limits.claudeEnabled))
+        #expect(!world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+    }
+
+    @Test func everyMutationDescriptorResolvesThroughTheCatalog() {
+        let descriptors = ExtensionMutationOperation.allCases.map(\.descriptor)
+        #expect(Set(descriptors.map(\.id)).count == descriptors.count)
+        #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+        for descriptor in descriptors {
+            #expect(UserOperationCatalog.descriptor(id: descriptor.id) == descriptor)
+            #expect(UserOperationCatalog.descriptor(cli: descriptor.cli) == descriptor)
+            #expect(descriptor.effect == .write)
+        }
+    }
+}
