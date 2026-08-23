@@ -5,16 +5,23 @@ struct ExtensionPreview: View {
     let entry: ExtensionRegistryEntry
     let dark: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
-            preview(phase: reduceMotion ? 1.1 : context.date.timeIntervalSinceReferenceDate)
-        }
+        let animates = ExtensionPreviewMotionPolicy.animates(
+            hovering: hovering, reduceMotion: reduceMotion)
+        preview(
+            phase: ExtensionPreviewMotionPolicy.phase(
+                hovering: hovering, reduceMotion: reduceMotion),
+            animating: animates
+        )
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.28), value: hovering)
+        .onHover { hovering = $0 }
         .accessibilityHidden(true)
     }
 
     @ViewBuilder
-    private func preview(phase: Double) -> some View {
+    private func preview(phase: Double, animating: Bool) -> some View {
         switch entry.id {
         case "usage": usagePreview(phase: phase)
         case "herdr": herdrPreview(phase: phase)
@@ -27,7 +34,7 @@ struct ExtensionPreview: View {
         case "calendar": calendarPreview(phase: phase)
         case "notchShelf": notchPreview(phase: phase)
         case "clipboard": clipboardPreview(phase: phase)
-        case "music": musicPreview
+        case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
@@ -362,10 +369,10 @@ struct ExtensionPreview: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var musicPreview: some View {
+    private func musicPreview(animating: Bool) -> some View {
         HStack(spacing: UIScale.pt(13)) {
             PlaybackWave(
-                playing: !reduceMotion, color: brandAccent, barCount: 7, maxHeight: UIScale.pt(28))
+                playing: animating, color: brandAccent, barCount: 7, maxHeight: UIScale.pt(28))
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                 Capsule().fill(DashSkin.inkSoft(dark).opacity(0.65)).frame(
                     width: UIScale.pt(62), height: UIScale.pt(5))
@@ -507,6 +514,19 @@ struct ExtensionPreview: View {
         }
         .frame(width: UIScale.pt(46), height: UIScale.pt(42))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+enum ExtensionPreviewMotionPolicy {
+    static let restingPhase = 1.1
+    static let hoverPhase = 2.2
+
+    static func animates(hovering: Bool, reduceMotion: Bool) -> Bool {
+        hovering && !reduceMotion
+    }
+
+    static func phase(hovering: Bool, reduceMotion: Bool) -> Double {
+        animates(hovering: hovering, reduceMotion: reduceMotion) ? hoverPhase : restingPhase
     }
 }
 

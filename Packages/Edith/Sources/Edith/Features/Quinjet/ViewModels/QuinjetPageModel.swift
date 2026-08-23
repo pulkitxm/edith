@@ -19,6 +19,7 @@ final class QuinjetTab: Identifiable {
     var launchConfiguration = QuinjetLaunchConfiguration.default
     var externalLaunchMessage: String?
     var externalWorkspaceID: String?
+    var externalLaunchGeneration = 0
 
     var title: String {
         guard let projectName else { return "New review" }
@@ -41,6 +42,8 @@ final class QuinjetPageModel {
     private var remoteProjects: [UUID: [QuinjetProject]] = [:]
     private var loadingRemoteProjects: Set<UUID> = []
     private var remoteProjectErrors: [UUID: String] = [:]
+    private var projectRefreshGeneration = 0
+    private var remoteProjectRefreshGenerations: [UUID: Int] = [:]
 
     init(client: QuinjetClient = .live) {
         self.client = client
@@ -86,24 +89,45 @@ final class QuinjetPageModel {
     }
 
     func refreshProjects() async {
+        projectRefreshGeneration += 1
+        let generation = projectRefreshGeneration
         loadingProjects = true
         projectError = nil
-        defer { loadingProjects = false }
+        defer {
+            if generation == projectRefreshGeneration { loadingProjects = false }
+        }
         do {
-            projects = try await client.recentProjects()
+            let refreshed = try await client.recentProjects()
+            try Task.checkCancellation()
+            guard generation == projectRefreshGeneration else { return }
+            projects = refreshed
+        } catch is CancellationError {
         } catch {
+            guard generation == projectRefreshGeneration else { return }
             projectError = error.localizedDescription
         }
     }
 
     func refreshProjects(for remote: QuinjetRemote) async {
-        loadingRemoteProjects.insert(remote.machineID)
-        remoteProjectErrors[remote.machineID] = nil
-        defer { loadingRemoteProjects.remove(remote.machineID) }
+        let machineID = remote.machineID
+        let generation = (remoteProjectRefreshGenerations[machineID] ?? 0) + 1
+        remoteProjectRefreshGenerations[machineID] = generation
+        loadingRemoteProjects.insert(machineID)
+        remoteProjectErrors[machineID] = nil
+        defer {
+            if generation == remoteProjectRefreshGenerations[machineID] {
+                loadingRemoteProjects.remove(machineID)
+            }
+        }
         do {
-            remoteProjects[remote.machineID] = try await client.recentProjects(remote: remote)
+            let refreshed = try await client.recentProjects(remote: remote)
+            try Task.checkCancellation()
+            guard generation == remoteProjectRefreshGenerations[machineID] else { return }
+            remoteProjects[machineID] = refreshed
+        } catch is CancellationError {
         } catch {
-            remoteProjectErrors[remote.machineID] = error.localizedDescription
+            guard generation == remoteProjectRefreshGenerations[machineID] else { return }
+            remoteProjectErrors[machineID] = error.localizedDescription
         }
     }
 
@@ -121,8 +145,9 @@ final class QuinjetPageModel {
             return
         }
         tab.holder.stop()
+        tab.externalLaunchGeneration += 1
         if let workspaceID = tab.externalWorkspaceID {
-            try? QuinjetCMUXLauncher.close(workspaceID: workspaceID)
+            Task { try? await QuinjetCMUXLauncher.close(workspaceID: workspaceID) }
         }
         tabs.remove(at: index)
         if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }
@@ -142,6 +167,8 @@ final class QuinjetPageModel {
         tab.errorMessage = nil
         tab.externalLaunchMessage = nil
         selected = tab.id
+        tab.externalLaunchGeneration += 1
+        let externalLaunchGeneration = tab.externalLaunchGeneration
         guard launchEnabled else { return }
         guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
             tab.errorMessage = QuinjetClientError.notInstalled.localizedDescription
@@ -149,24 +176,38 @@ final class QuinjetPageModel {
         }
         if configuration.terminal == .cmux {
             tab.holder.stop()
-            do {
-                tab.externalWorkspaceID = try QuinjetCMUXLauncher.launch(
-                    quinjet: executable,
-                    arguments: launchArguments(
-                        worktree: worktree, remote: remote, configuration: configuration,
-                        managed: false),
-                    currentDirectory: remote == nil
-                        ? worktree.path : FileManager.default.homeDirectoryForCurrentUser.path,
-                    replacing: tab.externalWorkspaceID)
-                tab.externalLaunchMessage = "Opened in cmux"
-            } catch {
-                tab.errorMessage = error.localizedDescription
+            let arguments = launchArguments(
+                worktree: worktree, remote: remote, configuration: configuration, managed: false)
+            let currentDirectory =
+                remote == nil ? worktree.path : FileManager.default.homeDirectoryForCurrentUser.path
+            let replacing = tab.externalWorkspaceID
+            Task { [weak tab] in
+                do {
+                    let workspaceID = try await QuinjetCMUXLauncher.launch(
+                        quinjet: executable, arguments: arguments,
+                        currentDirectory: currentDirectory, replacing: replacing)
+                    guard
+                        let tab,
+                        tab.externalLaunchGeneration == externalLaunchGeneration
+                    else {
+                        try? await QuinjetCMUXLauncher.close(workspaceID: workspaceID)
+                        return
+                    }
+                    tab.externalWorkspaceID = workspaceID
+                    tab.externalLaunchMessage = "Opened in cmux"
+                } catch {
+                    guard
+                        let tab,
+                        tab.externalLaunchGeneration == externalLaunchGeneration
+                    else { return }
+                    tab.errorMessage = error.localizedDescription
+                }
             }
             return
         }
         if let workspaceID = tab.externalWorkspaceID {
-            try? QuinjetCMUXLauncher.close(workspaceID: workspaceID)
             tab.externalWorkspaceID = nil
+            Task { try? await QuinjetCMUXLauncher.close(workspaceID: workspaceID) }
         }
         tab.holder.registerOSCHandler(code: QuinjetHostAction.oscCode) {
             [weak self, weak tab] payload in
@@ -259,10 +300,13 @@ final class QuinjetPageModel {
                 configuration: tab.launchConfiguration)
             return
         }
-        do {
-            try QuinjetCMUXLauncher.focus(workspaceID: workspaceID)
-        } catch {
-            tab.errorMessage = error.localizedDescription
+        Task { [weak tab] in
+            do {
+                try await QuinjetCMUXLauncher.focus(workspaceID: workspaceID)
+            } catch {
+                guard let tab, tab.externalWorkspaceID == workspaceID else { return }
+                tab.errorMessage = error.localizedDescription
+            }
         }
     }
 
