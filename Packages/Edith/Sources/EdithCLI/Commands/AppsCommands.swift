@@ -133,7 +133,7 @@ struct AppsListCommand: AsyncParsableCommand {
         try await execute {
             let apps = await AppsCLI.list()
             guard !json else {
-                CLIOut.json(.array(apps.map(AppsCLI.json)))
+                CLIOut.json(.array(apps.map { AppsCLI.json($0) }))
                 return
             }
             CLIOut.out(
