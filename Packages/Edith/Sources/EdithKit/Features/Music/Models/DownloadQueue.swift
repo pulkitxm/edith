@@ -1,6 +1,7 @@
 import Foundation
 
-public struct DownloadRecord: Codable, Equatable {
+public struct DownloadRecord: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
     public var url: URL
     public var status: DownloadStatus
     public var outputFilename: String?
@@ -8,9 +9,11 @@ public struct DownloadRecord: Codable, Equatable {
     public var kind: DownloadKind?
 
     public init(
-        url: URL, status: DownloadStatus, outputFilename: String?, createdAt: Date,
+        id: UUID = UUID(), url: URL, status: DownloadStatus, outputFilename: String?,
+        createdAt: Date,
         kind: DownloadKind?
     ) {
+        self.id = id
         self.url = url
         self.status = status
         self.outputFilename = outputFilename
@@ -67,40 +70,47 @@ public struct DownloadRecord: Codable, Equatable {
 public enum DownloadQueue {
     public static var file: URL { Repo.dataDir.appendingPathComponent("downloads.json") }
 
-    public static func load() -> [DownloadRecord] {
+    public static func load(from file: URL = DownloadQueue.file) -> [DownloadRecord] {
         guard let data = try? Data(contentsOf: file) else { return [] }
         return ((try? JSONDecoder().decode([DownloadRecord].self, from: data)) ?? [])
-            .sorted { $0.createdAt > $1.createdAt }
+            .sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
     }
 
-    public static func save(_ records: [DownloadRecord]) throws {
+    public static func save(
+        _ records: [DownloadRecord], to file: URL = DownloadQueue.file
+    ) throws {
         try FileManager.default.createDirectory(
-            at: Repo.dataDir, withIntermediateDirectories: true)
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(records).write(to: file, options: .atomic)
     }
 
-    public static func outputTemplate(prefix: String) -> String {
-        let directory = Repo.musicDir
+    public static func outputTemplate(prefix: String, directory: URL = Repo.musicDir) -> String {
         let name = prefix.isEmpty ? "%(title)s.%(ext)s" : "\(prefix)%(title)s.%(ext)s"
         return directory.appendingPathComponent(name).path
     }
 
     @discardableResult
     public static func enqueue(
-        urls: [URL], prefix: String = "", kind: DownloadKind = .audio, now: Date = Date()
+        urls: [URL], prefix: String = "", kind: DownloadKind = .audio, now: Date = Date(),
+        file: URL = DownloadQueue.file, outputDirectory: URL = Repo.musicDir
     ) throws -> [DownloadRecord] {
-        let template = outputTemplate(prefix: prefix)
+        let template = outputTemplate(prefix: prefix, directory: outputDirectory)
         let added = urls.map {
             DownloadRecord(
                 url: $0, status: .queued, outputFilename: template, createdAt: now, kind: kind)
         }
-        try save(added + load())
+        try save(added + load(from: file), to: file)
         return added
     }
 
     @discardableResult
-    public static func retry(_ matching: (DownloadRecord) -> Bool) throws -> Int {
-        var records = load()
+    public static func retry(
+        _ matching: (DownloadRecord) -> Bool, file: URL = DownloadQueue.file
+    ) throws -> Int {
+        var records = load(from: file)
         var changed = 0
         for index in records.indices where matching(records[index]) {
             guard records[index].canRetry else { continue }
@@ -108,21 +118,23 @@ public enum DownloadQueue {
             changed += 1
         }
         guard changed > 0 else { return 0 }
-        try save(records)
+        try save(records, to: file)
         return changed
     }
 
     @discardableResult
-    public static func remove(_ matching: (DownloadRecord) -> Bool) throws -> Int {
-        let records = load()
+    public static func remove(
+        _ matching: (DownloadRecord) -> Bool, file: URL = DownloadQueue.file
+    ) throws -> Int {
+        let records = load(from: file)
         let kept = records.filter { !matching($0) }
         guard kept.count != records.count else { return 0 }
-        try save(kept)
+        try save(kept, to: file)
         return records.count - kept.count
     }
 
     @discardableResult
-    public static func clearFinished() throws -> Int {
-        try remove { $0.isFinished }
+    public static func clearFinished(file: URL = DownloadQueue.file) throws -> Int {
+        try remove({ $0.isFinished }, file: file)
     }
 }

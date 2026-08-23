@@ -6,7 +6,7 @@ extension Notification.Name {
     public static let musicFolderChangedLocally = Notification.Name("musicFolderChanged")
 }
 
-public enum DownloadStatus: Equatable, Codable {
+public enum DownloadStatus: Equatable, Codable, Sendable {
     case queued
     case resolving
     case downloading(progress: String, videoIndex: Int, videoCount: Int)
