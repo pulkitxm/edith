@@ -26,6 +26,7 @@ final class RunningAppsModel {
     private(set) var ascending = false
 
     private var lastCPU: [pid_t: (time: UInt64, at: Date)] = [:]
+    private let operations = RunningAppOperationCenter()
 
     init() {
         let d = SharedDefaults.store
@@ -66,21 +67,9 @@ final class RunningAppsModel {
     }
 
     func refresh() async {
-        struct AppSnapshot: Sendable {
-            let pid: pid_t
-            let name: String
-            let bundleID: String?
-        }
-        let running = NSWorkspace.shared.runningApplications.filter {
-            $0.activationPolicy == .regular
-        }
         var icons: [pid_t: NSImage] = [:]
-        var snapshots: [AppSnapshot] = []
-        for app in running where app.processIdentifier > 0 {
-            snapshots.append(
-                AppSnapshot(
-                    pid: app.processIdentifier, name: app.localizedName ?? "Unknown",
-                    bundleID: app.bundleIdentifier))
+        let snapshots = operations.list()
+        for app in NSWorkspace.shared.runningApplications where app.processIdentifier > 0 {
             icons[app.processIdentifier] = app.icon
         }
         let previous = lastCPU
@@ -133,10 +122,12 @@ final class RunningAppsModel {
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
-        RunningApps.quit(pid: row.pid, force: force)
+        guard let plan = try? operations.plan(.pid(row.pid), force: force) else { return }
+        _ = operations.apply(plan, confirmed: true)
     }
 
     func quitAll(force: Bool = false) {
-        RunningApps.quitEverythingElse(force: force)
+        guard let plan = try? operations.plan(.all, force: force) else { return }
+        _ = operations.apply(plan, confirmed: true)
     }
 }
