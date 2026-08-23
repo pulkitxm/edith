@@ -85,34 +85,32 @@ private final class CLIStreamingOutput: @unchecked Sendable {
 }
 
 private final class CLIProcessTimeout: @unchecked Sendable {
-    private let lock = NSLock()
+    private let condition = NSCondition()
     private var finished = false
-    private var workItem: DispatchWorkItem?
 
-    func install(_ item: DispatchWorkItem) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !finished else {
-            item.cancel()
-            return false
+    func schedule(_ process: Process, after timeout: TimeInterval) {
+        let deadline = Date(timeIntervalSinceNow: max(0.01, timeout))
+        let thread = Thread { [self, process] in
+            condition.lock()
+            while !finished, condition.wait(until: deadline) {}
+            let shouldTerminate = !finished
+            finished = true
+            condition.unlock()
+            if shouldTerminate, process.isRunning { process.terminate() }
         }
-        workItem = item
-        return true
+        thread.qualityOfService = .userInteractive
+        thread.start()
     }
 
     func finish() {
-        lock.lock()
+        condition.lock()
         finished = true
-        workItem?.cancel()
-        workItem = nil
-        lock.unlock()
+        condition.broadcast()
+        condition.unlock()
     }
 }
 
 public enum CLICommandRunner {
-    private static let timeoutQueue = DispatchQueue(
-        label: "com.pulkit.edith.cli-command-timeout", qos: .userInteractive)
-
     public static func run(
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
@@ -148,14 +146,7 @@ public enum CLICommandRunner {
             do {
                 try process.run()
                 if let timeout = request.timeout {
-                    let process = process
-                    let workItem = DispatchWorkItem {
-                        if process.isRunning { process.terminate() }
-                    }
-                    if processTimeout.install(workItem) {
-                        timeoutQueue.asyncAfter(
-                            deadline: .now() + max(0.01, timeout), execute: workItem)
-                    }
+                    processTimeout.schedule(process, after: timeout)
                 }
             } catch {
                 pipe.fileHandleForReading.readabilityHandler = nil

@@ -88,6 +88,23 @@ import Testing
         #expect(MachineDirectory.load(from: missing).isEmpty)
     }
 
+    @Test func everyMachineControlRouteParsesInMachineFirstAndCanonicalOrder() throws {
+        let commands = [
+            ["status"], ["brightness", "50"], ["volume", "40"], ["mute", "on"],
+            ["wifi", "off", "--yes"], ["bluetooth", "on"],
+            ["airplane", "on", "--yes"], ["dnd", "off"], ["keyboard-light", "25"],
+        ]
+        for command in commands {
+            let canonical =
+                ["machines", "control"] + Array(command.prefix(1)) + ["box"]
+                + Array(command.dropFirst())
+            #expect(throws: Never.self) { _ = try EdRoot.parseAsRoot(canonical) }
+            let rewritten = ArgumentRewriting.machineFirst(
+                ["machines", "box", "control"] + command)
+            #expect(rewritten == Array(canonical))
+        }
+    }
+
     @Test func samplesEncodeIntoStableFieldNames() {
         let sample = MachineSample(
             ts: 1_700_000_000, dt: 2, cpu: MachineCPU(total: 12.5, steal: 0, cores: [10, 15]),

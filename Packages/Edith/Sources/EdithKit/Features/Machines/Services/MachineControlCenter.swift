@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public enum MachineControlPlatform: String, Equatable, Sendable {
@@ -64,6 +65,100 @@ public enum MachineControlAction: Equatable, Sendable {
     case setBluetoothEnabled(Bool)
     case setAirplaneMode(Bool)
     case setDoNotDisturb(Bool)
+
+    public var operation: MachineControlOperation {
+        switch self {
+        case .setBrightness: .brightness
+        case .setVolume: .volume
+        case .setKeyboardBacklight: .keyboardLight
+        case .setMuted: .mute
+        case .setWiFiEnabled: .wifi
+        case .setBluetoothEnabled: .bluetooth
+        case .setAirplaneMode: .airplane
+        case .setDoNotDisturb: .doNotDisturb
+        }
+    }
+
+    public var isDisruptive: Bool {
+        self == .setWiFiEnabled(false) || self == .setAirplaneMode(true)
+    }
+}
+
+public enum MachineControlOperation: String, CaseIterable, Equatable, Sendable {
+    case status
+    case brightness
+    case volume
+    case mute
+    case wifi
+    case bluetooth
+    case airplane
+    case doNotDisturb
+    case keyboardLight
+
+    public var descriptor: UserOperationDescriptor {
+        switch self {
+        case .status:
+            descriptor("status", "Read the available live controls.", effect: .read)
+        case .brightness:
+            descriptor("brightness", "Set display brightness.", effect: .write)
+        case .volume:
+            descriptor("volume", "Set system output volume.", effect: .write)
+        case .mute:
+            descriptor("mute", "Mute or unmute system audio.", effect: .write)
+        case .wifi:
+            descriptor(
+                "wifi", "Turn Wi-Fi on or off.", effect: .destructive,
+                requiresPreview: true)
+        case .bluetooth:
+            descriptor("bluetooth", "Turn Bluetooth on or off.", effect: .write)
+        case .airplane:
+            descriptor(
+                "airplane", "Turn airplane mode on or off.", effect: .destructive,
+                requiresPreview: true)
+        case .doNotDisturb:
+            descriptor("dnd", "Turn Do Not Disturb on or off.", effect: .write)
+        case .keyboardLight:
+            descriptor("keyboard-light", "Set keyboard backlight brightness.", effect: .write)
+        }
+    }
+
+    private func descriptor(
+        _ verb: String, _ summary: String, effect: UserOperationEffect,
+        requiresPreview: Bool = false
+    ) -> UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "machines.control.\(rawValue)"), summary: summary,
+            cli: ["machines", "control", verb], effect: effect,
+            requiresPreview: requiresPreview)
+    }
+}
+
+public enum MachineControlOperationExecution {
+    public typealias Run = (String, Data?, TimeInterval) async -> Result<String, Error>
+
+    public static func status(using run: Run) async -> Result<MachineControlSnapshot, Error> {
+        switch await run(MachineControlCenterCommands.statusCommand, nil, 20) {
+        case let .success(output):
+            return .success(MachineControlCenterCommands.parseStatus(output))
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    public static func perform(
+        _ action: MachineControlAction, machineID: UUID, isLocal: Bool,
+        platform: MachineControlPlatform?, using run: Run
+    ) async -> Result<String, Error> {
+        let shouldAttachSudoPassword =
+            !isLocal
+            && MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: action, platform: platform)
+        let stdin = shouldAttachSudoPassword ? SudoPassword.stdin(machineID: machineID) : nil
+        let command = MachineControlCenterCommands.command(
+            for: action, withSudoPassword: stdin != nil,
+            usingLocalAuthorization: isLocal)
+        return await run(command, stdin, 30)
+    }
 }
 
 public enum MachineControlCenterCommands {

@@ -13,11 +13,9 @@ final class MachinesModel {
     private(set) var sshClipboardStates: [UUID: SSHClipboardSyncState] = [:]
     var selection: UUID?
 
-    static let localMachineID = UUID(uuidString: "00000000-0000-0000-0000-0000000000ED")!
+    static let localMachineID = Machine.localID
 
-    let localMachine = Machine(
-        id: MachinesModel.localMachineID, name: "This Mac", host: "localhost",
-        source: .manual, createdAt: Date(timeIntervalSince1970: 0))
+    let localMachine = Machine.local
 
     private var machinesObserver: NSObjectProtocol?
 

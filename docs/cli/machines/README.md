@@ -73,11 +73,12 @@ the process state between metric records.
 | `ed machines unmount` | Unmounts it again and tidies the folder away. Aliased `umount`. |
 | `ed machines mounts` | Lists every machine file system Edith mounted or can see, and whether each one still answers. |
 
-Eight more subcommands live under `ed machines` and are documented on five
+Nine more subcommands live under `ed machines` and are documented on six
 further pages: [`docker`](../machines-docker/README.md), [`files`](../machines-files/README.md),
 [`power`](../machines-power/README.md), [`services`](../machines-power/README.md),
 [`kill`](../machines-power/README.md), [`broadcast`](../machines-power/README.md),
-[`thermal`](../machines-thermal/README.md) and [`workspace`](../machines-workspace/README.md).
+[`thermal`](../machines-thermal/README.md), [`control`](../machines-control/README.md)
+and [`workspace`](../machines-workspace/README.md).
 
 ## The machine record
 
@@ -237,6 +238,8 @@ app is closed.
   and compose projects.
 - [`ed machines power`](../machines-power/README.md) for power state, systemd units,
   processes and `broadcast`.
+- [`ed machines control`](../machines-control/README.md) for brightness, audio, radios,
+  airplane mode, Do Not Disturb and keyboard lighting.
 - [`ed machines workspace`](../machines-workspace/README.md) for the saved multi-pane
   layouts.
 - [`ed system`](../system/README.md) for the same metrics report taken on this Mac.
