@@ -52,6 +52,7 @@ public enum CLIEnvironment {
         FileManager.default.homeDirectoryForCurrentUser
 
     nonisolated(unsafe) public static var clipboardPasteboard: NSPasteboard = .general
+    nonisolated(unsafe) public static var downloadQueueFile: URL = DownloadQueue.file
 
     nonisolated(unsafe) public static var runAppleScript:
         @Sendable (String, TimeInterval) throws -> String = {
@@ -114,6 +115,7 @@ public enum CLIEnvironment {
         deliver = { IPC.post($0, userInfo: $1) }
         homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         clipboardPasteboard = .general
+        downloadQueueFile = DownloadQueue.file
         ClipboardPaths.root = AppData.supportDir
         MachinePaths.root = AppData.supportDir
         ShelfIndex.root = AppData.supportDir.appendingPathComponent("Shelf")

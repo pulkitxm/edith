@@ -297,6 +297,8 @@ public enum Guide {
         ed music play|pause|stop|toggle|next|previous
         ed music volume 0.4
         ed music players                every player, and which one is active
+        ed music open-current           open whichever player is active
+        ed music reveal-current         reveal the library track or open its player
         ed music favorite <track>       keep or remove with unfavorite
         ed music reveal <track> | open  Finder actions from the Music page
         ed calendar ls --days 7
@@ -360,8 +362,11 @@ public enum Guide {
         ed apps ls                      what is running here
         ed apps quit Safari | --all --yes
         ed download ls                  the yt-dlp queue
+        ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
-        ed download retry --all | clear | tool --update
+        ed download retry --all | clear --yes | tool --update
+        ed download cancel 1 | cancel
+        ed download open 1 | reveal 1
         ```
 
         ```

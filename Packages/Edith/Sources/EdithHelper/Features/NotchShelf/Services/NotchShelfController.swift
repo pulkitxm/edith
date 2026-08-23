@@ -745,7 +745,7 @@ final class NotchShelfController: FeatureModule {
 
     func nowPlayingSeek(_ fraction: Double) {
         guard nowPlayingSeekable else { return }
-        localMusic?.seek(to: fraction)
+        localMusic?.perform(.seek(fraction))
     }
 
     var nowPlayingVolume: Double {
@@ -758,10 +758,10 @@ final class NotchShelfController: FeatureModule {
 
     func setNowPlayingVolume(_ value: Double) {
         switch nowPlaying?.source {
-        case .local: localMusic?.volume = value
+        case .local: localMusic?.perform(.volume(value))
         case .external:
             externalVolume = value
-            external.setVolume(Float(value))
+            external.perform(.volume(value))
         case .none: break
         }
     }
@@ -807,52 +807,93 @@ final class NotchShelfController: FeatureModule {
     }
 
     func openNowPlayingApp() {
-        let source = nowPlaying?.source
+        guard let target = nowPlayingTarget else { return }
         collapseNow()
-        switch source {
-        case .external(let app):
-            guard
-                let url = NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: app.bundleID)
-            else { return }
-            NSWorkspace.shared.openApplication(
-                at: url, configuration: NSWorkspace.OpenConfiguration())
-        case .local:
-            MainApp.openDashboard()
-        case .none:
-            break
-        }
+        performNowPlayingOperation(.openCurrent, target: target)
     }
 
     func openNowPlayingLocation() {
-        guard case .local = nowPlaying?.source, let track = localMusic?.current else {
-            openNowPlayingApp()
+        guard let target = nowPlayingTarget else { return }
+        collapseNow()
+        performNowPlayingOperation(.revealCurrent, target: target)
+    }
+
+    private var nowPlayingTarget: MusicCurrentTarget? {
+        switch nowPlaying?.source {
+        case .local:
+            MusicCurrentTarget(player: .builtin, trackPath: localMusic?.current?.relativePath)
+        case .external(.spotify):
+            MusicCurrentTarget(player: .spotify)
+        case .external(.music):
+            MusicCurrentTarget(player: .apple)
+        case .none:
+            nil
+        }
+    }
+
+    private func performNowPlayingOperation(
+        _ operation: MusicCurrentOperation, target: MusicCurrentTarget
+    ) {
+        do {
+            try MusicCurrentOperationExecution.perform(
+                operation, target: target,
+                openPlayer: { player in
+                    if player == .builtin {
+                        MainApp.open(section: "music")
+                        return true
+                    }
+                    guard let bundleIdentifier = player.bundleIdentifier,
+                        let url = NSWorkspace.shared.urlForApplication(
+                            withBundleIdentifier: bundleIdentifier)
+                    else { return false }
+                    NSWorkspace.shared.openApplication(
+                        at: url, configuration: NSWorkspace.OpenConfiguration())
+                    return true
+                },
+                revealTrack: { trackPath in
+                    MusicReveal.request(trackPath: trackPath)
+                    return true
+                })
+        } catch {
+            presentMusicFailure(error)
+        }
+    }
+
+    private func presentMusicFailure(_ error: Error) {
+        let alert = NotchAlert(
+            id: "music.action", icon: "exclamationmark.circle.fill", tint: "#e0664f",
+            title: "Music action failed", subtitle: error.localizedDescription,
+            priority: .high)
+        guard !alertsEnabled else {
+            postAlert(alert)
             return
         }
-        collapseNow()
-        MusicReveal.request(trackPath: track.relativePath)
+        alertPinned = false
+        currentAlert = alert
+        syncFrames()
+        scheduleAlertHide(after: alert.autoHide)
     }
 
     func nowPlayingPlayPause() {
         switch nowPlaying?.source {
-        case .local: localMusic?.playPause()
-        case .external: external.playPause()
+        case .local: localMusic?.perform(.toggle)
+        case .external: external.perform(.toggle)
         case .none: break
         }
     }
 
     func nowPlayingNext() {
         switch nowPlaying?.source {
-        case .local: localMusic?.next()
-        case .external: external.next()
+        case .local: localMusic?.perform(.next)
+        case .external: external.perform(.next)
         case .none: break
         }
     }
 
     func nowPlayingPrevious() {
         switch nowPlaying?.source {
-        case .local: localMusic?.previous()
-        case .external: external.previous()
+        case .local: localMusic?.perform(.previous)
+        case .external: external.perform(.previous)
         case .none: break
         }
     }
