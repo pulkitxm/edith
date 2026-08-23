@@ -59,6 +59,9 @@ enum UIParity {
             ["permissions", "request", "calendar"]),
         UICapability(
             "Permissions pane", "re-read the real permission state", ["permissions", "refresh"]),
+        UICapability(
+            "Permissions pane", "open the relevant System Settings pane",
+            ["permissions", "settings", "calendar"]),
 
         UICapability("Clipboard panel", "click an entry to copy it", ["clipboard", "copy", "1"]),
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),
@@ -550,6 +553,16 @@ enum UIParity {
                     ["config", "ls"], ["config", "get"], ["config", "set"],
                     ["config", "unset"], ["config", "describe"], ["config", "export"],
                     ["config", "import"],
+                ])
+    }
+
+    @Test func everyPermissionLeafDeclaresItsSharedOperation() {
+        let declared = Set(PermissionOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["permissions", "ls"], ["permissions", "request"],
+                    ["permissions", "refresh"], ["permissions", "settings"],
                 ])
     }
 

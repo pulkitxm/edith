@@ -719,10 +719,12 @@ private struct MeetingsCard: View {
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
-            Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
-                .buttonStyle(HoverButtonStyle())
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(theme)
+            Button("Grant…") {
+                _ = try? MainPermissionOperations.center.request(.calendar)
+            }
+            .buttonStyle(HoverButtonStyle())
+            .font(.system(size: UIScale.pt(11)))
+            .foregroundStyle(theme)
         }
         .padding(.vertical, UIScale.pt(14))
     }

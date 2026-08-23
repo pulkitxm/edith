@@ -598,7 +598,7 @@ struct MainWindowView: View {
 
     private func refreshPermissionsPill() {
         CalendarPermission.mirror()
-        IPC.post(IPC.Name.requestPermissionsRefresh)
+        _ = MainPermissionOperations.center.refresh()
         permissionsNeedAttention = PermissionsStatus.current
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             permissionsNeedAttention = PermissionsStatus.current

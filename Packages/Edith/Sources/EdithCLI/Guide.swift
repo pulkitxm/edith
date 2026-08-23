@@ -278,6 +278,7 @@ public enum Guide {
         ed herdr ls                     live Herdr sessions here and over SSH
         ed permissions ls
         ed permissions request calendar
+        ed permissions settings screenRecording
         ```
 
         `ed music` targets whatever is actually playing. Spotify and Apple Music are

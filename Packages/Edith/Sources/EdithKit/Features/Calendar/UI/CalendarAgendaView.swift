@@ -88,11 +88,13 @@ public struct CalendarPermissionPrompt: View {
                 Text("Calendars")
                     .font(.system(size: style.permissionTitleSize))
                 Spacer()
-                Button("Grant…") { IPC.post(IPC.Name.grantCalendar) }
-                    .buttonStyle(HoverButtonStyle())
-                    .font(.system(size: style.permissionButtonSize))
-                    .foregroundStyle(accentColor)
-                    .help("Opens System Settings on the right pane")
+                Button("Grant…") {
+                    _ = try? PermissionOperationCenter.application.request(.calendar)
+                }
+                .buttonStyle(HoverButtonStyle())
+                .font(.system(size: style.permissionButtonSize))
+                .foregroundStyle(accentColor)
+                .help("Opens System Settings on the right pane")
             }
         }
         .padding(style.permissionPadding)

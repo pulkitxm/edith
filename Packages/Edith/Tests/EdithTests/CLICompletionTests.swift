@@ -65,6 +65,13 @@ import Testing
         #expect(result.candidates == ["clipboard"])
     }
 
+    @Test func permissionIDsCompleteForEveryTypedPermissionRoute() {
+        for command in ["request", "settings"] {
+            let result = Self.plan(["ed", "permissions", command, "screen"], 3)
+            #expect(result.candidates == ["screenRecording"])
+        }
+    }
+
     @Test func extensionLifecycleCommandsCompleteIDsAndFlags() {
         for command in ["enable", "disable", "info", "status", "setup", "verify", "doctor"] {
             let ids = Self.plan(["ed", "extensions", command, "quin"], 3)

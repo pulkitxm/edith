@@ -152,11 +152,7 @@ struct PresenterRows: View {
 
             Section {
                 Button("Open Screen Recording Settings…") {
-                    NSWorkspace.shared.open(
-                        URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                        )!)
+                    _ = try? MainPermissionOperations.center.openSettings(for: .screenRecording)
                 }
                 .pointerCursor()
             }

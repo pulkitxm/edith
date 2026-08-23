@@ -29,7 +29,7 @@ struct OnboardingView: View {
     @State private var permissionItems: [OnboardingPermission] = []
 
     init(onFinish: @escaping () -> Void) {
-        let baselineGrantedPermissions = OnboardingFlow.grantedPermissions()
+        let baselineGrantedPermissions = MainPermissionOperations.center.grantedPermissions()
         self.onFinish = onFinish
         self.baselineGrantedPermissions = baselineGrantedPermissions
         _grantedPermissions = State(initialValue: baselineGrantedPermissions)
@@ -72,7 +72,7 @@ struct OnboardingView: View {
                 for: IPC.Name.permissionsRefreshed)
         ) { _ in
             guard step == .permissions else { return }
-            grantedPermissions = OnboardingFlow.grantedPermissions()
+            grantedPermissions = MainPermissionOperations.center.grantedPermissions()
         }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -309,13 +309,13 @@ struct OnboardingView: View {
                             granted: grantedPermissions[item.permission] == true,
                             dark: dark
                         ) {
-                            if let request = item.permission.grantRequest {
-                                IPC.post(request)
-                                refreshPermissions()
-                            }
+                            _ = try? MainPermissionOperations.center.request(item.permission)
+                            refreshPermissions()
                         }
                     }
-                    if OnboardingFlow.hasOptionalPermissions(selectedIDs: selectedIDs) {
+                    if MainPermissionOperations.center.onboardingDecision(
+                        selectedIDs: selectedIDs
+                    ).hasOptionalPermissions {
                         Text(
                             "Some features ask for more access the first time you use them, with an explanation."
                         )
@@ -538,9 +538,10 @@ struct OnboardingView: View {
     }
 
     private func continueFromPicks() {
-        grantedPermissions = OnboardingFlow.grantedPermissions()
-        permissionItems = OnboardingFlow.missingPermissions(
-            selectedIDs: selectedIDs, granted: grantedPermissions)
+        grantedPermissions = MainPermissionOperations.center.grantedPermissions()
+        let decision = MainPermissionOperations.center.onboardingDecision(
+            selectedIDs: selectedIDs)
+        permissionItems = decision.items
         if permissionItems.isEmpty {
             finishSelection()
         } else {
@@ -550,7 +551,7 @@ struct OnboardingView: View {
     }
 
     private func finishSelection() {
-        grantedPermissions = OnboardingFlow.grantedPermissions()
+        grantedPermissions = MainPermissionOperations.center.grantedPermissions()
         move(to: .ready, direction: 1)
     }
 
@@ -579,11 +580,11 @@ struct OnboardingView: View {
     }
 
     private func refreshPermissions() {
-        IPC.post(IPC.Name.requestPermissionsRefresh)
-        grantedPermissions = OnboardingFlow.grantedPermissions()
+        _ = MainPermissionOperations.center.refresh()
+        grantedPermissions = MainPermissionOperations.center.grantedPermissions()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             guard step == .permissions else { return }
-            grantedPermissions = OnboardingFlow.grantedPermissions()
+            grantedPermissions = MainPermissionOperations.center.grantedPermissions()
         }
     }
 }
@@ -703,7 +704,9 @@ private struct OnboardingPermissionCard: View {
                 Label("Granted", systemImage: "checkmark.circle.fill")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.ok)
-            } else if item.permission.grantRequest != nil {
+            } else if MainPermissionOperations.center.remediation(for: item.permission).action
+                == .request
+            {
                 Button("Grant", action: grant)
                     .controlSize(.small)
                     .pointerCursor()
