@@ -45,7 +45,8 @@ public struct CompletionResult: Equatable, Sendable {
 public enum CompletionEngine {
     public static func plan(
         _ request: CompletionRequest, machines: [String], configKeys: [String],
-        extensionIDs: [String]
+        extensionIDs: [String], toolIDs: [String] = ToolProvisioning.all.map(\.id),
+        usageSources: [String] = []
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
         let prefix = request.current
@@ -55,28 +56,65 @@ public enum CompletionEngine {
             return CompletionResult(remoteMachine: first)
         }
         var node = CommandTree.root
-        var consumed = 0
+        var positionals: [String] = []
+        var expectedValue: ArgumentKind?
         for word in leading {
-            guard !word.hasPrefix("-"), let next = node.child(word) else { break }
-            node = next
-            consumed += 1
+            if expectedValue != nil {
+                expectedValue = nil
+                continue
+            }
+            if let separator = word.firstIndex(of: "=") {
+                let option = String(word[..<separator])
+                if node.optionValues[option] != nil { continue }
+            }
+            if let kind = node.optionValues[word] {
+                expectedValue = kind
+                continue
+            }
+            if word.hasPrefix("-") { continue }
+            if let next = node.child(word) {
+                node = next
+                positionals = []
+                continue
+            }
+            positionals.append(word)
+        }
+        if let kind = expectedValue {
+            return CompletionResult(
+                candidates: filtered(
+                    values(
+                        for: kind, machines: machines, configKeys: configKeys,
+                        extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
+                        previous: positionals.last), prefix))
+        }
+        if let separator = prefix.firstIndex(of: "=") {
+            let option = String(prefix[..<separator])
+            if let kind = node.optionValues[option] {
+                let valuePrefix = String(prefix[prefix.index(after: separator)...])
+                let candidates = filtered(
+                    values(
+                        for: kind, machines: machines, configKeys: configKeys,
+                        extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
+                        previous: positionals.last), valuePrefix)
+                return CompletionResult(candidates: candidates.map { option + "=" + $0 })
+            }
         }
         if prefix.hasPrefix("-") {
             return CompletionResult(
-                candidates: filtered(node.options + CommandTree.common, prefix))
+                candidates: filtered(node.options + CommandTree.inherited, prefix))
         }
         var candidates = node.children.map(\.name)
         if node.name == "ed" {
             candidates += machines
         }
         var wantsFiles = false
-        let positional = leading.dropFirst(consumed).filter { !$0.hasPrefix("-") }
-        let slot = positional.count
+        let slot = positionals.count
         if slot < node.arguments.count {
             let kind = node.arguments[slot]
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
-                extensionIDs: extensionIDs, previous: positional.last)
+                extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
+                previous: positionals.last)
             candidates += values
             if kind == .localPath { wantsFiles = true }
         }
@@ -86,6 +124,7 @@ public enum CompletionEngine {
 
     static func values(
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
+        toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
         previous: String?
     ) -> [String] {
         switch kind {
@@ -109,7 +148,11 @@ public enum CompletionEngine {
         case .appAction: return AppActions.all.map(\.name)
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
+        case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
+        case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
         case .pruneTarget: return DockerPruneCommand.targets
+        case .tool: return toolIDs
+        case .usageSource: return usageSources
         case .localPath, .remotePath, .container, .composeProject, .historyIndex, .free:
             return []
         }

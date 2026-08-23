@@ -43,6 +43,40 @@ struct CLIRun: Sendable {
     var array: [Any]? { (try? decoded()) as? [Any] }
 }
 
+enum CLIProcessProbe {
+    static let packageRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+
+    static var binary: URL {
+        packageRoot.appendingPathComponent(".build/debug/ed")
+    }
+
+    static func run(
+        _ arguments: [String], executable: URL? = nil, currentDirectory: URL? = nil,
+        environment: [String: String]? = nil
+    ) throws -> CLIRun {
+        let process = Process()
+        process.executableURL = executable ?? binary
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
+        process.environment = environment
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        process.standardInput = FileHandle.nullDevice
+        try process.run()
+        let out = stdout.fileHandleForReading.readDataToEndOfFile()
+        let err = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return CLIRun(
+            stdout: String(decoding: out, as: UTF8.self),
+            stderr: String(decoding: err, as: UTF8.self), code: process.terminationStatus)
+    }
+}
+
 final class CLIWorld: @unchecked Sendable {
     let suite: String
     let shared: UserDefaults

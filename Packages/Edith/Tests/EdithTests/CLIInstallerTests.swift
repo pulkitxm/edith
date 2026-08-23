@@ -62,6 +62,7 @@ import Testing
         let result = CLIInstaller.install(toolsDirectory: tools, into: bin)
         let untouched = try String(contentsOf: squatter, encoding: .utf8)
         #expect(result.skipped.contains("ed"))
+        #expect(result.message?.contains("is not managed by Edith") == true)
         #expect(untouched == "someone else")
         try? FileManager.default.removeItem(at: tools)
         try? FileManager.default.removeItem(at: bin)
@@ -129,6 +130,47 @@ import Testing
     @Test func pathEntriesSplitOnColons() {
         #expect(CLIInstaller.pathEntries(["PATH": "/a:/b"]) == ["/a", "/b"])
         #expect(CLIInstaller.pathEntries([:]).isEmpty)
+    }
+
+    @Test func installFailureHasTheSameContractInPlainAndJSONProcesses() throws {
+        let root = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let isolated = root.appendingPathComponent("a/b/c/d/e/f/g/tool")
+        try FileManager.default.createDirectory(
+            at: isolated.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: CLIProcessProbe.binary, to: isolated)
+        let target = root.appendingPathComponent("links")
+        let outside = root.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+
+        let plain = try CLIProcessProbe.run(
+            ["install", "--directory", target.path], executable: isolated,
+            currentDirectory: outside)
+        let json = try CLIProcessProbe.run(
+            ["install", "--directory", target.path, "--json"], executable: isolated,
+            currentDirectory: outside)
+
+        #expect(plain.code == ExitCodes.failure)
+        #expect(json.code == plain.code)
+        #expect(plain.stdout.isEmpty)
+        #expect(json.stdout.isEmpty)
+        #expect(plain.stderr.contains("the ed binary is not present in this build"))
+        #expect(json.stderr == plain.stderr)
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+
+    @Test func invalidTargetFailsBeforeReportingSkippedTools() throws {
+        let tools = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tools) }
+        try Self.makeTool("ed", in: tools)
+        try Self.makeTool("edh", in: tools)
+
+        let result = CLIInstaller.install(
+            toolsDirectory: tools, into: URL(fileURLWithPath: "/dev/null/edith"))
+
+        #expect(result.linked.isEmpty)
+        #expect(result.skipped.isEmpty)
+        #expect(result.message?.contains("could not create /dev/null/edith") == true)
     }
 
     @Test func completionScriptsCoverEveryShellAndNameEveryAlias() {
