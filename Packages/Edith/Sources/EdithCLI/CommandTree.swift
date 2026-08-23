@@ -26,6 +26,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case downloadKind
     case quinjetAppearance
     case quinjetMachine
+    case quinjetPath
     case quinjetTheme
     case localPath
     case musicPlayer
@@ -557,7 +558,7 @@ public enum CommandTree {
                         "worktrees", "List the worktrees in a Quinjet project.",
                         options: ["--json", "--help", "--machine"],
                         optionValues: ["--machine": .quinjetMachine],
-                        arguments: [.remotePath]),
+                        arguments: [.quinjetPath]),
                     CommandNode(
                         "open", "Print a Quinjet launch request without running it.",
                         options: [
@@ -567,7 +568,7 @@ public enum CommandTree {
                         optionValues: [
                             "--machine": .quinjetMachine, "--theme": .quinjetTheme,
                             "--appearance": .quinjetAppearance,
-                        ], arguments: [.remotePath]),
+                        ], arguments: [.quinjetPath]),
                     CommandNode(
                         "launch", "Launch a Quinjet review session.",
                         options: [
@@ -578,7 +579,7 @@ public enum CommandTree {
                             "--machine": .quinjetMachine, "--theme": .quinjetTheme,
                             "--appearance": .quinjetAppearance,
                         ],
-                        arguments: [.remotePath]),
+                        arguments: [.quinjetPath]),
                 ]),
             CommandNode(
                 "machines", "The computers Edith can reach over SSH.",

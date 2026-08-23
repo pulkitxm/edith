@@ -121,6 +121,7 @@ public enum CompletionEngine {
                 calendarEvents: calendarEvents)
             candidates += values
             if kind == .localPath { wantsFiles = true }
+            if kind == .quinjetPath { wantsFiles = quinjetPathIsLocal(leading) }
         }
         return CompletionResult(
             candidates: filtered(candidates, prefix), wantsFiles: wantsFiles)
@@ -159,6 +160,7 @@ public enum CompletionEngine {
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
         case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)
         case .quinjetMachine: return ["local"] + machines
+        case .quinjetPath: return []
         case .quinjetTheme: return QuinjetTheme.allCases.map(\.rawValue)
         case .pruneTarget: return DockerPruneCommand.targets
         case .shelfItem: return shelfItems
@@ -177,5 +179,16 @@ public enum CompletionEngine {
             guard value.hasPrefix(prefix), seen.insert(value).inserted else { return false }
             return true
         }
+    }
+
+    private static func quinjetPathIsLocal(_ words: [String]) -> Bool {
+        if let assignment = words.last(where: { $0.hasPrefix("--machine=") }) {
+            let machine = String(assignment.dropFirst("--machine=".count))
+            return ["local", "this-mac", "thismac"].contains(machine.lowercased())
+        }
+        guard let option = words.lastIndex(of: "--machine"), option + 1 < words.count else {
+            return true
+        }
+        return ["local", "this-mac", "thismac"].contains(words[option + 1].lowercased())
     }
 }

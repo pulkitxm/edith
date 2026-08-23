@@ -107,6 +107,12 @@ import Testing
         #expect(themes.candidates == ["tokyo-night"])
         let appearances = Self.plan(["ed", "quinjet", "launch", "--appearance=l"], 3)
         #expect(appearances.candidates == ["--appearance=light"])
+        #expect(Self.plan(["ed", "quinjet", "open", ""], 3).wantsFiles)
+        #expect(
+            Self.plan(["ed", "quinjet", "open", "--machine", "local", ""], 5).wantsFiles)
+        #expect(
+            !Self.plan(["ed", "quinjet", "open", "--machine", "tuf", ""], 5).wantsFiles)
+        #expect(!Self.plan(["ed", "quinjet", "open", "--machine=tuf", ""], 4).wantsFiles)
     }
 
     @Test func machineNamesCompleteInsideTheMachinesTree() {
