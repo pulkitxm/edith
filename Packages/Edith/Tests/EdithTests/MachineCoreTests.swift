@@ -804,7 +804,10 @@ import Testing
         #expect(MachineControlOperation.wifi.descriptor.requiresPreview)
         #expect(MachineControlOperation.airplane.descriptor.requiresPreview)
         #expect(!MachineControlOperation.volume.descriptor.requiresPreview)
-        #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
+        #expect(
+            UserOperationCatalog.descriptors.filter {
+                $0.cli.starts(with: ["machines", "control"])
+            } == descriptors)
     }
 
     @Test func statusUsesTheSharedCommandAndParsesItsResult() async throws {
