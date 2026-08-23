@@ -398,6 +398,9 @@ final class QuinjetPageModel {
                 selection.worktree, projectName: tab.projectName ?? selection.projectName,
                 available: selection.worktrees, remote: tab.remote, in: tab,
                 launchEnabled: sessionLaunchEnabled, configuration: tab.launchConfiguration)
+        } catch let error as QuinjetOperationError {
+            tab.errorMessage = error.localizedDescription
+            throw QuinjetSessionError.worktreeNotFound(error.localizedDescription)
         } catch {
             tab.errorMessage = error.localizedDescription
             throw QuinjetSessionError.operationFailed(error.localizedDescription)

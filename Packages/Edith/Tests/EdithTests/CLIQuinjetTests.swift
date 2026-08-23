@@ -377,15 +377,21 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
     }
 
     @Test func nativeSwitchCarriesTheSessionAndWorktreePath() async {
-        let result = await CLIProbe.runInWorld([
-            "quinjet", "switch", "2", "/work/edith-native", "--json",
-        ]) { world in
+        await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
             world.answers { _ in Self.sessionReply(.switchWorktree, selected: 2, affected: 2) }
-        }
+            let result = await CLIProbe.capture([
+                "quinjet", "switch", "2", "/work/edith-native", "--json",
+            ])
 
-        #expect(result.code == 0)
-        #expect(result.object?["operation"] as? String == "switch")
+            #expect(result.code == 0)
+            #expect(result.object?["operation"] as? String == "switch")
+            #expect(
+                world.posted.last?.info[QuinjetSessionIPC.sessionKey] as? String == "2")
+            #expect(
+                world.posted.last?.info[QuinjetSessionIPC.worktreePathKey] as? String
+                    == "/work/edith-native")
+        }
     }
 
     @Test func nativeSessionControlNeedsTheRunningMainWindow() async {

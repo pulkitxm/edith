@@ -302,6 +302,8 @@ enum QuinjetSessionCLI {
         case QuinjetSessionError.sessionNotFound("").code:
             return CLIFailure.notFound(
                 message, hint: "run `ed quinjet sessions` and use its session number")
+        case QuinjetSessionError.worktreeNotFound("").code:
+            return CLIFailure.notFound(message)
         case QuinjetSessionError.worktreeRequired.code:
             return CLIFailure.usage(message)
         default:

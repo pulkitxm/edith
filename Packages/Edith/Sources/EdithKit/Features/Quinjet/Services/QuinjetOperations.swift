@@ -335,6 +335,7 @@ public struct QuinjetSessionResult: Codable, Equatable, Sendable {
 public enum QuinjetSessionError: Error, Equatable, LocalizedError, Sendable {
     case pageUnavailable
     case sessionNotFound(String)
+    case worktreeNotFound(String)
     case lastSession
     case reviewUnavailable(String)
     case worktreeRequired
@@ -344,6 +345,7 @@ public enum QuinjetSessionError: Error, Equatable, LocalizedError, Sendable {
         switch self {
         case .pageUnavailable: "pageUnavailable"
         case .sessionNotFound: "sessionNotFound"
+        case .worktreeNotFound: "worktreeNotFound"
         case .lastSession: "lastSession"
         case .reviewUnavailable: "reviewUnavailable"
         case .worktreeRequired: "worktreeRequired"
@@ -357,6 +359,8 @@ public enum QuinjetSessionError: Error, Equatable, LocalizedError, Sendable {
             "The Quinjet page is not open in Edith."
         case let .sessionNotFound(selector):
             "No native Quinjet session matches \(selector)."
+        case let .worktreeNotFound(message):
+            message
         case .lastSession:
             "The only native Quinjet session cannot be closed."
         case let .reviewUnavailable(selector):
