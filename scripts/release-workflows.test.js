@@ -129,6 +129,26 @@ test("release publication can recover after a partial failure", () => {
   expect(mirror).not.toContain("if: env.REBUILD == ''");
 });
 
+test("superseded release cuts finish cleanly without publishing", () => {
+  expect(releaseStateScript).toContain(
+    'echo "release superseded: main moved after the release build" >&2',
+  );
+  expect(releaseStateScript).toContain("exit 75");
+  expect(releaseWorkflow).toContain(
+    "../scripts/publish-release-state.sh cut || PUBLISH_STATUS=$?",
+  );
+  expect(releaseWorkflow).toContain('if [ "$PUBLISH_STATUS" -eq 75 ]; then');
+  expect(releaseWorkflow).toContain(
+    'echo "superseded=true" >> "$GITHUB_OUTPUT"',
+  );
+  expect(
+    releaseWorkflow.match(
+      /if: steps\.release_state\.outputs\.superseded != 'true'/g,
+    )?.length,
+  ).toBe(2);
+  expect(releaseWorkflow).toContain('exit "$PUBLISH_STATUS"');
+});
+
 test("the obsolete tag-only manual release path is retired", () => {
   expect(makefile).not.toMatch(/^release:/m);
   expect(makefile).not.toContain("make release");
