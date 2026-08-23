@@ -37,6 +37,41 @@ import Testing
                 == ["Music", "com.apple.Music", "Safari", "com.apple.Safari"])
     }
 
+    @Test func resourceMeasurementsUseOneSharedIntervalAndHandleProcessReuse() {
+        final class Samples {
+            var values: [pid_t: [RunningAppResourceSample]] = [
+                2: [
+                    RunningAppResourceSample(cpuNanoseconds: 2_000_000_000, memoryMB: 100),
+                    RunningAppResourceSample(cpuNanoseconds: 2_500_000_000, memoryMB: 120),
+                ],
+                4: [
+                    RunningAppResourceSample(cpuNanoseconds: 8_000_000_000, memoryMB: 200),
+                    RunningAppResourceSample(cpuNanoseconds: 1_000_000_000, memoryMB: 180),
+                ],
+            ]
+        }
+        let samples = Samples()
+        let center = RunningAppOperationCenter(
+            snapshot: { [Self.safari, Self.music] },
+            resource: { pid in
+                samples.values[pid]?.removeFirst()
+                    ?? .init(cpuNanoseconds: 0, memoryMB: 0)
+            })
+        let started = Date(timeIntervalSince1970: 100)
+        let apps = center.list()
+        let baseline = center.resourceBaseline(for: apps, at: started)
+
+        let result = center.measureResources(
+            for: apps, from: baseline, at: started.addingTimeInterval(2))
+
+        #expect(result.apps[0].name == "Music")
+        #expect(result.apps[0].cpuPercent == 0)
+        #expect(result.apps[0].memoryMB == 180)
+        #expect(result.apps[1].name == "Safari")
+        #expect(result.apps[1].cpuPercent == 25)
+        #expect(result.apps[1].memoryMB == 120)
+    }
+
     @Test func resolutionSupportsExactNamesBundleIDsAndUniquePrefixes() throws {
         let center = RunningAppOperationCenter(snapshot: { [Self.safari, Self.music] })
 
@@ -85,6 +120,7 @@ import Testing
         let outcome = center.apply(plan, confirmed: false)
 
         #expect(outcome.applied == false)
+        #expect(outcome.acknowledged == false)
         #expect(outcome.changed == 0)
         #expect(capture.calls == 0)
     }
@@ -109,6 +145,7 @@ import Testing
         #expect(capture.targets == [Self.music, Self.safari])
         #expect(capture.force)
         #expect(outcome.applied)
+        #expect(outcome.acknowledged)
         #expect(outcome.changed == 2)
     }
 }

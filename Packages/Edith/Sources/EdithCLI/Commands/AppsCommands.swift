@@ -7,9 +7,8 @@ struct AppsCommand: AsyncParsableCommand {
         commandName: "apps",
         abstract: "The applications running on this Mac.",
         discussion: """
-            Listing reads the process table and needs nothing. Quitting asks the Edith app
-            to do it, because sending a quit event belongs to the app's Automation grant
-            rather than to `ed`, and exits 4 when Edith is closed.
+            Listing samples the process table and needs nothing. Quitting asks the Edith
+            app to do it, waits for its result, and exits 4 when Edith is closed or silent.
             """,
         subcommands: [AppsListCommand.self, AppsQuitCommand.self],
         defaultSubcommand: AppsListCommand.self)
@@ -19,21 +18,29 @@ enum AppsCLI {
     static var operations: RunningAppOperationCenter {
         RunningAppOperationCenter(
             snapshot: CLIEnvironment.runningApps,
-            perform: { targets, force in
-                AppBridge.post(
-                    IPC.Name.requestQuitApps,
-                    userInfo: ["pids": targets.map { Int($0.pid) }, "force": force])
-                return targets.count
-            })
+            perform: { _, _ in 0 })
     }
 
-    static func json(_ app: RunningAppSnapshot) -> JSONValue {
-        .object([
+    static func list() async -> [RunningAppSnapshot] {
+        let operations = Self.operations
+        let apps = operations.list()
+        let baseline = operations.resourceBaseline(for: apps)
+        try? await Task.sleep(for: .milliseconds(100))
+        return operations.measureResources(for: apps, from: baseline).apps
+    }
+
+    static func json(_ app: RunningAppSnapshot, resources: Bool = true) -> JSONValue {
+        var object: [String: JSONValue] = [
             "name": .string(app.name),
             "bundleID": .optional(app.bundleID),
             "pid": .int(Int(app.pid)),
             "active": .bool(app.active),
-        ])
+        ]
+        if resources {
+            object["cpuPercent"] = .double(app.cpuPercent)
+            object["memoryMB"] = .double(app.memoryMB)
+        }
+        return .object(object)
     }
 
     static func plan(
@@ -62,8 +69,10 @@ enum AppsCLI {
                     "operation": .string(RunningAppOperation.quit.descriptor.id.rawValue),
                     "force": .bool(outcome.plan.force),
                     "applied": .bool(outcome.applied),
+                    "acknowledged": .bool(outcome.acknowledged),
+                    "requested": .int(outcome.plan.targets.count),
                     "changed": .int(outcome.changed),
-                    "targets": .array(outcome.plan.targets.map(Self.json)),
+                    "targets": .array(outcome.plan.targets.map { Self.json($0, resources: false) }),
                 ]))
             return
         }
@@ -81,7 +90,35 @@ enum AppsCLI {
             CLIOut.out("would quit \(label); pass --yes to apply")
             return
         }
-        CLIOut.out("asked Edith to quit \(label)")
+        CLIOut.out(
+            "Edith accepted quit for \(outcome.changed) of \(outcome.plan.targets.count) apps")
+    }
+
+    static func apply(_ plan: RunningAppQuitPlan) async throws -> RunningAppQuitOutcome {
+        let requestID = UUID().uuidString
+        let targets = plan.targets
+        guard
+            let reply = await AppBridge.awaitReply(
+                IPC.Name.quitAppsResult, timeout: 5,
+                matching: { $0[RunningAppIPC.requestIDKey] as? String == requestID },
+                trigger: {
+                    AppBridge.post(
+                        IPC.Name.requestQuitApps,
+                        userInfo: [
+                            RunningAppIPC.requestIDKey: requestID,
+                            RunningAppIPC.pidsKey: targets.map { Int($0.pid) },
+                            RunningAppIPC.forceKey: plan.force,
+                        ])
+                })
+        else {
+            throw AppBridge.silence("quitting apps")
+        }
+        guard let changed = reply[RunningAppIPC.changedKey] as? Int else {
+            throw CLIFailure("Edith returned an invalid quit result")
+        }
+        return RunningAppQuitOutcome(
+            plan: plan, applied: true, acknowledged: true,
+            changed: min(max(0, changed), targets.count))
     }
 }
 
@@ -94,17 +131,18 @@ struct AppsListCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let apps = AppsCLI.operations.list()
+            let apps = await AppsCLI.list()
             guard !json else {
                 CLIOut.json(.array(apps.map(AppsCLI.json)))
                 return
             }
             CLIOut.out(
                 TextTable.render(
-                    headers: ["NAME", "PID", "BUNDLE"],
+                    headers: ["NAME", "PID", "CPU", "MEMORY", "BUNDLE"],
                     rows: apps.map {
                         [
-                            $0.name, String($0.pid), $0.bundleID ?? "",
+                            $0.name, String($0.pid), String(format: "%.1f%%", $0.cpuPercent),
+                            String(format: "%.1f MB", $0.memoryMB), $0.bundleID ?? "",
                         ]
                     }))
         }
@@ -146,7 +184,7 @@ struct AppsQuitCommand: AsyncParsableCommand {
                 return
             }
             try AppBridge.requireHelper("quitting apps")
-            AppsCLI.render(AppsCLI.operations.apply(plan, confirmed: true), json: json)
+            AppsCLI.render(try await AppsCLI.apply(plan), json: json)
         }
     }
 }

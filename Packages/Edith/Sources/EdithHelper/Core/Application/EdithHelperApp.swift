@@ -108,9 +108,16 @@ struct EdithApp: App {
         _ = IPC.observe(
             IPC.Name.requestQuitApps,
             info: { info in
-                let force = info["force"] as? Bool ?? false
-                let pids = (info["pids"] as? [Int] ?? []).map(pid_t.init)
-                _ = RunningAppOperationCenter().apply(pids: pids, force: force)
+                guard let requestID = info[RunningAppIPC.requestIDKey] as? String else { return }
+                let force = info[RunningAppIPC.forceKey] as? Bool ?? false
+                let pids = (info[RunningAppIPC.pidsKey] as? [Int] ?? []).map(pid_t.init)
+                let outcome = RunningAppOperationCenter().apply(pids: pids, force: force)
+                IPC.post(
+                    IPC.Name.quitAppsResult,
+                    userInfo: [
+                        RunningAppIPC.requestIDKey: requestID,
+                        RunningAppIPC.changedKey: outcome.changed,
+                    ])
             })
         _ = IPC.observe(IPC.Name.openPanel) {
             showPanel()

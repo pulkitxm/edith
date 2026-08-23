@@ -23,9 +23,13 @@ import Testing
         #expect(json.code == 0)
         let rows = try #require(json.array as? [[String: Any]])
         #expect(rows.map { $0["name"] as? String } == ["Music", "Safari"])
-        #expect(Set(rows[0].keys) == ["active", "bundleID", "name", "pid"])
+        #expect(
+            Set(rows[0].keys)
+                == ["active", "bundleID", "cpuPercent", "memoryMB", "name", "pid"])
         #expect(plain.stdout.contains("Music"))
         #expect(plain.stdout.contains("Safari"))
+        #expect(plain.stdout.contains("CPU"))
+        #expect(plain.stdout.contains("MEMORY"))
     }
 
     @Test func namedPreviewNeedsNoHelperAndPostsNothing() async throws {
@@ -61,16 +65,28 @@ import Testing
             CLIEnvironment.deliver = { name, info in
                 capture.posted.append((name, info ?? [:]))
             }
+            CLIEnvironment.answer = { name in
+                guard name == IPC.Name.quitAppsResult,
+                    let requestID = capture.posted.last?.info[RunningAppIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    RunningAppIPC.requestIDKey: requestID,
+                    RunningAppIPC.changedKey: 1,
+                ]
+            }
         }
 
         #expect(result.code == 0)
         let object = try #require(result.object)
         #expect(object["applied"] as? Bool == true)
+        #expect(object["acknowledged"] as? Bool == true)
+        #expect(object["requested"] as? Int == 1)
         #expect(object["changed"] as? Int == 1)
         #expect(capture.posted.count == 1)
         #expect(capture.posted[0].name == IPC.Name.requestQuitApps)
-        #expect(capture.posted[0].info["pids"] as? [Int] == [42])
-        #expect(capture.posted[0].info["force"] as? Bool == true)
+        #expect(capture.posted[0].info[RunningAppIPC.pidsKey] as? [Int] == [42])
+        #expect(capture.posted[0].info[RunningAppIPC.forceKey] as? Bool == true)
+        #expect(capture.posted[0].info[RunningAppIPC.requestIDKey] as? String != nil)
     }
 
     @Test func allPreviewListsExactUnprotectedTargets() async throws {
@@ -85,6 +101,7 @@ import Testing
         let targets = try #require(object["targets"] as? [[String: Any]])
         #expect(targets.map { $0["name"] as? String } == ["Music", "Safari"])
         #expect(object["applied"] as? Bool == false)
+        #expect(object["acknowledged"] as? Bool == false)
         #expect(object["changed"] as? Int == 0)
     }
 
@@ -117,6 +134,20 @@ import Testing
 
         #expect(result.code == 1)
         #expect(result.stderr.contains("Finder is protected"))
+    }
+
+    @Test func confirmedQuitFailsWhenTheHelperDoesNotAcknowledge() async {
+        let result = await CLIProbe.runInWorld(
+            ["apps", "quit", "Safari", "--yes", "--json"]
+        ) { world in
+            CLIEnvironment.runningApps = { [Self.safari] }
+            world.helperRunning(true)
+            CLIEnvironment.answer = { _ in nil }
+        }
+
+        #expect(result.code == ExitCodes.unavailable)
+        #expect(result.stdout.isEmpty)
+        #expect(result.stderr.contains("did not answer for quitting apps"))
     }
 
     @Test func runningAppCompletionUsesNamesAndBundleIDs() {
