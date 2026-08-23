@@ -111,9 +111,10 @@ characters, which means a name carrying an invisible mark such as a
 left-to-right override still occupies a column of width the eye does not see,
 and its row can look a character out of line.
 
-`ed apps ls` and the app's Running apps card read the same process list but
-present it differently. The card measures CPU and memory per process and sorts
-by CPU descending by default; `ed` measures neither and always sorts by name.
+`ed apps ls` and the app's Running apps card use the same EdithKit discovery
+operation but present it differently. The card measures CPU and memory per
+process and sorts by CPU descending by default; `ed` measures neither and
+always sorts by name.
 For per-process CPU on this Mac use `ed system stats --processes <n>`, which
 covers every process rather than only the ones with a Dock icon.
 

@@ -379,10 +379,10 @@ machines files rm`, `ed machines docker volume-rm`, `ed machines docker prune`,
 leaving it out makes the command report what it would have done, change nothing,
 and exit 0, so a missing `--yes` is never an error to handle.
 
-Seven of the nine require it for anything at all. The other two gate only their
-irreversible half: `ed apps quit --all` and `ed machines files rm --delete` need
-it, while `ed apps quit <app>` and a plain `ed machines files rm`, which only
-moves to the Trash, act straight away without asking.
+Eight of the nine require it for anything at all. Only `ed machines files rm`
+gates its irreversible half: `--delete` needs `--yes`, while a plain removal
+moves to the Trash without asking. Every `ed apps quit` form is preview-only
+without `--yes`.
 
 Secrets are never an argument value. `ed machines add` and `ed machines edit`
 take `--password-stdin` and `--key-passphrase-stdin`, and read the secret from
@@ -420,7 +420,7 @@ is a local question that needs no permission and no round trip.
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
 | `ed permissions settings` | no | opens the matching System Settings pane locally and never relaunches Edith |
 | `ed usage limits --refresh` | menu bar | only the app polls the providers again; without `--refresh`, `limits` reads the file |
-| `ed apps quit` | menu bar | quitting another app is the app's Automation grant, not `ed`'s |
+| `ed apps quit --yes` | menu bar | applying a quit uses the app's Automation grant; previews only read the process table |
 | `ed music start`, `ed music seek` | menu bar | both drive Edith's own player, which lives in the helper |
 | `ed music play`, `pause`, `stop`, `toggle`, `next`, `previous`, `volume` | menu bar, only for Edith's own player | against Spotify or Apple Music these go through AppleScript and need only that app |
 | `ed machines files undo` | main window | the undo history belongs to an open Finder window and lives in memory |
