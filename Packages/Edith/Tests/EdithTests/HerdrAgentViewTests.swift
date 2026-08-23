@@ -40,6 +40,52 @@ import Testing
         #expect(HerdrAgentView.agent.title == "Open agent")
     }
 
+    @Test func aNestedDirectoryPicksItsEnclosingWorktree() {
+        let worktrees = [
+            Self.worktree("/repo", branch: "main", current: true),
+            Self.worktree("/repo-feature", branch: "feature"),
+            Self.worktree("/repo-feature/nested", branch: "nested"),
+        ]
+        #expect(
+            QuinjetOperationExecution.worktree(
+                containing: "/repo-feature/nested/Sources/App", in: worktrees)?.branch == "nested")
+        #expect(
+            QuinjetOperationExecution.worktree(
+                containing: "/repo-feature/Sources", in: worktrees)?.branch == "feature")
+        #expect(
+            QuinjetOperationExecution.worktree(containing: "/repo-feature", in: worktrees)?.branch
+                == "feature")
+    }
+
+    @Test func anUnrelatedDirectoryFallsBackToTheCheckedOutWorktree() {
+        let worktrees = [
+            Self.worktree("/repo-feature", branch: "feature"),
+            Self.worktree("/repo", branch: "main", current: true),
+        ]
+        #expect(
+            QuinjetOperationExecution.worktree(containing: "/elsewhere", in: worktrees)?.branch
+                == "main")
+        #expect(QuinjetOperationExecution.worktree(containing: "/repo", in: []) == nil)
+    }
+
+    @Test func aSiblingPathPrefixIsNotTreatedAsEnclosing() {
+        let worktrees = [
+            Self.worktree("/repo", branch: "main", current: true),
+            Self.worktree("/repo-feature", branch: "feature"),
+        ]
+        #expect(
+            QuinjetOperationExecution.worktree(containing: "/repo-feature", in: worktrees)?.branch
+                == "feature")
+    }
+
+    private static func worktree(_ path: String, branch: String, current: Bool = false)
+        -> QuinjetWorktree
+    {
+        QuinjetWorktree(
+            path: path, head: String(repeating: "0", count: 40), branch: branch, current: current,
+            bare: false, detached: false, locked: nil, prunable: nil)
+    }
+
     private static func defaults() -> UserDefaults {
         let suite = "HerdrAgentViewTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

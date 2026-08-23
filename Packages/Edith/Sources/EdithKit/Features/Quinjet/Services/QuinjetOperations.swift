@@ -406,12 +406,21 @@ public enum QuinjetOperationExecution {
     ) async throws -> QuinjetOpenSelection {
         let worktrees = try await worktrees(at: path, remote: remote, using: client).filter(
             \.canOpen)
-        guard let worktree = worktrees.first(where: { $0.path == path }) ?? worktrees.first else {
+        guard let worktree = worktree(containing: path, in: worktrees) else {
             throw QuinjetOperationError.noOpenWorktree(path)
         }
         return QuinjetOpenSelection(
-            projectName: URL(fileURLWithPath: path).lastPathComponent,
+            projectName: URL(fileURLWithPath: worktree.path).lastPathComponent,
             worktree: worktree, worktrees: worktrees)
+    }
+
+    public static func worktree(containing path: String, in worktrees: [QuinjetWorktree])
+        -> QuinjetWorktree?
+    {
+        if let exact = worktrees.first(where: { $0.path == path }) { return exact }
+        let enclosing = worktrees.filter { path.hasPrefix($0.path + "/") }
+        if let deepest = enclosing.max(by: { $0.path.count < $1.path.count }) { return deepest }
+        return worktrees.first(where: \.current) ?? worktrees.first
     }
 
     public static func terminalEnvironment() -> [String] {
