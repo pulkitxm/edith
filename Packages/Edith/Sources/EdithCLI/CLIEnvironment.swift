@@ -3,7 +3,13 @@ import EdithKit
 import Foundation
 
 public enum CLIEnvironment {
-    nonisolated(unsafe) public static var sharedDefaults: UserDefaults = SharedDefaults.store
+    nonisolated(unsafe) public static var sharedDefaults: UserDefaults = {
+        guard let suite = ProcessInfo.processInfo.environment["EDITH_TEST_SHARED_DEFAULTS_SUITE"],
+            let defaults = UserDefaults(suiteName: suite)
+        else { return SharedDefaults.store }
+        defaults.register(defaults: SharedDefaults.registeredDefaults)
+        return defaults
+    }()
     nonisolated(unsafe) public static var standardDefaults: UserDefaults = .standard
 
     nonisolated(unsafe) public static var isHelperRunning: @Sendable () -> Bool = {

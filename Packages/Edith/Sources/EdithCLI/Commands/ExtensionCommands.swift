@@ -88,6 +88,23 @@ enum ExtensionLookup {
         }
     }
 
+    static func mutationCenter() -> ExtensionMutationCenter {
+        let toolAvailable: @Sendable (String) -> Bool = { id in
+            guard let tool = ToolProvisioning.spec(id: id),
+                case let .executable(name, _) = tool.presenceStrategy
+            else { return false }
+            return CLIEnvironment.executableNamed(name) != nil
+        }
+        return ExtensionMutationCenter(
+            environment: ExtensionMutationEnvironment(
+                defaults: CLIEnvironment.sharedDefaults,
+                announceChange: { ConfigStore.announceChange() },
+                grantedPermissions: { grantedPermissions() },
+                toolAvailable: toolAvailable,
+                installTool: { tool, log in try await CLIEnvironment.installTool(tool, log) },
+                lifecycle: probe().environment))
+    }
+
     private static func lifecycleJSON(_ lifecycle: ExtensionLifecycleDescriptor) -> JSONValue {
         .object([
             "id": .string(lifecycle.id),
@@ -151,11 +168,6 @@ enum ExtensionLookup {
             })
     }
 
-    static func setEnabled(_ entry: ExtensionRegistryEntry, _ enabled: Bool) {
-        CLIEnvironment.sharedDefaults.set(enabled, forKey: entry.defaultsKey)
-        CLIEnvironment.sharedDefaults.synchronize()
-        ConfigStore.announceChange()
-    }
 }
 
 struct ExtensionsListCommand: AsyncParsableCommand {
@@ -194,15 +206,13 @@ struct ExtensionsEnableCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
-            ExtensionLookup.setEnabled(entry, true)
-            let granted = ExtensionLookup.grantedPermissions()
-            let missing = entry.requiredPermissions.filter { granted[$0] != true }
+            let result = ExtensionLookup.mutationCenter().setEnabled(true, for: entry)
             guard !json else {
                 CLIOut.json(ExtensionLookup.json(entry))
                 return
             }
             CLIOut.out("\(entry.id) enabled")
-            for permission in missing {
+            for permission in result.missingRequiredPermissions {
                 CLIOut.note(
                     "note: \(entry.title) needs \(permission.displayName); "
                         + "run `ed permissions request \(permission.rawValue)`")
@@ -224,7 +234,7 @@ struct ExtensionsDisableCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
-            ExtensionLookup.setEnabled(entry, false)
+            _ = ExtensionLookup.mutationCenter().setEnabled(false, for: entry)
             guard !json else {
                 CLIOut.json(ExtensionLookup.json(entry))
                 return
@@ -337,54 +347,34 @@ struct ExtensionsSetupCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
-            let wasEnabled = ExtensionLookup.isEnabled(entry)
-            var environment = ExtensionLookup.probe().environment
-            let missingTools = entry.requiredTools.filter { !environment.toolAvailable($0.id) }
-            var installed: [String] = []
-            var failures: [(String, String)] = []
-            if dryRun {
-                let original = environment.isEnabled
-                environment.isEnabled = { candidate in
-                    candidate.id == entry.id ? true : original(candidate)
-                }
-            } else {
-                ExtensionLookup.setEnabled(entry, true)
-                if installTools {
-                    for tool in missingTools {
-                        do {
-                            _ = try await CLIEnvironment.installTool(tool) { line in
-                                if !json { CLIOut.note(line) }
-                            }
-                            installed.append(tool.id)
-                        } catch {
-                            failures.append((tool.id, error.localizedDescription))
-                        }
-                    }
-                }
-            }
-            let report = await ExtensionLifecycleProbe(environment: environment).report(for: entry)
+            let result = await ExtensionLookup.mutationCenter().setup(
+                entry, dryRun: dryRun, installTools: installTools,
+                log: { line in if !json { CLIOut.note(line) } })
             guard !json else {
                 CLIOut.json(
                     .object([
                         "id": .string(entry.id), "dryRun": .bool(dryRun),
-                        "changed": .bool(!dryRun && !wasEnabled),
-                        "plannedTools": .strings(installTools ? missingTools.map(\.id) : []),
-                        "installedTools": .strings(installed),
+                        "changed": .bool(result.changed),
+                        "plannedTools": .strings(result.tools.planned),
+                        "installedTools": .strings(result.tools.installed),
                         "installFailures": .array(
-                            failures.map { id, detail in
-                                .object(["id": .string(id), "detail": .string(detail)])
+                            result.tools.failures.map { failure in
+                                .object([
+                                    "id": .string(failure.id),
+                                    "detail": .string(failure.detail),
+                                ])
                             }),
-                        "report": ExtensionLookup.reportJSON(entry, report),
+                        "report": ExtensionLookup.reportJSON(entry, result.report),
                     ]))
                 return
             }
             CLIOut.out(
                 dryRun
                     ? "would enable \(entry.id)"
-                    : wasEnabled ? "\(entry.id) already enabled" : "\(entry.id) enabled")
-            printReport(entry, report)
-            for failure in failures {
-                CLIOut.note("could not install \(failure.0): \(failure.1)")
+                    : result.changed ? "\(entry.id) enabled" : "\(entry.id) already enabled")
+            printReport(entry, result.report)
+            for failure in result.tools.failures {
+                CLIOut.note("could not install \(failure.id): \(failure.detail)")
             }
         }
     }

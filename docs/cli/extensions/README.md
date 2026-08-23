@@ -18,6 +18,12 @@ The lifecycle sheet's documentation buttons and `ed app open-link
 extension-doc:<extension>:<document>` resolve through the same shared link
 catalog. `ed app links` lists every available documentation id.
 
+The settings pane, onboarding flow, `enable`, `disable`, `setup`, and extension
+tool installation all execute through the same EdithKit operation layer. The
+pane uses its permission-aware policy, which leaves a required-permission toggle
+off until the grant arrives. The CLI uses the noninteractive policy, which
+enables immediately and reports missing grants in plain text or JSON.
+
 ## At a glance
 
 | Command | What it does |
@@ -161,9 +167,10 @@ for agents and scripts. Read `verified`, `state.phase`, `checks`, and
   only writes the keys you turn on, so an untouched `tabUsageEnabled` keeps
   disagreeing until something writes it.
 - Every extension is also an ordinary `ed config` boolean, and both paths write
-  the same key in the same store and post the same `settingsChanged`.
-  `ed config set clipboardEnabled true` and `ed extensions enable clipboard`
-  leave identical state; only the second one knows to mention Accessibility.
+  the same primary key in the same store. The extension verbs also preserve
+  lifecycle dependencies: enabling Agent Usage restores the selected provider
+  when both providers are off, and disabling System turns Prevent Sleep off.
+  Only the extension verbs know to mention a missing permission.
   Related settings sit in that extension's own config group, so
   `ed config ls --group clipboard` and `--group notch`, `--group focusdim` or
   `--group colorpicker` give you the rest of the knobs.
@@ -189,6 +196,9 @@ for agents and scripts. Read `verified`, `state.phase`, `checks`, and
   the Extensions pane writes when you flip a switch there. The pane still reads
   it, but `ExtensionPermissionFlow.decision` ignores the value, so the two paths
   still end up equivalent.
+- Completion offers every registry id for `enable`, `disable`, `info`, `status`,
+  `setup`, `verify`, and `doctor`. It offers every provisionable tool id for
+  `ed tools install`, including tools added by a new extension.
 - The `ls` renderer flattens tabs and newlines to spaces and drops control
   characters, so a row is always one line, and the last column is never padded.
 

@@ -15,7 +15,9 @@ ed extensions setup <id> [--dry-run] [--install-tools] [--json]
 The command is noninteractive. It does not open the app, request a permission,
 create a machine, or start a backend session. Those steps appear as failed
 checks with actionable recovery commands. Tool installation happens only when
-`--install-tools` is explicit.
+`--install-tools` is explicit. The operation and the Extensions pane use the
+same provisioning executor and preserve per-tool failures without rolling back
+the enabled extension.
 
 JSON includes `dryRun`, `changed`, `plannedTools`, `installedTools`,
 `installFailures`, and `report`. A tool installation failure is represented in
