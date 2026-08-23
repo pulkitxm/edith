@@ -18,6 +18,7 @@ final class QuinjetTab: Identifiable {
     var folderPicker: QuinjetFolderPickerModel?
     var launchConfiguration = QuinjetLaunchConfiguration.default
     var externalLaunchMessage: String?
+    var externalWorkspaceID: String?
 
     var title: String {
         guard let projectName else { return "New review" }
@@ -120,6 +121,9 @@ final class QuinjetPageModel {
             return
         }
         tab.holder.stop()
+        if let workspaceID = tab.externalWorkspaceID {
+            try? QuinjetCMUXLauncher.close(workspaceID: workspaceID)
+        }
         tabs.remove(at: index)
         if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }
     }
@@ -146,19 +150,23 @@ final class QuinjetPageModel {
         if configuration.terminal == .cmux {
             tab.holder.stop()
             do {
-                try QuinjetCMUXLauncher.launch(
+                tab.externalWorkspaceID = try QuinjetCMUXLauncher.launch(
                     quinjet: executable,
                     arguments: launchArguments(
                         worktree: worktree, remote: remote, configuration: configuration,
                         managed: false),
-                    title: tab.title,
                     currentDirectory: remote == nil
-                        ? worktree.path : FileManager.default.homeDirectoryForCurrentUser.path)
+                        ? worktree.path : FileManager.default.homeDirectoryForCurrentUser.path,
+                    replacing: tab.externalWorkspaceID)
                 tab.externalLaunchMessage = "Opened in cmux"
             } catch {
                 tab.errorMessage = error.localizedDescription
             }
             return
+        }
+        if let workspaceID = tab.externalWorkspaceID {
+            try? QuinjetCMUXLauncher.close(workspaceID: workspaceID)
+            tab.externalWorkspaceID = nil
         }
         tab.holder.registerOSCHandler(code: QuinjetHostAction.oscCode) {
             [weak self, weak tab] payload in
@@ -245,6 +253,22 @@ final class QuinjetPageModel {
             worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
             remote: tab.remote, in: tab, launchEnabled: launchEnabled,
             configuration: configuration)
+    }
+
+    func showInCMUX(_ tab: QuinjetTab, launchEnabled: Bool) {
+        guard let workspaceID = tab.externalWorkspaceID else {
+            guard let worktree = tab.worktree else { return }
+            open(
+                worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
+                remote: tab.remote, in: tab, launchEnabled: launchEnabled,
+                configuration: tab.launchConfiguration)
+            return
+        }
+        do {
+            try QuinjetCMUXLauncher.focus(workspaceID: workspaceID)
+        } catch {
+            tab.errorMessage = error.localizedDescription
+        }
     }
 
     func stopAll() {

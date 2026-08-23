@@ -21,7 +21,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Edith controls playback in Spotify and Apple Music from the notch.</string>
+	<string>Edith controls playback and opens terminal sessions in the app you select.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Edith shows a notch alert when a Bluetooth device connects or disconnects.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

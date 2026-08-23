@@ -347,9 +347,11 @@ private struct QuinjetTerminalWorkspace: View {
                 }
                 .foregroundStyle(Color(nsColor: palette.foreground))
                 HStack(spacing: UIScale.pt(10)) {
-                    Button("Show in cmux", action: restart)
-                        .buttonStyle(QuinjetToolbarButtonStyle())
-                        .pointerCursor()
+                    Button("Show in cmux") {
+                        model.showInCMUX(tab, launchEnabled: launchEnabled)
+                    }
+                    .buttonStyle(QuinjetToolbarButtonStyle())
+                    .pointerCursor()
                     Button("Use embedded terminal", action: useEmbedded)
                         .buttonStyle(QuinjetToolbarButtonStyle())
                         .pointerCursor()

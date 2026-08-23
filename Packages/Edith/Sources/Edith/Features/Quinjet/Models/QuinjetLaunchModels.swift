@@ -155,10 +155,12 @@ extension EnvironmentValues {
 
 enum QuinjetLaunchError: LocalizedError {
     case cmuxUnavailable
+    case cmuxLaunchFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .cmuxUnavailable: "cmux is not installed in Applications."
+        case .cmuxLaunchFailed(let message): "cmux could not open Quinjet: \(message)"
         }
     }
 }
@@ -175,25 +177,84 @@ enum QuinjetCMUXLauncher {
     }
 
     static func launch(
-        quinjet: URL, arguments: [String], title: String, currentDirectory: String?
-    ) throws {
-        guard let executable else { throw QuinjetLaunchError.cmuxUnavailable }
-        let process = Process()
-        process.executableURL = executable
-        var cmuxArguments = ["new-workspace", "--name", "Quinjet · \(title)"]
-        if let currentDirectory { cmuxArguments += ["--cwd", currentDirectory] }
-        cmuxArguments += [
-            "--command", shellCommand(executable: quinjet.path, arguments: arguments),
+        quinjet: URL, arguments: [String], currentDirectory: String?, replacing workspaceID: String?
+    ) throws -> String {
+        guard executable != nil else { throw QuinjetLaunchError.cmuxUnavailable }
+        var command = "exec \(shellCommand(executable: quinjet.path, arguments: arguments))"
+        if let currentDirectory {
+            command = "cd \(shellQuote(currentDirectory)) && \(command)"
+        }
+        var statements = ["tell application id \"com.cmuxterm.app\"", "activate"]
+        if let workspaceID {
+            statements += closeStatements(workspaceID: workspaceID)
+        }
+        statements += [
+            "set quinjetWorkspace to new tab",
+            "select tab quinjetWorkspace",
+            "delay 0.5",
+            "set quinjetTerminal to focused terminal of quinjetWorkspace",
+            "focus quinjetTerminal",
+            "input text \(appleScriptQuote(command)) to quinjetTerminal",
+            "perform action \(appleScriptQuote("text:\\x0d")) on quinjetTerminal",
+            "return id of quinjetWorkspace",
+            "end tell",
         ]
-        process.arguments = cmuxArguments
-        try process.run()
+        return try execute(statements.joined(separator: "\n"))
+    }
+
+    static func focus(workspaceID: String) throws {
+        let statements = [
+            "tell application id \"com.cmuxterm.app\"", "activate",
+            "repeat with cmuxWindow in windows",
+            "repeat with cmuxWorkspace in tabs of cmuxWindow",
+            "if id of cmuxWorkspace is \(appleScriptQuote(workspaceID)) then",
+            "select tab cmuxWorkspace", "return id of cmuxWorkspace", "end if", "end repeat",
+            "end repeat", "error \"workspace is no longer open\"", "end tell",
+        ]
+        _ = try execute(statements.joined(separator: "\n"))
+    }
+
+    static func close(workspaceID: String) throws {
+        let statements =
+            ["tell application id \"com.cmuxterm.app\""]
+            + closeStatements(workspaceID: workspaceID) + ["return \"closed\"", "end tell"]
+        _ = try execute(statements.joined(separator: "\n"))
     }
 
     static func shellCommand(executable: String, arguments: [String]) -> String {
         ([executable] + arguments).map(shellQuote).joined(separator: " ")
     }
 
-    private static func shellQuote(_ value: String) -> String {
+    static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    static func appleScriptQuote(_ value: String) -> String {
+        "\""
+            + value.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n") + "\""
+    }
+
+    private static func closeStatements(workspaceID: String) -> [String] {
+        [
+            "repeat with cmuxWindow in windows",
+            "repeat with cmuxWorkspace in tabs of cmuxWindow",
+            "if id of cmuxWorkspace is \(appleScriptQuote(workspaceID)) then",
+            "close tab cmuxWorkspace", "exit repeat", "end if", "end repeat", "end repeat",
+        ]
+    }
+
+    private static func execute(_ source: String) throws -> String {
+        guard let script = NSAppleScript(source: source) else {
+            throw QuinjetLaunchError.cmuxLaunchFailed("the launch request was invalid")
+        }
+        var details: NSDictionary?
+        let result = script.executeAndReturnError(&details)
+        if let details {
+            let message = details[NSAppleScript.errorMessage] as? String ?? "unknown error"
+            throw QuinjetLaunchError.cmuxLaunchFailed(message)
+        }
+        return result.stringValue ?? ""
     }
 }

@@ -204,6 +204,12 @@ import Testing
                 == "'/Applications/Quinjet Tools/quinjet' '-C' '/work/it'\\''s ready'")
     }
 
+    @Test func cmuxLaunchEscapesAppleScriptText() {
+        #expect(
+            QuinjetCMUXLauncher.appleScriptQuote("a \"quoted\" folder\n")
+                == "\"a \\\"quoted\\\" folder\\n\"")
+    }
+
     @Test func themeCatalogMatchesQuinjetCapabilities() {
         #expect(
             QuinjetTheme.allCases.map(\.rawValue)
