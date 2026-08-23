@@ -269,7 +269,12 @@ public enum Guide {
         ed music play|pause|stop|toggle|next|previous
         ed music volume 0.4
         ed music players                every player, and which one is active
+        ed music favorite <track>       keep or remove with unfavorite
+        ed music reveal <track> | open  Finder actions from the Music page
         ed calendar ls --days 7
+        ed calendar join <event-id>     open the event's meeting link
+        ed calendar open                open the Calendar application
+        ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed permissions ls
         ed permissions request calendar
@@ -341,6 +346,7 @@ public enum Guide {
         ed color ls --format hex        the colours you picked
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
+        ed shelf open 1 | reveal 1 | share 1
         ed cleaner scan                 developer caches worth reclaiming
         ed cleaner clean --yes          moves them to the Trash, never deletes
         ```

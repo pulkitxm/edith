@@ -33,6 +33,7 @@ key.
 | [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
+| [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |

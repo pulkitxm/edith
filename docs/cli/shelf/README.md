@@ -26,6 +26,9 @@ a row in this listing rather than a position on screen.
 | `ed shelf add <file>` | Copies a file onto the shelf and leaves the original where it is. |
 | `ed shelf rm <n>` | Previews deleting one shelf copy; `--yes` applies it. |
 | `ed shelf clear` | Previews emptying the shelf; `--yes` applies it. |
+| `ed shelf open <n>` | Opens one item in its default application. |
+| `ed shelf reveal <n>` | Reveals one item in Finder. |
+| `ed shelf share <n>` | Opens the notch shelf's macOS share picker for one item. |
 
 `ed shelf list` is the same command as `ed shelf ls`, and `ed shelf` with
 nothing after it runs `ls`, including its flags: `ed shelf --json` is
@@ -38,6 +41,9 @@ nothing after it runs `ls`, including its flags: `ed shelf --json` is
 - [`ed shelf add`](./add.md)
 - [`ed shelf rm`](./rm.md)
 - [`ed shelf clear`](./clear.md)
+- [`ed shelf open`](./open.md)
+- [`ed shelf reveal`](./reveal.md)
+- [`ed shelf share`](./share.md)
 
 ## Exit codes
 
@@ -106,10 +112,9 @@ rather than acting.
 - `--help` works on the group and on all five verbs, prints on stdout and exits
   0. `--version` is inherited from the root and works on any of them too,
   printing the CLI version.
-- Completion knows the group: `ed shelf <TAB>` offers the five verbs, and
+- Completion knows the group and reads the current shelf indices. `ed shelf <TAB>` offers the verbs, and
   `ed shelf add <TAB>` completes file paths. The index slots of `path` and `rm`
-  offer nothing, because completion does not read the shelf; run
-  `ed shelf ls` for the numbers.
+  offer the current item numbers.
 
 ## Where to go next
 

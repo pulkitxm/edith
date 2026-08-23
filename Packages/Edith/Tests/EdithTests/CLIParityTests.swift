@@ -27,6 +27,7 @@ enum UIParity {
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
         "check-updates", "collect", "forget", "mount", "unmount",
+        "favorite", "unfavorite",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -86,6 +87,15 @@ enum UIParity {
         UICapability(
             "Notch shelf", "take an item off the shelf", ["shelf", "rm", "1", "--yes"]),
         UICapability("Notch shelf", "empty the shelf", ["shelf", "clear", "--yes"]),
+        UICapability("Notch shelf", "open an item", ["shelf", "open", "1"]),
+        UICapability("Notch shelf", "reveal an item", ["shelf", "reveal", "1"]),
+        UICapability("Notch shelf", "share an item", ["shelf", "share", "1"]),
+
+        UICapability("Calendar page", "open Calendar", ["calendar", "open"]),
+        UICapability("Calendar agenda", "join a meeting", ["calendar", "join", "event"]),
+
+        UICapability("Presenter controls", "start manual mode", ["presenter", "start"]),
+        UICapability("Presenter controls", "stop manual mode", ["presenter", "stop"]),
 
         UICapability("Cleaner card", "reclaim the scanned caches", ["cleaner", "clean"]),
         UICapability(
@@ -341,6 +351,10 @@ enum UIParity {
             ["music", "rm", "--folder", "Chill", "--yes"]),
         UICapability("Music footer", "toggle shuffle", ["music", "shuffle", "on"]),
         UICapability("Music footer", "toggle repeat", ["music", "repeat", "on"]),
+        UICapability("Music page", "favourite a track", ["music", "favorite", "song"]),
+        UICapability("Music page", "unfavourite a track", ["music", "unfavorite", "song"]),
+        UICapability("Music page", "reveal a track", ["music", "reveal", "song"]),
+        UICapability("Music page", "open the library", ["music", "open"]),
 
         UICapability(
             "Machine finder", "download a remote file",

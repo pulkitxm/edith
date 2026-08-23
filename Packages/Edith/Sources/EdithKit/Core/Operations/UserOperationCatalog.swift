@@ -4,6 +4,10 @@ public enum UserOperationCatalog {
     public static let descriptors =
         MachineControlOperation.allCases.map(\.descriptor)
         + ExtensionMutationOperation.allCases.map(\.descriptor)
+        + CalendarEventOperation.allCases.map(\.descriptor)
+        + ShelfItemOperation.allCases.map(\.descriptor)
+        + MusicLibraryOperation.allCases.map(\.descriptor)
+        + PresenterRuntimeOperation.allCases.map(\.descriptor)
 
     public static func descriptor(id: UserOperationID) -> UserOperationDescriptor? {
         descriptors.first { $0.id == id }

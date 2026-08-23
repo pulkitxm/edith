@@ -8,6 +8,9 @@ public enum ArgumentKind: Equatable, Sendable {
     case pruneTarget
     case composeProject
     case historyIndex
+    case shelfItem
+    case musicTrack
+    case calendarEvent
     case configKey
     case configValue
     case extensionID
@@ -297,6 +300,16 @@ public enum CommandTree {
                     CommandNode(
                         "start", "Play one track, or a whole folder.",
                         options: ["--json", "--help", "--folder"], arguments: [.free]),
+                    CommandNode(
+                        "favorite", "Add a track to favourites.", aliases: ["favourite"],
+                        options: common, arguments: [.musicTrack]),
+                    CommandNode(
+                        "unfavorite", "Remove a track from favourites.",
+                        aliases: ["unfavourite"], options: common, arguments: [.musicTrack]),
+                    CommandNode(
+                        "reveal", "Reveal a track in Finder.", options: common,
+                        arguments: [.musicTrack]),
+                    CommandNode("open", "Open the music library in Finder.", options: common),
                     CommandNode("rescan", "Read the music folder again.", options: common),
                     CommandNode(
                         "seek", "Jump to a point in the track.", options: common,
@@ -330,7 +343,18 @@ public enum CommandTree {
                 children: [
                     CommandNode(
                         "ls", "Upcoming events.", aliases: ["list"],
-                        options: ["--json", "--days"])
+                        options: ["--json", "--days"]),
+                    CommandNode("open", "Open Calendar.", options: common),
+                    CommandNode(
+                        "join", "Join an event's meeting.", options: common,
+                        arguments: [.calendarEvent]),
+                ]),
+            CommandNode(
+                "presenter", "Manual presenter mode at runtime.",
+                children: [
+                    CommandNode("status", "Show presenter runtime state.", options: common),
+                    CommandNode("start", "Start manual presenter mode.", options: common),
+                    CommandNode("stop", "Stop manual presenter mode.", options: common),
                 ]),
             CommandNode(
                 "herdr", "Live Herdr sessions on this Mac and your SSH machines.",
@@ -479,16 +503,25 @@ public enum CommandTree {
                         "ls", "List what is on the shelf.", aliases: ["list"], options: common),
                     CommandNode(
                         "path", "Print the path of one item.", options: common,
-                        arguments: [.historyIndex]),
+                        arguments: [.shelfItem]),
                     CommandNode(
                         "add", "Copy a file onto the shelf.", options: ["--json"],
                         arguments: [.localPath]),
                     CommandNode(
                         "rm", "Take one item off the shelf.", options: ["--json", "--yes"],
-                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
+                        arguments: [.shelfItem], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Empty the shelf.", options: ["--json", "--yes"],
                         destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "open", "Open one shelf item.", options: common,
+                        arguments: [.shelfItem]),
+                    CommandNode(
+                        "reveal", "Reveal one shelf item in Finder.", options: common,
+                        arguments: [.shelfItem]),
+                    CommandNode(
+                        "share", "Open sharing for one shelf item.", options: common,
+                        arguments: [.shelfItem]),
                 ]),
             CommandNode(
                 "cleaner", "The developer caches the disk cleaner can reclaim.",

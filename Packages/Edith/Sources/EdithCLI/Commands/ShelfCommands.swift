@@ -12,9 +12,78 @@ struct ShelfCommand: AsyncParsableCommand {
             """,
         subcommands: [
             ShelfListCommand.self, ShelfPathCommand.self, ShelfAddCommand.self,
-            ShelfRemoveCommand.self, ShelfClearCommand.self,
+            ShelfRemoveCommand.self, ShelfClearCommand.self, ShelfOpenCommand.self,
+            ShelfRevealCommand.self, ShelfShareCommand.self,
         ],
         defaultSubcommand: ShelfListCommand.self)
+}
+
+enum ShelfActionBridge {
+    static func run(_ operation: ShelfItemOperation, index: Int, json: Bool) async throws {
+        let found = try ShelfBridge.item(at: index)
+        let url = ShelfIndex.fileURL(for: found.item)
+        let completed: Bool
+        if operation == .share {
+            try AppBridge.requireHelper("sharing a shelf item")
+            guard
+                CLIEnvironment.sharedDefaults.bool(forKey: AppStorageKeys.Notch.shelfEnabled)
+            else {
+                throw CLIFailure.unavailable(
+                    "the Notch Shelf extension is off",
+                    hint: "run `ed extensions enable notchShelf`")
+            }
+            AppBridge.post(
+                IPC.Name.shelfOperation,
+                userInfo: ShelfItemOperationExecution.payload(operation, itemIDs: [found.item.id]))
+            completed = true
+        } else {
+            completed = await ShelfItemOperationExecution.perform(operation, urls: [url])
+        }
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "action": .string(operation.rawValue), "index": .int(index),
+                    "id": .string(found.item.id.uuidString), "name": .string(found.item.name),
+                    "path": .string(url.path),
+                    operation == .share ? "requested" : "opened": .bool(completed),
+                ]))
+            return
+        }
+        CLIOut.out(
+            operation == .share
+                ? "opened sharing for \(found.item.name)"
+                : "\(operation.rawValue == "reveal" ? "revealed" : "opened") \(found.item.name)")
+    }
+}
+
+struct ShelfOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open one shelf item.")
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "The item number, counting from 1.") var index: Int
+    func run() async throws {
+        try await execute { try await ShelfActionBridge.run(.open, index: index, json: json) }
+    }
+}
+
+struct ShelfRevealCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reveal", abstract: "Reveal one shelf item in Finder.")
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "The item number, counting from 1.") var index: Int
+    func run() async throws {
+        try await execute { try await ShelfActionBridge.run(.reveal, index: index, json: json) }
+    }
+}
+
+struct ShelfShareCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "share", abstract: "Open sharing for one shelf item.")
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "The item number, counting from 1.") var index: Int
+    func run() async throws {
+        try await execute { try await ShelfActionBridge.run(.share, index: index, json: json) }
+    }
 }
 
 enum ShelfBridge {

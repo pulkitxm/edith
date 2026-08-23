@@ -472,6 +472,91 @@ enum BooleanWord {
     }
 }
 
+enum MusicFavouriteBridge {
+    static func run(_ operation: MusicLibraryOperation, query: String, json: Bool) throws {
+        let track = try LibraryBridge.track(query)
+        let result = MusicLibraryOperationExecution.setFavourite(
+            operation, path: track.relativePath)
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "action": .string(operation.rawValue), "path": .string(result.path),
+                    "title": .string(track.title), "favourite": .bool(result.isFavourite),
+                    "changed": .bool(result.changed),
+                ]))
+            return
+        }
+        CLIOut.out(
+            result.changed
+                ? "\(result.isFavourite ? "favourited" : "unfavourited") \(track.title)"
+                : "\(track.title) is already \(result.isFavourite ? "a favourite" : "not a favourite")"
+        )
+    }
+}
+
+struct MusicFavoriteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "favorite", abstract: "Add a track to favourites.", aliases: ["favourite"])
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
+    func run() async throws {
+        try await execute { try MusicFavouriteBridge.run(.favorite, query: track, json: json) }
+    }
+}
+
+struct MusicUnfavoriteCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "unfavorite", abstract: "Remove a track from favourites.",
+        aliases: ["unfavourite"])
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
+    func run() async throws {
+        try await execute { try MusicFavouriteBridge.run(.unfavorite, query: track, json: json) }
+    }
+}
+
+struct MusicRevealCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reveal", abstract: "Reveal a track in Finder.")
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    @Argument(help: "Track path, or enough of its name to be unambiguous.") var track: String
+    func run() async throws {
+        try await execute {
+            let found = try LibraryBridge.track(track)
+            let url = await MusicLibraryOperationExecution.reveal(found.url)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("reveal"), "path": .string(found.relativePath),
+                        "file": .string(url.path), "opened": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("revealed \(found.title)")
+        }
+    }
+}
+
+struct MusicOpenLibraryCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open the music library in Finder.")
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+    func run() async throws {
+        try await execute {
+            let url = try await MusicLibraryOperationExecution.openLibrary()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("open"), "path": .string(url.path),
+                        "opened": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("opened \(url.path)")
+        }
+    }
+}
+
 struct MusicRescanCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rescan",
