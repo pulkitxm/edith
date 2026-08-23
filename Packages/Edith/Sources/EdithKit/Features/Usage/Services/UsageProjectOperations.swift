@@ -14,7 +14,7 @@ public enum UsageProjectOperation: String, CaseIterable, Sendable {
         case .list:
             descriptor("list", "List usage grouped by repository.", effect: .read)
         case .show:
-            descriptor("show", "Show one repository and its folders.", effect: .read)
+            descriptor("show", "Show one repository and its usage hierarchy.", effect: .read)
         case .openRepository:
             descriptor("open", "Open a usage repository in the browser.", effect: .interactive)
         case .copyRepositoryLink:

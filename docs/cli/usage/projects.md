@@ -13,7 +13,7 @@ With no command, this group runs `ed usage projects list`.
 | Command | What it does |
 | --- | --- |
 | `ed usage projects list` | List repository totals in descending cost order |
-| `ed usage projects show <repository>` | Show one repository and every matching folder |
+| `ed usage projects show <repository>` | Show its folders, worktrees and chats |
 | `ed usage projects open <repository>` | Open its HTTP repository link in the browser |
 | `ed usage projects copy-link <repository>` | Copy its HTTP repository link |
 | `ed usage projects copy-chat <chat-id>` | Copy a chat identifier from the dashboard drilldown |

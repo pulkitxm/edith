@@ -373,13 +373,17 @@ struct CompleteCommand: AsyncParsableCommand {
         } else {
             quinjetSessions = []
         }
+        let usageDocument = try? UsageDocument.load()
+        let usageChatIDs =
+            request.leading.starts(with: ["usage", "projects", "copy-chat"])
+            ? UsageAnalysis.chatIDs(usageDocument?.daily ?? []) : []
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
             extensionIDs: ExtensionRegistry.entries.map(\.id), shelfItems: shelfItems,
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
-            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [],
+            usageSources: usageDocument?.sources?.sorted() ?? [], usageChatIDs: usageChatIDs,
             quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(

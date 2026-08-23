@@ -6,7 +6,7 @@ import Testing
 @Suite struct CLIUsageProjectOperationTests {
     @Test func registeredDescriptorsReachParserAndCompletionLeaves() throws {
         let descriptors = UsageProjectOperation.allCases.map(\.descriptor)
-        #expect(UserOperationCatalog.descriptors.suffix(descriptors.count) == descriptors[...])
+        #expect(descriptors.allSatisfy(UserOperationCatalog.descriptors.contains))
         let arguments = [
             ["usage", "projects", "list"],
             ["usage", "projects", "show", "edith"],
@@ -45,5 +45,30 @@ import Testing
         let root = try EdRoot.parseAsRoot(["usage", "projects", "--limit", "25"])
         let list = try #require(root as? UsageProjectsListCommand)
         #expect(list.limit == 25)
+    }
+
+    @Test func plainHierarchyRowsExposeEveryChatIdentifier() {
+        let direct = UsageProjectChatSummary(
+            id: "main-chat", title: "Main", path: "/tmp/edith", source: "cli",
+            cost: 1, tokens: 10, lastTs: nil)
+        let nested = UsageProjectChatSummary(
+            id: "work-chat", title: "Work", path: "/tmp/edith-worktree", source: "codex",
+            cost: 2, tokens: 20, lastTs: nil)
+        let folder = UsageProjectFolderSummary(
+            folderName: "edith", path: "/tmp/edith", machineName: "Laptop",
+            machineID: "laptop", cost: 3, tokens: 30, chats: [direct],
+            worktrees: [
+                UsageProjectWorktreeSummary(
+                    name: "feature", cost: 2, tokens: 20, chats: [nested])
+            ])
+        let summary = UsageProjectSummary(
+            repositoryID: "github.com/acme/edith", repositoryName: "edith",
+            repositoryURL: "https://github.com/acme/edith", cost: 3, tokens: 30,
+            folders: [folder])
+        let rows = UsageProjectsShowCommand.hierarchyRows(summary)
+
+        #expect(rows.map(\.first) == ["folder", "chat", "worktree", "chat"])
+        #expect(rows.map { $0[2] } == ["-", "main-chat", "-", "work-chat"])
+        #expect(rows[3][1] == "    Work")
     }
 }

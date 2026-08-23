@@ -358,16 +358,57 @@ struct UsageProjectsShowCommand: AsyncParsableCommand {
             CLIOut.out(String(format: "cost        %.2f", summary.cost))
             CLIOut.out("tokens      \(Int(summary.tokens))")
             CLIOut.out("")
-            let rows = summary.folders.map { folder in
-                [
-                    folder.folderName, folder.machineName ?? "local", folder.path ?? "-",
-                    String(format: "%.2f", folder.cost), String(Int(folder.tokens)),
-                ]
-            }
             CLIOut.out(
                 TextTable.render(
-                    headers: ["FOLDER", "MACHINE", "PATH", "COST", "TOKENS"], rows: rows))
+                    headers: [
+                        "TYPE", "NAME", "CHAT ID", "SOURCE", "MACHINE", "PATH", "COST",
+                        "TOKENS",
+                    ],
+                    rows: Self.hierarchyRows(summary)))
         }
+    }
+
+    static func hierarchyRows(_ summary: UsageProjectSummary) -> [[String]] {
+        summary.folders.flatMap { folder in
+            var rows = [
+                row(
+                    type: "folder", name: folder.folderName, machine: folder.machineName ?? "local",
+                    path: folder.path, cost: folder.cost, tokens: folder.tokens)
+            ]
+            rows += folder.chats.map {
+                chatRow($0, indent: "  ", machine: folder.machineName ?? "local")
+            }
+            for worktree in folder.worktrees {
+                rows.append(
+                    row(
+                        type: "worktree", name: "  \(worktree.name)",
+                        machine: folder.machineName ?? "local", path: nil,
+                        cost: worktree.cost, tokens: worktree.tokens))
+                rows += worktree.chats.map {
+                    chatRow($0, indent: "    ", machine: folder.machineName ?? "local")
+                }
+            }
+            return rows
+        }
+    }
+
+    private static func chatRow(
+        _ chat: UsageProjectChatSummary, indent: String, machine: String
+    ) -> [String] {
+        row(
+            type: "chat", name: indent + chat.displayName, chatID: chat.id,
+            source: chat.source, machine: machine, path: chat.path,
+            cost: chat.cost, tokens: chat.tokens)
+    }
+
+    private static func row(
+        type: String, name: String, chatID: String? = nil, source: String? = nil,
+        machine: String, path: String?, cost: Double, tokens: Double
+    ) -> [String] {
+        [
+            type, name, chatID ?? "-", source ?? "-", machine, path ?? "-",
+            String(format: "%.2f", cost), String(Int(tokens)),
+        ]
     }
 }
 

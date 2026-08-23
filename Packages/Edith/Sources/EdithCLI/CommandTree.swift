@@ -34,6 +34,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case remotePath
     case container
     case tool
+    case usageChat
     case usageSource
     case free
 }
@@ -244,7 +245,7 @@ public enum CommandTree {
                                 options: ["--json", "--range", "--limit"],
                                 optionValues: ["--range": .usageRange]),
                             CommandNode(
-                                "show", "Show one repository and its folders.",
+                                "show", "Show one repository and its usage hierarchy.",
                                 options: ["--json", "--range"],
                                 optionValues: ["--range": .usageRange], arguments: [.free]),
                             CommandNode(
@@ -257,7 +258,7 @@ public enum CommandTree {
                                 optionValues: ["--range": .usageRange], arguments: [.free]),
                             CommandNode(
                                 "copy-chat", "Copy a usage chat identifier.",
-                                options: common, arguments: [.free]),
+                                options: common, arguments: [.usageChat]),
                         ]),
                     CommandNode(
                         "sources", "The agents that produced the history.",
