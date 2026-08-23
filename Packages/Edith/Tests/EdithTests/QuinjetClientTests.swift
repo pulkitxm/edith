@@ -76,6 +76,50 @@ import Testing
         #expect(projects[0].availableWorktrees.count == 2)
     }
 
+    @Test func boundsRemoteFolderProbesAndPreservesFolderOrder() async throws {
+        let folders = ["/srv/one", "/srv/two", "/srv/three"]
+        let folderData = try JSONEncoder().encode(
+            QuinjetRemoteFolders(
+                remotes: folders.map {
+                    QuinjetRemoteFolder(
+                        target: "pulkit@build", folder: $0, accessible: true, uses: 1)
+                }))
+        let worktreeData = try Dictionary(
+            uniqueKeysWithValues: folders.map { folder in
+                (
+                    folder,
+                    try JSONEncoder().encode([
+                        QuinjetWorktree(
+                            path: folder, head: "1234567890abcdef", branch: "main",
+                            current: true, bare: false, detached: false, locked: nil,
+                            prunable: nil)
+                    ])
+                )
+            })
+        let harness = RemoteProbeHarness(folderData: folderData, worktreeData: worktreeData)
+        let client = QuinjetClient(remoteProbeLimit: 2) { arguments in
+            await harness.execute(arguments)
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        let request = Task { try await client.recentProjects(remote: remote) }
+        await harness.waitUntilStarted(2)
+        #expect(await harness.maximumActive == 2)
+        #expect(Set(await harness.startedFolders) == Set(folders.prefix(2)))
+
+        await harness.release("/srv/two")
+        await harness.waitUntilStarted(3)
+        #expect(await harness.maximumActive == 2)
+
+        await harness.release("/srv/three")
+        await harness.release("/srv/one")
+        let projects = try await request.value
+
+        #expect(projects.map(\.name) == ["one", "two", "three"])
+    }
+
     @Test func rejectsUnsupportedOutput() async {
         let client = QuinjetClient { _ in Data("{}".utf8) }
 
@@ -154,6 +198,47 @@ import Testing
           ]
         }
         """
+}
+
+private actor RemoteProbeHarness {
+    let folderData: Data
+    let worktreeData: [String: Data]
+    private(set) var startedFolders: [String] = []
+    private(set) var maximumActive = 0
+    private var active = 0
+    private var releases: [String: CheckedContinuation<Void, Never>] = [:]
+    private var startedWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    init(folderData: Data, worktreeData: [String: Data]) {
+        self.folderData = folderData
+        self.worktreeData = worktreeData
+    }
+
+    func execute(_ arguments: [String]) async -> Data {
+        if arguments == ["remote", "list", "--json"] { return folderData }
+        guard let marker = arguments.firstIndex(of: "-C"),
+            arguments.indices.contains(marker + 1)
+        else { return Data() }
+        let folder = arguments[marker + 1]
+        active += 1
+        maximumActive = max(maximumActive, active)
+        startedFolders.append(folder)
+        let ready = startedWaiters.filter { startedFolders.count >= $0.0 }
+        startedWaiters.removeAll { startedFolders.count >= $0.0 }
+        ready.forEach { $0.1.resume() }
+        await withCheckedContinuation { releases[folder] = $0 }
+        active -= 1
+        return worktreeData[folder] ?? Data()
+    }
+
+    func waitUntilStarted(_ count: Int) async {
+        if startedFolders.count >= count { return }
+        await withCheckedContinuation { startedWaiters.append((count, $0)) }
+    }
+
+    func release(_ folder: String) {
+        releases.removeValue(forKey: folder)?.resume()
+    }
 }
 
 @MainActor
