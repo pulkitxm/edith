@@ -2,7 +2,17 @@ import ArgumentParser
 import EdithKit
 import Foundation
 
-public let edithCLIVersion = "1.0.0"
+public let edithCLIVersion = EdithCLIVersion.resolve(Bundle.main.infoDictionary)
+
+enum EdithCLIVersion {
+    static func resolve(_ infoDictionary: [String: Any]?) -> String {
+        guard
+            let value = infoDictionary?["CFBundleShortVersionString"] as? String,
+            !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return "development" }
+        return value
+    }
+}
 
 func execute(_ body: () async throws -> Void) async throws {
     do {

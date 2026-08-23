@@ -214,6 +214,13 @@ enum CommandCrawler {
         #expect(EdRoot.configuration.version == edithCLIVersion)
         #expect(!edithCLIVersion.isEmpty)
     }
+
+    @Test func releaseVersionComesFromTheContainingBundle() {
+        #expect(
+            EdithCLIVersion.resolve(["CFBundleShortVersionString": "0.0.122"]) == "0.0.122")
+        #expect(EdithCLIVersion.resolve(nil) == "development")
+        #expect(EdithCLIVersion.resolve(["CFBundleShortVersionString": " "]) == "development")
+    }
 }
 
 @Suite struct CLICompletionTreeParityTests {
