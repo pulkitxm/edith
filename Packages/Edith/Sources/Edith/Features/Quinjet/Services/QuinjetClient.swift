@@ -5,8 +5,10 @@ struct QuinjetClient: Sendable {
     typealias Execute = @Sendable ([String]) async throws -> Data
 
     private let execute: Execute
+    private let remoteProbeLimit: Int
 
-    init(execute: @escaping Execute) {
+    init(remoteProbeLimit: Int = 4, execute: @escaping Execute) {
+        self.remoteProbeLimit = max(1, remoteProbeLimit)
         self.execute = execute
     }
 
@@ -19,13 +21,16 @@ struct QuinjetClient: Sendable {
     func recentProjects(remote: QuinjetRemote) async throws -> [QuinjetProject] {
         let folders = try decode(
             QuinjetRemoteFolders.self, from: await execute(["remote", "list", "--json"]))
+        let candidates = folders.remotes.filter {
+            $0.target == remote.target && $0.accessible && $0.folder.hasPrefix("/")
+        }
+        let probes = try await probeRemoteFolders(candidates, remote: remote)
         var projects: [QuinjetProject] = []
         var identities = Set<String>()
-        for folder in folders.remotes
-        where folder.target == remote.target && folder.accessible && folder.folder.hasPrefix("/") {
-            guard let worktrees = try? await worktrees(at: folder.folder, remote: remote),
-                !worktrees.isEmpty
-            else { continue }
+        for probe in probes {
+            guard !probe.worktrees.isEmpty else { continue }
+            let folder = probe.folder
+            let worktrees = probe.worktrees
             let identity = worktrees.map(\.path).sorted().joined(separator: "\u{1F}")
             guard identities.insert(identity).inserted else { continue }
             projects.append(
@@ -34,6 +39,52 @@ struct QuinjetClient: Sendable {
                     commonDir: identity, worktrees: worktrees))
         }
         return projects
+    }
+
+    private func probeRemoteFolders(
+        _ folders: [QuinjetRemoteFolder], remote: QuinjetRemote
+    ) async throws -> [RemoteFolderProbe] {
+        guard !folders.isEmpty else { return [] }
+        return try await withThrowingTaskGroup(of: IndexedRemoteFolderProbe.self) { group in
+            var nextIndex = 0
+            var results = Array<RemoteFolderProbe?>(repeating: nil, count: folders.count)
+            let initialCount = min(remoteProbeLimit, folders.count)
+            while nextIndex < initialCount {
+                let index = nextIndex
+                let folder = folders[index]
+                group.addTask { try await remoteFolderProbe(index, folder: folder, remote: remote) }
+                nextIndex += 1
+            }
+            while let indexed = try await group.next() {
+                results[indexed.index] = indexed.probe
+                if nextIndex < folders.count {
+                    let index = nextIndex
+                    let folder = folders[index]
+                    group.addTask {
+                        try await remoteFolderProbe(index, folder: folder, remote: remote)
+                    }
+                    nextIndex += 1
+                }
+            }
+            return results.compactMap { $0 }
+        }
+    }
+
+    private func remoteFolderProbe(
+        _ index: Int, folder: QuinjetRemoteFolder, remote: QuinjetRemote
+    ) async throws -> IndexedRemoteFolderProbe {
+        do {
+            try Task.checkCancellation()
+            let worktrees = try await worktrees(at: folder.folder, remote: remote)
+            try Task.checkCancellation()
+            return IndexedRemoteFolderProbe(
+                index: index, probe: RemoteFolderProbe(folder: folder, worktrees: worktrees))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return IndexedRemoteFolderProbe(
+                index: index, probe: RemoteFolderProbe(folder: folder, worktrees: []))
+        }
     }
 
     func worktrees(at path: String, remote: QuinjetRemote? = nil) async throws
@@ -73,4 +124,14 @@ struct QuinjetClient: Sendable {
         }
         return Data(result.output.utf8)
     }
+}
+
+private struct RemoteFolderProbe: Sendable {
+    let folder: QuinjetRemoteFolder
+    let worktrees: [QuinjetWorktree]
+}
+
+private struct IndexedRemoteFolderProbe: Sendable {
+    let index: Int
+    let probe: RemoteFolderProbe
 }

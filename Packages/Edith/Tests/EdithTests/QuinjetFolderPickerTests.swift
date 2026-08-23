@@ -21,7 +21,7 @@ import Testing
         await model.start()
 
         model.editPath("/home/pulkit/Desk")
-        try? await Task.sleep(for: .milliseconds(5))
+        await model.waitForInputRefresh()
 
         #expect(model.entries.map(\.name) == ["Desktop"])
         await model.completePath()
