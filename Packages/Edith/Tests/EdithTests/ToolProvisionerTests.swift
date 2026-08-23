@@ -175,4 +175,25 @@ private final class CommandRecorder: @unchecked Sendable {
                 $0.arguments == ["brew", "install", "example/tap/brew-tool"]
             } == 1)
     }
+
+    @Test func nonzeroVersionProbeIsNotPresent() async {
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/tmp/broken-tool"), arguments: ["--version"],
+            environment: [:], timeout: 5)
+        let version = await ToolVersionProbe.version(request) { received, _ in
+            #expect(received.timeout == 5)
+            return CLICommandResult(terminationStatus: 7, output: "broken 1.0\n")
+        }
+        #expect(version == nil)
+    }
+
+    @Test func versionProbeStopsAtItsDeadline() async {
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/bin/sleep"), arguments: ["60"], environment: [:],
+            timeout: 0.05)
+        let started = Date()
+        let version = await ToolVersionProbe.version(request)
+        #expect(version == nil)
+        #expect(Date().timeIntervalSince(started) < 1)
+    }
 }

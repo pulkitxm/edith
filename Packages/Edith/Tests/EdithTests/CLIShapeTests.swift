@@ -214,6 +214,13 @@ enum CommandCrawler {
         #expect(EdRoot.configuration.version == edithCLIVersion)
         #expect(!edithCLIVersion.isEmpty)
     }
+
+    @Test func releaseVersionComesFromTheContainingBundle() {
+        #expect(
+            EdithCLIVersion.resolve(["CFBundleShortVersionString": "0.0.122"]) == "0.0.122")
+        #expect(EdithCLIVersion.resolve(nil) == "development")
+        #expect(EdithCLIVersion.resolve(["CFBundleShortVersionString": " "]) == "development")
+    }
 }
 
 @Suite struct CLICompletionTreeParityTests {
@@ -274,6 +281,30 @@ enum CommandCrawler {
         var wrong: [String] = []
         check(node: CommandTree.root, command: EdRoot.self, path: ["ed"], wrong: &wrong)
         #expect(wrong.isEmpty, "completion offers flags the parser rejects: \(wrong)")
+    }
+
+    @Test func everyTypedOptionIsAlsoAdvertisedAndAccepted() {
+        var wrong: [String] = []
+        checkTyped(node: CommandTree.root, command: EdRoot.self, path: ["ed"], wrong: &wrong)
+        #expect(wrong.isEmpty, "typed completion metadata names invalid options: \(wrong)")
+    }
+
+    private func checkTyped(
+        node: CommandNode, command: ParsableCommand.Type, path: [String], wrong: inout [String]
+    ) {
+        let real = CommandCrawler.optionNames(of: command)
+        for option in node.optionValues.keys
+        where !node.options.contains(option) || !real.contains(option) {
+            wrong.append((path + [option]).joined(separator: " "))
+        }
+        for child in node.children {
+            guard
+                let match = command.configuration.subcommands.first(where: {
+                    CommandCrawler.name(of: $0) == child.name
+                })
+            else { continue }
+            checkTyped(node: child, command: match, path: path + [child.name], wrong: &wrong)
+        }
     }
 
     private func check(
