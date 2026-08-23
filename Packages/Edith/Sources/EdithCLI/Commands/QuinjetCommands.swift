@@ -127,7 +127,7 @@ struct QuinjetLaunchCommand: AsyncParsableCommand {
         try await execute {
             let plan = try await QuinjetCLI.plan(
                 path: path, machine: target.machine, launch: launch)
-            let status = try await QuinjetCLIEnvironment.launch(plan.request)
+            let status = try await QuinjetCLIEnvironment.launch(plan.request, json)
             guard status == 0 else { throw ExitCode(status) }
             if json {
                 QuinjetCLI.renderPlan(plan, launched: true, json: true)
@@ -173,7 +173,7 @@ struct QuinjetCLIPlan: Sendable {
 }
 
 enum QuinjetCLIEnvironment {
-    typealias Launcher = @Sendable (QuinjetLaunchRequest) async throws -> Int32
+    typealias Launcher = @Sendable (QuinjetLaunchRequest, Bool) async throws -> Int32
 
     nonisolated(unsafe) static var client: @Sendable () -> QuinjetClient = { .live }
     nonisolated(unsafe) static var cmuxExecutable: @Sendable () -> URL? = {
@@ -183,18 +183,20 @@ enum QuinjetCLIEnvironment {
         @Sendable (String?) async throws -> QuinjetCommandTarget = {
             try await QuinjetCommandTarget.resolve($0)
         }
-    nonisolated(unsafe) static var launch: Launcher = { request in
-        try await launchLive(request)
+    nonisolated(unsafe) static var launch: Launcher = { request, noninteractive in
+        try await launchLive(request, noninteractive: noninteractive)
     }
 
     static func reset() {
         client = { .live }
         cmuxExecutable = { QuinjetCMUX.executable() }
         resolveTarget = { try await QuinjetCommandTarget.resolve($0) }
-        launch = { try await launchLive($0) }
+        launch = { try await launchLive($0, noninteractive: $1) }
     }
 
-    private static func launchLive(_ request: QuinjetLaunchRequest) async throws -> Int32 {
+    private static func launchLive(
+        _ request: QuinjetLaunchRequest, noninteractive: Bool
+    ) async throws -> Int32 {
         if request.terminal == .cmux {
             guard cmuxExecutable() != nil else {
                 throw CLIFailure.unavailable(
@@ -214,9 +216,10 @@ enum QuinjetCLIEnvironment {
         process.executableURL = request.executableURL
         process.arguments = request.arguments
         process.environment = CLIToolEnvironment.sanitized()
-        process.standardInput = FileHandle.standardInput
-        process.standardOutput = FileHandle.standardOutput
-        process.standardError = FileHandle.standardError
+        process.standardInput = noninteractive ? FileHandle.nullDevice : FileHandle.standardInput
+        process.standardOutput =
+            noninteractive ? CLIOut.stderrHandle : FileHandle.standardOutput
+        process.standardError = noninteractive ? CLIOut.stderrHandle : FileHandle.standardError
         if let currentDirectory = request.currentDirectory {
             process.currentDirectoryURL = URL(fileURLWithPath: currentDirectory)
         }

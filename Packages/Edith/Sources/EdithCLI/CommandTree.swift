@@ -24,6 +24,9 @@ public enum ArgumentKind: Equatable, Sendable {
     case attentionEntity
     case attentionCategory
     case downloadKind
+    case quinjetAppearance
+    case quinjetMachine
+    case quinjetTheme
     case localPath
     case musicPlayer
     case remotePath
@@ -548,22 +551,32 @@ public enum CommandTree {
                 children: [
                     CommandNode(
                         "projects", "List recent Quinjet projects.",
-                        options: ["--json", "--help", "--machine"]),
+                        options: ["--json", "--help", "--machine"],
+                        optionValues: ["--machine": .quinjetMachine]),
                     CommandNode(
                         "worktrees", "List the worktrees in a Quinjet project.",
                         options: ["--json", "--help", "--machine"],
+                        optionValues: ["--machine": .quinjetMachine],
                         arguments: [.remotePath]),
                     CommandNode(
                         "open", "Print a Quinjet launch request without running it.",
                         options: [
                             "--json", "--help", "--machine", "--theme", "--appearance",
                             "--cmux",
+                        ],
+                        optionValues: [
+                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
+                            "--appearance": .quinjetAppearance,
                         ], arguments: [.remotePath]),
                     CommandNode(
                         "launch", "Launch a Quinjet review session.",
                         options: [
                             "--json", "--help", "--machine", "--theme", "--appearance",
                             "--cmux",
+                        ],
+                        optionValues: [
+                            "--machine": .quinjetMachine, "--theme": .quinjetTheme,
+                            "--appearance": .quinjetAppearance,
                         ],
                         arguments: [.remotePath]),
                 ]),

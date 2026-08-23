@@ -157,6 +157,9 @@ public enum CompletionEngine {
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
+        case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)
+        case .quinjetMachine: return ["local"] + machines
+        case .quinjetTheme: return QuinjetTheme.allCases.map(\.rawValue)
         case .pruneTarget: return DockerPruneCommand.targets
         case .shelfItem: return shelfItems
         case .musicTrack: return musicTracks

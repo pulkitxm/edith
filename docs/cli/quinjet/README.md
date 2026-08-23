@@ -81,6 +81,11 @@ values are JSON null. Object keys are sorted.
 `worktree`. `launched` is false for `open` and true after a successful `launch`.
 `terminal` is `current` or `cmux`.
 
+For `launch --json`, the child process cannot write to stdout and receives no
+interactive input, so stdout remains exactly one JSON document. Use plain
+`launch` for an interactive terminal session. Use `open --json` for a safe
+noninteractive preview, or `launch --cmux --json` to open a separate workspace.
+
 ## Exit codes
 
 | Code | When |

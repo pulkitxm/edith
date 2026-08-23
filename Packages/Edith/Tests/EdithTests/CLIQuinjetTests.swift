@@ -8,6 +8,7 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var arguments: [[String]] = []
     private var launches: [QuinjetLaunchRequest] = []
+    private var noninteractiveLaunches: [Bool] = []
 
     func record(_ value: [String]) {
         lock.lock()
@@ -15,9 +16,10 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         lock.unlock()
     }
 
-    func record(_ value: QuinjetLaunchRequest) {
+    func record(_ value: QuinjetLaunchRequest, noninteractive: Bool) {
         lock.lock()
         launches.append(value)
+        noninteractiveLaunches.append(noninteractive)
         lock.unlock()
     }
 
@@ -31,6 +33,12 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return launches
+    }
+
+    func recordedLaunchModes() -> [Bool] {
+        lock.lock()
+        defer { lock.unlock() }
+        return noninteractiveLaunches
     }
 }
 
@@ -141,8 +149,8 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
                 URL(fileURLWithPath: "/Applications/Quinjet Tools/quinjet")
             }
             QuinjetCLIEnvironment.client = { Self.client(path: "/work/it's ready") }
-            QuinjetCLIEnvironment.launch = {
-                recorder.record($0)
+            QuinjetCLIEnvironment.launch = { request, noninteractive in
+                recorder.record(request, noninteractive: noninteractive)
                 return 0
             }
         }
@@ -171,8 +179,8 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
                     name: "build", local: false, remote: Self.remote, connection: nil)
             }
             QuinjetCLIEnvironment.client = { Self.client(path: "/srv/edith") }
-            QuinjetCLIEnvironment.launch = {
-                recorder.record($0)
+            QuinjetCLIEnvironment.launch = { request, noninteractive in
+                recorder.record(request, noninteractive: noninteractive)
                 return 0
             }
         }
@@ -180,6 +188,7 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         #expect(result.code == 0)
         #expect(result.object?["launched"] as? Bool == true)
         #expect(result.object?["machine"] as? String == "build")
+        #expect(recorder.recordedLaunchModes() == [true])
         let request = try #require(recorder.recordedLaunches().first)
         #expect(
             request.arguments
@@ -188,6 +197,20 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
                     "-C", "/srv/edith", "tui", "--theme", "gruvbox", "--appearance", "dark",
                 ])
         #expect(!request.arguments.contains("--client"))
+    }
+
+    @Test func jsonLaunchKeepsChildOutputOffStdout() async throws {
+        let result = await CLIProbe.runInWorld([
+            "quinjet", "launch", "/tmp", "--json",
+        ]) { _ in
+            CLIEnvironment.executableNamed = { _ in URL(fileURLWithPath: "/bin/echo") }
+            QuinjetCLIEnvironment.client = { Self.client(path: "/tmp") }
+        }
+
+        #expect(result.code == 0, "\(result.stderr)")
+        #expect(try result.decoded() is [String: Any])
+        #expect(!result.stdout.contains("--theme quinjet"))
+        #expect(result.stderr.contains("--theme quinjet"))
     }
 
     @Test func malformedOutputIsAnActionableFailure() async {
