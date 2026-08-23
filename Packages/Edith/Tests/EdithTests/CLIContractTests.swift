@@ -361,6 +361,33 @@ enum JSONContract {
         JSONCase(
             "ed machines thermal set",
             ["machines", "thermal", "set", "nowhere-at-all", "balanced", "--json"]),
+        JSONCase(
+            "ed machines control status",
+            ["machines", "control", "status", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines control brightness",
+            ["machines", "control", "brightness", "nowhere-at-all", "50", "--json"]),
+        JSONCase(
+            "ed machines control volume",
+            ["machines", "control", "volume", "nowhere-at-all", "40", "--json"]),
+        JSONCase(
+            "ed machines control mute",
+            ["machines", "control", "mute", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control wifi",
+            ["machines", "control", "wifi", "nowhere-at-all", "off", "--json"]),
+        JSONCase(
+            "ed machines control bluetooth",
+            ["machines", "control", "bluetooth", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control airplane",
+            ["machines", "control", "airplane", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control dnd",
+            ["machines", "control", "dnd", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control keyboard-light",
+            ["machines", "control", "keyboard-light", "nowhere-at-all", "25", "--json"]),
         JSONCase("ed machines kill", ["machines", "kill", "nowhere-at-all", "42", "--json"]),
         JSONCase(
             "ed machines services ls", ["machines", "services", "ls", "nowhere-at-all", "--json"]),

@@ -54,6 +54,7 @@ key.
 | [`ed machines files`](./machines-files/README.md) | Browsing, transferring and editing files over SSH, and the undo model |
 | [`ed machines power`](./machines-power/README.md) | Power state, processes and system services |
 | [`ed machines thermal`](./machines-thermal/README.md) | Thermal readings and temporary or persistent performance profiles |
+| [`ed machines control`](./machines-control/README.md) | Brightness, audio, radios, airplane mode, Do Not Disturb and keyboard lighting |
 | [`ed machines workspace`](./machines-workspace/README.md) | Workspaces and panes |
 
 ## The short version
