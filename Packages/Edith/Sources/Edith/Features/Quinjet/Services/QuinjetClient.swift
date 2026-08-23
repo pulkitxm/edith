@@ -11,15 +11,44 @@ struct QuinjetClient: Sendable {
     }
 
     func recentProjects() async throws -> [QuinjetProject] {
-        try decode(
+        return try decode(
             [QuinjetProject].self,
-            from: await execute(["--client", "edith", "project", "list", "--json"]))
+            from: await execute(["project", "list", "--json"]))
     }
 
-    func worktrees(at path: String) async throws -> [QuinjetWorktree] {
-        try decode(
+    func recentProjects(remote: QuinjetRemote) async throws -> [QuinjetProject] {
+        let folders = try decode(
+            QuinjetRemoteFolders.self, from: await execute(["remote", "list", "--json"]))
+        var projects: [QuinjetProject] = []
+        var identities = Set<String>()
+        for folder in folders.remotes
+        where folder.target == remote.target && folder.accessible && folder.folder.hasPrefix("/") {
+            guard let worktrees = try? await worktrees(at: folder.folder, remote: remote),
+                !worktrees.isEmpty
+            else { continue }
+            let identity = worktrees.map(\.path).sorted().joined(separator: "\u{1F}")
+            guard identities.insert(identity).inserted else { continue }
+            projects.append(
+                QuinjetProject(
+                    name: URL(fileURLWithPath: folder.folder).lastPathComponent,
+                    commonDir: identity, worktrees: worktrees))
+        }
+        return projects
+    }
+
+    func worktrees(at path: String, remote: QuinjetRemote? = nil) async throws
+        -> [QuinjetWorktree]
+    {
+        var arguments: [String] = []
+        if let remote {
+            arguments += [
+                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
+            ]
+        }
+        arguments += ["-C", path, "worktree", "list", "--json"]
+        return try decode(
             [QuinjetWorktree].self,
-            from: await execute(["--client", "edith", "-C", path, "worktree", "list", "--json"]))
+            from: await execute(arguments))
     }
 
     private func decode<Value: Decodable>(_ type: Value.Type, from data: Data) throws -> Value {

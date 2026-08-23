@@ -6,7 +6,7 @@ import Testing
 @Suite struct QuinjetClientTests {
     @Test func decodesRecentProjectsAndWorktrees() async throws {
         let client = QuinjetClient { arguments in
-            #expect(arguments == ["--client", "edith", "project", "list", "--json"])
+            #expect(arguments == ["project", "list", "--json"])
             return Data(Self.projectsJSON.utf8)
         }
 
@@ -23,7 +23,7 @@ import Testing
             #expect(
                 arguments
                     == [
-                        "--client", "edith", "-C", "/work/edith", "worktree", "list", "--json",
+                        "-C", "/work/edith", "worktree", "list", "--json",
                     ])
             return Data(Self.worktreesJSON.utf8)
         }
@@ -31,6 +31,49 @@ import Testing
         let worktrees = try await client.worktrees(at: "/work/edith")
 
         #expect(worktrees.filter(\.canOpen).map(\.branch) == ["main", "feat/quinjet"])
+    }
+
+    @Test func requestsWorktreesThroughAnEdithMachineSession() async throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+        let client = QuinjetClient { arguments in
+            #expect(
+                arguments
+                    == [
+                        "--remote", "pulkit@build", "--ssh-control-path",
+                        "/tmp/edith.sock", "-C", "/srv/project", "worktree", "list", "--json",
+                    ])
+            return Data(Self.worktreesJSON.utf8)
+        }
+
+        let worktrees = try await client.worktrees(at: "/srv/project", remote: remote)
+
+        #expect(worktrees.filter(\.canOpen).count == 2)
+    }
+
+    @Test func hydratesRecentFoldersFromTheSelectedMachine() async throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+        let client = QuinjetClient { arguments in
+            if arguments == ["remote", "list", "--json"] {
+                return Data(Self.remoteFoldersJSON.utf8)
+            }
+            #expect(
+                arguments
+                    == [
+                        "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith.sock",
+                        "-C", "/srv/edith", "worktree", "list", "--json",
+                    ])
+            return Data(Self.worktreesJSON.utf8)
+        }
+
+        let projects = try await client.recentProjects(remote: remote)
+
+        #expect(projects.count == 1)
+        #expect(projects[0].name == "edith")
+        #expect(projects[0].availableWorktrees.count == 2)
     }
 
     @Test func rejectsUnsupportedOutput() async {
@@ -92,10 +135,91 @@ import Testing
           }
         ]
         """
+
+    private static let remoteFoldersJSON = """
+        {
+          "remotes": [
+            {
+              "target": "pulkit@build",
+              "folder": "/srv/edith",
+              "accessible": true,
+              "uses": 12
+            },
+            {
+              "target": "other",
+              "folder": "/srv/other",
+              "accessible": true,
+              "uses": 4
+            }
+          ]
+        }
+        """
 }
 
 @MainActor
 @Suite struct QuinjetPageModelTests {
+    @Test func embeddedLaunchUsesEdithRoutingAndSelectedTheme() throws {
+        let model = QuinjetPageModel(client: client)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .tokyoNight, appearance: .light)
+
+        let arguments = model.launchArguments(
+            worktree: Self.main, remote: nil, configuration: configuration, managed: true)
+
+        #expect(
+            arguments
+                == [
+                    "--client", "edith", "-C", "/work/edith", "tui", "--theme",
+                    "tokyo-night", "--appearance", "light",
+                ])
+    }
+
+    @Test func cmuxLaunchKeepsRemoteSessionWithoutEdithRouting() throws {
+        let model = QuinjetPageModel(client: client)
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith socket")
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .cmux, theme: .gruvbox, appearance: .dark)
+
+        let arguments = model.launchArguments(
+            worktree: Self.main, remote: remote, configuration: configuration, managed: false)
+
+        #expect(
+            arguments
+                == [
+                    "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith socket",
+                    "-C", "/work/edith", "tui", "--theme", "gruvbox", "--appearance", "dark",
+                ])
+        #expect(!arguments.contains("--client"))
+    }
+
+    @Test func cmuxCommandQuotesEveryArgument() {
+        let command = QuinjetCMUXLauncher.shellCommand(
+            executable: "/Applications/Quinjet Tools/quinjet",
+            arguments: ["-C", "/work/it's ready"])
+
+        #expect(
+            command
+                == "'/Applications/Quinjet Tools/quinjet' '-C' '/work/it'\\''s ready'")
+    }
+
+    @Test func cmuxLaunchEscapesAppleScriptText() {
+        #expect(
+            QuinjetCMUXLauncher.appleScriptQuote("a \"quoted\" folder\n")
+                == "\"a \\\"quoted\\\" folder\\n\"")
+    }
+
+    @Test func themeCatalogMatchesQuinjetCapabilities() {
+        #expect(
+            QuinjetTheme.allCases.map(\.rawValue)
+                == [
+                    "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord",
+                    "one", "rose-pine", "solarized", "tokyo-night", "ayu", "monokai",
+                    "github",
+                ])
+    }
+
     @Test func newTabPayloadCreatesAndSelectsPickerTab() throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)
@@ -104,6 +228,20 @@ import Testing
 
         #expect(model.tabs.count == 2)
         #expect(model.selectedTab?.id != original.id)
+        #expect(model.selectedTab?.worktree == nil)
+    }
+
+    @Test func remoteNewTabPayloadKeepsTheCurrentMachine() throws {
+        let model = QuinjetPageModel(client: client)
+        let original = try #require(model.selectedTab)
+        let machineID = UUID()
+        original.remote = QuinjetRemote(
+            machineID: machineID, machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        model.handleHostPayload("quinjet;open-new-tab", from: original)
+
+        #expect(model.selectedTab?.machineID == machineID)
         #expect(model.selectedTab?.worktree == nil)
     }
 
@@ -141,6 +279,23 @@ import Testing
         #expect(!tab.holder.started)
     }
 
+    @Test func changingTerminalSettingsReconfiguresTheOpenProject() throws {
+        let model = QuinjetPageModel(client: client)
+        let tab = try #require(model.selectedTab)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main, Self.feature], in: tab,
+            launchEnabled: false)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .cmux, theme: .dracula, appearance: .light)
+
+        model.apply(configuration, launchEnabled: false)
+
+        #expect(tab.worktree == Self.main)
+        #expect(tab.worktrees == [Self.main, Self.feature])
+        #expect(tab.launchConfiguration == configuration)
+        #expect(!tab.holder.started)
+    }
+
     @Test func terminalRoutesManagedOSCSequence() async {
         let holder = TerminalSessionHolder()
         var action: QuinjetHostAction?
@@ -155,6 +310,19 @@ import Testing
         }
 
         #expect(action == .openNewTab)
+    }
+
+    @Test func resettingTerminalClearsMouseTrackingAndCreatesANewView() {
+        let holder = TerminalSessionHolder()
+        let original = holder.terminalView
+        holder.terminalView.feed(text: "\u{1B}[?1003h")
+        #expect(holder.terminalView.terminal.mouseMode == .anyEvent)
+
+        holder.reset()
+
+        #expect(holder.terminalView !== original)
+        #expect(holder.terminalView.terminal.mouseMode == .off)
+        #expect(holder.generation == 1)
     }
 
     private var client: QuinjetClient {

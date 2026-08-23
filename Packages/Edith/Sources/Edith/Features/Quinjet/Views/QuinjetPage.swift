@@ -3,8 +3,13 @@ import SwiftUI
 
 struct QuinjetPage: View {
     @State private var model = QuinjetPageModel()
+    @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
+    private var terminalName = QuinjetTerminal.embedded.rawValue
+    @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
+    private var themeName = QuinjetTheme.quinjet.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,9 +24,13 @@ struct QuinjetPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .environment(\.quinjetLaunchConfiguration, configuration)
         .task {
             guard automaticActionsEnabled else { return }
             await model.refreshProjects()
+        }
+        .onChange(of: configuration) { _, configuration in
+            model.apply(configuration, launchEnabled: launchEnabled)
         }
         .onDisappear { model.stopAll() }
     }
@@ -46,10 +55,66 @@ struct QuinjetPage: View {
             .buttonStyle(HoverButtonStyle())
             .pointerCursor()
             .help("New Quinjet review")
+            terminalMenu
+            themeMenu
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(9))
         .background(.thinMaterial)
+    }
+
+    private var configuration: QuinjetLaunchConfiguration {
+        let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
+        return QuinjetLaunchConfiguration(
+            terminal: storedTerminal.isAvailable ? storedTerminal : .embedded,
+            theme: QuinjetTheme(rawValue: themeName) ?? .quinjet,
+            appearance: scheme == .dark ? .dark : .light)
+    }
+
+    private var terminalMenu: some View {
+        Menu {
+            ForEach(QuinjetTerminal.allCases) { terminal in
+                Button {
+                    terminalName = terminal.rawValue
+                } label: {
+                    if terminal == configuration.terminal {
+                        Label(terminal.label, systemImage: "checkmark")
+                    } else {
+                        Label(terminal.label, systemImage: terminal.icon)
+                    }
+                }
+                .disabled(!terminal.isAvailable)
+            }
+        } label: {
+            QuinjetMenuLabel(
+                icon: configuration.terminal.icon, title: configuration.terminal.label)
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Terminal renderer")
+    }
+
+    private var themeMenu: some View {
+        Menu {
+            ForEach(QuinjetTheme.allCases) { theme in
+                Button {
+                    themeName = theme.rawValue
+                } label: {
+                    if theme == configuration.theme {
+                        Label(theme.label, systemImage: "checkmark")
+                    } else {
+                        Text(theme.label)
+                    }
+                }
+            }
+        } label: {
+            QuinjetMenuLabel(icon: "paintpalette", title: configuration.theme.label)
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Quinjet theme")
     }
 
     @ViewBuilder
@@ -57,8 +122,44 @@ struct QuinjetPage: View {
         if tab.worktree == nil {
             QuinjetProjectPicker(model: model, tab: tab)
         } else {
-            QuinjetTerminalWorkspace(model: model, tab: tab)
+            QuinjetTerminalWorkspace(
+                model: model, tab: tab,
+                useEmbedded: { terminalName = QuinjetTerminal.embedded.rawValue })
         }
+    }
+}
+
+private struct QuinjetMenuLabel: View {
+    let icon: String
+    let title: String
+    @State private var hovered = false
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            Image(systemName: icon)
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+            Text(title)
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            Image(systemName: "chevron.down")
+                .font(.system(size: UIScale.pt(7), weight: .bold))
+        }
+        .foregroundStyle(DashSkin.ink(dark))
+        .padding(.horizontal, UIScale.pt(9))
+        .padding(.vertical, UIScale.pt(6))
+        .background(
+            hovered ? DashSkin.inkFaint(dark).opacity(0.12) : DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(6))
+                .stroke(DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .pointerCursor()
     }
 }
 
@@ -106,10 +207,12 @@ private struct QuinjetTabButton: View {
 private struct QuinjetTerminalWorkspace: View {
     let model: QuinjetPageModel
     @Bindable var tab: QuinjetTab
+    let useEmbedded: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
+    @Environment(\.quinjetLaunchConfiguration) private var configuration
 
     private var dark: Bool { scheme == .dark }
 
@@ -128,15 +231,25 @@ private struct QuinjetTerminalWorkspace: View {
                 .padding(.vertical, UIScale.pt(7))
                 .background(DashSkin.warn.opacity(0.1))
             }
-            TerminalPane(holder: tab.holder, dark: dark)
+            if tab.launchConfiguration.terminal == .embedded {
+                TerminalPane(
+                    holder: tab.holder,
+                    palette: .quinjet(
+                        theme: tab.launchConfiguration.theme,
+                        appearance: tab.launchConfiguration.appearance)
+                )
+                .id(tab.holder.generation)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                externalWorkspace
+            }
         }
         .background(dark ? Color.black.opacity(0.9) : Color.white)
     }
 
     private var workspaceBar: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "laptopcomputer")
+            Image(systemName: tab.launchConfiguration.terminal.icon)
                 .foregroundStyle(DashSkin.inkFaint(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(tab.title)
@@ -157,6 +270,11 @@ private struct QuinjetTerminalWorkspace: View {
                     .buttonStyle(.plain)
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     .pointerCursor()
+            }
+            if let message = tab.externalLaunchMessage {
+                Text(message)
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Button {
                 Task { await model.presentWorktrees(for: tab) }
@@ -197,7 +315,8 @@ private struct QuinjetTerminalWorkspace: View {
                 select: { worktree in
                     model.open(
                         worktree, projectName: tab.projectName ?? "Project",
-                        available: tab.worktrees, in: tab, launchEnabled: launchEnabled)
+                        available: tab.worktrees, remote: tab.remote, in: tab,
+                        launchEnabled: launchEnabled, configuration: configuration)
                 })
         }
     }
@@ -207,10 +326,51 @@ private struct QuinjetTerminalWorkspace: View {
         return count == 1 ? "1 worktree" : "\(count) worktrees"
     }
 
+    private var externalWorkspace: some View {
+        let palette = TerminalPalette.quinjet(
+            theme: tab.launchConfiguration.theme,
+            appearance: tab.launchConfiguration.appearance)
+        return ZStack {
+            Color(nsColor: palette.background)
+            VStack(spacing: UIScale.pt(18)) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: UIScale.pt(30), weight: .medium))
+                    .foregroundStyle(Color(nsColor: palette.caret))
+                VStack(spacing: UIScale.pt(6)) {
+                    Text("Open in cmux")
+                        .font(.system(size: UIScale.pt(22), weight: .bold))
+                    Text(tab.title)
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    Text(tab.worktree?.path ?? "")
+                        .font(DashSkin.mono(10.5))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(Color(nsColor: palette.foreground))
+                HStack(spacing: UIScale.pt(10)) {
+                    Button("Show in cmux") {
+                        model.showInCMUX(tab, launchEnabled: launchEnabled)
+                    }
+                    .buttonStyle(QuinjetToolbarButtonStyle())
+                    .pointerCursor()
+                    Button("Use embedded terminal", action: useEmbedded)
+                        .buttonStyle(QuinjetToolbarButtonStyle())
+                        .pointerCursor()
+                }
+                Text("Theme: \(tab.launchConfiguration.theme.label)")
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.65))
+            }
+            .padding(UIScale.pt(30))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private func restart() {
         guard let worktree = tab.worktree else { return }
         model.open(
             worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
-            in: tab, launchEnabled: launchEnabled)
+            remote: tab.remote, in: tab, launchEnabled: launchEnabled,
+            configuration: configuration)
     }
 }

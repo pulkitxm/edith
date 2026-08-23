@@ -30,7 +30,7 @@ struct HerdrSessionView: View {
 
     private var sessionPane: some View {
         ZStack {
-            TerminalPane(holder: tab.holder, dark: dark)
+            TerminalPane(holder: tab.holder, palette: .edith(dark: dark))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let connectError {
                 Text(connectError)

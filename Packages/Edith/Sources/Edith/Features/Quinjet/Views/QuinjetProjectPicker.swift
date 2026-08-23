@@ -2,13 +2,16 @@ import AppKit
 import EdithKit
 import SwiftUI
 
-struct QuinjetProjectPicker: View {
+struct QuinjetLocalProjectPicker: View {
     @Bindable var model: QuinjetPageModel
     let tab: QuinjetTab
+    let machines: MachinesModel
+    let selectMachine: (Machine) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
+    @Environment(\.quinjetLaunchConfiguration) private var configuration
 
     private var dark: Bool { scheme == .dark }
 
@@ -38,20 +41,24 @@ struct QuinjetProjectPicker: View {
                     .help("Refresh recent projects")
                 }
             } accessory: {
-                HStack(spacing: UIScale.pt(8)) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                    TextField("Search projects and worktrees", text: $model.query)
-                        .textFieldStyle(.plain)
-                }
-                .padding(.horizontal, UIScale.pt(11))
-                .frame(height: UIScale.pt(34))
-                .background(
-                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(8))
-                        .strokeBorder(DashSkin.lineStrong(dark))
+                VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                    QuinjetMachineStrip(
+                        machines: machines, selection: tab.machineID, select: selectMachine)
+                    HStack(spacing: UIScale.pt(8)) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        TextField("Search projects and worktrees", text: $model.query)
+                            .textFieldStyle(.plain)
+                    }
+                    .padding(.horizontal, UIScale.pt(11))
+                    .frame(height: UIScale.pt(34))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            .strokeBorder(DashSkin.lineStrong(dark))
+                    }
                 }
             }
 
@@ -104,7 +111,7 @@ struct QuinjetProjectPicker: View {
                                 model.open(
                                     worktree, projectName: project.name,
                                     available: project.availableWorktrees, in: tab,
-                                    launchEnabled: launchEnabled)
+                                    launchEnabled: launchEnabled, configuration: configuration)
                             })
                     }
                 }
@@ -120,11 +127,14 @@ struct QuinjetProjectPicker: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Open in Quinjet"
         guard panel.runModal() == .OK, let path = panel.url?.path else { return }
-        Task { await model.openFolder(path, in: tab, launchEnabled: launchEnabled) }
+        Task {
+            await model.openFolder(
+                path, in: tab, launchEnabled: launchEnabled, configuration: configuration)
+        }
     }
 }
 
-private struct QuinjetProjectCard: View {
+struct QuinjetProjectCard: View {
     let project: QuinjetProject
     let open: (QuinjetWorktree) -> Void
 
@@ -328,7 +338,7 @@ private struct QuinjetWorktreeRowStyle: ButtonStyle {
     }
 }
 
-private struct QuinjetToolbarButtonStyle: ButtonStyle {
+struct QuinjetToolbarButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var scheme
     @State private var hovering = false
 

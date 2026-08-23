@@ -1,5 +1,23 @@
 import Foundation
 
+struct QuinjetRemote: Equatable, Sendable {
+    let machineID: UUID
+    let machineName: String
+    let target: String
+    let controlPath: String
+}
+
+struct QuinjetRemoteFolder: Codable, Equatable, Sendable {
+    let target: String
+    let folder: String
+    let accessible: Bool
+    let uses: UInt64
+}
+
+struct QuinjetRemoteFolders: Codable, Equatable, Sendable {
+    let remotes: [QuinjetRemoteFolder]
+}
+
 struct QuinjetProject: Codable, Equatable, Identifiable, Sendable {
     let name: String
     let commonDir: String
