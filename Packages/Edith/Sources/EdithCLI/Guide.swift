@@ -301,6 +301,7 @@ public enum Guide {
         ed music reveal <track> | open  Finder actions from the Music page
         ed calendar ls --days 7
         ed calendar join <event-id>     open the event's meeting link
+        ed calendar directions <event>  open its location in Maps
         ed calendar open                open the Calendar application
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
