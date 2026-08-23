@@ -47,14 +47,19 @@ import Testing
         #expect(paths.first { $0.id == .music }?.exists == true)
     }
 
-    @Test func linksIncludeFixedDestinationsAndContributors() {
+    @Test func linksIncludeFixedDestinationsExtensionDocsAndContributors() throws {
         let contributor = Contributor(
             id: 1, login: "octo", avatarURL: URL(string: "https://example.com/avatar")!,
             profileURL: URL(string: "https://example.com/octo")!, contributions: 2)
 
         let links = AppInspectionCenter().links(contributors: [contributor])
+        let usageDoc = try #require(
+            links.first { $0.id == "extension-doc:usage:guide" })
 
-        #expect(links.map(\.id) == ["repository", "creator", "contributor:octo"])
+        #expect(Array(links.prefix(2).map(\.id)) == ["repository", "creator"])
+        #expect(
+            usageDoc.url.absoluteString
+                == "https://github.com/pulkitxm/edith/blob/main/docs/cli/usage/README.md")
         #expect(links.last?.url == contributor.profileURL)
     }
 
@@ -146,6 +151,11 @@ import Testing
 
         #expect(result.url == AppInspectionCenter.repositoryURL)
         #expect(capture.opened == [AppInspectionCenter.repositoryURL])
+        let documentation = try center.openLink(
+            "extension-doc:usage:guide", contributors: [])
+        #expect(
+            documentation.url.absoluteString
+                == "https://github.com/pulkitxm/edith/blob/main/docs/cli/usage/README.md")
         #expect(throws: AppInspectionError.unknownLink("missing")) {
             try center.openLink("missing", contributors: [])
         }

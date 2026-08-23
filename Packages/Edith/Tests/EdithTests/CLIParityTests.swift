@@ -443,6 +443,9 @@ enum UIParity {
         UICapability(
             "About pane", "open a contributor profile",
             ["app", "open-link", "contributor:octo"]),
+        UICapability(
+            "Extension lifecycle sheet", "open an extension guide",
+            ["app", "open-link", "extension-doc:usage:guide"]),
         UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
         UICapability(
             "Dashboard machines menu", "count a machine's agent usage too",

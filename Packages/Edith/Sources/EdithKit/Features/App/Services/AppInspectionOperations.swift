@@ -153,6 +153,8 @@ public struct AppInspectionCenter {
 
     public static let repositoryURL = URL(string: "https://github.com/pulkitxm/edith")!
     public static let creatorURL = URL(string: MainApp.creatorSiteURLString)!
+    public static let repositorySourceURL = URL(
+        string: "https://github.com/pulkitxm/edith/blob/main/")!
 
     private let exists: Exists
     private let createDirectory: CreateDirectory
@@ -214,10 +216,34 @@ public struct AppInspectionCenter {
             AppExternalLink(id: "repository", label: "pulkitxm/edith", url: Self.repositoryURL),
             AppExternalLink(id: "creator", label: "Pulkit", url: Self.creatorURL),
         ]
+            + extensionDocumentationLinks()
             + contributors.map {
                 AppExternalLink(
                     id: "contributor:\($0.login)", label: $0.login, url: $0.profileURL)
             }
+    }
+
+    public func extensionDocumentationLinks(
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
+    ) -> [AppExternalLink] {
+        entries.flatMap { entry in
+            entry.lifecycle?.documentation.compactMap { document in
+                guard
+                    let url = URL(string: document.path, relativeTo: Self.repositorySourceURL)?
+                        .absoluteURL
+                else { return nil }
+                return AppExternalLink(
+                    id: Self.extensionDocumentationID(
+                        extensionID: entry.id, documentID: document.id),
+                    label: "\(entry.title): \(document.title)", url: url)
+            } ?? []
+        }
+    }
+
+    public static func extensionDocumentationID(
+        extensionID: String, documentID: String
+    ) -> String {
+        "extension-doc:\(extensionID):\(documentID)"
     }
 
     public func openPath(_ id: AppPathID) throws -> AppOpenResult {

@@ -540,11 +540,13 @@ private struct ExtensionLifecycleRows: View {
                         instructionRow(recovery)
                     }
                     ForEach(lifecycle.documentation) { document in
-                        if let url = URL(
-                            string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
-                        ) {
-                            Link(document.title, destination: url)
+                        Button(document.title) {
+                            _ = try? AppInspectionCenter().openLink(
+                                AppInspectionCenter.extensionDocumentationID(
+                                    extensionID: entry.id, documentID: document.id),
+                                contributors: [])
                         }
+                        .buttonStyle(.link)
                     }
                 }
             } else {

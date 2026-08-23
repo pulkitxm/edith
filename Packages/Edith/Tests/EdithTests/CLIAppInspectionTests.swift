@@ -72,7 +72,9 @@ import Testing
         #expect(pathRows?.allSatisfy { Set($0.keys) == ["id", "label", "path", "exists"] } == true)
         #expect(links.code == 0)
         let linkRows = links.array as? [[String: Any]]
-        #expect(linkRows?.compactMap { $0["id"] as? String } == ["repository", "creator"])
+        let linkIDs = linkRows?.compactMap { $0["id"] as? String }
+        #expect(Array(linkIDs?.prefix(2) ?? []) == ["repository", "creator"])
+        #expect(linkIDs?.contains("extension-doc:usage:guide") == true)
         #expect(linkRows?.allSatisfy { Set($0.keys) == ["id", "label", "url"] } == true)
     }
 
@@ -97,6 +99,57 @@ import Testing
         #expect(box.value.code == 0)
         #expect(box.value.object?["id"] as? String == "repository")
         #expect(opened == [AppInspectionCenter.repositoryURL])
+    }
+
+    @Test func developerPathsOpenOrRevealOnlyTheirResolvedTarget() async {
+        let log = Repo.dataDir.appendingPathComponent("refresh.log")
+        let data = RunBox()
+        var opened: [URL] = []
+        await CLIProbe.inWorld { world in
+            data.value = await CLIProbe.capture(["app", "open-path", "data", "--json"])
+            opened = world.opened()
+        }
+        #expect(data.value.code == 0)
+        #expect(opened == [Repo.dataDir])
+
+        let missing = RunBox()
+        await CLIProbe.inWorld { world in
+            missing.value = await CLIProbe.capture(
+                ["app", "open-path", "refresh-log", "--json"])
+            opened = world.opened()
+        }
+        #expect(missing.value.object?["mode"] as? String == "open")
+        #expect(opened == [Repo.dataDir])
+
+        let present = RunBox()
+        var revealed: [[URL]] = []
+        await CLIProbe.inWorld { world in
+            world.appPaths(existing: [log])
+            present.value = await CLIProbe.capture(
+                ["app", "open-path", "refresh-log", "--json"])
+            opened = world.opened()
+            revealed = world.revealed()
+        }
+        #expect(present.value.object?["mode"] as? String == "reveal")
+        #expect(opened.isEmpty)
+        #expect(revealed == [[log]])
+    }
+
+    @Test func extensionDocumentationOpensThroughTheSharedLinkCatalog() async {
+        let result = RunBox()
+        var opened: [URL] = []
+        await CLIProbe.inWorld { world in
+            result.value = await CLIProbe.capture(
+                ["app", "open-link", "extension-doc:usage:guide", "--json"])
+            opened = world.opened()
+        }
+
+        #expect(result.value.code == 0)
+        #expect(result.value.object?["id"] as? String == "extension-doc:usage:guide")
+        #expect(
+            opened.map(\.absoluteString) == [
+                "https://github.com/pulkitxm/edith/blob/main/docs/cli/usage/README.md"
+            ])
     }
 
     @Test func anUnknownLinkIsANotFoundFailure() async {

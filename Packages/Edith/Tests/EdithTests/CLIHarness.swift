@@ -189,6 +189,18 @@ final class CLIWorld: @unchecked Sendable {
         return revealedURLs
     }
 
+    func appPaths(existing: Set<URL>) {
+        CLIEnvironment.appInspectionCenter = { [weak self] in
+            AppInspectionCenter(
+                exists: { existing.contains($0) }, createDirectory: { _ in },
+                open: { url in
+                    self?.note(opened: url)
+                    return true
+                },
+                reveal: { self?.note(revealed: $0) }, idleWakeups: { 0 })
+        }
+    }
+
     func helperRunning(_ running: Bool) {
         CLIEnvironment.isHelperRunning = { running }
     }

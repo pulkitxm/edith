@@ -14,6 +14,9 @@ works whether or not Edith is running. A write posts `settingsChanged`, so a
 running app picks the change up live and a closed one picks it up the next time
 it launches. Readiness commands also inspect the tools, permissions, helper,
 platform support, configured machines and available backends an extension uses.
+The lifecycle sheet's documentation buttons and `ed app open-link
+extension-doc:<extension>:<document>` resolve through the same shared link
+catalog. `ed app links` lists every available documentation id.
 
 ## At a glance
 

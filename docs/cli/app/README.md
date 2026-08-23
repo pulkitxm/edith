@@ -22,9 +22,9 @@ Reach for this group when you want the app to do something now. Reach for
 | `ed app info` | Show the installed app name, version, build, bundle identity, and path. |
 | `ed app diagnostics` | Show the helper's process id, uptime, and idle wakeups. |
 | `ed app paths` | List the folders and files exposed by Edith. |
-| `ed app links` | List the repository, creator, and cached contributor links. |
+| `ed app links` | List the repository, creator, extension guides, and cached contributor links. |
 | `ed app open-path <id>` | Open a folder or reveal the refresh log. |
-| `ed app open-link <id>` | Open one repository or profile link. |
+| `ed app open-link <id>` | Open one listed repository, guide, or profile link. |
 | `ed app actions` | List the seven one-shot actions, what each needs, and whether it can run right now. Aliased `ed app ls`, and what a bare `ed app` runs. |
 | `ed app clean-keys` | Ask the menu bar app to lock the keyboard so it can be wiped without typing. |
 | `ed app test-notification` | Ask the menu bar app to send the same test notification the settings pane sends. |
