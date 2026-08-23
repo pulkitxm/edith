@@ -52,10 +52,9 @@ error: download 1 is done, so there is nothing to retry
 Behaviour: `retry` rewrites `downloads.json` when something changed, and posts
 `downloadQueueChanged` either way, so a running Edith picks the work up at once
 rather than waiting for its next look at the file. Retrying
-by number matches on the entry's URL rather than on its position, so if the
-same link failed twice, `ed download retry 3` re-queues both copies and
-`retried` says 2. The "Edith is not running" note applies here too, on the
-human path only.
+by number resolves the selected persisted record ID, so identical URLs remain
+independent. The "Edith is not running" note applies here too, on the human
+path only.
 
 ## Where to go next
 

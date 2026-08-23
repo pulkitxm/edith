@@ -43,6 +43,7 @@ nothing is printed.
 [
   {
     "detail": "Night Drive.m4a",
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
     "index": 1,
     "kind": "audio",
     "queuedAt": "2026-08-07T19:12:44Z",
@@ -79,8 +80,8 @@ reason for `interrupted`, and an empty string for `queued` and `resolving`.
 `title` is the produced file's name without its extension once the download is
 `done`, and the URL itself until then. `kind` is `audio` or `video`, and an
 entry written by an older Edith that recorded no kind reads back as `audio`.
-`queuedAt` is ISO 8601 in UTC. The output filename template the entry was
-queued with is not exposed.
+`queuedAt` is ISO 8601 in UTC. `id` is the stable persisted record identity.
+The output filename template is not exposed.
 
 Examples:
 

@@ -48,6 +48,7 @@ they were parsed:
 [
   {
     "detail": "",
+    "id": "58F41E66-1D3E-4C0C-9D89-63DC3C082D79",
     "index": 1,
     "kind": "audio",
     "queuedAt": "2026-08-07T19:20:31Z",
