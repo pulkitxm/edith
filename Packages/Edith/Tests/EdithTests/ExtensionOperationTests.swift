@@ -30,6 +30,21 @@ import Testing
                 }))
         #expect(joined == calendar)
 
+        let event = CalendarEventPayload(
+            id: "visit", title: "Visit", start: .now, end: .now, isAllDay: false,
+            location: "1 Infinite Loop", latitude: 37.3317, longitude: -122.0301)
+        var directions: URL?
+        let routed = try #require(
+            CalendarEventOperationExecution.directions(
+                event,
+                using: {
+                    directions = $0
+                    return true
+                }))
+        #expect(routed.opened)
+        #expect(routed.url == directions)
+        #expect(routed.url.host == "maps.apple.com")
+
         let first = URL(fileURLWithPath: "/tmp/first")
         let second = URL(fileURLWithPath: "/tmp/second")
         var revealed: [URL] = []
@@ -43,6 +58,48 @@ import Testing
                 ShelfItemOperationExecution.payload(.share, itemIDs: [id])))
         #expect(decoded.operation == .share)
         #expect(decoded.itemIDs == [id])
+    }
+
+    @Test func calendarReadUsesTheSharedBoundedQuery() async throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-08-23T12:00:00Z"))
+        let query = CalendarEventQuery(days: 7, now: now, calendar: calendar)
+        let duplicate = CalendarEventPayload(
+            id: "first", title: "Planning", start: now, end: now.addingTimeInterval(3600),
+            isAllDay: false)
+        let copy = CalendarEventPayload(
+            id: "second", title: "Planning", start: now, end: now.addingTimeInterval(3600),
+            isAllDay: false)
+        let late = CalendarEventPayload(
+            id: "late", title: "Later", start: query.end.addingTimeInterval(1),
+            end: query.end.addingTimeInterval(3600), isAllDay: false)
+        var received: CalendarEventQuery?
+        let events = await CalendarEventOperationExecution.events(query) { value in
+            received = value
+            return [late, copy, duplicate]
+        }
+        #expect(received == query)
+        #expect(events.map(\.id) == ["second"])
+    }
+
+    @Test func calendarPaginationStopsAtOneHundredTwentyDays() {
+        var pagination = CalendarEventPagination()
+        var days = [pagination.days]
+        while pagination.loadMore() { days.append(pagination.days) }
+        #expect(days == [14, 28, 42, 56, 70, 84, 98, 112, 120])
+        #expect(!pagination.canLoadMore)
+        let loaded = pagination.loadMore()
+        #expect(!loaded)
+    }
+
+    @Test func calendarQueryRoundTripsTheRequestedWindow() throws {
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-08-23T12:00:00Z"))
+        let query = CalendarEventQuery(days: 120, now: now)
+        let decoded = CalendarEventBridge.decodeQuery(CalendarEventBridge.encode(query))
+        #expect(decoded.days == 120)
+        #expect(decoded.start == query.start)
+        #expect(decoded.end == query.end)
     }
 
     @MainActor
@@ -117,9 +174,69 @@ import Testing
         let calendar = CompletionEngine.plan(
             CompletionRequest(words: ["ed", "calendar", "join", "e"], index: 3), machines: [],
             configKeys: [], extensionIDs: [], calendarEvents: ["event-1"])
+        let directions = CompletionEngine.plan(
+            CompletionRequest(words: ["ed", "calendar", "directions", "e"], index: 3),
+            machines: [], configKeys: [], extensionIDs: [], calendarEvents: ["event-1"])
         #expect(shelf.candidates == ["1", "2"])
         #expect(music.candidates == ["Focus/song.mp3"])
         #expect(calendar.candidates == ["event-1"])
+        #expect(directions.candidates == ["event-1"])
+    }
+
+    @MainActor
+    @Test func calendarDirectionsHasStablePlainAndJSONOutput() async throws {
+        let now = Date().addingTimeInterval(86400)
+        let event = CalendarEventPayload(
+            id: "visit", title: "Studio visit", start: now,
+            end: now.addingTimeInterval(3600), isAllDay: false,
+            location: "1 Infinite Loop", latitude: 37.3317, longitude: -122.0301)
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.calendarEvents else { return nil }
+                return [
+                    CalendarEventBridge.statusKey: "ok",
+                    CalendarEventBridge.payloadKey: CalendarEventBridge.encode([event]),
+                ]
+            }
+            let plain = await CLIProbe.capture(["calendar", "directions", "visit"])
+            #expect(plain.code == 0)
+            #expect(plain.stdout == "opening directions to 1 Infinite Loop\n")
+            #expect(world.recordedURLs().last?.host == "maps.apple.com")
+
+            let json = await CLIProbe.capture(
+                ["calendar", "directions", "Studio visit", "--json"])
+            #expect(json.code == 0)
+            #expect(json.object?["action"] as? String == "directions")
+            #expect(json.object?["id"] as? String == "visit")
+            #expect(json.object?["location"] as? String == "1 Infinite Loop")
+            #expect(json.object?["opened"] as? Bool == true)
+            #expect((json.object?["url"] as? String)?.contains("maps.apple.com") == true)
+        }
+    }
+
+    @Test func calendarListCanRequestTheFullWindowAndRejectsMore() async {
+        let event = CalendarEventPayload(
+            id: "distant", title: "Distant planning",
+            start: Date().addingTimeInterval(119 * 86400),
+            end: Date().addingTimeInterval(119 * 86400 + 3600), isAllDay: false)
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.calendarEvents else { return nil }
+                return [
+                    CalendarEventBridge.statusKey: "ok",
+                    CalendarEventBridge.payloadKey: CalendarEventBridge.encode([event]),
+                ]
+            }
+            let full = await CLIProbe.capture(["calendar", "ls", "--days", "120", "--json"])
+            #expect(full.code == 0)
+            #expect((full.array?.first as? [String: Any])?["id"] as? String == "distant")
+
+            let tooMany = await CLIProbe.capture(["calendar", "ls", "--days", "121"])
+            #expect(tooMany.code == 2)
+            #expect(tooMany.stderr.contains("--days must be between 0 and 120"))
+        }
     }
 
     @Test func presenterPlainAndJSONOutputsShareTheRuntime() async {
