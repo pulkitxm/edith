@@ -423,8 +423,11 @@ enum UIParity {
 
         UICapability("Download sheet", "start a download", ["download", "add", "https://x/y"]),
         UICapability("Download sheet", "retry a failed item", ["download", "retry", "--all"]),
-        UICapability("Download sheet", "clear the history", ["download", "clear"]),
-        UICapability("Download sheet", "remove one item", ["download", "rm", "1"]),
+        UICapability("Download sheet", "clear the history", ["download", "clear", "--yes"]),
+        UICapability("Download sheet", "remove one item", ["download", "rm", "1", "--yes"]),
+        UICapability("Download sheet", "open a completed result", ["download", "open", "1"]),
+        UICapability(
+            "Download sheet", "reveal a completed result", ["download", "reveal", "1"]),
         UICapability("Download sheet", "update yt-dlp", ["download", "tool", "--update"]),
 
         UICapability(

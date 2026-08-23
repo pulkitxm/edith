@@ -45,6 +45,61 @@ import Testing
         }
     }
 
+    @Test func downloadCommandsShareLifecycleStateAndStableJSON() async throws {
+        await CLIProbe.inWorld { world in
+            let added = await CLIProbe.capture([
+                "download", "add", "https://youtu.be/one", "https://youtu.be/two", "--json",
+            ])
+            #expect(added.code == 0)
+            #expect(added.array?.count == 2)
+            #expect((added.array?.first as? [String: Any])?["id"] as? String != nil)
+
+            let status = await CLIProbe.capture(["download", "status", "--json"])
+            #expect(status.object?["total"] as? Int == 2)
+            #expect(status.object?["queued"] as? Int == 2)
+            let cancelled = await CLIProbe.capture(["download", "cancel", "--json"])
+            #expect(cancelled.object?["cancelled"] as? Int == 2)
+            let afterCancel = await CLIProbe.capture(["download", "status", "--json"])
+            #expect(afterCancel.object?["interrupted"] as? Int == 2)
+
+            let retried = await CLIProbe.capture(["download", "retry", "1", "--json"])
+            #expect(retried.object?["retried"] as? Int == 1)
+            #expect(world.postedNames().contains(IPC.Name.downloadQueueChanged.rawValue))
+        }
+    }
+
+    @Test func downloadHistoryMutationsPreviewUntilConfirmed() async throws {
+        try await CLIProbe.inWorld { _ in
+            let queue = CLIEnvironment.downloadQueueFile
+            try DownloadQueue.save(
+                [
+                    DownloadRecord(
+                        url: URL(string: "https://youtu.be/one")!, status: .done("one.m4a"),
+                        outputFilename: nil, createdAt: Date(), kind: .audio)
+                ], to: queue)
+
+            let removePreview = await CLIProbe.capture(["download", "rm", "1", "--json"])
+            #expect(removePreview.object?["preview"] as? Bool == true)
+            #expect(removePreview.object?["removed"] as? Int == 0)
+            #expect(DownloadQueue.load(from: queue).count == 1)
+            let remove = await CLIProbe.capture(["download", "rm", "1", "--yes", "--json"])
+            #expect(remove.object?["preview"] as? Bool == false)
+            #expect(remove.object?["removed"] as? Int == 1)
+
+            _ = await CLIProbe.capture(["download", "add", "https://youtu.be/two", "--json"])
+            let clearPreview = await CLIProbe.capture([
+                "download", "clear", "--everything", "--json",
+            ])
+            #expect(clearPreview.object?["wouldRemove"] as? Int == 1)
+            #expect(DownloadQueue.load(from: queue).count == 1)
+            let clear = await CLIProbe.capture([
+                "download", "clear", "--everything", "--yes", "--json",
+            ])
+            #expect(clear.object?["removed"] as? Int == 1)
+            #expect(DownloadQueue.load(from: queue).isEmpty)
+        }
+    }
+
     @Test func toolVersionsAreRememberedUntilTheBinaryChanges() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-toolcache-\(UUID().uuidString)")
