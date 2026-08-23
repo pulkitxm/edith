@@ -26,7 +26,7 @@ import Testing
         let sampled = NSColor(
             calibratedRed: 0.2, green: 0.4, blue: 0.6, alpha: 1)
         var launched = false
-        var selected: NSColor?
+        let selected = SelectedColorBox()
 
         ColorPickerOperationExecution.perform(
             .pick,
@@ -34,9 +34,22 @@ import Testing
                 launched = true
                 completion(sampled)
             },
-            selection: { selected = $0 })
+            selection: { selected.set($0) })
 
         #expect(launched)
-        #expect(selected == sampled)
+        #expect(selected.value == sampled)
+    }
+}
+
+private final class SelectedColorBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: NSColor?
+
+    var value: NSColor? {
+        lock.withLock { stored }
+    }
+
+    func set(_ color: NSColor?) {
+        lock.withLock { stored = color }
     }
 }

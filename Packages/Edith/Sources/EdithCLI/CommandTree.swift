@@ -497,6 +497,8 @@ public enum CommandTree {
                 "color", "The colours picked with the colour picker.", aliases: ["colour"],
                 children: [
                     CommandNode(
+                        "pick", "Open Edith's system colour sampler.", options: common),
+                    CommandNode(
                         "ls", "List picked colours.", aliases: ["list"],
                         options: ["--json", "--help", "--format", "--limit"],
                         optionValues: ["--format": .colorFormat]),

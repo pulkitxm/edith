@@ -362,6 +362,60 @@ import Testing
         #expect(result.array?.isEmpty == true)
     }
 
+    @Test func pickingRequestsTheSharedInteractiveOperation() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.ColorPicker.enabled)
+            world.helperRunning(true)
+
+            let result = await CLIProbe.capture(["color", "pick", "--json"])
+
+            #expect(result.code == 0)
+            #expect(Set(result.object?.keys ?? [:].keys) == ["operation", "requested"])
+            #expect(result.object?["operation"] as? String == "color.pick")
+            #expect(result.object?["requested"] as? Bool == true)
+            #expect(world.postedNames() == [IPC.Name.requestColorPick.rawValue])
+        }
+    }
+
+    @Test func pickingPrintsOnePlainAcknowledgement() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.ColorPicker.enabled)
+            world.helperRunning(true)
+
+            let result = await CLIProbe.capture(["color", "pick"])
+
+            #expect(result.code == 0)
+            #expect(result.stdout == "color picker requested\n")
+            #expect(result.stderr.isEmpty)
+        }
+    }
+
+    @Test func pickingFailsBeforeDispatchWhenTheExtensionIsOff() async {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+
+            let result = await CLIProbe.capture(["color", "pick", "--json"])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("Color Picker extension is off"))
+            #expect(world.postedNames().isEmpty)
+        }
+    }
+
+    @Test func pickingFailsBeforeDispatchWhenTheHelperIsClosed() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.ColorPicker.enabled)
+
+            let result = await CLIProbe.capture(["color", "pick"])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("menu bar app"))
+            #expect(world.postedNames().isEmpty)
+        }
+    }
+
     @Test func everySwatchCarriesEveryFormat() async throws {
         await CLIProbe.inWorld { world in
             Self.seed(world, count: 2)

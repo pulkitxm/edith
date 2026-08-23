@@ -1,25 +1,25 @@
 # `ed color`
 
-`ed color` reads the swatch history Edith's colour picker keeps: every colour
-you have sampled with the loupe, newest first, in whichever of the five
-representations you ask for. Reach for it when you want the colour you just
-picked to land in a script or a stylesheet rather than on the pasteboard.
+`ed color` opens Edith's system loupe and reads the swatch history it keeps:
+every colour you have sampled, newest first, in whichever of the five
+representations you ask for. Reach for it when you want to start a pick from
+the terminal or move the latest result into a script or stylesheet.
 
 The history is one key in Edith's shared defaults suite
 (`com.pulkit.edith.shared`), so both verbs work whether or not the app is
 running. `colour` is an accepted spelling of the group, and `ed color` with
 nothing after it is `ed color ls`.
 
-Sampling a colour is not here. The loupe is `NSColorSampler`, which belongs to
-the app, so picking stays on the eyedropper in the menu bar panel and on the
-hotkey (`⌃⌥⌘C` unless you have rebound it). `ed` reads what the loupe recorded,
-and can forget it.
+`ed color pick` asks the running menu bar app to open the same `NSColorSampler`
+as the eyedropper and hotkey (`⌃⌥⌘C` unless you have rebound it). The command
+returns once the request is sent, while the pick finishes on the desktop.
 
 ## At a glance
 
 | Command | What it does |
 | --- | --- |
 | `ed color` | Runs `ed color ls`, which is the default subcommand. |
+| `ed color pick` | Requests the system colour sampler from the running menu bar app. |
 | `ed color ls` | Lists picked colours, newest first, as a table or as one chosen format per line. |
 | `ed color clear` | Previews forgetting every picked colour; `--yes` applies it. |
 
@@ -28,6 +28,7 @@ is the same command as `ed color ls`.
 
 ## Commands
 
+- [`ed color pick`](./pick.md)
 - [`ed color ls`](./ls.md)
 - [`ed color clear`](./clear.md)
 
@@ -35,12 +36,13 @@ is the same command as `ed color ls`.
 
 | Code | When this group produces it |
 | --- | --- |
-| 0 | The listing printed, or the history was cleared. Also an empty history, and `ed color ls --help`. |
+| 0 | The sampler request was sent, the listing printed, or the history was cleared. Also an empty history, and help. |
 | 2 | `--limit` was negative (`--limit cannot be negative`), or the command line was wrong in ArgumentParser's own terms: an unknown flag, `--format` or `--limit` with no value, or a `--limit` value that is not an integer. |
 | 3 | `--format` named something that is not `hex`, `rgb`, `hsl`, `swiftUI` or `nsColor`. |
+| 4 | `ed color pick` found the extension off or the menu bar app closed. |
 
-Nothing in this group exits 1 or 4: there is no remote call, no app request and
-no write that can be refused.
+Nothing in this group exits 1. Listing and clearing need no app, while picking
+is an app request and uses exit 4 when it cannot be delivered.
 
 ## Notes and gotchas
 
@@ -90,7 +92,9 @@ no write that can be refused.
 - The eyedropper's context menu in the menu bar panel lists the last eight
   picks in hex, so `ed color ls --format hex --limit 8` prints exactly what that
   menu shows.
-- `--help` works on the group and on both verbs, prints on stdout and exits 0.
+- `--help` works on the group and on all three verbs, prints on stdout and exits 0.
+- `ed color pick` is safe to request without a TTY because it never reads stdin,
+  but the sampler still requires a person at the logged-in desktop.
 - Completion knows this group: `ed color ls --format <TAB>` offers `hex`,
   `rgb`, `hsl`, `swiftUI` and `nsColor`. A bare `ed color ls <TAB>` offers them
   as well, because the completion tree hangs the format list off the command

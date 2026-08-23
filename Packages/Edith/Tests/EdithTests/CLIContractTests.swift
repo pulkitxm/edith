@@ -104,6 +104,7 @@ enum JSONContract {
             "ed download clear", ["download", "clear", "--json"], mutatesTheMachine: true),
         JSONCase("ed download tool", ["download", "tool", "--json"]),
         JSONCase("ed download cancel", ["download", "cancel", "--json"], mutatesTheMachine: true),
+        JSONCase("ed color pick", ["color", "pick", "--json"], mutatesTheMachine: true),
         JSONCase("ed color ls", ["color", "ls", "--json"]),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),

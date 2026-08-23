@@ -85,6 +85,7 @@ enum UIParity {
 
         UICapability(
             "Colour picker", "forget the picked colours", ["color", "clear", "--yes"]),
+        UICapability("Colour picker", "open the system loupe", ["color", "pick"]),
 
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
         UICapability(

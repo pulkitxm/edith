@@ -372,9 +372,43 @@ struct ColorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "color",
         abstract: "The colours picked with Edith's colour picker.",
-        subcommands: [ColorListCommand.self, ColorClearCommand.self],
+        subcommands: [ColorPickCommand.self, ColorListCommand.self, ColorClearCommand.self],
         defaultSubcommand: ColorListCommand.self,
         aliases: ["colour"])
+}
+
+struct ColorPickCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "pick", abstract: "Open Edith's system colour sampler.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            guard
+                CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.ColorPicker.enabled)
+                    as? Bool == true
+            else {
+                throw CLIFailure.unavailable(
+                    "the Color Picker extension is off",
+                    hint: "run `ed extensions enable colorPicker`, then retry")
+            }
+            try AppBridge.requireHelper("picking a color")
+            let descriptor = ColorPickerOperationExecution.request(.pick) {
+                AppBridge.post($0)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "operation": .string(descriptor.id.rawValue),
+                        "requested": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("color picker requested")
+        }
+    }
 }
 
 struct ColorListCommand: AsyncParsableCommand {
