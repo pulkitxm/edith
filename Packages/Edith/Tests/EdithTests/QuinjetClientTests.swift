@@ -391,6 +391,12 @@ private actor ProjectRefreshHarness {
                 == "\"a \\\"quoted\\\" folder\\n\"")
     }
 
+    @Test func cmuxOperationsLeaveTheMainThread() async throws {
+        let ranOnMainThread = try await QuinjetBackgroundOperation.run { Thread.isMainThread }
+
+        #expect(!ranOnMainThread)
+    }
+
     @Test func themeCatalogMatchesQuinjetCapabilities() {
         #expect(
             QuinjetTheme.allCases.map(\.rawValue)
