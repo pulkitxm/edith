@@ -43,9 +43,12 @@ struct CLIDestructivePlan {
         payload["applied"] = .bool(applied)
         payload["changed"] = .bool(changed)
         guard json else {
+            let displayTargets = targets.map(TextTable.oneLine)
             CLIOut.out(
-                targets.isEmpty
-                    ? "would \(action)" : "would \(action): \(targets.joined(separator: ", "))")
+                displayTargets.isEmpty
+                    ? "would \(TextTable.oneLine(action))"
+                    : "would \(TextTable.oneLine(action)): \(displayTargets.joined(separator: ", "))"
+            )
             return
         }
         CLIOut.json(.object(payload))
