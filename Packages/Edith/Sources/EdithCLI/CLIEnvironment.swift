@@ -61,6 +61,15 @@ public enum CLIEnvironment {
         CompanionClient.endpoint(override: $0)
     }
 
+    nonisolated(unsafe) public static var appInspectionCenter:
+        @Sendable () -> AppInspectionCenter = {
+            AppInspectionCenter()
+        }
+
+    nonisolated(unsafe) public static var appContributors: @Sendable () -> [Contributor] = {
+        Contributors.cached()
+    }
+
     nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -106,5 +115,20 @@ public enum CLIEnvironment {
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        appInspectionCenter = { AppInspectionCenter() }
+        appContributors = { Contributors.cached() }
+        installedAppURL = {
+            let bundled = Bundle.main.bundleURL
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+            if bundled.pathExtension == "app",
+                FileManager.default.fileExists(atPath: bundled.path)
+            {
+                return bundled
+            }
+            let standard = URL(fileURLWithPath: "/Applications/Edith.app")
+            return FileManager.default.fileExists(atPath: standard.path) ? standard : nil
+        }
     }
 }

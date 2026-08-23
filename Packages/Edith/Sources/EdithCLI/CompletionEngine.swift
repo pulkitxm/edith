@@ -46,7 +46,7 @@ public enum CompletionEngine {
     public static func plan(
         _ request: CompletionRequest, machines: [String], configKeys: [String],
         extensionIDs: [String], toolIDs: [String] = ToolProvisioning.all.map(\.id),
-        usageSources: [String] = []
+        usageSources: [String] = [], appLinks: [String] = ["repository", "creator"]
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
         let prefix = request.current
@@ -85,7 +85,7 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last), prefix))
+                        appLinks: appLinks, previous: positionals.last), prefix))
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
@@ -95,7 +95,7 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last), valuePrefix)
+                        appLinks: appLinks, previous: positionals.last), valuePrefix)
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
@@ -114,7 +114,7 @@ public enum CompletionEngine {
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                previous: positionals.last)
+                appLinks: appLinks, previous: positionals.last)
             candidates += values
             if kind == .localPath { wantsFiles = true }
         }
@@ -125,10 +125,12 @@ public enum CompletionEngine {
     static func values(
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
-        previous: String?
+        appLinks: [String] = ["repository", "creator"], previous: String?
     ) -> [String] {
         switch kind {
         case .machine: return machines
+        case .appPath: return AppPathID.allCases.map(\.rawValue)
+        case .appLink: return appLinks
         case .configKey: return configKeys
         case .configValue:
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {

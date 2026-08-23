@@ -344,7 +344,10 @@ struct CompleteCommand: AsyncParsableCommand {
             configKeys: ConfigCatalog.keys,
             extensionIDs: ExtensionRegistry.entries.map(\.id),
             toolIDs: ToolProvisioning.all.map(\.id),
-            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [])
+            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [],
+            appLinks: AppInspectionCLI.center.links(
+                contributors: AppInspectionCLI.contributors
+            ).map(\.id))
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)

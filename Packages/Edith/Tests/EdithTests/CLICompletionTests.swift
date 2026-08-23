@@ -70,6 +70,18 @@ import Testing
         #expect(result.candidates == ["quinjet"])
     }
 
+    @Test func appInspectionTargetsCompleteFromTheirTypedDomains() {
+        let paths = Self.plan(["ed", "app", "open-path", ""], 3)
+        let links = CompletionEngine.plan(
+            CompletionRequest(words: ["ed", "app", "open-link", "con"], index: 3),
+            machines: Self.machines, configKeys: ConfigCatalog.keys,
+            extensionIDs: Self.extensionIDs,
+            appLinks: ["repository", "creator", "contributor:octo"])
+
+        #expect(paths.candidates == AppPathID.allCases.map(\.rawValue))
+        #expect(links.candidates == ["contributor:octo"])
+    }
+
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
         #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])
@@ -223,6 +235,18 @@ import Testing
 
         #expect(result.code == 0)
         #expect(result.stdoutLines == ["--help"])
+        #expect(result.stderr.isEmpty)
+    }
+
+    @Test func appInspectionCompletionWorksOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let result = try CLIProcessProbe.run(
+            ["__complete", "--index", "3", "--", "ed", "app", "open-path", ""],
+            currentDirectory: outside)
+
+        #expect(result.code == 0)
+        #expect(result.stdoutLines == AppPathID.allCases.map(\.rawValue))
         #expect(result.stderr.isEmpty)
     }
 

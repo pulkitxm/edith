@@ -26,7 +26,7 @@ enum UIParity {
         "uninstall", "refresh", "request", "play", "pause", "stop", "toggle", "next",
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
-        "check-updates", "collect", "forget", "mount", "unmount",
+        "check-updates", "collect", "forget", "mount", "unmount", "open-path", "open-link",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -417,6 +417,26 @@ enum UIParity {
         UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
         UICapability("Settings", "send a test notification", ["app", "test-notification"]),
         UICapability("About pane", "check for updates", ["app", "check-updates"]),
+        UICapability("About pane", "read the app version", ["app", "info"]),
+        UICapability(
+            "Developer panel", "read process uptime and idle wakeups", ["app", "diagnostics"]),
+        UICapability(
+            "iCloud settings", "open the app data folder", ["app", "open-path", "app-data"]),
+        UICapability(
+            "iCloud settings", "open the iCloud folder", ["app", "open-path", "icloud"]),
+        UICapability(
+            "Developer panel", "open the usage data folder", ["app", "open-path", "data"]),
+        UICapability(
+            "Developer panel", "reveal the refresh log", ["app", "open-path", "refresh-log"]),
+        UICapability(
+            "Music page", "open the music folder", ["app", "open-path", "music"]),
+        UICapability(
+            "About pane", "open the source repository", ["app", "open-link", "repository"]),
+        UICapability(
+            "Navigation sidebar", "open the creator profile", ["app", "open-link", "creator"]),
+        UICapability(
+            "About pane", "open a contributor profile",
+            ["app", "open-link", "contributor:octo"]),
         UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
         UICapability(
             "Dashboard machines menu", "count a machine's agent usage too",

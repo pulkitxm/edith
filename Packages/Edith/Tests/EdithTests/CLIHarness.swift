@@ -85,6 +85,8 @@ final class CLIWorld: @unchecked Sendable {
     let pasteboard: NSPasteboard
     private(set) var posted: [(name: Notification.Name, info: [String: Any])] = []
     private(set) var scripts: [String] = []
+    private(set) var openedURLs: [URL] = []
+    private(set) var revealedURLs: [[URL]] = []
     private let lock = NSLock()
 
     init(_ label: String = UUID().uuidString) {
@@ -110,6 +112,17 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }
         CLIEnvironment.executableNamed = { _ in nil }
+        CLIEnvironment.installedAppURL = { nil }
+        CLIEnvironment.appContributors = { [] }
+        CLIEnvironment.appInspectionCenter = { [weak self] in
+            AppInspectionCenter(
+                exists: { _ in false }, createDirectory: { _ in },
+                open: { url in
+                    self?.note(opened: url)
+                    return true
+                },
+                reveal: { self?.note(revealed: $0) }, idleWakeups: { 0 })
+        }
         CLIEnvironment.resolveCompanionEndpoint = {
             CompanionClient.endpoint(override: $0 ?? "http://127.0.0.1:1")
         }
@@ -140,6 +153,18 @@ final class CLIWorld: @unchecked Sendable {
         lock.unlock()
     }
 
+    private func note(opened url: URL) {
+        lock.lock()
+        openedURLs.append(url)
+        lock.unlock()
+    }
+
+    private func note(revealed urls: [URL]) {
+        lock.lock()
+        revealedURLs.append(urls)
+        lock.unlock()
+    }
+
     func postedNames() -> [String] {
         lock.lock()
         defer { lock.unlock() }
@@ -150,6 +175,18 @@ final class CLIWorld: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return scripts
+    }
+
+    func opened() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return openedURLs
+    }
+
+    func revealed() -> [[URL]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return revealedURLs
     }
 
     func helperRunning(_ running: Bool) {
