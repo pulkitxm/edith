@@ -16,6 +16,44 @@ enum AppSortKey: String {
     case name, cpu, memory
 }
 
+enum RunningAppActionStatus: Equatable {
+    case planRejected(RunningAppResolutionError)
+    case planningFailed(String)
+    case rejected(name: String?, requested: Int, force: Bool)
+    case partial(changed: Int, requested: Int, force: Bool)
+    case accepted(name: String?, changed: Int, requested: Int, force: Bool)
+
+    var message: String {
+        switch self {
+        case .planRejected(.notFound(let query)):
+            return "\(query) is no longer running. Refresh the list and try again."
+        case .planRejected(.ambiguous(let query, let matches)):
+            return
+                "\(query) matches \(matches.joined(separator: ", ")). Choose one app and try again."
+        case .planRejected(.protected(let name)):
+            return "\(name) stays open because Edith protects essential apps."
+        case .planningFailed(let detail):
+            return "The quit request could not be prepared: \(detail)"
+        case .rejected(let name, let requested, let force):
+            if let name {
+                return
+                    "\(name) did not accept the \(force ? "force-quit" : "quit") request. Resolve any open dialogs and try again."
+            }
+            return
+                "None of the \(requested) apps accepted the \(force ? "force-quit" : "quit") request. Resolve open dialogs and try again."
+        case .partial(let changed, let requested, let force):
+            return
+                "\(changed) of \(requested) apps accepted the \(force ? "force-quit" : "quit") request. Resolve open dialogs in the remaining apps and retry."
+        case .accepted(let name, let changed, let requested, let force):
+            if requested == 0 { return "No quit-eligible apps are running." }
+            if let name {
+                return "\(name) accepted the \(force ? "force-quit" : "quit") request."
+            }
+            return "\(changed) apps accepted the \(force ? "force-quit" : "quit") request."
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class RunningAppsModel {
@@ -23,9 +61,10 @@ final class RunningAppsModel {
     private(set) var totalMemoryMB: Double = 0
     private(set) var sortKey: AppSortKey = .cpu
     private(set) var ascending = false
+    private(set) var actionStatus: RunningAppActionStatus?
 
     private var resourceBaseline: RunningAppResourceBaseline?
-    private let operations = RunningAppOperationCenter()
+    private let operations: RunningAppOperationCenter
 
     var quitAllTargetCount: Int {
         apps.filter { !RunningAppOperationCenter.protectedBundleIDs.contains($0.bundleID ?? "") }
@@ -36,7 +75,8 @@ final class RunningAppsModel {
         !RunningAppOperationCenter.protectedBundleIDs.contains(row.bundleID ?? "")
     }
 
-    init() {
+    init(operations: RunningAppOperationCenter = RunningAppOperationCenter()) {
+        self.operations = operations
         let d = SharedDefaults.store
         if let raw = d.string(forKey: "systemAppsSort"), let key = AppSortKey(rawValue: raw) {
             sortKey = key
@@ -98,12 +138,43 @@ final class RunningAppsModel {
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
-        guard let plan = try? operations.plan(.pid(row.pid), force: force) else { return }
-        _ = operations.apply(plan, confirmed: true)
+        do {
+            let plan = try operations.plan(.pid(row.pid), force: force)
+            record(operations.apply(plan, confirmed: true), name: row.name)
+        } catch let error as RunningAppResolutionError {
+            actionStatus = .planRejected(error)
+        } catch {
+            actionStatus = .planningFailed(error.localizedDescription)
+        }
     }
 
     func quitAll(force: Bool = false) {
-        guard let plan = try? operations.plan(.all, force: force) else { return }
-        _ = operations.apply(plan, confirmed: true)
+        do {
+            let plan = try operations.plan(.all, force: force)
+            record(operations.apply(plan, confirmed: true), name: nil)
+        } catch let error as RunningAppResolutionError {
+            actionStatus = .planRejected(error)
+        } catch {
+            actionStatus = .planningFailed(error.localizedDescription)
+        }
+    }
+
+    func clearActionStatus() {
+        actionStatus = nil
+    }
+
+    private func record(_ outcome: RunningAppQuitOutcome, name: String?) {
+        let requested = outcome.plan.targets.count
+        if requested == 0 || outcome.changed == requested {
+            actionStatus = .accepted(
+                name: name, changed: outcome.changed, requested: requested,
+                force: outcome.plan.force)
+        } else if outcome.changed == 0 {
+            actionStatus = .rejected(
+                name: name, requested: requested, force: outcome.plan.force)
+        } else {
+            actionStatus = .partial(
+                changed: outcome.changed, requested: requested, force: outcome.plan.force)
+        }
     }
 }
