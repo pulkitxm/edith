@@ -472,6 +472,11 @@ public final class YoutubeDownloader {
         load()
     }
 
+    public func remove(_ item: DownloadItem) {
+        guard (try? DownloadOperationExecution.remove(id: item.id).changed) ?? 0 > 0 else { return }
+        load()
+    }
+
     @discardableResult
     public func openResult(_ item: DownloadItem) -> Bool {
         (try? DownloadOperationExecution.open(id: item.id)) != nil

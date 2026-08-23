@@ -601,6 +601,7 @@ struct DownloadSheet: View {
             default:
                 EmptyView()
             }
+
         }
         .padding(.vertical, UIScale.pt(8))
         .padding(.horizontal, UIScale.pt(10))
@@ -709,6 +710,17 @@ struct DownloadSheet: View {
             default:
                 EmptyView()
             }
+
+            Button {
+                downloader.remove(item)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(HoverButtonStyle())
+            .font(.system(size: UIScale.pt(11)))
+            .foregroundStyle(.red)
+            .pointerCursor()
+            .help("Remove from download history")
         }
         .padding(.vertical, UIScale.pt(5))
         .padding(.horizontal, UIScale.pt(8))
