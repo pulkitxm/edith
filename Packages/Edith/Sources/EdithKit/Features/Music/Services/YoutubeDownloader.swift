@@ -6,7 +6,7 @@ extension Notification.Name {
     public static let musicFolderChangedLocally = Notification.Name("musicFolderChanged")
 }
 
-public enum DownloadStatus: Equatable, Codable {
+public enum DownloadStatus: Equatable, Codable, Sendable {
     case queued
     case resolving
     case downloading(progress: String, videoIndex: Int, videoCount: Int)
@@ -171,14 +171,6 @@ public enum DownloadSizeParser {
     }
 }
 
-private struct SavedItem: Codable {
-    let url: URL
-    var status: DownloadStatus
-    var outputFilename: String?
-    var createdAt: Date
-    var kind: DownloadKind?
-}
-
 @MainActor
 @Observable
 public final class YoutubeDownloader {
@@ -201,13 +193,29 @@ public final class YoutubeDownloader {
     private var cancelObserver: NSObjectProtocol?
 
     public struct DownloadItem: Identifiable, Equatable {
-        public let id = UUID()
+        public let id: UUID
         public let url: URL
         public var status: DownloadStatus
         public var outputFilename: String?
         public let createdAt: Date
         public var kind: DownloadKind = .audio
         public var logs: String = ""
+
+        public init(record: DownloadRecord, logs: String = "") {
+            id = record.id
+            url = record.url
+            status = record.status
+            outputFilename = record.outputFilename
+            createdAt = record.createdAt
+            kind = record.kind ?? .audio
+            self.logs = logs
+        }
+
+        public var record: DownloadRecord {
+            DownloadRecord(
+                id: id, url: url, status: status, outputFilename: outputFilename,
+                createdAt: createdAt, kind: kind)
+        }
 
         public static func == (lhs: DownloadItem, rhs: DownloadItem) -> Bool {
             lhs.id == rhs.id
@@ -257,33 +265,22 @@ public final class YoutubeDownloader {
         return URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")
     }
 
-    private var persistenceURL: URL {
-        Repo.dataDir.appendingPathComponent("downloads.json")
-    }
-
     private init() {
         checkAvailability()
         load()
-        var changed = false
-        for i in items.indices {
-            switch items[i].status {
-            case .queued, .resolving, .downloading:
-                items[i].status = .interrupted("Interrupted")
-                changed = true
-            default:
-                break
-            }
-        }
-        if changed {
-            save()
+        if (try? DownloadOperationExecution.cancel(
+            includeQueued: false, reason: "Interrupted"
+        ).changed) ?? 0 > 0 {
+            load()
             NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
             IPC.post(IPC.Name.musicFolderChanged)
         }
         queueObserver = IPC.observe(IPC.Name.downloadQueueChanged) { [weak self] in
             Task { @MainActor in self?.adoptQueueFromDisk() }
         }
-        cancelObserver = IPC.observe(IPC.Name.requestDownloadCancel) { [weak self] in
-            Task { @MainActor in self?.cancelAll() }
+        cancelObserver = IPC.observe(IPC.Name.requestDownloadCancel) { [weak self] info in
+            let targetID = (info["id"] as? String).flatMap(UUID.init(uuidString:))
+            Task { @MainActor in self?.cancel(targetID: targetID) }
         }
         provisioningObserver = NotificationCenter.default.addObserver(
             forName: .cliToolProvisioned, object: nil, queue: .main
@@ -295,28 +292,14 @@ public final class YoutubeDownloader {
     }
 
     private func save() {
-        let saved = items.map {
-            SavedItem(
-                url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
-                createdAt: $0.createdAt, kind: $0.kind)
-        }
-        if let data = try? JSONEncoder().encode(saved) {
-            try? FileManager.default.createDirectory(
-                at: Repo.dataDir, withIntermediateDirectories: true)
-            try? data.write(to: persistenceURL, options: .atomic)
-        }
+        try? DownloadQueue.save(items.map(\.record))
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: persistenceURL),
-            let saved = try? JSONDecoder().decode([SavedItem].self, from: data)
-        else { return }
-        items = saved.map {
-            DownloadItem(
-                url: $0.url, status: $0.status, outputFilename: $0.outputFilename,
-                createdAt: $0.createdAt, kind: $0.kind ?? .audio)
+        let logs = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.logs) })
+        items = DownloadOperationExecution.list(limit: 0).map {
+            DownloadItem(record: $0, logs: logs[$0.id] ?? "")
         }
-        .sorted { $0.createdAt > $1.createdAt }
     }
 
     private func adoptQueueFromDisk() {
@@ -326,34 +309,14 @@ public final class YoutubeDownloader {
 
     public func checkAvailability() {
         ytdlpExecutableCache = nil
-        let (exe, prefix) = ytdlpExecutable()
-        let p = Process()
-        p.executableURL = exe
-        p.arguments = prefix + ["--version"]
-        p.environment = CLIToolEnvironment.sanitized()
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        p.standardOutput = outPipe
-        p.standardError = errPipe
-        do {
-            try p.run()
-            p.waitUntilExit()
-            if p.terminationStatus == 0 {
-                unavailableReason = nil
-                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-                ytdlpVersion = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            } else {
-                unavailableReason =
-                    "yt-dlp is not installed. Open Music extension settings to install it."
-                ytdlpVersion = nil
-                ytdlpExecutableCache = nil
-            }
-        } catch {
+        Task {
+            let status = await DownloadToolOperationExecution.status(
+                executable: CLIToolEnvironment.executable(named: "yt-dlp"))
             unavailableReason =
-                "yt-dlp is not installed. Open Music extension settings to install it."
-            ytdlpVersion = nil
-            ytdlpExecutableCache = nil
+                status.installed
+                ? nil
+                : "yt-dlp is not installed. Open Music extension settings to install it."
+            ytdlpVersion = status.version
         }
     }
 
@@ -361,56 +324,21 @@ public final class YoutubeDownloader {
         isUpdatingYTDLP = true
         updateResult = nil
         ytdlpUpdateMessage = nil
-        let (exe, prefix) = ytdlpExecutable()
-        let p = Process()
-        p.executableURL = exe
-        p.arguments = prefix + ["-U"]
-        p.environment = CLIToolEnvironment.sanitized()
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        p.standardOutput = outPipe
-        p.standardError = errPipe
-
-        p.terminationHandler = { [weak self] proc in
-            let out =
-                String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? ""
-            let err =
-                String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                ?? ""
-            Task { @MainActor in
-                guard let self else { return }
-                self.isUpdatingYTDLP = false
-                self.ytdlpExecutableCache = nil
-                if proc.terminationStatus == 0 {
-                    let msg = out.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let text = msg.isEmpty ? "yt-dlp updated" : msg
-                    self.updateResult = .success(text)
-                    self.ytdlpUpdateMessage = text
-                } else {
-                    let msg = err.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let text = msg.isEmpty ? "Update failed" : msg
-                    let error = NSError(
-                        domain: "YTDLP",
-                        code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: text]
-                    )
-                    self.updateResult = .failure(error)
-                    self.ytdlpUpdateMessage = text
-                }
-                self.checkAvailability()
-                completion?(self.updateResult!)
+        Task {
+            do {
+                let update = try await DownloadToolOperationExecution.update(
+                    executable: CLIToolEnvironment.executable(named: "yt-dlp"))
+                let text = update.output.isEmpty ? "yt-dlp updated" : update.output
+                updateResult = .success(text)
+                ytdlpUpdateMessage = text
+                ytdlpVersion = update.after
+                unavailableReason = nil
+            } catch {
+                updateResult = .failure(error)
+                ytdlpUpdateMessage = error.localizedDescription
             }
-        }
-
-        do {
-            try p.run()
-        } catch {
             isUpdatingYTDLP = false
             ytdlpExecutableCache = nil
-            updateResult = .failure(error)
-            ytdlpUpdateMessage = error.localizedDescription
-            checkAvailability()
             completion?(updateResult!)
         }
     }
@@ -430,25 +358,10 @@ public final class YoutubeDownloader {
     }
 
     public func enqueue(urls: [URL], prefix: String, kind: DownloadKind = .audio) {
-        let outputDir = Repo.musicDir
-        try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-
-        let items = urls.map { url -> DownloadItem in
-            let template: String
-            if prefix.isEmpty {
-                template = outputDir.appendingPathComponent("%(title)s.%(ext)s").path
-            } else {
-                template = outputDir.appendingPathComponent("\(prefix)%(title)s.%(ext)s").path
-            }
-            return DownloadItem(
-                url: url, status: .queued, outputFilename: template, createdAt: Date(),
-                kind: kind)
-        }
-        self.items.insert(contentsOf: items, at: 0)
-        save()
-        if !isRunning {
-            processNext()
-        }
+        guard
+            (try? DownloadOperationExecution.enqueue(urls: urls, prefix: prefix, kind: kind)) != nil
+        else { return }
+        adoptQueueFromDisk()
     }
 
     public func estimate(for url: URL) async -> DownloadEstimate? {
@@ -487,33 +400,43 @@ public final class YoutubeDownloader {
     }
 
     public func retry(_ item: DownloadItem) {
-        guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
-        items[idx].status = .queued
-        save()
-        if !isRunning {
-            processNext()
-        }
+        guard (try? DownloadOperationExecution.retry(id: item.id).changed) ?? 0 > 0 else { return }
+        adoptQueueFromDisk()
     }
 
     public func retryAll() {
-        for i in items.indices {
-            switch items[i].status {
-            case .error, .interrupted:
-                items[i].status = .queued
-            default:
-                break
-            }
-        }
-        save()
-        if !isRunning {
-            processNext()
-        }
+        guard (try? DownloadOperationExecution.retry(all: true).changed) ?? 0 > 0 else { return }
+        adoptQueueFromDisk()
     }
 
     public func clearHistory() {
-        cancelAll()
-        items.removeAll()
-        save()
+        currentProcess?.terminate()
+        currentProcess = nil
+        isRunning = false
+        currentItemID = nil
+        guard (try? DownloadOperationExecution.clear(includeActive: true).changed) ?? 0 > 0 else {
+            return
+        }
+        load()
+    }
+
+    public func remove(_ item: DownloadItem) {
+        guard (try? DownloadOperationExecution.remove(id: item.id).changed) ?? 0 > 0 else { return }
+        load()
+    }
+
+    public func cancel(_ item: DownloadItem) {
+        cancel(targetID: item.id)
+    }
+
+    @discardableResult
+    public func openResult(_ item: DownloadItem) -> Bool {
+        (try? DownloadOperationExecution.open(id: item.id)) != nil
+    }
+
+    @discardableResult
+    public func revealResult(_ item: DownloadItem) -> Bool {
+        (try? DownloadOperationExecution.reveal(id: item.id)) != nil
     }
 
     private func processNext() {
@@ -673,19 +596,16 @@ public final class YoutubeDownloader {
     }
 
     public func cancelAll() {
-        currentProcess?.terminate()
-        currentProcess = nil
-        for i in items.indices {
-            switch items[i].status {
-            case .queued, .resolving, .downloading:
-                items[i].status = .interrupted("Cancelled")
-            default:
-                break
-            }
-        }
-        isRunning = false
-        currentItemID = nil
-        save()
+        cancel(targetID: nil)
+    }
+
+    private func cancel(targetID: UUID?) {
+        _ = try? DownloadOperationExecution.cancel(id: targetID)
+        load()
+        let stopped = DownloadProcessControl.cancel(
+            currentID: currentItemID, targetID: targetID,
+            terminate: { currentProcess?.terminate() })
+        if !stopped, !isRunning { processNext() }
     }
 
     nonisolated static func parseProgress(from text: String) -> (

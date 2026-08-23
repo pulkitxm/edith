@@ -183,6 +183,12 @@ import Testing
             Self.plan(["ed", "tools", "install", ""], 3).candidates.contains("quinjet"))
     }
 
+    @Test func downloadCancellationAcceptsTheSameHistoryIndexAsOtherRecordActions() {
+        let download = CommandTree.root.child("download")
+        #expect(download?.child("cancel")?.arguments == [.historyIndex])
+        #expect(Self.plan(["ed", "download", "cancel", ""], 3).wantsFiles == false)
+    }
+
     @Test func typedOptionsWorkAfterOtherOptionsAndWithEqualsSyntax() {
         let sources = Self.plan(
             ["ed", "usage", "summary", "--range", "week", "--source", ""], 6,
