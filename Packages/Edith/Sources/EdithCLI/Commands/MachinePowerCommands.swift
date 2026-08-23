@@ -323,6 +323,9 @@ struct MachinesKillCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually send KILL. TERM and other signals do not require this.")
+    var yes = false
+
     @Option(help: "Signal to send: TERM, KILL, HUP, INT, QUIT, USR1 or USR2.")
     var signal: String = "TERM"
 
@@ -340,6 +343,18 @@ struct MachinesKillCommand: AsyncParsableCommand {
                     hint: "signals: " + ProcessCommands.signals.joined(separator: ", "))
             }
             guard pid > 0 else { throw CLIFailure("a process id is greater than zero") }
+            let target = try MachineResolver.machine(machine)
+            let plan =
+                named == "KILL"
+                ? CLIDestructivePlan(
+                    action: "send SIGKILL", targets: ["\(target.name):pid:\(pid)"],
+                    confirmed: yes, json: json,
+                    fields: [
+                        "machine": .string(target.name), "pid": .int(pid),
+                        "signal": .string(named),
+                    ])
+                : nil
+            guard plan?.shouldApply() ?? true else { return }
             let runner = try await MachineResolver.runner(machine)
             let result = try await runner.run(
                 ProcessCommands.kill(pid: pid, signal: named), timeout: 30)
@@ -350,6 +365,15 @@ struct MachinesKillCommand: AsyncParsableCommand {
                         + (detail.isEmpty ? "" : ": \(detail)"))
             }
             let gone = ProcessCommands.hadAlreadyExited(detail)
+            if let plan {
+                plan.finish(
+                    changed: !gone,
+                    plain: gone
+                        ? "\(pid) had already exited on \(runner.machine.name)"
+                        : "sent SIG\(named) to \(pid) on \(runner.machine.name)",
+                    fields: ["sent": .bool(!gone), "alreadyExited": .bool(gone)])
+                return
+            }
             guard !json else {
                 CLIOut.json(
                     .object([

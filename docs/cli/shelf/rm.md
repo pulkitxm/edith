@@ -5,7 +5,7 @@ Takes one item off the shelf.
 Usage:
 
 ```
-ed shelf rm <n> [--json]
+ed shelf rm <n> [--json] [--yes]
 ```
 
 Arguments:
@@ -19,8 +19,10 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
+| `--yes` | flag | off | Applies the removal. Without it, prints the exact path. |
 
-There is no `--yes` guard here: `rm` takes effect the moment you run it.
+Without `--yes`, `rm` previews the item's id, name, and exact shelf path while
+leaving both the file and index bytes unchanged.
 
 `--json` shape:
 
@@ -38,11 +40,11 @@ Examples:
 
 ```
 ed shelf rm 1
-ed shelf rm 2 --json
+ed shelf rm 2 --yes --json
 ```
 
 ```
-$ ed shelf rm 2
+$ ed shelf rm 2 --yes
 removed notes 2.pdf, 1 left
 ```
 

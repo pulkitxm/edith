@@ -3,7 +3,7 @@
 Sends a signal to one process on a machine.
 
 ```
-ed machines kill <machine> <pid> [--signal <name>] [--json]
+ed machines kill <machine> <pid> [--signal <name>] [--json] [--yes]
 ```
 
 ## Arguments
@@ -19,6 +19,7 @@ ed machines kill <machine> <pid> [--signal <name>] [--json]
 | --- | --- | --- | --- |
 | `--signal` | `TERM`, `KILL`, `HUP`, `INT`, `QUIT`, `USR1`, `USR2` | `TERM` | Which signal to send. Case-insensitive, and a leading `SIG` is stripped, so `kill`, `KILL`, `sigkill` and `SIGKILL` are all the same. Anything else exits 3. |
 | `--json` | flag | off | Emit JSON on stdout instead of the human line. |
+| `--yes` | flag | off | Send `KILL`. Other signals do not require confirmation. |
 | `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
 
 ```
@@ -48,6 +49,7 @@ means the pid was not there to signal, and then `sent` is `false`.
 ```
 ed machines kill tuf 4213
 ed machines kill tuf 4213 --signal KILL
+ed machines kill tuf 4213 --signal KILL --yes
 ed machines tuf kill 4213 --signal HUP
 ed machines metrics tuf --processes 20 --json | jq -r '.sample.processes[] | "\(.pid) \(.name)"'
 ```
@@ -68,6 +70,11 @@ $ ed machines kill tuf 4213 --signal BOOM
 error: there is no signal called BOOM
 hint: signals: TERM, KILL, HUP, INT, QUIT, USR1, USR2
 ```
+
+`KILL` without `--yes` is also local-only. It prints the resolved machine and
+pid target, reports `applied: false` and `changed: false` under `--json`, and
+does not open an SSH connection. `TERM` and the other catchable signals keep
+their immediate behavior.
 
 The remote line checks the pid is still there with `kill -0` and `/proc` before
 it sends anything, then runs `kill -<SIGNAL> <pid> 2>&1`, through the login shell

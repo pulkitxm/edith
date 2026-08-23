@@ -3,39 +3,42 @@
 Forgets the whole history.
 
 ```
-ed clipboard clear [--keep-pinned] [--json]
+ed clipboard clear [--keep-pinned] [--json] [--yes]
 ```
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--keep-pinned` | flag | off | Keep pinned entries. |
 | `--json` | flag | off | Emit JSON on stdout. |
+| `--yes` | flag | off | Apply the clear. Without it, print the exact entry ids. |
 
 ```json
 {
+  "applied": false,
+  "changed": false,
   "remaining": 3,
-  "removed": 1214
+  "removed": 1214,
+  "targets": ["entry-id-1", "entry-id-2"]
 }
 ```
 
 `removed` is a count here, and `remaining` is what survived, which is 0 without
 `--keep-pinned` and the number of pinned entries with it.
 
-There is no confirmation flag on this one: unlike `ed machines rm` or
-`ed cleaner clean`, `clear` acts immediately. Orphaned blobs are pruned with it,
-so the disk space comes back at once. Clearing an already empty history writes
-nothing and reports `cleared 0 entries`, exit 0.
+Without `--yes`, the command reports the exact entry ids and changes neither
+the index nor its blobs. A confirmed clear deletes only those ids. Orphaned
+blobs are pruned with it, so the disk space comes back at once.
 
 Examples:
 
 ```
 ed clipboard clear
-ed clipboard clear --keep-pinned
+ed clipboard clear --keep-pinned --yes
 ed clipboard clear --json
 ```
 
 ```
-$ ed clipboard clear --keep-pinned
+$ ed clipboard clear --keep-pinned --yes
 cleared 1214 entries
 ```
 

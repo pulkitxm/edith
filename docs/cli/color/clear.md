@@ -5,7 +5,7 @@ Forgets the whole picked-colour history.
 Usage:
 
 ```
-ed color clear [--json]
+ed color clear [--json] [--yes]
 ```
 
 Options:
@@ -13,9 +13,10 @@ Options:
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
+| `--yes` | flag | off | Applies the clear. Without it, prints the swatch ids. |
 
-There are no positional arguments, and there is no `--yes` guard: `clear` takes
-effect the moment you run it.
+There are no positional arguments. Without `--yes`, `clear` is a preview that
+leaves the defaults bytes unchanged.
 
 `--json` shape:
 
@@ -31,11 +32,11 @@ Examples:
 
 ```
 ed color clear
-ed color clear --json
+ed color clear --yes --json
 ```
 
 ```
-$ ed color clear
+$ ed color clear --yes
 cleared 3 colours
 ```
 

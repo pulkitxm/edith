@@ -24,6 +24,10 @@ public enum ArgumentKind: Equatable, Sendable {
     case free
 }
 
+public enum DestructivePolicy: String, Equatable, Sendable {
+    case previewThenYes
+}
+
 public struct CommandNode: Equatable, Sendable {
     public let name: String
     public let summary: String
@@ -31,10 +35,12 @@ public struct CommandNode: Equatable, Sendable {
     public let options: [String]
     public let arguments: [ArgumentKind]
     public let children: [CommandNode]
+    public let destructivePolicy: DestructivePolicy?
 
     public init(
         _ name: String, _ summary: String, aliases: [String] = [], options: [String] = [],
-        arguments: [ArgumentKind] = [], children: [CommandNode] = []
+        arguments: [ArgumentKind] = [], children: [CommandNode] = [],
+        destructivePolicy: DestructivePolicy? = nil
     ) {
         self.name = name
         self.summary = summary
@@ -42,6 +48,7 @@ public struct CommandNode: Equatable, Sendable {
         self.options = options
         self.arguments = arguments
         self.children = children
+        self.destructivePolicy = destructivePolicy
     }
 
     public var names: [String] { [name] + aliases }
@@ -275,7 +282,8 @@ public enum CommandTree {
                         options: ["--json", "--help", "--folder"], arguments: [.free]),
                     CommandNode(
                         "rm", "Move a track or folder to the Trash.",
-                        options: ["--json", "--help", "--folder", "--yes"], arguments: [.free]),
+                        options: ["--json", "--help", "--folder", "--yes"], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "calendar", "Your schedule.",
@@ -314,7 +322,7 @@ public enum CommandTree {
                     CommandNode(
                         "quit", "Quit one app, or everything else.",
                         options: ["--json", "--help", "--all", "--force", "--yes"],
-                        arguments: [.free]),
+                        arguments: [.free], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "download", "The download queue Edith feeds to yt-dlp.",
@@ -367,7 +375,8 @@ public enum CommandTree {
                         arguments: [.historyIndex]),
                     CommandNode(
                         "clear", "Forget the whole history.",
-                        options: ["--json", "--help", "--keep-pinned", "--yes"]),
+                        options: ["--json", "--help", "--keep-pinned", "--yes"],
+                        destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "attention", "Local attention, application, website, music and focus data.",
@@ -419,7 +428,7 @@ public enum CommandTree {
                         arguments: [.colorFormat]),
                     CommandNode(
                         "clear", "Forget every picked colour.",
-                        options: ["--json", "--yes"]),
+                        options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "shelf", "The files parked on the notch shelf.",
@@ -434,8 +443,10 @@ public enum CommandTree {
                         arguments: [.localPath]),
                     CommandNode(
                         "rm", "Take one item off the shelf.", options: ["--json", "--yes"],
-                        arguments: [.historyIndex]),
-                    CommandNode("clear", "Empty the shelf.", options: ["--json", "--yes"]),
+                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "clear", "Empty the shelf.", options: ["--json", "--yes"],
+                        destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "cleaner", "The developer caches the disk cleaner can reclaim.",
@@ -449,7 +460,8 @@ public enum CommandTree {
                         options: common),
                     CommandNode(
                         "clean", "Move the scanned caches to the Trash.",
-                        options: ["--json", "--help", "--category", "--yes"]),
+                        options: ["--json", "--help", "--category", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
                 ]),
             CommandNode(
@@ -479,7 +491,7 @@ public enum CommandTree {
                     CommandNode(
                         "rm", "Forget a machine and everything saved against it.",
                         aliases: ["remove"], options: ["--json", "--help", "--yes"],
-                        arguments: [.machine]),
+                        arguments: [.machine], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "forwards", "Saved port forwards.", aliases: ["forward"],
                         children: [
@@ -525,10 +537,12 @@ public enum CommandTree {
                                 options: common, arguments: [.machine]),
                             CommandNode(
                                 "reboot", "Restart a machine.", aliases: ["restart"],
-                                options: ["--json", "--help", "--yes"], arguments: [.machine]),
+                                options: ["--json", "--help", "--yes"], arguments: [.machine],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "shutdown", "Shut a machine down.", aliases: ["poweroff"],
-                                options: ["--json", "--help", "--yes"], arguments: [.machine]),
+                                options: ["--json", "--help", "--yes"], arguments: [.machine],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "wake", "Send a wake-on-LAN packet.", options: common,
                                 arguments: [.machine]),
@@ -587,8 +601,9 @@ public enum CommandTree {
                         options: ["--json", "--help", "--only"], arguments: [.free]),
                     CommandNode(
                         "kill", "End a process on a machine.",
-                        options: ["--json", "--help", "--signal"],
-                        arguments: [.machine, .historyIndex]),
+                        options: ["--json", "--help", "--signal", "--yes"],
+                        arguments: [.machine, .historyIndex],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "metrics", "Sample a machine.",
                         options: ["--json", "--follow", "--interval", "--processes"],
@@ -640,7 +655,8 @@ public enum CommandTree {
                             CommandNode(
                                 "rm", "Trash or delete files there.",
                                 options: ["--json", "--help", "--delete", "--yes"],
-                                arguments: [.machine, .remotePath]),
+                                arguments: [.machine, .remotePath],
+                                destructivePolicy: .previewThenYes),
                         ]),
                     CommandNode(
                         "docker", "Containers on a machine.",
@@ -677,8 +693,9 @@ public enum CommandTree {
                                 "restart", "Restart a container.", options: ["--json"],
                                 arguments: [.machine, .container]),
                             CommandNode(
-                                "rm", "Remove a container.", options: ["--json"],
-                                arguments: [.machine, .container]),
+                                "rm", "Remove a container.", options: ["--json", "--yes"],
+                                arguments: [.machine, .container],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "pause", "Freeze a container.", options: ["--json"],
                                 arguments: [.machine, .container]),
@@ -687,16 +704,19 @@ public enum CommandTree {
                                 arguments: [.machine, .container]),
                             CommandNode(
                                 "rmi", "Remove an image.", aliases: ["remove-image"],
-                                options: ["--json", "--help", "--force"],
-                                arguments: [.machine, .free]),
+                                options: ["--json", "--help", "--force", "--yes"],
+                                arguments: [.machine, .free],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "volume-rm", "Remove a volume and the data in it.",
                                 options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .free]),
+                                arguments: [.machine, .free],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "prune", "Reclaim space from unused objects.",
                                 options: ["--json", "--help", "--yes"],
-                                arguments: [.machine, .pruneTarget]),
+                                arguments: [.machine, .pruneTarget],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "compose", "Compose projects on a machine.",
                                 children: [
@@ -957,7 +977,8 @@ public enum CommandTree {
                         options: common + ["--endpoint", "--limit"], arguments: [.free]),
                     CommandNode(
                         "forget", "Delete a conversation and its messages.",
-                        options: common + ["--endpoint"], arguments: [.free]),
+                        options: common + ["--endpoint", "--yes"], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "extract", "Pull typed claims out of recent episodes.",
                         options: common + ["--endpoint"]),
@@ -1005,7 +1026,10 @@ public enum CommandTree {
                                 "status", "Which host runs the stack, and what is up.",
                                 options: common),
                             CommandNode("up", "Start the stack.", options: common + ["--build"]),
-                            CommandNode("down", "Stop the stack.", options: common + ["--wipe"]),
+                            CommandNode(
+                                "down", "Stop the stack.",
+                                options: common + ["--wipe", "--yes"],
+                                destructivePolicy: .previewThenYes),
                             CommandNode("restart", "Restart the stack.", options: common),
                             CommandNode(
                                 "logs", "Read the stack's logs.", options: common + ["--tail"],
@@ -1023,10 +1047,12 @@ public enum CommandTree {
                         options: common + ["--endpoint"], arguments: [.localPath]),
                     CommandNode(
                         "erase", "Delete one episode and everything derived from it.",
-                        options: common + ["--endpoint", "--yes"], arguments: [.free]),
+                        options: common + ["--endpoint", "--yes"], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "wipe", "Delete the companion's entire memory.",
-                        options: common + ["--endpoint", "--yes"]),
+                        options: common + ["--endpoint", "--yes"],
+                        destructivePolicy: .previewThenYes),
                 ]),
         ])
 

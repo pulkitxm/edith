@@ -194,6 +194,9 @@ struct CompanionForgetCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually delete it. Without this nothing is touched.")
+    var yes = false
+
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
@@ -202,14 +205,17 @@ struct CompanionForgetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
+            let plan = CLIDestructivePlan(
+                action: "forget companion conversation", targets: [id], confirmed: yes,
+                json: json, fields: ["conversation": .string(id)])
+            guard plan.shouldApply() else { return }
             let deletion = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.deleteConversation(id: id)
             }
-            guard !json else {
-                CLIOut.json(.object(["deleted": .string(deletion.deleted)]))
-                return
-            }
-            CLIOut.out("forgot conversation \(deletion.deleted)")
+            plan.finish(
+                changed: deletion.deleted == id,
+                plain: "forgot conversation \(deletion.deleted)",
+                fields: ["deleted": .string(deletion.deleted)])
         }
     }
 }

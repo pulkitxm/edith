@@ -24,8 +24,8 @@ a row in this listing rather than a position on screen.
 | `ed shelf ls` | Lists what is parked, newest first, with size and when it landed. |
 | `ed shelf path <n>` | Prints the full path of one item, which is what to pipe into another tool. |
 | `ed shelf add <file>` | Copies a file onto the shelf and leaves the original where it is. |
-| `ed shelf rm <n>` | Takes one item off the shelf and deletes the shelf's copy. |
-| `ed shelf clear` | Empties the shelf. |
+| `ed shelf rm <n>` | Previews deleting one shelf copy; `--yes` applies it. |
+| `ed shelf clear` | Previews emptying the shelf; `--yes` applies it. |
 
 `ed shelf list` is the same command as `ed shelf ls`, and `ed shelf` with
 nothing after it runs `ls`, including its flags: `ed shelf --json` is
@@ -72,11 +72,9 @@ rather than acting.
   really gone. Quitting and reopening Edith, or running the CLI while it is
   closed, avoids the whole question.
 - `ls` sorts newest first every time, but the index file is written in whatever
-  order the writer used. `add` appends, the way the app does. `rm` writes back
-  what it read, which is the sorted list, so removing one item quietly reverses
-  the stored order of the rest. That changes nothing about what `ed` prints,
-  and it does move the tiles in the notch for items you have never dragged,
-  because an untouched tile is positioned by its index in the file.
+  order the writer used. `add` appends, the way the app does. A confirmed `rm`
+  filters the current index by the previewed id, preserving the stored order of
+  everything else.
 - Each item can carry a `position` recorded by dragging its tile around the
   notch canvas. `ed` never reads it, writes it or shows it, and it survives
   `ed shelf rm` for the items that are left, because `rm` saves back the items

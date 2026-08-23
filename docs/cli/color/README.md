@@ -21,7 +21,7 @@ and can forget it.
 | --- | --- |
 | `ed color` | Runs `ed color ls`, which is the default subcommand. |
 | `ed color ls` | Lists picked colours, newest first, as a table or as one chosen format per line. |
-| `ed color clear` | Forgets every picked colour. |
+| `ed color clear` | Previews forgetting every picked colour; `--yes` applies it. |
 
 `ed colour` is the same group under its British spelling, and `ed color list`
 is the same command as `ed color ls`.

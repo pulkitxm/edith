@@ -350,7 +350,11 @@ struct ClipboardClearCommand: AsyncParsableCommand {
             let targets = entries.filter { !keepPinned || !$0.pinned }.map(\.id)
             let plan = CLIDestructivePlan(
                 action: "clear clipboard history", targets: targets, confirmed: yes, json: json,
-                fields: ["keepPinned": .bool(keepPinned), "removed": .int(targets.count)])
+                fields: [
+                    "keepPinned": .bool(keepPinned),
+                    "removed": .int(targets.count),
+                    "remaining": .int(entries.count - targets.count),
+                ])
             guard plan.shouldApply() else { return }
             let outcome = try ClipboardActions.delete(ids: Set(targets))
             AppBridge.post(IPC.Name.clipboardChanged)
