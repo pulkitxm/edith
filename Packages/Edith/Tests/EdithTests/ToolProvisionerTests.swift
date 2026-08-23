@@ -175,4 +175,32 @@ private final class CommandRecorder: @unchecked Sendable {
                 $0.arguments == ["brew", "install", "example/tap/brew-tool"]
             } == 1)
     }
+
+    @Test func nonzeroVersionProbeIsNotPresent() async {
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/tmp/broken-tool"), arguments: ["--version"],
+            environment: [:], timeout: 5)
+        let version = await ToolVersionProbe.version(request) { received, _ in
+            #expect(received.timeout == 5)
+            return CLICommandResult(terminationStatus: 7, output: "broken 1.0\n")
+        }
+        #expect(version == nil)
+    }
+
+    @Test func versionProbeStopsAtItsDeadline() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-version-timeout-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = directory.appendingPathComponent("stuck-tool")
+        try Data("#!/bin/sh\nwhile true; do :; done\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let request = CLICommandRequest(
+            executableURL: executable, arguments: ["--version"], environment: [:], timeout: 0.05)
+        let started = Date()
+        let version = await ToolVersionProbe.version(request)
+        #expect(version == nil)
+        #expect(Date().timeIntervalSince(started) < 1)
+    }
 }
