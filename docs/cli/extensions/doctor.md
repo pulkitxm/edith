@@ -12,9 +12,9 @@ report object. `doctor` uses the same probe and JSON report as `status` and
 `verify`.
 
 Checks cover the stored enabled state, required and optional permissions,
-required tools, helper availability, platform capabilities, configured machines
-and supported backend or session health. Checks that do not apply are omitted,
-and checks behind a disabled extension are skipped.
+required and optional tools, helper availability, platform capabilities,
+configured machines and supported backend or session health. Checks that do not
+apply are omitted, and checks behind a disabled extension are skipped.
 
 ```
 ed extensions doctor
