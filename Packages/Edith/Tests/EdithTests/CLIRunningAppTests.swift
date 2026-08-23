@@ -150,6 +150,54 @@ import Testing
         #expect(result.stderr.contains("did not answer for quitting apps"))
     }
 
+    @Test func confirmedPlainOutputReportsTheAcknowledgedCount() async {
+        final class Capture: @unchecked Sendable {
+            var requestID: String?
+        }
+        let capture = Capture()
+        let result = await CLIProbe.runInWorld(
+            ["apps", "quit", "--all", "--yes"]
+        ) { world in
+            CLIEnvironment.runningApps = { [Self.safari, Self.music] }
+            world.helperRunning(true)
+            CLIEnvironment.deliver = { _, info in
+                capture.requestID = info?[RunningAppIPC.requestIDKey] as? String
+            }
+            CLIEnvironment.answer = { name in
+                guard name == IPC.Name.quitAppsResult, let requestID = capture.requestID else {
+                    return nil
+                }
+                return [
+                    RunningAppIPC.requestIDKey: requestID,
+                    RunningAppIPC.changedKey: 1,
+                ]
+            }
+        }
+
+        #expect(result.code == 0)
+        #expect(result.stdout == "Edith accepted quit for 1 of 2 apps\n")
+        #expect(result.stderr.isEmpty)
+    }
+
+    @Test func anUnrelatedQuitReplyIsNotAnAcknowledgement() async {
+        let result = await CLIProbe.runInWorld(
+            ["apps", "quit", "Safari", "--yes", "--json"]
+        ) { world in
+            CLIEnvironment.runningApps = { [Self.safari] }
+            world.helperRunning(true)
+            CLIEnvironment.answer = { _ in
+                [
+                    RunningAppIPC.requestIDKey: "another-request",
+                    RunningAppIPC.changedKey: 1,
+                ]
+            }
+        }
+
+        #expect(result.code == ExitCodes.unavailable)
+        #expect(result.stdout.isEmpty)
+        #expect(result.stderr.contains("did not answer for quitting apps"))
+    }
+
     @Test func runningAppCompletionUsesNamesAndBundleIDs() {
         let result = CompletionEngine.plan(
             CompletionRequest(words: ["ed", "apps", "quit", "com.apple."], index: 3),
