@@ -665,7 +665,7 @@ enum JSONContract {
             "id", "title", "summary", "group", "featured", "key", "enabled",
             "requiredCapabilities", "optionalCapabilities",
             "requiredPermissions", "optionalPermissions", "missingRequiredPermissions",
-            "requiredTools",
+            "requiredTools", "optionalTools",
         ]
         for row in rows {
             #expect(Set(row.keys) == expected, "\(row["id"] ?? "?") has the wrong fields")

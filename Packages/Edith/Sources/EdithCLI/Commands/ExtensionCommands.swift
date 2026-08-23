@@ -32,7 +32,7 @@ enum ExtensionLookup {
     }
 
     static func isEnabled(_ entry: ExtensionRegistryEntry) -> Bool {
-        CLIEnvironment.sharedDefaults.object(forKey: entry.defaultsKey) as? Bool ?? false
+        entry.isEnabled(in: CLIEnvironment.sharedDefaults)
     }
 
     static func json(
@@ -54,6 +54,7 @@ enum ExtensionLookup {
             "missingRequiredPermissions": .strings(
                 entry.requiredPermissions.filter { granted[$0] != true }.map(\.rawValue)),
             "requiredTools": .strings(entry.requiredTools.map(\.id)),
+            "optionalTools": .strings(entry.optionalTools.map(\.id)),
         ]
         if let report, let lifecycle = entry.lifecycle {
             fields["lifecycle"] = lifecycleJSON(lifecycle)

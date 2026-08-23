@@ -13,6 +13,7 @@ public typealias ExtensionLifecycleInstruction = EdithCore.ExtensionLifecycleIns
 public typealias ExtensionLifecycleIssue = EdithCore.ExtensionLifecycleIssue
 public typealias ExtensionLifecyclePhase = EdithCore.ExtensionLifecyclePhase
 public typealias ExtensionLifecycleReport = EdithCore.ExtensionLifecycleReport
+public typealias ExtensionRuntimePhase = EdithCore.ExtensionRuntimePhase
 public typealias ExtensionLifecycleState = EdithCore.ExtensionLifecycleState
 
 public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
@@ -133,6 +134,18 @@ public extension ExtensionRegistryEntry {
 
     var requiredTools: [CLIToolSpec] {
         requiredToolIDs.compactMap(ToolProvisioning.spec(id:))
+    }
+
+    var optionalTools: [CLIToolSpec] {
+        optionalToolIDs.compactMap(ToolProvisioning.spec(id:))
+    }
+
+    func isEnabled(in defaults: UserDefaults) -> Bool {
+        if let stored = defaults.object(forKey: defaultsKey) as? Bool { return stored }
+        guard let definition = ConfigCatalog.definition(for: defaultsKey),
+            case let .bool(fallback) = definition.fallback
+        else { return false }
+        return fallback
     }
 }
 

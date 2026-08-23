@@ -177,7 +177,7 @@ public struct ExtensionMutationEnvironment: @unchecked Sendable {
         }
         var lifecycle = ExtensionLifecycleProbeEnvironment.live
         lifecycle.isEnabled = { entry in
-            defaultsBox.store.object(forKey: entry.defaultsKey) as? Bool ?? false
+            entry.isEnabled(in: defaultsBox.store)
         }
         lifecycle.grantedPermissions = grantedPermissions
         lifecycle.toolAvailable = toolAvailable
@@ -227,7 +227,7 @@ public struct ExtensionMutationCenter: Sendable {
     }
 
     public func isEnabled(_ entry: ExtensionRegistryEntry) -> Bool {
-        environment.defaults.object(forKey: entry.defaultsKey) as? Bool ?? false
+        entry.isEnabled(in: environment.defaults)
     }
 
     public func setEnabled(
