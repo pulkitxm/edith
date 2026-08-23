@@ -131,6 +131,33 @@ import Testing
         #expect(CLIInstaller.pathEntries([:]).isEmpty)
     }
 
+    @Test func installFailureHasTheSameContractInPlainAndJSONProcesses() throws {
+        let root = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let isolated = root.appendingPathComponent("a/b/c/d/e/f/g/tool")
+        try FileManager.default.createDirectory(
+            at: isolated.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: CLIProcessProbe.binary, to: isolated)
+        let target = root.appendingPathComponent("links")
+        let outside = root.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+
+        let plain = try CLIProcessProbe.run(
+            ["install", "--directory", target.path], executable: isolated,
+            currentDirectory: outside)
+        let json = try CLIProcessProbe.run(
+            ["install", "--directory", target.path, "--json"], executable: isolated,
+            currentDirectory: outside)
+
+        #expect(plain.code == ExitCodes.failure)
+        #expect(json.code == plain.code)
+        #expect(plain.stdout.isEmpty)
+        #expect(json.stdout.isEmpty)
+        #expect(plain.stderr.contains("the ed binary is not present in this build"))
+        #expect(json.stderr == plain.stderr)
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+
     @Test func completionScriptsCoverEveryShellAndNameEveryAlias() {
         for shell in CompletionScripts.Shell.allCases {
             let script = CompletionScripts.script(for: shell)

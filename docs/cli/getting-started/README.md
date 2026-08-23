@@ -198,8 +198,8 @@ Only the codes this page's commands produce.
 
 | Code | What produced it |
 | --- | --- |
-| 0 | The command did what it says, including `ed install` reporting a problem in the `message` field of `--json`, `ed uninstall` finding nothing to remove, and `--help` or `--version` on any command but `__complete`, which captures both as words and still exits 0 |
-| 1 | `ed install` without `--json` when no `ed` binary can be found near the running executable, or a write that fails while `ed completions install` is creating a script |
+| 0 | The command did what it says, including `ed uninstall` finding nothing to remove, and `--help` or `--version` on any command but `__complete`, which captures both as words and still exits 0 |
+| 1 | `ed install` when no `ed` binary can be found near the running executable, or a write that fails while `ed completions install` is creating a script |
 | 2 | The command line was wrong: an unknown flag, a missing value, or a positional the command does not take, such as `ed completions install zsh` |
 | 3 | `ed guide <topic>` for any topic other than `claude`, or `ed completions install --shell <anything but zsh, bash or fish>` |
 

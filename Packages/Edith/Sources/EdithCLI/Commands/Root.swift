@@ -267,6 +267,9 @@ struct InstallCommand: AsyncParsableCommand {
                 URL(fileURLWithPath: $0.expandingTilde())
             }
             let result = CLIInstaller.install(into: target)
+            if let message = result.message {
+                throw CLIFailure(message)
+            }
             let onPath = CLIInstaller.isOnPath(
                 URL(fileURLWithPath: result.directory), entries: CLIInstaller.pathEntries())
             guard !json else {
@@ -279,9 +282,6 @@ struct InstallCommand: AsyncParsableCommand {
                         "message": .optional(result.message),
                     ]))
                 return
-            }
-            if let message = result.message {
-                throw CLIFailure(message)
             }
             CLIOut.out("linked \(result.linked.joined(separator: ", ")) in \(result.directory)")
             if !onPath {
