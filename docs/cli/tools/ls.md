@@ -44,6 +44,14 @@ the order is always `yt-dlp`, `claude`, `codex`, `quinjet`.
     "path": "/Users/pulkit/.local/bin/codex",
     "version": "codex-cli 0.146.0-alpha.9.2",
     "why": "Reads Codex session and weekly limits when that provider is enabled."
+  },
+  {
+    "id": "quinjet",
+    "installed": true,
+    "name": "Quinjet",
+    "path": "/opt/homebrew/bin/quinjet",
+    "version": "quinjet 1.0.0",
+    "why": "Powers local pull request review and live workspace changes."
   }
 ]
 ```
@@ -84,6 +92,7 @@ ID      STATE      VERSION                      WHY
 yt-dlp  installed  2026.07.04                   Downloads YouTube audio into your Music library.
 claude  installed  2.1.226 (Claude Code)        Includes Claude Code cloud sessions in Agent Usage.
 codex   installed  codex-cli 0.146.0-alpha.9.2  Reads Codex session and weekly limits when that provider is enabled.
+quinjet installed  quinjet 1.0.0                 Powers local pull request review and live workspace changes.
 ```
 
 `STATE` is `installed`, `missing` or `broken`. A missing tool has no executable;
@@ -96,6 +105,7 @@ ID      STATE      VERSION                      WHY
 yt-dlp  missing                                 Downloads YouTube audio into your Music library.
 claude  installed  2.1.226 (Claude Code)        Includes Claude Code cloud sessions in Agent Usage.
 codex   installed  codex-cli 0.146.0-alpha.9.2  Reads Codex session and weekly limits when that provider is enabled.
+quinjet missing                                  Powers local pull request review and live workspace changes.
 ```
 
 Behaviour: `ls` reads no settings, posts no notification and needs neither the

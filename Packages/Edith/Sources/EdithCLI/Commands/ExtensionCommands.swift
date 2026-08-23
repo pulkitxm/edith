@@ -33,9 +33,9 @@ enum ExtensionLookup {
         CLIEnvironment.sharedDefaults.object(forKey: entry.defaultsKey) as? Bool ?? false
     }
 
-    static func json(_ entry: ExtensionRegistryEntry) -> JSONValue {
+    static func json(_ entry: ExtensionRegistryEntry, includeLifecycle: Bool = false) -> JSONValue {
         let granted = PermissionsStatus.granted
-        return .object([
+        var fields: [String: JSONValue] = [
             "id": .string(entry.id),
             "title": .string(entry.title),
             "summary": .string(entry.subtitle),
@@ -50,6 +50,79 @@ enum ExtensionLookup {
             "missingRequiredPermissions": .strings(
                 entry.requiredPermissions.filter { granted[$0] != true }.map(\.rawValue)),
             "requiredTools": .strings(entry.requiredTools.map(\.id)),
+        ]
+        if includeLifecycle, let lifecycle = entry.lifecycle {
+            fields["lifecycle"] = lifecycleJSON(lifecycle)
+            fields["state"] = stateJSON(lifecycleState(entry))
+        }
+        return .object(fields)
+    }
+
+    static func lifecycleState(_ entry: ExtensionRegistryEntry) -> ExtensionLifecycleState {
+        guard isEnabled(entry) else {
+            return .preference(extensionID: entry.id, enabled: false)
+        }
+        let granted = PermissionsStatus.granted
+        var issues = entry.requiredPermissions.filter { granted[$0] != true }.map { permission in
+            ExtensionLifecycleIssue(
+                id: "missing-permission.\(permission.rawValue)",
+                title: "Grant \(permission.displayName)", detail: permission.reason,
+                recoveryCommand: "ed permissions request \(permission.rawValue)")
+        }
+        if entry.requiredTools.count == 1, let tool = entry.requiredTools.first,
+            ToolsBridge.found(tool) == nil
+        {
+            issues.append(
+                ExtensionLifecycleIssue(
+                    id: "missing-tool.\(tool.id)", title: "Install \(tool.displayName)",
+                    detail: tool.why, recoveryCommand: "ed tools install \(tool.id)"))
+        }
+        guard !issues.isEmpty else {
+            return .preference(extensionID: entry.id, enabled: true)
+        }
+        return ExtensionLifecycleState(
+            extensionID: entry.id, phase: .needsSetup,
+            summary: "Enabled, but setup is incomplete.", issues: issues)
+    }
+
+    private static func lifecycleJSON(_ lifecycle: ExtensionLifecycleDescriptor) -> JSONValue {
+        .object([
+            "id": .string(lifecycle.id),
+            "value": .string(lifecycle.value),
+            "workflows": .array(lifecycle.workflows.map(instructionJSON)),
+            "prerequisites": .array(lifecycle.prerequisites.map(instructionJSON)),
+            "cliExamples": .strings(lifecycle.cliExamples),
+            "documentation": .array(
+                lifecycle.documentation.map { document in
+                    .object([
+                        "id": .string(document.id), "title": .string(document.title),
+                        "path": .string(document.path),
+                    ])
+                }),
+            "recovery": .array(lifecycle.recovery.map(instructionJSON)),
+            "verification": .array(lifecycle.verification.map(instructionJSON)),
+        ])
+    }
+
+    private static func instructionJSON(_ instruction: ExtensionLifecycleInstruction) -> JSONValue {
+        .object([
+            "id": .string(instruction.id), "title": .string(instruction.title),
+            "detail": .string(instruction.detail), "command": .optional(instruction.command),
+        ])
+    }
+
+    private static func stateJSON(_ state: ExtensionLifecycleState) -> JSONValue {
+        .object([
+            "extensionID": .string(state.extensionID), "phase": .string(state.phase.rawValue),
+            "summary": .string(state.summary),
+            "issues": .array(
+                state.issues.map { issue in
+                    .object([
+                        "id": .string(issue.id), "title": .string(issue.title),
+                        "detail": .string(issue.detail),
+                        "recoveryCommand": .optional(issue.recoveryCommand),
+                    ])
+                }),
         ])
     }
 
@@ -70,7 +143,7 @@ struct ExtensionsListCommand: AsyncParsableCommand {
 
     func run() async throws {
         guard !json else {
-            CLIOut.json(.array(ExtensionRegistry.entries.map(ExtensionLookup.json)))
+            CLIOut.json(.array(ExtensionRegistry.entries.map { ExtensionLookup.json($0) }))
             return
         }
         let rows = ExtensionRegistry.entries.map { entry in
@@ -150,15 +223,17 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
             guard !json else {
-                CLIOut.json(ExtensionLookup.json(entry))
+                CLIOut.json(ExtensionLookup.json(entry, includeLifecycle: true))
                 return
             }
+            let lifecycle = entry.lifecycle
+            let state = ExtensionLookup.lifecycleState(entry)
             CLIOut.out(entry.title)
-            CLIOut.out("  " + entry.subtitle)
+            CLIOut.out("  " + (lifecycle?.value ?? entry.subtitle))
             CLIOut.out("  id       \(entry.id)")
             CLIOut.out("  key      \(entry.defaultsKey)")
             CLIOut.out("  group    \(entry.group.rawValue)")
-            CLIOut.out("  state    \(ExtensionLookup.isEnabled(entry) ? "on" : "off")")
+            CLIOut.out("  state    \(state.phase.title)")
             if !entry.requiredPermissions.isEmpty {
                 CLIOut.out(
                     "  needs    "
@@ -168,6 +243,22 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
                 CLIOut.out(
                     "  asks for "
                         + entry.optionalPermissions.map(\.displayName).joined(separator: ", "))
+            }
+            if let lifecycle {
+                CLIOut.out("  workflows")
+                for workflow in lifecycle.workflows {
+                    CLIOut.out("    \(workflow.title): \(workflow.detail)")
+                }
+                CLIOut.out("  setup")
+                for prerequisite in lifecycle.prerequisites {
+                    CLIOut.out("    \(prerequisite.title): \(prerequisite.detail)")
+                }
+                CLIOut.out("  verify")
+                for verification in lifecycle.verification {
+                    CLIOut.out("    \(verification.command ?? verification.detail)")
+                }
+                CLIOut.out(
+                    "  docs     " + lifecycle.documentation.map(\.path).joined(separator: ", "))
             }
         }
     }

@@ -11,6 +11,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case configKey
     case configValue
     case extensionID
+    case toolID
     case permission
     case onOff
     case shell

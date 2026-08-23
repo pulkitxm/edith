@@ -23,6 +23,8 @@ struct ExtensionsPane: View {
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
         var herdrEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
+        var quinjetEnabled = false
     @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
         var claudeEnabled = true
     @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
@@ -195,7 +197,6 @@ struct ExtensionsPane: View {
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
-        guard entry.id != "calendar" else { return }
         selectedEntry = entry
     }
 
@@ -242,6 +243,7 @@ struct ExtensionsPane: View {
         switch entry.defaultsKey {
         case AppStorageKeys.Tabs.usageEnabled: agentUsageBinding
         case AppStorageKeys.Tabs.herdrEnabled: $herdrEnabled
+        case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled
         case AppStorageKeys.Tabs.systemEnabled: $systemEnabled
         case AppStorageKeys.Tabs.machinesEnabled: $machinesEnabled
         case AppStorageKeys.Tabs.companionEnabled: $companionEnabled
@@ -394,10 +396,10 @@ private struct ExtensionMarketplaceCard: View {
                     .pointerCursor()
             }
             Button(action: open) {
-                Text(entry.subtitle)
+                Text(entry.lifecycle?.value ?? entry.subtitle)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
@@ -437,6 +439,7 @@ private struct ExtensionSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                ExtensionLifecycleRows(entry: entry)
                 RequiredPermissionRows(permissions: entry.requiredPermissions)
                 ExtensionDetailRows(entry: entry)
             }
@@ -473,6 +476,67 @@ private struct ExtensionSettingsSheet: View {
         case "system": 500
         case "notchShelf", "presenter": 580
         default: 620
+        }
+    }
+}
+
+private struct ExtensionLifecycleRows: View {
+    let entry: ExtensionRegistryEntry
+
+    var body: some View {
+        if let lifecycle = entry.lifecycle {
+            Section("About") {
+                Text(lifecycle.value)
+                ForEach(lifecycle.workflows) { workflow in
+                    instructionRow(workflow)
+                }
+            }
+            Section("Setup") {
+                ForEach(lifecycle.prerequisites) { prerequisite in
+                    instructionRow(prerequisite)
+                }
+            }
+            Section("Command line") {
+                ForEach(lifecycle.cliExamples, id: \.self) { example in
+                    Text(example)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+            Section("Verify and recover") {
+                ForEach(lifecycle.verification) { verification in
+                    instructionRow(verification)
+                }
+                ForEach(lifecycle.recovery) { recovery in
+                    instructionRow(recovery)
+                }
+                ForEach(lifecycle.documentation) { document in
+                    if let url = URL(
+                        string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
+                    ) {
+                        Link(document.title, destination: url)
+                    }
+                }
+            }
+        } else {
+            Section("About") {
+                Text(entry.subtitle)
+            }
+        }
+    }
+
+    private func instructionRow(_ instruction: ExtensionLifecycleInstruction) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            Text(instruction.title)
+                .fontWeight(.medium)
+            Text(instruction.detail)
+                .settingsCaption()
+            if let command = instruction.command {
+                Text(command)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         }
     }
 }
@@ -527,6 +591,7 @@ private struct ExtensionDetailRows: View {
     @ViewBuilder var body: some View {
         switch entry.id {
         case "usage": UsageRows()
+        case "quinjet": QuinjetRows()
         case "system": SystemRows()
         case "machines": MachinesRows()
         case "systemStats": SystemStatsRows()
@@ -540,6 +605,36 @@ private struct ExtensionDetailRows: View {
         case "colorPicker": ColorPickerRows()
         default: EmptyView()
         }
+    }
+}
+
+private struct QuinjetRows: View {
+    @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store) private
+        var terminal = QuinjetTerminal.embedded.rawValue
+    @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store) private
+        var theme = QuinjetTheme.quinjet.rawValue
+
+    var body: some View {
+        CLIToolStatusSection(tools: [.quinjet], extensionEnabled: enabled)
+
+        Section("Launch") {
+            Picker("Terminal", selection: $terminal) {
+                ForEach(QuinjetTerminal.allCases) { option in
+                    Label(option.label, systemImage: option.icon)
+                        .tag(option.rawValue)
+                        .disabled(!option.isAvailable)
+                }
+            }
+            Picker("Theme", selection: $theme) {
+                ForEach(QuinjetTheme.allCases) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 
