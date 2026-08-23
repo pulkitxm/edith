@@ -6,6 +6,9 @@ import Testing
 
 @Suite struct CLIDestructiveSafetyTests {
     static let destructivePaths: Set<String> = [
+        "ed app clear-updates",
+        "ed app quit",
+        "ed app relaunch",
         "ed apps quit",
         "ed cleaner clean",
         "ed clipboard clear",
@@ -85,8 +88,61 @@ import Testing
         let color = try #require(
             try EdRoot.parseAsRoot(["color", "clear", "--yes"])
                 as? ColorClearCommand)
+        let appQuit = try #require(
+            try EdRoot.parseAsRoot(["app", "quit", "--yes"]) as? AppQuitCommand)
+        let appRelaunch = try #require(
+            try EdRoot.parseAsRoot(["app", "relaunch", "--yes"]) as? AppRelaunchCommand)
+        let appClear = try #require(
+            try EdRoot.parseAsRoot(["app", "clear-updates", "--yes"])
+                as? AppClearUpdateHistoryCommand)
         #expect(docker.yes && image.yes && kill.yes && stack.yes && forget.yes)
         #expect(shelfRemove.yes && shelfClear.yes && clipboard.yes && color.yes)
+        #expect(appQuit.yes && appRelaunch.yes && appClear.yes)
+    }
+
+    @Test func appRuntimePreviewsDoNotQuitLaunchOrClearHistory() async {
+        await CLIProbe.inWorld { world in
+            let app = world.sandbox.appendingPathComponent("Edith.app")
+            CLIEnvironment.installedAppURL = { app }
+            let historyURL = CLIEnvironment.updateHistoryURL()
+            let record = UpdateCheckRecord(
+                date: Date(timeIntervalSince1970: 1), kind: .manual, outcome: .upToDate)
+            UpdateCheckLog.append(record, to: historyURL)
+
+            let quit = await CLIProbe.capture(["app", "quit", "--json"])
+            let relaunch = await CLIProbe.capture(["app", "relaunch", "--json"])
+            let clear = await CLIProbe.capture(["app", "clear-updates", "--json"])
+
+            for result in [quit, relaunch, clear] {
+                #expect(result.code == 0)
+                #expect(result.object?["applied"] as? Bool == false)
+                #expect(result.object?["changed"] as? Bool == false)
+            }
+            #expect(quit.object?["requested"] as? Bool == false)
+            #expect(relaunch.object?["relaunched"] as? Bool == false)
+            #expect(relaunch.object?["path"] as? String == app.path)
+            #expect(clear.object?["removed"] as? Int == 1)
+            #expect(world.postedNames().isEmpty)
+            #expect(UpdateCheckLog.load(from: historyURL) == [record])
+
+            let applied = await CLIProbe.capture([
+                "app", "clear-updates", "--yes", "--json",
+            ])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["changed"] as? Bool == true)
+            #expect(applied.object?["removed"] as? Int == 1)
+            #expect(UpdateCheckLog.load(from: historyURL).isEmpty)
+        }
+    }
+
+    @Test func previewDescriptorsResolveToConfirmedCommandLeaves() {
+        for descriptor in UserOperationCatalog.descriptors where descriptor.requiresPreview {
+            let node = descriptor.cli.reduce(Optional(CommandTree.root)) { node, component in
+                node?.child(component)
+            }
+            #expect(node?.destructivePolicy == .previewThenYes)
+            #expect(node?.options.contains("--yes") == true)
+        }
     }
 
     @Test func clipboardPreviewPreservesIndexAndBlobsThenConfirmationRemovesOnlyTargets()

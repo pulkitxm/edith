@@ -415,7 +415,7 @@ is a local question that needs no permission and no round trip.
 | Command | Needs | Why |
 | --- | --- | --- |
 | `ed app clean-keys`, `ed app test-notification`, `ed app open` | menu bar | the helper owns the panel, the keyboard lock and notifications |
-| `ed app quit`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it |
+| `ed app quit --yes`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it; the quit preview needs no process |
 | `ed calendar ls` | menu bar | the calendar grant belongs to the Edith bundle, not to `ed` |
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
 | `ed usage limits --refresh` | menu bar | only the app polls the providers again; without `--refresh`, `limits` reads the file |
@@ -423,7 +423,7 @@ is a local question that needs no permission and no round trip.
 | `ed music start`, `ed music seek` | menu bar | both drive Edith's own player, which lives in the helper |
 | `ed music play`, `pause`, `stop`, `toggle`, `next`, `previous`, `volume` | menu bar, only for Edith's own player | against Spotify or Apple Music these go through AppleScript and need only that app |
 | `ed machines files undo` | main window | the undo history belongs to an open Finder window and lives in memory |
-| `ed app relaunch` | no, but the app must be installed | it terminates both bundle ids, waits, escalates to a force quit, then launches; exits 4 when it cannot find a bundle and 1 when the quit or the launch fails |
+| `ed app relaunch --yes` | no, but the app must be installed | it terminates both bundle ids, waits, escalates to a force quit, then launches; the preview needs no installed bundle |
 | `ed config`, `ed extensions`, `ed schema`, `ed guide`, `ed version`, `ed install`, `ed uninstall`, `ed completions` | no | defaults and files; a write reaches a running app live |
 | `ed usage limits`, `summary`, `daily`, `models`, `projects`, `sources` | no | they read the collected files the dashboard reads |
 | `ed usage refresh` | no | it runs the collection pipeline in this process, and attaches to the app's run when one is already going |
@@ -431,7 +431,7 @@ is a local question that needs no permission and no round trip.
 | `ed usage machines collect`, `forget` | no | the collector runs over SSH from this process, and the fold back into `usage.json` is the same in-process pipeline `ed usage refresh` runs |
 | `ed system stats`, `ed system disks` | no | the same sampler, run in this process |
 | `ed clipboard`, `ed color`, `ed shelf`, `ed download`, `ed cleaner` | no | stores under Application Support and the shared defaults suite |
-| `ed apps ls`, `ed tools ls`, `ed app actions`, `ed app updates`, `ed app clear-updates` | no | the process table, `PATH`, and a log file |
+| `ed apps ls`, `ed tools ls`, `ed app actions`, `ed app updates`, `ed app clear-updates` | no | the process table, `PATH`, and a log file; clearing previews unless `--yes` is present |
 | `ed tools install` | no | it fetches and installs the tool itself, then checks the tool landed on `PATH` |
 | `ed music ls`, `mkdir`, `mv`, `rename`, `rm`, `rescan`, `shuffle`, `repeat`, `status`, `players` | no | the library is a folder of files and two defaults keys |
 | `ed machines`, and `ed <machine> <command...>` | no, except `files undo` | `/usr/bin/ssh` over a ControlMaster socket shared with the app |

@@ -136,5 +136,5 @@ Permissions pane opens with, and is writable.
   `permissionsFilter`.
 - [`ed calendar`](../calendar/README.md) for the one read that fails outright without
   its grant.
-- [`ed app`](../app/README.md) for `ed app relaunch`, which a new grant usually needs.
+- [`ed app`](../app/README.md) for `ed app relaunch --yes`, which a new grant usually needs.
 - [All `ed` commands](../README.md).

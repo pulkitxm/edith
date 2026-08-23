@@ -159,10 +159,20 @@ struct AppQuitCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually quit it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            try await AppActions.fire(
-                AppActions.named("quit"), json: json)
+            let action = try AppActions.named("quit")
+            let plan = CLIDestructivePlan(
+                action: "quit", targets: [AppBridge.mainBundleID], confirmed: yes, json: json,
+                fields: ["requested": .bool(false)])
+            guard plan.shouldApply() else { return }
+            try AppActions.require(action)
+            AppActions.runtime.request(action.operation)
+            plan.finish(
+                changed: true, plain: "quit requested", fields: ["requested": .bool(true)])
         }
     }
 }
@@ -266,9 +276,18 @@ struct AppRelaunchCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually relaunch it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            guard let bundle = CLIEnvironment.installedAppURL() else {
+            let bundle = CLIEnvironment.installedAppURL()
+            let plan = CLIDestructivePlan(
+                action: "relaunch Edith", targets: [bundle?.path ?? "Edith.app"], confirmed: yes,
+                json: json,
+                fields: ["path": .optional(bundle?.path), "relaunched": .bool(false)])
+            guard plan.shouldApply() else { return }
+            guard let bundle else {
                 throw CLIFailure.unavailable(
                     "Edith is not installed where ed can find it",
                     hint: "it looks in /Applications and alongside this binary")
@@ -281,7 +300,7 @@ struct AppRelaunchCommand: AsyncParsableCommand {
             guard stopped else {
                 throw CLIFailure(
                     "Edith did not quit, so it was not relaunched",
-                    hint: "quit it from the menu bar, then run `ed app relaunch` again")
+                    hint: "quit it from the menu bar, then run `ed app relaunch --yes` again")
             }
             progress.begin("starting Edith")
             do {
@@ -293,11 +312,9 @@ struct AppRelaunchCommand: AsyncParsableCommand {
                     hint: "open \(bundle.path) from Finder")
             }
             progress.end()
-            guard !json else {
-                CLIOut.json(.object(["relaunched": .bool(true), "path": .string(bundle.path)]))
-                return
-            }
-            CLIOut.out("relaunched Edith")
+            plan.finish(
+                changed: true, plain: "relaunched Edith",
+                fields: ["relaunched": .bool(true), "path": .string(bundle.path)])
         }
     }
 }
@@ -309,14 +326,21 @@ struct AppClearUpdateHistoryCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually clear it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            let before = AppActions.runtime.clearUpdateHistory()
-            guard !json else {
-                CLIOut.json(.object(["removed": .int(before)]))
-                return
-            }
-            CLIOut.out("cleared \(before) check(s)")
+            let url = CLIEnvironment.updateHistoryURL()
+            let before = AppActions.runtime.updateHistory(url: url).count
+            let plan = CLIDestructivePlan(
+                action: "clear update history", targets: [url.path], confirmed: yes, json: json,
+                fields: ["removed": .int(before)])
+            guard plan.shouldApply() else { return }
+            let removed = AppActions.runtime.clearUpdateHistory(url: url)
+            plan.finish(
+                changed: removed > 0, plain: "cleared \(removed) check(s)",
+                fields: ["removed": .int(removed)])
         }
     }
 }

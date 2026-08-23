@@ -296,9 +296,9 @@ enum UIParity {
             "Download sheet", "cancel running downloads", ["download", "cancel"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
-            "Permissions pane", "relaunch after granting", ["app", "relaunch"]),
+            "Permissions pane", "relaunch after granting", ["app", "relaunch", "--yes"]),
         UICapability(
-            "Update schedule sheet", "clear the check history", ["app", "clear-updates"]),
+            "Update schedule sheet", "clear the check history", ["app", "clear-updates", "--yes"]),
         UICapability(
             "Workspace toolbar", "apply a layout preset",
             ["machines", "workspace", "new", "box", "--screen", "terminal"]),
@@ -419,7 +419,7 @@ enum UIParity {
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
         UICapability("Menu bar", "open the panel", ["app", "open"]),
-        UICapability("Menu bar", "quit Edith", ["app", "quit"]),
+        UICapability("Menu bar", "quit Edith", ["app", "quit", "--yes"]),
         UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
         UICapability("Settings", "send a test notification", ["app", "test-notification"]),
         UICapability("About pane", "check for updates", ["app", "check-updates"]),

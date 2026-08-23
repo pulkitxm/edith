@@ -80,5 +80,5 @@ Exit 3 has no producer here; `ed calendar` names nothing that can be missing.
 - [`ed permissions`](../permissions/README.md) to request the macOS calendar grant
 - [`ed config`](../config/README.md) for `tabCalendarEnabled`, the only key in the
   `calendar` group
-- [`ed app`](../app/README.md) for `ed app relaunch`, which a new grant needs
+- [`ed app`](../app/README.md) for `ed app relaunch --yes`, which a new grant needs
 - [All command groups](../README.md)

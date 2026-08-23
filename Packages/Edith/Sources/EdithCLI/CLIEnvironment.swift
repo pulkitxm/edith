@@ -67,7 +67,7 @@ public enum CLIEnvironment {
         CompanionClient.endpoint(override: $0)
     }
 
-    nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
+    private static func detectedInstalledAppURL() -> URL? {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -79,6 +79,14 @@ public enum CLIEnvironment {
         }
         let standard = URL(fileURLWithPath: "/Applications/Edith.app")
         return FileManager.default.fileExists(atPath: standard.path) ? standard : nil
+    }
+
+    nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
+        detectedInstalledAppURL()
+    }
+
+    nonisolated(unsafe) public static var updateHistoryURL: @Sendable () -> URL = {
+        UpdateCheckLog.url
     }
 
     public static func reset() {
@@ -112,5 +120,7 @@ public enum CLIEnvironment {
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        installedAppURL = { detectedInstalledAppURL() }
+        updateHistoryURL = { UpdateCheckLog.url }
     }
 }

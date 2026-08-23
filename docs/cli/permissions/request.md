@@ -37,7 +37,7 @@ was answered.
 ```
 ed permissions request calendar
 ed permissions request screenRecording --json
-ed permissions request notifications && ed app relaunch
+ed permissions request notifications && ed app relaunch --yes
 ```
 
 ## Behaviour
@@ -83,7 +83,7 @@ note: finish the prompt in System Settings, then run `ed permissions refresh`
 
 Accessibility, Input Monitoring and Screen Recording only take effect for a
 process that starts after the grant, so follow a successful request with
-`ed app relaunch`.
+`ed app relaunch --yes`.
 
 ## Where to go next
 

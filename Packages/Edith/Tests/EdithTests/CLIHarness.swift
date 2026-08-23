@@ -99,6 +99,8 @@ final class CLIWorld: @unchecked Sendable {
         AttentionPaths.root = sandbox
         MachinePaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
+        let historyURL = sandbox.appendingPathComponent("update-checks.json")
+        CLIEnvironment.updateHistoryURL = { historyURL }
         CLIEnvironment.homeDirectory = sandbox
         CLIEnvironment.clipboardPasteboard = pasteboard
         shared = UserDefaults(suiteName: suite)!

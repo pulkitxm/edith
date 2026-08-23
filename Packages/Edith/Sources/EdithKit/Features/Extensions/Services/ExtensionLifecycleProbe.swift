@@ -283,7 +283,7 @@ public struct ExtensionLifecycleProbe: Sendable {
             "helper", "Menu bar helper", running ? .passed : .failed,
             running
                 ? "The Edith menu bar helper is running." : "The extension runtime is not running.",
-            running ? nil : "ed app relaunch")
+            running ? nil : "ed app relaunch --yes")
     }
 
     private func machineCheck() -> ExtensionLifecycleCheck {

@@ -34,8 +34,9 @@ import Testing
     }
 
     @Test func anActionThatNeedsTheMainWindowSaysSoWhenItIsClosed() async {
-        for name in ["quit", "check-updates"] {
-            let result = await CLIProbe.run(["app", name])
+        for arguments in [["app", "quit", "--yes"], ["app", "check-updates"]] {
+            let result = await CLIProbe.run(arguments)
+            let name = arguments[1]
             #expect(result.code == ExitCodes.unavailable, "\(name) exited \(result.code)")
             #expect(result.stderr.contains("main window"))
         }
@@ -60,10 +61,12 @@ import Testing
     @Test func quitAsksTheMainAppRatherThanTheMenuBar() async throws {
         await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
-            let result = await CLIProbe.capture(["app", "quit", "--json"])
+            let result = await CLIProbe.capture(["app", "quit", "--yes", "--json"])
             #expect(result.code == 0)
             #expect(world.postedNames() == [IPC.Name.quitMainApp.rawValue])
             #expect(result.object?["action"] as? String == "quit")
+            #expect(result.object?["applied"] as? Bool == true)
+            #expect(result.object?["requested"] as? Bool == true)
         }
     }
 

@@ -33,7 +33,7 @@ only the stored boolean:
 
 This is a preference write, so it works with Edith closed and posts
 `settingsChanged` for a running app. It does not change the current system
-state. Quitting only the main window with `ed app quit` leaves the menu bar app
+state. Quitting only the main window with `ed app quit --yes` leaves the menu bar app
 and the Lid Awake engine running, so it does not trigger this policy. Fully
 terminating or uninstalling the menu bar feature does.
 
