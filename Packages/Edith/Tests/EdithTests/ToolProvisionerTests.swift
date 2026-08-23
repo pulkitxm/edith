@@ -187,17 +187,10 @@ private final class CommandRecorder: @unchecked Sendable {
         #expect(version == nil)
     }
 
-    @Test func versionProbeStopsAtItsDeadline() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("edith-version-timeout-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let executable = directory.appendingPathComponent("stuck-tool")
-        try Data("#!/bin/sh\nwhile true; do :; done\n".utf8).write(to: executable)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o755], ofItemAtPath: executable.path)
+    @Test func versionProbeStopsAtItsDeadline() async {
         let request = CLICommandRequest(
-            executableURL: executable, arguments: ["--version"], environment: [:], timeout: 0.05)
+            executableURL: URL(fileURLWithPath: "/bin/sleep"), arguments: ["60"], environment: [:],
+            timeout: 0.05)
         let started = Date()
         let version = await ToolVersionProbe.version(request)
         #expect(version == nil)

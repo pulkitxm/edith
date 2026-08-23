@@ -86,7 +86,7 @@ private final class CLIStreamingOutput: @unchecked Sendable {
 
 public enum CLICommandRunner {
     private static let timeoutQueue = DispatchQueue(
-        label: "com.pulkit.edith.cli-command-timeout", qos: .userInitiated)
+        label: "com.pulkit.edith.cli-command-timeout", qos: .userInteractive)
 
     public static func run(
         _ request: CLICommandRequest,
