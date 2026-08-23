@@ -76,6 +76,50 @@ import Testing
         #expect(projects[0].availableWorktrees.count == 2)
     }
 
+    @Test func boundsRemoteFolderProbesAndPreservesFolderOrder() async throws {
+        let folders = ["/srv/one", "/srv/two", "/srv/three"]
+        let folderData = try JSONEncoder().encode(
+            QuinjetRemoteFolders(
+                remotes: folders.map {
+                    QuinjetRemoteFolder(
+                        target: "pulkit@build", folder: $0, accessible: true, uses: 1)
+                }))
+        let worktreeData = try Dictionary(
+            uniqueKeysWithValues: folders.map { folder in
+                (
+                    folder,
+                    try JSONEncoder().encode([
+                        QuinjetWorktree(
+                            path: folder, head: "1234567890abcdef", branch: "main",
+                            current: true, bare: false, detached: false, locked: nil,
+                            prunable: nil)
+                    ])
+                )
+            })
+        let harness = RemoteProbeHarness(folderData: folderData, worktreeData: worktreeData)
+        let client = QuinjetClient(remoteProbeLimit: 2) { arguments in
+            await harness.execute(arguments)
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        let request = Task { try await client.recentProjects(remote: remote) }
+        await harness.waitUntilStarted(2)
+        #expect(await harness.maximumActive == 2)
+        #expect(Set(await harness.startedFolders) == Set(folders.prefix(2)))
+
+        await harness.release("/srv/two")
+        await harness.waitUntilStarted(3)
+        #expect(await harness.maximumActive == 2)
+
+        await harness.release("/srv/three")
+        await harness.release("/srv/one")
+        let projects = try await request.value
+
+        #expect(projects.map(\.name) == ["one", "two", "three"])
+    }
+
     @Test func rejectsUnsupportedOutput() async {
         let client = QuinjetClient { _ in Data("{}".utf8) }
 
@@ -156,8 +200,145 @@ import Testing
         """
 }
 
+private actor RemoteProbeHarness {
+    let folderData: Data
+    let worktreeData: [String: Data]
+    private(set) var startedFolders: [String] = []
+    private(set) var maximumActive = 0
+    private var active = 0
+    private var releases: [String: CheckedContinuation<Void, Never>] = [:]
+    private var startedWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    init(folderData: Data, worktreeData: [String: Data]) {
+        self.folderData = folderData
+        self.worktreeData = worktreeData
+    }
+
+    func execute(_ arguments: [String]) async -> Data {
+        if arguments == ["remote", "list", "--json"] { return folderData }
+        guard let marker = arguments.firstIndex(of: "-C"),
+            arguments.indices.contains(marker + 1)
+        else { return Data() }
+        let folder = arguments[marker + 1]
+        active += 1
+        maximumActive = max(maximumActive, active)
+        startedFolders.append(folder)
+        let ready = startedWaiters.filter { startedFolders.count >= $0.0 }
+        startedWaiters.removeAll { startedFolders.count >= $0.0 }
+        ready.forEach { $0.1.resume() }
+        await withCheckedContinuation { releases[folder] = $0 }
+        active -= 1
+        return worktreeData[folder] ?? Data()
+    }
+
+    func waitUntilStarted(_ count: Int) async {
+        if startedFolders.count >= count { return }
+        await withCheckedContinuation { startedWaiters.append((count, $0)) }
+    }
+
+    func release(_ folder: String) {
+        releases.removeValue(forKey: folder)?.resume()
+    }
+}
+
+private actor ProjectRefreshHarness {
+    private var requests: [CheckedContinuation<Data, Error>?] = []
+    private var requestWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    func execute(_ arguments: [String]) async throws -> Data {
+        if let marker = arguments.firstIndex(of: "-C"),
+            arguments.indices.contains(marker + 1)
+        {
+            let path = arguments[marker + 1]
+            return try JSONEncoder().encode([
+                QuinjetWorktree(
+                    path: path, head: "1234567890abcdef", branch: "main", current: true,
+                    bare: false, detached: false, locked: nil, prunable: nil)
+            ])
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            requests.append(continuation)
+            let ready = requestWaiters.filter { requests.count >= $0.0 }
+            requestWaiters.removeAll { requests.count >= $0.0 }
+            ready.forEach { $0.1.resume() }
+        }
+    }
+
+    func waitUntilRequested(_ count: Int) async {
+        if requests.count >= count { return }
+        await withCheckedContinuation { requestWaiters.append((count, $0)) }
+    }
+
+    func resolve(_ index: Int, with data: Data) {
+        guard requests.indices.contains(index), let continuation = requests[index] else { return }
+        requests[index] = nil
+        continuation.resume(returning: data)
+    }
+}
+
 @MainActor
 @Suite struct QuinjetPageModelTests {
+    @Test func newestLocalProjectRefreshWins() async throws {
+        let harness = ProjectRefreshHarness()
+        let model = QuinjetPageModel(
+            client: QuinjetClient { arguments in try await harness.execute(arguments) })
+
+        let first = Task { await model.refreshProjects() }
+        await harness.waitUntilRequested(1)
+        let second = Task { await model.refreshProjects() }
+        await harness.waitUntilRequested(2)
+
+        await harness.resolve(1, with: try Self.projectData(name: "new"))
+        await second.value
+        #expect(model.projects.map(\.name) == ["new"])
+
+        await harness.resolve(0, with: try Self.projectData(name: "old"))
+        await first.value
+        #expect(model.projects.map(\.name) == ["new"])
+        #expect(!model.loadingProjects)
+        #expect(model.projectError == nil)
+    }
+
+    @Test func newestRemoteProjectRefreshWins() async throws {
+        let harness = ProjectRefreshHarness()
+        let model = QuinjetPageModel(
+            client: QuinjetClient { arguments in try await harness.execute(arguments) })
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "build", target: "pulkit@build",
+            controlPath: "/tmp/edith.sock")
+
+        let first = Task { await model.refreshProjects(for: remote) }
+        await harness.waitUntilRequested(1)
+        let second = Task { await model.refreshProjects(for: remote) }
+        await harness.waitUntilRequested(2)
+
+        await harness.resolve(1, with: try Self.remoteFolderData(path: "/srv/new"))
+        await second.value
+        #expect(model.projects(for: remote).map(\.name) == ["new"])
+
+        await harness.resolve(0, with: try Self.remoteFolderData(path: "/srv/old"))
+        await first.value
+        #expect(model.projects(for: remote).map(\.name) == ["new"])
+        #expect(!model.isLoadingProjects(for: remote))
+        #expect(model.projectError(for: remote) == nil)
+    }
+
+    @Test func cancelledProjectRefreshDoesNotApplyItsResult() async throws {
+        let harness = ProjectRefreshHarness()
+        let model = QuinjetPageModel(
+            client: QuinjetClient { arguments in try await harness.execute(arguments) })
+
+        let request = Task { await model.refreshProjects() }
+        await harness.waitUntilRequested(1)
+        request.cancel()
+        await harness.resolve(0, with: try Self.projectData(name: "cancelled"))
+        await request.value
+
+        #expect(model.projects.isEmpty)
+        #expect(!model.loadingProjects)
+        #expect(model.projectError == nil)
+    }
+
     @Test func embeddedLaunchUsesEdithRoutingAndSelectedTheme() throws {
         let model = QuinjetPageModel(client: client)
         let configuration = QuinjetLaunchConfiguration(
@@ -208,6 +389,12 @@ import Testing
         #expect(
             QuinjetCMUXLauncher.appleScriptQuote("a \"quoted\" folder\n")
                 == "\"a \\\"quoted\\\" folder\\n\"")
+    }
+
+    @Test func cmuxOperationsLeaveTheMainThread() async throws {
+        let ranOnMainThread = try await QuinjetBackgroundOperation.run { Thread.isMainThread }
+
+        #expect(!ranOnMainThread)
     }
 
     @Test func themeCatalogMatchesQuinjetCapabilities() {
@@ -336,4 +523,25 @@ import Testing
     private static let feature = QuinjetWorktree(
         path: "/work/edith-quinjet", head: "abcdef1234567890", branch: "feat/quinjet",
         current: false, bare: false, detached: false, locked: nil, prunable: nil)
+
+    private static func projectData(name: String) throws -> Data {
+        try JSONEncoder().encode([
+            QuinjetProject(
+                name: name, commonDir: "/work/\(name)/.git",
+                worktrees: [
+                    QuinjetWorktree(
+                        path: "/work/\(name)", head: "1234567890abcdef", branch: "main",
+                        current: true, bare: false, detached: false, locked: nil, prunable: nil)
+                ])
+        ])
+    }
+
+    private static func remoteFolderData(path: String) throws -> Data {
+        try JSONEncoder().encode(
+            QuinjetRemoteFolders(
+                remotes: [
+                    QuinjetRemoteFolder(
+                        target: "pulkit@build", folder: path, accessible: true, uses: 1)
+                ]))
+    }
 }
