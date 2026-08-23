@@ -257,10 +257,10 @@ final class QuinjetPageModel {
                 "--remote", remote.target, "--ssh-control-path", remote.controlPath,
             ]
         }
+        arguments += ["-C", worktree.path, "tui"]
         arguments += [
             "--theme", configuration.theme.rawValue,
             "--appearance", configuration.appearance.rawValue,
-            "-C", worktree.path,
         ]
         return arguments
     }

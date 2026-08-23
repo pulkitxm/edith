@@ -169,8 +169,8 @@ import Testing
         #expect(
             arguments
                 == [
-                    "--client", "edith", "--theme", "tokyo-night", "--appearance", "light",
-                    "-C", "/work/edith",
+                    "--client", "edith", "-C", "/work/edith", "tui", "--theme",
+                    "tokyo-night", "--appearance", "light",
                 ])
     }
 
@@ -189,7 +189,7 @@ import Testing
             arguments
                 == [
                     "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith socket",
-                    "--theme", "gruvbox", "--appearance", "dark", "-C", "/work/edith",
+                    "-C", "/work/edith", "tui", "--theme", "gruvbox", "--appearance", "dark",
                 ])
         #expect(!arguments.contains("--client"))
     }
