@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct ConfigurationExecutorTests {
@@ -72,5 +73,45 @@ import Testing
         #expect(
             Set(descriptors.filter { $0.effect == .write }.map(\.cli))
                 == [["config", "set"], ["config", "unset"], ["config", "import"]])
+    }
+}
+
+@Suite(.serialized) struct ConfigurationProcessTests {
+    @Test func shippedEntrySharesPlainJSONAndFailureContracts() throws {
+        let suite = "ConfigurationProcessTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var environment = ProcessInfo.processInfo.environment
+        environment["EDITH_TEST_SHARED_DEFAULTS_SUITE"] = suite
+
+        let plain = try CLIProcessProbe.run(
+            ["config", "set", "appearance", "dark"], environment: environment)
+        defaults.synchronize()
+        #expect(plain.code == 0)
+        #expect(plain.stdout == "appearance = dark\n")
+        #expect(plain.stderr.isEmpty)
+        #expect(defaults.string(forKey: AppStorageKeys.General.appearance) == "dark")
+
+        let json = try CLIProcessProbe.run(
+            ["config", "get", "appearance", "--json"], environment: environment)
+        #expect(json.code == 0)
+        #expect(json.object?["key"] as? String == "appearance")
+        #expect(json.object?["value"] as? String == "dark")
+
+        let invalid = try CLIProcessProbe.run(
+            ["config", "set", "appearance", "purple"], environment: environment)
+        defaults.synchronize()
+        #expect(invalid.code == 1)
+        #expect(invalid.stdout.isEmpty)
+        #expect(invalid.stderr.contains("allowed: system, light, dark"))
+        #expect(defaults.string(forKey: AppStorageKeys.General.appearance) == "dark")
+
+        let unset = try CLIProcessProbe.run(
+            ["config", "unset", "appearance", "--json"], environment: environment)
+        defaults.synchronize()
+        #expect(unset.code == 0)
+        #expect(unset.object?["value"] as? String == "system")
+        #expect(defaults.object(forKey: AppStorageKeys.General.appearance) == nil)
     }
 }

@@ -47,6 +47,10 @@ ed config set limitsProvider codex
 ed config set cleanerSelectedDrives /,/Volumes/Data
 ```
 
+This is the same validated write path used by the app's persistent settings controls.
+Successful writes notify the running app after the value has reached the setting's
+declared shared or standard defaults suite.
+
 Validation happens before the write, so a rejected value leaves the stored value
 alone and exits 1. The 23 read-only keys are refused the same way, also exit 1,
 before anything is touched:
