@@ -582,7 +582,8 @@ public enum ExtensionLifecycleCatalog {
             workflows: [
                 instruction(
                     "sample", "Pick a color",
-                    "Open the system loupe from Edith or its global shortcut."),
+                    "Open the system loupe from Edith, its shortcut or the command line.",
+                    "ed color pick"),
                 instruction(
                     "reuse", "Reuse recent colors",
                     "Copy a previous sample in HEX, RGB or another format."),
@@ -593,7 +594,10 @@ public enum ExtensionLifecycleCatalog {
                     "macOS requires Screen Recording to sample pixels.",
                     "ed permissions request screenRecording")
             ],
-            examples: ["ed extensions enable colorPicker", "ed color ls --json"],
+            examples: [
+                "ed extensions enable colorPicker", "ed color pick --json",
+                "ed color ls --json",
+            ],
             docs: [documentation("guide", "Color Picker guide", "docs/cli/color/README.md")],
             recovery: [
                 instruction(
