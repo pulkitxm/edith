@@ -2,7 +2,17 @@ import ArgumentParser
 import EdithKit
 import Foundation
 
-public let edithCLIVersion = "1.0.0"
+public let edithCLIVersion = EdithCLIVersion.resolve(Bundle.main.infoDictionary)
+
+enum EdithCLIVersion {
+    static func resolve(_ infoDictionary: [String: Any]?) -> String {
+        guard
+            let value = infoDictionary?["CFBundleShortVersionString"] as? String,
+            !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return "development" }
+        return value
+    }
+}
 
 func execute(_ body: () async throws -> Void) async throws {
     do {
@@ -267,6 +277,9 @@ struct InstallCommand: AsyncParsableCommand {
                 URL(fileURLWithPath: $0.expandingTilde())
             }
             let result = CLIInstaller.install(into: target)
+            if let message = result.message {
+                throw CLIFailure(message)
+            }
             let onPath = CLIInstaller.isOnPath(
                 URL(fileURLWithPath: result.directory), entries: CLIInstaller.pathEntries())
             guard !json else {
@@ -279,9 +292,6 @@ struct InstallCommand: AsyncParsableCommand {
                         "message": .optional(result.message),
                     ]))
                 return
-            }
-            if let message = result.message {
-                throw CLIFailure(message)
             }
             CLIOut.out("linked \(result.linked.joined(separator: ", ")) in \(result.directory)")
             if !onPath {
@@ -332,7 +342,9 @@ struct CompleteCommand: AsyncParsableCommand {
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
-            extensionIDs: ExtensionRegistry.entries.map(\.id))
+            extensionIDs: ExtensionRegistry.entries.map(\.id),
+            toolIDs: ToolProvisioning.all.map(\.id),
+            usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [])
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)
