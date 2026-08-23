@@ -63,7 +63,7 @@ import Testing
     }
 
     @Test func extensionLifecycleCommandsCompleteIDsAndFlags() {
-        for command in ["status", "setup", "verify", "doctor"] {
+        for command in ["enable", "disable", "info", "status", "setup", "verify", "doctor"] {
             let ids = Self.plan(["ed", "extensions", command, "quin"], 3)
             #expect(ids.candidates == ["quinjet"])
         }

@@ -94,3 +94,33 @@ import Testing
         }
     }
 }
+
+@Suite(.serialized) struct CLIExtensionMutationProcessTests {
+    @Test func shippedEntryPreservesPlainAndJSONMutationContracts() throws {
+        let suite = "CLIExtensionMutationProcessTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var environment = ProcessInfo.processInfo.environment
+        environment["EDITH_TEST_SHARED_DEFAULTS_SUITE"] = suite
+
+        let plain = try CLIProcessProbe.run(
+            ["extensions", "enable", "calendar"], environment: environment)
+        defaults.synchronize()
+
+        #expect(plain.code == 0)
+        #expect(plain.stdout == "calendar enabled\n")
+        #expect(plain.stderr.contains("ed permissions request calendar"))
+        #expect(defaults.bool(forKey: AppStorageKeys.Tabs.calendarEnabled))
+
+        let json = try CLIProcessProbe.run(
+            ["extensions", "disable", "calendar", "--json"], environment: environment)
+        defaults.synchronize()
+
+        #expect(json.code == 0)
+        #expect(json.stderr.isEmpty)
+        #expect(json.object?["id"] as? String == "calendar")
+        #expect(json.object?["enabled"] as? Bool == false)
+        #expect(!defaults.bool(forKey: AppStorageKeys.Tabs.calendarEnabled))
+    }
+}

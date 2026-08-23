@@ -469,6 +469,32 @@ enum UIParity {
         }
     }
 
+    @Test func everyRegisteredOperationResolvesToAParserAndCompletionLeaf() {
+        for descriptor in UserOperationCatalog.descriptors {
+            let label = (["ed"] + descriptor.cli).joined(separator: " ")
+            #expect(Self.labels.contains(label), "\(label) is not a parser command")
+            var node = CommandTree.root
+            var walked: [String] = []
+            for segment in descriptor.cli {
+                guard let child = node.child(segment) else { break }
+                node = child
+                walked.append(segment)
+            }
+            #expect(walked == descriptor.cli, "\(label) is incomplete in CommandTree")
+            #expect(node.children.isEmpty, "\(label) resolves to a command group, not a leaf")
+        }
+    }
+
+    @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {
+        let declared = Set(ExtensionMutationOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["extensions", "enable"], ["extensions", "disable"],
+                    ["extensions", "setup"], ["tools", "install"],
+                ])
+    }
+
     @Test func everyMutatingCommandIsClaimedByAUIAction() {
         let claimed = Set(UIParity.capabilities.map { Self.commandPath($0.cli) })
         var orphans: [String] = []

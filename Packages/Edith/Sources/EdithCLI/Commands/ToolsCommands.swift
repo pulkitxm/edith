@@ -144,9 +144,8 @@ struct ToolsInstallCommand: AsyncParsableCommand {
             progress.header("EDITH · install " + spec.displayName)
             progress.begin("installing " + spec.id)
             do {
-                let version = try await CLIEnvironment.installTool(spec) { line in
-                    progress.note(line)
-                }
+                let version = try await ExtensionLookup.mutationCenter().install(
+                    spec, log: { line in progress.note(line) })
                 progress.end()
                 progress.done("\(spec.id) is ready")
                 guard !json else {

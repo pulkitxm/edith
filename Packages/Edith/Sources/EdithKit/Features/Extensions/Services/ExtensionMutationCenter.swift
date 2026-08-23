@@ -80,6 +80,16 @@ public struct ExtensionToolFailure: Equatable, Sendable {
     }
 }
 
+public struct ExtensionToolProvisioningError: LocalizedError, Equatable, Sendable {
+    public let message: String
+
+    public init(_ message: String) {
+        self.message = message
+    }
+
+    public var errorDescription: String? { message }
+}
+
 public struct ExtensionToolProvisionResult: Equatable, Sendable {
     public let planned: [String]
     public let installed: [String]
@@ -149,18 +159,44 @@ public struct ExtensionMutationEnvironment: @unchecked Sendable {
         self.lifecycle = lifecycle
     }
 
-    public static let live = ExtensionMutationEnvironment(
-        defaults: SharedDefaults.store,
-        announceChange: { IPC.post(IPC.Name.settingsChanged) },
-        grantedPermissions: { PermissionsStatus.granted },
-        toolAvailable: { id in
+    public static func local(
+        defaults: UserDefaults,
+        announceChange: @escaping @Sendable () -> Void = {}
+    ) -> ExtensionMutationEnvironment {
+        let defaultsBox = ExtensionDefaultsBox(defaults)
+        let grantedPermissions: @Sendable () -> [ExtensionPermission: Bool] = {
+            OnboardingFlow.grantedPermissions(defaults: defaultsBox.store)
+        }
+        let toolAvailable: @Sendable (String) -> Bool = { id in
             guard let tool = ToolProvisioning.spec(id: id),
                 case let .executable(name, _) = tool.presenceStrategy
             else { return false }
             return CLIToolEnvironment.executable(named: name) != nil
-        },
-        installTool: { tool, log in try await ToolInstaller().install(tool, log: log) },
-        lifecycle: .live)
+        }
+        var lifecycle = ExtensionLifecycleProbeEnvironment.live
+        lifecycle.isEnabled = { entry in
+            defaultsBox.store.object(forKey: entry.defaultsKey) as? Bool ?? false
+        }
+        lifecycle.grantedPermissions = grantedPermissions
+        lifecycle.toolAvailable = toolAvailable
+        return ExtensionMutationEnvironment(
+            defaults: defaults, announceChange: announceChange,
+            grantedPermissions: grantedPermissions, toolAvailable: toolAvailable,
+            installTool: { tool, log in try await ToolInstaller().install(tool, log: log) },
+            lifecycle: lifecycle)
+    }
+
+    public static let live = local(
+        defaults: SharedDefaults.store,
+        announceChange: { IPC.post(IPC.Name.settingsChanged) })
+}
+
+private final class ExtensionDefaultsBox: @unchecked Sendable {
+    let store: UserDefaults
+
+    init(_ store: UserDefaults) {
+        self.store = store
+    }
 }
 
 public struct ExtensionMutationCenter: Sendable {
@@ -168,6 +204,24 @@ public struct ExtensionMutationCenter: Sendable {
 
     public init(environment: ExtensionMutationEnvironment = .live) {
         self.environment = environment
+    }
+
+    @MainActor public static var application: ExtensionMutationCenter {
+        var environment = ExtensionMutationEnvironment.live
+        environment.installTool = { tool, _ in
+            let task = await MainActor.run { ToolProvisioner.shared.provision(tool) }
+            await task.value
+            return try await MainActor.run {
+                switch ToolProvisioner.shared.state(for: tool) {
+                case let .present(version): version
+                case .installed: tool.id
+                case let .failed(message, _): throw ExtensionToolProvisioningError(message)
+                case .idle, .checking, .installing:
+                    throw ExtensionToolProvisioningError("\(tool.displayName) did not finish setup")
+                }
+            }
+        }
+        return ExtensionMutationCenter(environment: environment)
     }
 
     public func isEnabled(_ entry: ExtensionRegistryEntry) -> Bool {
@@ -210,6 +264,11 @@ public struct ExtensionMutationCenter: Sendable {
         }
     }
 
+    public func markPermissionsSeen(for entry: ExtensionRegistryEntry) {
+        environment.defaults.set(true, forKey: OnboardingFlow.seenKey(for: entry))
+        environment.defaults.synchronize()
+    }
+
     public func completeOnboarding(
         selectedIDs: Set<String>, icloudBackup: Bool = OnboardingFlow.initialICloudBackup,
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
@@ -246,6 +305,12 @@ public struct ExtensionMutationCenter: Sendable {
         }
         return ExtensionToolProvisionResult(
             planned: tools.map(\.id), installed: installed, failures: failures)
+    }
+
+    public func install(
+        _ tool: CLIToolSpec, log: @escaping @Sendable (String) -> Void = { _ in }
+    ) async throws -> String {
+        try await environment.installTool(tool, log)
     }
 
     public func setup(

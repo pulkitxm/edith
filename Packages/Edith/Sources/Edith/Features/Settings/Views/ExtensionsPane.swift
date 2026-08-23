@@ -25,17 +25,6 @@ struct ExtensionsPane: View {
         var herdrEnabled = false
     @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
         var quinjetEnabled = false
-    @AppStorage(AppStorageKeys.Limits.claudeEnabled, store: SharedDefaults.store) private
-        var claudeEnabled = true
-    @AppStorage(AppStorageKeys.Limits.codexEnabled, store: SharedDefaults.store) private
-        var codexEnabled = true
-    @AppStorage(AppStorageKeys.Limits.inMenuBar, store: SharedDefaults.store) private
-        var limitsInMenuBar = true
-    @AppStorage(AppStorageKeys.Notify.master, store: SharedDefaults.store) private
-        var notifyMaster = false
-    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
-        var limitsProviderRaw =
-        LimitProvider.claude.rawValue
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
@@ -69,8 +58,6 @@ struct ExtensionsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
-    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
-        var preventSleep = false
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -103,9 +90,6 @@ struct ExtensionsPane: View {
         }
         .navigationTitle("Extensions")
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
-        .onChange(of: systemEnabled) {
-            if !systemEnabled { preventSleep = false }
-        }
         .onChange(of: grantedPermissions) {
             enableRequestedExtensionIfReady()
         }
@@ -215,33 +199,9 @@ struct ExtensionsPane: View {
         }
     }
 
-    private var agentUsageBinding: Binding<Bool> {
-        Binding(
-            get: { usageEnabled },
-            set: {
-                applyAgentUsageState(AgentUsageSettingsFlow.setEnabled($0, in: agentUsageState))
-            }
-        )
-    }
-
-    private var agentUsageState: AgentUsageSettingsState {
-        AgentUsageSettingsState(
-            enabled: usageEnabled, claudeEnabled: claudeEnabled, codexEnabled: codexEnabled,
-            menuBarEnabled: limitsInMenuBar, alertsEnabled: notifyMaster,
-            selectedProvider: LimitProvider(rawValue: limitsProviderRaw) ?? .claude)
-    }
-
-    private func applyAgentUsageState(_ state: AgentUsageSettingsState) {
-        usageEnabled = state.enabled
-        claudeEnabled = state.claudeEnabled
-        codexEnabled = state.codexEnabled
-        limitsInMenuBar = state.menuBarEnabled
-        notifyMaster = state.alertsEnabled
-    }
-
     private func enabledBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
         switch entry.defaultsKey {
-        case AppStorageKeys.Tabs.usageEnabled: agentUsageBinding
+        case AppStorageKeys.Tabs.usageEnabled: $usageEnabled
         case AppStorageKeys.Tabs.herdrEnabled: $herdrEnabled
         case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled
         case AppStorageKeys.Tabs.systemEnabled: $systemEnabled
@@ -266,45 +226,28 @@ struct ExtensionsPane: View {
         return Binding(
             get: { enabled.wrappedValue },
             set: { newValue in
+                let center = ExtensionMutationCenter.application
                 guard newValue else {
-                    if enabled.wrappedValue { markPermissionsSeen(for: entry) }
-                    enabled.wrappedValue = false
+                    _ = center.setEnabled(
+                        false, for: entry, markPermissionsSeen: enabled.wrappedValue)
                     return
                 }
-                let granted = ExtensionPermissionState.readGrantedPermissions()
-                grantedPermissions = granted
-                let decision = ExtensionPermissionFlow.decision(
-                    for: entry, granted: granted,
-                    hasSeenPermissions: hasSeenPermissions(for: entry))
-                switch decision {
-                case .enableDirectly:
-                    enabled.wrappedValue = true
-                    markPermissionsSeen(for: entry)
+                grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+                switch center.enablePermissionAware(entry) {
+                case .applied:
                     showProvisioning(for: entry)
-                case .showSheet(let required, let optional):
-                    enabled.wrappedValue = false
+                case let .needsPermissions(plan):
                     permissionRequest = ExtensionPermissionRequest(
-                        entry: entry, required: required, optional: optional)
+                        entry: entry, required: plan.required, optional: plan.optional)
                 }
             })
     }
 
-    private static func seenKey(for entry: ExtensionRegistryEntry) -> String {
-        "extensionPermissionsSeen.\(entry.id)"
-    }
-
-    private func hasSeenPermissions(for entry: ExtensionRegistryEntry) -> Bool {
-        SharedDefaults.store.bool(forKey: Self.seenKey(for: entry))
-    }
-
-    private func markPermissionsSeen(for entry: ExtensionRegistryEntry) {
-        SharedDefaults.store.set(true, forKey: Self.seenKey(for: entry))
-    }
-
     private func markEnabledExtensionsSeen() {
+        let center = ExtensionMutationCenter.application
         for entry in ExtensionRegistry.entries
         where SharedDefaults.store.bool(forKey: entry.defaultsKey) {
-            markPermissionsSeen(for: entry)
+            center.markPermissionsSeen(for: entry)
         }
     }
 
@@ -329,8 +272,8 @@ struct ExtensionsPane: View {
     }
 
     private func enableRequestedExtension(_ request: ExtensionPermissionRequest) {
-        enabledBinding(for: request.entry).wrappedValue = true
-        markPermissionsSeen(for: request.entry)
+        _ = ExtensionMutationCenter.application.setEnabled(
+            true, for: request.entry, markPermissionsSeen: true)
         permissionRequest = nil
         DispatchQueue.main.async {
             showProvisioning(for: request.entry)
@@ -338,16 +281,10 @@ struct ExtensionsPane: View {
     }
 
     private func showProvisioning(for entry: ExtensionRegistryEntry) {
-        let tools = entry.requiredTools.filter { $0.requirement.isActive() }
-        guard !tools.isEmpty else { return }
-        Task {
-            for tool in tools { await ToolProvisioner.shared.check(tool).value }
-            let hasMissingTool = tools.contains {
-                if case .failed = ToolProvisioner.shared.state(for: $0) { return true }
-                return false
-            }
-            if hasMissingTool { provisioningEntry = entry }
-        }
+        let active = Set(entry.requiredTools.filter { $0.requirement.isActive() }.map(\.id))
+        let missing = ExtensionMutationCenter.application.missingTools(for: entry)
+            .contains { active.contains($0.id) }
+        if missing { provisioningEntry = entry }
     }
 
 }
@@ -1175,7 +1112,10 @@ private struct UsageRows: View {
         .opacity(enabled ? 1 : 0.5)
         .onChange(of: claudeEnabled) { reconcileProviders() }
         .onChange(of: codexEnabled) {
-            if enabled && codexEnabled { ToolProvisioner.shared.provision(.codex) }
+            if enabled && codexEnabled {
+                let center = ExtensionMutationCenter.application
+                Task { _ = await center.provision([.codex]) }
+            }
             reconcileProviders()
         }
     }
