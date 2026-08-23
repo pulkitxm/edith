@@ -229,9 +229,28 @@ public enum CommandTree {
                         options: ["--json", "--range", "--source", "--machine"],
                         optionValues: usageValues),
                     CommandNode(
-                        "projects", "Cost and tokens per GitHub repository.",
-                        options: ["--json", "--range", "--limit"],
-                        optionValues: ["--range": .usageRange]),
+                        "projects", "Inspect usage by GitHub repository.",
+                        children: [
+                            CommandNode(
+                                "list", "List usage grouped by repository.",
+                                options: ["--json", "--range", "--limit"],
+                                optionValues: ["--range": .usageRange]),
+                            CommandNode(
+                                "show", "Show one repository and its folders.",
+                                options: ["--json", "--range"],
+                                optionValues: ["--range": .usageRange], arguments: [.free]),
+                            CommandNode(
+                                "open", "Open a usage repository in the browser.",
+                                options: ["--json", "--range"],
+                                optionValues: ["--range": .usageRange], arguments: [.free]),
+                            CommandNode(
+                                "copy-link", "Copy a usage repository link.",
+                                options: ["--json", "--range"],
+                                optionValues: ["--range": .usageRange], arguments: [.free]),
+                            CommandNode(
+                                "copy-chat", "Copy a usage chat identifier.",
+                                options: common, arguments: [.free]),
+                        ]),
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),

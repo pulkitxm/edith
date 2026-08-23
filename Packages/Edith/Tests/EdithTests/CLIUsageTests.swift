@@ -131,9 +131,9 @@ import Testing
     }
 
     @Test func projectCommandDoesNotSilentlyTruncateAccounting() throws {
-        let command = try UsageProjectsCommand.parse([])
+        let command = try UsageProjectsListCommand.parse([])
         #expect(command.limit == nil)
-        let limited = try UsageProjectsCommand.parse(["--limit", "25"])
+        let limited = try UsageProjectsListCommand.parse(["--limit", "25"])
         #expect(limited.limit == 25)
     }
 

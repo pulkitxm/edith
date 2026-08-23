@@ -439,6 +439,21 @@ enum UIParity {
         UICapability("About pane", "check for updates", ["app", "check-updates"]),
         UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
         UICapability(
+            "Dashboard repository drilldown", "list repository usage",
+            ["usage", "projects", "list"]),
+        UICapability(
+            "Dashboard repository drilldown", "show one repository and its folders",
+            ["usage", "projects", "show", "edith"]),
+        UICapability(
+            "Dashboard repository drilldown", "open a repository",
+            ["usage", "projects", "open", "edith"]),
+        UICapability(
+            "Dashboard repository drilldown", "copy a repository link",
+            ["usage", "projects", "copy-link", "edith"]),
+        UICapability(
+            "Dashboard repository drilldown", "copy a chat identifier",
+            ["usage", "projects", "copy-chat", "abc"]),
+        UICapability(
             "Dashboard machines menu", "count a machine's agent usage too",
             ["usage", "machines", "enable", "box"]),
         UICapability(

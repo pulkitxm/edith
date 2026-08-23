@@ -248,13 +248,56 @@ struct UsageModelsCommand: AsyncParsableCommand {
 
 struct UsageProjectsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "projects", abstract: "Cost and tokens per GitHub repository.")
+        commandName: "projects",
+        abstract: "Inspect usage by GitHub repository.",
+        subcommands: [
+            UsageProjectsListCommand.self, UsageProjectsShowCommand.self,
+            UsageProjectsOpenCommand.self, UsageProjectsCopyLinkCommand.self,
+            UsageProjectsCopyChatCommand.self,
+        ],
+        defaultSubcommand: UsageProjectsListCommand.self)
+}
+
+struct UsageProjectsRange: ParsableArguments {
+    @Option(help: "today, week, month or all.")
+    var range: String = "all"
+
+    func summaries() throws -> [UsageProjectSummary] {
+        guard let value = UsageRange(rawValue: range.lowercased()) else {
+            throw CLIFailure.notFound(
+                "no range named \(range)",
+                hint: "ranges: " + UsageRange.allCases.map(\.rawValue).joined(separator: ", "))
+        }
+        let document = try UsageDocument.load()
+        return UsageAnalysis.byProject(UsageAnalysis.days(document, range: value))
+    }
+
+    func resolve(_ query: String) throws -> (UsageProjectSummary, UsageProjectTarget) {
+        let summaries = try summaries()
+        do {
+            let target = try UsageProjectOperationExecution.resolve(
+                query, in: summaries.map(\.operationTarget))
+            guard let summary = summaries.first(where: { $0.repositoryID == target.repositoryID })
+            else {
+                throw CLIFailure.notFound("no usage repository matches \(query)")
+            }
+            return (summary, target)
+        } catch let error as UsageProjectOperationError {
+            throw CLIFailure.notFound(
+                error.localizedDescription,
+                hint: "run `ed usage projects list` to see repository names and identities")
+        }
+    }
+}
+
+struct UsageProjectsListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "list", abstract: UsageProjectOperation.list.descriptor.summary)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Option(help: "today, week, month or all.")
-    var range: String = "all"
+    @OptionGroup var window: UsageProjectsRange
 
     @Option(help: "Show at most this many repositories.")
     var limit: Int?
@@ -267,15 +310,7 @@ struct UsageProjectsCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard let value = UsageRange(rawValue: range.lowercased()) else {
-                throw CLIFailure.notFound(
-                    "no range named \(range)",
-                    hint: "ranges: "
-                        + UsageRange.allCases.map(\.rawValue).joined(separator: ", "))
-            }
-            let document = try UsageDocument.load()
-            let allProjects = UsageAnalysis.byProject(
-                UsageAnalysis.days(document, range: value))
+            let allProjects = try window.summaries()
             let projects: [UsageProjectSummary]
             if let requested = self.limit {
                 let limit = try ArgumentChecks.positive(requested, "--limit")
@@ -295,6 +330,138 @@ struct UsageProjectsCommand: AsyncParsableCommand {
             }
             CLIOut.out(TextTable.render(headers: ["REPOSITORY", "COST", "TOKENS"], rows: rows))
         }
+    }
+}
+
+struct UsageProjectsShowCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show", abstract: UsageProjectOperation.show.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var window: UsageProjectsRange
+
+    @Argument(help: "Repository name, identity or URL.")
+    var repository: String
+
+    func run() async throws {
+        try await execute {
+            let (summary, _) = try window.resolve(repository)
+            guard !json else {
+                CLIOut.json(summary.json)
+                return
+            }
+            CLIOut.out("repository  \(summary.repositoryName)")
+            CLIOut.out("identity    \(summary.repositoryID)")
+            CLIOut.out("link        \(summary.repositoryURL ?? "-")")
+            CLIOut.out(String(format: "cost        %.2f", summary.cost))
+            CLIOut.out("tokens      \(Int(summary.tokens))")
+            CLIOut.out("")
+            let rows = summary.folders.map { folder in
+                [
+                    folder.folderName, folder.machineName ?? "local", folder.path ?? "-",
+                    String(format: "%.2f", folder.cost), String(Int(folder.tokens)),
+                ]
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["FOLDER", "MACHINE", "PATH", "COST", "TOKENS"], rows: rows))
+        }
+    }
+}
+
+struct UsageProjectsOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: UsageProjectOperation.openRepository.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var window: UsageProjectsRange
+
+    @Argument(help: "Repository name, identity or URL.")
+    var repository: String
+
+    func run() async throws {
+        try await execute {
+            let (_, target) = try window.resolve(repository)
+            let result = try await MainActor.run {
+                try UsageProjectOperationExecution.openRepository(target)
+            }
+            render(result, json: json, message: "opened \(target.repositoryName)")
+        }
+    }
+}
+
+struct UsageProjectsCopyLinkCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy-link",
+        abstract: UsageProjectOperation.copyRepositoryLink.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var window: UsageProjectsRange
+
+    @Argument(help: "Repository name, identity or URL.")
+    var repository: String
+
+    func run() async throws {
+        try await execute {
+            let (_, target) = try window.resolve(repository)
+            let result = try await MainActor.run {
+                try UsageProjectOperationExecution.copyRepositoryLink(target)
+            }
+            render(result, json: json, message: "copied \(result.value)")
+        }
+    }
+}
+
+struct UsageProjectsCopyChatCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy-chat", abstract: UsageProjectOperation.copyChatID.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Chat identifier from the dashboard drilldown.")
+    var chatID: String
+
+    func run() async throws {
+        try await execute {
+            let result = try await MainActor.run {
+                try UsageProjectOperationExecution.copyChatID(chatID)
+            }
+            render(result, json: json, message: "copied \(result.value)")
+        }
+    }
+}
+
+private extension UsageProjectSummary {
+    var operationTarget: UsageProjectTarget {
+        UsageProjectTarget(
+            repositoryID: repositoryID, repositoryName: repositoryName,
+            repositoryURL: repositoryURL)
+    }
+}
+
+private func render(_ result: UsageProjectOperationResult, json: Bool, message: String) {
+    guard !json else {
+        CLIOut.json(result.json)
+        return
+    }
+    CLIOut.out(message)
+}
+
+extension UsageProjectOperationResult {
+    var json: JSONValue {
+        .object([
+            "operation": .string(operationID.rawValue),
+            "repositoryID": .optional(repositoryID),
+            "value": .string(value),
+            "performed": .bool(true),
+        ])
     }
 }
 

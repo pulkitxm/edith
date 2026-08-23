@@ -1,104 +1,33 @@
 # `ed usage projects`
 
-Cost and tokens per repository, with every matching folder grouped beneath its
-GitHub repository.
+Inspect the repository hierarchy behind the dashboard project drilldown.
 
 ```
-ed usage projects [--range <range>] [--limit <n>] [--json]
+ed usage projects <command>
 ```
 
-## Options
+With no command, this group runs `ed usage projects list`.
 
-| Name | Type / values | Default | What it does |
-| --- | --- | --- | --- |
-| `--range` | `today`, `week`, `month`, `all` | `all` | Which days to include. `week` is the current calendar week, from Monday through today |
-| `--limit` | integer greater than zero | `25` | Show at most this many repositories, taken from the top of the cost order |
-| `--json` | flag | off | Emit repository and folder details as JSON on stdout |
+## Commands
 
-This is the one window command that does not take `--source`. It declares its
-own `--range`, so `--source` here is an unknown option and exits 2.
+| Command | What it does |
+| --- | --- |
+| `ed usage projects list` | List repository totals in descending cost order |
+| `ed usage projects show <repository>` | Show one repository and every matching folder |
+| `ed usage projects open <repository>` | Open its HTTP repository link in the browser |
+| `ed usage projects copy-link <repository>` | Copy its HTTP repository link |
+| `ed usage projects copy-chat <chat-id>` | Copy a chat identifier from the dashboard drilldown |
 
-## Output
-
-The human table shows the repository name, cost and tokens. It does not include
-paths, machine names or repository URLs.
-
-```
-$ ed usage projects --range week --limit 3
-REPOSITORY  COST    TOKENS
-edith       1340.77 1664124164
-fable       988.15  919092634
-macos       303.80  383653333
-```
-
-The JSON result is a top-level array sorted by `cost` descending and truncated
-to `--limit`. Each repository includes its stable identity, GitHub URL and
-folder breakdown.
-
-```json
-[
-  {
-    "repositoryID": "github.com/pulkitxm/edith",
-    "repositoryName": "edith",
-    "repositoryURL": "https://github.com/pulkitxm/edith",
-    "cost": 1340.774043018298,
-    "tokens": 1664124164,
-    "folders": [
-      {
-        "folderName": "edith",
-        "path": "/Users/pulkit/scripts/edith",
-        "machineName": null,
-        "machineID": null,
-        "cost": 810.235,
-        "tokens": 1012304402
-      },
-      {
-        "folderName": "edith",
-        "path": "machine:0b481f65-f946-4636-ab36-e4508eb67e6a:/home/pulkit/code/edith",
-        "machineName": "Asus TUF 7",
-        "machineID": "0B481F65-F946-4636-AB36-E4508EB67E6A",
-        "cost": 530.539043018298,
-        "tokens": 651819762
-      }
-    ]
-  }
-]
-```
-
-## Examples
-
-```
-ed usage projects
-ed usage projects --range week --limit 5
-ed usage projects --range today --json | jq -r '.[] | .repositoryName'
-ed usage projects --json | jq '.[] | {name: .repositoryName, folders}'
-```
-
-## Behaviour
-
-Folders with the same GitHub remote are one repository even when they are on
-different machines. A repository's visible name is its final GitHub path
-component. Repositories with the same visible name remain separate because
-`repositoryID`, not the display name, is the grouping key. Repositories without
-a GitHub remote use a folder identity and are not merged across unrelated paths.
-Local folder paths remain absolute. A remote folder path is prefixed with
-`machine:<lowercase-machine-uuid>:` so it cannot collide with a local path.
-GitHub-backed `repositoryID` values stay unprefixed, which is what lets the same
-repository merge across machines.
-
-For each day and source, cost and tokens are normalized independently to that
-source's canonical totals. Per-source data, including its per-model split, is
-preferred when it exists; chats and worktrees are the fallback. When measured
-cost is zero the split follows tokens, and when measured tokens are zero it
-follows cost. Usage with no matching folder detail appears under `Unattributed`
-for that source and model, so repository totals still reconcile with the
-summary.
-
-The command reads only, mutates nothing, and needs no app. It exits 4 with no
-`usage.json`, 1 on a file that will not decode, 3 on a bad `--range`, and 2 on
-`--limit 0` or a negative limit.
+A repository argument can be its stable identity, visible name or full URL. A
+visible name shared by several repositories is rejected as ambiguous. Use the
+stable identity from `list --json` to select it exactly.
 
 ## Where to go next
 
+- [`ed usage projects list`](./projects-list.md)
+- [`ed usage projects show`](./projects-show.md)
+- [`ed usage projects open`](./projects-open.md)
+- [`ed usage projects copy-link`](./projects-copy-link.md)
+- [`ed usage projects copy-chat`](./projects-copy-chat.md)
 - [`ed usage`](./README.md), the rest of this group
 - [All `ed` commands](../README.md)
