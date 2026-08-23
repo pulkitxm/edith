@@ -420,10 +420,11 @@ public enum CommandTree {
                     CommandNode(
                         "rm", "Take one entry out of the queue.",
                         options: common + ["--yes"],
-                        arguments: [.historyIndex]),
+                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Forget what has finished.",
-                        options: ["--json", "--help", "--yes"]),
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "cancel", "Stop active downloads and keep their history.", options: common,
                         arguments: [.historyIndex]),
