@@ -7,6 +7,8 @@ public enum UserOperationCatalog {
         + CalendarEventOperation.allCases.map(\.descriptor)
         + ShelfItemOperation.allCases.map(\.descriptor)
         + MusicLibraryOperation.allCases.map(\.descriptor)
+        + MusicTransportOperation.allCases.map(\.descriptor)
+        + MusicCurrentOperation.allCases.map(\.descriptor)
         + PresenterRuntimeOperation.allCases.map(\.descriptor)
         + ConfigurationOperation.allCases.map(\.descriptor)
         + PermissionOperation.allCases.map(\.descriptor)

@@ -306,6 +306,12 @@ public enum CommandTree {
                         "volume", "Set the player volume from 0 to 1.", options: playback,
                         optionValues: playbackValues),
                     CommandNode(
+                        "open-current", "Open the active music player.", options: playback,
+                        optionValues: playbackValues),
+                    CommandNode(
+                        "reveal-current", "Reveal the current track or open its player.",
+                        options: playback, optionValues: playbackValues),
+                    CommandNode(
                         "start", "Play one track, or a whole folder.",
                         options: ["--json", "--help", "--folder"], arguments: [.free]),
                     CommandNode(
