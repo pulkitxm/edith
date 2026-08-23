@@ -464,6 +464,17 @@ enum UIParity {
         UICapability(
             "Herdr session tab", "copy the attach command for a pane",
             ["herdr", "command", "w3:p1N"]),
+        UICapability(
+            "Quinjet page", "list recent review projects", ["quinjet", "projects"]),
+        UICapability(
+            "Quinjet project picker", "list project worktrees",
+            ["quinjet", "worktrees", "/tmp/project"]),
+        UICapability(
+            "Quinjet project picker", "prepare a review launch without running it",
+            ["quinjet", "open", "/tmp/project"]),
+        UICapability(
+            "Quinjet project picker", "launch a review session",
+            ["quinjet", "launch", "/tmp/project"]),
     ]
 }
 

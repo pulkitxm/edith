@@ -55,6 +55,16 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
     public let terminal: QuinjetTerminal
 
     public init(
+        executableURL: URL, arguments: [String], currentDirectory: String?,
+        terminal: QuinjetTerminal
+    ) {
+        self.executableURL = executableURL
+        self.arguments = arguments
+        self.currentDirectory = currentDirectory
+        self.terminal = terminal
+    }
+
+    public init(
         executableURL: URL, worktreePath: String, remote: QuinjetRemote?,
         configuration: QuinjetLaunchConfiguration, managedByEdith: Bool,
         localHomeDirectory: String
@@ -102,6 +112,70 @@ public enum QuinjetShellCommand {
     }
 }
 
+public enum QuinjetCMUX {
+    public static func executable(fileManager: FileManager = .default) -> URL? {
+        let candidates = [
+            "/Applications/cmux.app/Contents/Resources/bin/cmux",
+            "/Applications/cmux.app/Contents/MacOS/cmux",
+        ]
+        return candidates.map(URL.init(fileURLWithPath:)).first {
+            fileManager.isExecutableFile(atPath: $0.path)
+        }
+    }
+
+    public static func launchScript(
+        request: QuinjetLaunchRequest, replacing workspaceID: String? = nil
+    ) -> String {
+        var statements = ["tell application id \"com.cmuxterm.app\"", "activate"]
+        if let workspaceID { statements += closeStatements(workspaceID: workspaceID) }
+        statements += [
+            "set quinjetWorkspace to new tab",
+            "select tab quinjetWorkspace",
+            "delay 0.5",
+            "set quinjetTerminal to focused terminal of quinjetWorkspace",
+            "focus quinjetTerminal",
+            "input text \(appleScriptQuote(request.shellCommand)) to quinjetTerminal",
+            "perform action \(appleScriptQuote("text:\\x0d")) on quinjetTerminal",
+            "return id of quinjetWorkspace",
+            "end tell",
+        ]
+        return statements.joined(separator: "\n")
+    }
+
+    public static func focusScript(workspaceID: String) -> String {
+        [
+            "tell application id \"com.cmuxterm.app\"", "activate",
+            "repeat with cmuxWindow in windows",
+            "repeat with cmuxWorkspace in tabs of cmuxWindow",
+            "if id of cmuxWorkspace is \(appleScriptQuote(workspaceID)) then",
+            "select tab cmuxWorkspace", "return id of cmuxWorkspace", "end if", "end repeat",
+            "end repeat", "error \"workspace is no longer open\"", "end tell",
+        ].joined(separator: "\n")
+    }
+
+    public static func closeScript(workspaceID: String) -> String {
+        (["tell application id \"com.cmuxterm.app\""]
+            + closeStatements(workspaceID: workspaceID) + ["return \"closed\"", "end tell"])
+            .joined(separator: "\n")
+    }
+
+    public static func appleScriptQuote(_ value: String) -> String {
+        "\""
+            + value.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n") + "\""
+    }
+
+    private static func closeStatements(workspaceID: String) -> [String] {
+        [
+            "repeat with cmuxWindow in windows",
+            "repeat with cmuxWorkspace in tabs of cmuxWindow",
+            "if id of cmuxWorkspace is \(appleScriptQuote(workspaceID)) then",
+            "close tab cmuxWorkspace", "exit repeat", "end if", "end repeat", "end repeat",
+        ]
+    }
+}
+
 public enum QuinjetOperation: String, CaseIterable, Equatable, Sendable {
     case projects
     case worktrees
@@ -142,6 +216,19 @@ public enum QuinjetOperationExecution {
         at path: String, remote: QuinjetRemote? = nil, using client: QuinjetClient
     ) async throws -> [QuinjetWorktree] {
         try await client.worktrees(at: path, remote: remote)
+    }
+
+    public static func openSelection(
+        at path: String, remote: QuinjetRemote? = nil, using client: QuinjetClient
+    ) async throws -> QuinjetOpenSelection {
+        let worktrees = try await worktrees(at: path, remote: remote, using: client).filter(
+            \.canOpen)
+        guard let worktree = worktrees.first(where: { $0.path == path }) ?? worktrees.first else {
+            throw QuinjetOperationError.noOpenWorktree(path)
+        }
+        return QuinjetOpenSelection(
+            projectName: URL(fileURLWithPath: path).lastPathComponent,
+            worktree: worktree, worktrees: worktrees)
     }
 
     public static func launchRequest(

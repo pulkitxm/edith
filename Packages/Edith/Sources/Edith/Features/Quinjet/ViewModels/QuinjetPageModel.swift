@@ -232,18 +232,11 @@ final class QuinjetPageModel {
             tab.errorMessage = nil
         }
         do {
-            let worktrees = try await QuinjetOperationExecution.worktrees(
-                at: path, remote: remote, using: client
-            ).filter(\.canOpen)
-            guard let worktree = worktrees.first(where: { $0.path == path }) ?? worktrees.first
-            else {
-                let message = "No open worktree was found in this folder."
-                if remote == nil { projectError = message } else { tab.errorMessage = message }
-                return
-            }
-            let name = URL(fileURLWithPath: path).lastPathComponent
+            let selection = try await QuinjetOperationExecution.openSelection(
+                at: path, remote: remote, using: client)
             open(
-                worktree, projectName: name, available: worktrees, remote: remote, in: tab,
+                selection.worktree, projectName: selection.projectName,
+                available: selection.worktrees, remote: remote, in: tab,
                 launchEnabled: launchEnabled, configuration: configuration)
             if remote == nil { await refreshProjects() }
         } catch {

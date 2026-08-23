@@ -130,3 +130,28 @@ public enum QuinjetClientError: Error, Equatable, LocalizedError {
         }
     }
 }
+
+public struct QuinjetOpenSelection: Equatable, Sendable {
+    public let projectName: String
+    public let worktree: QuinjetWorktree
+    public let worktrees: [QuinjetWorktree]
+
+    public init(
+        projectName: String, worktree: QuinjetWorktree, worktrees: [QuinjetWorktree]
+    ) {
+        self.projectName = projectName
+        self.worktree = worktree
+        self.worktrees = worktrees
+    }
+}
+
+public enum QuinjetOperationError: Error, Equatable, LocalizedError {
+    case noOpenWorktree(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .noOpenWorktree(path):
+            return "No open worktree was found in \(path)."
+        }
+    }
+}

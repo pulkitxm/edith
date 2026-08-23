@@ -5,6 +5,17 @@ import Testing
 @testable import EdithKit
 
 @Suite struct QuinjetClientTests {
+    @Test func operationDescriptorsAreUniqueAndRegistered() {
+        let descriptors = QuinjetOperation.allCases.map(\.descriptor)
+
+        #expect(Set(descriptors.map(\.id)).count == descriptors.count)
+        #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+        #expect(descriptors.allSatisfy { $0.cli.starts(with: ["quinjet"]) })
+        #expect(QuinjetOperation.open.descriptor.effect == .read)
+        #expect(QuinjetOperation.launch.descriptor.effect == .interactive)
+        #expect(UserOperationCatalog.descriptors.suffix(descriptors.count) == descriptors[...])
+    }
+
     @Test func decodesRecentProjectsAndWorktrees() async throws {
         let client = QuinjetClient { arguments in
             #expect(arguments == ["project", "list", "--json"])

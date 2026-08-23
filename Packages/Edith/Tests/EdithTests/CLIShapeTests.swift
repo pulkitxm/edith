@@ -198,6 +198,7 @@ enum CommandCrawler {
             "ed companion connectors", "ed companion db", "ed companion stack",
             "ed lid-awake",
             "ed attention", "ed attention categories", "ed attention focus",
+            "ed quinjet",
         ]
         for walk in Self.commands where !exempt.contains(walk.label) {
             #expect(

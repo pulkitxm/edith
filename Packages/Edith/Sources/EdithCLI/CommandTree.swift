@@ -544,6 +544,30 @@ public enum CommandTree {
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
                 ]),
             CommandNode(
+                "quinjet", "Discover and open Quinjet review workspaces.",
+                children: [
+                    CommandNode(
+                        "projects", "List recent Quinjet projects.",
+                        options: ["--json", "--help", "--machine"]),
+                    CommandNode(
+                        "worktrees", "List the worktrees in a Quinjet project.",
+                        options: ["--json", "--help", "--machine"],
+                        arguments: [.remotePath]),
+                    CommandNode(
+                        "open", "Print a Quinjet launch request without running it.",
+                        options: [
+                            "--json", "--help", "--machine", "--theme", "--appearance",
+                            "--cmux",
+                        ], arguments: [.remotePath]),
+                    CommandNode(
+                        "launch", "Launch a Quinjet review session.",
+                        options: [
+                            "--json", "--help", "--machine", "--theme", "--appearance",
+                            "--cmux",
+                        ],
+                        arguments: [.remotePath]),
+                ]),
+            CommandNode(
                 "machines", "The computers Edith can reach over SSH.",
                 arguments: [.machine],
                 children: [
