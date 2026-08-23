@@ -367,7 +367,7 @@ public enum CommandTree {
                         arguments: [.historyIndex]),
                     CommandNode(
                         "clear", "Forget the whole history.",
-                        options: ["--json", "--help", "--keep-pinned"]),
+                        options: ["--json", "--help", "--keep-pinned", "--yes"]),
                 ]),
             CommandNode(
                 "attention", "Local attention, application, website, music and focus data.",
@@ -417,7 +417,9 @@ public enum CommandTree {
                         "ls", "List picked colours.", aliases: ["list"],
                         options: ["--json", "--help", "--format", "--limit"],
                         arguments: [.colorFormat]),
-                    CommandNode("clear", "Forget every picked colour.", options: ["--json"]),
+                    CommandNode(
+                        "clear", "Forget every picked colour.",
+                        options: ["--json", "--yes"]),
                 ]),
             CommandNode(
                 "shelf", "The files parked on the notch shelf.",
@@ -431,9 +433,9 @@ public enum CommandTree {
                         "add", "Copy a file onto the shelf.", options: ["--json"],
                         arguments: [.localPath]),
                     CommandNode(
-                        "rm", "Take one item off the shelf.", options: ["--json"],
+                        "rm", "Take one item off the shelf.", options: ["--json", "--yes"],
                         arguments: [.historyIndex]),
-                    CommandNode("clear", "Empty the shelf.", options: ["--json"]),
+                    CommandNode("clear", "Empty the shelf.", options: ["--json", "--yes"]),
                 ]),
             CommandNode(
                 "cleaner", "The developer caches the disk cleaner can reclaim.",
