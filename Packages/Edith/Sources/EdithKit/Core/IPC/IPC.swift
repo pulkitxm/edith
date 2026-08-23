@@ -100,6 +100,10 @@ public enum IPC {
             "com.pulkit.edith.requestWindowSnapshot")
         public static let windowSnapshotResult = Notification.Name(
             "com.pulkit.edith.windowSnapshotResult")
+        public static let requestQuinjetSessionOperation = Notification.Name(
+            "com.pulkit.edith.requestQuinjetSessionOperation")
+        public static let quinjetSessionOperationResult = Notification.Name(
+            "com.pulkit.edith.quinjetSessionOperationResult")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {

@@ -228,6 +228,158 @@ public enum QuinjetOperation: String, CaseIterable, Equatable, Sendable {
     }
 }
 
+public enum QuinjetSessionOperation: String, CaseIterable, Codable, Equatable, Sendable {
+    case status
+    case sessions
+    case focus
+    case close
+    case restart
+    case switchWorktree = "switch"
+
+    public var descriptor: UserOperationDescriptor {
+        switch self {
+        case .status:
+            descriptor("Show the selected native Quinjet session.", effect: .read)
+        case .sessions:
+            descriptor("List native Quinjet sessions in the running app.", effect: .read)
+        case .focus:
+            descriptor("Select and focus a native Quinjet session.", effect: .interactive)
+        case .close:
+            descriptor(
+                "Close a native Quinjet session.", effect: .destructive,
+                requiresPreview: true)
+        case .restart:
+            descriptor("Restart a native Quinjet session in place.", effect: .interactive)
+        case .switchWorktree:
+            descriptor("Switch a native Quinjet session to another worktree.", effect: .interactive)
+        }
+    }
+
+    private func descriptor(
+        _ summary: String, effect: UserOperationEffect, requiresPreview: Bool = false
+    ) -> UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "quinjet.session.\(rawValue)"), summary: summary,
+            cli: ["quinjet", rawValue], effect: effect, requiresPreview: requiresPreview)
+    }
+}
+
+public struct QuinjetSessionRequest: Equatable, Sendable {
+    public let operation: QuinjetSessionOperation
+    public let session: String?
+    public let worktreePath: String?
+
+    public init(
+        operation: QuinjetSessionOperation, session: String? = nil,
+        worktreePath: String? = nil
+    ) {
+        self.operation = operation
+        self.session = session
+        self.worktreePath = worktreePath
+    }
+}
+
+public struct QuinjetSessionState: Codable, Equatable, Sendable {
+    public let id: String
+    public let index: Int
+    public let title: String
+    public let selected: Bool
+    public let state: String
+    public let terminal: String?
+    public let project: String?
+    public let worktreePath: String?
+    public let branch: String?
+    public let machine: String
+    public let canClose: Bool
+    public let canRestart: Bool
+    public let exitMessage: String?
+
+    public init(
+        id: String, index: Int, title: String, selected: Bool, state: String,
+        terminal: String?, project: String?, worktreePath: String?, branch: String?,
+        machine: String, canClose: Bool, canRestart: Bool, exitMessage: String?
+    ) {
+        self.id = id
+        self.index = index
+        self.title = title
+        self.selected = selected
+        self.state = state
+        self.terminal = terminal
+        self.project = project
+        self.worktreePath = worktreePath
+        self.branch = branch
+        self.machine = machine
+        self.canClose = canClose
+        self.canRestart = canRestart
+        self.exitMessage = exitMessage
+    }
+}
+
+public struct QuinjetSessionResult: Codable, Equatable, Sendable {
+    public let operation: QuinjetSessionOperation
+    public let selectedSessionID: String?
+    public let affectedSessionID: String?
+    public let sessions: [QuinjetSessionState]
+
+    public init(
+        operation: QuinjetSessionOperation, selectedSessionID: String?,
+        affectedSessionID: String?, sessions: [QuinjetSessionState]
+    ) {
+        self.operation = operation
+        self.selectedSessionID = selectedSessionID
+        self.affectedSessionID = affectedSessionID
+        self.sessions = sessions
+    }
+}
+
+public enum QuinjetSessionError: Error, Equatable, LocalizedError, Sendable {
+    case pageUnavailable
+    case sessionNotFound(String)
+    case lastSession
+    case reviewUnavailable(String)
+    case worktreeRequired
+    case operationFailed(String)
+
+    public var code: String {
+        switch self {
+        case .pageUnavailable: "pageUnavailable"
+        case .sessionNotFound: "sessionNotFound"
+        case .lastSession: "lastSession"
+        case .reviewUnavailable: "reviewUnavailable"
+        case .worktreeRequired: "worktreeRequired"
+        case .operationFailed: "operationFailed"
+        }
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .pageUnavailable:
+            "The Quinjet page is not open in Edith."
+        case let .sessionNotFound(selector):
+            "No native Quinjet session matches \(selector)."
+        case .lastSession:
+            "The only native Quinjet session cannot be closed."
+        case let .reviewUnavailable(selector):
+            "Quinjet session \(selector) does not have an open review."
+        case .worktreeRequired:
+            "A worktree path is required for this Quinjet session operation."
+        case let .operationFailed(message):
+            message
+        }
+    }
+}
+
+public enum QuinjetSessionIPC {
+    public static let requestIDKey = "requestID"
+    public static let operationKey = "operation"
+    public static let sessionKey = "session"
+    public static let worktreePathKey = "worktreePath"
+    public static let okKey = "ok"
+    public static let payloadKey = "payload"
+    public static let errorKey = "error"
+    public static let errorCodeKey = "errorCode"
+}
+
 public enum QuinjetOperationExecution {
     public static func projects(
         remote: QuinjetRemote? = nil, using client: QuinjetClient

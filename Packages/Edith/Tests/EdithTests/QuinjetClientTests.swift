@@ -6,14 +6,28 @@ import Testing
 
 @Suite struct QuinjetClientTests {
     @Test func operationDescriptorsAreUniqueAndRegistered() {
-        let descriptors = QuinjetOperation.allCases.map(\.descriptor)
+        let descriptors =
+            QuinjetOperation.allCases.map(\.descriptor)
+            + QuinjetSessionOperation.allCases.map(\.descriptor)
 
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
         #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
         #expect(descriptors.allSatisfy { $0.cli.starts(with: ["quinjet"]) })
         #expect(QuinjetOperation.open.descriptor.effect == .read)
         #expect(QuinjetOperation.launch.descriptor.effect == .interactive)
+        #expect(QuinjetSessionOperation.close.descriptor.effect == .destructive)
+        #expect(QuinjetSessionOperation.close.descriptor.requiresPreview)
         #expect(UserOperationCatalog.descriptors.suffix(descriptors.count) == descriptors[...])
+    }
+
+    @Test func nativeSessionVocabularyHasStableCommandPaths() {
+        #expect(
+            QuinjetSessionOperation.allCases.map(\.descriptor.cli)
+                == [
+                    ["quinjet", "status"], ["quinjet", "sessions"],
+                    ["quinjet", "focus"], ["quinjet", "close"],
+                    ["quinjet", "restart"], ["quinjet", "switch"],
+                ])
     }
 
     @Test func decodesRecentProjectsAndWorktrees() async throws {
