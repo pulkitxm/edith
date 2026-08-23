@@ -98,6 +98,8 @@ public struct UsageProjectFolderSummary: Equatable, Sendable {
     public let machineID: String?
     public var cost: Double
     public var tokens: Double
+    public var chats: [UsageProjectChatSummary]
+    public var worktrees: [UsageProjectWorktreeSummary]
 
     public var json: JSONValue {
         .object([
@@ -107,6 +109,52 @@ public struct UsageProjectFolderSummary: Equatable, Sendable {
             "machineID": .optional(machineID),
             "cost": .double(cost),
             "tokens": .double(tokens),
+            "chats": .array(chats.map(\.json)),
+            "worktrees": .array(worktrees.map(\.json)),
+        ])
+    }
+}
+
+public struct UsageProjectChatSummary: Equatable, Sendable {
+    public let id: String?
+    public var title: String?
+    public var path: String?
+    public var source: String?
+    public var cost: Double
+    public var tokens: Double
+    public var lastTs: Double?
+
+    public var displayName: String {
+        if let title, !title.isEmpty { return title }
+        if let id, !id.isEmpty { return "Chat \(String(id.prefix(8)))" }
+        return "Untitled chat"
+    }
+
+    public var json: JSONValue {
+        .object([
+            "id": .optional(id),
+            "title": .optional(title),
+            "path": .optional(path),
+            "source": .optional(source),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "lastTs": lastTs.map(JSONValue.double) ?? .null,
+        ])
+    }
+}
+
+public struct UsageProjectWorktreeSummary: Equatable, Sendable {
+    public let name: String
+    public var cost: Double
+    public var tokens: Double
+    public var chats: [UsageProjectChatSummary]
+
+    public var json: JSONValue {
+        .object([
+            "name": .string(name),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "chats": .array(chats.map(\.json)),
         ])
     }
 }
@@ -118,6 +166,14 @@ public struct UsageProjectSummary: Equatable, Sendable {
     public var cost: Double
     public var tokens: Double
     public var folders: [UsageProjectFolderSummary]
+
+    public var chatIDs: [String] {
+        let values = folders.flatMap { folder in
+            folder.chats.compactMap(\.id)
+                + folder.worktrees.flatMap { $0.chats.compactMap(\.id) }
+        }
+        return Array(Set(values.filter { !$0.isEmpty })).sorted()
+    }
 
     public var json: JSONValue {
         .object([
@@ -349,7 +405,8 @@ public enum UsageAnalysis {
                     if $0.cost != $1.cost { return $0.cost > $1.cost }
                     if $0.folderName != $1.folderName { return $0.folderName < $1.folderName }
                     return ($0.path ?? "") < ($1.path ?? "")
-                })
+                }
+                .map(sorted))
         }
         .sorted {
             if $0.cost != $1.cost { return $0.cost > $1.cost }
@@ -380,7 +437,7 @@ public enum UsageAnalysis {
             }
             for (project, cost, tokens) in measured {
                 add(
-                    project,
+                    project, source: source,
                     cost: normalized(
                         cost, alternate: tokens, rawTotal: rawCost,
                         rawAlternateTotal: rawTokens, target: targetCost),
@@ -412,7 +469,7 @@ public enum UsageAnalysis {
     }
 
     private static func add(
-        _ project: UsageProject, cost: Double, tokens: Double,
+        _ project: UsageProject, source: String, cost: Double, tokens: Double,
         to repositories: inout [String: UsageRepositoryAccumulator]
     ) {
         guard cost != 0 || tokens != 0 else { return }
@@ -438,9 +495,12 @@ public enum UsageAnalysis {
                 machineName: project.machineName,
                 machineID: project.machineID,
                 cost: 0,
-                tokens: 0)
+                tokens: 0,
+                chats: [],
+                worktrees: [])
         folder.cost += cost
         folder.tokens += tokens
+        addHierarchy(project, source: source, cost: cost, tokens: tokens, to: &folder)
         repository.folders[folderKey] = folder
         repositories[repositoryKey] = repository
     }
@@ -464,11 +524,131 @@ public enum UsageAnalysis {
             repository.folders[folderName]
             ?? UsageProjectFolderSummary(
                 folderName: folderName, path: nil, machineName: nil, machineID: nil,
-                cost: 0, tokens: 0)
+                cost: 0, tokens: 0, chats: [], worktrees: [])
         folder.cost += cost
         folder.tokens += tokens
         repository.folders[folderName] = folder
         repositories[repositoryKey] = repository
+    }
+
+    private static func addHierarchy(
+        _ project: UsageProject, source: String, cost: Double, tokens: Double,
+        to folder: inout UsageProjectFolderSummary
+    ) {
+        let direct = (project.chats ?? []).filter { chatBelongs($0, to: source, project: project) }
+        let worktrees = (project.worktrees ?? []).map { worktree in
+            (
+                worktree,
+                (worktree.chats ?? []).filter {
+                    chatBelongs($0, to: source, project: project)
+                }
+            )
+        }
+        let allChats = direct + worktrees.flatMap(\.1)
+        let rawCost = allChats.reduce(0) { $0 + ($1.cost ?? 0) }
+        let rawTokens = allChats.reduce(0) { $0 + ($1.tokens ?? 0) }
+        func summary(_ chat: UsageProjectChat) -> UsageProjectChatSummary {
+            UsageProjectChatSummary(
+                id: nonempty(chat.id), title: nonempty(chat.title), path: nonempty(chat.path),
+                source: nonempty(chat.source) ?? source,
+                cost: normalized(
+                    chat.cost ?? 0, alternate: chat.tokens ?? 0, rawTotal: rawCost,
+                    rawAlternateTotal: rawTokens, target: cost),
+                tokens: normalized(
+                    chat.tokens ?? 0, alternate: chat.cost ?? 0, rawTotal: rawTokens,
+                    rawAlternateTotal: rawCost, target: tokens),
+                lastTs: chat.lastTs)
+        }
+        for chat in direct { merge(summary(chat), into: &folder.chats) }
+        for (worktree, chats) in worktrees where !chats.isEmpty {
+            let name = nonempty(worktree.name) ?? "Unnamed worktree"
+            var index = folder.worktrees.firstIndex { $0.name == name }
+            if index == nil {
+                folder.worktrees.append(
+                    UsageProjectWorktreeSummary(name: name, cost: 0, tokens: 0, chats: []))
+                index = folder.worktrees.indices.last
+            }
+            guard let index else { continue }
+            for chat in chats {
+                let value = summary(chat)
+                folder.worktrees[index].cost += value.cost
+                folder.worktrees[index].tokens += value.tokens
+                merge(value, into: &folder.worktrees[index].chats)
+            }
+        }
+    }
+
+    private static func chatBelongs(
+        _ chat: UsageProjectChat, to source: String, project: UsageProject
+    ) -> Bool {
+        guard let chatSource = nonempty(chat.source) else {
+            return project.bySource?.count == 1
+        }
+        return chatSource == source
+    }
+
+    private static func merge(
+        _ incoming: UsageProjectChatSummary, into chats: inout [UsageProjectChatSummary]
+    ) {
+        let key = chatKey(incoming)
+        guard let index = chats.firstIndex(where: { chatKey($0) == key }) else {
+            chats.append(incoming)
+            return
+        }
+        chats[index].cost += incoming.cost
+        chats[index].tokens += incoming.tokens
+        if let title = incoming.title { chats[index].title = title }
+        if let path = incoming.path { chats[index].path = path }
+        if let source = incoming.source { chats[index].source = source }
+        if (incoming.lastTs ?? 0) > (chats[index].lastTs ?? 0) {
+            chats[index].lastTs = incoming.lastTs
+        }
+    }
+
+    private static func chatKey(_ chat: UsageProjectChatSummary) -> String {
+        if let id = nonempty(chat.id) { return "id:\(id)" }
+        return [chat.source ?? "", chat.path ?? "", chat.title ?? ""]
+            .joined(separator: "\u{1F}")
+    }
+
+    private static func sorted(_ folder: UsageProjectFolderSummary) -> UsageProjectFolderSummary {
+        var value = folder
+        value.chats.sort(by: chatOrder)
+        value.worktrees = value.worktrees.map { worktree in
+            var item = worktree
+            item.chats.sort(by: chatOrder)
+            return item
+        }
+        .sorted {
+            if $0.cost != $1.cost { return $0.cost > $1.cost }
+            if $0.tokens != $1.tokens { return $0.tokens > $1.tokens }
+            return $0.name < $1.name
+        }
+        return value
+    }
+
+    private static func chatOrder(
+        _ left: UsageProjectChatSummary, _ right: UsageProjectChatSummary
+    ) -> Bool {
+        if left.cost != right.cost { return left.cost > right.cost }
+        if left.tokens != right.tokens { return left.tokens > right.tokens }
+        if left.lastTs != right.lastTs { return (left.lastTs ?? 0) > (right.lastTs ?? 0) }
+        return (left.id ?? "") < (right.id ?? "")
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+
+    public static func chatIDs(_ days: [UsageDay]) -> [String] {
+        let ids = days.flatMap { $0.projects ?? [] }.flatMap { project in
+            (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        }
+        .compactMap { nonempty($0.id) }
+        return Array(Set(ids)).sorted()
     }
 
     private static func normalized(

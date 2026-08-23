@@ -168,6 +168,79 @@ import Testing
         #expect(projects[1].tokens == 25)
     }
 
+    @Test func projectHierarchyMergesChatsAcrossDaysAndKeepsWorktrees() throws {
+        let document = """
+            {
+              "sources": ["cli"],
+              "daily": [
+                {
+                  "period": "2026-08-06",
+                  "bySource": {"cli": [
+                    {"modelName": "opus", "inputTokens": 20, "cost": 2}
+                  ]},
+                  "projects": [{
+                    "repositoryID": "github.com/acme/edith", "repositoryName": "edith",
+                    "folderName": "edith", "path": "/tmp/edith",
+                    "machineName": "Laptop", "machineID": "laptop",
+                    "bySource": {"cli": {"tokens": 20, "cost": 2}},
+                    "chats": [{"id": "main-chat", "title": "First title",
+                      "path": "/tmp/edith", "source": "cli", "tokens": 5, "cost": 0.5,
+                      "lastTs": 10}],
+                    "worktrees": [{"name": "feature", "chats": [
+                      {"id": "work-chat", "title": "Feature work", "source": "cli",
+                       "tokens": 15, "cost": 1.5, "lastTs": 20}
+                    ]}]
+                  }]
+                },
+                {
+                  "period": "2026-08-07",
+                  "bySource": {"cli": [
+                    {"modelName": "opus", "inputTokens": 10, "cost": 1}
+                  ]},
+                  "projects": [{
+                    "repositoryID": "github.com/acme/edith", "repositoryName": "edith",
+                    "folderName": "edith", "path": "/tmp/edith",
+                    "machineName": "Laptop", "machineID": "laptop",
+                    "bySource": {"cli": {"tokens": 10, "cost": 1}},
+                    "chats": [{"id": "main-chat", "title": "Latest title",
+                      "path": "/tmp/edith", "source": "cli", "tokens": 10, "cost": 1,
+                      "lastTs": 30}],
+                    "worktrees": []
+                  }]
+                }
+              ]
+            }
+            """
+        let parsed = try JSONDecoder().decode(UsageDocument.self, from: Data(document.utf8))
+        let project = try #require(UsageAnalysis.byProject(parsed.daily).first)
+        let folder = try #require(project.folders.first)
+        let direct = try #require(folder.chats.first)
+        let worktree = try #require(folder.worktrees.first)
+
+        #expect(project.chatIDs == ["main-chat", "work-chat"])
+        #expect(direct.id == "main-chat")
+        #expect(direct.title == "Latest title")
+        #expect(direct.lastTs == 30)
+        #expect(direct.tokens == 15)
+        #expect(worktree.name == "feature")
+        #expect(worktree.chats.map(\.id) == ["work-chat"])
+        #expect(worktree.tokens == 15)
+        #expect(folder.tokens == 30)
+    }
+
+    @Test func discoverableChatIDsAreTrimmedUniqueAndSorted() throws {
+        let document = """
+            {"daily": [{"period": "2026-08-07", "projects": [{
+              "chats": [{"id": " beta "}, {"id": "alpha"}, {"id": ""}],
+              "worktrees": [{"name": "feature", "chats": [
+                {"id": "alpha"}, {"id": "work"}
+              ]}]
+            }]}]}
+            """
+        let parsed = try JSONDecoder().decode(UsageDocument.self, from: Data(document.utf8))
+        #expect(UsageAnalysis.chatIDs(parsed.daily) == ["alpha", "beta", "work"])
+    }
+
     @Test func sameRepositoryAcrossMachinesHasDistinctFolders() throws {
         let document = """
             {
@@ -297,7 +370,13 @@ import Testing
                   "repositoryURL": "https://github.com/pulkitxm/edith",
                   "folderName": "edith", "path": "/tmp/edith",
                   "machineName": "Laptop", "machineID": "laptop-id", "tokens": 10, "cost": 1,
-                  "bySource": {"cli": {"tokens": 10, "cost": 1}}
+                  "bySource": {"cli": {"tokens": 10, "cost": 1}},
+                  "chats": [{"id": "main-chat", "title": "Main chat", "source": "cli",
+                    "tokens": 4, "cost": 0.4}],
+                  "worktrees": [{"name": "feature", "chats": [
+                    {"id": "work-chat", "title": "Work chat", "source": "cli",
+                     "tokens": 6, "cost": 0.6}
+                  ]}]
                 }]
               }]
             }
@@ -320,6 +399,17 @@ import Testing
         }
         #expect(folder["path"] == .string("/tmp/edith"))
         #expect(folder["machineID"] == .string("laptop-id"))
+        guard case let .array(chats)? = folder["chats"],
+            case let .array(worktrees)? = folder["worktrees"],
+            case let .object(chat)? = chats.first,
+            case let .object(worktree)? = worktrees.first
+        else {
+            Issue.record("folder hierarchy should be present")
+            return
+        }
+        #expect(chat["id"] == .string("main-chat"))
+        #expect(chat["title"] == .string("Main chat"))
+        #expect(worktree["name"] == .string("feature"))
     }
 
     @Test func rangesSliceOnTheDayStampAndCalendarWeek() {
