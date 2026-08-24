@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithCore
 @testable import EdithKit
 
@@ -122,5 +123,37 @@ import Testing
             CompanionMindRuntimeOperationText.nightly(CompanionNightlyStart(runId: "run-7"))
                 == "pipeline finished, run run-7; see `ed companion runs`")
         #expect(CompanionMindRuntimeOperationText.coreSet("values") == "rewrote values")
+    }
+
+    @Test func completionTreeHasEverySharedOperationAsAnExactLeaf() throws {
+        for operation in CompanionMindRuntimeOperation.allCases {
+            let node = try #require(CommandTree.node(at: operation.descriptor.cli))
+            #expect(node.children.isEmpty)
+        }
+        let down = try #require(CommandTree.node(at: ["companion", "stack", "down"]))
+        #expect(down.destructivePolicy == .previewThenYes)
+        #expect(down.options.contains("--wipe"))
+        #expect(down.options.contains("--yes"))
+    }
+
+    @Test func missingBackendsKeepStableErrorsAndExitCodes() async {
+        for arguments in [
+            ["companion", "nightly"],
+            ["companion", "nightly", "--json"],
+            ["companion", "core", "set", "values", "honest", "--json"],
+            ["companion", "inquire", "next", "--json"],
+        ] {
+            let result = await CLIProbe.run(arguments)
+            #expect(result.code == ExitCodes.unavailable, "\(arguments) exited \(result.code)")
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("companion backend"))
+        }
+
+        for verb in ["up", "restart"] {
+            let result = await CLIProbe.run(["companion", "stack", verb, "--json"])
+            #expect(result.code == ExitCodes.notFound, "\(verb) exited \(result.code)")
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("not deployed anywhere"))
+        }
     }
 }
