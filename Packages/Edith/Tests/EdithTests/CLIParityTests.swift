@@ -255,31 +255,13 @@ enum UIParity {
         UICapability(
             "Machine finder", "undo the last move or rename",
             ["machines", "files", "undo", "box"]),
-        UICapability("Workspace view", "list saved layouts", ["machines", "workspace", "ls"]),
-        UICapability(
-            "Workspace pane menu", "split a pane",
-            ["machines", "workspace", "split", "1", "box"]),
-        UICapability(
-            "Workspace pane menu", "close a pane", ["machines", "workspace", "close", "1"]),
-        UICapability(
-            "Workspace tab strip", "point a pane at another machine",
-            ["machines", "workspace", "point", "1", "box"]),
-        UICapability(
-            "Workspace toolbar", "even out the panes", ["machines", "workspace", "equalize"]),
         UICapability(
             "Download sheet", "cancel running downloads", ["download", "cancel"]),
         UICapability(
             "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
-        UICapability(
-            "Workspace toolbar", "apply a layout preset",
-            ["machines", "workspace", "new", "box", "--screen", "terminal"]),
-        UICapability(
-            "Workspace picker", "switch to another layout", ["machines", "workspace", "use", "a"]),
-        UICapability(
-            "Workspace picker", "rename a layout", ["machines", "workspace", "rename", "a", "b"]),
-        UICapability(
-            "Workspace picker", "delete a layout", ["machines", "workspace", "rm", "a"]),
+        UICapability("Machines", "open the shared connection", ["machines", "connect", "box"]),
+        UICapability("Machines", "close the shared connection", ["machines", "disconnect", "box"]),
         UICapability(
             "Machine tools", "mount the machine's disk on this Mac", ["machines", "mount", "box"]),
         UICapability(

@@ -92,6 +92,9 @@ public enum UserOperationCatalog {
         + CleanerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + WorkspaceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + UsageCollectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -429,6 +432,33 @@ private extension DockerLifecycleOperation {
             userInterface("Docker window", "remove a volume", ["box", "data"])
         case .prune:
             userInterface("Docker window", "prune unused objects", ["box", "images"])
+        }
+    }
+}
+
+private extension WorkspaceOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Workspace view", "list saved layouts")
+        case .split:
+            userInterface("Workspace pane menu", "split a pane", ["1", "box"])
+        case .close:
+            userInterface("Workspace pane menu", "close a pane", ["1"])
+        case .point:
+            userInterface("Workspace tab strip", "point a pane at another machine", ["1", "box"])
+        case .equalize:
+            userInterface("Workspace toolbar", "even out the panes")
+        case .create:
+            userInterface(
+                "Workspace toolbar", "apply a layout preset",
+                ["box", "--screen", "terminal"])
+        case .use:
+            userInterface("Workspace picker", "switch to another layout", ["a"])
+        case .rename:
+            userInterface("Workspace picker", "rename a layout", ["a", "b"])
+        case .remove:
+            userInterface("Workspace picker", "delete a layout", ["a"])
         }
     }
 }

@@ -26,28 +26,22 @@ enum WorkspaceBridge {
     static func store() -> WorkspaceStore { WorkspaceStore.load() }
 
     static func layout(_ query: String, in store: WorkspaceStore) throws -> WorkspaceLayout {
-        guard !store.layouts.isEmpty else {
-            throw CLIFailure.unavailable(
-                "no workspaces are saved",
-                hint: "make one with `ed machines workspace new`")
+        try operation { try WorkspaceOperationExecution.workspace(matching: query, in: store) }
+    }
+
+    static func operation<Result>(_ body: () throws -> Result) throws -> Result {
+        do {
+            return try body()
+        } catch let error as WorkspaceOperationError {
+            switch error.kind {
+            case .invalid:
+                throw CLIFailure(error.message, hint: error.hint)
+            case .notFound:
+                throw CLIFailure.notFound(error.message, hint: error.hint)
+            case .unavailable:
+                throw CLIFailure.unavailable(error.message, hint: error.hint)
+            }
         }
-        let needle = query.lowercased()
-        if let exact = store.layouts.first(where: { $0.name.lowercased() == needle }) {
-            return exact
-        }
-        if let byID = store.layouts.first(where: { $0.id.uuidString.lowercased() == needle }) {
-            return byID
-        }
-        let prefixed = store.layouts.filter { $0.name.lowercased().hasPrefix(needle) }
-        if prefixed.count == 1, let only = prefixed.first { return only }
-        if prefixed.count > 1 {
-            throw CLIFailure.notFound(
-                "\(query) matches more than one workspace",
-                hint: prefixed.map(\.name).joined(separator: ", "))
-        }
-        throw CLIFailure.notFound(
-            "no workspace called \(query)",
-            hint: "known: " + store.layouts.map(\.name).joined(separator: ", "))
     }
 
     static func json(_ layout: WorkspaceLayout, current: Bool) -> JSONValue {
@@ -83,24 +77,27 @@ struct WorkspaceListCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let store = WorkspaceBridge.store()
+            var store = WorkspaceBridge.store()
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(.list, in: &store)
+            }
             let currentID = store.current?.id
             guard !json else {
                 CLIOut.json(
                     .array(
-                        store.layouts.map {
+                        result.layouts.map {
                             WorkspaceBridge.json($0, current: $0.id == currentID)
                         }))
                 return
             }
-            guard !store.layouts.isEmpty else {
+            guard !result.layouts.isEmpty else {
                 CLIOut.note("no workspaces are saved")
                 return
             }
             CLIOut.out(
                 TextTable.render(
                     headers: ["NAME", "PANES", "MACHINES", ""],
-                    rows: store.layouts.map {
+                    rows: result.layouts.map {
                         [
                             $0.name, String($0.paneCount),
                             String($0.subscribedMachines().count),
@@ -125,10 +122,13 @@ struct WorkspaceUseCommand: AsyncParsableCommand {
         try await execute {
             var store = WorkspaceBridge.store()
             let layout = try WorkspaceBridge.layout(workspace, in: store)
-            store.currentID = layout.id
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .use(workspaceID: layout.id), in: &store)
+            }
             try WorkspaceBridge.write(store)
             guard !json else {
-                CLIOut.json(WorkspaceBridge.json(layout, current: true))
+                CLIOut.json(WorkspaceBridge.json(result.layout ?? layout, current: true))
                 return
             }
             CLIOut.out("now showing \(layout.name)")
@@ -174,10 +174,12 @@ struct WorkspaceNewCommand: AsyncParsableCommand {
                     machineIDs: resolved.map(\.id), screen: wanted, name: title)
             else { throw CLIFailure("could not build a layout from those machines") }
             var store = WorkspaceBridge.store()
-            store.upsert(layout)
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(.create(layout), in: &store)
+            }
             try WorkspaceBridge.write(store)
             guard !json else {
-                CLIOut.json(WorkspaceBridge.json(layout, current: true))
+                CLIOut.json(WorkspaceBridge.json(result.layout ?? layout, current: true))
                 return
             }
             CLIOut.out("made \(layout.name) with \(layout.paneCount) pane(s)")
@@ -201,20 +203,20 @@ struct WorkspaceRenameCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             var store = WorkspaceBridge.store()
-            var layout = try WorkspaceBridge.layout(workspace, in: store)
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { throw CLIFailure("a workspace needs a name") }
+            let layout = try WorkspaceBridge.layout(workspace, in: store)
             let was = layout.name
-            layout.name = trimmed
-            let currentID = store.currentID
-            store.upsert(layout)
-            store.currentID = currentID
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .rename(workspaceID: layout.id, name: name), in: &store)
+            }
+            let renamed = result.layout ?? layout
             try WorkspaceBridge.write(store)
             guard !json else {
-                CLIOut.json(WorkspaceBridge.json(layout, current: layout.id == currentID))
+                CLIOut.json(
+                    WorkspaceBridge.json(renamed, current: renamed.id == store.currentID))
                 return
             }
-            CLIOut.out("renamed \(was) to \(trimmed)")
+            CLIOut.out("renamed \(was) to \(renamed.name)")
         }
     }
 }
@@ -233,13 +235,16 @@ struct WorkspaceRemoveCommand: AsyncParsableCommand {
         try await execute {
             var store = WorkspaceBridge.store()
             let layout = try WorkspaceBridge.layout(workspace, in: store)
-            store.remove(layout.id)
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .remove(workspaceID: layout.id), in: &store)
+            }
             try WorkspaceBridge.write(store)
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "removed": .string(layout.name),
-                        "remaining": .int(store.layouts.count),
+                        "removed": .string(result.removed?.name ?? layout.name),
+                        "remaining": .int(result.layouts.count),
                     ]))
                 return
             }
@@ -265,13 +270,9 @@ enum PaneBridge {
     }
 
     static func pane(_ index: Int, in layout: WorkspaceLayout) throws -> PaneNode {
-        let panes = layout.root.panes
-        guard index >= 1, index <= panes.count else {
-            throw CLIFailure.notFound(
-                "there is no pane \(index) in \(layout.name)",
-                hint: "it has \(panes.count), numbered from 1")
+        try WorkspaceBridge.operation {
+            try WorkspaceOperationExecution.pane(at: index, in: layout)
         }
-        return panes[index - 1]
     }
 
     static func screen(_ raw: String) throws -> PaneScreen {
@@ -289,14 +290,6 @@ enum PaneBridge {
                 "no side called \(raw)", hint: "sides: left, right, top, bottom")
         }
         return value
-    }
-
-    static func save(_ store: WorkspaceStore, _ layout: WorkspaceLayout) throws {
-        var updated = store
-        let currentID = store.currentID
-        updated.upsert(layout)
-        updated.currentID = currentID ?? layout.id
-        try WorkspaceBridge.write(updated)
     }
 
     static func describe(_ layout: WorkspaceLayout, machines: [Machine]) -> JSONValue {
@@ -382,21 +375,28 @@ struct WorkspaceSplitCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            var found = try PaneBridge.context(workspace)
+            let found = try PaneBridge.context(workspace)
             let target = try PaneBridge.pane(pane, in: found.layout)
             let wanted = try MachineResolver.machine(machine)
-            found.layout.split(
-                paneID: target.id, side: try PaneBridge.side(side),
-                target: PaneTarget(
-                    machineID: wanted.id, screen: try PaneBridge.screen(screen)))
-            try PaneBridge.save(found.store, found.layout)
+            var store = found.store
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .split(
+                        workspaceID: found.layout.id, paneID: target.id,
+                        side: try PaneBridge.side(side),
+                        target: PaneTarget(
+                            machineID: wanted.id, screen: try PaneBridge.screen(screen))),
+                    in: &store)
+            }
+            let layout = result.layout ?? found.layout
+            try WorkspaceBridge.write(store)
             guard !json else {
                 CLIOut.json(
-                    PaneBridge.describe(found.layout, machines: MachineRegistry.machines()))
+                    PaneBridge.describe(layout, machines: MachineRegistry.machines()))
                 return
             }
             CLIOut.out(
-                "split pane \(pane) to the \(side); \(found.layout.paneCount) panes now")
+                "split pane \(pane) to the \(side); \(layout.paneCount) panes now")
         }
     }
 }
@@ -416,21 +416,21 @@ struct WorkspaceClosePaneCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            var found = try PaneBridge.context(workspace)
-            guard found.layout.paneCount > 1 else {
-                throw CLIFailure(
-                    "\(found.layout.name) has one pane left, and a workspace needs one",
-                    hint: "remove the whole thing with `ed machines workspace rm`")
-            }
+            let found = try PaneBridge.context(workspace)
             let target = try PaneBridge.pane(pane, in: found.layout)
-            found.layout.closePane(target.id)
-            try PaneBridge.save(found.store, found.layout)
+            var store = found.store
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .close(workspaceID: found.layout.id, paneID: target.id), in: &store)
+            }
+            let layout = result.layout ?? found.layout
+            try WorkspaceBridge.write(store)
             guard !json else {
                 CLIOut.json(
-                    PaneBridge.describe(found.layout, machines: MachineRegistry.machines()))
+                    PaneBridge.describe(layout, machines: MachineRegistry.machines()))
                 return
             }
-            CLIOut.out("closed pane \(pane); \(found.layout.paneCount) left")
+            CLIOut.out("closed pane \(pane); \(layout.paneCount) left")
         }
     }
 }
@@ -460,20 +460,28 @@ struct WorkspaceRetargetCommand: AsyncParsableCommand {
             guard machine != nil || screen != nil else {
                 throw CLIFailure("say a machine, a --screen, or both")
             }
-            var found = try PaneBridge.context(workspace)
+            let found = try PaneBridge.context(workspace)
             let target = try PaneBridge.pane(pane, in: found.layout)
             let wanted = try machine.map { try MachineResolver.machine($0) }
             let wantedScreen = try screen.map { try PaneBridge.screen($0) }
-            found.layout.root.updatePane(target.id) { node in
-                guard let index = node.tabs.firstIndex(where: { $0.id == node.selected })
-                else { return }
-                if let wanted { node.tabs[index].target.machineID = wanted.id }
-                if let wantedScreen { node.tabs[index].target.screen = wantedScreen }
+            let tab = target.tabs.first { $0.id == target.selected } ?? target.tabs[0]
+            let next = PaneTarget(
+                machineID: wanted?.id ?? tab.target.machineID,
+                screen: wantedScreen ?? tab.target.screen,
+                argument: tab.target.argument)
+            var store = found.store
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .point(
+                        workspaceID: found.layout.id, paneID: target.id,
+                        targets: [WorkspaceTabRetarget(tabID: tab.id, target: next)]),
+                    in: &store)
             }
-            try PaneBridge.save(found.store, found.layout)
+            let layout = result.layout ?? found.layout
+            try WorkspaceBridge.write(store)
             guard !json else {
                 CLIOut.json(
-                    PaneBridge.describe(found.layout, machines: MachineRegistry.machines()))
+                    PaneBridge.describe(layout, machines: MachineRegistry.machines()))
                 return
             }
             CLIOut.out(
@@ -495,15 +503,20 @@ struct WorkspaceEqualizeCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            var found = try PaneBridge.context(workspace)
-            found.layout.root.equalize()
-            try PaneBridge.save(found.store, found.layout)
+            let found = try PaneBridge.context(workspace)
+            var store = found.store
+            let result = try WorkspaceBridge.operation {
+                try WorkspaceOperationExecution.perform(
+                    .equalize(workspaceID: found.layout.id), in: &store)
+            }
+            let layout = result.layout ?? found.layout
+            try WorkspaceBridge.write(store)
             guard !json else {
                 CLIOut.json(
-                    PaneBridge.describe(found.layout, machines: MachineRegistry.machines()))
+                    PaneBridge.describe(layout, machines: MachineRegistry.machines()))
                 return
             }
-            CLIOut.out("evened out \(found.layout.paneCount) panes")
+            CLIOut.out("evened out \(layout.paneCount) panes")
         }
     }
 }
