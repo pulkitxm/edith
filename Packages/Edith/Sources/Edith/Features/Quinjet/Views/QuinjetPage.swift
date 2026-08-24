@@ -17,7 +17,7 @@ struct QuinjetPage: View {
             Divider().opacity(0.45)
             ZStack {
                 ForEach(model.tabs) { tab in
-                    tabContent(tab)
+                    tabContent(tab, presented: tab.id == model.selected)
                         .opacity(tab.id == model.selected ? 1 : 0)
                         .allowsHitTesting(tab.id == model.selected)
                 }
@@ -144,12 +144,12 @@ struct QuinjetPage: View {
     }
 
     @ViewBuilder
-    private func tabContent(_ tab: QuinjetTab) -> some View {
+    private func tabContent(_ tab: QuinjetTab, presented: Bool) -> some View {
         if tab.worktree == nil {
             QuinjetProjectPicker(model: model, tab: tab)
         } else {
             QuinjetTerminalWorkspace(
-                model: model, tab: tab,
+                model: model, tab: tab, presented: presented,
                 useEmbedded: { terminalName = QuinjetTerminal.embedded.rawValue })
         }
     }
@@ -233,6 +233,7 @@ private struct QuinjetTabButton: View {
 private struct QuinjetTerminalWorkspace: View {
     let model: QuinjetPageModel
     @Bindable var tab: QuinjetTab
+    let presented: Bool
     let useEmbedded: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -260,7 +261,8 @@ private struct QuinjetTerminalWorkspace: View {
                     holder: tab.holder,
                     palette: .quinjet(
                         theme: tab.launchConfiguration.theme,
-                        appearance: tab.launchConfiguration.appearance)
+                        appearance: tab.launchConfiguration.appearance),
+                    active: presented
                 )
                 .id(tab.holder.generation)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

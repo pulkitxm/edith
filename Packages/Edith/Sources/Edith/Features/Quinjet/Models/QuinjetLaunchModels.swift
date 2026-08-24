@@ -45,10 +45,16 @@ extension QuinjetTheme {
     }
 }
 
-struct TerminalPalette {
+struct TerminalPalette: Equatable {
     var background: NSColor
     var foreground: NSColor
     var caret: NSColor
+
+    static func == (lhs: TerminalPalette, rhs: TerminalPalette) -> Bool {
+        lhs.background.isEqual(rhs.background)
+            && lhs.foreground.isEqual(rhs.foreground)
+            && lhs.caret.isEqual(rhs.caret)
+    }
 
     static func edith(dark: Bool) -> TerminalPalette {
         TerminalPalette(

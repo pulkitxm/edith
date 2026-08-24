@@ -77,6 +77,7 @@ final class TerminalTabsModel {
 
 struct TerminalTabsView: View {
     let session: MachineSession
+    var presented = true
     @State private var model = TerminalTabsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var command = ""
@@ -90,9 +91,12 @@ struct TerminalTabsView: View {
             Divider().opacity(0.3)
             ZStack {
                 ForEach(model.tabs) { tab in
-                    MachineTerminalTab(session: session, holder: tab.holder)
-                        .opacity(tab.id == model.selected ? 1 : 0)
-                        .allowsHitTesting(tab.id == model.selected)
+                    let active = presented && tab.id == model.selected
+                    MachineTerminalTab(
+                        session: session, active: active, holder: tab.holder
+                    )
+                    .opacity(tab.id == model.selected ? 1 : 0)
+                    .allowsHitTesting(tab.id == model.selected)
                 }
                 if model.tabs.isEmpty {
                     Text("No terminals open.")

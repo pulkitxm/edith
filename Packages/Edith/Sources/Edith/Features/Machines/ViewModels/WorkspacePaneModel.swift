@@ -63,6 +63,8 @@ struct PaneContentView: View {
     let machines: MachinesModel
     let screen: PaneScreen
     let tabID: UUID
+    let presented: Bool
+    let wantsFocus: Bool
 
     var body: some View {
         switch screen {
@@ -72,6 +74,8 @@ struct PaneContentView: View {
         case .terminal:
             MachineTerminalTab(
                 session: session,
+                active: presented,
+                wantsFocus: wantsFocus,
                 holder: PaneViewStore.shared.terminal(for: tabID, session: session))
         case .files:
             FinderPane(model: PaneViewStore.shared.finder(for: tabID, session: session))
@@ -141,7 +145,8 @@ struct WorkspacePaneView: View {
                     let live = tab.id == (selectedTab?.id ?? pane.selected)
                     PaneContentView(
                         session: machines.session(for: tab.target.machineID),
-                        machines: machines, screen: tab.target.screen, tabID: tab.id
+                        machines: machines, screen: tab.target.screen, tabID: tab.id,
+                        presented: live, wantsFocus: live && focused
                     )
                     .id(PaneContentIdentity(tab: tab.id, target: tab.target))
                     .opacity(live ? 1 : 0)
