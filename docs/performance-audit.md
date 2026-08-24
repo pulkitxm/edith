@@ -11,12 +11,12 @@ evidence.
 | Area | Finding | Guard |
 | --- | --- | --- |
 | Startup | The main window and helper panel precede deferred service setup. | Generation-owned startup phases yield between independent service groups and cancel on supersession or termination. |
-| Input | Type-ahead and global hotkeys are event driven on the main thread. | Stable input interval names and a thread-context test. |
+| Input | Type-ahead and global hotkeys are event driven on the main thread, and terminal focus follows the latest visible tab. | Stable input intervals plus a 10,000-transition stale-focus regression. |
 | Repository | Dashboard reads skip unchanged files. | The full load path is traced and the modification-time early return is checked. |
 | Git | Usage collection owns the repository and Git subprocess pipeline. | The asynchronous utility process has one end-to-end interval and structured phase events. |
 | GitHub | Contributor data uses a daily cache and failure fallback. | Cache and request intervals plus a one-read fallback test. |
 | Extension discovery | Readiness is requested on demand and aggregate reports run concurrently. | The settings readiness request is traced. |
-| UI rendering | Clipboard history renders at most 80 rows before extending its visible page. | Navigation tests use a 500-item history and stay within the rendered page. |
+| UI rendering | Clipboard history renders at most 80 rows, and inactive terminal surfaces defer redraws. | A 20,000-chunk terminal flood produces one deferred redraw before activation. |
 | Cache | Contributor hit and miss decisions are visible. | Corrupt-cache fallback decodes once. |
 | Background workers | Usage collection runs as a utility process and handles task cancellation. | The complete worker lifetime is traced by `usage.refresh`. |
 | Generation safety | Local and remote project refreshes reject canceled or superseded results. | Deterministic concurrency tests complete requests out of order. |
@@ -27,8 +27,10 @@ evidence.
 
 No universal timing budget is checked because CPU, RSS, disk, and network timing
 vary materially by hardware and environment. Stable regression properties are
-checked in CI. Timing changes are compared on the same machine, build, data set,
-power mode, and network profile.
+checked in CI. Terminal regressions also use broad responsiveness ceilings with
+at least an order of magnitude of headroom over the captured development run.
+Timing changes are compared on the same machine, build, data set, power mode,
+and network profile.
 
 ## Capture workflow
 
@@ -53,6 +55,11 @@ bursts.
 For large-repository comparisons, reuse the same `usage.json` and record
 `dashboard.load` and `dashboard.ingest`. For slow-network comparisons, apply the
 same Network Link Conditioner profile and record `contributors.fetch`.
+
+For terminal comparisons, open several Machine, Workspace, Quinjet, and Herdr
+tabs, stream output in each, then switch repeatedly between them. Inactive tabs
+should stop drawing, the selected tab should render its latest buffer once, and
+keyboard focus should stay with the latest selected terminal.
 
 The deterministic harness can be verified without a running app:
 

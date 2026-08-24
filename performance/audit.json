@@ -57,9 +57,9 @@
     {
       "area": "input",
       "status": "instrumented",
-      "finding": "Type-ahead and global hotkeys are event driven and execute on the main thread.",
-      "measurement": "Points of Interest intervals named main.typeAhead and helper.globalHotKey.",
-      "regressionProperty": "Input spans preserve their stable identity and record main-thread context.",
+      "finding": "Type-ahead and global hotkeys are event driven, while terminal focus requests are cancellation owned across rapid tab switches.",
+      "measurement": "Points of Interest intervals named main.typeAhead and helper.globalHotKey, plus 10,000 terminal presentation transitions.",
+      "regressionProperty": "Input spans preserve stable identity and stale terminal focus work cannot reactivate a hidden surface.",
       "evidence": [
         {
           "path": "Packages/Edith/Sources/EdithKit/UI/InputFocus.swift",
@@ -68,6 +68,10 @@
         {
           "path": "Packages/Edith/Tests/EdithTests/PerformanceTraceTests.swift",
           "contains": "spansCarryStableIdentityAndThreadContext"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/TerminalPresentationTests.swift",
+          "contains": "presentationChangesDoNotAccumulateStaleFocusWork"
         }
       ]
     },
@@ -146,9 +150,9 @@
     {
       "area": "uiRendering",
       "status": "protected",
-      "finding": "Clipboard history bounds its initial render population and extends it only as navigation reaches later rows.",
-      "measurement": "The initial visible population is capped at 80 rows, with navigation behavior exercised against a 500-item history.",
-      "regressionProperty": "Large clipboard histories do not create every row before it becomes visible.",
+      "finding": "Clipboard history bounds its initial population, and inactive terminal surfaces defer repeated redraws until visible.",
+      "measurement": "The initial clipboard population is capped at 80 rows, while 20,000 terminal output chunks create one deferred inactive redraw pass.",
+      "regressionProperty": "Large clipboard histories stay paged and hidden terminal tabs request one catch-up redraw when reactivated.",
       "evidence": [
         {
           "path": "Packages/Edith/Sources/EdithHelper/Features/Clipboard/Views/ClipboardPanelView.swift",
@@ -157,6 +161,14 @@
         {
           "path": "Packages/Edith/Tests/EdithTests/ClipboardPanelNavigationTests.swift",
           "contains": "commandDownFallsBackToTheRenderedPage"
+        },
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Machines/Views/MachineTerminalTab.swift",
+          "contains": "guard !hasDeferredDisplay else { return }"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/TerminalPresentationTests.swift",
+          "contains": "inactiveTerminalCoalescesFloodRedrawAndKeepsBoundedHistory"
         }
       ]
     },
