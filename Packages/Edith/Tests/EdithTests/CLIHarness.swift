@@ -74,8 +74,8 @@ enum CLIProcessProbe {
         trap 'terminate_group; exit 124' TERM INT
         wait "$child"
         status=$?
-        trap - TERM INT
         terminate_group
+        trap - TERM INT
         exit "$status"
         """
 
