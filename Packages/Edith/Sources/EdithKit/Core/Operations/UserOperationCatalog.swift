@@ -65,6 +65,9 @@ public enum UserOperationCatalog {
         + CompanionChatLibraryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + CompanionMindRuntimeOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     public static let descriptors = registrations.map(\.descriptor)
 
@@ -532,5 +535,10 @@ private extension CompanionChatLibraryOperation {
                     surface: $0.surface, action: $0.action,
                     exampleArguments: $0.exampleArguments)
             })
+    }
+}
+private extension CompanionMindRuntimeOperation {
+    var interfaceExposure: UserOperationExposure {
+        .userInterface(placements)
     }
 }
