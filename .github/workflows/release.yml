@@ -1,39 +1,23 @@
 name: Release
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       cut_release:
         description: "Permit a fully gated CI run to cut the next release."
         type: boolean
         required: false
         default: false
-      rebuild:
-        description: "Existing tag to rebuild and re-upload. Empty cuts the next patch release."
+      source_sha:
+        description: "Main commit approved by CI for a new release."
         type: string
         required: false
         default: ""
-    secrets:
-      MACOS_CERT_P12:
-        required: false
-      MACOS_CERT_PASSWORD:
-        required: false
-      SPARKLE_PRIVATE_KEY:
-        required: false
-      NOTARY_KEY_ID:
-        required: false
-      NOTARY_ISSUER_ID:
-        required: false
-      NOTARY_KEY:
-        required: false
-      PUKBOT_PRIVATE_KEY:
-        required: false
-  workflow_dispatch:
-    inputs:
       rebuild:
         description: "Current release tag to rebuild and re-upload."
         type: string
-        required: true
+        required: false
+        default: ""
 
 concurrency:
   group: >-
@@ -59,13 +43,14 @@ jobs:
     env:
       REBUILD: ${{ inputs.rebuild }}
       CUT_RELEASE: ${{ inputs.cut_release }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
       HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ inputs.rebuild && format('refs/tags/{0}', inputs.rebuild) || github.sha }}
+          ref: ${{ inputs.rebuild && format('refs/tags/{0}', inputs.rebuild) || inputs.source_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -76,6 +61,10 @@ jobs:
           if [ -z "$REBUILD" ]; then
             test "$CUT_RELEASE" = true \
               || { echo "release blocked: new releases must pass through CI" >&2; exit 1; }
+            test -n "$SOURCE_SHA" \
+              || { echo "release blocked: CI must provide the approved commit" >&2; exit 1; }
+            test "$(git rev-parse HEAD)" = "$SOURCE_SHA" \
+              || { echo "release blocked: checkout does not match the approved commit" >&2; exit 1; }
           fi
           test "$HAS_SIGNING" = true \
             || { echo "release blocked: MACOS_CERT_P12 is required" >&2; exit 1; }

@@ -283,14 +283,17 @@ jobs:
       && needs.changes.outputs.release_artifact == 'true')
       || (github.event_name == 'workflow_dispatch' && inputs.release))
     permissions:
+      actions: write
       contents: read
-    uses: ./.github/workflows/release.yml
-    with:
-      cut_release: true
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
-      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
-      NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: >-
+          gh workflow run release.yml
+          --repo "$GITHUB_REPOSITORY"
+          --ref main
+          --field cut_release=true
+          --field source_sha="$RELEASE_SHA"

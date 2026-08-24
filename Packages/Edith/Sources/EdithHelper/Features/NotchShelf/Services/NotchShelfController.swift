@@ -8,6 +8,27 @@ extension NSScreen {
     }
 }
 
+struct ShelfOperationRequestOutcome {
+    let operation: ShelfItemOperation
+    let requestID: String?
+    let error: String?
+}
+
+enum ShelfOperationRequestRouter {
+    static func route(
+        _ info: [AnyHashable: Any], isSharing: Bool,
+        perform: (ShelfItemOperation, Set<UUID>) -> String?
+    ) -> ShelfOperationRequestOutcome? {
+        guard let request = ShelfItemOperationExecution.request(info) else { return nil }
+        let error =
+            isSharing
+            ? ShelfActionSelectionError.busy.localizedDescription
+            : perform(request.operation, request.itemIDs)
+        return ShelfOperationRequestOutcome(
+            operation: request.operation, requestID: request.requestID, error: error)
+    }
+}
+
 @MainActor
 @Observable
 final class NotchShelfController: FeatureModule {
@@ -32,6 +53,7 @@ final class NotchShelfController: FeatureModule {
     private var pendingAlerts: [PendingNotchAlert] = []
     private(set) var livePositions: [UUID: CGPoint] = [:]
     private(set) var selectedIDs: Set<UUID> = []
+    private(set) var shelfOperationError: String?
 
     let external = ExternalMusic()
     private weak var localMusic: MusicPlayer?
@@ -61,6 +83,8 @@ final class NotchShelfController: FeatureModule {
     private var pendingDragOutIDs: Set<UUID> = []
     private var internalDragItemIDs: Set<UUID> = []
     private var sharePickerDelegate: SharePickerDelegate?
+    private var shareStagedFiles: ShelfStagedFiles?
+    private var dragStagedFiles: ShelfStagedFiles?
     private var isSharing = false
     private var dragStartPositions: [UUID: CGPoint] = [:]
     private var dragPointerStart: CGPoint?
@@ -202,6 +226,11 @@ final class NotchShelfController: FeatureModule {
         collapseWorkItem = nil
         gateWorkItem?.cancel()
         gateWorkItem = nil
+        isSharing = false
+        sharePickerDelegate = nil
+        shareStagedFiles = nil
+        dragStagedFiles = nil
+        store.cancelActionSelection()
         for panel in panels.values { panel.orderOut(nil) }
         panels.removeAll()
         collapsedSizes.removeAll()
@@ -908,7 +937,20 @@ final class NotchShelfController: FeatureModule {
         collapseNow()
     }
 
-    func fileURL(for item: ShelfItem) -> URL { store.fileURL(for: item) }
+    func thumbnail(for item: ShelfItem) async -> NSImage? {
+        let staged: ShelfStagedFiles
+        do {
+            staged = try store.withActionSelection(itemIDs: [item.id]) { selection in
+                try selection.stagedFiles()
+            }
+        } catch {
+            return nil
+        }
+        guard let url = staged.urls.first else { return nil }
+        let image = await ShelfThumbnails.thumbnail(for: url, cacheKey: item.id.uuidString)
+        withExtendedLifetime(staged) {}
+        return image
+    }
 
     func toggleSelection(_ item: ShelfItem) {
         if selectedIDs.contains(item.id) {
@@ -924,61 +966,159 @@ final class NotchShelfController: FeatureModule {
     }
 
     func open(_ item: ShelfItem) {
-        perform(.open, items: group(for: item), anchor: item)
-        collapseNow()
+        guard let error = perform(.open, items: group(for: item), anchor: item) else {
+            shelfOperationError = nil
+            collapseNow()
+            return
+        }
+        presentShelfFailure(error)
+    }
+
+    func dismissShelfFailure() {
+        shelfOperationError = nil
+    }
+
+    private func presentShelfFailure(_ error: String) {
+        shelfOperationError = error
     }
 
     func reveal(_ item: ShelfItem) {
-        perform(.reveal, items: group(for: item), anchor: item)
-        collapseNow()
+        guard let error = perform(.reveal, items: group(for: item), anchor: item) else {
+            shelfOperationError = nil
+            collapseNow()
+            return
+        }
+        presentShelfFailure(error)
     }
 
-    private func removeSingle(_ item: ShelfItem) {
-        store.remove(item)
-        selectedIDs.remove(item.id)
-        items = store.items
+    @discardableResult
+    private func removeMembers(_ members: [ShelfItem]) -> Bool {
+        do {
+            try store.remove(members)
+            selectedIDs.subtract(members.map(\.id))
+            items = store.items
+            shelfOperationError = nil
+            return true
+        } catch {
+            items = store.items
+            presentShelfFailure(error.localizedDescription)
+            return false
+        }
     }
 
     func remove(_ item: ShelfItem) {
-        for member in group(for: item) { removeSingle(member) }
+        guard removeMembers(group(for: item)) else { return }
         collapseNow()
     }
 
     func share(_ item: ShelfItem) {
-        perform(.share, items: group(for: item), anchor: item)
+        if let error = perform(.share, items: group(for: item), anchor: item) {
+            presentShelfFailure(error)
+        } else {
+            shelfOperationError = nil
+        }
     }
 
     private func performShelfOperation(_ info: [AnyHashable: Any]) {
-        guard let request = ShelfItemOperationExecution.request(info) else { return }
-        let members = items.filter { request.itemIDs.contains($0.id) }
-        guard let anchor = members.first else { return }
-        perform(request.operation, items: members, anchor: anchor)
-        if request.operation != .share { collapseNow() }
+        guard
+            let outcome = ShelfOperationRequestRouter.route(
+                info, isSharing: isSharing,
+                perform: { [weak self] operation, itemIDs in
+                    self?.perform(operation, itemIDs: itemIDs)
+                        ?? "the shelf operation could not start"
+                })
+        else { return }
+        if let requestID = outcome.requestID {
+            IPC.post(
+                IPC.Name.shelfOperationResult,
+                userInfo: ShelfItemOperationExecution.resultPayload(
+                    requestID: requestID, ok: outcome.error == nil, error: outcome.error))
+        }
+        guard outcome.error == nil else { return }
+        if outcome.operation != .share { collapseNow() }
+    }
+
+    private func operationError(_ operation: ShelfItemOperation, completed: Bool) -> String? {
+        guard !completed else { return nil }
+        return operation == .share
+            ? "the shelf share picker could not open" : "the shelf operation could not start"
+    }
+
+    private func perform(_ operation: ShelfItemOperation, itemIDs: Set<UUID>) -> String? {
+        do {
+            return try store.withActionSelection(itemIDs: itemIDs) { action in
+                items = store.items
+                return perform(operation, selection: action, anchor: action.items[0])
+            }
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     private func perform(
         _ operation: ShelfItemOperation, items members: [ShelfItem], anchor item: ShelfItem
-    ) {
-        ShelfItemOperationExecution.perform(
-            operation, urls: members.map(fileURL),
-            share: { [weak self] urls in self?.showSharePicker(urls, anchor: item) })
+    ) -> String? {
+        do {
+            return try store.withActionSelection(itemIDs: Set(members.map(\.id))) { selection in
+                items = store.items
+                let anchor = selection.items.first { $0.id == item.id } ?? selection.items[0]
+                return perform(operation, selection: selection, anchor: anchor)
+            }
+        } catch {
+            return error.localizedDescription
+        }
     }
 
-    private func showSharePicker(_ urls: [URL], anchor item: ShelfItem) {
+    private func perform(
+        _ operation: ShelfItemOperation, selection: ShelfStoreActionSelection,
+        anchor item: ShelfItem
+    ) -> String? {
+        if operation == .share {
+            do {
+                let staged = try selection.stagedFiles()
+                let completed = ShelfItemOperationExecution.perform(
+                    operation, urls: staged.urls,
+                    share: { [weak self] _ in
+                        self?.showSharePicker(staged, anchor: item, selection: selection.snapshot)
+                            ?? false
+                    })
+                return operationError(operation, completed: completed)
+            } catch {
+                return error.localizedDescription
+            }
+        }
+        let urls: [URL]
+        do {
+            urls = try selection.fileURLs()
+        } catch {
+            return error.localizedDescription
+        }
+        let completed = ShelfItemOperationExecution.perform(operation, urls: urls)
+        return operationError(operation, completed: completed)
+    }
+
+    private func showSharePicker(
+        _ staged: ShelfStagedFiles, anchor item: ShelfItem, selection: ShelfPinnedSelection
+    ) -> Bool {
+        guard !isSharing else { return false }
         let mouse = NSEvent.mouseLocation
         let panel =
             panels.values.first { $0.frame.contains(mouse) }
             ?? builtinDisplayID.flatMap { panels[$0] }
-        guard let panel, let view = panel.contentView else { return }
+        guard let panel, let view = panel.contentView else { return false }
+        guard store.retainActionSelection(selection) else { return false }
         isSharing = true
+        shareStagedFiles = staged
         collapseWorkItem?.cancel()
         let delegate = SharePickerDelegate { [weak self] in
             self?.isSharing = false
             self?.sharePickerDelegate = nil
+            self?.store.releaseActionSelection()
+            self?.shareStagedFiles = nil
             self?.collapseAfterDelay()
         }
         sharePickerDelegate = delegate
-        let picker = NSSharingServicePicker(items: urls)
+        let picker = NSSharingServicePicker(items: staged.urls)
         picker.delegate = delegate
         let size = view.bounds.size
         let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
@@ -986,6 +1126,7 @@ final class NotchShelfController: FeatureModule {
         let anchor = NSRect(
             x: position.x - 20, y: size.height - position.y - 20, width: 40, height: 40)
         picker.show(relativeTo: anchor, of: view, preferredEdge: .minY)
+        return true
     }
 
     func canvasDrag(_ item: ShelfItem, to location: CGPoint, in size: CGSize) {
@@ -1006,10 +1147,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     func endCanvasDrag() {
-        for (id, point) in livePositions {
-            guard let member = items.first(where: { $0.id == id }) else { continue }
-            store.setPosition(point, for: member)
-        }
+        store.setPositions(livePositions)
         if !livePositions.isEmpty { items = store.items }
         livePositions = [:]
         dragStartPositions = [:]
@@ -1028,12 +1166,23 @@ final class NotchShelfController: FeatureModule {
         guard let catcher = panel?.contentView as? ShelfDropCatcherView,
             let event = NSApp.currentEvent
         else { return }
+        let staged: ShelfStagedFiles
+        do {
+            staged = try store.withActionSelection(itemIDs: Set(members.map(\.id))) { selection in
+                try selection.stagedFiles()
+            }
+        } catch {
+            presentShelfFailure(error.localizedDescription)
+            return
+        }
+        dragStagedFiles = staged
         internalDragItemIDs = Set(members.map(\.id))
         if removeAfterDragOut { pendingDragOutIDs = Set(members.map(\.id)) }
-        catcher.beginDrag(of: members.map { fileURL(for: $0) }, event: event)
+        catcher.beginDrag(of: staged.urls, event: event)
     }
 
     func externalDragEnded(at point: CGPoint, operation: NSDragOperation) {
+        defer { dragStagedFiles = nil }
         internalDragItemIDs = []
         guard !pendingDragOutIDs.isEmpty else { return }
         let ids = pendingDragOutIDs
@@ -1043,7 +1192,7 @@ final class NotchShelfController: FeatureModule {
         let members = items.filter { ids.contains($0.id) }
         guard !members.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            for member in members { self?.removeSingle(member) }
+            self?.removeMembers(members)
         }
     }
 
@@ -1090,7 +1239,7 @@ final class NotchShelfController: FeatureModule {
 
     private func receivePromise(_ receiver: NSFilePromiseReceiver, at location: CGPoint?) {
         let id = UUID()
-        let destination = store.promiseDestination(id: id)
+        guard let destination = store.promiseDestination(id: id) else { return }
         receiver.receivePromisedFiles(
             atDestination: destination, options: [:], operationQueue: .main
         ) {
@@ -1099,13 +1248,23 @@ final class NotchShelfController: FeatureModule {
                 guard let self else { return }
                 guard error == nil else {
                     self.store.discardPromiseDestination(id: id)
+                    self.presentShelfFailure(
+                        error?.localizedDescription ?? "the promised file failed")
                     return
                 }
-                if let item = self.store.adopt(fileAt: url, id: id), let location {
-                    self.store.setPosition(location, for: item)
+                self.store.adoptWhenAvailable(fileAt: url, id: id) { [weak self] item in
+                    guard let self else { return }
+                    guard let item else {
+                        self.items = self.store.items
+                        self.presentShelfFailure(
+                            "the promised file could not be added to the shelf")
+                        return
+                    }
+                    if let location { self.store.setPosition(location, for: item) }
+                    self.items = self.store.items
+                    self.shelfOperationError = nil
+                    self.fireHaptic()
                 }
-                self.items = self.store.items
-                self.fireHaptic()
             }
         }
     }

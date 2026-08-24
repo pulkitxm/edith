@@ -207,7 +207,7 @@ import Testing
             .machine, .machineOrLocal, .configKey, .configValue, .extensionID, .permission,
             .shell, .group, .usageRange, .localPath, .remotePath, .container, .appAction,
             .cleanerCategory, .colorFormat, .pruneTarget, .composeProject, .historyIndex, .free,
-            .shelfItem, .musicTrack, .calendarEvent,
+            .shelfItem, .shelfKeepDuration, .musicTrack, .calendarEvent,
         ]
         for kind in kinds {
             let values = CompletionEngine.values(

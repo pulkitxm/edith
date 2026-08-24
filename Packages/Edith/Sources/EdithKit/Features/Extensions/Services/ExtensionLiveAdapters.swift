@@ -326,15 +326,8 @@ public enum ExtensionLiveAdapters {
     }
 
     static func shelfReadiness(root: URL = ShelfIndex.root) -> ExtensionAdapterReadiness {
-        let index = ShelfIndex.indexFile(in: root)
-        guard FileManager.default.fileExists(atPath: index.path) else {
-            return ExtensionAdapterFacts(
-                contentCount: 0, readyDetail: "The shelf index is readable.",
-                emptyDetail: "The shelf is ready and has no parked files."
-            ).readiness
-        }
         do {
-            let items = try JSONDecoder().decode([ShelfItem].self, from: Data(contentsOf: index))
+            let items = try ShelfMutationExecution.snapshot(root: root).items
             let missing = items.filter {
                 !FileManager.default.fileExists(atPath: ShelfIndex.fileURL(for: $0, in: root).path)
             }.count
