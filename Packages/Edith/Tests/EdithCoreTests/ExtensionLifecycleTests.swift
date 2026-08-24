@@ -68,7 +68,7 @@ import Testing
                 == .enabled)
         #expect(
             ExtensionLifecycleState.preference(extensionID: "usage", enabled: false).runtimePhase
-                == .uninstalled)
+                == .loading)
         #expect(
             ExtensionLifecycleState.loading(extensionID: "usage").runtimePhase == .loading)
         #expect(

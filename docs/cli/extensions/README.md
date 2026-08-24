@@ -152,9 +152,9 @@ stable JSON values:
 
 | Runtime phase | Meaning |
 | --- | --- |
-| `installed` | The enabled core runtime is present and its probes succeeded |
-| `uninstalled` | The extension is off, or a required executable or adapter is absent |
-| `empty` | The runtime is installed but has no content or sessions yet |
+| `installed` | The core runtime is present and its probes succeeded |
+| `uninstalled` | A required executable or adapter is absent, whether the extension is on or off |
+| `empty` | The runtime is installed and ready but has no content or sessions yet |
 | `loading` | Runtime discovery is still in progress |
 | `unsupported` | The current platform cannot provide a required capability |
 | `error` | A present executable, backend, or adapter failed its readiness probe |

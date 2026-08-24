@@ -80,7 +80,7 @@ public struct ExtensionLifecycleState: Codable, Equatable, Sendable {
     public static func preference(extensionID: String, enabled: Bool) -> Self {
         ExtensionLifecycleState(
             extensionID: extensionID, phase: enabled ? .enabled : .disabled,
-            runtimePhase: enabled ? .loading : .uninstalled,
+            runtimePhase: .loading,
             summary: enabled ? "Enabled; readiness has not been checked." : "Disabled.")
     }
 

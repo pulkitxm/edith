@@ -191,16 +191,7 @@ public struct ExtensionLifecycleProbe: Sendable {
     }
 
     public func report(for entry: ExtensionRegistryEntry) async -> ExtensionLifecycleReport {
-        guard environment.isEnabled(entry) else {
-            return ExtensionLifecycleReport(
-                state: .preference(extensionID: entry.id, enabled: false),
-                checks: [
-                    check(
-                        "enabled", "Extension enabled", .skipped,
-                        "Enable the extension before checking readiness.",
-                        "ed extensions setup \(entry.id)")
-                ])
-        }
+        let enabled = environment.isEnabled(entry)
         guard let policy = Self.policies[entry.id] else {
             return ExtensionLifecycleReport(
                 state: ExtensionLifecycleState(
@@ -214,7 +205,14 @@ public struct ExtensionLifecycleProbe: Sendable {
                 checks: [])
         }
 
-        var checks = [check("enabled", "Extension enabled", .passed, "Enabled in shared settings.")]
+        var checks = [
+            check(
+                "enabled", "Extension enabled", enabled ? .passed : .skipped,
+                enabled
+                    ? "Enabled in shared settings."
+                    : "Disabled in shared settings; runtime checks still run.",
+                enabled ? nil : "ed extensions setup \(entry.id)")
+        ]
         checks.append(platformCheck(entry))
         checks.append(contentsOf: permissionChecks(entry))
         checks.append(contentsOf: await toolChecks(entry, rule: policy.toolRule))
@@ -227,7 +225,7 @@ public struct ExtensionLifecycleProbe: Sendable {
                 ?? .failed("No live runtime adapter is registered for \(entry.id).")
             checks.append(adapterCheck(entry, readiness: readiness))
         }
-        return report(entry, checks: checks)
+        return report(entry, enabled: enabled, checks: checks)
     }
 
     public func reports(
@@ -399,7 +397,7 @@ public struct ExtensionLifecycleProbe: Sendable {
                 runtimePhase: .uninstalled)
         case let .empty(detail):
             check(
-                "adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery,
+                "adapter.\(entry.id)", "Runtime adapter", .passed, detail, nil,
                 runtimePhase: .empty)
         case let .loading(detail):
             check(
@@ -417,12 +415,14 @@ public struct ExtensionLifecycleProbe: Sendable {
     }
 
     private func report(
-        _ entry: ExtensionRegistryEntry, checks: [ExtensionLifecycleCheck]
+        _ entry: ExtensionRegistryEntry, enabled: Bool, checks: [ExtensionLifecycleCheck]
     ) -> ExtensionLifecycleReport {
         let problems = checks.filter { $0.status == .warning || $0.status == .failed }
         let phase: ExtensionLifecyclePhase
         let runtimePhase = runtimePhase(checks)
-        if runtimePhase == .unsupported {
+        if !enabled {
+            phase = .disabled
+        } else if runtimePhase == .unsupported {
             phase = .unavailable
         } else if runtimePhase == .error {
             phase = .failed
@@ -443,7 +443,7 @@ public struct ExtensionLifecycleProbe: Sendable {
         return ExtensionLifecycleReport(
             state: ExtensionLifecycleState(
                 extensionID: entry.id, phase: phase, runtimePhase: runtimePhase,
-                summary: summary(phase), issues: issues),
+                summary: summary(phase, runtimePhase: runtimePhase), issues: issues),
             checks: checks)
     }
 
@@ -457,14 +457,20 @@ public struct ExtensionLifecycleProbe: Sendable {
         return .installed
     }
 
-    private func summary(_ phase: ExtensionLifecyclePhase) -> String {
+    private func summary(
+        _ phase: ExtensionLifecyclePhase, runtimePhase: ExtensionRuntimePhase
+    ) -> String {
         switch phase {
-        case .ready: "Enabled and verified ready."
+        case .ready:
+            runtimePhase == .empty
+                ? "Enabled and ready; no content or sessions are available yet."
+                : "Enabled and verified ready."
         case .degraded: "Ready with optional capabilities unavailable."
         case .needsSetup: "Enabled, but setup is incomplete."
         case .unavailable: "Required platform capabilities are unavailable."
         case .failed: "The extension runtime failed its health check."
-        case .disabled, .checking, .enabled: phase.title
+        case .disabled: "Disabled; runtime checks reflect the current installation."
+        case .checking, .enabled: phase.title
         }
     }
 
