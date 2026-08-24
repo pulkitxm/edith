@@ -66,7 +66,7 @@ struct PaneContentView: View {
 
     var body: some View {
         switch screen {
-        case .overview: MachineOverviewTab(session: session)
+        case .overview: MachineOverviewTab(session: session, model: machines)
         case .processes: MachineProcessesTab(session: session)
         case .docker: DockerConsoleView(session: session)
         case .terminal:

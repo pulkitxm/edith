@@ -161,6 +161,7 @@ struct MetricCard: View {
 
 struct MachineOverviewTab: View {
     let session: MachineSession
+    let model: MachinesModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -214,7 +215,7 @@ struct MachineOverviewTab: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: 0)
             if case .disconnected = session.state {
-                Button("Connect") { session.start() }
+                Button("Connect") { model.performConnection(.connect, for: session) }
                     .pointerCursor()
             }
         }

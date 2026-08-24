@@ -5,6 +5,15 @@ public enum UserOperationCatalog {
         MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MachineMutationOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachinePowerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineConnectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -171,6 +180,62 @@ private extension MachineControlOperation {
             userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
+        }
+    }
+}
+
+private extension MachineMutationOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Machines", action: "add a machine",
+                    exampleArguments: ["box", "--host", "h"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "store a login password",
+                    exampleArguments: ["box", "--host", "h", "--password-stdin"]),
+            ])
+        case .edit:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Machines", action: "edit a machine", exampleArguments: ["box"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "store a key passphrase",
+                    exampleArguments: ["box", "--key-passphrase-stdin"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "store a sudo password",
+                    exampleArguments: ["box", "--sudo-password-stdin"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "forget the stored sudo password",
+                    exampleArguments: ["box", "--forget-sudo-password"]),
+            ])
+        case .remove:
+            userInterface("Machines", "delete a machine", ["box"])
+        }
+    }
+}
+
+private extension MachinePowerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .reboot:
+            userInterface("Machine header", "restart the machine", ["box", "--yes"])
+        case .shutdown:
+            userInterface("Machine header", "shut the machine down", ["box", "--yes"])
+        case .wake:
+            userInterface("Machine header", "wake the machine", ["box"])
+        }
+    }
+}
+
+private extension MachineConnectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .connect:
+            userInterface("Machines", "open the shared connection", ["box"])
+        case .disconnect:
+            userInterface("Machines", "close the shared connection", ["box"])
         }
     }
 }
