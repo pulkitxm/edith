@@ -47,7 +47,8 @@ public enum CompletionEngine {
         _ request: CompletionRequest, machines: [String], configKeys: [String],
         extensionIDs: [String], shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
-        usageSources: [String] = [], usageChatIDs: [String] = [], usageProjects: [String] = [],
+        usageSources: [String] = [], appLinks: [String] = ["repository", "creator"],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
@@ -87,7 +88,7 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last, shelfItems: shelfItems,
+                        appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
                         usageChatIDs: usageChatIDs, usageProjects: usageProjects,
                         quinjetSessions: quinjetSessions), prefix))
@@ -100,7 +101,7 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last, shelfItems: shelfItems,
+                        appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
                         usageChatIDs: usageChatIDs, usageProjects: usageProjects,
                         quinjetSessions: quinjetSessions), valuePrefix)
@@ -122,7 +123,8 @@ public enum CompletionEngine {
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                previous: positionals.last, shelfItems: shelfItems, musicTracks: musicTracks,
+                appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
+                musicTracks: musicTracks,
                 calendarEvents: calendarEvents, usageChatIDs: usageChatIDs,
                 usageProjects: usageProjects, quinjetSessions: quinjetSessions)
             candidates += values
@@ -136,12 +138,15 @@ public enum CompletionEngine {
     static func values(
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
-        previous: String?, shelfItems: [String] = [], musicTracks: [String] = [],
+        appLinks: [String] = ["repository", "creator"], previous: String?,
+        shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], usageChatIDs: [String] = [],
         usageProjects: [String] = [], quinjetSessions: [String] = []
     ) -> [String] {
         switch kind {
         case .machine: return machines
+        case .appPath: return AppPathID.allCases.map(\.rawValue)
+        case .appLink: return appLinks
         case .configKey: return configKeys
         case .configValue:
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {

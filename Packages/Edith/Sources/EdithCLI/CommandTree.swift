@@ -3,6 +3,8 @@ import Foundation
 public enum ArgumentKind: Equatable, Sendable {
     case machine
     case appAction
+    case appPath
+    case appLink
     case cleanerCategory
     case colorFormat
     case colorIndex
@@ -135,6 +137,17 @@ public enum CommandTree {
             CommandNode(
                 "app", "One-shot actions the Edith app performs.",
                 children: [
+                    CommandNode("info", "Show the installed app identity.", options: common),
+                    CommandNode(
+                        "diagnostics", "Show live helper diagnostics.", options: common),
+                    CommandNode("paths", "List Edith folders and files.", options: common),
+                    CommandNode("links", "List Edith external links.", options: common),
+                    CommandNode(
+                        "open-path", "Open or reveal one Edith path.", options: common,
+                        arguments: [.appPath]),
+                    CommandNode(
+                        "open-link", "Open one Edith external link.", options: common,
+                        arguments: [.appLink]),
                     CommandNode(
                         "actions", "List the one-shot actions.", aliases: ["ls"],
                         options: common),

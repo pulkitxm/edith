@@ -94,6 +94,15 @@ public enum CLIEnvironment {
         return FileManager.default.fileExists(atPath: standard.path) ? standard : nil
     }
 
+    nonisolated(unsafe) public static var appInspectionCenter: @Sendable () -> AppInspectionCenter =
+        {
+            AppInspectionCenter()
+        }
+
+    nonisolated(unsafe) public static var appContributors: @Sendable () -> [Contributor] = {
+        Contributors.cached()
+    }
+
     nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
         detectedInstalledAppURL()
     }
@@ -143,6 +152,8 @@ public enum CLIEnvironment {
                 id, executableNamed: CLIEnvironment.executableNamed)
         }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        appInspectionCenter = { AppInspectionCenter() }
+        appContributors = { Contributors.cached() }
         installedAppURL = { detectedInstalledAppURL() }
         updateHistoryURL = { UpdateCheckLog.url }
         QuinjetCLIEnvironment.reset()

@@ -7,12 +7,12 @@ struct AboutPane: View {
         "accent"
     @State private var contributors: [Contributor] = []
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    private let inspection = AppInspectionCenter()
 
     private var theme: Color { themeColor(themeName) }
 
     private var version: String {
-        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
-        return "Version \(short)"
+        "Version \(inspection.info().version)"
     }
 
     private let story = """
@@ -65,7 +65,7 @@ struct AboutPane: View {
                 .lineSpacing(3)
                 .frame(maxWidth: UIScale.pt(460))
             Button {
-                NSWorkspace.shared.open(Self.repository)
+                _ = try? inspection.openLink("repository", contributors: contributors)
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     githubMark
@@ -96,8 +96,6 @@ struct AboutPane: View {
         }
     }
 
-    private static let repository = URL(string: "https://github.com/pulkitxm/edith")!
-
     @ViewBuilder private var githubMark: some View {
         if let mark = ProviderLogo.image(named: "github") {
             Image(nsImage: mark)
@@ -124,7 +122,8 @@ struct AboutPane: View {
                 LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
                     ForEach(contributors) { person in
                         Button {
-                            NSWorkspace.shared.open(person.profileURL)
+                            _ = try? inspection.openLink(
+                                "contributor:\(person.login)", contributors: contributors)
                         } label: {
                             avatar(for: person)
                         }

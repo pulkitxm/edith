@@ -7,17 +7,249 @@ struct AppCommand: AsyncParsableCommand {
         commandName: "app",
         abstract: "One-shot actions the Edith app performs.",
         discussion: """
-            These are verbs, not settings: things the app does once when asked, rather
-            than switches `ed config set` can flip. Each needs the app that owns it, so
-            they exit 4 and say which part is missing when it is not running.
+            Inspect the Edith installation and ask a running Edith process to perform
+            one-shot actions. Commands that need a live process exit 4 and identify the
+            missing app when it is not running.
             """,
         subcommands: [
+            AppInfoCommand.self, AppDiagnosticsCommand.self, AppPathsCommand.self,
+            AppLinksCommand.self, AppOpenPathCommand.self, AppOpenLinkCommand.self,
             AppActionsCommand.self, AppCleanKeysCommand.self, AppTestNotificationCommand.self,
             AppOpenCommand.self, AppQuitCommand.self, AppCheckUpdatesCommand.self,
             AppUpdatesCommand.self, AppRelaunchCommand.self,
             AppClearUpdateHistoryCommand.self, AppRevealCommand.self, AppSnapshotCommand.self,
         ],
         defaultSubcommand: AppActionsCommand.self)
+}
+
+extension AppPathID: ExpressibleByArgument {}
+
+enum AppInspectionCLI {
+    static var center: AppInspectionCenter { CLIEnvironment.appInspectionCenter() }
+
+    static var contributors: [Contributor] { CLIEnvironment.appContributors() }
+
+    static func info() -> AppInfoSnapshot {
+        guard let url = CLIEnvironment.installedAppURL(), let bundle = Bundle(url: url) else {
+            return center.info()
+        }
+        return center.info(bundle: bundle)
+    }
+
+    static func infoJSON(_ info: AppInfoSnapshot) -> JSONValue {
+        .object([
+            "name": .string(info.name), "version": .string(info.version),
+            "build": .string(info.build), "bundleID": .optional(info.bundleID),
+            "bundlePath": .string(info.bundlePath),
+            "repositoryURL": .string(info.repositoryURL.absoluteString),
+            "creatorURL": .string(info.creatorURL.absoluteString),
+        ])
+    }
+
+    static func diagnosticsJSON(_ diagnostics: AppDiagnosticsSnapshot) -> JSONValue {
+        .object([
+            "info": infoJSON(diagnostics.info), "pid": .int(Int(diagnostics.processID)),
+            "uptimeSeconds": .int(diagnostics.uptimeSeconds),
+            "uptime": .string(diagnostics.uptimeText),
+            "idleWakeups": .int(diagnostics.idleWakeups),
+        ])
+    }
+
+    static func pathJSON(_ path: AppPathSnapshot) -> JSONValue {
+        .object([
+            "id": .string(path.id.rawValue), "label": .string(path.label),
+            "path": .string(path.url.path), "exists": .bool(path.exists),
+        ])
+    }
+
+    static func linkJSON(_ link: AppExternalLink) -> JSONValue {
+        .object([
+            "id": .string(link.id), "label": .string(link.label),
+            "url": .string(link.url.absoluteString),
+        ])
+    }
+
+    static func openJSON(_ result: AppOpenResult) -> JSONValue {
+        .object([
+            "id": .string(result.id), "url": .string(result.url.absoluteString),
+            "mode": .string(result.mode.rawValue), "opened": .bool(result.opened),
+        ])
+    }
+
+    static func failure(_ error: AppInspectionError) -> CLIFailure {
+        switch error {
+        case let .unknownLink(id):
+            return .notFound(
+                "no app link named \(id)",
+                hint: "run `ed app links` to list valid link names")
+        case let .couldNotPrepare(path):
+            return .unavailable("could not prepare \(path) for opening")
+        case let .couldNotOpen(target):
+            return .unavailable("macOS could not open \(target)")
+        }
+    }
+}
+
+struct AppInfoCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "info", abstract: "Show the installed Edith app identity and version.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let info = AppInspectionCLI.info()
+            guard !json else {
+                CLIOut.json(AppInspectionCLI.infoJSON(info))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["FIELD", "VALUE"],
+                    rows: [
+                        ["name", info.name], ["version", info.version], ["build", info.build],
+                        ["bundle id", info.bundleID ?? "-"], ["bundle path", info.bundlePath],
+                    ]))
+        }
+    }
+}
+
+struct AppDiagnosticsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "diagnostics", abstract: "Show live Edith helper process diagnostics.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            try AppBridge.requireHelper("app diagnostics")
+            let reply = await AppBridge.awaitReply(IPC.Name.appDiagnostics, timeout: 5) {
+                AppBridge.post(IPC.Name.requestAppDiagnostics)
+            }
+            guard let reply, let diagnostics = AppDiagnosticsPayload.decode(reply) else {
+                throw AppBridge.silence("app diagnostics")
+            }
+            guard !json else {
+                CLIOut.json(AppInspectionCLI.diagnosticsJSON(diagnostics))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["FIELD", "VALUE"],
+                    rows: [
+                        ["name", diagnostics.info.name],
+                        ["version", diagnostics.info.version],
+                        ["build", diagnostics.info.build],
+                        ["pid", String(diagnostics.processID)],
+                        ["uptime", diagnostics.uptimeText],
+                        ["idle wakeups", String(diagnostics.idleWakeups)],
+                        ["bundle path", diagnostics.info.bundlePath],
+                    ]))
+        }
+    }
+}
+
+struct AppPathsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "paths", abstract: "List the folders and files Edith exposes.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let paths = AppInspectionCLI.center.paths()
+            guard !json else {
+                CLIOut.json(.array(paths.map(AppInspectionCLI.pathJSON)))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["ID", "STATE", "PATH"],
+                    rows: paths.map {
+                        [$0.id.rawValue, $0.exists ? "exists" : "missing", $0.url.path]
+                    }))
+        }
+    }
+}
+
+struct AppLinksCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "links", abstract: "List Edith's repository and people links.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let links = AppInspectionCLI.center.links(contributors: AppInspectionCLI.contributors)
+            guard !json else {
+                CLIOut.json(.array(links.map(AppInspectionCLI.linkJSON)))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["ID", "LABEL", "URL"],
+                    rows: links.map { [$0.id, $0.label, $0.url.absoluteString] }))
+        }
+    }
+}
+
+struct AppOpenPathCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open-path", abstract: "Open or reveal one Edith folder or file.")
+
+    @Argument(help: "The path name from `ed app paths`.")
+    var path: AppPathID
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let result: AppOpenResult
+            do {
+                result = try AppInspectionCLI.center.openPath(path)
+            } catch let error as AppInspectionError {
+                throw AppInspectionCLI.failure(error)
+            }
+            guard !json else {
+                CLIOut.json(AppInspectionCLI.openJSON(result))
+                return
+            }
+            CLIOut.out("\(result.mode.rawValue)ed \(result.url.path)")
+        }
+    }
+}
+
+struct AppOpenLinkCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open-link", abstract: "Open Edith's repository or a profile link.")
+
+    @Argument(help: "The link name from `ed app links`.")
+    var link: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let result: AppOpenResult
+            do {
+                result = try AppInspectionCLI.center.openLink(
+                    link, contributors: AppInspectionCLI.contributors)
+            } catch let error as AppInspectionError {
+                throw AppInspectionCLI.failure(error)
+            }
+            guard !json else {
+                CLIOut.json(AppInspectionCLI.openJSON(result))
+                return
+            }
+            CLIOut.out("opened \(result.url.absoluteString)")
+        }
+    }
 }
 
 struct AppAction: Sendable {
