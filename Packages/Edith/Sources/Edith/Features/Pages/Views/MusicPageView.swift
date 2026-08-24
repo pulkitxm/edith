@@ -225,7 +225,6 @@ final class MusicRemote {
     }
 
     func rescan() {
-        TrackMeta.invalidateCaches()
         folderCache.removeAll()
         invalidateSearchScope()
         refreshFavourites()
@@ -234,18 +233,23 @@ final class MusicRemote {
         {
             folderPath = ""
         }
-        refreshEntries()
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
         Task { [weak self] in
-            let scanned = await Task.detached { TrackMeta.scanMusicFolder() }.value
+            let scanned = await Task.detached {
+                MusicLibraryContentOperationExecution.rescan()
+            }.value
             self?.tracks = scanned
+            self?.refreshEntries()
         }
     }
 
     private func refreshEntries() {
         let path = folderPath
         Task { [weak self] in
-            let entries = await Task.detached { TrackMeta.entries(in: path) }.value
+            let entries = await Task.detached {
+                MusicLibraryContentOperationExecution.list(
+                    MusicFolder(url: TrackMeta.url(for: path), relativePath: path))
+            }.value
             guard let self, self.folderPath == path else { return }
             self.folders = entries.folders
             self.folderTracks = entries.tracks
@@ -444,13 +448,18 @@ final class MusicRemote {
     func toggleShuffle() { send(.shuffle(!shuffling)) }
 
     func delete(_ track: Track) {
-        guard (try? MusicLibrary.trash(track)) != nil else { return }
+        guard
+            (try? MusicLibraryContentOperationExecution.remove(.track(track))) != nil
+        else { return }
         rescan()
         broadcastFolderChanged()
     }
 
     func rename(_ track: Track, to name: String) {
-        guard let move = try? MusicLibrary.rename(track, to: name) else { return }
+        guard
+            let move = try? MusicLibraryContentOperationExecution.rename(
+                .track(track), to: name)
+        else { return }
         sendLibraryChange("renamed", ["from": move.from, "to": move.to])
         refreshAfterFileChange()
     }
@@ -465,7 +474,10 @@ final class MusicRemote {
     }
 
     func createFolder(named name: String) {
-        guard (try? MusicLibrary.createFolder(named: name, under: folderPath)) != nil else {
+        guard
+            (try? MusicLibraryContentOperationExecution.createFolder(
+                named: name, under: folderPath)) != nil
+        else {
             return
         }
         refreshEntries()
@@ -486,7 +498,10 @@ final class MusicRemote {
     }
 
     private func moveTrack(_ track: Track, toFolderPath folderRelativePath: String) -> Bool {
-        guard let move = try? MusicLibrary.move(track, toFolder: folderRelativePath) else {
+        guard
+            let move = try? MusicLibraryContentOperationExecution.move(
+                track, to: folderRelativePath)
+        else {
             return false
         }
         sendLibraryChange("renamed", ["from": move.from, "to": move.to])
@@ -495,7 +510,8 @@ final class MusicRemote {
 
     func renameFolder(_ folder: MusicFolder, to name: String) {
         guard sanitizedName(name) != folder.name,
-            let renamed = try? MusicLibrary.renameFolder(folder, to: name)
+            let renamed = try? MusicLibraryContentOperationExecution.rename(
+                .folder(folder), to: name)
         else { return }
         let newPath = renamed.to
         if let playing = currentFile,
@@ -511,7 +527,9 @@ final class MusicRemote {
     }
 
     func deleteFolder(_ folder: MusicFolder) {
-        guard (try? MusicLibrary.trashFolder(folder)) != nil else { return }
+        guard
+            (try? MusicLibraryContentOperationExecution.remove(.folder(folder))) != nil
+        else { return }
         repointFolderPath(from: folder.relativePath, to: nil)
         rescan()
         broadcastFolderChanged()
