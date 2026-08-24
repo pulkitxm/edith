@@ -849,7 +849,7 @@ struct MainWindowView: View {
                 help: "Lock the keyboard so you can wipe it"
             ) {
                 keyboardCleanTrigger += 1
-                IPC.post(IPC.Name.requestKeyboardClean)
+                AppRuntimeCenter().request(.cleanKeys)
             },
             quickActionTile(
                 icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",
@@ -1069,7 +1069,7 @@ struct MainWindowView: View {
                 Text("Made with ♥ by")
                     .foregroundStyle(.tertiary)
                 Button("Pulkit") {
-                    NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
+                    _ = try? AppInspectionCenter().openLink("creator", contributors: [])
                 }
                 .buttonStyle(.plain)
                 .fontWeight(.semibold)

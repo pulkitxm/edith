@@ -586,11 +586,13 @@ private struct ExtensionLifecycleRows: View {
                         instructionRow(recovery)
                     }
                     ForEach(lifecycle.documentation) { document in
-                        if let url = URL(
-                            string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
-                        ) {
-                            Link(document.title, destination: url)
+                        Button(document.title) {
+                            _ = try? AppInspectionCenter().openLink(
+                                AppInspectionCenter.extensionDocumentationID(
+                                    extensionID: entry.id, documentID: document.id),
+                                contributors: [])
                         }
+                        .buttonStyle(.link)
                     }
                 }
             } else {
@@ -1466,7 +1468,7 @@ private struct UsageRows: View {
 
             HStack {
                 Button("Send test notification") {
-                    IPC.post(IPC.Name.requestTestNotification)
+                    AppRuntimeCenter().request(.testNotification)
                     testSent = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { testSent = false }
                 }
@@ -1679,7 +1681,7 @@ private struct SystemRows: View {
                         .settingsCaption()
                 }
                 Button("Clean now") {
-                    IPC.post(IPC.Name.requestKeyboardClean)
+                    AppRuntimeCenter().request(.cleanKeys)
                     cleaningStarted = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                         cleaningStarted = false

@@ -48,6 +48,7 @@ public enum CompletionEngine {
         extensionIDs: [String], shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
         usageSources: [String] = [], runningApps: [String] = [],
+        appLinks: [String] = ["repository", "creator"],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
@@ -87,7 +88,7 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last, shelfItems: shelfItems,
+                        appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
                         runningApps: runningApps, quinjetSessions: quinjetSessions), prefix))
         }
@@ -99,7 +100,7 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last, shelfItems: shelfItems,
+                        appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
                         runningApps: runningApps, quinjetSessions: quinjetSessions), valuePrefix)
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
@@ -120,9 +121,9 @@ public enum CompletionEngine {
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                previous: positionals.last, shelfItems: shelfItems, musicTracks: musicTracks,
-                calendarEvents: calendarEvents, runningApps: runningApps,
-                quinjetSessions: quinjetSessions)
+                appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
+                musicTracks: musicTracks, calendarEvents: calendarEvents,
+                runningApps: runningApps, quinjetSessions: quinjetSessions)
             candidates += values
             if kind == .localPath { wantsFiles = true }
             if kind == .quinjetPath { wantsFiles = quinjetPathIsLocal(leading) }
@@ -134,12 +135,15 @@ public enum CompletionEngine {
     static func values(
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
-        previous: String?, shelfItems: [String] = [], musicTracks: [String] = [],
+        appLinks: [String] = ["repository", "creator"], previous: String?,
+        shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], runningApps: [String] = [],
         quinjetSessions: [String] = []
     ) -> [String] {
         switch kind {
         case .machine: return machines
+        case .appPath: return AppPathID.allCases.map(\.rawValue)
+        case .appLink: return appLinks
         case .configKey: return configKeys
         case .configValue:
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {

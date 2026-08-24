@@ -32,7 +32,7 @@ public enum AppBridge {
         guard mainAppIsRunning else {
             throw CLIFailure.unavailable(
                 "\(what) needs the Edith main window to be open",
-                hint: "run `ed app relaunch`, or open Edith from the menu bar")
+                hint: "run `ed app relaunch --yes`, or open Edith from the menu bar")
         }
     }
 

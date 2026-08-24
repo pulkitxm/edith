@@ -394,16 +394,26 @@ public enum Guide {
 
         ## One-shot actions
 
-        `ed config set` flips switches. These are verbs the app performs once:
+        Inspect Edith itself, then ask it to perform a one-shot action:
 
         ```
+        ed app info                     installed identity, version and build
+        ed app diagnostics              live helper uptime and idle wakeups
+        ed app paths                    app data, logs, iCloud and music locations
+        ed app links                    repository and profile destinations
+        ed app open-path refresh-log    reveal the log, or open its folder
+        ed app open-link repository     open one listed URL
         ed app actions                  what can be asked for, and whether it can run
         ed app clean-keys               lock the keyboard so it can be wiped
         ed app test-notification
         ed app open                     open Edith's panel
         ed app check-updates            ask Sparkle to look now
         ed app updates                  the checks already made
-        ed app quit                     quit the main window, leave the menu bar
+        ed app quit                     preview quitting the main window
+        ed app quit --yes               apply it, leaving the menu bar running
+        ed app relaunch                 preview restarting both processes
+        ed app relaunch --yes           apply the restart after a permission grant
+        ed app clear-updates            preview clearing the update history
         ed app reveal companion --tab chat  show a section, and a tab inside it
         ed app snapshot                 the open windows as PNGs, no screen recording
         ```

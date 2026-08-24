@@ -4,6 +4,8 @@ public enum ArgumentKind: Equatable, Sendable {
     case machine
     case appAction
     case runningApp
+    case appPath
+    case appLink
     case cleanerCategory
     case colorFormat
     case colorIndex
@@ -134,6 +136,17 @@ public enum CommandTree {
             CommandNode(
                 "app", "One-shot actions the Edith app performs.",
                 children: [
+                    CommandNode("info", "Show the installed app identity.", options: common),
+                    CommandNode(
+                        "diagnostics", "Show live helper diagnostics.", options: common),
+                    CommandNode("paths", "List Edith folders and files.", options: common),
+                    CommandNode("links", "List Edith external links.", options: common),
+                    CommandNode(
+                        "open-path", "Open or reveal one Edith path.", options: common,
+                        arguments: [.appPath]),
+                    CommandNode(
+                        "open-link", "Open one Edith external link.", options: common,
+                        arguments: [.appLink]),
                     CommandNode(
                         "actions", "List the one-shot actions.", aliases: ["ls"],
                         options: common),
@@ -141,17 +154,24 @@ public enum CommandTree {
                     CommandNode(
                         "test-notification", "Send a test notification.", options: common),
                     CommandNode("open", "Open Edith's panel.", options: common),
-                    CommandNode("quit", "Quit the Edith main window.", options: common),
+                    CommandNode(
+                        "quit", "Quit the Edith main window.",
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "check-updates", "Check for an update now.",
                         options: ["--json", "--help", "--no-wait"]),
                     CommandNode(
                         "updates", "The update checks already made.",
                         options: ["--json", "--help", "--limit"]),
-                    CommandNode("relaunch", "Quit Edith and start it again.", options: common),
+                    CommandNode(
+                        "relaunch", "Quit Edith and start it again.",
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear-updates", "Forget the record of past update checks.",
-                        options: common),
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "reveal", "Show a section of the main window.",
                         options: ["--json", "--help", "--tab"]),

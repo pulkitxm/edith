@@ -41,7 +41,7 @@ true only when the grant landed and its policy requires a fresh Edith process.
 ```
 ed permissions request calendar
 ed permissions request screenRecording --json
-ed permissions request notifications && ed app relaunch
+ed permissions request notifications && ed app relaunch --yes
 ```
 
 ## Behaviour
@@ -87,7 +87,7 @@ note: finish the prompt in System Settings, then run `ed permissions refresh`
 
 Accessibility, Input Monitoring, Full Disk Access and Screen Recording can need
 a fresh process. The command reports that policy but never relaunches Edith by
-itself. Run `ed app relaunch` explicitly after a successful request when
+itself. Run `ed app relaunch --yes` explicitly after a successful request when
 `relaunchRequired` is true.
 
 ## Where to go next

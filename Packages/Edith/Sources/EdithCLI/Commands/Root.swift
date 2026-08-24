@@ -382,7 +382,9 @@ struct CompleteCommand: AsyncParsableCommand {
             toolIDs: ToolProvisioning.all.map(\.id),
             usageSources: (try? UsageDocument.load().sources)?.sorted() ?? [],
             runningApps: RunningAppOperationCenter().completionValues(),
-            quinjetSessions: quinjetSessions)
+            appLinks: AppInspectionCLI.center.links(
+                contributors: AppInspectionCLI.contributors
+            ).map(\.id), quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)
