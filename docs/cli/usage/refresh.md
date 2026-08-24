@@ -80,6 +80,11 @@ process, so it needs no menu bar app and there is nothing to time out on. A
 first run takes noticeably longer, because the collector installs `ccusage`, and
 `jq` or `bun` when they are missing, before it can read anything.
 
+The dashboard refresh button and this command enter the same refresh operation.
+The app sends that operation to its helper, while the CLI starts or follows it in
+the current process, so both paths keep the same lock, progress and completion
+semantics without requiring the same process boundary.
+
 Progress goes to stderr and stdout stays clean: one `usage refreshed` line at
 the end, or the JSON object. Each phase is printed as it lands, with a spinner on
 the phase in flight, and the whole display is skipped when `--json` is passed or

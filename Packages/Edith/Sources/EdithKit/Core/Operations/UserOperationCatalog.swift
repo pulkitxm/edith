@@ -59,6 +59,9 @@ public enum UserOperationCatalog {
         + PresenterRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + UsageProjectOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -81,6 +84,9 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + CleanerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + UsageCollectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + QuinjetOperation.allCases.map {
@@ -551,6 +557,28 @@ private extension PresenterRuntimeOperation {
     }
 }
 
+private extension UsageProjectOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Dashboard repository drilldown", "list repository usage")
+        case .show:
+            userInterface(
+                "Dashboard repository drilldown", "show one repository and its folders",
+                ["edith"])
+        case .openRepository:
+            userInterface(
+                "Dashboard repository drilldown", "open a repository", ["edith"])
+        case .copyRepositoryLink:
+            userInterface(
+                "Dashboard repository drilldown", "copy a repository link", ["edith"])
+        case .copyChatID:
+            userInterface(
+                "Dashboard repository drilldown", "copy a chat identifier", ["abc"])
+        }
+    }
+}
+
 private extension ConfigurationOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
@@ -697,6 +725,27 @@ private extension CleanerOperation {
                     surface: "Cleaner card", action: "clean one category",
                     exampleArguments: ["--category", "npm", "--yes"]),
             ])
+        }
+    }
+}
+
+private extension UsageCollectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .limitsRefresh:
+            userInterface("Rate limit cards", "refresh the limits now", ["--refresh"])
+        case .refresh:
+            userInterface("Dashboard", "re-collect agent usage")
+        case .machineEnable:
+            userInterface(
+                "Dashboard machines menu", "count a machine's agent usage too", ["box"])
+        case .machineDisable:
+            userInterface("Dashboard machines menu", "stop counting a machine", ["box"])
+        case .machineCollect:
+            userInterface("Dashboard machines menu", "collect from the machines now")
+        case .machineForget:
+            userInterface(
+                "Dashboard machines menu", "drop what a machine already gave", ["box"])
         }
     }
 }

@@ -11,12 +11,15 @@ import Testing
 
     static func plan(
         _ words: [String], _ index: Int, usageSources: [String] = [],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
         CompletionEngine.plan(
             CompletionRequest(words: words, index: index), machines: machines,
             configKeys: ConfigCatalog.keys, extensionIDs: extensionIDs,
-            usageSources: usageSources, quinjetSessions: quinjetSessions)
+            usageSources: usageSources, usageChatIDs: usageChatIDs,
+            usageProjects: usageProjects,
+            quinjetSessions: quinjetSessions)
     }
 
     @Test func theTopLevelOffersCommandsAndMachines() {
@@ -210,6 +213,32 @@ import Testing
         let nested = Self.plan(
             ["ed", "music", "--player", "spotify", "status", "--player", ""], 6)
         #expect(nested.candidates == MusicPlayer.allCases.map(\.rawValue))
+    }
+
+    @Test func usageChatIDsCompleteOnlyForCopyChat() {
+        let ids = ["chat-alpha", "chat-beta"]
+        let copy = Self.plan(
+            ["ed", "usage", "projects", "copy-chat", "chat-a"], 4,
+            usageChatIDs: ids)
+        let show = Self.plan(
+            ["ed", "usage", "projects", "show", "chat-a"], 4,
+            usageChatIDs: ids)
+        #expect(copy.candidates == ["chat-alpha"])
+        #expect(show.candidates.isEmpty)
+    }
+
+    @Test func usageRepositoriesCompleteOnlyForRepositoryArguments() {
+        let projects = ["edith", "github.com/acme/edith"]
+        for command in ["show", "open", "copy-link"] {
+            let result = Self.plan(
+                ["ed", "usage", "projects", command, "git"], 4,
+                usageProjects: projects)
+            #expect(result.candidates == ["github.com/acme/edith"])
+        }
+        let copyChat = Self.plan(
+            ["ed", "usage", "projects", "copy-chat", "git"], 4,
+            usageProjects: projects)
+        #expect(copyChat.candidates.isEmpty)
     }
 
     @Test func localPathsAskTheShellForFiles() {
