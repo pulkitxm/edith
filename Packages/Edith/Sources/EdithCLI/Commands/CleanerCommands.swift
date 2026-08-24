@@ -66,20 +66,10 @@ enum CleanerBridge {
         _ entries: [JunkCatalog.Entry], roots: [URL], only: String?,
         progress: CLIProgress? = nil
     ) -> [JunkCategory] {
-        var found: [JunkCategory] = []
-        for entry in entries {
-            progress?.update(entry.name)
-            if let category = JunkScanner.scanCategory(entry, home: home) {
-                found.append(category)
-            }
-        }
-        guard !roots.isEmpty else { return found }
-        var swept = JunkScanner.scanProjectJunk(roots: roots) { note in
-            progress?.update(note)
-        }
-        if let only { swept = swept.filter { $0.id == only } }
-        found.append(contentsOf: swept)
-        return found
+        CleanerOperationExecution.scan(
+            entries: entries, roots: roots, only: only, home: home,
+            progress: { progress?.update($0) }
+        ).categories
     }
 
     static func json(_ category: JunkCategory) -> JSONValue {
@@ -236,19 +226,19 @@ struct CleanerCleanCommand: AsyncParsableCommand {
                 return
             }
             progress.begin("moving \(items.count) items to the Trash")
-            let reclaimed = JunkScanner.clean(items)
+            let result = CleanerOperationExecution.clean(items)
             progress.end()
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "reclaimedBytes": .number(reclaimed),
+                        "reclaimedBytes": .number(result.reclaimedBytes),
                         "wouldReclaimBytes": .number(total),
                         "items": .int(items.count),
                         "applied": .bool(true),
                     ]))
                 return
             }
-            CLIOut.out("moved \(ByteFormatter.string(reclaimed)) to the Trash")
+            CLIOut.out("moved \(ByteFormatter.string(result.reclaimedBytes)) to the Trash")
         }
     }
 }
