@@ -70,6 +70,84 @@ public enum ExtensionEnableOutcome: Equatable, Sendable {
     case needsPermissions(ExtensionPermissionPlan)
 }
 
+public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
+    case usage
+    case herdr
+    case quinjet
+    case system
+    case machines
+    case companion
+    case systemStats
+    case micMute
+    case lidAwake
+    case music
+    case calendar
+    case notchShelf
+    case clipboard
+    case focusDim
+    case presenter
+    case colorPicker
+}
+
+public enum ExtensionModalMutationOutcome: Equatable, Sendable {
+    case applied(ExtensionMutationResult, missingRequiredTools: [CLIToolSpec])
+    case needsPermissions(ExtensionPermissionPlan)
+}
+
+public struct ExtensionModalCoordinator: Sendable {
+    public let entry: ExtensionRegistryEntry
+    public let mutationCenter: ExtensionMutationCenter
+
+    public init(
+        entry: ExtensionRegistryEntry,
+        mutationCenter: ExtensionMutationCenter = ExtensionMutationCenter()
+    ) {
+        self.entry = entry
+        self.mutationCenter = mutationCenter
+    }
+
+    public var route: ExtensionDetailRoute? {
+        ExtensionDetailRoute(rawValue: entry.id)
+    }
+
+    public var isEnabled: Bool {
+        mutationCenter.isEnabled(entry)
+    }
+
+    @MainActor public func setEnabled(_ enabled: Bool) -> ExtensionModalMutationOutcome {
+        guard enabled else {
+            return .applied(
+                mutationCenter.setEnabled(false, for: entry, markPermissionsSeen: isEnabled),
+                missingRequiredTools: [])
+        }
+        switch mutationCenter.enablePermissionAware(entry) {
+        case let .applied(result):
+            return .applied(result, missingRequiredTools: missingRequiredTools)
+        case let .needsPermissions(plan):
+            return .needsPermissions(plan)
+        }
+    }
+
+    @MainActor public func enableAfterPermissions() -> ExtensionModalMutationOutcome {
+        switch mutationCenter.enablePermissionAware(entry) {
+        case let .applied(result):
+            return .applied(result, missingRequiredTools: missingRequiredTools)
+        case let .needsPermissions(plan):
+            return .needsPermissions(plan)
+        }
+    }
+
+    @MainActor public var missingRequiredTools: [CLIToolSpec] {
+        let active = Set(entry.requiredTools.filter { $0.requirement.isActive() }.map(\.id))
+        return mutationCenter.missingTools(for: entry).filter { active.contains($0.id) }
+    }
+
+    public func lifecycleReport() async -> ExtensionLifecycleReport {
+        await ExtensionLifecycleProbe(environment: mutationCenter.environment.lifecycle)
+            .report(for: entry)
+    }
+}
+
 public struct ExtensionToolFailure: Equatable, Sendable {
     public let id: String
     public let detail: String
