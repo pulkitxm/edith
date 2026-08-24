@@ -1,11 +1,21 @@
 import Foundation
 
-public enum MusicLibraryError: Error, Equatable {
+public enum MusicLibraryError: LocalizedError, Equatable {
     case emptyName
     case alreadyThere(String)
     case noSuchTrack(String)
     case noSuchFolder(String)
     case failed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .emptyName: "a name cannot be blank"
+        case let .alreadyThere(path): "\(path) is already there"
+        case let .noSuchTrack(path): "no track exists at \(path)"
+        case let .noSuchFolder(path): "no folder exists at \(path)"
+        case let .failed(message): message
+        }
+    }
 }
 
 public enum MusicLibrary {
@@ -21,18 +31,32 @@ public enum MusicLibrary {
     }
 
     public static func track(at relativePath: String) throws -> Track {
-        let url = TrackMeta.url(for: relativePath)
-        guard FileManager.default.fileExists(atPath: url.path) else {
+        try track(at: relativePath, root: Repo.musicDir)
+    }
+
+    static func track(at relativePath: String, root: URL) throws -> Track {
+        let url = try validatedLibraryURL(
+            TrackMeta.url(for: relativePath, base: root.standardizedFileURL.path), root: root)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+            !isDirectory.boolValue,
+            TrackMeta.playableExtensions.contains(url.pathExtension.lowercased())
+        else {
             throw MusicLibraryError.noSuchTrack(relativePath)
         }
         return Track(url: url, relativePath: relativePath)
     }
 
     public static func folder(at relativePath: String) throws -> MusicFolder {
+        try folder(at: relativePath, root: Repo.musicDir)
+    }
+
+    static func folder(at relativePath: String, root: URL) throws -> MusicFolder {
         guard !relativePath.isEmpty else {
-            return MusicFolder(url: TrackMeta.url(for: ""), relativePath: "")
+            return MusicFolder(url: root.standardizedFileURL, relativePath: "")
         }
-        let url = TrackMeta.url(for: relativePath)
+        let url = try validatedLibraryURL(
+            TrackMeta.url(for: relativePath, base: root.standardizedFileURL.path), root: root)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
             isDirectory.boolValue
@@ -58,8 +82,13 @@ public enum MusicLibrary {
     }
 
     public static func trash(_ track: Track) throws {
+        try trash(track, root: Repo.musicDir)
+    }
+
+    static func trash(_ track: Track, root: URL) throws {
+        let url = try validatedLibraryURL(track.url, root: root)
         do {
-            try FileManager.default.trashItem(at: track.url, resultingItemURL: nil)
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         } catch {
             throw MusicLibraryError.failed(error.localizedDescription)
         }
@@ -87,6 +116,9 @@ public enum MusicLibrary {
 
     @discardableResult
     public static func renameFolder(_ folder: MusicFolder, to name: String) throws -> Move {
+        guard !folder.relativePath.isEmpty else {
+            throw MusicLibraryError.failed("the library root cannot be renamed")
+        }
         let base = sanitized(name)
         guard !base.isEmpty else { throw MusicLibraryError.emptyName }
         let destination = folder.url.deletingLastPathComponent().appendingPathComponent(base)
@@ -94,11 +126,16 @@ public enum MusicLibrary {
     }
 
     public static func trashFolder(_ folder: MusicFolder) throws {
+        try trashFolder(folder, root: Repo.musicDir)
+    }
+
+    static func trashFolder(_ folder: MusicFolder, root: URL) throws {
         guard !folder.relativePath.isEmpty else {
             throw MusicLibraryError.failed("the library root cannot be removed")
         }
+        let url = try validatedLibraryURL(folder.url, root: root)
         do {
-            try FileManager.default.trashItem(at: folder.url, resultingItemURL: nil)
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         } catch {
             throw MusicLibraryError.failed(error.localizedDescription)
         }
@@ -106,8 +143,16 @@ public enum MusicLibrary {
 
     @discardableResult
     public static func relocate(from source: URL, to destination: URL) throws -> Move {
-        let from = TrackMeta.relativePath(of: source)
-        let to = TrackMeta.relativePath(of: destination)
+        try relocate(from: source, to: destination, root: Repo.musicDir)
+    }
+
+    @discardableResult
+    static func relocate(from source: URL, to destination: URL, root: URL) throws -> Move {
+        let source = try validatedLibraryURL(source, root: root)
+        let destination = try validatedLibraryURL(destination, root: root)
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().path
+        let from = TrackMeta.relativePath(of: source, base: base)
+        let to = TrackMeta.relativePath(of: destination, base: base)
         guard destination != source else { throw MusicLibraryError.alreadyThere(to) }
         guard !FileManager.default.fileExists(atPath: destination.path) else {
             throw MusicLibraryError.alreadyThere(to)
@@ -119,5 +164,18 @@ public enum MusicLibrary {
         }
         Favourites.repoint(from: from, to: to)
         return Move(from: from, to: to)
+    }
+
+    static func validatedLibraryURL(_ url: URL, root: URL, allowsRoot: Bool = false) throws -> URL {
+        let resolvedRoot = root.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let resolved = url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let rootPath = resolvedRoot.path
+        let path = resolved.path
+        let isDescendant =
+            rootPath == "/" ? path.hasPrefix("/") && path != "/" : path.hasPrefix(rootPath + "/")
+        guard isDescendant || allowsRoot && path == rootPath else {
+            throw MusicLibraryError.failed("\(url.path) is outside the music library")
+        }
+        return resolved
     }
 }

@@ -79,6 +79,8 @@ enum JSONContract {
         JSONCase("ed music ls", ["music", "ls", "--json"]),
         JSONCase("ed music rescan", ["music", "rescan", "--json"]),
         JSONCase(
+            "ed music library", ["music", "library", "/path/that/does/not/exist", "--json"]),
+        JSONCase(
             "ed music favorite", ["music", "favorite", "nothing-at-all", "--json"],
             mutatesTheMachine: true),
         JSONCase(

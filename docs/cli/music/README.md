@@ -26,6 +26,7 @@ it, so `ed np --json` and `ed music --player spotify` both work.
 | `ed music players` | Every player Edith can see, and which one is active. |
 | `ed music open-current` | Open the active player, including Edith's Music page. |
 | `ed music reveal-current` | Reveal the current library track, or open its external player. |
+| `ed music library` | Choose the folder Edith uses as its local music library. |
 | `ed music ls` | List the library, a folder at a time. Aliased `list`. |
 | `ed music mkdir` | Make a folder in the library. Aliased `newfolder`. |
 | `ed music mv` | Move a track into a folder. Aliased `move`. |
@@ -110,6 +111,17 @@ stop, track, folder, seek, volume, shuffle and repeat semantics regardless of
 which surface sent it. Scripts can use the commands above noninteractively and
 add `--json` whenever they need stable structured output.
 
+The Music page and command line also use the same library content operations for
+listing and rescanning the library, making folders, moving tracks, renaming
+tracks or folders, and moving either kind of item to the Trash. The app confirms
+Trash actions in its sheets. `ed music rm` prints the exact path and track count
+without changing anything until `--yes` is present, in plain text or as one JSON
+document.
+
+Folder selection is shared too. `ed music library ~/Music` performs the same
+path expansion, directory validation, external-storage confirmation, stale-state
+reset, cache invalidation and live notification as the Music page picker.
+
 ## Commands
 
 - [`ed music status`](./status.md)
@@ -123,6 +135,7 @@ add `--json` whenever they need stable structured output.
 - [`ed music players`](./players.md)
 - [`ed music open-current`](./open-current.md)
 - [`ed music reveal-current`](./reveal-current.md)
+- [`ed music library`](./library.md)
 - [`ed music ls`](./ls.md)
 - [`ed music mkdir`](./mkdir.md)
 - [`ed music mv`](./mv.md)
@@ -145,7 +158,7 @@ add `--json` whenever they need stable structured output.
 | 0 | The command did what it says. Also the dry run of `ed music rm` without `--yes`, and `ed music status --json` when no player is running. |
 | 1 | A library operation the filesystem refused: a blank name, a destination that already exists, a Trash that failed, or trashing the library root. Also `shuffle` or `repeat` given a word that is neither on nor off. |
 | 2 | `volume` or `seek` outside 0 to 1, a level or position that is not a number, an unknown flag, a missing argument. |
-| 3 | An unknown `--player` spelling, a track query that matches nothing, a track query that matches more than one track, a folder that does not exist. |
+| 3 | An unknown `--player` spelling, a track query that matches nothing, a track query that matches more than one track, a library folder selection that does not exist or is not a directory, a folder that does not exist. |
 | 4 | No player is running, or the forced player is not; no music folder is set; `start` or `seek` with the menu bar app closed; Edith's own player unreachable because the app is closed, the Music extension is off, or it did not answer in time; osascript refused, timed out, or macOS has not granted this command line Automation access. |
 
 ## Notes and gotchas
@@ -172,14 +185,12 @@ The last player you successfully drove is remembered in the `cliActivePlayer`
 shared default and used only to break a tie between two players with the same
 score. `status` and `players` read it; they never write it.
 
-Every library command needs `musicFolderPath` to be set and exits 4 with
-`no music folder is set` when it is not, even though none of them need the app.
-Set it with `ed config set musicFolderPath ~/Music` or from the Music page. One
-subtlety follows from where the app resolves that path: a folder on `/Volumes`
-that the app has not confirmed is dropped in favour of `<repoPath>/local/music`
-when `repoPath` is set and `~/Library/Application Support/Edith/music`
-otherwise, so the checks pass but `ed music ls` lists the fallback folder rather
-than the external drive.
+Every library content command needs a confirmed folder and exits 4 with
+`no music folder is set` when there is none, even though the commands do not
+need the app. Set it with `ed music library ~/Music` or from the Music page.
+Both routes standardize the path and confirm external folders before any content
+command can use them. A raw restored `/Volumes` value without that confirmation
+is treated as unset instead of silently reading a fallback folder.
 
 Track queries are matched against the relative path and the derived title, never
 against file tags, and the first exact relative-path hit wins before any
@@ -190,9 +201,9 @@ Favourites follow a rename or a move, including a folder rename, because the
 stored relative paths are repointed as part of the move. They do not follow a
 trash: `ed music rm` leaves the old path sitting in `musicFavourites`.
 
-`ed music rename --folder "" <name>` renames the library folder itself, because
-the empty path resolves to the library root and only `rm` guards against it.
-That leaves `musicFolderPath` pointing at a folder that no longer exists.
+`ed music rename --folder "" <name>` is rejected because the empty path is the
+library root. The root can only be changed through `ed music library <path>`,
+which updates confirmation and live state together.
 
 `shuffle` and `repeat` write to the standard defaults domain, matching the
 `.standard` scope those two settings declare in the config catalog, so
@@ -209,8 +220,8 @@ mode here, so `--json` output is always pretty-printed.
 
 ## Where to go next
 
-- [`ed config`](../config/README.md) sets `musicFolderPath`, `musicVolume`,
-  `musicShuffling`, `musicLooping` and the rest of the `music` group.
+- [`ed config`](../config/README.md) sets `musicVolume`, `musicShuffling`,
+  `musicLooping` and the rest of the general `music` preferences.
 - [`ed extensions`](../extensions/README.md) turns the `music` extension on, which is
   what makes the built-in player reachable at all.
 - [`ed permissions`](../permissions/README.md) covers the grants that belong to the
