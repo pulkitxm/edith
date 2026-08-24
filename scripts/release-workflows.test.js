@@ -53,6 +53,14 @@ test("the release is reusable and supports manual rebuilds", () => {
   expect(releaseWorkflow).not.toContain('tags: ["v*"]');
 });
 
+test("automatic cuts and manual rebuilds cannot replace each other", () => {
+  expect(releaseWorkflow).toContain("&& format('rebuild-{0}', inputs.rebuild)");
+  expect(releaseWorkflow).toContain("|| 'automatic'");
+  expect(releaseWorkflow).toContain(
+    "concurrency:\n      group: release-publication\n      cancel-in-progress: false",
+  );
+});
+
 test("automated commits do not re-run CI", () => {
   expect(ciWorkflow).toContain("'Release v'");
   expect(ciWorkflow).toContain("'Refresh the contributor list'");
@@ -80,8 +88,9 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(dmgJob).toContain(
     "./scripts/run-current-release-build.sh ./build.sh --no-open --release",
   );
-  expect(dmgJob).toContain('if [ -n "$REBUILD" ]; then');
-  expect(dmgJob).toContain('if [ "$BUILD_STATUS" -eq 75 ]; then');
+  expect(dmgJob).toContain('RELEASE_SUPERSEDED_FILE="$SUPERSEDED_FILE"');
+  expect(dmgJob).toContain('if [ -f "$SUPERSEDED_FILE" ]; then');
+  expect(dmgJob).not.toContain('if [ "$BUILD_STATUS" -eq 75 ]; then');
   expect(dmgJob).toContain('echo "superseded=true" >> "$GITHUB_OUTPUT"');
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
@@ -113,7 +122,7 @@ test("the publisher uses a token that clears the ruleset", () => {
 test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain("permissions:\n  contents: read");
   expect(releaseWorkflow).toContain(
-    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
+    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    concurrency:\n      group: release-publication\n      cancel-in-progress: false\n    permissions:\n      contents: write",
   );
   expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);

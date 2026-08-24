@@ -38,7 +38,12 @@ on:
         required: true
 
 concurrency:
-  group: release
+  group: >-
+    release-${{
+      inputs.rebuild != ''
+      && format('rebuild-{0}', inputs.rebuild)
+      || 'automatic'
+    }}
   cancel-in-progress: false
 
 permissions:
@@ -187,13 +192,12 @@ jobs:
           EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
         run: |
           BUILD_STATUS=0
-          if [ -n "$REBUILD" ]; then
-            ./build.sh --no-open --release || BUILD_STATUS=$?
-          else
+          SUPERSEDED_FILE="$RUNNER_TEMP/release-build-superseded"
+          rm -f "$SUPERSEDED_FILE"
+          RELEASE_SUPERSEDED_FILE="$SUPERSEDED_FILE" \
             ./scripts/run-current-release-build.sh ./build.sh --no-open --release \
-              || BUILD_STATUS=$?
-          fi
-          if [ "$BUILD_STATUS" -eq 75 ]; then
+            || BUILD_STATUS=$?
+          if [ -f "$SUPERSEDED_FILE" ]; then
             echo "superseded=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -288,6 +292,9 @@ jobs:
     needs: [version, dmg]
     if: needs.dmg.outputs.superseded != 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-publication
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
