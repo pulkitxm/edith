@@ -18,6 +18,10 @@ struct ColorPickerRows: View {
     var body: some View {
         Group {
             Section {
+                Button("Pick now") {
+                    _ = ColorPickerOperationExecution.request(.pick)
+                }
+                .pointerCursor()
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
                 } label: {
