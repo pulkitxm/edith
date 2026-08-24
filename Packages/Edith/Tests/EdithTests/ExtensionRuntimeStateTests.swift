@@ -150,6 +150,32 @@ import Testing
         #expect(controls.lowerBound < readiness.lowerBound)
     }
 
+    @Test func recoveryControlsUseTheSameOperationsAsTheCLI() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let pane = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Settings/Views/ExtensionsPane.swift"), encoding: .utf8)
+        let machines = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Settings/Views/MachinesRows.swift"), encoding: .utf8)
+        let model = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Machines/ViewModels/MachinesModel.swift"), encoding: .utf8)
+
+        #expect(pane.contains("Button(\"Choose folder...\")"))
+        #expect(pane.contains("MusicFolderSelectionOperationExecution.select(url.path)"))
+        #expect(pane.contains("Button(\"Check sessions\")"))
+        #expect(pane.contains("HerdrSessionOperationExecution.list()"))
+        #expect(pane.contains("Button(\"Open setup guide\")"))
+        #expect(machines.contains("Button(\"Add machine...\")"))
+        #expect(machines.contains("model.add(machine, secrets: changes(secrets))"))
+        #expect(model.contains("MachineMutationOperationExecution.perform("))
+    }
+
     @Test func everyExtensionMutationSurfaceUsesTheSharedCenter() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

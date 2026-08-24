@@ -916,17 +916,79 @@ private struct AttentionRows: View {
 private struct HerdrRows: View {
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private var enabled =
         false
+    @State private var checkTask: Task<Void, Never>?
+    @State private var checkResult: String?
+    @State private var checkFailed = false
+    @State private var checking = false
+    @State private var actionError: String?
 
     var body: some View {
         Section("Sessions") {
             LabeledContent("Sources", value: "This Mac and SSH machines")
             Text("Follow live agent sessions, inspect their state, and open workspace diffs.")
                 .settingsCaption()
-            Button("Open Herdr") { SectionWindow.open(.herdr) }
-                .pointerCursor()
+            HStack {
+                Button("Check sessions") { checkSessions() }
+                    .disabled(checking)
+                    .pointerCursor()
+                Button("Open Herdr") { SectionWindow.open(.herdr) }
+                    .pointerCursor()
+                Button("Open setup guide") { openGuide() }
+                    .pointerCursor()
+            }
+            if checking {
+                ProgressView()
+                    .controlSize(.small)
+            } else if let checkResult {
+                Text(checkResult)
+                    .settingsCaption()
+                    .foregroundStyle(checkFailed ? .red : .green)
+            }
+            if let actionError {
+                Text(actionError)
+                    .settingsCaption()
+                    .foregroundStyle(.red)
+            }
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+        .onDisappear { checkTask?.cancel() }
+    }
+
+    private func checkSessions() {
+        checkTask?.cancel()
+        checking = true
+        checkResult = nil
+        checkTask = Task {
+            let hosts = await HerdrSessionOperationExecution.list()
+            guard !Task.isCancelled else { return }
+            let installed = hosts.filter(\.herdrPresent)
+            let agents = installed.flatMap(\.agents)
+            if installed.isEmpty {
+                checkResult = "Herdr was not found on this Mac or a configured machine."
+                checkFailed = true
+            } else if agents.isEmpty {
+                checkResult = "Herdr is installed, but no live sessions were found."
+                checkFailed = false
+            } else {
+                checkResult = "Found \(agents.count) live Herdr sessions."
+                checkFailed = false
+            }
+            checking = false
+            checkTask = nil
+        }
+    }
+
+    private func openGuide() {
+        do {
+            _ = try AppInspectionCenter().openLink(
+                AppInspectionCenter.extensionDocumentationID(
+                    extensionID: "herdr", documentID: "guide"),
+                contributors: [])
+            actionError = nil
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 }
 
@@ -1641,15 +1703,19 @@ private struct MusicRows: View {
 
         Section {
             LabeledContent("Music folder") {
-                Button("Open in Finder") {
-                    do {
-                        try MusicLibraryOperationExecution.openLibrary()
-                        openError = nil
-                    } catch {
-                        openError = error.localizedDescription
+                HStack {
+                    Button("Choose folder...") { chooseLibrary() }
+                        .pointerCursor()
+                    Button("Open in Finder") {
+                        do {
+                            try MusicLibraryOperationExecution.openLibrary()
+                            openError = nil
+                        } catch {
+                            openError = error.localizedDescription
+                        }
                     }
+                    .pointerCursor()
                 }
-                .pointerCursor()
             }
             if let openError {
                 Label(openError, systemImage: "exclamationmark.triangle.fill")
@@ -1680,6 +1746,22 @@ private struct MusicRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+    }
+
+    private func chooseLibrary() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose your music folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            _ = try MusicFolderSelectionOperationExecution.select(url.path)
+            openError = nil
+        } catch {
+            openError = error.localizedDescription
+        }
     }
 }
 

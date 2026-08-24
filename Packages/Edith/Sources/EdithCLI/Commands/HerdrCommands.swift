@@ -25,7 +25,7 @@ enum HerdrCLI {
     }
 
     static func collect(_ query: String?) async throws -> [HerdrHostSnapshot] {
-        try await HerdrCollector.collect(scope(query))
+        await HerdrSessionOperationExecution.list(try scope(query))
     }
 
     static func json(_ hosts: [HerdrHostSnapshot]) -> JSONValue {
