@@ -66,7 +66,7 @@ struct EdithApp: App {
     @NSApplicationDelegateAdaptor(MenuBarAppDelegate.self) private var appDelegate
 
     init() {
-        _ = ProcessUptime.launchedAt
+        _ = AppProcessUptime.launchedAt
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
@@ -110,6 +110,11 @@ struct EdithApp: App {
             AppRuntimeCenter().perform(.cleanKeys) {
                 services.system?.beginCleaning()
             }
+        }
+        _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
+            IPC.post(
+                IPC.Name.appDiagnostics,
+                userInfo: AppDiagnosticsPayload.encode(AppInspectionCenter().diagnostics()))
         }
         _ = IPC.observe(
             IPC.Name.requestQuitApps,
@@ -537,9 +542,7 @@ struct RootView: View {
                 Spacer()
                 if tab == "music", musicEnabled {
                     Button {
-                        try? FileManager.default.createDirectory(
-                            at: Repo.musicDir, withIntermediateDirectories: true)
-                        NSWorkspace.shared.open(Repo.musicDir)
+                        _ = try? AppInspectionCenter().openPath(.music)
                         dismissPanel()
                     } label: {
                         Image(systemName: "folder")
