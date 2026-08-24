@@ -328,13 +328,15 @@ struct CompanionNightlyCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let started = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.nightlyRun()
+                try await CompanionMindRuntimeOperationExecution.nightly {
+                    try await client.nightlyRun()
+                }
             }
             guard !json else {
                 CLIOut.json(.object(["runId": .string(started.runId)]))
                 return
             }
-            CLIOut.out("pipeline finished, run \(started.runId); see `ed companion runs`")
+            CLIOut.out(CompanionMindRuntimeOperationText.nightly(started))
         }
     }
 }
