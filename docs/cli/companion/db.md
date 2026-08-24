@@ -8,16 +8,15 @@ Usage:
 
 ```
 ed companion db [migrate] [--json] [--endpoint <url>]
-ed companion db reindex [--json] [--endpoint <url>]
-ed companion db rebuild-derived [--json] [--endpoint <url>]
+ed companion db reindex [--yes] [--json] [--endpoint <url>]
+ed companion db rebuild-derived [--yes] [--json] [--endpoint <url>]
 ```
 
 `ed companion db migrate` (also the bare default) applies any migration the backend
 has not run. It runs on boot too, so this is for when you deploy without a restart.
 
-`ed companion db reindex` drops the chunks. [`ed companion index`](./index.md) then
-embeds every episode again, which is what you want after changing the embedding model
-or the chunker.
+`ed companion db reindex` drops the chunks and then embeds every episode again, which
+is what you want after changing the embedding model or the chunker.
 
 `ed companion db rebuild-derived` is the bigger hammer and the reason the ladder is
 built this way. It drops the chunks, retires every belief and closes every fact,
@@ -32,10 +31,15 @@ indexing finishes. `rebuild-derived` also retires active, contested and already
 superseded beliefs, and expires every open fact. Export first when you need an
 easy rollback of derived state.
 
-Every JSON response includes `action`. The remaining keys are nullable strings:
-`{action,chunksDropped,beliefsRetired,factsExpired,episodesKept}`. `migrate`
-returns all four count fields as null. `reindex` sets only `chunksDropped`.
-`rebuild-derived` sets all four counts.
+Without `--yes`, either command prints the exact records it would invalidate and
+changes nothing. Add `--yes` to apply the preview. The app presents the same targets
+in a typed confirmation sheet before either Settings button runs.
+
+Every maintenance JSON response includes `action`. A preview also returns
+`{targets,applied:false,changed:false}`. Confirmed `reindex` adds
+`{chunksDropped,episodesIndexed,chunksCreated}`, while confirmed `rebuild-derived`
+adds `{chunksDropped,beliefsRetired,factsExpired,episodesKept}`. `migrate` keeps its
+nullable count fields because it is non-destructive and does not need confirmation.
 
 ## Where to go next
 

@@ -17,7 +17,7 @@ import Testing
         #expect(QuinjetOperation.launch.descriptor.effect == .interactive)
         #expect(QuinjetSessionOperation.close.descriptor.effect == .destructive)
         #expect(QuinjetSessionOperation.close.descriptor.requiresPreview)
-        #expect(UserOperationCatalog.descriptors.suffix(descriptors.count) == descriptors[...])
+        #expect(descriptors.allSatisfy(UserOperationCatalog.descriptors.contains))
     }
 
     @Test func nativeSessionVocabularyHasStableCommandPaths() {

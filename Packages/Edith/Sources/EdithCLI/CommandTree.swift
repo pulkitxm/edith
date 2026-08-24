@@ -1164,10 +1164,12 @@ public enum CommandTree {
                                 options: common + ["--endpoint"]),
                             CommandNode(
                                 "reindex", "Drop the chunks so episodes embed again.",
-                                options: common + ["--endpoint"]),
+                                options: common + ["--endpoint", "--yes"],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "rebuild-derived", "Rebuild everything from the episodes.",
-                                options: common + ["--endpoint"]),
+                                options: common + ["--endpoint", "--yes"],
+                                destructivePolicy: .previewThenYes),
                         ]),
                     CommandNode(
                         "chat", "Talk with the companion, streamed as it thinks.",
