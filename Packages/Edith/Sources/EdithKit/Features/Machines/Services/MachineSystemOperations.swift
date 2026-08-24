@@ -262,10 +262,26 @@ public enum MachineTerminalBroadcastIPC {
     public static let commandKey = "command"
     public static let okKey = "ok"
     public static let tabCountKey = "tabCount"
+    public static let unavailableTabCountKey = "unavailableTabCount"
     public static let errorCodeKey = "errorCode"
     public static let errorKey = "error"
     public static let noOpenTabsCode = "noOpenTabs"
+    public static let noLiveTabsCode = "noLiveTabs"
+    public static let partialDeliveryCode = "partialDelivery"
     public static let invalidRequestCode = "invalidRequest"
+}
+
+public struct MachineTerminalBroadcastDelivery: Equatable, Sendable {
+    public let sent: Int
+    public let unavailable: Int
+
+    public init(sent: Int, unavailable: Int) {
+        self.sent = sent
+        self.unavailable = unavailable
+    }
+
+    public var total: Int { sent + unavailable }
+    public var isComplete: Bool { sent > 0 && unavailable == 0 }
 }
 
 public enum MachineBroadcastOperationError: LocalizedError, Equatable, Sendable {

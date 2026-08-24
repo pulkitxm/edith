@@ -206,26 +206,26 @@ import Testing
             performing: { try MachineBroadcastOperationExecution.plan(command: "  ").get() })
     }
 
-    @MainActor @Test func terminalBroadcastSendsTheSharedPlanToEveryTab() throws {
+    @MainActor @Test func terminalBroadcastSendsOnlyToLiveTabs() throws {
         let model = TerminalTabsModel()
-        model.addTab(named: "One")
+        let live = model.addTab(named: "One")
         model.addTab(named: "Two")
         var inputs: [String] = []
+        let plan = try MachineBroadcastOperationExecution.plan(command: " uptime ").get()
 
-        let result = model.sendBroadcast(" uptime ") { _, input in
-            inputs.append(input)
-        }
+        let result = model.sendBroadcast(
+            plan, isLive: { $0 === live.holder }, send: { _, input in inputs.append(input) })
 
-        #expect(try result.get().command == "uptime")
-        #expect(inputs == ["uptime\n", "uptime\n"])
+        #expect(result == MachineTerminalBroadcastDelivery(sent: 1, unavailable: 1))
+        #expect(inputs == ["uptime\n"])
     }
 
     @MainActor @Test func terminalBroadcastIPCIsCorrelatedAndScopedByMachineIdentity() throws {
         let first = TerminalTabsModel()
-        first.addTab(named: "One")
+        let firstLive = first.addTab(named: "One")
         first.addTab(named: "Two")
         let second = TerminalTabsModel()
-        second.addTab(named: "Three")
+        let secondLive = second.addTab(named: "Three")
         let other = TerminalTabsModel()
         other.addTab(named: "Other")
         let otherID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
@@ -238,24 +238,27 @@ import Testing
             TerminalTabRegistry.unregister(other, machineID: otherID)
         }
         var inputs: [String] = []
-        let requestID = "request-1"
+        let requestID = UUID().uuidString
         let response = MachineTerminalBroadcastBridge.response(
             to: [
                 MachineTerminalBroadcastIPC.requestIDKey: requestID,
                 MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
                 MachineTerminalBroadcastIPC.commandKey: " uptime ",
-            ],
+            ], isLive: { $0 === firstLive.holder || $0 === secondLive.holder },
             send: { _, input in inputs.append(input) })
 
         #expect(response[MachineTerminalBroadcastIPC.requestIDKey] as? String == requestID)
-        #expect(response[MachineTerminalBroadcastIPC.okKey] as? Bool == true)
-        #expect(response[MachineTerminalBroadcastIPC.tabCountKey] as? Int == 3)
-        #expect(response[MachineTerminalBroadcastIPC.commandKey] as? String == "uptime")
-        #expect(inputs == ["uptime\n", "uptime\n", "uptime\n"])
+        #expect(response[MachineTerminalBroadcastIPC.okKey] as? Bool == false)
+        #expect(
+            response[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                == MachineTerminalBroadcastIPC.partialDeliveryCode)
+        #expect(response[MachineTerminalBroadcastIPC.tabCountKey] as? Int == 2)
+        #expect(response[MachineTerminalBroadcastIPC.unavailableTabCountKey] as? Int == 1)
+        #expect(inputs == ["uptime\n", "uptime\n"])
 
         let missing = MachineTerminalBroadcastBridge.response(
             to: [
-                MachineTerminalBroadcastIPC.requestIDKey: "request-2",
+                MachineTerminalBroadcastIPC.requestIDKey: UUID().uuidString,
                 MachineTerminalBroadcastIPC.machineIDKey: UUID().uuidString,
                 MachineTerminalBroadcastIPC.commandKey: "uptime",
             ])
@@ -263,6 +266,64 @@ import Testing
         #expect(
             missing[MachineTerminalBroadcastIPC.errorCodeKey] as? String
                 == MachineTerminalBroadcastIPC.noOpenTabsCode)
+    }
+
+    @MainActor @Test func terminalBroadcastRejectsMissingEmptyAndMalformedRequestIDs() {
+        let model = TerminalTabsModel()
+        model.addTab(named: "One")
+        TerminalTabRegistry.register(model, machineID: machine.id)
+        defer { TerminalTabRegistry.unregister(model, machineID: machine.id) }
+        var sends = 0
+        let requests: [[AnyHashable: Any]] = [
+            [
+                MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
+                MachineTerminalBroadcastIPC.commandKey: "uptime",
+            ],
+            [
+                MachineTerminalBroadcastIPC.requestIDKey: "",
+                MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
+                MachineTerminalBroadcastIPC.commandKey: "uptime",
+            ],
+            [
+                MachineTerminalBroadcastIPC.requestIDKey: "request-1",
+                MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
+                MachineTerminalBroadcastIPC.commandKey: "uptime",
+            ],
+        ]
+
+        for request in requests {
+            let response = MachineTerminalBroadcastBridge.response(
+                to: request, isLive: { _ in true }, send: { _, _ in sends += 1 })
+            #expect(response[MachineTerminalBroadcastIPC.okKey] as? Bool == false)
+            #expect(
+                response[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                    == MachineTerminalBroadcastIPC.invalidRequestCode)
+        }
+        #expect(sends == 0)
+    }
+
+    @MainActor @Test func terminalBroadcastReportsAllUnavailableWithoutSending() {
+        let model = TerminalTabsModel()
+        model.addTab(named: "One")
+        model.addTab(named: "Two")
+        TerminalTabRegistry.register(model, machineID: machine.id)
+        defer { TerminalTabRegistry.unregister(model, machineID: machine.id) }
+        var sends = 0
+
+        let response = MachineTerminalBroadcastBridge.response(
+            to: [
+                MachineTerminalBroadcastIPC.requestIDKey: UUID().uuidString,
+                MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
+                MachineTerminalBroadcastIPC.commandKey: "uptime",
+            ], isLive: { _ in false }, send: { _, _ in sends += 1 })
+
+        #expect(response[MachineTerminalBroadcastIPC.okKey] as? Bool == false)
+        #expect(
+            response[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                == MachineTerminalBroadcastIPC.noLiveTabsCode)
+        #expect(response[MachineTerminalBroadcastIPC.tabCountKey] as? Int == 0)
+        #expect(response[MachineTerminalBroadcastIPC.unavailableTabCountKey] as? Int == 2)
+        #expect(sends == 0)
     }
 
     @Test func terminalBroadcastCLIUsesCorrelatedMainAppIPC() async throws {
@@ -336,6 +397,58 @@ import Testing
             #expect(result.stdout.isEmpty)
             #expect(result.stderr.contains("no open terminal tabs"))
             #expect(result.stderr.contains("open a terminal tab for Box"))
+        }
+    }
+
+    @Test func terminalBroadcastCLIReportsPartialDeliveryExactly() async {
+        await CLIProbe.inWorld { world in
+            MachineRegistry.add(machine)
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { name in
+                guard name == IPC.Name.machineTerminalBroadcastResult,
+                    let requestID = world.postedPayloads(
+                        for: IPC.Name.requestMachineTerminalBroadcast
+                    ).last?[MachineTerminalBroadcastIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    MachineTerminalBroadcastIPC.requestIDKey: requestID,
+                    MachineTerminalBroadcastIPC.okKey: false,
+                    MachineTerminalBroadcastIPC.errorCodeKey:
+                        MachineTerminalBroadcastIPC.partialDeliveryCode,
+                    MachineTerminalBroadcastIPC.errorKey:
+                        "Sent to 1 running terminal tab. 2 unavailable tabs were skipped.",
+                    MachineTerminalBroadcastIPC.tabCountKey: 1,
+                    MachineTerminalBroadcastIPC.unavailableTabCountKey: 2,
+                ]
+            }
+
+            let result = await CLIProbe.capture([
+                "machines", "terminal", "broadcast", "Box", "uptime", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.failure)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("Sent to 1 running terminal tab"))
+            #expect(result.stderr.contains("2 unavailable tabs were skipped"))
+        }
+    }
+
+    @Test func preCancelledTerminalBroadcastDoesNotPostIPC() async {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            let plan = MachineBroadcastPlan(command: "uptime")
+            let task = Task { try await MachineTerminalBroadcastCLI.send(plan, to: machine) }
+            task.cancel()
+            var cancelled = false
+            do {
+                _ = try await task.value
+            } catch is CancellationError {
+                cancelled = true
+            } catch {}
+
+            #expect(cancelled)
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestMachineTerminalBroadcast).isEmpty)
         }
     }
 

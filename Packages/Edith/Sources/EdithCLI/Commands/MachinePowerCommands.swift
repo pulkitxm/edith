@@ -541,6 +541,7 @@ enum MachineTerminalBroadcastCLI {
     static func send(
         _ plan: MachineBroadcastPlan, to machine: Machine, timeout: TimeInterval = 5
     ) async throws -> Int {
+        try Task.checkCancellation()
         try AppBridge.requireMainApp("broadcasting to open machine terminals")
         let requestID = UUID().uuidString
         let payload: [String: Any] = [
@@ -548,6 +549,7 @@ enum MachineTerminalBroadcastCLI {
             MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
             MachineTerminalBroadcastIPC.commandKey: plan.command,
         ]
+        try Task.checkCancellation()
         guard
             let reply = await AppBridge.awaitReply(
                 IPC.Name.machineTerminalBroadcastResult, timeout: timeout,
@@ -574,6 +576,13 @@ enum MachineTerminalBroadcastCLI {
                 throw CLIFailure.notFound(
                     detail,
                     hint: "open a terminal tab for \(machine.name) in Edith, then retry")
+            }
+            if reply[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                == MachineTerminalBroadcastIPC.noLiveTabsCode
+            {
+                throw CLIFailure.notFound(
+                    detail,
+                    hint: "start a terminal tab for \(machine.name) in Edith, then retry")
             }
             throw CLIFailure(detail)
         }

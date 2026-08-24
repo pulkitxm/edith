@@ -49,28 +49,23 @@ final class TerminalTabsModel {
 
     @discardableResult
     func sendBroadcast(
-        _ command: String,
-        send: @MainActor (TerminalSessionHolder, String) -> Void = {
-            $0.terminalView.send(txt: $1)
-        }
-    ) -> Result<MachineBroadcastPlan, Error> {
-        let result = MachineBroadcastOperationExecution.plan(command: command)
-        guard case let .success(plan) = result else { return result }
-        _ = sendBroadcast(plan, send: send)
-        return .success(plan)
-    }
-
-    @discardableResult
-    func sendBroadcast(
         _ plan: MachineBroadcastPlan,
+        isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
             $0.terminalView.send(txt: $1)
         }
-    ) -> Int {
+    ) -> MachineTerminalBroadcastDelivery {
+        var sent = 0
+        var unavailable = 0
         for tab in tabs {
+            guard isLive(tab.holder) else {
+                unavailable += 1
+                continue
+            }
             send(tab.holder, plan.terminalInput)
+            sent += 1
         }
-        return tabs.count
+        return MachineTerminalBroadcastDelivery(sent: sent, unavailable: unavailable)
     }
 
     func stopAll() {
@@ -85,6 +80,7 @@ struct TerminalTabsView: View {
     @State private var model = TerminalTabsModel()
     @Environment(\.colorScheme) private var scheme
     @State private var command = ""
+    @State private var broadcastError: String?
 
     private var dark: Bool { scheme == .dark }
 
@@ -201,17 +197,40 @@ struct TerminalTabsView: View {
                 .foregroundStyle(DashSkin.warn)
             TextField("Send to every tab", text: $command)
                 .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    if case .success = model.sendBroadcast(command) { command = "" }
-                }
-            Button("Send") {
-                if case .success = model.sendBroadcast(command) { command = "" }
+                .onSubmit(sendBroadcast)
+            Button("Send", action: sendBroadcast)
+                .pointerCursor()
+            if let broadcastError {
+                Text(broadcastError)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.danger)
             }
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(7))
         .background(DashSkin.warn.opacity(0.1))
+    }
+
+    private func sendBroadcast() {
+        let plan: MachineBroadcastPlan
+        switch MachineBroadcastOperationExecution.plan(command: command) {
+        case let .success(value):
+            plan = value
+        case let .failure(error):
+            broadcastError = error.localizedDescription
+            return
+        }
+        guard let delivery = TerminalTabRegistry.broadcast(plan, machineID: session.machine.id)
+        else {
+            broadcastError = "This machine has no open terminal tabs."
+            return
+        }
+        guard delivery.isComplete else {
+            broadcastError = TerminalTabRegistry.failureMessage(for: delivery)
+            return
+        }
+        command = ""
+        broadcastError = nil
     }
 }
 

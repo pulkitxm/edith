@@ -83,20 +83,38 @@ enum TerminalTabRegistry {
 
     static func broadcast(
         _ plan: MachineBroadcastPlan, machineID: UUID,
+        isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
             $0.terminalView.send(txt: $1)
         }
-    ) -> Int? {
+    ) -> MachineTerminalBroadcastDelivery? {
         let available = models[machineID, default: []].compactMap(\.value)
         guard !available.isEmpty else {
             models.removeValue(forKey: machineID)
             return nil
         }
         models[machineID] = available.map(WeakTerminalTabsModel.init)
-        let count = available.reduce(0) { total, model in
-            total + model.sendBroadcast(plan, send: send)
+        let delivery = available.reduce(
+            MachineTerminalBroadcastDelivery(sent: 0, unavailable: 0)
+        ) { total, model in
+            let next = model.sendBroadcast(plan, isLive: isLive, send: send)
+            return MachineTerminalBroadcastDelivery(
+                sent: total.sent + next.sent,
+                unavailable: total.unavailable + next.unavailable)
         }
-        return count > 0 ? count : nil
+        return delivery.total > 0 ? delivery : nil
+    }
+
+    static func failureMessage(for delivery: MachineTerminalBroadcastDelivery) -> String {
+        if delivery.sent == 0 {
+            let noun = delivery.unavailable == 1 ? "tab" : "tabs"
+            return
+                "That machine has \(delivery.unavailable) open terminal \(noun), but none are running."
+        }
+        let sentNoun = delivery.sent == 1 ? "tab" : "tabs"
+        let unavailableNoun = delivery.unavailable == 1 ? "tab was" : "tabs were"
+        return
+            "Sent to \(delivery.sent) running terminal \(sentNoun). \(delivery.unavailable) unavailable \(unavailableNoun) skipped."
     }
 
     @discardableResult

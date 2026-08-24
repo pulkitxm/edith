@@ -20,12 +20,15 @@ enum MachineTerminalBroadcastBridge {
 
     static func response(
         to info: [AnyHashable: Any],
+        isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
             $0.terminalView.send(txt: $1)
         }
     ) -> [String: Any] {
         let requestID = info[MachineTerminalBroadcastIPC.requestIDKey] as? String ?? ""
         guard
+            !requestID.isEmpty,
+            UUID(uuidString: requestID) != nil,
             let rawMachineID = info[MachineTerminalBroadcastIPC.machineIDKey] as? String,
             let machineID = UUID(uuidString: rawMachineID),
             let command = info[MachineTerminalBroadcastIPC.commandKey] as? String
@@ -44,30 +47,47 @@ enum MachineTerminalBroadcastBridge {
                 message: error.localizedDescription)
         }
         guard
-            let tabCount = TerminalTabRegistry.broadcast(
-                plan, machineID: machineID, send: send)
+            let delivery = TerminalTabRegistry.broadcast(
+                plan, machineID: machineID, isLive: isLive, send: send)
         else {
             return failure(
                 requestID: requestID, code: MachineTerminalBroadcastIPC.noOpenTabsCode,
                 message: "That machine has no open terminal tabs.")
+        }
+        guard delivery.sent > 0 else {
+            return failure(
+                requestID: requestID, code: MachineTerminalBroadcastIPC.noLiveTabsCode,
+                message: TerminalTabRegistry.failureMessage(for: delivery), delivery: delivery)
+        }
+        guard delivery.unavailable == 0 else {
+            return failure(
+                requestID: requestID, code: MachineTerminalBroadcastIPC.partialDeliveryCode,
+                message: TerminalTabRegistry.failureMessage(for: delivery), delivery: delivery)
         }
         return [
             MachineTerminalBroadcastIPC.requestIDKey: requestID,
             MachineTerminalBroadcastIPC.okKey: true,
             MachineTerminalBroadcastIPC.machineIDKey: machineID.uuidString,
             MachineTerminalBroadcastIPC.commandKey: plan.command,
-            MachineTerminalBroadcastIPC.tabCountKey: tabCount,
+            MachineTerminalBroadcastIPC.tabCountKey: delivery.sent,
+            MachineTerminalBroadcastIPC.unavailableTabCountKey: delivery.unavailable,
         ]
     }
 
     private static func failure(
-        requestID: String, code: String, message: String
+        requestID: String, code: String, message: String,
+        delivery: MachineTerminalBroadcastDelivery? = nil
     ) -> [String: Any] {
-        [
+        var response: [String: Any] = [
             MachineTerminalBroadcastIPC.requestIDKey: requestID,
             MachineTerminalBroadcastIPC.okKey: false,
             MachineTerminalBroadcastIPC.errorCodeKey: code,
             MachineTerminalBroadcastIPC.errorKey: message,
         ]
+        if let delivery {
+            response[MachineTerminalBroadcastIPC.tabCountKey] = delivery.sent
+            response[MachineTerminalBroadcastIPC.unavailableTabCountKey] = delivery.unavailable
+        }
+        return response
     }
 }
