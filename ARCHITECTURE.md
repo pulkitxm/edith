@@ -47,7 +47,8 @@ identity and CLI route cannot drift into separate sources of truth.
 
 `CLIParityTests` resolves every registered route through the argument parser and
 the completion tree. It also keeps the remaining unshared UI inventory visible
-until those paths move behind shared operations. Focus, scrolling, folding,
+until an exact operation, UI surface and example invocation move behind a typed
+placement. Focus, scrolling, folding,
 local filtering, modal visibility and mouse capture are recorded separately as
 presentation-only state and do not need CLI commands.
 

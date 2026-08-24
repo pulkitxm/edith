@@ -99,6 +99,23 @@ public enum UserInterfaceActionCatalog {
         UserInterfacePresentationState(
             surface: "Machine terminal", state: "mouse capture",
             reason: "Mouse capture controls input delivery within the current terminal view."),
+        UserInterfacePresentationState(
+            surface: "Clipboard panel", state: "history search filtering",
+            reason: "Searching filters the entries already loaded into the clipboard panel."),
+        UserInterfacePresentationState(
+            surface: "Machine terminal", state: "terminal keyboard delivery",
+            reason:
+                "Typing sends input through the active terminal view without a discrete action."),
+        UserInterfacePresentationState(
+            surface: "Machine tab bar", state: "Files window visibility",
+            reason: "Opening the Files window changes the visible application presentation."),
+        UserInterfacePresentationState(
+            surface: "Dashboard machines chip", state: "single-machine chart filter",
+            reason:
+                "Selecting one machine filters the usage charts already loaded in the dashboard."),
+        UserInterfacePresentationState(
+            surface: "Dashboard machines chip", state: "local-machine chart filter",
+            reason: "Selecting local usage filters the charts without changing collected usage."),
     ]
 }
 
@@ -158,10 +175,14 @@ private extension ExtensionMutationOperation {
 private extension CalendarEventOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
+        case .list:
+            userInterface("Calendar agenda", "list upcoming events")
         case .open:
             userInterface("Calendar page", "open Calendar")
         case .join:
             userInterface("Calendar agenda", "join a meeting", ["event"])
+        case .directions:
+            userInterface("Calendar agenda", "open directions to a location", ["event"])
         }
     }
 }
