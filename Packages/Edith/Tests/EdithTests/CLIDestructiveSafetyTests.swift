@@ -13,6 +13,8 @@ import Testing
         "ed color clear",
         "ed companion erase",
         "ed companion forget",
+        "ed companion db rebuild-derived",
+        "ed companion db reindex",
         "ed companion stack down",
         "ed companion wipe",
         "ed download clear",
@@ -77,6 +79,12 @@ import Testing
         let forget = try #require(
             try EdRoot.parseAsRoot(["companion", "forget", "abc", "--yes"])
                 as? CompanionForgetCommand)
+        let reindex = try #require(
+            try EdRoot.parseAsRoot(["companion", "db", "reindex", "--yes"])
+                as? CompanionDbReindexCommand)
+        let rebuild = try #require(
+            try EdRoot.parseAsRoot(["companion", "db", "rebuild-derived", "--yes"])
+                as? CompanionDbRebuildCommand)
         let shelfRemove = try #require(
             try EdRoot.parseAsRoot(["shelf", "rm", "1", "--yes"])
                 as? ShelfRemoveCommand)
@@ -92,7 +100,9 @@ import Testing
         let color = try #require(
             try EdRoot.parseAsRoot(["color", "clear", "--yes"])
                 as? ColorClearCommand)
-        #expect(docker.yes && image.yes && kill.yes && stack.yes && forget.yes)
+        #expect(
+            docker.yes && image.yes && kill.yes && stack.yes && forget.yes && reindex.yes
+                && rebuild.yes)
         #expect(
             shelfRemove.yes && shelfClear.yes && clipboard.yes && clipboardRemove.yes
                 && color.yes)

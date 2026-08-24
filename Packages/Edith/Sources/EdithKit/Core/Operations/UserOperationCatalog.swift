@@ -41,6 +41,9 @@ public enum UserOperationCatalog {
         + ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + CompanionSettingsOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ClipboardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -365,6 +368,43 @@ private extension ColorSwatchOperation {
                     surface: "Color Picker settings", action: "copy a swatch in one format",
                     exampleArguments: ["1", "--format", "hex"]),
             ])
+        }
+    }
+}
+
+private extension CompanionSettingsOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .syncGithub:
+            userInterface("Companion", "sync github activity", ["github"])
+        case .exportData:
+            userInterface(
+                "Companion settings", "export the memory as a bundle", ["/tmp/backup"])
+        case .importData:
+            userInterface(
+                "Companion settings", "restore a memory bundle", ["/tmp/backup"])
+        case .wipe:
+            userInterface("Companion settings", "wipe the whole memory", ["--yes"])
+        case .dbReindex:
+            userInterface(
+                "Companion settings", "drop and rebuild the search index", ["--yes"])
+        case .dbRebuildDerived:
+            userInterface(
+                "Companion settings", "rebuild everything derived", ["--yes"])
+        case .connectorsSet:
+            userInterface(
+                "Companion settings", "store a github or notion token",
+                ["--github", "gho_x"])
+        case .connectorsImport:
+            userInterface(
+                "Companion settings", "import a calendar, music or youtube export",
+                ["music", "./export.json"])
+        case .reasonSet:
+            userInterface(
+                "Companion settings", "change the reasoner or its api key",
+                ["--provider", "anthropic", "--api-key", "sk-x"])
+        case .reasonTest:
+            userInterface("Companion settings", "test the reasoner")
         }
     }
 }
