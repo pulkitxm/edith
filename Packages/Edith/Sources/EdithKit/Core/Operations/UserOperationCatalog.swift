@@ -83,6 +83,12 @@ public enum UserOperationCatalog {
         + QuinjetSessionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + CompanionChatLibraryOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + CompanionMindRuntimeOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     public static let descriptors = registrations.map(\.descriptor)
 
@@ -643,5 +649,21 @@ private extension QuinjetSessionOperation {
             userInterface(
                 "Quinjet worktree picker", "switch an open session", ["1", "/tmp/worktree"])
         }
+    }
+}
+
+private extension CompanionChatLibraryOperation {
+    var interfaceExposure: UserOperationExposure {
+        .userInterface(
+            placements.map {
+                UserInterfaceActionPlacement(
+                    surface: $0.surface, action: $0.action,
+                    exampleArguments: $0.exampleArguments)
+            })
+    }
+}
+private extension CompanionMindRuntimeOperation {
+    var interfaceExposure: UserOperationExposure {
+        .userInterface(placements)
     }
 }

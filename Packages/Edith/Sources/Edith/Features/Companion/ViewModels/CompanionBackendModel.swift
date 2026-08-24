@@ -65,11 +65,13 @@ final class CompanionBackendModel: CompanionRefreshable {
     func deploy() async {
         guard let host = selectedHost else { return }
         await perform("Setting up on \(host.name)") {
-            let deployment = try await CompanionStackControl.deploy(
-                host: host, config: self.config,
-                log: { line in
-                    Task { @MainActor in self.lastLog += line + "\n" }
-                })
+            let deployment = try await CompanionMindRuntimeOperationExecution.deploy {
+                try await CompanionStackControl.deploy(
+                    host: host, config: self.config,
+                    log: { line in
+                        Task { @MainActor in self.lastLog += line + "\n" }
+                    })
+            }
             self.deployment = deployment
         }
     }

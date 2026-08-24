@@ -176,12 +176,12 @@ struct CompanionStackUpCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
-            _ = try await CompanionStackRunner.run(
-                CompanionStackCommands.up(
-                    directory: deployment.directory,
-                    tier: CompanionTier(rawValue: deployment.tier) ?? .cpu,
-                    build: build),
-                on: deployment, timeout: 1800)
+            _ = try await CompanionMindRuntimeOperationExecution.start(
+                deployment, build: build
+            ) { command, deployment, timeout in
+                try await CompanionStackRunner.run(
+                    command, on: deployment, timeout: timeout)
+            }
             try await CompanionStackRunner.report(deployment, json: json, verb: "started")
         }
     }
@@ -212,12 +212,12 @@ struct CompanionStackDownCommand: AsyncParsableCommand {
                     fields: ["deployment": CompanionHostsCommand.deploymentJSON(deployment)])
                 : nil
             guard plan?.shouldApply() ?? true else { return }
-            _ = try await CompanionStackRunner.run(
-                CompanionStackCommands.down(
-                    directory: deployment.directory,
-                    tier: CompanionTier(rawValue: deployment.tier) ?? .cpu,
-                    keepData: !wipe),
-                on: deployment, timeout: 300)
+            _ = try await CompanionMindRuntimeOperationExecution.stop(
+                deployment, wipe: wipe
+            ) { command, deployment, timeout in
+                try await CompanionStackRunner.run(
+                    command, on: deployment, timeout: timeout)
+            }
             try await CompanionStackRunner.report(
                 deployment, json: json, verb: "stopped", plan: plan)
         }
@@ -234,11 +234,11 @@ struct CompanionStackRestartCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let deployment = try CompanionStackRunner.requireDeployment()
-            _ = try await CompanionStackRunner.run(
-                CompanionStackCommands.restart(
-                    directory: deployment.directory,
-                    tier: CompanionTier(rawValue: deployment.tier) ?? .cpu),
-                on: deployment, timeout: 600)
+            _ = try await CompanionMindRuntimeOperationExecution.restart(deployment) {
+                command, deployment, timeout in
+                try await CompanionStackRunner.run(
+                    command, on: deployment, timeout: timeout)
+            }
             try await CompanionStackRunner.report(deployment, json: json, verb: "restarted")
         }
     }
@@ -341,38 +341,40 @@ struct CompanionDeployCommand: AsyncParsableCommand {
                     hint: "run `ed companion hosts` to see what each one needs")
             }
             let chosenPort = try ArgumentChecks.positive(port, "--port")
-            let deployment = CompanionDeployment(
-                machineID: chosen.isLocal ? nil : chosen.id,
-                machineName: chosen.name,
-                directory: directory,
-                tier: (chosen.tier ?? .cpu).rawValue,
-                localPort: chosenPort)
-            let alreadyThere = await CompanionStackRunner.services(deployment)
+            let candidate = CompanionMindRuntimeOperationExecution.deployment(
+                host: chosen, directory: directory, localPort: chosenPort)
+            let alreadyThere = await CompanionStackRunner.services(candidate)
             guard chosen.canHostTheStack || !alreadyThere.isEmpty else {
                 throw CLIFailure(
                     "\(chosen.name) cannot run the companion yet",
                     hint: chosen.blockers.map { "\($0.headline): \($0.fix)" }
                         .joined(separator: "; "))
             }
-            if !adopt {
-                var config = CompanionConfigStore.load()
-                config.apiPort = chosenPort
-                try await CompanionInstaller.install(
-                    deployment: deployment, config: config, secrets: CompanionSecrets.all(),
-                    runner: { command, stdin, timeout in
+            let deployment = try await CompanionMindRuntimeOperationExecution.deploy {
+                if !adopt {
+                    var config = CompanionConfigStore.load()
+                    config.apiPort = chosenPort
+                    try await CompanionInstaller.install(
+                        deployment: candidate, config: config,
+                        secrets: CompanionSecrets.all(),
+                        runner: { command, stdin, timeout in
+                            try await CompanionStackRunner.run(
+                                command, on: candidate, stdin: stdin, timeout: timeout)
+                        },
+                        log: { CLIOut.note($0) })
+                    CLIOut.note("Starting the stack, building the image when it changed")
+                    _ = try await CompanionMindRuntimeOperationExecution.start(
+                        candidate, build: true
+                    ) { command, deployment, timeout in
                         try await CompanionStackRunner.run(
-                            command, on: deployment, stdin: stdin, timeout: timeout)
-                    },
-                    log: { CLIOut.note($0) })
-                CLIOut.note("Starting the stack, building the image when it changed")
-                _ = try await CompanionStackRunner.run(
-                    CompanionStackCommands.up(
-                        directory: directory, tier: chosen.tier ?? .cpu, build: true),
-                    on: deployment, timeout: 1800)
-            }
-            CompanionDeploymentStore.save(deployment)
-            if !adopt, deployment.machineID != nil {
-                await openTunnel(deployment)
+                            command, on: deployment, timeout: timeout)
+                    }
+                }
+                let saved = CompanionDeploymentStore.save(candidate)
+                if !adopt, saved.machineID != nil {
+                    await openTunnel(saved)
+                }
+                return saved
             }
             guard !json else {
                 CLIOut.json(CompanionHostsCommand.deploymentJSON(deployment))

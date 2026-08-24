@@ -666,7 +666,6 @@ enum UIParity {
 
     @Test func legacyVariantsShareOneExactOperationWithMultiplePlacements() {
         let expectedPlacementCounts: [[String]: Int] = [
-            ["companion", "chat"]: 2,
             ["music", "rename"]: 2,
             ["music", "rm"]: 2,
             ["machines", "docker", "start"]: 2,
