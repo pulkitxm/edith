@@ -155,9 +155,8 @@ final class AttentionPageModel {
 
     func startFocus(name: String, duration: TimeInterval) {
         do {
-            _ = try repository.startFocus(
-                name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focus" : name,
-                duration: duration)
+            try AttentionFocusOperationExecution.start(
+                name: name, duration: duration, repository: repository)
             errorMessage = nil
             reload()
         } catch {
@@ -167,7 +166,7 @@ final class AttentionPageModel {
 
     func stopFocus() {
         do {
-            _ = try repository.endFocus()
+            try AttentionFocusOperationExecution.stop(repository: repository)
             errorMessage = nil
             reload()
         } catch {

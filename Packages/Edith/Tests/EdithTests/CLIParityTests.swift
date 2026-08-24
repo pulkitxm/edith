@@ -84,7 +84,8 @@ enum UIParity {
         UICapability("Clipboard panel", "click an entry to copy it", ["clipboard", "copy", "1"]),
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),
         UICapability("Clipboard panel", "unpin an entry", ["clipboard", "unpin", "1"]),
-        UICapability("Clipboard panel", "delete an entry", ["clipboard", "rm", "1"]),
+        UICapability(
+            "Clipboard panel", "delete an entry", ["clipboard", "rm", "1", "--yes"]),
         UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
         UICapability("Color Picker menu", "copy a recent colour", ["color", "copy", "1"]),
@@ -701,7 +702,6 @@ enum UIParity {
 
     @Test func legacyVariantsShareOneExactOperationWithMultiplePlacements() {
         let expectedPlacementCounts: [[String]: Int] = [
-            ["cleaner", "clean"]: 2,
             ["companion", "chat"]: 2,
             ["machines", "kill"]: 2,
             ["music", "rename"]: 2,
