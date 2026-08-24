@@ -475,6 +475,33 @@ import Testing
         Self.expect(result, matches: invocation.scenario)
     }
 
+    @Test func bashPreservesMetacharacterCandidatesFromTheProductionShim() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let fake = outside.appendingPathComponent("completion-source")
+        try """
+        #!/bin/bash
+        printf '%s\\n' 'track * [mix].mp3'
+        """.write(to: fake, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: fake.path)
+        try Data().write(to: outside.appendingPathComponent("track album m.mp3"))
+        let script = CompletionScripts.defaultDirectory(for: .bash, home: outside)
+            .appendingPathComponent(CompletionScripts.Shell.bash.scriptName)
+        try FileManager.default.createDirectory(
+            at: script.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try CompletionScripts.script(for: .bash, tool: fake.path)
+            .write(to: script, atomically: true, encoding: .utf8)
+
+        let scenario = ShellCompletionScenario(
+            words: ["ed", "track"], expected: ["track * [mix].mp3"],
+            requiresExactMatch: true)
+        let result = try Self.shellCompletion(
+            scenario, shell: .bash, script: script, outside: outside)
+
+        Self.expect(result, matches: scenario)
+    }
+
     @Test(.enabled(if: fishExecutable != nil), arguments: shellCompletionScenarios)
     func fishCompletesTheFullMatrix(scenario: ShellCompletionScenario) throws {
         let outside = try Self.temporaryDirectory()
