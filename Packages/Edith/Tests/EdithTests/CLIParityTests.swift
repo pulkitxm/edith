@@ -361,9 +361,8 @@ enum UIParity {
         UICapability(
             "Terminal broadcast bar", "send one line to every pane",
             ["machines", "broadcast", "--", "uptime"]),
-        UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
-        UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
-
+        UICapability(
+            "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
         UICapability(
             "Herdr board", "list live sessions on this Mac and SSH machines", ["herdr", "ls"]),
         UICapability(
@@ -633,6 +632,11 @@ enum UIParity {
         for (cli, count) in expectedPlacementCounts {
             #expect(operations[cli] == count, "\(cli) should have \(count) UI placements")
         }
+    }
+
+    @Test func everyRunningAppLeafDeclaresItsSharedOperation() {
+        let declared = Set(RunningAppOperation.allCases.map(\.descriptor.cli))
+        #expect(declared == [["apps", "ls"], ["apps", "quit"]])
     }
 
     @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {

@@ -68,6 +68,9 @@ public enum UserOperationCatalog {
         + PermissionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + RunningAppOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ColorPickerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -643,6 +646,24 @@ private extension PermissionOperation {
         case .settings:
             userInterface(
                 "Permissions pane", "open the relevant System Settings pane", ["calendar"])
+        }
+    }
+}
+
+private extension RunningAppOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("System page", "inspect running applications")
+        case .quit:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "System page", action: "quit one app",
+                    exampleArguments: ["Safari", "--yes"]),
+                UserInterfaceActionPlacement(
+                    surface: "System page", action: "quit all apps",
+                    exampleArguments: ["--all", "--yes"]),
+            ])
         }
     }
 }

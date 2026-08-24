@@ -42,6 +42,8 @@ public enum IPC {
             "com.pulkit.edith.downloadQueueChanged")
         public static let requestQuitApps = Notification.Name(
             "com.pulkit.edith.requestQuitApps")
+        public static let quitAppsResult = Notification.Name(
+            "com.pulkit.edith.quitAppsResult")
         public static let requestFinderUndo = Notification.Name(
             "com.pulkit.edith.requestFinderUndo")
         public static let requestDownloadCancel = Notification.Name(
