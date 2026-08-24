@@ -13,7 +13,8 @@ struct MachinesDockerCommand: AsyncParsableCommand {
             """,
         subcommands: [
             DockerPsCommand.self, DockerShellCommand.self, DockerImagesCommand.self,
-            DockerNetworksCommand.self, DockerDiskUsageCommand.self, DockerLogsCommand.self,
+            DockerVolumesCommand.self, DockerNetworksCommand.self, DockerDiskUsageCommand.self,
+            DockerLogsCommand.self,
             DockerInspectCommand.self, DockerStartCommand.self, DockerStopCommand.self,
             DockerRestartCommand.self, DockerRemoveCommand.self,
             DockerPauseCommand.self, DockerUnpauseCommand.self,

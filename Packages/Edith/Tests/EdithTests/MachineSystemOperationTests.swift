@@ -546,12 +546,15 @@ import Testing
         #expect(terminalBroadcast.machine == "box")
         #expect(terminalBroadcast.command == ["uptime", "--pretty"])
 
-        let defaultTerminalBroadcast = try #require(
-            try EdRoot.parseAsRoot([
-                "machines", "terminal", "box", "uptime",
-            ]) as? MachinesTerminalBroadcastCommand)
-        #expect(defaultTerminalBroadcast.machine == "box")
-        #expect(defaultTerminalBroadcast.command == ["uptime"])
+    }
+
+    @Test func bareTerminalGroupPrintsHelpAndSucceeds() throws {
+        let result = try CLIProcessProbe.run(["machines", "terminal"])
+
+        #expect(result.code == 0)
+        #expect(result.stdout.contains("USAGE: ed machines terminal"))
+        #expect(result.stdout.contains("broadcast"))
+        #expect(result.stderr.isEmpty)
     }
 
     @Test func everySystemDescriptorIsAnExactCompletionLeaf() {

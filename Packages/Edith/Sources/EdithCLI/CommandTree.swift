@@ -2,6 +2,7 @@ import Foundation
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
+    case machineOrLocal
     case appAction
     case runningApp
     case appPath
@@ -871,7 +872,7 @@ public enum CommandTree {
                             CommandNode(
                                 "broadcast",
                                 "Send one line to every open terminal tab for one machine.",
-                                options: common, arguments: [.machine, .free])
+                                options: common, arguments: [.machineOrLocal, .free])
                         ]),
                     CommandNode(
                         "kill", "End a process on a machine.",

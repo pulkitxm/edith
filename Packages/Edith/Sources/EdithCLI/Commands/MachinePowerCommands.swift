@@ -527,8 +527,7 @@ struct MachinesTerminalCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "terminal",
         abstract: "Act on terminal tabs that are open in the Edith app.",
-        subcommands: [MachinesTerminalBroadcastCommand.self],
-        defaultSubcommand: MachinesTerminalBroadcastCommand.self)
+        subcommands: [MachinesTerminalBroadcastCommand.self])
 }
 
 enum MachineTerminalBroadcastCLI {

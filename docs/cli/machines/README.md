@@ -175,7 +175,8 @@ remote command's own exit code, so any value from 0 to 255 can come back and
 none of them mean what the table above says.
 
 Only `ed machines terminal broadcast` needs the Edith app. It exits 4 when the
-main app is closed and 3 when the selected machine has no open terminal tabs.
+main app is closed, 3 when the selected machine has no open or running terminal
+tabs, and 1 when only some running tabs receive the line.
 
 ## Notes and gotchas
 

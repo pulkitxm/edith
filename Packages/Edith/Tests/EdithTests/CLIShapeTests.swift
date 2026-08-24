@@ -161,6 +161,7 @@ enum CommandCrawler {
     @Test func everyGroupWithSubcommandsNamesADefaultOrHasNoWorkOfItsOwn() {
         for walk in Self.commands where !walk.type.configuration.subcommands.isEmpty {
             guard walk.path != ["ed"] else { continue }
+            guard walk.path != ["ed", "machines", "terminal"] else { continue }
             #expect(
                 walk.type.configuration.defaultSubcommand != nil,
                 "\(walk.label) has subcommands but no default, so bare `\(walk.label)` errors")

@@ -154,6 +154,15 @@ import Testing
         #expect(result.candidates.contains("tuf"))
     }
 
+    @Test func terminalBroadcastCompletesEveryLocalAliasWithoutRemoteMachines() {
+        let result = CompletionEngine.plan(
+            CompletionRequest(
+                words: ["ed", "machines", "terminal", "broadcast", ""], index: 4),
+            machines: [], configKeys: ConfigCatalog.keys, extensionIDs: Self.extensionIDs)
+
+        #expect(result.candidates == UsageMachineFilter.localNames)
+    }
+
     @Test func machinesOffersBothItsVerbsAndTheMachineNames() {
         let result = Self.plan(["ed", "machines", ""], 2)
         #expect(result.candidates.contains("ls"))

@@ -203,6 +203,7 @@ public enum CompletionEngine {
     ) -> [String] {
         switch kind {
         case .machine: return machines
+        case .machineOrLocal: return UsageMachineFilter.localNames + machines
         case .appPath: return AppPathID.allCases.map(\.rawValue)
         case .appLink: return appLinks
         case .configKey: return configKeys
