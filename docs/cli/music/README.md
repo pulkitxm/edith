@@ -201,9 +201,9 @@ Favourites follow a rename or a move, including a folder rename, because the
 stored relative paths are repointed as part of the move. They do not follow a
 trash: `ed music rm` leaves the old path sitting in `musicFavourites`.
 
-`ed music rename --folder "" <name>` renames the library folder itself, because
-the empty path resolves to the library root and only `rm` guards against it.
-That leaves `musicFolderPath` pointing at a folder that no longer exists.
+`ed music rename --folder "" <name>` is rejected because the empty path is the
+library root. The root can only be changed through `ed music library <path>`,
+which updates confirmation and live state together.
 
 `shuffle` and `repeat` write to the standard defaults domain, matching the
 `.standard` scope those two settings declare in the config catalog, so

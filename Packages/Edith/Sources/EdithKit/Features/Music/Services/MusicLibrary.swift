@@ -1,11 +1,21 @@
 import Foundation
 
-public enum MusicLibraryError: Error, Equatable {
+public enum MusicLibraryError: LocalizedError, Equatable {
     case emptyName
     case alreadyThere(String)
     case noSuchTrack(String)
     case noSuchFolder(String)
     case failed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .emptyName: "a name cannot be blank"
+        case let .alreadyThere(path): "\(path) is already there"
+        case let .noSuchTrack(path): "no track exists at \(path)"
+        case let .noSuchFolder(path): "no folder exists at \(path)"
+        case let .failed(message): message
+        }
+    }
 }
 
 public enum MusicLibrary {
@@ -87,6 +97,9 @@ public enum MusicLibrary {
 
     @discardableResult
     public static func renameFolder(_ folder: MusicFolder, to name: String) throws -> Move {
+        guard !folder.relativePath.isEmpty else {
+            throw MusicLibraryError.failed("the library root cannot be renamed")
+        }
         let base = sanitized(name)
         guard !base.isEmpty else { throw MusicLibraryError.emptyName }
         let destination = folder.url.deletingLastPathComponent().appendingPathComponent(base)

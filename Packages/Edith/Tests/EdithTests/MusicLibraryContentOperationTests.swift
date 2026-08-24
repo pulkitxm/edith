@@ -139,8 +139,36 @@ import Testing
         }
     }
 
+    @Test func removalExecutesTheExactTargetCapturedByItsPreviewPlan() throws {
+        let folder = MusicFolder(url: root.appendingPathComponent("Chill"), relativePath: "Chill")
+        let plan = MusicLibraryContentOperationExecution.removalPlan(folderTarget(folder)) { _ in 7
+        }
+        var removed: MusicFolder?
+
+        let executed = try MusicLibraryContentOperationExecution.remove(
+            plan, trashTrack: { _ in throw MusicLibraryContentTestError.wrongTarget },
+            trashFolder: { removed = $0 })
+
+        #expect(executed == plan)
+        #expect(executed.path == "Chill")
+        #expect(executed.trackCount == 7)
+        #expect(removed == folder)
+    }
+
+    @Test func libraryRootCannotBeRenamed() {
+        let folder = MusicFolder(url: root, relativePath: "")
+
+        #expect(throws: MusicLibraryError.failed("the library root cannot be renamed")) {
+            _ = try MusicLibrary.renameFolder(folder, to: "Elsewhere")
+        }
+    }
+
     private func track(_ path: String) -> Track {
         Track(url: root.appendingPathComponent(path), relativePath: path)
+    }
+
+    private func folderTarget(_ folder: MusicFolder) -> MusicLibraryRemovalTarget {
+        .folder(folder)
     }
 }
 

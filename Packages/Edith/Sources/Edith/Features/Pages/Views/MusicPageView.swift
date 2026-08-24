@@ -133,6 +133,33 @@ final class MusicRemote {
     private var revealObserver: NSObjectProtocol?
     private var searchScopePath: String?
     private var folderCache: [String: [MusicFolder]] = [:]
+    private var rescanTask: Task<Void, Never>?
+    private var entriesTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var rescanGeneration = 0
+    private var entriesGeneration = 0
+    private var searchGeneration = 0
+    private let scanLibrary: @Sendable () -> [Track]
+    private let listFolder: @Sendable (String) -> MusicLibraryContentListing
+    private let searchFolder: @Sendable (String) -> (tracks: [Track], folders: [MusicFolder])
+
+    init(
+        scanLibrary: @escaping @Sendable () -> [Track] = {
+            MusicLibraryContentOperationExecution.rescan()
+        },
+        listFolder: @escaping @Sendable (String) -> MusicLibraryContentListing = { path in
+            MusicLibraryContentOperationExecution.list(
+                MusicFolder(url: TrackMeta.url(for: path), relativePath: path))
+        },
+        searchFolder: @escaping @Sendable (String) -> (tracks: [Track], folders: [MusicFolder]) = {
+            path in
+            (TrackMeta.tracks(under: path), TrackMeta.folders(under: path))
+        }
+    ) {
+        self.scanLibrary = scanLibrary
+        self.listFolder = listFolder
+        self.searchFolder = searchFolder
+    }
 
     func start() {
         if stateObserver != nil {
@@ -197,6 +224,13 @@ final class MusicRemote {
     }
 
     func stop() {
+        rescanTask?.cancel()
+        rescanTask = nil
+        rescanGeneration &+= 1
+        entriesTask?.cancel()
+        entriesTask = nil
+        entriesGeneration &+= 1
+        invalidateSearchScope()
         if let stateObserver {
             IPC.stopObserving(stateObserver)
             self.stateObserver = nil
@@ -226,6 +260,10 @@ final class MusicRemote {
     }
 
     func rescan() {
+        rescanTask?.cancel()
+        rescanGeneration &+= 1
+        let generation = rescanGeneration
+        let scanLibrary = scanLibrary
         folderCache.removeAll()
         invalidateSearchScope()
         refreshFavourites()
@@ -235,23 +273,27 @@ final class MusicRemote {
             folderPath = ""
         }
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
-        Task { [weak self] in
-            let scanned = await Task.detached {
-                MusicLibraryContentOperationExecution.rescan()
-            }.value
-            self?.tracks = scanned
-            self?.refreshEntries()
+        rescanTask = Task { [weak self] in
+            let scanned = await Task.detached { scanLibrary() }.value
+            guard !Task.isCancelled, let self, self.rescanGeneration == generation else { return }
+            self.rescanTask = nil
+            self.tracks = scanned
+            self.refreshEntries()
         }
     }
 
     private func refreshEntries() {
+        entriesTask?.cancel()
+        entriesGeneration &+= 1
+        let generation = entriesGeneration
         let path = folderPath
-        Task { [weak self] in
-            let entries = await Task.detached {
-                MusicLibraryContentOperationExecution.list(
-                    MusicFolder(url: TrackMeta.url(for: path), relativePath: path))
-            }.value
-            guard let self, self.folderPath == path else { return }
+        let listFolder = listFolder
+        entriesTask = Task { [weak self] in
+            let entries = await Task.detached { listFolder(path) }.value
+            guard !Task.isCancelled, let self, self.entriesGeneration == generation,
+                self.folderPath == path
+            else { return }
+            self.entriesTask = nil
             self.folders = entries.folders
             self.folderTracks = entries.tracks
         }
@@ -260,18 +302,26 @@ final class MusicRemote {
     func loadSearchScope() {
         let path = folderPath
         guard searchScopePath != path else { return }
+        searchTask?.cancel()
+        searchGeneration &+= 1
+        let generation = searchGeneration
         searchScopePath = path
-        Task { [weak self] in
-            let found = await Task.detached {
-                (TrackMeta.tracks(under: path), TrackMeta.folders(under: path))
-            }.value
-            guard let self, self.searchScopePath == path else { return }
-            self.searchTracks = found.0
-            self.searchFolders = found.1
+        let searchFolder = searchFolder
+        searchTask = Task { [weak self] in
+            let found = await Task.detached { searchFolder(path) }.value
+            guard !Task.isCancelled, let self, self.searchGeneration == generation,
+                self.searchScopePath == path
+            else { return }
+            self.searchTask = nil
+            self.searchTracks = found.tracks
+            self.searchFolders = found.folders
         }
     }
 
     private func invalidateSearchScope() {
+        searchTask?.cancel()
+        searchTask = nil
+        searchGeneration &+= 1
         searchScopePath = nil
         searchTracks = []
         searchFolders = []
@@ -451,6 +501,7 @@ final class MusicRemote {
     func chooseLibrary(_ url: URL) {
         do {
             _ = try MusicFolderSelectionOperationExecution.select(url.path)
+            libraryError = nil
             rescan()
         } catch {
             libraryError = error.localizedDescription
@@ -461,18 +512,32 @@ final class MusicRemote {
         libraryError = nil
     }
 
+    private func libraryResult<T>(_ perform: () throws -> T) -> T? {
+        do {
+            return try perform()
+        } catch {
+            libraryError = error.localizedDescription
+            return nil
+        }
+    }
+
     func delete(_ track: Track) {
+        libraryError = nil
         guard
-            (try? MusicLibraryContentOperationExecution.remove(.track(track))) != nil
+            libraryResult({
+                try MusicLibraryContentOperationExecution.remove(.track(track))
+            }) != nil
         else { return }
         rescan()
         broadcastFolderChanged()
     }
 
     func rename(_ track: Track, to name: String) {
+        libraryError = nil
         guard
-            let move = try? MusicLibraryContentOperationExecution.rename(
-                .track(track), to: name)
+            let move = libraryResult({
+                try MusicLibraryContentOperationExecution.rename(.track(track), to: name)
+            })
         else { return }
         sendLibraryChange("renamed", ["from": move.from, "to": move.to])
         refreshAfterFileChange()
@@ -488,9 +553,12 @@ final class MusicRemote {
     }
 
     func createFolder(named name: String) {
+        libraryError = nil
         guard
-            (try? MusicLibraryContentOperationExecution.createFolder(
-                named: name, under: folderPath)) != nil
+            libraryResult({
+                try MusicLibraryContentOperationExecution.createFolder(
+                    named: name, under: folderPath)
+            }) != nil
         else {
             return
         }
@@ -499,10 +567,12 @@ final class MusicRemote {
     }
 
     func move(_ track: Track, toFolderPath folderRelativePath: String) {
+        libraryError = nil
         if moveTrack(track, toFolderPath: folderRelativePath) { refreshAfterFileChange() }
     }
 
     func move(relativePaths: [String], toFolderPath folderRelativePath: String) {
+        libraryError = nil
         var moved = false
         for path in relativePaths {
             let track = Track(url: TrackMeta.url(for: path), relativePath: path)
@@ -513,8 +583,9 @@ final class MusicRemote {
 
     private func moveTrack(_ track: Track, toFolderPath folderRelativePath: String) -> Bool {
         guard
-            let move = try? MusicLibraryContentOperationExecution.move(
-                track, to: folderRelativePath)
+            let move = libraryResult({
+                try MusicLibraryContentOperationExecution.move(track, to: folderRelativePath)
+            })
         else {
             return false
         }
@@ -523,9 +594,11 @@ final class MusicRemote {
     }
 
     func renameFolder(_ folder: MusicFolder, to name: String) {
+        libraryError = nil
         guard sanitizedName(name) != folder.name,
-            let renamed = try? MusicLibraryContentOperationExecution.rename(
-                .folder(folder), to: name)
+            let renamed = libraryResult({
+                try MusicLibraryContentOperationExecution.rename(.folder(folder), to: name)
+            })
         else { return }
         let newPath = renamed.to
         if let playing = currentFile,
@@ -541,8 +614,11 @@ final class MusicRemote {
     }
 
     func deleteFolder(_ folder: MusicFolder) {
+        libraryError = nil
         guard
-            (try? MusicLibraryContentOperationExecution.remove(.folder(folder))) != nil
+            libraryResult({
+                try MusicLibraryContentOperationExecution.remove(.folder(folder))
+            }) != nil
         else { return }
         repointFolderPath(from: folder.relativePath, to: nil)
         rescan()
