@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const packageManifest = readFileSync("Packages/Edith/Package.swift", "utf8");
+const swiftTestScript = readFileSync("Packages/Edith/test.sh", "utf8");
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
 
@@ -74,14 +76,50 @@ test("every change area covers its repository inputs", () => {
   }
 });
 
-test("embedded companion runtime changes run Swift tests", () => {
+test("embedded companion runtime changes run their focused guard", () => {
   const swiftTest = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain(
+  expect(swiftTest).not.toContain(
     "needs.changes.outputs.companion_runtime == 'true'",
   );
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.companion_runtime == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
+  expect(ciWorkflow).toContain("run: make ci-companion-runtime");
+});
+
+test("documentation changes run focused documentation tests", () => {
+  const swiftTest = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  swift-test:"),
+    ciWorkflow.indexOf("\n  companion:"),
+  );
+  expect(swiftTest).not.toContain("needs.changes.outputs.docs == 'true'");
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
+  expect(ciWorkflow).toContain("run: make ci-docs");
+});
+
+test("main releases skip the redundant debug app build", () => {
+  const swiftBuild = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  swift-build:"),
+    ciWorkflow.indexOf("\n  swift-test:"),
+  );
+  expect(swiftBuild).toContain("github.event_name != 'push'");
+  const release = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
+  expect(release).toContain("&& (github.event_name == 'push'");
+  expect(release).toContain("|| needs.swift-build.result == 'success'))");
+});
+
+test("Swift tests build their CLI fixture in one package graph", () => {
+  expect(swiftTestScript).not.toMatch(/^swift build/gm);
+  expect(swiftTestScript.match(/^exec swift test/gm)?.length).toBe(1);
+  const testTarget = packageManifest.slice(
+    packageManifest.indexOf('name: "EdithTests"'),
+  );
+  expect(testTarget).toContain('"Highlighter", "ed"');
 });
 
 test("targeted publishing workflows watch every deployment input", () => {
