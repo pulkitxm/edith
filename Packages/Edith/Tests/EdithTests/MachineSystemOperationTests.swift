@@ -425,6 +425,13 @@ import Testing
             ]) as? MachinesTerminalBroadcastCommand)
         #expect(terminalBroadcast.machine == "box")
         #expect(terminalBroadcast.command == ["uptime", "--pretty"])
+
+        let defaultTerminalBroadcast = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "terminal", "box", "uptime",
+            ]) as? MachinesTerminalBroadcastCommand)
+        #expect(defaultTerminalBroadcast.machine == "box")
+        #expect(defaultTerminalBroadcast.command == ["uptime"])
     }
 
     @Test func everySystemDescriptorIsAnExactCompletionLeaf() {
