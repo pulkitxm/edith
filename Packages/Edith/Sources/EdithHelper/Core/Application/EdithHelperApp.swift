@@ -56,12 +56,14 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
         defer { PerformanceTrace.end(launchTrace) }
         PanelController.shared = PanelController(services: AppState.services)
+        AppState.services.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !terminationPending else { return .terminateLater }
         terminationPending = true
+        AppState.services.cancelStartup()
         AppState.services.usage?.prepareForTermination()
         SettingsBackup.shared.prepareForTermination()
         terminationFlushTask = Task { [weak self] in

@@ -18,6 +18,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private let startup = StartupCoordinator()
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -34,11 +35,44 @@ final class AppServices {
         SharedDefaults.store.object(forKey: key) as? Bool ?? false
     }
 
-    init() {
-        sync()
+    func start() {
+        startup.start([
+            StartupPhase(name: "helper.services.primary") { [weak self] in
+                self?.reconcilePrimaryServices()
+            },
+            StartupPhase(name: "helper.services.panels") { [weak self] in
+                self?.reconcilePanelServices()
+            },
+            StartupPhase(name: "helper.services.interaction") { [weak self] in
+                self?.reconcileInteractionServices()
+            },
+            StartupPhase(name: "helper.services.attention") { [weak self] in
+                self?.reconcileAttentionService()
+            },
+            StartupPhase(name: "helper.services.refresh") { [weak self] in
+                self?.refreshServices()
+            },
+        ])
     }
 
     func sync() {
+        startup.cancel()
+        reconcilePrimaryServices()
+        reconcilePanelServices()
+        reconcileInteractionServices()
+        reconcileAttentionService()
+        refreshServices()
+    }
+
+    func cancelStartup() {
+        startup.cancel()
+    }
+
+    func waitForStartup() async {
+        await startup.waitForCurrent()
+    }
+
+    private func reconcilePrimaryServices() {
         let usageState = Self.reconcileAgentUsageSettings()
         let usageOn = usageState.enabled
         let musicOn = Self.extensionEnabled(AppStorageKeys.Tabs.musicEnabled)
@@ -87,7 +121,9 @@ final class AppServices {
             store.shutdown()
             calendar = nil
         }
+    }
 
+    private func reconcilePanelServices() {
         let notchShelfOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.shelfEnabled)
         if notchShelfOn, notchShelf == nil { notchShelf = NotchShelfController() }
         if !notchShelfOn, let controller = notchShelf {
@@ -126,7 +162,9 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+    }
 
+    private func reconcileInteractionServices() {
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
@@ -173,18 +211,24 @@ final class AppServices {
             stats.shutdown()
             systemStats = nil
         }
+    }
 
-        let attentionSettings = AttentionRepository().loadSettings()
-        let attentionOn = Self.attentionEnabled(
-            extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
-            settings: attentionSettings)
+    private func reconcileAttentionService() {
+        let extensionEnabled = Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled)
+        let attentionSettings = extensionEnabled ? AttentionRepository().loadSettings() : nil
+        let attentionOn =
+            attentionSettings.map {
+                Self.attentionEnabled(extensionEnabled: extensionEnabled, settings: $0)
+            } ?? false
         if attentionOn, attention == nil { attention = AttentionTrackingService() }
-        if attentionOn { attention?.sync(attentionSettings) }
+        if let attentionSettings, attentionOn { attention?.sync(attentionSettings) }
         if !attentionOn, let service = attention {
             service.shutdown()
             attention = nil
         }
+    }
 
+    private func refreshServices() {
         usage?.syncStatusItem()
         usage?.refreshMenuBarItem()
         usage?.notifier.clearStateIfMasterOff()
