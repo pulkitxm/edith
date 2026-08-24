@@ -138,6 +138,13 @@ import Testing
         #expect(HerdrAgentViews.view(for: claude.id, defaults) == .agent)
     }
 
+    @Test func openUsesANonInteractiveObserverTerminal() {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        store.open(agent("Codex", pane: "a"))
+
+        #expect(store.tabs.first?.holder.terminalView is HerdrObserverTerminalView)
+    }
+
     @Test func openingAnAlreadyOpenAgentSwitchesItsView() {
         let defaults = Self.scratchDefaults()
         let store = HerdrStore(defaults: defaults)
