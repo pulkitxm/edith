@@ -75,7 +75,7 @@ private struct UpdatesPane: View {
     @State private var showingSchedule = false
 
     private var currentVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
+        AppInspectionCenter().info().version
     }
 
     private var automaticDownloads: Binding<Bool> {

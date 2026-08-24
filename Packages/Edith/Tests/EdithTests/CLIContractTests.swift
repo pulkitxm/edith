@@ -43,6 +43,16 @@ enum JSONContract {
             "ed completions install", ["completions", "install", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed app actions", ["app", "actions", "--json"]),
+        JSONCase("ed app info", ["app", "info", "--json"]),
+        JSONCase("ed app diagnostics", ["app", "diagnostics", "--json"]),
+        JSONCase("ed app paths", ["app", "paths", "--json"]),
+        JSONCase("ed app links", ["app", "links", "--json"]),
+        JSONCase(
+            "ed app open-path", ["app", "open-path", "app-data", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed app open-link", ["app", "open-link", "repository", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed app clean-keys", ["app", "clean-keys", "--json"]),
         JSONCase("ed app test-notification", ["app", "test-notification", "--json"]),
         JSONCase("ed app open", ["app", "open", "--json"]),
@@ -754,7 +764,10 @@ enum JSONContract {
     }
 
     @Test func theExtensionListAndTheHumanTableAgreeOnWhatIsOn() async {
-        await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { world in
+            for entry in ExtensionRegistry.entries {
+                world.shared.set(false, forKey: entry.defaultsKey)
+            }
             _ = await CLIProbe.capture(["extensions", "enable", "clipboard"])
             let json = await CLIProbe.capture(["extensions", "ls", "--json"])
             let table = await CLIProbe.capture(["extensions", "ls"])

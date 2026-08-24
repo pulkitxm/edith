@@ -282,6 +282,8 @@ struct MainWindowView: View {
         var sidebarOpen = true
     @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
         var sidebarWidth = 230.0
+    @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
+        var attentionEnabled = true
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
@@ -368,6 +370,7 @@ struct MainWindowView: View {
     private var destination: MainDestination {
         let requested = MainDestination.resolve(navigationSelection.mainWindowSection)
         return switch requested {
+        case .attention: attentionEnabled ? requested : .home
         case .dashboard: usageEnabled ? requested : .home
         case .herdr: herdrEnabled ? requested : .home
         case .quinjet: quinjetEnabled ? requested : .home
@@ -706,6 +709,7 @@ struct MainWindowView: View {
     private var visibleHomeItems: [MainDestination] {
         MainDestination.homeItems.filter { item in
             switch item {
+            case .attention: attentionEnabled
             case .dashboard: usageEnabled
             case .herdr: herdrEnabled
             case .quinjet: quinjetEnabled
@@ -1069,7 +1073,7 @@ struct MainWindowView: View {
                 Text("Made with ♥ by")
                     .foregroundStyle(.tertiary)
                 Button("Pulkit") {
-                    NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
+                    _ = try? AppInspectionCenter().openLink("creator", contributors: [])
                 }
                 .buttonStyle(.plain)
                 .fontWeight(.semibold)

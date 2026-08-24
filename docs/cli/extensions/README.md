@@ -14,6 +14,9 @@ works whether or not Edith is running. A write posts `settingsChanged`, so a
 running app picks the change up live and a closed one picks it up the next time
 it launches. Readiness commands also inspect the tools, permissions, helper,
 platform support, configured machines and available backends an extension uses.
+The lifecycle sheet's documentation buttons and `ed app open-link
+extension-doc:<extension>:<document>` resolve through the same shared link
+catalog. `ed app links` lists every available documentation id.
 
 The settings pane, onboarding flow, `enable`, `disable`, `setup`, and extension
 tool installation all execute through the same EdithKit operation layer. The
@@ -30,18 +33,19 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all sixteen |
+| `ed extensions status [id]` | Summarises readiness for one extension or all seventeen |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all sixteen, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all seventeen, with recovery commands |
 
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Sixteen entries, in this order:
+walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
+| `attention` | Attention | Utilities | Understand where your time goes and protect focused work |
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
 | `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
@@ -59,12 +63,13 @@ walks, and its order is the order `ls` prints. Sixteen entries, in this order:
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same sixteen, with what each one is made of. `Key` is the preference the app
+The same seventeen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-seven the welcome tour shows before you ask it for all of them.
+eight the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |
+| `attention` | `tabAttentionEnabled` | yes | none | none | none | none |
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` | none |
 | `herdr` | `tabHerdrEnabled` | yes | none | none | none | none |
 | `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` | none |
@@ -88,6 +93,7 @@ the current platform, and which missing implementations merely degrade it:
 
 | ID | Required capabilities | Optional capabilities |
 | --- | --- | --- |
+| `attention` | `runningApplications` | none |
 | `usage` | `usageCollection` | `notifications` |
 | `herdr` | `herdrSessions` | none |
 | `quinjet` | `localTerminal` | none |

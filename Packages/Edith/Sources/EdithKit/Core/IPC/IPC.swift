@@ -42,6 +42,8 @@ public enum IPC {
             "com.pulkit.edith.downloadQueueChanged")
         public static let requestQuitApps = Notification.Name(
             "com.pulkit.edith.requestQuitApps")
+        public static let quitAppsResult = Notification.Name(
+            "com.pulkit.edith.quitAppsResult")
         public static let requestFinderUndo = Notification.Name(
             "com.pulkit.edith.requestFinderUndo")
         public static let requestDownloadCancel = Notification.Name(
@@ -102,6 +104,10 @@ public enum IPC {
             "com.pulkit.edith.requestWindowSnapshot")
         public static let windowSnapshotResult = Notification.Name(
             "com.pulkit.edith.windowSnapshotResult")
+        public static let requestAppDiagnostics = Notification.Name(
+            "com.pulkit.edith.requestAppDiagnostics")
+        public static let appDiagnostics = Notification.Name(
+            "com.pulkit.edith.appDiagnostics")
         public static let requestQuinjetSessionOperation = Notification.Name(
             "com.pulkit.edith.requestQuinjetSessionOperation")
         public static let quinjetSessionOperationResult = Notification.Name(
