@@ -41,7 +41,7 @@ concurrency:
   group: >-
     release-${{
       inputs.rebuild != ''
-      && format('rebuild-{0}', inputs.rebuild)
+      && 'rebuild'
       || 'automatic'
     }}
   cancel-in-progress: false

@@ -54,8 +54,9 @@ test("the release is reusable and supports manual rebuilds", () => {
 });
 
 test("automatic cuts and manual rebuilds cannot replace each other", () => {
-  expect(releaseWorkflow).toContain("&& format('rebuild-{0}', inputs.rebuild)");
+  expect(releaseWorkflow).toContain("&& 'rebuild'");
   expect(releaseWorkflow).toContain("|| 'automatic'");
+  expect(releaseWorkflow).not.toContain("format('rebuild-{0}'");
   expect(releaseWorkflow).toContain(
     "concurrency:\n      group: release-publication\n      cancel-in-progress: false",
   );
