@@ -217,7 +217,7 @@ final class QuinjetPageModel {
             guard let self, let tab else { return }
             self.handleHostPayload(payload, from: tab)
         }
-        let environment = terminalEnvironment()
+        let environment = QuinjetOperationExecution.terminalEnvironment()
         tab.holder.reset()
         tab.holder.start(
             executable: request.executableURL.path, arguments: request.arguments,
@@ -340,13 +340,6 @@ final class QuinjetPageModel {
 
     func stopAll() {
         for tab in tabs { tab.holder.stop() }
-    }
-
-    private func terminalEnvironment() -> [String] {
-        var environment = CLIToolEnvironment.sanitized()
-        environment["TERM"] = "xterm-256color"
-        environment["COLORTERM"] = "truecolor"
-        return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
     }
 
     private func session(matching selector: String?) throws -> QuinjetTab {
