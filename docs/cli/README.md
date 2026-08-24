@@ -13,6 +13,15 @@ and is the shortest path to being useful. These pages are the complete
 reference: one page per command group, every flag, every default, every JSON
 key.
 
+## Agent discovery
+
+Start with `ed guide`, then use `ed <group> --help` and the reference page for
+the selected command. Prefer `--json` when a command offers it, read only stdout
+as the result document, and treat stderr and the exit code as diagnostics. Shell
+completion walks the same command tree used by parity checks, including nested
+routes and typed values, so it is also a reliable discovery surface outside the
+app.
+
 ## Start here
 
 | Page | What it covers |

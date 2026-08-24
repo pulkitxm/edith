@@ -102,7 +102,8 @@ struct ExtensionsPane: View {
         .sheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
                 request: request, grantedPermissions: grantedPermissions,
-                grant: { _ = try? MainPermissionOperations.center.request($0) },
+                grant: { _ = try MainPermissionOperations.center.request($0) },
+                openSettings: { _ = try MainPermissionOperations.center.openSettings(for: $0) },
                 cancel: { permissionRequest = nil },
                 enable: { enableRequestedExtension(request) },
                 refresh: requestPermissionRefresh)
@@ -218,16 +219,12 @@ struct ExtensionsPane: View {
         return Binding(
             get: { enabled.wrappedValue },
             set: { newValue in
-                let center = ExtensionMutationCenter.application
-                guard newValue else {
-                    _ = center.setEnabled(
-                        false, for: entry, markPermissionsSeen: enabled.wrappedValue)
-                    return
-                }
+                let coordinator = ExtensionModalCoordinator(
+                    entry: entry, mutationCenter: .application)
                 grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
-                switch center.enablePermissionAware(entry) {
-                case .applied:
-                    showProvisioning(for: entry)
+                switch coordinator.setEnabled(newValue) {
+                case let .applied(_, missingRequiredTools):
+                    if !missingRequiredTools.isEmpty { provisioningEntry = entry }
                 case let .needsPermissions(plan):
                     permissionRequest = ExtensionPermissionRequest(
                         entry: entry, required: plan.required, optional: plan.optional)
@@ -264,19 +261,14 @@ struct ExtensionsPane: View {
     }
 
     private func enableRequestedExtension(_ request: ExtensionPermissionRequest) {
-        _ = ExtensionMutationCenter.application.setEnabled(
-            true, for: request.entry, markPermissionsSeen: true)
+        let coordinator = ExtensionModalCoordinator(
+            entry: request.entry, mutationCenter: .application)
+        let outcome = coordinator.enableAfterPermissions()
         permissionRequest = nil
-        DispatchQueue.main.async {
-            showProvisioning(for: request.entry)
-        }
-    }
-
-    private func showProvisioning(for entry: ExtensionRegistryEntry) {
-        let active = Set(entry.requiredTools.filter { $0.requirement.isActive() }.map(\.id))
-        let missing = ExtensionMutationCenter.application.missingTools(for: entry)
-            .contains { active.contains($0.id) }
-        if missing { provisioningEntry = entry }
+        guard case let .applied(_, missingRequiredTools) = outcome,
+            !missingRequiredTools.isEmpty
+        else { return }
+        DispatchQueue.main.async { provisioningEntry = request.entry }
     }
 
 }
@@ -363,13 +355,49 @@ private struct ExtensionMarketplaceCard: View {
 
 private struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
+    let coordinator: ExtensionModalCoordinator
     @Environment(\.dismiss) private var dismiss
+    @State private var enabled: Bool
+    @State private var grantedPermissions: [ExtensionPermission: Bool]
+    @State private var permissionRequest: ExtensionPermissionRequest?
+    @State private var provisioningEntry: ExtensionRegistryEntry?
+    @State private var invalidation = 0
+
+    init(entry: ExtensionRegistryEntry) {
+        let coordinator = ExtensionModalCoordinator(
+            entry: entry, mutationCenter: .application)
+        self.entry = entry
+        self.coordinator = coordinator
+        _enabled = State(initialValue: coordinator.isEnabled)
+        _grantedPermissions = State(
+            initialValue: ExtensionPermissionState.readGrantedPermissions())
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                ExtensionLifecycleRows(entry: entry)
-                RequiredPermissionRows(permissions: entry.requiredPermissions)
+                Section("Extension") {
+                    Toggle("Enabled", isOn: enabledBinding)
+                        .toggleStyle(.switch)
+                        .pointerCursor()
+                    Text(
+                        enabled
+                            ? "This extension is available throughout Edith."
+                            : "Enable this extension to use its controls and workflows."
+                    )
+                    .settingsCaption()
+                    if enabled, !coordinator.missingRequiredTools.isEmpty {
+                        Button("Set up required tools...") {
+                            provisioningEntry = entry
+                        }
+                        .pointerCursor()
+                    }
+                }
+                ExtensionLifecycleRows(
+                    entry: entry, coordinator: coordinator, invalidation: invalidation)
+                ExtensionPermissionRows(entry: entry) {
+                    invalidateReadiness()
+                }
                 ExtensionDetailRows(entry: entry)
             }
             .formStyle(.grouped)
@@ -389,10 +417,89 @@ private struct ExtensionSettingsSheet: View {
                 }
             }
         }
+        .onChange(of: grantedPermissions) {
+            enableAfterPermissionGrantIfReady()
+        }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: IPC.Name.permissionsRefreshed)
+        ) { _ in
+            grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+            invalidateReadiness()
+        }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged)
+        ) { _ in
+            enabled = coordinator.isEnabled
+            invalidateReadiness()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cliToolProvisioned)) { _ in
+            invalidateReadiness()
+        }
+        .sheet(item: $permissionRequest) { request in
+            ExtensionPermissionSheet(
+                request: request, grantedPermissions: grantedPermissions,
+                grant: { _ = try MainPermissionOperations.center.request($0) },
+                openSettings: { _ = try MainPermissionOperations.center.openSettings(for: $0) },
+                cancel: { permissionRequest = nil },
+                enable: { enableAfterPermissions() },
+                refresh: refreshPermissionState)
+        }
+        .sheet(item: $provisioningEntry) { entry in
+            ToolProvisioningSheet(entry: entry) {
+                invalidateReadiness()
+            }
+        }
         .frame(
             minWidth: UIScale.pt(520), idealWidth: 560, maxWidth: UIScale.pt(560),
             minHeight: UIScale.pt(260),
             idealHeight: idealHeight, maxHeight: UIScale.pt(620))
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { enabled },
+            set: { wanted in
+                grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+                switch coordinator.setEnabled(wanted) {
+                case let .applied(result, missingRequiredTools):
+                    enabled = result.enabled
+                    invalidateReadiness()
+                    if !missingRequiredTools.isEmpty { provisioningEntry = entry }
+                case let .needsPermissions(plan):
+                    permissionRequest = ExtensionPermissionRequest(
+                        entry: entry, required: plan.required, optional: plan.optional)
+                }
+            })
+    }
+
+    private func refreshPermissionState() {
+        _ = MainPermissionOperations.center.refresh()
+        grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+        invalidateReadiness()
+    }
+
+    private func enableAfterPermissionGrantIfReady() {
+        guard let request = permissionRequest, !request.required.isEmpty,
+            request.required.allSatisfy({ grantedPermissions[$0] == true })
+        else { return }
+        enableAfterPermissions()
+    }
+
+    private func enableAfterPermissions() {
+        guard
+            case let .applied(result, missingRequiredTools) =
+                coordinator.enableAfterPermissions()
+        else { return }
+        enabled = result.enabled
+        permissionRequest = nil
+        invalidateReadiness()
+        guard !missingRequiredTools.isEmpty else { return }
+        DispatchQueue.main.async { provisioningEntry = entry }
+    }
+
+    private func invalidateReadiness() {
+        invalidation &+= 1
     }
 
     private var idealHeight: CGFloat {
@@ -411,6 +518,8 @@ private struct ExtensionSettingsSheet: View {
 
 private struct ExtensionLifecycleRows: View {
     let entry: ExtensionRegistryEntry
+    let coordinator: ExtensionModalCoordinator
+    let invalidation: Int
     @State private var report: ExtensionLifecycleReport?
 
     var body: some View {
@@ -424,6 +533,13 @@ private struct ExtensionLifecycleRows: View {
                         )
                         .foregroundStyle(phaseColor(report.state.phase))
                     }
+                    LabeledContent("Runtime") {
+                        Label(
+                            report.state.runtimePhase.title,
+                            systemImage: runtimeSymbol(report.state.runtimePhase)
+                        )
+                        .foregroundStyle(runtimeColor(report.state.runtimePhase))
+                    }
                     Text(report.state.summary)
                         .settingsCaption()
                     ForEach(report.checks) { check in
@@ -434,10 +550,11 @@ private struct ExtensionLifecycleRows: View {
                     }
                     .pointerCursor()
                 } else {
+                    let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     HStack(spacing: UIScale.pt(8)) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Checking readiness...")
+                        Text("\(loading.runtimePhase.title) readiness...")
                             .settingsCaption()
                     }
                 }
@@ -484,11 +601,11 @@ private struct ExtensionLifecycleRows: View {
                 }
             }
         }
-        .task(id: entry.id) { await refresh() }
+        .task(id: "\(entry.id):\(invalidation)") { await refresh() }
     }
 
     @MainActor private func refresh() async {
-        report = await ExtensionLifecycleProbe().report(for: entry)
+        report = await coordinator.lifecycleReport()
     }
 
     private func checkRow(_ check: ExtensionLifecycleCheck) -> some View {
@@ -529,6 +646,26 @@ private struct ExtensionLifecycleRows: View {
         case .degraded: .orange
         case .failed, .unavailable: .red
         case .checking, .disabled, .enabled, .needsSetup: .secondary
+        }
+    }
+
+    private func runtimeSymbol(_ phase: ExtensionRuntimePhase) -> String {
+        switch phase {
+        case .installed: "checkmark.circle.fill"
+        case .uninstalled: "arrow.down.circle"
+        case .empty: "tray"
+        case .loading: "arrow.clockwise.circle"
+        case .unsupported: "nosign"
+        case .error: "xmark.circle.fill"
+        }
+    }
+
+    private func runtimeColor(_ phase: ExtensionRuntimePhase) -> Color {
+        switch phase {
+        case .installed: .green
+        case .empty: .orange
+        case .error, .unsupported: .red
+        case .loading, .uninstalled: .secondary
         }
     }
 
@@ -575,15 +712,23 @@ private struct ExtensionLifecycleRows: View {
     }
 }
 
-private struct RequiredPermissionRows: View {
-    let permissions: [ExtensionPermission]
+private struct ExtensionPermissionRows: View {
+    let entry: ExtensionRegistryEntry
+    let changed: () -> Void
     @State private var grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+    @State private var actionError: String?
+
+    private var permissions: [(permission: ExtensionPermission, required: Bool)] {
+        entry.requiredPermissions.map { ($0, true) }
+            + entry.optionalPermissions.map { ($0, false) }
+    }
 
     var body: some View {
         Group {
             if !permissions.isEmpty {
                 Section {
-                    ForEach(permissions, id: \.self) { permission in
+                    ForEach(permissions, id: \.permission) { item in
+                        let permission = item.permission
                         HStack(spacing: UIScale.pt(8)) {
                             Image(
                                 systemName: grantedPermissions[permission] == true
@@ -591,21 +736,35 @@ private struct RequiredPermissionRows: View {
                             )
                             .foregroundStyle(
                                 grantedPermissions[permission] == true ? .green : .secondary)
-                            Text(permission.displayName)
-                            Spacer()
-                            if grantedPermissions[permission] != true,
-                                MainPermissionOperations.center.remediation(for: permission).action
-                                    == .request
-                            {
-                                Button("Grant...") {
-                                    _ = try? MainPermissionOperations.center.request(permission)
+                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                HStack(spacing: UIScale.pt(6)) {
+                                    Text(permission.displayName)
+                                    Text(item.required ? "Required" : "Optional")
+                                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                                        .foregroundStyle(item.required ? .orange : .secondary)
                                 }
-                                .pointerCursor()
+                                Text(permission.reason)
+                                    .settingsCaption()
+                            }
+                            Spacer()
+                            if grantedPermissions[permission] == true {
+                                Text("Granted")
+                                    .settingsCaption()
+                                    .foregroundStyle(.green)
+                            } else {
+                                permissionAction(permission)
                             }
                         }
                     }
+                    if let actionError {
+                        Label(actionError, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .settingsCaption()
+                    }
                 } header: {
-                    Text("Required Access")
+                    Text("Access")
+                } footer: {
+                    Text("Required access blocks setup. Optional access unlocks extra features.")
                 }
             }
         }
@@ -618,7 +777,53 @@ private struct RequiredPermissionRows: View {
                 for: IPC.Name.permissionsRefreshed)
         ) { _ in
             grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+            changed()
         }
+    }
+
+    @ViewBuilder private func permissionAction(_ permission: ExtensionPermission) -> some View {
+        let remediation = MainPermissionOperations.center.remediation(for: permission)
+        switch remediation.action {
+        case .request:
+            Button("Grant...") { request(permission) }
+                .pointerCursor()
+        case .firstUse:
+            if remediation.settingsURL != nil {
+                Button("Open Settings...") { openSettings(permission) }
+                    .pointerCursor()
+            } else {
+                Text("On first use")
+                    .settingsCaption()
+            }
+        case .none:
+            EmptyView()
+        }
+    }
+
+    private func request(_ permission: ExtensionPermission) {
+        do {
+            _ = try MainPermissionOperations.center.request(permission)
+            actionError = nil
+            refresh()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func openSettings(_ permission: ExtensionPermission) {
+        do {
+            _ = try MainPermissionOperations.center.openSettings(for: permission)
+            actionError = nil
+            refresh()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func refresh() {
+        _ = MainPermissionOperations.center.refresh()
+        grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+        changed()
     }
 }
 
@@ -626,22 +831,88 @@ private struct ExtensionDetailRows: View {
     let entry: ExtensionRegistryEntry
 
     @ViewBuilder var body: some View {
-        switch entry.id {
-        case "usage": UsageRows()
-        case "quinjet": QuinjetRows()
-        case "system": SystemRows()
-        case "machines": MachinesRows()
-        case "systemStats": SystemStatsRows()
-        case "micMute": MicMuteRows()
-        case "lidAwake": LidAwakeRows()
-        case "music": MusicRows()
-        case "notchShelf": NotchShelfRows()
-        case "clipboard": ClipboardRows()
-        case "focusDim": FocusDimRows()
-        case "presenter": PresenterRows()
-        case "colorPicker": ColorPickerRows()
-        default: EmptyView()
+        if let route = ExtensionDetailRoute(rawValue: entry.id) {
+            switch route {
+            case .usage: UsageRows()
+            case .herdr: HerdrRows()
+            case .quinjet: QuinjetRows()
+            case .system: SystemRows()
+            case .machines: MachinesRows()
+            case .companion: CompanionRows()
+            case .systemStats: SystemStatsRows()
+            case .micMute: MicMuteRows()
+            case .lidAwake: LidAwakeRows()
+            case .music: MusicRows()
+            case .calendar: CalendarRows()
+            case .notchShelf: NotchShelfRows()
+            case .clipboard: ClipboardRows()
+            case .focusDim: FocusDimRows()
+            case .presenter: PresenterRows()
+            case .colorPicker: ColorPickerRows()
+            }
+        } else {
+            Section("Controls") {
+                Text("No extension controls are registered for \(entry.title).")
+                    .settingsCaption()
+            }
         }
+    }
+}
+
+private struct HerdrRows: View {
+    @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private var enabled =
+        false
+
+    var body: some View {
+        Section("Sessions") {
+            LabeledContent("Sources", value: "This Mac and SSH machines")
+            Text("Follow live agent sessions, inspect their state, and open workspace diffs.")
+                .settingsCaption()
+            Button("Open Herdr") { SectionWindow.open(.herdr) }
+                .pointerCursor()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct CompanionRows: View {
+    @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Workspace") {
+            LabeledContent("Content", value: "Notes, voice memos, and activity")
+            Text("Search remembered context, capture new material, and manage Companion hosts.")
+                .settingsCaption()
+            Button("Open Companion") { SectionWindow.open(.companion) }
+                .pointerCursor()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct CalendarRows: View {
+    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Calendar") {
+            LabeledContent("Source", value: "macOS Calendar")
+            Text("Your agenda appears in Edith after Calendar access is granted.")
+                .settingsCaption()
+            HStack {
+                Button("Open Edith Calendar") { SectionWindow.open(.calendar) }
+                    .pointerCursor()
+                Button("Open Calendar app") {
+                    CalendarEventOperationExecution.openCalendar()
+                }
+                .pointerCursor()
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 
@@ -688,10 +959,12 @@ private struct ExtensionPermissionRequest: Identifiable {
 private struct ExtensionPermissionSheet: View {
     let request: ExtensionPermissionRequest
     let grantedPermissions: [ExtensionPermission: Bool]
-    let grant: (ExtensionPermission) -> Void
+    let grant: (ExtensionPermission) throws -> Void
+    let openSettings: (ExtensionPermission) throws -> Void
     let cancel: () -> Void
     let enable: () -> Void
     let refresh: () -> Void
+    @State private var actionError: String?
 
     private var requiredGranted: Bool {
         request.entry.requiredPermissions.allSatisfy { grantedPermissions[$0] == true }
@@ -721,6 +994,11 @@ private struct ExtensionPermissionSheet: View {
                 ForEach(request.optional, id: \.self) { permission in
                     permissionCard(permission, required: false)
                 }
+            }
+            if let actionError {
+                Label(actionError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .settingsCaption()
             }
             HStack(spacing: UIScale.pt(10)) {
                 Spacer()
@@ -787,9 +1065,18 @@ private struct ExtensionPermissionSheet: View {
             } else if MainPermissionOperations.center.remediation(for: permission).action
                 == .request
             {
-                Button("Grant") { grant(permission) }
+                Button("Grant") { requestPermission(permission) }
                     .controlSize(.small)
                     .pointerCursor()
+            } else if MainPermissionOperations.center.remediation(for: permission).settingsURL
+                != nil
+            {
+                Button("Open Settings") { openPermissionSettings(permission) }
+                    .controlSize(.small)
+                    .pointerCursor()
+            } else {
+                Text("On first use")
+                    .settingsCaption()
             }
         }
         .padding(UIScale.pt(14))
@@ -800,6 +1087,26 @@ private struct ExtensionPermissionSheet: View {
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
                 .stroke(Color(nsColor: .separatorColor).opacity(0.45))
+        }
+    }
+
+    private func requestPermission(_ permission: ExtensionPermission) {
+        do {
+            try grant(permission)
+            actionError = nil
+            refresh()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func openPermissionSettings(_ permission: ExtensionPermission) {
+        do {
+            try openSettings(permission)
+            actionError = nil
+            refresh()
+        } catch {
+            actionError = error.localizedDescription
         }
     }
 }
@@ -1273,6 +1580,7 @@ private struct MusicRows: View {
     @AppStorage(MusicFade.enabledKey, store: SharedDefaults.store) private var crossfade = true
     @AppStorage(MusicFade.secondsKey, store: SharedDefaults.store) private var crossfadeSeconds =
         MusicFade.defaultSeconds
+    @State private var openError: String?
 
     var body: some View {
         CLIToolStatusSection(tools: [.youtubeDownloader], extensionEnabled: enabled)
@@ -1280,9 +1588,19 @@ private struct MusicRows: View {
         Section {
             LabeledContent("Music folder") {
                 Button("Open in Finder") {
-                    _ = try? AppInspectionCenter().openPath(.music)
+                    do {
+                        try MusicLibraryOperationExecution.openLibrary()
+                        openError = nil
+                    } catch {
+                        openError = error.localizedDescription
+                    }
                 }
                 .pointerCursor()
+            }
+            if let openError {
+                Label(openError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .settingsCaption()
             }
             Toggle(
                 "Fade between tracks",

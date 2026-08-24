@@ -66,24 +66,24 @@ The same sixteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 seven the welcome tour shows before you ask it for all of them.
 
-| ID | Key | Featured | Required permissions | Optional permissions | Required tools |
-| --- | --- | --- | --- | --- | --- |
-| `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` |
-| `herdr` | `tabHerdrEnabled` | yes | none | none | none |
-| `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` |
-| `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none |
-| `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none |
-| `companion` | `tabCompanionEnabled` | no | none | none | none |
-| `systemStats` | `menuBarSystemStats` | no | none | none | none |
-| `micMute` | `micMuteEnabled` | no | none | none | none |
-| `lidAwake` | `lidAwakeEnabled` | no | none | none | none |
-| `music` | `tabMusicEnabled` | no | none | none | `yt-dlp` |
-| `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none |
-| `notchShelf` | `notchShelfEnabled` | yes | none | `bluetooth`, `camera`, `automation` | none |
-| `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none |
-| `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none |
-| `presenter` | `presenterEnabled` | no | `screenRecording` | none | none |
-| `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none |
+| ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
+| --- | --- | --- | --- | --- | --- | --- |
+| `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` | none |
+| `herdr` | `tabHerdrEnabled` | yes | none | none | none | none |
+| `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` | none |
+| `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
+| `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none | none |
+| `companion` | `tabCompanionEnabled` | no | none | none | none | none |
+| `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
+| `micMute` | `micMuteEnabled` | no | none | none | none | none |
+| `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
+| `music` | `tabMusicEnabled` | no | none | none | none | `yt-dlp` |
+| `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
+| `notchShelf` | `notchShelfEnabled` | yes | none | `bluetooth`, `camera`, `automation` | none | none |
+| `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
+| `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
+| `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
+| `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
 
 The JSON form also exposes the platform capability registry. Capabilities are
 not permission ids. They say which implementation an extension requires from
@@ -144,6 +144,28 @@ Each check has a `passed`, `warning`, `failed`, or `skipped` status. Failed
 checks carry a `recoveryCommand` where the CLI can name a safe next action.
 `verified` is true only when the phase is `ready`.
 
+Readiness and runtime are separate dimensions. `state.runtimePhase` uses these
+stable JSON values:
+
+| Runtime phase | Meaning |
+| --- | --- |
+| `installed` | The enabled core runtime is present and its probes succeeded |
+| `uninstalled` | The extension is off, or a required executable or adapter is absent |
+| `empty` | The runtime is installed but has no content or sessions yet |
+| `loading` | Runtime discovery is still in progress |
+| `unsupported` | The current platform cannot provide a required capability |
+| `error` | A present executable, backend, or adapter failed its readiness probe |
+
+An optional workflow can make readiness `degraded` without changing runtime
+from `installed`. Music without `yt-dlp` is the canonical example: local
+playback remains installed, while URL import has an actionable warning.
+
+Every enabled extension also runs a live adapter. The adapter validates its
+real storage, operating system service, executable, configuration, or backend
+instead of treating a running helper as proof that the feature works. See
+[extension runtime detection](./runtime-detection.md) for the full matrix and
+agent recovery workflow.
+
 ## Exit codes
 
 | Code | When |
@@ -153,19 +175,14 @@ checks carry a `recoveryCommand` where the CLI can name a safe next action.
 | 3 | no extension matches the id you named, by id or by defaults key |
 
 An unhealthy extension is data, not a command failure. This keeps JSON intact
-for agents and scripts. Read `verified`, `state.phase`, `checks`, and
-`remediation` to decide what to do next.
+for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
+`checks`, and `remediation` to decide what to do next.
 
 ## Notes and gotchas
 
-- The state `ls` and `info` report is `object(forKey:) as? Bool ?? false`, so a
-  key that has never been written reads as off. `ed config get` answers the same
-  question from the catalogue's fallback instead, which is `true` for
-  `tabUsageEnabled` and `tabSystemEnabled`, so on a Mac where Edith has never
-  run those two disagree. Upgrading from an older Edith writes a concrete value
-  for all sixteen keys on the next launch and they agree again; a fresh install
-  only writes the keys you turn on, so an untouched `tabUsageEnabled` keeps
-  disagreeing until something writes it.
+- An unset extension key has one effective fallback across `ed config`,
+  `ed extensions`, onboarding, and the app: off. A fresh install can therefore
+  leave unselected keys absent without the reporting surfaces disagreeing.
 - Every extension is also an ordinary `ed config` boolean, and both paths write
   the same primary key in the same store. The extension verbs also preserve
   lifecycle dependencies: enabling Agent Usage restores the selected provider
@@ -185,10 +202,12 @@ for agents and scripts. Read `verified`, `state.phase`, `checks`, and
   mirrored key, so they are always reported as not granted. That is why they
   appear only as optional permissions, on `notchShelf`, and never in
   `missingRequiredPermissions`.
-- `requiredTools` is reported verbatim from the registry. The app's provisioning
-  sheet filters that list by whether the tool is currently wanted, which drops
-  `codex` while `codexLimitsEnabled` is off; `ed` does not filter, so `usage`
-  always lists both `claude` and `codex`.
+- `requiredTools` contains core setup blockers. `optionalTools` contains tools
+  for additional workflows. Onboarding and `setup --install-tools` provision
+  only required tools. Music exposes `yt-dlp` as optional because local library
+  playback works without URL import. Agent Usage always lists both registered
+  providers, although the app's provisioning sheet can hide a provider disabled
+  in limits settings.
 - Ordering is stable and worth relying on: the array `--json` emits follows the
   registry's own order, and only the keys inside each object are sorted, which
   is why the output diffs cleanly between runs.
@@ -206,6 +225,9 @@ for agents and scripts. Read `verified`, `state.phase`, `checks`, and
 
 - [`ed permissions`](../permissions/README.md) for granting what an extension needs
 - [`ed config`](../config/README.md) for the settings an extension exposes once it is on
-- [`ed tools`](../tools/README.md) for the command line tools `requiredTools` names
+- [`ed tools`](../tools/README.md) for the command line tools named by
+  `requiredTools` and `optionalTools`
+- [Extension runtime detection](./runtime-detection.md) for every live probe and
+  recovery path
 - [Quinjet setup](https://github.com/pulkitxm/edith/blob/main/docs/quinjet.md) for terminal, theme, install and verification details
 - [All `ed` commands](../README.md)

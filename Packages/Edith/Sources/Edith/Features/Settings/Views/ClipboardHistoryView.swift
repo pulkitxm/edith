@@ -16,7 +16,7 @@ struct ClipboardHistoryView: View {
     }
 
     private var summary: String {
-        let stats = ClipboardActions.stats(entries)
+        let stats = ClipboardOperationExecution.stats(entries)
         var parts = [stats.count == 1 ? "1 item" : "\(stats.count) items"]
         parts.append(Self.byteCountFormatter.string(fromByteCount: Int64(stats.bytes)))
         if stats.pinned > 0 { parts.append("\(stats.pinned) pinned") }
@@ -124,7 +124,7 @@ struct ClipboardHistoryView: View {
 
     private func copy(_ entry: ClipboardEntry) {
         let plain = SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
-        apply { try ClipboardActions.copy(entry, asPlainText: plain) }
+        apply { try ClipboardOperationExecution.perform(.copy, entry: entry, asPlainText: plain) }
         copiedID = entry.id
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             if copiedID == entry.id { copiedID = nil }
@@ -132,11 +132,13 @@ struct ClipboardHistoryView: View {
     }
 
     private func togglePin(_ entry: ClipboardEntry) {
-        apply { try ClipboardActions.togglePin(ids: [entry.id]) }
+        apply {
+            try ClipboardOperationExecution.perform(entry.pinned ? .unpin : .pin, entry: entry)
+        }
     }
 
     private func delete(_ entry: ClipboardEntry) {
-        apply { try ClipboardActions.delete(ids: [entry.id]) }
+        apply { try ClipboardOperationExecution.perform(.remove, entry: entry) }
     }
 
     private func apply(_ action: () throws -> ClipboardActions.Outcome) {

@@ -168,9 +168,9 @@ install that did not land.
   Quinjet extension off does not remove anything either: tools stay installed
   when the extension that wanted them is disabled.
 - The relation between tools and extensions is readable from the other side:
-  `ed extensions info music --json` reports `"requiredTools": ["yt-dlp"]` and
-  `ed extensions info usage --json` reports `["claude", "codex"]`, while
-  `ed extensions info quinjet --json` reports `["quinjet"]`.
+  `ed extensions info music --json` reports `"optionalTools": ["yt-dlp"]`,
+  `ed extensions info usage --json` reports `"requiredTools": ["claude", "codex"]`,
+  and `ed extensions info quinjet --json` reports `"requiredTools": ["quinjet"]`.
 - `ed download tool` is the second view of the same yt-dlp. It prints the
   version and path of the binary found on the same assembled PATH, and
   `ed download tool --update` runs `yt-dlp -U` on it. The two disagree on tone
@@ -191,7 +191,7 @@ install that did not land.
 
 - [`ed download`](../download/README.md), the queue yt-dlp serves, and the
   `ed download tool` verb for updating it in place.
-- [`ed extensions`](../extensions/README.md), which is where `requiredTools` comes from
-  and where turning a feature on can want a tool.
+- [`ed extensions`](../extensions/README.md), which owns the required and optional
+  tool relationships for extension workflows.
 - [`ed usage`](../usage/README.md), the numbers `claude` and `codex` make possible.
 - [All `ed` commands](../README.md).

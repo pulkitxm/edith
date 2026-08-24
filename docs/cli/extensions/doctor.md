@@ -12,9 +12,12 @@ report object. `doctor` uses the same probe and JSON report as `status` and
 `verify`.
 
 Checks cover the stored enabled state, required and optional permissions,
-required tools, helper availability, platform capabilities, configured machines
-and supported backend or session health. Checks that do not apply are omitted,
-and checks behind a disabled extension are skipped.
+required and optional tools, helper availability, platform capabilities,
+configured machines and supported backend or session health. Checks that do not
+apply are omitted, and checks behind a disabled extension are skipped.
+All sixteen extensions have an explicit live adapter. A missing adapter is
+reported as a runtime error instead of silently falling back to helper
+availability.
 
 ```
 ed extensions doctor
@@ -29,5 +32,6 @@ safe for noninteractive agents that need the full remediation plan.
 
 - [`ed extensions status`](./status.md) for the compact table
 - [`ed extensions setup`](./setup.md) for noninteractive setup
+- [Extension runtime detection](./runtime-detection.md) for all adapter checks
 - [`ed extensions`](./README.md), the shared state and check contract
 - [All `ed` commands](../README.md)

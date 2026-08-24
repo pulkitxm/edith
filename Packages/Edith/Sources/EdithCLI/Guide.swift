@@ -246,8 +246,11 @@ public enum Guide {
         ed companion nightly                    run the learning pipeline now
         ed companion export ~/backup --include-media
         ed companion import ~/backup            put a bundle back, idempotently
+        ed companion db reindex                  preview a full search-index rebuild
+        ed companion db reindex --yes            rebuild the search index now
         ed companion erase <id> --yes           delete one episode for good
-        ed companion wipe --yes                 delete the whole memory
+        ed companion wipe                       preview a complete memory wipe
+        ed companion wipe --yes                 apply the complete memory wipe
         ```
 
         `ed companion stack down` keeps memory by default. `--wipe` removes the
@@ -379,7 +382,7 @@ public enum Guide {
         ed clipboard get 3              entry three, as text
         ed clipboard copy 3             put it back on the pasteboard
         ed clipboard pin 3 | unpin 3
-        ed clipboard rm 3 | clear
+        ed clipboard rm 3 --yes | clear --yes
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
         ed shelf ls                     what is parked on the notch shelf
