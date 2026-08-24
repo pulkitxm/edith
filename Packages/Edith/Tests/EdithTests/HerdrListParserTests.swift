@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithKit
+@testable import Edith
 
 @Suite struct HerdrListParserTests {
     @Test func unwrapsTheEnvelopeAndReadsBlockedWorkingPanes() {
@@ -257,6 +258,40 @@ import Testing
         #expect(
             HerdrAttachCommand.line(for: agent)
                 == "ssh -tt tuf-wired -- herdr --session default agent attach w3:p1N")
+    }
+
+    @Test func observerUsesAnIndependentViewport() {
+        #expect(
+            HerdrAttachCommand.observerArguments(
+                session: "default", pane: "w3:p1N", columns: 132, rows: 41)
+                == [
+                    "--session", "default", "terminal", "session", "observe", "w3:p1N",
+                    "--cols", "132", "--rows", "41",
+                ])
+    }
+}
+
+@Suite struct HerdrObserverStreamDecoderTests {
+    @Test func decodesFragmentedTerminalFrames() {
+        let bytes = Data("\u{1B}[2Jready".utf8)
+        let encoded = bytes.base64EncodedString()
+        let line = Data("{\"type\":\"terminal.frame\",\"bytes\":\"\(encoded)\"}\r\n".utf8)
+        let split = line.index(line.startIndex, offsetBy: 17)
+        let first = Array(line[..<split])[...]
+        let second = Array(line[split...])[...]
+        var decoder = HerdrObserverStreamDecoder()
+
+        #expect(decoder.append(first).isEmpty)
+        let output = decoder.append(second)
+        #expect(output == [.frame(bytes)])
+    }
+
+    @Test func forwardsProcessErrors() {
+        let input = Array("herdr: session unavailable\r\n".utf8)[...]
+        let expected = HerdrObserverOutput.text(Data("herdr: session unavailable\r\n".utf8))
+        var decoder = HerdrObserverStreamDecoder()
+
+        #expect(decoder.append(input) == [expected])
     }
 }
 
