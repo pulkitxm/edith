@@ -12,6 +12,9 @@ login keychain, never in those files. Nothing here talks to the Edith app, so
 every command on this page works whether or not Edith is running; every
 mutation posts the same `machinesChanged` notification the app posts to itself,
 so an open Machines window updates immediately when it is there to hear it.
+The Tools and Processes tabs use the same operation definitions as these
+commands for forwards, snippets, systemd units and process signals, including
+their validation and remote timeouts.
 
 Transport is `/usr/bin/ssh` over a ControlMaster socket shared with the app. If
 the app already holds a connection, `ed` lands on it and the command is one

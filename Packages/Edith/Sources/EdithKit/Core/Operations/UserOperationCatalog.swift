@@ -14,6 +14,21 @@ public enum UserOperationCatalog {
         + MachineConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MachineForwardOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineSnippetOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineServiceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineProcessOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineDockerPauseOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -239,6 +254,75 @@ private extension MachineConnectionOperation {
             userInterface("Machines", "open the shared connection", ["box"])
         case .disconnect:
             userInterface("Machines", "close the shared connection", ["box"])
+        }
+    }
+}
+
+private extension MachineForwardOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Machine tools", "save a port forward",
+                ["box", "--local", "8080", "--remote", "80"])
+        case .remove:
+            userInterface("Machine tools", "delete a port forward", ["box", "1"])
+        case .enable:
+            userInterface("Machine tools", "switch a port forward on", ["box", "1"])
+        case .disable:
+            userInterface("Machine tools", "switch a port forward off", ["box", "1"])
+        }
+    }
+}
+
+private extension MachineSnippetOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Machine tools", "save a snippet", ["box", "logs", "journalctl"])
+        case .remove:
+            userInterface("Machine tools", "delete a snippet", ["box", "1"])
+        }
+    }
+}
+
+private extension MachineServiceOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .start:
+            userInterface(
+                "Machine tools", "start a systemd unit", ["box", "nginx.service"])
+        case .stop:
+            userInterface(
+                "Machine tools", "stop a systemd unit", ["box", "nginx.service"])
+        case .restart:
+            userInterface(
+                "Machine tools", "restart a systemd unit", ["box", "nginx.service"])
+        }
+    }
+}
+
+private extension MachineProcessOperation {
+    var interfaceExposure: UserOperationExposure {
+        .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Machine processes", action: "end a process with SIGTERM",
+                exampleArguments: ["box", "42"]),
+            UserInterfaceActionPlacement(
+                surface: "Machine processes", action: "force kill a process",
+                exampleArguments: ["box", "42", "--signal", "KILL", "--yes"]),
+        ])
+    }
+}
+
+private extension MachineDockerPauseOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .pause:
+            userInterface("Docker window", "pause a container", ["box", "api"])
+        case .unpause:
+            userInterface("Docker window", "unpause a container", ["box", "api"])
         }
     }
 }
