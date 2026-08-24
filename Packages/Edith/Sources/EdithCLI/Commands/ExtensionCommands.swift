@@ -32,7 +32,7 @@ enum ExtensionLookup {
     }
 
     static func isEnabled(_ entry: ExtensionRegistryEntry) -> Bool {
-        CLIEnvironment.sharedDefaults.object(forKey: entry.defaultsKey) as? Bool ?? false
+        entry.isEnabled(in: CLIEnvironment.sharedDefaults)
     }
 
     static func json(
@@ -54,6 +54,7 @@ enum ExtensionLookup {
             "missingRequiredPermissions": .strings(
                 entry.requiredPermissions.filter { granted[$0] != true }.map(\.rawValue)),
             "requiredTools": .strings(entry.requiredTools.map(\.id)),
+            "optionalTools": .strings(entry.optionalTools.map(\.id)),
         ]
         if let report, let lifecycle = entry.lifecycle {
             fields["lifecycle"] = lifecycleJSON(lifecycle)
@@ -68,12 +69,7 @@ enum ExtensionLookup {
         var environment = ExtensionLifecycleProbeEnvironment.live
         environment.isEnabled = { entry in isEnabled(entry) }
         environment.grantedPermissions = { grantedPermissions() }
-        environment.toolAvailable = { id in
-            guard let tool = ToolProvisioning.spec(id: id),
-                case let .executable(name, _) = tool.presenceStrategy
-            else { return false }
-            return CLIEnvironment.executableNamed(name) != nil
-        }
+        environment.toolReadiness = CLIEnvironment.extensionToolReadiness
         environment.helperRunning = CLIEnvironment.isHelperRunning
         return ExtensionLifecycleProbe(environment: environment)
     }
@@ -89,7 +85,7 @@ enum ExtensionLookup {
     }
 
     static func mutationCenter() -> ExtensionMutationCenter {
-        let toolAvailable: @Sendable (String) -> Bool = { id in
+        let toolPresent: @Sendable (String) -> Bool = { id in
             guard let tool = ToolProvisioning.spec(id: id),
                 case let .executable(name, _) = tool.presenceStrategy
             else { return false }
@@ -100,7 +96,7 @@ enum ExtensionLookup {
                 defaults: CLIEnvironment.sharedDefaults,
                 announceChange: { ConfigStore.announceChange() },
                 grantedPermissions: { grantedPermissions() },
-                toolAvailable: toolAvailable,
+                toolPresent: toolPresent,
                 installTool: { tool, log in try await CLIEnvironment.installTool(tool, log) },
                 lifecycle: probe().environment))
     }
@@ -145,6 +141,7 @@ enum ExtensionLookup {
     private static func stateJSON(_ state: ExtensionLifecycleState) -> JSONValue {
         .object([
             "extensionID": .string(state.extensionID), "phase": .string(state.phase.rawValue),
+            "runtimePhase": .string(state.runtimePhase.rawValue),
             "summary": .string(state.summary),
             "issues": .array(
                 state.issues.map { issue in
@@ -163,6 +160,7 @@ enum ExtensionLookup {
                 .object([
                     "id": .string(check.id), "title": .string(check.title),
                     "status": .string(check.status.rawValue), "detail": .string(check.detail),
+                    "runtimePhase": .optional(check.runtimePhase?.rawValue),
                     "recoveryCommand": .optional(check.recoveryCommand),
                 ])
             })
@@ -269,6 +267,7 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
             CLIOut.out("  key      \(entry.defaultsKey)")
             CLIOut.out("  group    \(entry.group.rawValue)")
             CLIOut.out("  state    \(report.state.phase.title)")
+            CLIOut.out("  runtime  \(report.state.runtimePhase.title)")
             if !entry.requiredPermissions.isEmpty {
                 CLIOut.out(
                     "  needs    "
@@ -320,9 +319,12 @@ struct ExtensionsStatusCommand: AsyncParsableCommand {
             }
             CLIOut.out(
                 TextTable.render(
-                    headers: ["ID", "STATE", "DETAIL"],
+                    headers: ["ID", "READINESS", "RUNTIME", "DETAIL"],
                     rows: zip(entries, reports).map { entry, report in
-                        [entry.id, report.state.phase.title, report.state.summary]
+                        [
+                            entry.id, report.state.phase.title, report.state.runtimePhase.title,
+                            report.state.summary,
+                        ]
                     }))
         }
     }
@@ -435,7 +437,9 @@ private func selectedEntries(_ id: String?) throws -> [ExtensionRegistryEntry] {
 }
 
 private func printReport(_ entry: ExtensionRegistryEntry, _ report: ExtensionLifecycleReport) {
-    CLIOut.out("\(entry.id)  \(report.state.phase.title)  \(report.state.summary)")
+    CLIOut.out(
+        "\(entry.id)  \(report.state.phase.title)  \(report.state.runtimePhase.title)  "
+            + report.state.summary)
     for check in report.checks {
         CLIOut.out("  \(check.status.rawValue)  \(check.title): \(check.detail)")
         if let recovery = check.recoveryCommand { CLIOut.out("    \(recovery)") }

@@ -88,6 +88,8 @@ import Testing
         #expect(source.contains("Text(entry.subtitle)"))
         #expect(source.contains("ExtensionLifecycleProbe().report(for: entry)"))
         #expect(source.contains("report.state.phase.title"))
+        #expect(source.contains("report.state.runtimePhase.title"))
+        #expect(source.contains("ExtensionLifecycleState.loading(extensionID: entry.id)"))
         #expect(source.contains("ForEach(report.checks)"))
     }
 
