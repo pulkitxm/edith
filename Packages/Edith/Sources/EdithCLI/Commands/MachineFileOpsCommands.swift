@@ -3,6 +3,39 @@ import EdithKit
 import Foundation
 
 enum FileOps {
+    private struct RemoteCommandFailure: LocalizedError {
+        let detail: String
+
+        var errorDescription: String? { detail }
+    }
+
+    static func sharedRun(_ runner: RemoteRunner) -> MachineFileOperationExecution.Run {
+        { command, timeout in
+            do {
+                let result = try await runner.run(command, timeout: timeout)
+                guard result.succeeded else {
+                    let detail = result.combinedText.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    return .failure(RemoteCommandFailure(detail: detail))
+                }
+                return .success(result.stdoutText)
+            } catch {
+                return .failure(error)
+            }
+        }
+    }
+
+    static func resolved<Value>(
+        _ result: Result<Value, Error>, failure: String
+    ) throws -> Value {
+        switch result {
+        case let .success(value): return value
+        case let .failure(error):
+            if let failure = error as? CLIFailure { throw failure }
+            throw CLIFailure(failure, hint: error.localizedDescription)
+        }
+    }
+
     static func apply(
         _ command: String, machine name: String, describing what: String, json: Bool,
         fields: [String: JSONValue]
@@ -84,6 +117,8 @@ struct MachinesFilesMoveCommand: AsyncParsableCommand {
 }
 
 struct MachinesFilesRenameCommand: AsyncParsableCommand {
+    static let operation = MachineFileOperation.rename
+
     static let configuration = CommandConfiguration(
         commandName: "rename", abstract: "Rename one file on the machine.")
 
@@ -101,18 +136,21 @@ struct MachinesFilesRenameCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard !name.contains("/") else {
-                throw CLIFailure(
-                    "a new name cannot contain a slash",
-                    hint: "use `ed machines files mv` to move it somewhere else")
+            let runner = try await MachineResolver.runner(machine)
+            let result = await MachineFileOperationExecution.rename(path: path, name: name) {
+                await FileOps.sharedRun(runner)($0, $1)
             }
-            let destination = (path as NSString).deletingLastPathComponent
-            let target =
-                destination.isEmpty ? name : (destination as NSString).appendingPathComponent(name)
-            try await FileOps.apply(
-                FileOperations.renameCommand(path: path, to: target), machine: machine,
-                describing: "renamed to \(target)", json: json,
-                fields: ["path": .string(path), "to": .string(target)])
+            let target = try FileOps.resolved(
+                result, failure: "could not rename \(path) on \(runner.machine.name)")
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name), "done": .bool(true),
+                        "path": .string(path), "to": .string(target),
+                    ]))
+                return
+            }
+            CLIOut.out("renamed to \(target)")
         }
     }
 }
@@ -140,6 +178,8 @@ struct MachinesFilesMakeDirectoryCommand: AsyncParsableCommand {
 }
 
 struct MachinesFilesRemoveCommand: AsyncParsableCommand {
+    static let operation = MachineFileOperation.remove
+
     static let configuration = CommandConfiguration(
         commandName: "rm",
         abstract: "Move files to the machine's trash, or delete them outright.",
@@ -166,32 +206,45 @@ struct MachinesFilesRemoveCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard !paths.isEmpty else { throw CLIFailure("name at least one path") }
-            guard !delete || yes else {
+            let plan = MachineFileRemovalPlan(paths: paths, permanently: delete)
+            guard !plan.paths.isEmpty else { throw CLIFailure("name at least one path") }
+            guard !plan.requiresConfirmation || yes else {
                 guard !json else {
                     CLIOut.json(
-                        .object(["paths": .strings(paths), "deleted": .bool(false)]))
+                        .object(["paths": .strings(plan.paths), "deleted": .bool(false)]))
                     return
                 }
-                CLIOut.out("would delete \(paths.count) path(s) for good")
+                CLIOut.out("would delete \(plan.paths.count) path(s) for good")
                 CLIOut.note("nothing was deleted; pass --yes to go ahead")
                 return
             }
-            let command =
+            let runner = try await MachineResolver.runner(machine)
+            let result = await MachineFileOperationExecution.remove(plan, confirmed: yes) {
+                await FileOps.sharedRun(runner)($0, $1)
+            }
+            _ = try FileOps.resolved(
+                result,
+                failure:
+                    "could not \(delete ? "delete" : "trash") paths on \(runner.machine.name)")
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name), "done": .bool(true),
+                        "paths": .strings(plan.paths), "deleted": .bool(delete),
+                    ]))
+                return
+            }
+            CLIOut.out(
                 delete
-                ? FileOperations.deleteCommand(paths: paths)
-                : FileOperations.trashCommand(paths: paths)
-            try await FileOps.apply(
-                command, machine: machine,
-                describing: delete
-                    ? "deleted \(paths.count) path(s)" : "trashed \(paths.count) path(s)",
-                json: json,
-                fields: ["paths": .strings(paths), "deleted": .bool(delete)])
+                    ? "deleted \(plan.paths.count) path(s)"
+                    : "trashed \(plan.paths.count) path(s)")
         }
     }
 }
 
 struct MachinesFilesSearchCommand: AsyncParsableCommand {
+    static let operation = MachineFileOperation.search
+
     static let configuration = CommandConfiguration(
         commandName: "search", abstract: "Find files under a directory by name.")
 
@@ -214,10 +267,12 @@ struct MachinesFilesSearchCommand: AsyncParsableCommand {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let runner = try await MachineResolver.runner(machine)
-            let output = try await runner.text(
-                FileOperations.searchCommand(path: path, query: query, limit: limit),
-                timeout: 120)
-            let hits = output.split(separator: "\n").map(String.init)
+            let result = await MachineFileOperationExecution.search(
+                path: path, query: query, limit: limit
+            ) { await FileOps.sharedRun(runner)($0, $1) }
+            let hits = try FileOps.resolved(
+                result, failure: "could not search \(path) on \(runner.machine.name)"
+            ).map(\.path)
             guard !json else {
                 CLIOut.json(.strings(hits))
                 return
@@ -232,6 +287,8 @@ struct MachinesFilesSearchCommand: AsyncParsableCommand {
 }
 
 struct MachinesFilesInfoCommand: AsyncParsableCommand {
+    static let operation = MachineFileOperation.info
+
     static let configuration = CommandConfiguration(
         commandName: "info",
         abstract: "How big something is on the machine, directories included.")
@@ -248,16 +305,17 @@ struct MachinesFilesInfoCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let output = try await runner.text(
-                FileOperations.directorySizeCommand(path: path), timeout: 120)
-            let kilobytes = Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-            let bytes = kilobytes * 1024
+            let result = await MachineFileOperationExecution.info(path: path) {
+                await FileOps.sharedRun(runner)($0, $1)
+            }
+            let bytes = try FileOps.resolved(
+                result, failure: "could not measure \(path) on \(runner.machine.name)")
             guard !json else {
                 CLIOut.json(
                     .object([
                         "machine": .string(runner.machine.name),
                         "path": .string(path),
-                        "sizeBytes": .int(bytes),
+                        "sizeBytes": .int(Int(clamping: bytes)),
                     ]))
                 return
             }
@@ -269,6 +327,8 @@ struct MachinesFilesInfoCommand: AsyncParsableCommand {
 }
 
 struct MachinesFilesDuplicateCommand: AsyncParsableCommand {
+    static let operation = MachineFileOperation.duplicate
+
     static let configuration = CommandConfiguration(
         commandName: "duplicate",
         abstract: "Copy a file beside itself, the way the Finder window does.",
@@ -290,22 +350,11 @@ struct MachinesFilesDuplicateCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let quoted = ShellQuote.quote(path)
-            let script = """
-                src=\(quoted); dir=$(dirname "$src"); base=$(basename "$src")
-                stem="${base%.*}"; ext=""
-                case "$base" in *.*) ext=".${base##*.}";; esac
-                target="$dir/$stem copy$ext"; n=2
-                while [ -e "$target" ]; do target="$dir/$stem copy $n$ext"; n=$((n+1)); done
-                cp -R "$src" "$target" && printf '%s' "$target"
-                """
-            let result = try await runner.run(script, timeout: 300)
-            let created = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded, !created.isEmpty else {
-                throw CLIFailure(
-                    "could not duplicate \(path) on \(runner.machine.name)",
-                    hint: result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines))
+            let result = await MachineFileOperationExecution.duplicate(path: path) {
+                await FileOps.sharedRun(runner)($0, $1)
             }
+            let created = try FileOps.resolved(
+                result, failure: "could not duplicate \(path) on \(runner.machine.name)")
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -320,6 +369,8 @@ struct MachinesFilesDuplicateCommand: AsyncParsableCommand {
 }
 
 struct MachinesFilesUndoCommand: AsyncParsableCommand {
+    static let operation = MachineFileOperation.undo
+
     static let configuration = CommandConfiguration(
         commandName: "undo",
         abstract: "Undo the last move or rename a Finder window made.",

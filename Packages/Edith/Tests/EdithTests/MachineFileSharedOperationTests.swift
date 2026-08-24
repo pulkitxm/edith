@@ -2,6 +2,8 @@ import EdithKit
 import Foundation
 import Testing
 
+@testable import EdithCLI
+
 @Suite struct MachineFileSharedOperationTests {
     @Test func descriptorsAndPlacementsExactlyCoverTheSixFinderActions() {
         let operations = MachineFileOperation.allCases
@@ -187,5 +189,41 @@ import Testing
                     FileOperations.renameCommand(path: "/x/b", to: "/b"),
                     FileOperations.renameCommand(path: "/x/a", to: "/a"),
                 ])
+    }
+
+    @Test func everyFinderParserDeclaresItsExactSharedOperation() {
+        #expect(MachinesFilesSearchCommand.operation == .search)
+        #expect(MachinesFilesInfoCommand.operation == .info)
+        #expect(MachinesFilesDuplicateCommand.operation == .duplicate)
+        #expect(MachinesFilesUndoCommand.operation == .undo)
+        #expect(MachinesFilesRenameCommand.operation == .rename)
+        #expect(MachinesFilesRemoveCommand.operation == .remove)
+    }
+
+    @Test func everyFinderDescriptorIsACompletionLeaf() throws {
+        for descriptor in MachineFileOperation.allCases.map(\.descriptor) {
+            var node = CommandTree.root
+            for component in descriptor.cli {
+                node = try #require(node.child(component))
+            }
+            #expect(node.children.isEmpty)
+        }
+    }
+
+    @Test func permanentRemovalHasStablePlainAndJSONPreviews() async {
+        let plain = await CLIProbe.run([
+            "machines", "files", "rm", "box", "/a", "/b", "--delete",
+        ])
+        #expect(plain.code == 0)
+        #expect(plain.stdout == "would delete 2 path(s) for good\n")
+        #expect(plain.stderr == "nothing was deleted; pass --yes to go ahead\n")
+
+        let json = await CLIProbe.run([
+            "machines", "files", "rm", "box", "/a", "/b", "--delete", "--json",
+        ])
+        #expect(json.code == 0)
+        #expect(json.stderr.isEmpty)
+        #expect(json.object?["deleted"] as? Bool == false)
+        #expect(json.object?["paths"] as? [String] == ["/a", "/b"])
     }
 }
