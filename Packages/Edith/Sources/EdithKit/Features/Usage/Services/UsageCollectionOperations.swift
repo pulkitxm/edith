@@ -251,6 +251,7 @@ public enum UsageCollectionOperationExecution {
             round: round, includedMachineIDs: included)
     }
 
+    @discardableResult
     public static func forgetMachine(
         machineID: UUID,
         store: UserDefaults = SharedDefaults.store,
