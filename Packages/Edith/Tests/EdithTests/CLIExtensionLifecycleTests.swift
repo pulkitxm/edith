@@ -29,6 +29,11 @@ import Testing
                 Set(result.object?.keys ?? [:].keys)
                     == ["id", "title", "verified", "state", "checks", "remediation"])
             #expect((result.object?["checks"] as? [[String: Any]])?.count == 1)
+            let state = result.object?["state"] as? [String: Any]
+            #expect(
+                Set(state?.keys ?? [:].keys)
+                    == ["extensionID", "phase", "runtimePhase", "summary", "issues"])
+            #expect(state?["runtimePhase"] as? String == "uninstalled")
         }
     }
 
@@ -71,12 +76,41 @@ import Testing
             CLIEnvironment.executableNamed = { name in
                 name == "quinjet" ? URL(fileURLWithPath: "/opt/homebrew/bin/quinjet") : nil
             }
+            CLIEnvironment.extensionToolReadiness = {
+                $0 == "quinjet" ? .installed(version: "quinjet 1.0") : .uninstalled
+            }
             let result = await CLIProbe.capture([
                 "extensions", "verify", "quinjet", "--json",
             ])
 
             #expect(result.object?["verified"] as? Bool == true)
             #expect((result.object?["state"] as? [String: Any])?["phase"] as? String == "ready")
+            #expect(
+                (result.object?["state"] as? [String: Any])?["runtimePhase"] as? String
+                    == "installed")
+        }
+    }
+
+    @Test func verifyDistinguishesABrokenExecutableFromAnUninstalledTool() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.quinjetEnabled)
+            CLIEnvironment.extensionToolReadiness = { _ in
+                .error("Found Quinjet, but its version probe failed.")
+            }
+
+            let result = await CLIProbe.capture([
+                "extensions", "verify", "quinjet", "--json",
+            ])
+            let state = result.object?["state"] as? [String: Any]
+            let checks = result.object?["checks"] as? [[String: Any]]
+
+            #expect(result.code == 0)
+            #expect(result.object?["verified"] as? Bool == false)
+            #expect(state?["phase"] as? String == "failed")
+            #expect(state?["runtimePhase"] as? String == "error")
+            #expect(
+                checks?.first { $0["id"] as? String == "tool.quinjet" }?["runtimePhase"] as? String
+                    == "error")
         }
     }
 

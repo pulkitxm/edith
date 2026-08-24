@@ -23,6 +23,14 @@ import Testing
         #expect(ids == [enabled.id])
     }
 
+    @Test func onboardingSeparatesCoreAndOptionalWorkflowTools() {
+        #expect(OnboardingFlow.requiredTools(selectedIDs: ["music"]).isEmpty)
+        #expect(OnboardingFlow.optionalTools(selectedIDs: ["music"]) == [.youtubeDownloader])
+        #expect(
+            OnboardingFlow.requiredTools(selectedIDs: ["usage", "quinjet"])
+                == [.claudeCode, .codex, .quinjet])
+    }
+
     @Test func freshInstallShowsOnboarding() {
         let (defaults, suiteName) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

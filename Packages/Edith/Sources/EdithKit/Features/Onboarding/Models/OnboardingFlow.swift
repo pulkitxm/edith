@@ -79,6 +79,20 @@ public enum OnboardingFlow {
         Set(entries.filter { settings[$0.defaultsKey] as? Bool == true }.map(\.id))
     }
 
+    public static func requiredTools(
+        selectedIDs: Set<String>,
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
+    ) -> [CLIToolSpec] {
+        uniqueTools(entries.filter { selectedIDs.contains($0.id) }.flatMap(\.requiredTools))
+    }
+
+    public static func optionalTools(
+        selectedIDs: Set<String>,
+        entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
+    ) -> [CLIToolSpec] {
+        uniqueTools(entries.filter { selectedIDs.contains($0.id) }.flatMap(\.optionalTools))
+    }
+
     public static func cloudBackupSelection(
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
     ) -> Set<String>? {
@@ -109,5 +123,10 @@ public enum OnboardingFlow {
     public static func skip(defaults: UserDefaults = SharedDefaults.store) {
         defaults.set(initialICloudBackup, forKey: iCloudBackupKey)
         defaults.set(true, forKey: completionKey)
+    }
+
+    private static func uniqueTools(_ tools: [CLIToolSpec]) -> [CLIToolSpec] {
+        var seen = Set<String>()
+        return tools.filter { seen.insert($0.id).inserted }
     }
 }
