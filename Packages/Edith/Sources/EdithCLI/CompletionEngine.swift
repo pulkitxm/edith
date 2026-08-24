@@ -174,8 +174,11 @@ public enum CompletionEngine {
         var wantsFiles = false
         let slot = positionals.count
         let arguments = helpRoute ? [] : effectiveArguments(node: node, command: command)
-        if slot < arguments.count {
-            let kind = arguments[slot]
+        let repeatingArgument =
+            helpRoute
+            ? nil
+            : node.repeatingArgument ?? defaultNode(node: node, command: command)?.repeatingArgument
+        if let kind = slot < arguments.count ? arguments[slot] : repeatingArgument {
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
@@ -241,6 +244,7 @@ public enum CompletionEngine {
         case .quinjetTheme: return QuinjetTheme.allCases.map(\.rawValue)
         case .pruneTarget: return DockerPruneCommand.targets
         case .shelfItem: return shelfItems
+        case .shelfKeepDuration: return ShelfKeepDuration.allCases.map(\.rawValue)
         case .musicTrack: return musicTracks
         case .calendarEvent: return calendarEvents
         case .tool: return toolIDs

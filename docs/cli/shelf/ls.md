@@ -29,6 +29,7 @@ prints:
     "index": 1,
     "name": "screenshot.png",
     "path": "/Users/pulkit/Library/Application Support/Edith/Shelf/screenshot.png",
+    "position": { "x": 120, "y": 60 },
     "sizeBytes": 225070
   },
   {
@@ -38,6 +39,7 @@ prints:
     "index": 2,
     "name": "notes 2.pdf",
     "path": "/Users/pulkit/Library/Application Support/Edith/Shelf/notes 2.pdf",
+    "position": null,
     "sizeBytes": 48211
   }
 ]
@@ -50,7 +52,8 @@ the file you added. `path` is `name` joined onto the shelf folder, so it is
 always flat and always absolute. `sizeBytes` and `exists` are measured on disk
 at the moment you run the command, not stored: a file removed behind the
 index's back reports `"sizeBytes": 0` and `"exists": false` rather than
-disappearing from the list. `addedAt` is ISO 8601 in UTC, to the second.
+disappearing from the list. `position` is the stored notch canvas coordinate or
+`null` before an item is moved. `addedAt` is ISO 8601 in UTC, to the second.
 
 Examples:
 

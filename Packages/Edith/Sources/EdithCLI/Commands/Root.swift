@@ -341,7 +341,7 @@ struct CompleteCommand: AsyncParsableCommand {
         let machines = MachineDirectory.load()
         let request = CompletionRequest(
             words: CompletionRequest.stripSeparator(words), index: index)
-        let shelfItems = ShelfBridge.items().indices.map { String($0 + 1) }
+        let shelfItems = ((try? ShelfBridge.items()) ?? []).indices.map { String($0 + 1) }
         let musicTracks: [String]
         if request.leading.starts(with: ["music", "favorite"])
             || request.leading.starts(with: ["music", "favourite"])

@@ -1,12 +1,13 @@
 # `ed shelf reveal`
 
-Reveals one numbered shelf item in Finder.
+Reveals one or more numbered shelf items in Finder.
 
 ```text
-ed shelf reveal <n> [--json]
+ed shelf reveal <n...> [--json]
 ```
 
-JSON reports `action`, `index`, `id`, `name`, `path`, and `opened`.
+JSON reports `action`, `requested`, and an `items` array containing the full
+item documents. Finder receives the whole selection in one request.
 
 - [`ed shelf`](./README.md)
 - [All command groups](../README.md)

@@ -62,6 +62,9 @@ public enum UserOperationCatalog {
         + ShelfItemOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + ShelfMutationOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + DownloadOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -602,11 +605,34 @@ private extension ShelfItemOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
         case .open:
-            userInterface("Notch shelf", "open an item", ["1"])
+            userInterface("Notch shelf", "open selected items", ["1", "2"])
         case .reveal:
-            userInterface("Notch shelf", "reveal an item", ["1"])
+            userInterface("Notch shelf", "reveal selected items", ["1", "2"])
         case .share:
-            userInterface("Notch shelf", "share an item", ["1"])
+            userInterface("Notch shelf", "share selected items", ["1", "2"])
+        }
+    }
+}
+
+private extension ShelfMutationOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface("Notch shelf", "drop a file onto the shelf", ["./file"])
+        case .addText:
+            userInterface("Notch shelf", "drop text onto the shelf", ["note"])
+        case .update:
+            userInterface(
+                "Notch shelf", "move an item on the canvas",
+                ["1", "--x", "120", "--y", "60"])
+        case .remove:
+            userInterface(
+                "Notch shelf", "take selected items off the shelf", ["1", "2", "--yes"])
+        case .clear:
+            commandLineOnly(
+                "The shelf UI deletes selected items but has no action that empties the shelf.")
+        case .purge:
+            userInterface("Notch shelf", "remove expired items", ["oneDay", "--yes"])
         }
     }
 }
