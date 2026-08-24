@@ -141,29 +141,33 @@ struct EdithApp: App {
             services.lidAwake?.syncSettings()
         }
         LidAwakeActionBridge.shared.install(services: services)
-        _ = IPC.observe(IPC.Name.requestCalendarEvents) {
-            Task { @MainActor in
-                guard let store = services.calendar else {
+        _ = IPC.observe(
+            IPC.Name.requestCalendarEvents,
+            info: { info in
+                Task { @MainActor in
+                    guard let store = services.calendar else {
+                        IPC.post(
+                            IPC.Name.calendarEvents,
+                            userInfo: [CalendarEventBridge.statusKey: "extensionOff"])
+                        return
+                    }
+                    guard store.authStatus == .fullAccess else {
+                        IPC.post(
+                            IPC.Name.calendarEvents,
+                            userInfo: [CalendarEventBridge.statusKey: "notAuthorized"])
+                        return
+                    }
+                    let query = CalendarEventBridge.decodeQuery(
+                        info[CalendarEventBridge.queryKey] as? String)
+                    let events = await store.events(query)
                     IPC.post(
                         IPC.Name.calendarEvents,
-                        userInfo: [CalendarEventBridge.statusKey: "extensionOff"])
-                    return
+                        userInfo: [
+                            CalendarEventBridge.statusKey: "ok",
+                            CalendarEventBridge.payloadKey: CalendarEventBridge.encode(events),
+                        ])
                 }
-                guard store.authStatus == .fullAccess else {
-                    IPC.post(
-                        IPC.Name.calendarEvents,
-                        userInfo: [CalendarEventBridge.statusKey: "notAuthorized"])
-                    return
-                }
-                let events = await store.refreshAndWait()
-                IPC.post(
-                    IPC.Name.calendarEvents,
-                    userInfo: [
-                        CalendarEventBridge.statusKey: "ok",
-                        CalendarEventBridge.payloadKey: CalendarEventBridge.encode(events),
-                    ])
-            }
-        }
+            })
         _ = IPC.observe(IPC.Name.requestTestNotification) {
             Task { _ = await services.usage?.notifier.sendTest() }
         }
