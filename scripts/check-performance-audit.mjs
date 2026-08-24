@@ -22,8 +22,7 @@ const normalizeLine = (source, index) => {
     .replaceAll(/\s+/g, " ");
 };
 
-const lineNumber = (source, index) =>
-  source.slice(0, index).split("\n").length;
+const lineNumber = (source, index) => source.slice(0, index).split("\n").length;
 
 const maskSwift = (source) => {
   const chars = [...source];
@@ -51,7 +50,9 @@ const maskSwift = (source) => {
     if (quote !== null) {
       const triple = quote === 3;
       const closes = triple
-        ? chars[index] === '"' && chars[index + 1] === '"' && chars[index + 2] === '"'
+        ? chars[index] === '"' &&
+          chars[index + 1] === '"' &&
+          chars[index + 2] === '"'
         : chars[index] === '"' && chars[index - 1] !== "\\";
       if (closes) {
         const width = triple ? 3 : 1;
@@ -121,7 +122,8 @@ const declarationRanges = (masked, prefix) => {
 
 const callableRanges = (masked) => {
   const ranges = [];
-  const callable = /(?:^|\n)\s*(?:(?:@\w+(?:\([^)]*\))?|public|package|internal|private|fileprivate|open|final|static|class|mutating|nonmutating|nonisolated|override)\s+)*(?:func\b|init\b|deinit\b)[^{]{0,1_000}\{/gm;
+  const callable =
+    /(?:^|\n)\s*(?:(?:@\w+(?:\([^)]*\))?|public|package|internal|private|fileprivate|open|final|static|class|mutating|nonmutating|nonisolated|override)\s+)*(?:func\b|init\b|deinit\b)[^{]{0,1_000}\{/gm;
   for (const match of masked.matchAll(callable)) {
     const opening = masked.indexOf("{", match.index);
     ranges.push([opening, closingBrace(masked, opening)]);
@@ -163,11 +165,19 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   for (const match of masked.matchAll(/\bTask\.detached\b/g)) {
     const range = closureRange(masked, match.index);
     if (range) detachedRanges.push(range);
-    const context = masked.slice(Math.max(0, match.index - 100), match.index + 900);
+    const context = masked.slice(
+      Math.max(0, match.index - 100),
+      match.index + 900,
+    );
     const assignment = masked
-      .slice(Math.max(0, masked.lastIndexOf("\n", match.index - 1) + 1), match.index)
+      .slice(
+        Math.max(0, masked.lastIndexOf("\n", match.index - 1) + 1),
+        match.index,
+      )
       .match(/(?:let|var)?\s*([A-Za-z_]\w*)\s*=\s*(?:try\s+)?(?:await\s+)?$/);
-    const awaited = /(?:try\s+)?await\s+Task\.detached[\s\S]*?\.value\b/.test(context);
+    const awaited = /(?:try\s+)?await\s+Task\.detached[\s\S]*?\.value\b/.test(
+      context,
+    );
     const returned = /return\s+(?:try\s+)?(?:await\s+)?$/.test(
       masked.slice(Math.max(0, match.index - 40), match.index),
     );
@@ -175,7 +185,13 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
       assignment &&
       new RegExp(`\\b${assignment[1]}\\s*\\??\\.cancel\\s*\\(`).test(masked);
     if (!awaited && !returned && !owned) {
-      addViolation(violations, "unowned-detached-task", path, source, match.index);
+      addViolation(
+        violations,
+        "unowned-detached-task",
+        path,
+        source,
+        match.index,
+      );
     }
   }
 
@@ -183,26 +199,42 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     addViolation(violations, "raw-process-launch", path, source, match.index);
     const functionRange = enclosingRange(functionRanges, match.index);
     const start = functionRange?.[0] ?? Math.max(0, match.index - 3_000);
-    const end = functionRange?.[1] ?? Math.min(masked.length, match.index + 3_000);
+    const end =
+      functionRange?.[1] ?? Math.min(masked.length, match.index + 3_000);
     const lifecycle = source.slice(start, end);
-    const bounded = /\b(?:timeout|deadline|timeLimit)\b|\.asyncAfter\s*\(|wait\s*\(\s*timeout\s*:/i.test(
-      lifecycle,
-    );
-    const cancellable = /withTaskCancellationHandler|Task\.isCancelled|\.terminate\s*\(|SIGTERM/.test(
-      lifecycle,
-    );
-    const escalatesGroup = /SIGKILL|killpg|kill\s*\(\s*-\s*|kill -KILL -|processGroup/i.test(
-      lifecycle,
-    );
+    const bounded =
+      /\b(?:timeout|deadline|timeLimit)\b|\.asyncAfter\s*\(|wait\s*\(\s*timeout\s*:/i.test(
+        lifecycle,
+      );
+    const cancellable =
+      /withTaskCancellationHandler|Task\.isCancelled|\.terminate\s*\(|SIGTERM/.test(
+        lifecycle,
+      );
+    const escalatesGroup =
+      /SIGKILL|killpg|kill\s*\(\s*-\s*|kill -KILL -|processGroup/i.test(
+        lifecycle,
+      );
     if (!bounded || !cancellable || !escalatesGroup) {
-      addViolation(violations, "unsafe-process-lifecycle", path, source, match.index);
+      addViolation(
+        violations,
+        "unsafe-process-lifecycle",
+        path,
+        source,
+        match.index,
+      );
     }
   }
 
   for (const match of masked.matchAll(/\.readDataToEndOfFile\s*\(\s*\)/g)) {
     const line = normalizeLine(source, match.index);
     if (!line.includes("FileHandle.standardInput")) {
-      addViolation(violations, "unbounded-process-output", path, source, match.index);
+      addViolation(
+        violations,
+        "unbounded-process-output",
+        path,
+        source,
+        match.index,
+      );
     }
   }
 
@@ -223,7 +255,13 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
         !containsIndex(nonisolatedRanges, match.index) &&
         !containsIndex(detachedRanges, match.index)
       ) {
-        addViolation(violations, "main-actor-blocking-io", path, source, match.index);
+        addViolation(
+          violations,
+          "main-actor-blocking-io",
+          path,
+          source,
+          match.index,
+        );
       }
     }
   }
@@ -236,40 +274,64 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   for (const [opening, end, start] of loopRanges) {
     const body = masked.slice(opening, end);
     if (!/\bgroup\.addTask\s*[({]/.test(body)) continue;
-    const context = masked.slice(Math.max(0, start - 1_500), Math.min(masked.length, end + 1_500));
-    const fixedRange = /\bfor\b[^\n{]*\b(?:allCases|supportedShells|0\s*\.\.<\s*\d+)/.test(
+    const context = masked.slice(
+      Math.max(0, start - 1_500),
+      Math.min(masked.length, end + 1_500),
+    );
+    const fixedRange =
+      /\bfor\b[^\n{]*\b(?:allCases|supportedShells|0\s*\.\.<\s*\d+)/.test(
+        masked.slice(start, opening),
+      );
+    const boundedPrefix = /\bfor\b[^\n{]*\.prefix\s*\(/.test(
       masked.slice(start, opening),
     );
-    const boundedPrefix = /\bfor\b[^\n{]*\.prefix\s*\(/.test(masked.slice(start, opening));
     const rollingWindow =
       /\bgroup\.next\s*\(/.test(context) &&
-      /\b(?:limit|concurr|parallel|initialCount|max\w*Count|probeLimit)\b/i.test(context);
+      /\b(?:limit|concurr|parallel|initialCount|max\w*Count|probeLimit)\b/i.test(
+        context,
+      );
     if (!fixedRange && !boundedPrefix && !rollingWindow) {
       addViolation(violations, "unbounded-task-group", path, source, start);
     }
   }
 
-  for (const match of masked.matchAll(/\b([A-Za-z_]\w*Task)\s*=\s*Task\s*(?!\.detached)[^{]{0,300}\{/g)) {
+  for (const match of masked.matchAll(
+    /\b([A-Za-z_]\w*Task)\s*=\s*Task\s*(?!\.detached)[^{]{0,300}\{/g,
+  )) {
     const range = closureRange(masked, match.index);
     if (!range) continue;
     const [opening, end] = range;
     const body = masked.slice(opening + 1, end);
     if (!/\bawait\b/.test(body)) continue;
     const ownerRange = enclosingRange(
-      declarationRanges(masked, "(?:public|package|internal|private|fileprivate|open|static|mutating|nonmutating)*"),
+      declarationRanges(
+        masked,
+        "(?:public|package|internal|private|fileprivate|open|static|mutating|nonmutating)*",
+      ),
       match.index,
     );
     const owner = ownerRange
       ? masked.slice(ownerRange[0], match.index)
       : masked.slice(Math.max(0, match.index - 2_000), match.index);
-    const cancellation = new RegExp(`\\b${match[1]}\\s*\\??\\.cancel\\s*\\(`).test(owner);
+    const cancellation = new RegExp(
+      `\\b${match[1]}\\s*\\??\\.cancel\\s*\\(`,
+    ).test(owner);
     const lastAwait = body.lastIndexOf("await");
-    const publication = body.slice(lastAwait).match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=\s*/);
-    const guarded = /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
-      body.slice(lastAwait, publication?.index ?? body.length),
-    );
+    const publication = body
+      .slice(lastAwait)
+      .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=\s*/);
+    const guarded =
+      /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
+        body.slice(lastAwait, publication?.index ?? body.length),
+      );
     if (publication && (!cancellation || !guarded)) {
-      addViolation(violations, "stale-task-publication", path, source, match.index);
+      addViolation(
+        violations,
+        "stale-task-publication",
+        path,
+        source,
+        match.index,
+      );
     }
   }
 
@@ -278,10 +340,20 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const actorSource = masked.slice(range[0], range[1]);
     for (const match of actorSource.matchAll(projection)) {
       const index = range[0] + match.index;
-      if (containsIndex(detachedRanges, index) || containsIndex(nonisolatedRanges, index)) continue;
+      if (
+        containsIndex(detachedRanges, index) ||
+        containsIndex(nonisolatedRanges, index)
+      )
+        continue;
       const window = masked.slice(index, Math.min(range[1], index + 500));
       if ([...window.matchAll(projection)].length > 1) {
-        addViolation(violations, "main-actor-projection-chain", path, source, index);
+        addViolation(
+          violations,
+          "main-actor-projection-chain",
+          path,
+          source,
+          index,
+        );
       }
     }
   }
@@ -307,7 +379,9 @@ const resolvePerformanceBase = (root, explicitBase) => {
   const candidates = [
     explicitBase,
     process.env.PERFORMANCE_BASE,
-    process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : null,
+    process.env.GITHUB_BASE_REF
+      ? `origin/${process.env.GITHUB_BASE_REF}`
+      : null,
   ].filter((candidate) => candidate && !/^0+$/.test(candidate));
   for (const candidate of candidates) {
     if (gitResult(root, ["cat-file", "-e", `${candidate}^{commit}`]) !== null) {
@@ -321,17 +395,34 @@ const resolvePerformanceBase = (root, explicitBase) => {
 
 const changedSwiftFiles = (root, base, roots) => {
   const records = new Map();
-  const status = gitResult(root, ["diff", "--name-status", "--find-renames", base, "--", ...roots]);
+  const status = gitResult(root, [
+    "diff",
+    "--name-status",
+    "--find-renames",
+    base,
+    "--",
+    ...roots,
+  ]);
   for (const line of status?.split("\n") ?? []) {
     if (!line) continue;
     const [kind, first, second] = line.split("\t");
     const path = second ?? first;
     if (!path?.endsWith(".swift") || kind.startsWith("D")) continue;
-    records.set(path, { currentPath: path, basePath: kind.startsWith("R") ? first : path });
+    records.set(path, {
+      currentPath: path,
+      basePath: kind.startsWith("R") ? first : path,
+    });
   }
-  const untracked = gitResult(root, ["ls-files", "--others", "--exclude-standard", "--", ...roots]);
+  const untracked = gitResult(root, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "--",
+    ...roots,
+  ]);
   for (const path of untracked?.split("\n") ?? []) {
-    if (path.endsWith(".swift")) records.set(path, { currentPath: path, basePath: null });
+    if (path.endsWith(".swift"))
+      records.set(path, { currentPath: path, basePath: null });
   }
   return [...records.values()];
 };
@@ -360,7 +451,7 @@ export function validatePerformanceChanges(
   )) {
     const currentSource = readFileSync(`${root}/${currentPath}`, "utf8");
     const baseSource = basePath
-      ? gitResult(root, ["show", `${base}:${basePath}`]) ?? ""
+      ? (gitResult(root, ["show", `${base}:${basePath}`]) ?? "")
       : "";
     const current = findPerformanceViolations(currentSource, currentPath);
     const previousCounts = violationCounts(
@@ -371,7 +462,9 @@ export function validatePerformanceChanges(
       const previous = previousCounts.get(rule) ?? 0;
       const next = currentCounts.get(rule) ?? 0;
       if (next <= previous) continue;
-      const examples = current.filter((violation) => violation.rule === rule).slice(previous);
+      const examples = current
+        .filter((violation) => violation.rule === rule)
+        .slice(previous);
       for (const violation of examples) {
         failures.push(
           `${violation.path}:${violation.line}: ${rule}: ${violation.source || "unsafe structural form"}`,
@@ -389,15 +482,21 @@ export function validatePerformanceAudit(audit, root = ".") {
     failures.push("capturedAt must use YYYY-MM-DD");
   }
   const enforcement = audit.structuralEnforcement;
-  if (!enforcement || !Array.isArray(enforcement.sourceRoots) || enforcement.sourceRoots.length === 0) {
+  if (
+    !enforcement ||
+    !Array.isArray(enforcement.sourceRoots) ||
+    enforcement.sourceRoots.length === 0
+  ) {
     failures.push("structuralEnforcement.sourceRoots is required");
   }
   const structuralRules = new Set(enforcement?.rules ?? []);
   for (const rule of requiredStructuralRules) {
-    if (!structuralRules.has(rule)) failures.push(`structural rule is missing: ${rule}`);
+    if (!structuralRules.has(rule))
+      failures.push(`structural rule is missing: ${rule}`);
   }
   for (const rule of structuralRules) {
-    if (!requiredStructuralRules.has(rule)) failures.push(`structural rule is unknown: ${rule}`);
+    if (!requiredStructuralRules.has(rule))
+      failures.push(`structural rule is unknown: ${rule}`);
   }
   const required = new Set(audit.requiredAreas ?? []);
   const scenarios = audit.scenarios ?? [];

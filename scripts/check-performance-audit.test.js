@@ -44,7 +44,9 @@ test("hostile actor work and process capture are rejected", () => {
   expect(rules).toContain("raw-process-launch");
   expect(rules).toContain("unsafe-process-lifecycle");
   expect(rules).toContain("unbounded-process-output");
-  expect(rules.filter((rule) => rule === "main-actor-blocking-io")).toHaveLength(3);
+  expect(
+    rules.filter((rule) => rule === "main-actor-blocking-io"),
+  ).toHaveLength(3);
 });
 
 test("bounded cancellation and group escalation satisfy process lifecycle analysis", () => {
@@ -102,9 +104,9 @@ test("fire-and-forget detached work needs ownership and cancellation", () => {
   expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
     "unowned-detached-task",
   );
-  expect(findPerformanceViolations(owned).map(({ rule }) => rule)).not.toContain(
-    "unowned-detached-task",
-  );
+  expect(
+    findPerformanceViolations(owned).map(({ rule }) => rule),
+  ).not.toContain("unowned-detached-task");
 });
 
 test("task-group fan-out requires a fixed set or rolling bound", () => {
@@ -130,9 +132,9 @@ test("task-group fan-out requires a fixed set or rolling bound", () => {
   expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
     "unbounded-task-group",
   );
-  expect(findPerformanceViolations(bounded).map(({ rule }) => rule)).not.toContain(
-    "unbounded-task-group",
-  );
+  expect(
+    findPerformanceViolations(bounded).map(({ rule }) => rule),
+  ).not.toContain("unbounded-task-group");
 });
 
 test("replacement tasks guard state publication after suspension", () => {
@@ -166,9 +168,9 @@ test("replacement tasks guard state publication after suspension", () => {
   expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
     "stale-task-publication",
   );
-  expect(findPerformanceViolations(guarded).map(({ rule }) => rule)).not.toContain(
-    "stale-task-publication",
-  );
+  expect(
+    findPerformanceViolations(guarded).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
 });
 
 test("main-actor projection chains are rejected without flagging one bounded projection", () => {
@@ -192,9 +194,9 @@ test("main-actor projection chains are rejected without flagging one bounded pro
   expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
     "main-actor-projection-chain",
   );
-  expect(findPerformanceViolations(bounded).map(({ rule }) => rule)).not.toContain(
-    "main-actor-projection-chain",
-  );
+  expect(
+    findPerformanceViolations(bounded).map(({ rule }) => rule),
+  ).not.toContain("main-actor-projection-chain");
 });
 
 test("source-like text in strings does not trigger structural rules", () => {
@@ -210,8 +212,20 @@ test("the change ratchet permits existing debt and rejects an added occurrence",
   const root = mkdtempSync(join(tmpdir(), "edith-performance-contract-"));
   try {
     execFileSync("git", ["init", "-q", root]);
-    execFileSync("git", ["-C", root, "config", "user.name", "Performance Tests"]);
-    execFileSync("git", ["-C", root, "config", "user.email", "tests@example.com"]);
+    execFileSync("git", [
+      "-C",
+      root,
+      "config",
+      "user.name",
+      "Performance Tests",
+    ]);
+    execFileSync("git", [
+      "-C",
+      root,
+      "config",
+      "user.email",
+      "tests@example.com",
+    ]);
     execFileSync("mkdir", [join(root, "Sources")]);
     const path = join(root, "Sources", "Runner.swift");
     writeFileSync(path, "func run() { let process = Process() }\n");
@@ -227,7 +241,9 @@ test("the change ratchet permits existing debt and rejects an added occurrence",
       },
     };
 
-    expect(validatePerformanceChanges(fixtureAudit, { root, base })).toEqual([]);
+    expect(validatePerformanceChanges(fixtureAudit, { root, base })).toEqual(
+      [],
+    );
 
     writeFileSync(
       path,
@@ -236,7 +252,9 @@ test("the change ratchet permits existing debt and rejects an added occurrence",
     const failures = validatePerformanceChanges(fixtureAudit, { root, base });
 
     expect(failures).toHaveLength(2);
-    expect(failures.some((failure) => failure.includes("raw-process-launch"))).toBeTrue();
+    expect(
+      failures.some((failure) => failure.includes("raw-process-launch")),
+    ).toBeTrue();
     expect(
       failures.some((failure) => failure.includes("unsafe-process-lifecycle")),
     ).toBeTrue();
