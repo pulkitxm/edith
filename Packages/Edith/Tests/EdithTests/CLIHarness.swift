@@ -1,5 +1,7 @@
 import AppKit
 import ArgumentParser
+import Darwin
+import Dispatch
 import Foundation
 
 @testable import EdithCLI
@@ -43,7 +45,40 @@ struct CLIRun: Sendable {
     var array: [Any]? { (try? decoded()) as? [Any] }
 }
 
+enum CLIProcessProbeError: Error, Equatable, LocalizedError {
+    case timedOut(executable: String, arguments: [String], seconds: TimeInterval)
+
+    var errorDescription: String? {
+        switch self {
+        case let .timedOut(executable, arguments, seconds):
+            return
+                "\(([executable] + arguments).joined(separator: " ")) timed out after \(seconds) seconds"
+        }
+    }
+}
+
 enum CLIProcessProbe {
+    static let defaultTimeout: TimeInterval = 15
+    private static let terminationGrace: TimeInterval = 2
+    private static let processGroupScript = """
+        set -m
+        "$@" &
+        child=$!
+        set +m
+        terminate_group() {
+            if kill -TERM -"$child" 2>/dev/null; then
+                sleep 1
+                kill -KILL -"$child" 2>/dev/null || :
+            fi
+        }
+        trap 'terminate_group; exit 124' TERM INT
+        wait "$child"
+        status=$?
+        trap - TERM INT
+        terminate_group
+        exit "$status"
+        """
+
     static let packageRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
@@ -55,22 +90,55 @@ enum CLIProcessProbe {
 
     static func run(
         _ arguments: [String], executable: URL? = nil, currentDirectory: URL? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        timeout: TimeInterval = defaultTimeout
     ) throws -> CLIRun {
+        let target = executable ?? binary
+        let captureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ed-cli-probe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: captureDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: captureDirectory) }
+        let stdoutURL = captureDirectory.appendingPathComponent("stdout")
+        let stderrURL = captureDirectory.appendingPathComponent("stderr")
+        try Data().write(to: stdoutURL)
+        try Data().write(to: stderrURL)
+        let stdout = try FileHandle(forWritingTo: stdoutURL)
+        let stderr = try FileHandle(forWritingTo: stderrURL)
+        defer {
+            try? stdout.close()
+            try? stderr.close()
+        }
+
         let process = Process()
-        process.executableURL = executable ?? binary
-        process.arguments = arguments
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments =
+            [
+                "-c", processGroupScript, "cli-process-probe", target.path,
+            ] + arguments
         process.currentDirectoryURL = currentDirectory
         process.environment = environment
-        let stdout = Pipe()
-        let stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
         process.standardInput = FileHandle.nullDevice
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
         try process.run()
-        let out = stdout.fileHandleForReading.readDataToEndOfFile()
-        let err = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        guard finished.wait(timeout: .now() + max(0, timeout)) == .success else {
+            if process.isRunning { process.terminate() }
+            if finished.wait(timeout: .now() + terminationGrace) == .timedOut,
+                process.isRunning
+            {
+                kill(process.processIdentifier, SIGKILL)
+                _ = finished.wait(timeout: .now() + terminationGrace)
+            }
+            throw CLIProcessProbeError.timedOut(
+                executable: target.path, arguments: arguments, seconds: timeout)
+        }
+        try stdout.close()
+        try stderr.close()
+        let out = try Data(contentsOf: stdoutURL)
+        let err = try Data(contentsOf: stderrURL)
         return CLIRun(
             stdout: String(decoding: out, as: UTF8.self),
             stderr: String(decoding: err, as: UTF8.self), code: process.terminationStatus)
