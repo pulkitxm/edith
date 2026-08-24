@@ -37,6 +37,8 @@ public enum IPC {
             "com.pulkit.edith.requestColorPick")
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
         public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
+        public static let shelfOperationResult = Notification.Name(
+            "com.pulkit.edith.shelfOperationResult")
         public static let machinesChanged = Notification.Name("com.pulkit.edith.machinesChanged")
         public static let requestMachineTerminalBroadcast = Notification.Name(
             "com.pulkit.edith.requestMachineTerminalBroadcast")
