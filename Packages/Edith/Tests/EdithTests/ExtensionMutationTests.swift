@@ -202,4 +202,60 @@ private struct ExtensionMutationWorld {
             #expect(descriptor.effect == .write)
         }
     }
+
+    @Test func everyRegisteredExtensionHasAnExplicitDetailRoute() {
+        let registered = Set(ExtensionRegistry.entries.map(\.id))
+        let routed = Set(ExtensionDetailRoute.allCases.map(\.rawValue))
+
+        #expect(registered == routed)
+        for entry in ExtensionRegistry.entries {
+            #expect(ExtensionDetailRoute(rawValue: entry.id) != nil)
+        }
+    }
+
+    @MainActor @Test func everyDisabledModalCanEnableAndDisableThroughTheMutationCenter() {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let granted = Dictionary(
+            uniqueKeysWithValues: ExtensionPermission.allCases.map { ($0, true) })
+        let center = world.center(granted: granted)
+
+        for entry in ExtensionRegistry.entries {
+            let coordinator = ExtensionModalCoordinator(entry: entry, mutationCenter: center)
+            #expect(!coordinator.isEnabled)
+
+            guard case let .applied(enabled, _) = coordinator.setEnabled(true) else {
+                Issue.record("\(entry.id) should enable from its detail modal")
+                continue
+            }
+            #expect(enabled.enabled)
+            #expect(coordinator.isEnabled)
+
+            guard case let .applied(disabled, tools) = coordinator.setEnabled(false) else {
+                Issue.record("\(entry.id) should disable from its detail modal")
+                continue
+            }
+            #expect(!disabled.enabled)
+            #expect(tools.isEmpty)
+            #expect(!coordinator.isEnabled)
+        }
+        #expect(world.recorder.announcementCount == ExtensionRegistry.entries.count * 2)
+    }
+
+    @MainActor @Test func modalDefersPermissionBlockedEnablementWithoutChangingState() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "calendar" })
+        let coordinator = ExtensionModalCoordinator(
+            entry: entry, mutationCenter: world.center())
+
+        guard case let .needsPermissions(plan) = coordinator.setEnabled(true) else {
+            Issue.record("Calendar should present its permission flow")
+            return
+        }
+        #expect(plan.required == [.calendar])
+        #expect(!coordinator.isEnabled)
+        #expect(coordinator.enableAfterPermissions() == .needsPermissions(plan))
+        #expect(world.recorder.announcementCount == 0)
+    }
 }
