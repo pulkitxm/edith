@@ -17,6 +17,9 @@ import EdithCore
 
     static let matrix = [
         MatrixRow(
+            id: "attention", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "usage", helper: true, machine: false, toolRule: .any, adapter: true,
             requiredTools: ["claude", "codex"], optionalTools: []),
         MatrixRow(
@@ -71,7 +74,7 @@ import EdithCore
             Set(ExtensionLifecycleProbe.policies.keys) == Set(ExtensionRegistry.entries.map(\.id)))
     }
 
-    @Test func allSixteenExtensionsHaveAnExplicitHealthyStateMatrix() async throws {
+    @Test func allRegisteredExtensionsHaveAnExplicitHealthyStateMatrix() async throws {
         #expect(Self.matrix.map(\.id) == ExtensionRegistry.entries.map(\.id))
         let permissions = Dictionary(
             uniqueKeysWithValues: ExtensionPermission.allCases.map { ($0, true) })

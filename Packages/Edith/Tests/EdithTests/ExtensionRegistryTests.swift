@@ -5,6 +5,7 @@ import Testing
 
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
+        "tabAttentionEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
@@ -39,7 +40,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "usage", "herdr", "quinjet", "system", "machines", "notchShelf", "clipboard",
+                "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
+                "clipboard",
             ])
     }
 
@@ -64,9 +66,10 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         for entry in ExtensionRegistry.entries {
+            let expected = entry.id == "attention"
             #expect(defaults.object(forKey: entry.defaultsKey) == nil)
-            #expect(!entry.isEnabled(in: defaults), "\(entry.id) is on without a stored choice")
-            #expect(ConfigCatalog.definition(for: entry.defaultsKey)?.fallback == .bool(false))
+            #expect(entry.isEnabled(in: defaults) == expected)
+            #expect(ConfigCatalog.definition(for: entry.defaultsKey)?.fallback == .bool(expected))
         }
     }
 
@@ -79,15 +82,19 @@ import Testing
             entries: ExtensionRegistry.entries, query: "", category: .utilities)
         let combinedMatches = ExtensionMarketplaceFilter.filter(
             entries: ExtensionRegistry.entries, query: "screen", category: .utilities)
+        let attentionMatches = ExtensionMarketplaceFilter.filter(
+            entries: ExtensionRegistry.entries, query: "attention", category: .all)
 
         #expect(titleMatches.map(\.id) == ["usage"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
         #expect(categoryMatches.allSatisfy { $0.group == .utilities })
         #expect(combinedMatches.map(\.id) == ["presenter"])
+        #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
+            "attention": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
@@ -106,6 +113,7 @@ import Testing
             "colorPicker": [.screenRecording],
         ]
         let optional: [String: [ExtensionPermission]] = [
+            "attention": [],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],
@@ -225,6 +233,7 @@ import Testing
         ExtensionDefaultsMigration.migrate(defaults: defaults)
 
         let expected: [String: Bool] = [
+            "tabAttentionEnabled": true,
             "tabUsageEnabled": false,
             "tabHerdrEnabled": false,
             "tabQuinjetEnabled": false,

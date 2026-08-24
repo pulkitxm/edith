@@ -187,6 +187,37 @@ public struct ExtensionLifecycleDescriptor: Identifiable, Codable, Equatable, Se
 public enum ExtensionLifecycleCatalog {
     public static let descriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
+            "attention", "Understand app and browser activity, then protect focused work.",
+            workflows: [
+                instruction(
+                    "timeline", "Review attention", "See focused, distracting, and idle time."),
+                instruction(
+                    "focus", "Run a focus session", "Set an intention and track the session."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tracking", "Choose tracking sources",
+                    "Enable application tracking, browser tracking, or both in Attention settings.")
+            ],
+            examples: [
+                "ed extensions enable attention", "ed attention summary --json",
+                "ed attention focus start --name Deep-work --minutes 45",
+            ],
+            docs: [
+                documentation("guide", "Attention guide", "docs/cli/attention/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Attention readiness",
+                    "Inspect the helper and tracking configuration.",
+                    "ed extensions doctor attention --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Read the current summary",
+                    "Confirm the Attention store is readable.", "ed attention summary --json")
+            ]),
+        descriptor(
             "usage", "See agent limits, cost and pacing before they interrupt your work.",
             workflows: [
                 instruction("limits", "Watch limits", "Compare session and weekly headroom."),
