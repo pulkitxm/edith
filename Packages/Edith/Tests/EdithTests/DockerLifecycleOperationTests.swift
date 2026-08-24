@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Edith
 @testable import EdithKit
 
 @Suite struct DockerLifecycleOperationTests {
@@ -102,6 +103,21 @@ import Testing
         } else {
             Issue.record("a failed runner succeeded")
         }
+    }
+
+    @Test func destructiveUIPlansCarryTypedTargetsAndExplicitWarnings() {
+        let image = DockerObjectRemovalPlan.image("team/api:latest")
+        let volume = DockerObjectRemovalPlan.volume("database")
+        let prune = PrunePlan(kind: .volumes)
+
+        #expect(image.operation == .removeImage)
+        #expect(image.target == .image("team/api:latest", force: false))
+        #expect(image.title.contains("Remove"))
+        #expect(volume.operation == .removeVolume)
+        #expect(volume.target == .volume("database"))
+        #expect(volume.detail.contains("cannot be undone"))
+        #expect(prune.id == "volumes")
+        #expect(prune.detail.contains("cannot be undone"))
     }
 }
 
