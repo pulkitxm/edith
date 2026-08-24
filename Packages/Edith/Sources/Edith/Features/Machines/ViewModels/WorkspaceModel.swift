@@ -10,6 +10,7 @@ final class WorkspaceModel {
 
     var layout: WorkspaceLayout
     var store: WorkspaceStore
+    var operationError: String?
 
     private let file: URL
 
@@ -45,21 +46,53 @@ final class WorkspaceModel {
     }
 
     func use(_ preset: WorkspaceLayout) {
-        let live = Set(preset.root.panes.flatMap { $0.tabs.map(\.id) })
-        layout = preset
-        store.layouts = [preset]
-        store.currentID = preset.id
-        persist()
-        PaneViewStore.shared.releaseAll(except: live)
+        perform(.create(preset))
+    }
+
+    var savedLayouts: [WorkspaceLayout] {
+        var snapshot = store
+        return (try? WorkspaceOperationExecution.perform(.list, in: &snapshot).layouts) ?? []
+    }
+
+    @discardableResult
+    func perform(_ request: WorkspaceOperationRequest) -> WorkspaceOperationResult? {
+        var updated = store
+        do {
+            let result = try WorkspaceOperationExecution.perform(request, in: &updated)
+            if result.changed { try WorkspaceStore.save(updated, to: file) }
+            store = updated
+            if let current = updated.current { layout = current }
+            let live = Set(layout.root.panes.flatMap { $0.tabs.map(\.id) })
+            PaneViewStore.shared.releaseAll(except: live)
+            operationError = nil
+            return result
+        } catch {
+            operationError = error.localizedDescription
+            return nil
+        }
     }
 
     func retargetPane(_ paneID: UUID, tabID: UUID, to target: PaneTarget) {
-        apply { layout in
-            layout.root.updatePane(paneID) { pane in
-                guard let index = pane.tabs.firstIndex(where: { $0.id == tabID }) else { return }
-                pane.tabs[index].target = target
-            }
-        }
+        perform(
+            .point(
+                workspaceID: layout.id, paneID: paneID,
+                targets: [WorkspaceTabRetarget(tabID: tabID, target: target)]))
+    }
+
+    func retargetPane(_ paneID: UUID, to targets: [WorkspaceTabRetarget]) {
+        perform(.point(workspaceID: layout.id, paneID: paneID, targets: targets))
+    }
+
+    func splitPane(_ paneID: UUID, side: InsertSide, target: PaneTarget) {
+        perform(.split(workspaceID: layout.id, paneID: paneID, side: side, target: target))
+    }
+
+    func closePane(_ paneID: UUID) {
+        perform(.close(workspaceID: layout.id, paneID: paneID))
+    }
+
+    func equalize(splitID: UUID? = nil) {
+        perform(.equalize(workspaceID: layout.id, splitID: splitID))
     }
 
     func addTab(to paneID: UUID, target: PaneTarget) {
@@ -115,7 +148,7 @@ final class WorkspaceModel {
         }
         guard layout.paneCount > 1 else { return false }
         let orphans = pane.tabs.map(\.id)
-        apply { $0.closePane(pane.id) }
+        closePane(pane.id)
         for id in orphans { PaneViewStore.shared.release(tabID: id) }
         return true
     }
@@ -132,13 +165,16 @@ final class WorkspaceModel {
                 if pane.selected == tabID { pane.selected = pane.tabs.first?.id ?? pane.selected }
             }
         }
-        if shouldClosePane { apply { $0.closePane(paneID) } }
+        if shouldClosePane { closePane(paneID) }
     }
 }
 
 struct WorkspaceView: View {
     let machines: MachinesModel
     @State private var model = WorkspaceModel.shared
+    @State private var renameTarget: WorkspaceLayout?
+    @State private var renameText = ""
+    @State private var removeTarget: WorkspaceLayout?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
@@ -162,11 +198,78 @@ struct WorkspaceView: View {
         .onAppear {
             if connectionsEnabled { machines.connectAll() }
         }
+        .alert("Rename Workspace", isPresented: renameBinding) {
+            TextField("Workspace name", text: $renameText)
+            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button("Rename") {
+                if let renameTarget {
+                    model.perform(
+                        .rename(workspaceID: renameTarget.id, name: renameText))
+                }
+                renameTarget = nil
+            }
+        }
+        .alert(
+            "Delete Workspace?", isPresented: removeBinding,
+            presenting: removeTarget
+        ) { workspace in
+            Button("Cancel", role: .cancel) { removeTarget = nil }
+            Button("Delete", role: .destructive) {
+                model.perform(.remove(workspaceID: workspace.id))
+                removeTarget = nil
+            }
+        } message: { workspace in
+            Text("\"\(workspace.name)\" and its pane layout will be deleted.")
+        }
+        .alert("Workspace Error", isPresented: errorBinding) {
+            Button("OK") { model.operationError = nil }
+        } message: {
+            Text(model.operationError ?? "The workspace could not be changed.")
+        }
+    }
+
+    private var renameBinding: Binding<Bool> {
+        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
+    }
+
+    private var removeBinding: Binding<Bool> {
+        Binding(get: { removeTarget != nil }, set: { if !$0 { removeTarget = nil } })
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(
+            get: { model.operationError != nil },
+            set: { if !$0 { model.operationError = nil } })
     }
 
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(8)) {
             Menu {
+                if !model.savedLayouts.isEmpty {
+                    ForEach(model.savedLayouts) { workspace in
+                        Menu {
+                            Button("Use") {
+                                model.perform(.use(workspaceID: workspace.id))
+                            }
+                            .disabled(workspace.id == model.layout.id)
+                            Button("Rename") {
+                                renameText = workspace.name
+                                renameTarget = workspace
+                            }
+                            Divider()
+                            Button("Delete", role: .destructive) {
+                                removeTarget = workspace
+                            }
+                            .disabled(model.savedLayouts.count < 2)
+                        } label: {
+                            Label(
+                                workspace.name,
+                                systemImage: workspace.id == model.layout.id
+                                    ? "checkmark.circle.fill" : "rectangle.split.2x1")
+                        }
+                    }
+                    Divider()
+                }
                 Button("Compare two machines") { usePreset(.comparison) }
                 Button("Docker everywhere") { usePreset(.docker) }
                 Button("Terminal grid") { usePreset(.terminals) }
@@ -181,7 +284,7 @@ struct WorkspaceView: View {
             .help("Choose a layout")
 
             Button {
-                model.apply { $0.root.equalize() }
+                model.equalize()
             } label: {
                 Image(systemName: "equal.square")
             }
@@ -284,13 +387,7 @@ struct WorkspaceNodeView: View {
                         },
                         onCommit: { model.persist() },
                         onEqualize: {
-                            model.apply { layout in
-                                layout.root.updateSplit(split.id) { node in
-                                    node.ratios = Array(
-                                        repeating: 1.0 / Double(node.children.count),
-                                        count: node.children.count)
-                                }
-                            }
+                            model.equalize(splitID: split.id)
                         })
                 }
             }

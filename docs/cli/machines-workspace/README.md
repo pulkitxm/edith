@@ -122,11 +122,12 @@ which you fix with `ed machines workspace new` rather than by opening the app.
   while the app is open does not appear, and the app's next pane change saves
   its older copy over yours. Do CLI workspace work while Edith is closed, or
   quit and reopen it to pick up what you wrote.
-- The app's Layout menu replaces the whole file. Choosing Compare two machines,
-  Docker everywhere, Terminal grid, Files side by side or Single pane does not
-  add a workspace: it sets the saved list to exactly that one layout. Every
-  workspace `ed` saved is gone at that point. `ed machines workspace new`
-  builds the same kind of layout and appends it instead.
+- The app's Layout menu lists every saved workspace. Each saved item can be
+  selected, renamed or deleted there, and the current item is marked. Choosing
+  Compare two machines, Docker everywhere, Terminal grid, Files side by side or
+  Single pane appends a new workspace and makes it current, matching
+  `ed machines workspace new`. The app keeps the final saved workspace so the
+  view always has a pane to show, while the CLI can remove the final item.
 - This Mac cannot be reached from here. The app's machine list starts with a
   built-in local machine that is not in `machines.json`, so `MachineResolver`
   never finds it and `panes` prints `removed machine` for any pane pointing at
