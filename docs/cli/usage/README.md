@@ -27,7 +27,12 @@ closed.
 | `ed usage summary` | Cost and tokens over a window, in total and per source |
 | `ed usage daily` | Cost and tokens per calendar day, oldest first |
 | `ed usage models` | Tokens and attributable cost per model, with unassigned provider cost shown separately |
-| `ed usage projects` | Cost and tokens per GitHub repository, most expensive first |
+| `ed usage projects` | Runs `ed usage projects list`, the default subcommand |
+| `ed usage projects list` | Cost and tokens per GitHub repository, most expensive first |
+| `ed usage projects show` | One repository with every matching folder |
+| `ed usage projects open` | Open a repository from the drilldown in the browser |
+| `ed usage projects copy-link` | Copy a repository link from the drilldown |
+| `ed usage projects copy-chat` | Copy a chat identifier from the drilldown |
 | `ed usage sources` | The agents that produced the history, with their ids |
 | `ed usage machines` | Runs `ed usage machines ls`, the default subcommand |
 | `ed usage machines ls` | Every configured machine, whether it is counted, and what it adds up to |
@@ -44,6 +49,11 @@ closed.
 - [`ed usage daily`](./daily.md)
 - [`ed usage models`](./models.md)
 - [`ed usage projects`](./projects.md)
+- [`ed usage projects list`](./projects-list.md)
+- [`ed usage projects show`](./projects-show.md)
+- [`ed usage projects open`](./projects-open.md)
+- [`ed usage projects copy-link`](./projects-copy-link.md)
+- [`ed usage projects copy-chat`](./projects-copy-chat.md)
 - [`ed usage sources`](./sources.md)
 - [`ed usage machines`](./machines.md)
 - [`ed usage refresh`](./refresh.md)
@@ -54,9 +64,9 @@ closed.
 | --- | --- |
 | 0 | The command printed its report, or the refresh finished. Also a read that legitimately found nothing to show |
 | 1 | `usage.json` exists but will not decode: `could not read <path>: <reason>` |
-| 2 | `--limit 0` or a negative limit on `ed usage projects`, plus the usual parse failures, an unknown flag, a missing value, or `--source` passed to `ed usage projects` |
-| 3 | `--range` is not `today`, `week`, `month` or `all`, and the hint lists the four. Also a `--source` id or a `--machine` the file knows nothing about |
-| 4 | No `usage.json` at all; no rate limit history at all; a usage refresh whose pipeline failed, or `--follow` with nothing running; or Edith not running, or not answering, for `ed usage limits --refresh` |
+| 2 | `--limit 0` or a negative limit on `ed usage projects list`, an empty chat identifier, plus the usual parse failures, an unknown flag, a missing value, or `--source` passed to this group |
+| 3 | `--range` is not `today`, `week`, `month` or `all`, a repository cannot be found uniquely, or a `--source` id or `--machine` is unknown |
+| 4 | No `usage.json` at all; no rate limit history at all; a repository link or platform action is unavailable; a usage refresh whose pipeline failed, or `--follow` with nothing running; or Edith not running, or not answering, for `ed usage limits --refresh` |
 
 ## Notes and gotchas
 
@@ -78,7 +88,7 @@ closed.
   unrounded values.
 - Object keys in `--json` are sorted, arrays keep the order the command chose:
   fixed provider order for `limits`, date ascending for `daily`, cost descending
-  for `models` and `projects`, and the file's own order for `sources`.
+  for `models` and `projects list`, and the file's own order for `sources`.
 - The read verbs never reach the network and only ever show the last thing that
   was written. `ed usage limits --refresh` posts a request and waits for the app
   to do the polling, while `ed usage refresh` runs the collector in this
@@ -113,7 +123,7 @@ to CLI events whose conversation ids exist in the local chat store. Those
 measurements are reconciled per day and source to the authoritative totals.
 Detail is scaled down when it would exceed the total, and any remaining source
 or model total with no reliable folder is emitted under the `Unattributed`
-repository. That is why `ed usage projects` adds back to `summary` without
+repository. That is why `ed usage projects list` adds back to `summary` without
 pretending every provider cost belongs to a known folder.
 
 Machine sources use the stable id
