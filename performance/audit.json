@@ -83,6 +83,10 @@
         {
           "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
           "contains": "process.qualityOfService = .utility"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageCollectionOperations.swift",
+          "contains": "start: { try await UsageRefreshRunner.run(onEvent: $0) }"
         }
       ]
     },
@@ -202,6 +206,10 @@
         {
           "path": "scripts/bench-helper.test.js",
           "contains": "benchmark fixtures produce stable machine-readable percentiles"
+        },
+        {
+          "path": "scripts/bench-helper.sh",
+          "contains": "top -l 2 -s 1 -stats pid,idlew -pid \"$PID_VALUE\""
         }
       ]
     },
