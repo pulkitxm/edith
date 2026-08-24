@@ -29,13 +29,16 @@ public struct CompletionResult: Equatable, Sendable {
     public var candidates: [String]
     public var wantsFiles: Bool
     public var remoteMachine: String?
+    public var remoteRequest: CompletionRequest?
 
     public init(
-        candidates: [String] = [], wantsFiles: Bool = false, remoteMachine: String? = nil
+        candidates: [String] = [], wantsFiles: Bool = false, remoteMachine: String? = nil,
+        remoteRequest: CompletionRequest? = nil
     ) {
         self.candidates = candidates
         self.wantsFiles = wantsFiles
         self.remoteMachine = remoteMachine
+        self.remoteRequest = remoteRequest
     }
 
     public var lines: [String] {
@@ -69,25 +72,46 @@ public enum CompletionEngine {
                 return CompletionResult(remoteMachine: first)
             }
         }
+        let machineRoute = leading.first == ArgumentRewriting.machinesGroup
         var node = CommandTree.root
         var command: ParsableCommand.Type = EdRoot.self
         var positionals: [String] = []
         var expectedValue: ArgumentKind?
         var optionValues = effectiveOptionValues(node: node, command: command)
-        for word in leading {
+        for (offset, word) in leading.enumerated() {
+            if let result = passthroughResult(
+                node: node, positionals: positionals, remaining: leading.dropFirst(offset),
+                prefix: prefix)
+            {
+                return result
+            }
+            if word == "--" { return CompletionResult() }
             if expectedValue != nil {
                 expectedValue = nil
                 continue
             }
             if let separator = word.firstIndex(of: "=") {
                 let option = String(word[..<separator])
-                if optionValues[option] != nil { continue }
+                if optionValues[option] != nil {
+                    selectDefaultRoute(
+                        for: option, node: &node, command: &command,
+                        optionValues: &optionValues, enabled: !helpRoute)
+                    continue
+                }
             }
             if let kind = optionValues[word] {
+                selectDefaultRoute(
+                    for: word, node: &node, command: &command,
+                    optionValues: &optionValues, enabled: !helpRoute)
                 expectedValue = kind
                 continue
             }
-            if word.hasPrefix("-") { continue }
+            if word.hasPrefix("-") {
+                selectDefaultRoute(
+                    for: word, node: &node, command: &command,
+                    optionValues: &optionValues, enabled: !helpRoute)
+                continue
+            }
             if let next = node.child(word) {
                 node = next
                 if let nextCommand = parserChild(word, in: command) { command = nextCommand }
@@ -95,7 +119,18 @@ public enum CompletionEngine {
                 positionals = []
                 continue
             }
+            let keepsMachineFirstRoute =
+                machineRoute && positionals.isEmpty
+                && machines.contains(where: { $0.lowercased() == word.lowercased() })
+            selectDefaultRoute(
+                for: nil, node: &node, command: &command, optionValues: &optionValues,
+                enabled: !helpRoute && !keepsMachineFirstRoute)
             positionals.append(word)
+        }
+        if let result = passthroughResult(
+            node: node, positionals: positionals, remaining: [], prefix: prefix)
+        {
+            return result
         }
         if let kind = expectedValue {
             return CompletionResult(
@@ -241,6 +276,46 @@ public enum CompletionEngine {
         return node.child(name)
     }
 
+    private static func defaultRoute(node: CommandNode, command: ParsableCommand.Type)
+        -> (node: CommandNode, command: ParsableCommand.Type)?
+    {
+        guard let fallback = command.configuration.defaultSubcommand,
+            let fallbackNode = defaultNode(node: node, command: command)
+        else { return nil }
+        return (fallbackNode, fallback)
+    }
+
+    private static func selectDefaultRoute(
+        for option: String?, node: inout CommandNode, command: inout ParsableCommand.Type,
+        optionValues: inout [String: ArgumentKind], enabled: Bool
+    ) {
+        guard enabled, let route = defaultRoute(node: node, command: command) else { return }
+        if let option {
+            guard route.node.options.contains(option), !parserOptionNames(command).contains(option)
+            else { return }
+        }
+        node = route.node
+        command = route.command
+        optionValues = effectiveOptionValues(node: node, command: command)
+    }
+
+    private static func passthroughResult(
+        node: CommandNode, positionals: [String], remaining: ArraySlice<String>, prefix: String
+    ) -> CompletionResult? {
+        guard let passthrough = node.passthroughCompletion,
+            positionals.count >= passthrough.afterPositionals
+        else { return nil }
+        guard let machinePosition = passthrough.remoteMachinePosition,
+            machinePosition < positionals.count
+        else { return CompletionResult() }
+        var payload = Array(remaining)
+        if payload.first == "--" { payload.removeFirst() }
+        let words = ["ed", positionals[machinePosition]] + payload + [prefix]
+        return CompletionResult(
+            remoteMachine: positionals[machinePosition],
+            remoteRequest: CompletionRequest(words: words, index: words.count - 1))
+    }
+
     private static func effectiveOptions(node: CommandNode, command: ParsableCommand.Type)
         -> [String]
     {
@@ -278,6 +353,21 @@ public enum CompletionEngine {
             }
         }
         return values
+    }
+
+    private static func parserOptionNames(_ command: ParsableCommand.Type) -> Set<String> {
+        Set(
+            command.helpMessage(columns: 400).split(separator: "\n").flatMap { line -> [String] in
+                guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { return [] }
+                let declaration = line.dropFirst(2)
+                    .split(separator: " ", omittingEmptySubsequences: false)
+                    .prefix { !$0.isEmpty }
+                return declaration.compactMap { token in
+                    guard token.hasPrefix("-") else { return nil }
+                    let option = token.prefix { $0 != "," && $0 != "<" && $0 != "=" }
+                    return option.count > 1 ? String(option) : nil
+                }
+            })
     }
 
     private static func effectiveArguments(node: CommandNode, command: ParsableCommand.Type)

@@ -76,6 +76,43 @@ import Testing
         #expect(MachinesExecCommand.strippingSeparator(exec.command) == ["ls", "-la"])
     }
 
+    @Test func defaultSubcommandSyntaxRejectsLaterSiblingCommands() throws {
+        #expect(try EdRoot.parseAsRoot(["config", "--changed"]) is ConfigListCommand)
+        #expect(try EdRoot.parseAsRoot(["download", "--limit", "1"]) is DownloadListCommand)
+        #expect(try EdRoot.parseAsRoot(["extensions", "--json"]) is ExtensionsListCommand)
+        #expect(try EdRoot.parseAsRoot(["system", "--follow"]) is SystemStatsCommand)
+
+        for arguments in [
+            ["config", "--changed", "get", "preventSleep"],
+            ["download", "--limit", "1", "add", "https://example.com/file"],
+            ["extensions", "--json", "info", "clipboard"],
+            ["system", "--follow", "disks"],
+        ] {
+            #expect((try? EdRoot.parseAsRoot(arguments)) == nil, "\(arguments) parsed")
+        }
+    }
+
+    @Test func terminatorsAndCapturedArgumentsPreserveOptionLikeWords() throws {
+        let exec = try #require(
+            try EdRoot.parseAsRoot(["machines", "exec", "tuf", "--version"])
+                as? MachinesExecCommand)
+        let broadcast = try #require(
+            try EdRoot.parseAsRoot(["machines", "broadcast", "--", "--version"])
+                as? MachinesBroadcastCommand)
+        let config = try #require(
+            try EdRoot.parseAsRoot(["config", "get", "--", "--version"])
+                as? ConfigGetCommand)
+        let snippet = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "snippets", "add", "tuf", "title", "--version",
+            ]) as? MachinesSnippetsAddCommand)
+
+        #expect(exec.command == ["--version"])
+        #expect(broadcast.command == ["--version"])
+        #expect(config.key == "--version")
+        #expect(snippet.command == ["--version"])
+    }
+
     @Test func aRemoteCommandWithNoWordsIsRejectedBeforeAnySSH() async {
         let result = await CLIProbe.run(["machines", "exec", "tuf"])
         #expect(result.code == ExitCodes.failure)

@@ -188,6 +188,50 @@ import Testing
                 == ColorCopyFormat.allCases.map(\.rawValue))
     }
 
+    @Test func defaultSubcommandSyntaxCommitsCompletionToThatRoute() {
+        for words in [
+            ["ed", "config", "--changed", ""],
+            ["ed", "config", "--group", "general", ""],
+            ["ed", "config", "prevent", ""],
+            ["ed", "download", "--limit", "1", ""],
+            ["ed", "extensions", "--json", ""],
+            ["ed", "music", "--player", "spotify", ""],
+            ["ed", "system", "--follow", ""],
+        ] {
+            let result = Self.plan(words, words.count - 1)
+            #expect(result.candidates.isEmpty, "\(words) offered \(result.candidates)")
+        }
+    }
+
+    @Test func passthroughRoutesNeverOfferLocalOptions() {
+        for words in [
+            ["ed", "machines", "broadcast", "--", "--v"],
+            ["ed", "machines", "snippets", "add", "tuf", "title", "--v"],
+            ["ed", "config", "get", "--", "--v"],
+            ["ed", "config", "ls", "--group", "--", "--v"],
+        ] {
+            let result = Self.plan(words, words.count - 1)
+            #expect(result.candidates.isEmpty, "\(words) offered \(result.candidates)")
+            #expect(result.remoteMachine == nil)
+        }
+    }
+
+    @Test func explicitExecHandsItsCapturedCommandToRemoteCompletion() throws {
+        let first = Self.plan(["ed", "machines", "exec", "tuf", "--v"], 4)
+        let nested = Self.plan(["ed", "machines", "exec", "tuf", "uptime", "--v"], 5)
+        let separated = Self.plan(
+            ["ed", "machines", "exec", "tuf", "--", "uptime", "--v"], 6)
+
+        #expect(first.candidates.isEmpty)
+        #expect(first.remoteMachine == "tuf")
+        #expect(first.remoteRequest?.words == ["ed", "tuf", "--v"])
+        #expect(first.remoteRequest?.index == 2)
+        #expect(nested.remoteMachine == "tuf")
+        #expect(nested.remoteRequest?.words == ["ed", "tuf", "uptime", "--v"])
+        #expect(separated.remoteMachine == "tuf")
+        #expect(separated.remoteRequest?.words == ["ed", "tuf", "uptime", "--v"])
+    }
+
     @Test func freeOptionValuesDoNotConsumePositionalCompletionSlots() {
         let words = [
             "ed", "companion", "connectors", "import", "--endpoint",
@@ -267,7 +311,7 @@ import Testing
         let player = Self.plan(["ed", "music", "status", "--player=sp"], 3)
         #expect(player.candidates == ["--player=spotify"])
         let nested = Self.plan(
-            ["ed", "music", "--player", "spotify", "status", "--player", ""], 6)
+            ["ed", "music", "--player", "spotify", "--player", ""], 5)
         #expect(nested.candidates == MusicPlayer.allCases.map(\.rawValue))
     }
 
@@ -425,6 +469,28 @@ import Testing
         #expect(typed.code == 0)
         #expect(Set(typed.stdoutLines) == Set(MusicPlayer.allCases.map(\.rawValue)))
         #expect(typed.stderr.isEmpty)
+    }
+
+    @Test func packagedCompletionRejectsSiblingAndLocalPassthroughSuggestions() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let routes = [
+            ["ed", "config", "--changed", ""],
+            ["ed", "download", "--limit", "1", ""],
+            ["ed", "extensions", "--json", ""],
+            ["ed", "system", "--follow", ""],
+            ["ed", "machines", "exec", "not-configured", "--v"],
+            ["ed", "machines", "broadcast", "--", "--v"],
+            ["ed", "config", "get", "--", "--v"],
+        ]
+        for words in routes {
+            let result = try CLIProcessProbe.run(
+                ["__complete", "--index", String(words.count - 1), "--"] + words,
+                currentDirectory: outside)
+            #expect(result.code == 0, "\(words) exited \(result.code)")
+            #expect(result.stdout.isEmpty, "\(words) offered \(result.stdoutLines)")
+            #expect(result.stderr.isEmpty, "\(words) reported \(result.stderr)")
+        }
     }
 
     @Test func inheritedHelpCompletesOutsideARepository() throws {

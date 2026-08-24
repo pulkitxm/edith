@@ -48,6 +48,16 @@ public enum DestructivePolicy: String, Equatable, Sendable {
     case previewThenYes
 }
 
+public struct PassthroughCompletion: Equatable, Sendable {
+    public let afterPositionals: Int
+    public let remoteMachinePosition: Int?
+
+    public init(afterPositionals: Int, remoteMachinePosition: Int? = nil) {
+        self.afterPositionals = afterPositionals
+        self.remoteMachinePosition = remoteMachinePosition
+    }
+}
+
 public struct CommandNode: Equatable, Sendable {
     public let name: String
     public let summary: String
@@ -57,11 +67,13 @@ public struct CommandNode: Equatable, Sendable {
     public let arguments: [ArgumentKind]
     public let children: [CommandNode]
     public let destructivePolicy: DestructivePolicy?
+    public let passthroughCompletion: PassthroughCompletion?
 
     public init(
         _ name: String, _ summary: String, aliases: [String] = [], options: [String] = [],
         optionValues: [String: ArgumentKind] = [:], arguments: [ArgumentKind] = [],
-        children: [CommandNode] = [], destructivePolicy: DestructivePolicy? = nil
+        children: [CommandNode] = [], destructivePolicy: DestructivePolicy? = nil,
+        passthroughCompletion: PassthroughCompletion? = nil
     ) {
         self.name = name
         self.summary = summary
@@ -71,6 +83,7 @@ public struct CommandNode: Equatable, Sendable {
         self.arguments = arguments
         self.children = children
         self.destructivePolicy = destructivePolicy
+        self.passthroughCompletion = passthroughCompletion
     }
 
     public var names: [String] { [name] + aliases }
@@ -737,7 +750,9 @@ public enum CommandTree {
                             CommandNode(
                                 "add", "Save a command against a machine.",
                                 options: ["--json", "--help", "--shared"],
-                                arguments: [.machine, .free]),
+                                arguments: [.machine, .free, .free],
+                                passthroughCompletion: PassthroughCompletion(
+                                    afterPositionals: 2)),
                             CommandNode(
                                 "rm", "Forget one snippet.", aliases: ["remove"],
                                 options: common, arguments: [.machine, .historyIndex]),
@@ -859,7 +874,9 @@ public enum CommandTree {
                     CommandNode(
                         "exec", "Run a command on a machine.", aliases: ["run"],
                         options: ["-t", "--tty"],
-                        arguments: [.machine, .free]),
+                        arguments: [.machine, .free],
+                        passthroughCompletion: PassthroughCompletion(
+                            afterPositionals: 1, remoteMachinePosition: 0)),
                     CommandNode(
                         "files", "Browse and transfer files.",
                         children: [

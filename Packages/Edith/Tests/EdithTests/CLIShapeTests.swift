@@ -71,6 +71,22 @@ enum CommandCrawler {
             })
     }
 
+    static func optionValueNames(of command: ParsableCommand.Type) -> Set<String> {
+        Set(
+            help(command).split(separator: "\n").flatMap { line -> [String] in
+                guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { return [] }
+                let declaration = line.dropFirst(2)
+                    .split(separator: " ", omittingEmptySubsequences: false)
+                    .prefix { !$0.isEmpty }
+                guard declaration.contains(where: { $0.contains("<") }) else { return [] }
+                return declaration.compactMap { token in
+                    guard token.hasPrefix("-") else { return nil }
+                    let option = token.prefix { $0 != "," && $0 != "<" && $0 != "=" }
+                    return option.count > 1 ? String(option) : nil
+                }
+            })
+    }
+
     static var inheritedOptionNames: Set<String> { optionNames(of: EdRoot.self) }
 
     static func matches(in text: String, pattern: String) -> [String] {
@@ -315,11 +331,15 @@ enum CommandCrawler {
         node: CommandNode, command: ParsableCommand.Type, path: [String], wrong: inout [String]
     ) {
         var real = CommandCrawler.optionNames(of: command)
+        var takingValues = CommandCrawler.optionValueNames(of: command)
         if let fallback = command.configuration.defaultSubcommand {
             real.formUnion(CommandCrawler.optionNames(of: fallback))
+            takingValues.formUnion(CommandCrawler.optionValueNames(of: fallback))
         }
         for option in node.optionValues.keys
-        where !node.options.contains(option) || !real.contains(option) {
+        where !node.options.contains(option) || !real.contains(option)
+            || !takingValues.contains(option)
+        {
             wrong.append((path + [option]).joined(separator: " "))
         }
         for child in node.children {
