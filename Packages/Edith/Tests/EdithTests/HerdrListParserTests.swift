@@ -324,6 +324,30 @@ import Testing
         #expect(bottom == 1)
         #expect(view.scrollPosition < bottom)
     }
+
+    @Test func observerFramesPauseAwayFromTheBottom() {
+        var gate = HerdrObserverFrameGate()
+        let first = Data("first".utf8)
+        let second = Data("second".utf8)
+        let third = Data("third".utf8)
+
+        #expect(gate.receive(first) == first)
+        #expect(gate.scroll(position: 0.5, canScroll: true) == nil)
+        #expect(gate.receive(second) == nil)
+        #expect(gate.receive(third) == nil)
+        #expect(gate.scroll(position: 1, canScroll: true) == third)
+    }
+
+    @Test func observerFramesContinueWithoutScrollback() {
+        var gate = HerdrObserverFrameGate()
+        let pending = Data("pending".utf8)
+        let current = Data("current".utf8)
+
+        #expect(gate.scroll(position: 0, canScroll: true) == nil)
+        #expect(gate.receive(pending) == nil)
+        #expect(gate.scroll(position: 0, canScroll: false) == pending)
+        #expect(gate.receive(current) == current)
+    }
 }
 
 @Suite struct HerdrSocketDiscoveryTests {

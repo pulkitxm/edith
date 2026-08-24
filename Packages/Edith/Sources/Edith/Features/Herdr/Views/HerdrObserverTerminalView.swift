@@ -34,6 +34,26 @@ struct HerdrObserverStreamDecoder {
     }
 }
 
+struct HerdrObserverFrameGate {
+    private var followsLiveOutput = true
+    private var pendingFrame: Data?
+
+    mutating func receive(_ frame: Data) -> Data? {
+        guard followsLiveOutput else {
+            pendingFrame = frame
+            return nil
+        }
+        return frame
+    }
+
+    mutating func scroll(position: Double, canScroll: Bool) -> Data? {
+        followsLiveOutput = !canScroll || position >= 1
+        guard followsLiveOutput, let pendingFrame else { return nil }
+        self.pendingFrame = nil
+        return pendingFrame
+    }
+}
+
 private struct HerdrObserverEnvelope: Decodable {
     let type: String
     let bytes: String?
@@ -41,14 +61,25 @@ private struct HerdrObserverEnvelope: Decodable {
 
 final class HerdrObserverTerminalView: LocalProcessTerminalView {
     private var decoder = HerdrObserverStreamDecoder()
+    private var frameGate = HerdrObserverFrameGate()
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         for output in decoder.append(slice) {
             switch output {
-            case .frame(let bytes), .text(let bytes):
+            case .frame(let bytes):
+                guard let frame = frameGate.receive(bytes) else { continue }
+                feed(byteArray: Array(frame)[...])
+            case .text(let bytes):
                 feed(byteArray: Array(bytes)[...])
             }
         }
+    }
+
+    override func scrolled(source: TerminalView, position: Double) {
+        guard let frame = frameGate.scroll(position: position, canScroll: canScroll) else {
+            return
+        }
+        feed(byteArray: Array(frame)[...])
     }
 
     override func send(source: TerminalView, data: ArraySlice<UInt8>) {}
