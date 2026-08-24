@@ -15,6 +15,9 @@ public enum UserOperationCatalog {
         + PermissionOperation.allCases.map(\.descriptor)
         + ColorPickerOperation.allCases.map(\.descriptor)
         + ColorSwatchOperation.allCases.map(\.descriptor)
+        + ClipboardOperation.allCases.map(\.descriptor)
+        + AttentionFocusOperation.allCases.map(\.descriptor)
+        + CleanerOperation.allCases.map(\.descriptor)
         + QuinjetOperation.allCases.map(\.descriptor)
         + QuinjetSessionOperation.allCases.map(\.descriptor)
 
