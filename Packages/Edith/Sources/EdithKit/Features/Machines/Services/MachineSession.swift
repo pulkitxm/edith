@@ -469,14 +469,16 @@ public final class MachineSession {
     }
 
     @discardableResult
-    public func runDocker(_ command: String) async -> Result<String, Error> {
+    public func runDocker(
+        _ command: String, timeout: TimeInterval = 120
+    ) async -> Result<String, Error> {
         guard let connection else {
             return .failure(
                 SSHConnectionError.commandFailed(
                     command: command, status: 1, stderr: "Not connected."))
         }
         do {
-            let result = try await connection.run(command, timeout: 120)
+            let result = try await connection.run(command, timeout: timeout)
             guard result.succeeded else {
                 let message = result.stderrText.isEmpty ? result.stdoutText : result.stderrText
                 return .failure(

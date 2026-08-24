@@ -50,6 +50,8 @@ being the usual example.
 
 Five verbs remove something. The direct container, image and volume removals,
 plus prune, preview exact targets unless `--yes` is present.
+The Docker window uses the same lifecycle operations and shows a confirmation
+before it removes a container, image or volume, or prunes unused objects.
 
 | Command | What disappears | Guard |
 | --- | --- | --- |
@@ -157,9 +159,10 @@ something unrecognisable, `docker reported an unknown state`.
 - `ps --json` drops two fields it collects. Network rx and tx bytes are parsed
   out of `docker stats` and never reach the document; only CPU and memory do.
 - Volume sizes are never reported by `volumes`. Use `df`.
-- Every mutating verb here is claimed by a Docker window action except the four
-  compose lifecycle verbs, which the window does not have: it groups containers
-  by compose project but never runs compose.
+- The Docker window and parsed CLI share start, stop, restart, container removal,
+  image removal, volume removal and prune operations. The four compose lifecycle
+  verbs remain CLI-only because the window groups containers by compose project
+  but never runs compose for a whole project.
 - Some hints embed the machine's display name unquoted, so a machine whose name
   has spaces produces a hint you cannot paste as is. Use the ssh alias, `tuf`,
   or any unambiguous prefix instead.
