@@ -132,21 +132,32 @@ final class MachinesModel {
         sessions = [:]
     }
 
-    func addForward(_ forward: PortForward) {
-        store.addForward(forward)
+    func performForward(
+        _ operation: MachineForwardOperation, forward: PortForward
+    ) async -> Result<MachineForwardOperationResult, Error> {
+        let session = session(for: forward.machineID)
+        let needsLiveAction =
+            operation == .enable || operation == .disable
+            || (operation == .remove && session.activeForwards.contains(forward.id))
+        let setActive: MachineForwardOperationExecution.SetActive? =
+            needsLiveAction
+            ? { candidate, active in await session.setForward(candidate, active: active) }
+            : nil
+        return await MachineForwardOperationExecution.perform(
+            operation, forward: forward, existing: store.forwards,
+            persistAdd: { self.store.addForward($0) },
+            persistRemove: { self.store.removeForward(id: $0) }, setActive: setActive,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
     }
 
-    func removeForward(_ forward: PortForward) {
-        Task { await session(for: forward.machineID).setForward(forward, active: false) }
-        store.removeForward(id: forward.id)
-    }
-
-    func addSnippet(_ snippet: CommandSnippet) {
-        store.addSnippet(snippet)
-    }
-
-    func removeSnippet(_ snippet: CommandSnippet) {
-        store.removeSnippet(id: snippet.id)
+    func performSnippet(
+        _ operation: MachineSnippetOperation, snippet: CommandSnippet
+    ) -> Result<MachineSnippetOperationResult, Error> {
+        MachineSnippetOperationExecution.perform(
+            operation, snippet: snippet,
+            persistAdd: { store.addSnippet($0) },
+            persistRemove: { store.removeSnippet(id: $0) },
+            notify: { IPC.post(IPC.Name.machinesChanged) })
     }
 
     func snapshot(for id: UUID) -> MachineSnapshot {
