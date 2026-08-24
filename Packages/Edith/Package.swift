@@ -107,7 +107,7 @@ let targets: [Target] = [
     .testTarget(
         name: "EdithTests",
         dependencies: [
-            "EdithCore", "Edith", "EdithKit", "EdithHelper", "EdithCLI", "Highlighter",
+            "EdithCore", "Edith", "EdithKit", "EdithHelper", "EdithCLI", "Highlighter", "ed",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
