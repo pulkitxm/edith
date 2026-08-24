@@ -20,7 +20,7 @@ Options:
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emits one JSON document on stdout. |
 
-`--json` shape, the new item, always at index 1 because it is the newest:
+`--json` returns the new item at its index in the committed shelf snapshot:
 
 ```json
 {
@@ -30,6 +30,7 @@ Options:
   "index": 1,
   "name": "report 2.pdf",
   "path": "/Users/pulkit/Library/Application Support/Edith/Shelf/report 2.pdf",
+  "position": null,
   "sizeBytes": 184320
 }
 ```

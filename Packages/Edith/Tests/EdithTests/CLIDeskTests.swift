@@ -545,10 +545,34 @@ import Testing
         ShelfIndex.save(items)
     }
 
+    static func seedFutureItem(named name: String) throws -> ShelfItem {
+        try FileManager.default.createDirectory(
+            at: ShelfIndex.root, withIntermediateDirectories: true)
+        let item = ShelfItem(
+            id: UUID(), name: name, addedAt: Date().addingTimeInterval(86_400))
+        try Data("future".utf8).write(to: ShelfIndex.fileURL(for: item))
+        ShelfIndex.save([item])
+        return item
+    }
+
     @Test func anEmptyShelfListsNothingRatherThanFailing() async {
         let result = await CLIProbe.run(["shelf", "ls", "--json"])
         #expect(result.code == 0)
         #expect(result.array?.isEmpty == true)
+    }
+
+    @Test func aCorruptShelfDoesNotMasqueradeAsEmpty() async throws {
+        try await CLIProbe.inWorld { _ in
+            try FileManager.default.createDirectory(
+                at: ShelfIndex.root, withIntermediateDirectories: true)
+            try Data("broken".utf8).write(to: ShelfIndex.indexFile())
+
+            let result = await CLIProbe.capture(["shelf", "ls", "--json"])
+
+            #expect(result.code != 0)
+            #expect(result.stderr.contains("could not read the shelf"))
+            #expect(result.stdout.isEmpty)
+        }
     }
 
     @Test func itemsAreNewestFirstAndCarryTheirPath() async throws {
@@ -574,6 +598,23 @@ import Testing
         }
     }
 
+    @Test func addingAFileReportsItsIndexInTheAppliedSnapshot() async throws {
+        try await CLIProbe.inWorld { world in
+            _ = try Self.seedFutureItem(named: "future.txt")
+            let source = world.sandbox.appendingPathComponent("source.txt")
+            try Data("hello".utf8).write(to: source)
+
+            let added = await CLIProbe.capture(["shelf", "add", source.path, "--json"])
+            let identifier = try #require(added.object?["id"] as? String)
+            let listed = await CLIProbe.capture(["shelf", "ls", "--json"])
+            let row = try #require(
+                (listed.array as? [[String: Any]])?.first { $0["id"] as? String == identifier })
+
+            #expect(added.object?["index"] as? Int == 2)
+            #expect(row["index"] as? Int == 2)
+        }
+    }
+
     @Test func addingTheSameNameTwiceNeverOverwrites() async throws {
         try await CLIProbe.inWorld { world in
             let source = world.sandbox.appendingPathComponent("dupe.txt")
@@ -586,9 +627,86 @@ import Testing
         }
     }
 
+    @Test func addingTextUsesTheSameShelfMutationLayer() async throws {
+        try await CLIProbe.inWorld { _ in
+            let result = await CLIProbe.capture([
+                "shelf", "add-text", "remember", "this", "--json",
+            ])
+            #expect(result.code == 0)
+            let items = ShelfIndex.load()
+            #expect(items.count == 1)
+            let item = try #require(items.first)
+            #expect(
+                try String(contentsOf: ShelfIndex.fileURL(for: item), encoding: .utf8)
+                    == "remember this")
+            #expect(result.object?["id"] as? String == item.id.uuidString)
+        }
+    }
+
+    @Test func addingTextReportsItsIndexInTheAppliedSnapshot() async throws {
+        try await CLIProbe.inWorld { _ in
+            _ = try Self.seedFutureItem(named: "future.txt")
+
+            let added = await CLIProbe.capture(["shelf", "add-text", "note", "--json"])
+            let identifier = try #require(added.object?["id"] as? String)
+            let listed = await CLIProbe.capture(["shelf", "ls", "--json"])
+            let row = try #require(
+                (listed.array as? [[String: Any]])?.first { $0["id"] as? String == identifier })
+
+            #expect(added.object?["index"] as? Int == 2)
+            #expect(row["index"] as? Int == 2)
+        }
+    }
+
     @Test func addingAMissingFileIsNotFound() async {
         let result = await CLIProbe.run(["shelf", "add", "/nowhere/at/all.txt"])
         #expect(result.code == ExitCodes.notFound)
+    }
+
+    @Test func updatingAPositionPersistsAndReportsIdempotence() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seed(world, names: ["one.txt"])
+            let moved = await CLIProbe.capture([
+                "shelf", "update", "1", "--x", "120", "--y", "60", "--json",
+            ])
+            #expect(moved.code == 0)
+            #expect(moved.object?["changed"] as? Bool == true)
+            let position = moved.object?["item"] as? [String: Any]
+            #expect((position?["position"] as? [String: Any])?["x"] as? Int == 120)
+            #expect(ShelfIndex.load().first?.position == CGPoint(x: 120, y: 60))
+
+            let unchanged = await CLIProbe.capture([
+                "shelf", "update", "1", "--x", "120", "--y", "60", "--json",
+            ])
+            #expect(unchanged.object?["changed"] as? Bool == false)
+        }
+    }
+
+    @Test func updatingReportsTheCommittedStateAfterAnInterleavedAddAndMove() async throws {
+        try await CLIProbe.inWorld { _ in
+            try FileManager.default.createDirectory(
+                at: ShelfIndex.root, withIntermediateDirectories: true)
+            let target = CGPoint(x: 120, y: 60)
+            let original = ShelfItem(
+                id: UUID(), name: "original.txt", addedAt: Date(), position: target)
+            try "original".write(
+                to: ShelfIndex.fileURL(for: original), atomically: true, encoding: .utf8)
+            ShelfIndex.save([original])
+
+            let result = try ShelfBridge.update(
+                at: 1, position: target,
+                beforeApply: {
+                    _ = try ShelfMutationExecution.addText(
+                        "future", addedAt: Date().addingTimeInterval(86_400), sender: "other")
+                    _ = try ShelfMutationExecution.updatePositions(
+                        [original.id: CGPoint(x: 5, y: 10)], sender: "other")
+                })
+
+            #expect(result.item.id == original.id)
+            #expect(result.item.position == target)
+            #expect(result.index == 2)
+            #expect(result.changed)
+        }
     }
 
     @Test func removingTakesTheFileWithIt() async throws {
@@ -601,12 +719,104 @@ import Testing
         }
     }
 
+    @Test func groupedRemovalPreviewsThenRemovesOnlySelectedItems() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seed(world, names: ["one.txt", "two.txt", "three.txt"])
+            let preview = await CLIProbe.capture(["shelf", "rm", "1", "3", "--json"])
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect((preview.object?["targets"] as? [String])?.count == 2)
+            #expect(ShelfIndex.load().count == 3)
+
+            let applied = await CLIProbe.capture([
+                "shelf", "rm", "1", "3", "--yes", "--json",
+            ])
+            #expect(applied.object?["removed"] as? Int == 2)
+            #expect(ShelfIndex.load().map(\.name) == ["two.txt"])
+        }
+    }
+
+    @Test func groupedShareSendsOneTypedRequest() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seed(world, names: ["one.txt", "two.txt"])
+            world.helperRunning(true)
+            world.shared.set(true, forKey: AppStorageKeys.Notch.shelfEnabled)
+            world.answers { name in
+                guard name == IPC.Name.shelfOperationResult else { return nil }
+                let requestID =
+                    world.posted.last?.info[
+                        ShelfItemOperationExecution.requestIDKey] as? String
+                return requestID.map {
+                    ShelfItemOperationExecution.resultPayload(requestID: $0, ok: true)
+                }
+            }
+            let result = await CLIProbe.capture(["shelf", "share", "1", "2", "--json"])
+            #expect(result.code == 0)
+            #expect(result.object?["opened"] as? Bool == true)
+            #expect((result.object?["items"] as? [Any])?.count == 2)
+            let info = try #require(world.posted.last?.info)
+            #expect(world.posted.last?.name == IPC.Name.shelfOperation)
+            #expect((info["itemIDs"] as? [String])?.count == 2)
+            #expect(info[ShelfItemOperationExecution.requestIDKey] as? String != nil)
+        }
+    }
+
+    @Test func groupedShareDoesNotClaimSuccessWhenThePickerCannotOpen() async throws {
+        try await CLIProbe.inWorld { world in
+            try Self.seed(world, names: ["one.txt"])
+            world.helperRunning(true)
+            world.shared.set(true, forKey: AppStorageKeys.Notch.shelfEnabled)
+            world.answers { name in
+                guard name == IPC.Name.shelfOperationResult else { return nil }
+                let requestID =
+                    world.posted.last?.info[
+                        ShelfItemOperationExecution.requestIDKey] as? String
+                return requestID.map {
+                    ShelfItemOperationExecution.resultPayload(
+                        requestID: $0, ok: false, error: "no shelf panel is available")
+                }
+            }
+            let result = await CLIProbe.capture(["shelf", "share", "1", "--json"])
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("no shelf panel is available"))
+            #expect(result.stdout.isEmpty)
+        }
+    }
+
     @Test func clearingEmptiesTheWholeShelf() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, names: ["a", "b", "c"])
             let result = await CLIProbe.capture(["shelf", "clear", "--yes", "--json"])
             #expect(result.object?["removed"] as? Int == 3)
             #expect(ShelfIndex.load().isEmpty)
+        }
+    }
+
+    @Test func purgingPreviewsThenRemovesOnlyExpiredItems() async throws {
+        try await CLIProbe.inWorld { _ in
+            try FileManager.default.createDirectory(
+                at: ShelfIndex.root, withIntermediateDirectories: true)
+            let old = ShelfItem(
+                id: UUID(), name: "old.txt", addedAt: Date(timeIntervalSince1970: 100))
+            let recent = ShelfItem(
+                id: UUID(), name: "recent.txt", addedAt: Date())
+            for item in [old, recent] {
+                try item.name.write(
+                    to: ShelfIndex.fileURL(for: item), atomically: true, encoding: .utf8)
+            }
+            ShelfIndex.save([old, recent])
+
+            let preview = await CLIProbe.capture(["shelf", "purge", "oneDay", "--json"])
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect(ShelfIndex.load().count == 2)
+
+            let applied = await CLIProbe.capture([
+                "shelf", "purge", "oneDay", "--yes", "--json",
+            ])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["changed"] as? Bool == true)
+            #expect(ShelfIndex.load().map(\.id) == [recent.id])
+            #expect(!FileManager.default.fileExists(atPath: ShelfIndex.fileURL(for: old).path))
+            #expect(FileManager.default.fileExists(atPath: ShelfIndex.fileURL(for: recent).path))
         }
     }
 

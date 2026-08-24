@@ -14,6 +14,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case composeProject
     case historyIndex
     case shelfItem
+    case shelfKeepDuration
     case musicTrack
     case calendarEvent
     case configKey
@@ -66,6 +67,7 @@ public struct CommandNode: Equatable, Sendable {
     public let options: [String]
     public let optionValues: [String: ArgumentKind]
     public let arguments: [ArgumentKind]
+    public let repeatingArgument: ArgumentKind?
     public let children: [CommandNode]
     public let destructivePolicy: DestructivePolicy?
     public let passthroughCompletion: PassthroughCompletion?
@@ -73,7 +75,8 @@ public struct CommandNode: Equatable, Sendable {
     public init(
         _ name: String, _ summary: String, aliases: [String] = [], options: [String] = [],
         optionValues: [String: ArgumentKind] = [:], arguments: [ArgumentKind] = [],
-        children: [CommandNode] = [], destructivePolicy: DestructivePolicy? = nil,
+        repeatingArgument: ArgumentKind? = nil, children: [CommandNode] = [],
+        destructivePolicy: DestructivePolicy? = nil,
         passthroughCompletion: PassthroughCompletion? = nil
     ) {
         self.name = name
@@ -82,6 +85,7 @@ public struct CommandNode: Equatable, Sendable {
         self.options = options
         self.optionValues = optionValues
         self.arguments = arguments
+        self.repeatingArgument = repeatingArgument
         self.children = children
         self.destructivePolicy = destructivePolicy
         self.passthroughCompletion = passthroughCompletion
@@ -606,20 +610,32 @@ public enum CommandTree {
                         "add", "Copy a file onto the shelf.", options: ["--json"],
                         arguments: [.localPath]),
                     CommandNode(
-                        "rm", "Take one item off the shelf.", options: ["--json", "--yes"],
-                        arguments: [.shelfItem], destructivePolicy: .previewThenYes),
+                        "add-text", "Add text to the shelf.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "update", "Update one shelf item's canvas position.",
+                        options: ["--json", "--help", "--x", "--y"], arguments: [.shelfItem]),
+                    CommandNode(
+                        "rm", "Take selected items off the shelf.",
+                        options: ["--json", "--yes"],
+                        arguments: [.shelfItem], repeatingArgument: .shelfItem,
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Empty the shelf.", options: ["--json", "--yes"],
                         destructivePolicy: .previewThenYes),
                     CommandNode(
-                        "open", "Open one shelf item.", options: common,
-                        arguments: [.shelfItem]),
+                        "purge", "Remove shelf items past an expiry window.",
+                        options: ["--json", "--yes"], arguments: [.shelfKeepDuration],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
-                        "reveal", "Reveal one shelf item in Finder.", options: common,
-                        arguments: [.shelfItem]),
+                        "open", "Open selected shelf items.", options: common,
+                        arguments: [.shelfItem], repeatingArgument: .shelfItem),
                     CommandNode(
-                        "share", "Open sharing for one shelf item.", options: common,
-                        arguments: [.shelfItem]),
+                        "reveal", "Reveal selected shelf items in Finder.", options: common,
+                        arguments: [.shelfItem], repeatingArgument: .shelfItem),
+                    CommandNode(
+                        "share", "Open sharing for selected shelf items.", options: common,
+                        arguments: [.shelfItem], repeatingArgument: .shelfItem),
                 ]),
             CommandNode(
                 "cleaner", "The developer caches the disk cleaner can reclaim.",
