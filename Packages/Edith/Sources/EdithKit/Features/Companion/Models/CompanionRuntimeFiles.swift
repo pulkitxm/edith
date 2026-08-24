@@ -169,7 +169,7 @@ public enum CompanionRuntimeFiles {
         """#
 
     public static let dockerfile = #"""
-        FROM rust:1.97-alpine AS builder
+        FROM rust:1.98-alpine AS builder
 
         WORKDIR /app
 
@@ -183,7 +183,7 @@ public enum CompanionRuntimeFiles {
         COPY evals ./evals
         RUN cargo build --release --locked
 
-        FROM alpine:3.22
+        FROM alpine:3.24
 
         RUN apk add --no-cache ca-certificates exiftool ffmpeg \
             && addgroup -S companion \
