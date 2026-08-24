@@ -143,7 +143,7 @@ import Testing
         #expect(defaults.bool(forKey: OnboardingFlow.completionKey))
         #expect(defaults.bool(forKey: OnboardingFlow.iCloudBackupKey))
         for entry in ExtensionRegistry.entries {
-            #expect(defaults.object(forKey: entry.defaultsKey) == nil)
+            #expect(defaults.object(forKey: entry.defaultsKey) as? Bool == false)
             #expect(defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) == nil)
         }
     }
@@ -164,10 +164,22 @@ import Testing
                 #expect(
                     defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) as? Bool == true)
             } else {
-                #expect(defaults.object(forKey: entry.defaultsKey) == nil)
+                #expect(defaults.object(forKey: entry.defaultsKey) as? Bool == false)
                 #expect(defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) == nil)
             }
         }
+    }
+
+    @Test func unselectedAttentionStaysDisabledAcrossEveryConsumer() throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let attention = try #require(ExtensionRegistry.entries.first { $0.id == "attention" })
+
+        OnboardingFlow.finish(selectedIDs: ["usage"], defaults: defaults)
+
+        #expect(defaults.object(forKey: attention.defaultsKey) as? Bool == false)
+        #expect(!attention.isEnabled(in: defaults))
+        #expect(ConfigCatalog.definition(for: attention.defaultsKey)?.fallback == .bool(false))
     }
 
     @Test func finishWritesICloudOptIn() {

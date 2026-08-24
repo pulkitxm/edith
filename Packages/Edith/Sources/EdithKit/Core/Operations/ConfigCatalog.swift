@@ -155,7 +155,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.attentionEnabled, .bool, group: "attention",
             summary: "Attention extension: app and browser activity with focus sessions.",
-            fallback: .bool(true))
+            fallback: .bool(false))
     ]
 
     private static let usageAndLimits: [SettingDefinition] = [

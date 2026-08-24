@@ -137,6 +137,9 @@ public enum UserOperationCatalog {
         + CompanionMindRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + HerdrSessionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     public static let descriptors = registrations.map(\.descriptor)
 
@@ -351,6 +354,9 @@ private extension MachineMutationOperation {
             .userInterface([
                 UserInterfaceActionPlacement(
                     surface: "Machines", action: "add a machine",
+                    exampleArguments: ["box", "--host", "h"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "add a machine",
                     exampleArguments: ["box", "--host", "h"]),
                 UserInterfaceActionPlacement(
                     surface: "Add machine sheet", action: "store a login password",
@@ -841,7 +847,26 @@ private extension ConfigurationOperation {
 
 private extension MusicFolderSelectionOperation {
     var interfaceExposure: UserOperationExposure {
-        userInterface("Music page", "choose the music folder", ["~/Music"])
+        .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Music page", action: "choose the music folder",
+                exampleArguments: ["~/Music"]),
+            UserInterfaceActionPlacement(
+                surface: "Extension settings", action: "choose the music folder",
+                exampleArguments: ["~/Music"]),
+        ])
+    }
+}
+
+private extension HerdrSessionOperation {
+    var interfaceExposure: UserOperationExposure {
+        .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Herdr board",
+                action: "list live sessions on this Mac and SSH machines"),
+            UserInterfaceActionPlacement(
+                surface: "Extension settings", action: "check live Herdr sessions"),
+        ])
     }
 }
 

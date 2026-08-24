@@ -31,7 +31,10 @@ import Testing
             #expect(
                 Set(result.object?.keys ?? [:].keys)
                     == ["id", "title", "verified", "state", "checks", "remediation"])
-            #expect((result.object?["checks"] as? [[String: Any]])?.count == 1)
+            let checks = result.object?["checks"] as? [[String: Any]]
+            #expect(checks?.first?["id"] as? String == "enabled")
+            #expect(checks?.contains { $0["id"] as? String == "tool.quinjet" } == true)
+            #expect(checks?.contains { $0["id"] as? String == "adapter.quinjet" } == true)
             let state = result.object?["state"] as? [String: Any]
             #expect(
                 Set(state?.keys ?? [:].keys)
