@@ -10,6 +10,10 @@ const expectedActions = new Map([
   ["actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"],
   ["actions/configure-pages", "45bfe0192ca1faeb007ade9deae92b16b8254a0d"],
   [
+    "actions/create-github-app-token",
+    "bcd2ba49218906704ab6c1aa796996da409d3eb1",
+  ],
+  [
     "actions/dependency-review-action",
     "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
   ],

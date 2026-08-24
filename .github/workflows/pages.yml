@@ -32,6 +32,14 @@ jobs:
         run: >-
           test "$GITHUB_REF" = refs/heads/main
           || { echo "deploy blocked: select the main branch" >&2; exit 1; }
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.PUKBOT_CLIENT_ID }}
+          private-key: ${{ secrets.PUKBOT_PRIVATE_KEY }}
+          owner: pulkitxm
+          repositories: edith
+          permission-pages: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -49,3 +57,5 @@ jobs:
           path: apps/site
       - id: deploy
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
+        with:
+          token: ${{ steps.app-token.outputs.token }}
