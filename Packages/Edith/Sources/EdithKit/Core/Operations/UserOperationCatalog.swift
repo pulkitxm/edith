@@ -346,7 +346,14 @@ private extension ExtensionMutationOperation {
         case .setup:
             userInterface("Extension setup", "prepare an extension for use", ["clipboard"])
         case .provisionTool:
-            userInterface("Extension setup", "install a required CLI tool", ["yt-dlp"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Extension setup", action: "install a required CLI tool",
+                    exampleArguments: ["yt-dlp"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension sheet", action: "install a required CLI tool",
+                    exampleArguments: ["yt-dlp"]),
+            ])
         }
     }
 }
@@ -418,7 +425,13 @@ private extension DownloadOperation {
         case .enqueue:
             userInterface("Download sheet", "start a download", ["https://x/y"])
         case .cancel:
-            userInterface("Download sheet", "cancel running downloads")
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Download sheet", action: "cancel running downloads"),
+                UserInterfaceActionPlacement(
+                    surface: "Download queue row", action: "cancel one active download",
+                    exampleArguments: ["1"]),
+            ])
         case .retry:
             userInterface("Download sheet", "retry failed items", ["--all"])
         case .remove:
@@ -536,7 +549,22 @@ private extension ConfigurationOperation {
         case .get:
             userInterface("Settings", "read a preference", ["theme"])
         case .set:
-            userInterface("Settings", "change a preference", ["theme", "dim"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Settings", action: "change a preference",
+                    exampleArguments: ["theme", "dim"]),
+                UserInterfaceActionPlacement(
+                    surface: "Companion settings", action: "point at another companion",
+                    exampleArguments: [
+                        "companionEndpoint", "http://127.0.0.1:4820",
+                    ]),
+                UserInterfaceActionPlacement(
+                    surface: "Quinjet terminal menu", action: "select the external terminal",
+                    exampleArguments: ["quinjetTerminal", "cmux"]),
+                UserInterfaceActionPlacement(
+                    surface: "Quinjet theme menu", action: "select the review theme",
+                    exampleArguments: ["quinjetTheme", "tokyo-night"]),
+            ])
         case .unset:
             userInterface("Settings", "restore a preference default", ["theme"])
         case .describe:

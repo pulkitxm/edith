@@ -590,8 +590,8 @@ struct CompanionSettingsScreen: View {
         guard endpointDraftIsValid else { return }
         let trimmed = endpointDraft.trimmingCharacters(in: .whitespaces)
         guard trimmed != endpoint else { return }
-        endpoint = trimmed
-        endpointDraft = trimmed
+        $endpoint.configured(AppStorageKeys.Companion.endpoint).wrappedValue = trimmed
+        if endpoint == trimmed { endpointDraft = trimmed }
     }
 
     private var dataCard: some View {

@@ -205,9 +205,6 @@ enum UIParity {
             "Companion backend", "choose the machine that runs the companion",
             ["companion", "deploy"]),
         UICapability(
-            "Companion settings", "point at another companion",
-            ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
-        UICapability(
             "Machine cooling", "inspect thermal profiles",
             ["machines", "thermal", "status", "box"]),
         UICapability(
@@ -266,10 +263,6 @@ enum UIParity {
             ["machines", "workspace", "point", "1", "box"]),
         UICapability(
             "Workspace toolbar", "even out the panes", ["machines", "workspace", "equalize"]),
-        UICapability(
-            "Download sheet", "cancel running downloads", ["download", "cancel"]),
-        UICapability(
-            "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
             "Workspace toolbar", "apply a layout preset",
@@ -375,8 +368,6 @@ enum UIParity {
         UICapability("Download sheet", "update yt-dlp", ["download", "tool", "--update"]),
 
         UICapability(
-            "Extension sheet", "install a required CLI tool", ["tools", "install", "yt-dlp"]),
-        UICapability(
             "Terminal broadcast bar", "send one line to every pane",
             ["machines", "broadcast", "--", "uptime"]),
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
@@ -404,12 +395,6 @@ enum UIParity {
         UICapability(
             "Quinjet machine picker", "browse a folder on another machine",
             ["machines", "files", "ls", "build", "/tmp"]),
-        UICapability(
-            "Quinjet terminal menu", "select the external terminal",
-            ["config", "set", "quinjetTerminal", "cmux"]),
-        UICapability(
-            "Quinjet theme menu", "select the review theme",
-            ["config", "set", "quinjetTheme", "tokyo-night"]),
         UICapability(
             "Quinjet tab bar", "list the open native review sessions",
             ["quinjet", "sessions"]),
