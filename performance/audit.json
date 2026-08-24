@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-23",
+  "requiredAreas": [
+    "startup",
+    "input",
+    "repository",
+    "git",
+    "github",
+    "extensionDiscovery",
+    "uiRendering",
+    "cache",
+    "backgroundWorker",
+    "generation",
+    "memory",
+    "mainThread",
+    "largeRepository",
+    "slowNetwork"
+  ],
+  "scenarios": [
+    {
+      "area": "startup",
+      "status": "instrumented",
+      "finding": "Main and helper launch perform synchronous setup before their initial window or panel is ready.",
+      "measurement": "Points of Interest intervals named main.launch, helper.services, and helper.panel.",
+      "regressionProperty": "Every launch boundary has a balanced runtime interval.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/Edith/Core/Application/EdithApp.swift",
+          "contains": "PerformanceTrace.begin(.startup, \"main.launch\")"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithHelper/Core/Application/EdithHelperApp.swift",
+          "contains": "PerformanceTrace.begin(.startup, \"helper.services\")"
+        }
+      ]
+    },
+    {
+      "area": "input",
+      "status": "instrumented",
+      "finding": "Type-ahead and global hotkeys are event driven and execute on the main thread.",
+      "measurement": "Points of Interest intervals named main.typeAhead and helper.globalHotKey.",
+      "regressionProperty": "Input spans preserve their stable identity and record main-thread context.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/UI/InputFocus.swift",
+          "contains": "PerformanceTrace.begin(.input, \"main.typeAhead\")"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/PerformanceTraceTests.swift",
+          "contains": "spansCarryStableIdentityAndThreadContext"
+        }
+      ]
+    },
+    {
+      "area": "repository",
+      "status": "instrumented",
+      "finding": "Dashboard data reads are skipped when the source modification time is unchanged.",
+      "measurement": "Points of Interest interval named dashboard.load.",
+      "regressionProperty": "Repository loading keeps its unchanged-file early return.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Dashboard/Models/DashboardModel.swift",
+          "contains": "PerformanceTrace.begin(.repository, \"dashboard.load\")"
+        },
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Dashboard/Models/DashboardModel.swift",
+          "contains": "if let m, m == mtime, data != nil { return }"
+        }
+      ]
+    },
+    {
+      "area": "git",
+      "status": "instrumented",
+      "finding": "The usage collector owns repository and Git subprocess work outside the interactive input path.",
+      "measurement": "Points of Interest interval named usage.refresh plus the collector event transcript.",
+      "regressionProperty": "Usage refresh remains asynchronous, cancellable, and assigned utility quality of service.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "contains": "PerformanceTrace.begin(.git, \"usage.refresh\")"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "contains": "process.qualityOfService = .utility"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageCollectionOperations.swift",
+          "contains": "start: { try await UsageRefreshRunner.run(onEvent: $0) }"
+        }
+      ]
+    },
+    {
+      "area": "github",
+      "status": "protected",
+      "finding": "Contributor requests use a daily cache and fall back to cached data when GitHub is unavailable.",
+      "measurement": "Points of Interest interval named contributors.load.",
+      "regressionProperty": "A failed refresh returns the cached decode without reading the cache twice.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Core/Resources/Contributors.swift",
+          "contains": "PerformanceTrace.begin(.github, \"contributors.load\")"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/ContributorsTests.swift",
+          "contains": "anInvalidFreshCacheIsReadOnceBeforeNetworkFallback"
+        }
+      ]
+    },
+    {
+      "area": "extensionDiscovery",
+      "status": "instrumented",
+      "finding": "Extension readiness is refreshed on demand, and multi-extension reports fan out concurrently.",
+      "measurement": "Points of Interest interval named extensions.report.",
+      "regressionProperty": "The settings surface keeps a trace around the complete readiness probe.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Settings/Views/ExtensionsPane.swift",
+          "contains": "PerformanceTrace.begin(.extensionDiscovery, \"extensions.report\")"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Extensions/Services/ExtensionLifecycleProbe.swift",
+          "contains": "withTaskGroup"
+        }
+      ]
+    },
+    {
+      "area": "uiRendering",
+      "status": "protected",
+      "finding": "Clipboard history bounds its initial render population and extends it only as navigation reaches later rows.",
+      "measurement": "The initial visible population is capped at 80 rows, with navigation behavior exercised against a 500-item history.",
+      "regressionProperty": "Large clipboard histories do not create every row before it becomes visible.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithHelper/Features/Clipboard/Views/ClipboardPanelView.swift",
+          "contains": "static let pageSize = 80"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/ClipboardPanelNavigationTests.swift",
+          "contains": "commandDownFallsBackToTheRenderedPage"
+        }
+      ]
+    },
+    {
+      "area": "cache",
+      "status": "protected",
+      "finding": "Contributor cache hit and miss decisions are visible, and one decode is reused across network fallback.",
+      "measurement": "Points of Interest events named contributors.hit and contributors.miss.",
+      "regressionProperty": "The invalid-cache fallback test permits exactly one content read.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Core/Resources/Contributors.swift",
+          "contains": "PerformanceTrace.event(.cache, \"contributors.hit\")"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/ContributorsTests.swift",
+          "contains": "#expect(fileManager.contentReads == 1)"
+        }
+      ]
+    },
+    {
+      "area": "backgroundWorker",
+      "status": "protected",
+      "finding": "Usage collection runs in a utility subprocess and terminates that subprocess when its task is canceled.",
+      "measurement": "The usage.refresh interval covers the worker lifetime and its structured event transcript.",
+      "regressionProperty": "The collector retains utility quality of service and task-cancellation handling.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "contains": "process.qualityOfService = .utility"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "contains": "withTaskCancellationHandler"
+        }
+      ]
+    },
+    {
+      "area": "generation",
+      "status": "protected",
+      "finding": "Local and remote project refreshes reject canceled or superseded responses before updating visible state.",
+      "measurement": "Deterministic concurrency tests finish project requests out of order and cancel an in-flight request.",
+      "regressionProperty": "Only the newest project refresh may update the corresponding UI state.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Quinjet/ViewModels/QuinjetPageModel.swift",
+          "contains": "guard generation == projectRefreshGeneration else { return }"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/QuinjetClientTests.swift",
+          "contains": "newestLocalProjectRefreshWins"
+        }
+      ]
+    },
+    {
+      "area": "memory",
+      "status": "protected",
+      "finding": "Helper CPU, resident memory, and optional idle wakeups can be captured as deterministic JSON summaries.",
+      "measurement": "bench-helper JSON fields cpuPercent, rssMB, and idleWakeups.",
+      "regressionProperty": "A checked fixture fixes median, p95, peak, unit conversion, and schema behavior.",
+      "evidence": [
+        {
+          "path": "scripts/bench-helper.sh",
+          "contains": "\"rssMB\""
+        },
+        {
+          "path": "scripts/bench-helper.test.js",
+          "contains": "benchmark fixtures produce stable machine-readable percentiles"
+        },
+        {
+          "path": "scripts/bench-helper.sh",
+          "contains": "top -l 2 -s 1 -stats pid,idlew -pid \"$PID_VALUE\""
+        }
+      ]
+    },
+    {
+      "area": "mainThread",
+      "status": "instrumented",
+      "finding": "Every interval records whether it began and ended on the main thread.",
+      "measurement": "The main field on each Points of Interest interval and event.",
+      "regressionProperty": "Trace tests assert main-thread context without wall-clock timing.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Core/Performance/PerformanceTrace.swift",
+          "contains": "public let beganOnMainThread: Bool"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/PerformanceTraceTests.swift",
+          "contains": "#expect(span.beganOnMainThread)"
+        }
+      ]
+    },
+    {
+      "area": "largeRepository",
+      "status": "instrumented",
+      "finding": "Large dashboard files decode on a utility task, while aggregation is measured separately.",
+      "measurement": "Points of Interest interval named dashboard.ingest.",
+      "regressionProperty": "JSON decoding remains detached from the main actor.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Dashboard/Models/DashboardModel.swift",
+          "contains": "try? await Task.detached"
+        },
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Dashboard/Models/DashboardModel.swift",
+          "contains": "PerformanceTrace.begin(.largeRepository, \"dashboard.ingest\")"
+        }
+      ]
+    },
+    {
+      "area": "slowNetwork",
+      "status": "protected",
+      "finding": "GitHub contributor fetches have a bounded timeout and preserve cached output on failure.",
+      "measurement": "Points of Interest interval named contributors.fetch.",
+      "regressionProperty": "The request timeout remains explicit and failure fallback stays covered by a local protocol test.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Core/Resources/Contributors.swift",
+          "contains": "request.timeoutInterval = 10"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/ContributorsTests.swift",
+          "contains": "FailingContributorURLProtocol"
+        }
+      ]
+    }
+  ]
+}

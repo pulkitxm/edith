@@ -605,6 +605,8 @@ private struct ExtensionLifecycleRows: View {
     }
 
     @MainActor private func refresh() async {
+        let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
+        defer { PerformanceTrace.end(discoveryTrace) }
         report = await coordinator.lifecycleReport()
     }
 

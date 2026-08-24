@@ -23,6 +23,8 @@ enum Logo {
 
 @MainActor
 func migratedServices() -> AppServices {
+    let launchTrace = PerformanceTrace.begin(.startup, "helper.services")
+    defer { PerformanceTrace.end(launchTrace) }
     let d = UserDefaults.standard
     if !d.bool(forKey: "migratedFromControlCenter"),
         let old = d.persistentDomain(forName: "com.pulkit.control-center")
@@ -45,6 +47,8 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("Edith lives in the menu bar")
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
+        defer { PerformanceTrace.end(launchTrace) }
         PanelController.shared = PanelController(services: AppState.services)
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -202,7 +206,9 @@ struct EdithApp: App {
 
 private func dispatchGlobalHotKey(_ id: UInt32) {
     if let action = GlobalHotKey.actions[id] {
-        DispatchQueue.main.async(execute: action)
+        DispatchQueue.main.async {
+            PerformanceTrace.measure(.input, "helper.globalHotKey") { action() }
+        }
     }
 }
 
