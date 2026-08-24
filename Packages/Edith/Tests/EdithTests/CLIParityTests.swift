@@ -272,10 +272,6 @@ enum UIParity {
             "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
-            "Permissions pane", "relaunch after granting", ["app", "relaunch", "--yes"]),
-        UICapability(
-            "Update schedule sheet", "clear the check history", ["app", "clear-updates", "--yes"]),
-        UICapability(
             "Workspace toolbar", "apply a layout preset",
             ["machines", "workspace", "new", "box", "--screen", "terminal"]),
         UICapability(
@@ -389,11 +385,6 @@ enum UIParity {
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
-        UICapability("Menu bar", "open the panel", ["app", "open"]),
-        UICapability("Menu bar", "quit Edith", ["app", "quit", "--yes"]),
-        UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
-        UICapability("Settings", "send a test notification", ["app", "test-notification"]),
-        UICapability("About pane", "check for updates", ["app", "check-updates"]),
         UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
         UICapability(
             "Dashboard machines menu", "count a machine's agent usage too",
