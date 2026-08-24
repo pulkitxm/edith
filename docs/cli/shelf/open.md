@@ -1,13 +1,13 @@
 # `ed shelf open`
 
-Opens one numbered shelf item in its default application.
+Opens one or more numbered shelf items in their default applications.
 
 ```text
-ed shelf open <n> [--json]
+ed shelf open <n...> [--json]
 ```
 
-JSON reports `action`, `index`, `id`, `name`, `path`, and `opened`. This works
-without Edith running.
+JSON reports `action`, `opened`, and an `items` array containing the full item
+documents. This works without Edith running. Repeated numbers are ignored.
 
 - [`ed shelf`](./README.md)
 - [All command groups](../README.md)

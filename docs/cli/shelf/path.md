@@ -30,6 +30,7 @@ Options:
   "index": 1,
   "name": "screenshot.png",
   "path": "/Users/pulkit/Library/Application Support/Edith/Shelf/screenshot.png",
+  "position": { "x": 120, "y": 60 },
   "sizeBytes": 225070
 }
 ```
