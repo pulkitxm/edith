@@ -13,6 +13,7 @@ jobs:
   area:
     name: Area labels
     runs-on: ubuntu-latest
+    environment: pukbot-production
     permissions:
       contents: read
     steps:
@@ -33,6 +34,7 @@ jobs:
   size:
     name: Size label
     runs-on: ubuntu-latest
+    environment: pukbot-production
     permissions:
       contents: read
     steps:

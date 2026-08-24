@@ -16,6 +16,7 @@ jobs:
   refresh:
     name: Refresh contributors
     runs-on: ubuntu-latest
+    environment: pukbot-production
     permissions:
       contents: read
     steps:

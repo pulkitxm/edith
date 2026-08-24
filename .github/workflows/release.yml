@@ -20,8 +20,6 @@ on:
         required: false
       SPARKLE_PRIVATE_KEY:
         required: false
-      PUKBOT_PRIVATE_KEY:
-        required: true
       NOTARY_KEY_ID:
         required: false
       NOTARY_ISSUER_ID:
@@ -284,6 +282,7 @@ jobs:
     needs: [version, dmg]
     if: needs.dmg.outputs.superseded != 'true'
     runs-on: ubuntu-latest
+    environment: pukbot-production
     concurrency:
       group: release-publication
       cancel-in-progress: false
@@ -299,7 +298,7 @@ jobs:
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           client-id: ${{ vars.PUKBOT_CLIENT_ID }}
-          private-key: ${{ secrets.PUKBOT_PRIVATE_KEY }}
+          private-key: ${{ secrets[format('PUKBOT_{0}', 'PRIVATE_KEY')] }}
           owner: pulkitxm
           repositories: |
             edith

@@ -16,6 +16,7 @@ jobs:
   stale:
     name: Sweep
     runs-on: ubuntu-latest
+    environment: pukbot-production
     steps:
       - id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
