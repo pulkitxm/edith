@@ -1,6 +1,21 @@
 {
   "schemaVersion": 1,
   "capturedAt": "2026-08-23",
+  "structuralEnforcement": {
+    "sourceRoots": [
+      "Packages/Edith/Sources"
+    ],
+    "rules": [
+      "main-actor-blocking-io",
+      "unowned-detached-task",
+      "raw-process-launch",
+      "unsafe-process-lifecycle",
+      "unbounded-process-output",
+      "unbounded-task-group",
+      "stale-task-publication",
+      "main-actor-projection-chain"
+    ]
+  },
   "requiredAreas": [
     "startup",
     "input",
