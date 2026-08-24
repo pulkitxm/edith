@@ -92,6 +92,9 @@ public enum UserOperationCatalog {
         + CompanionChatLibraryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MachineFileOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + CompanionMindRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -746,6 +749,12 @@ private extension CompanionChatLibraryOperation {
             })
     }
 }
+private extension MachineFileOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface(placement.surface, placement.action, placement.exampleArguments)
+    }
+}
+
 private extension CompanionMindRuntimeOperation {
     var interfaceExposure: UserOperationExposure {
         .userInterface(placements)
