@@ -22,11 +22,21 @@ Without `--yes`, `clear` previews every indexed path and changes nothing.
 
 ```json
 {
-  "removed": 2
+  "action": "clear shelf",
+  "applied": true,
+  "changed": true,
+  "remaining": 0,
+  "removed": 2,
+  "targets": [
+    "/Users/pulkit/Library/Application Support/Edith/Shelf/report.pdf",
+    "/Users/pulkit/Library/Application Support/Edith/Shelf/notes.txt"
+  ]
 }
 ```
 
-`removed` is how many items were on the shelf before it was emptied.
+`removed` is how many items were on the shelf before it was emptied. Preview
+output has the same shape with `applied: false`, `changed: false`, and no
+`remaining` field.
 
 Examples:
 
