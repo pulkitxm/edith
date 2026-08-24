@@ -134,9 +134,7 @@ final class HerdrStore {
         tabs.append(
             HerdrOpenTab(
                 agent: agent, machine: machine, view: resolved,
-                holder: TerminalSessionHolder {
-                    HerdrObserverTerminalView(frame: .zero)
-                }, quinjet: HerdrQuinjetSession()))
+                holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()))
         if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
         selectedTab = agent.id
     }
