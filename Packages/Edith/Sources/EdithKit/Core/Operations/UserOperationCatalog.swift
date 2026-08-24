@@ -50,13 +50,13 @@ public enum UserOperationCatalog {
         + CleanerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + WorkspaceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + QuinjetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + QuinjetSessionOperation.allCases.map {
-            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
-        }
-        + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
 
