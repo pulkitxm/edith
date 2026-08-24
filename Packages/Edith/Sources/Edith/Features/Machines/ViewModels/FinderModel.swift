@@ -376,14 +376,13 @@ final class FinderModel {
             let count = (try? FileManager.default.contentsOfDirectory(atPath: entry.path).count)
             folderCounts[entry.path] = count ?? 0
         }
-        let result = await session.runCommand(
-            FileOperations.directorySizeCommand(path: entry.path), timeout: 60)
-        if case let .success(output) = result,
-            let kilobytes = Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
-        {
-            folderSizes[entry.path] = kilobytes
-        } else {
-            folderSizes[entry.path] = 0
+        let result = await MachineFileOperationExecution.info(path: entry.path) {
+            [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        switch result {
+        case let .success(bytes): folderSizes[entry.path] = bytes / 1024
+        case .failure: folderSizes[entry.path] = 0
         }
     }
 
@@ -502,14 +501,17 @@ final class FinderModel {
             flash("Nothing to undo")
             return
         }
-        for move in step.moves.reversed() {
-            let command = FileOperations.renameCommand(path: move.to, to: move.from)
-            await run(command, reload: false)
-            if errorMessage != nil { break }
+        let result = await MachineFileOperationExecution.undo(step) {
+            [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        if case let .failure(error) = result {
+            undoStack.append(step)
+            errorMessage = error.localizedDescription
         }
         await load()
-        if errorMessage == nil {
-            selection = Set(step.moves.map(\.from))
+        if case let .success(restored) = result {
+            selection = Set(restored)
             flash("Undid \(step.label)")
         }
     }
@@ -548,16 +550,21 @@ final class FinderModel {
         }
         self.renaming = nil
         let target = FileListing.join(parent: parent, name: trimmed)
-        await run(
-            FileOperations.renameCommand(
-                path: entry.path, to: target, viaTemporary: sameNameDifferentCase),
-            reload: true)
-        if errorMessage == nil {
+        let result = await MachineFileOperationExecution.rename(
+            path: entry.path, destination: target, viaTemporary: sameNameDifferentCase
+        ) { [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        await load()
+        switch result {
+        case .success:
             recordUndo(
                 FinderUndoStep(
                     label: "Rename", moves: [FinderUndoStep.Move(from: entry.path, to: target)]))
+        case let .failure(error):
+            errorMessage = error.localizedDescription
         }
-        if errorMessage == nil {
+        if case .success = result {
             selection = [target]
             reveal(target)
         }
@@ -587,8 +594,15 @@ final class FinderModel {
             let target = FileListing.join(parent: path, name: name)
             taken.append(
                 RemoteFileEntry(name: name, path: target, kind: .file, sizeBytes: 0))
-            await run(
-                "cp -a \(ShellQuote.quote(source)) \(ShellQuote.quote(target))", reload: false)
+            let result = await MachineFileOperationExecution.duplicate(
+                path: source, destination: target
+            ) { [session] command, timeout in
+                await session.runCommand(command, timeout: timeout)
+            }
+            if case let .failure(error) = result {
+                errorMessage = error.localizedDescription
+                break
+            }
         }
         await load()
     }
@@ -596,25 +610,32 @@ final class FinderModel {
     func trashSelection(permanently: Bool) async {
         let paths = selectedEntries.map(\.path)
         guard !paths.isEmpty else { return }
-        if session.isLocal {
-            for path in paths {
-                let url = URL(fileURLWithPath: path)
-                if permanently {
-                    try? FileManager.default.removeItem(at: url)
-                } else {
-                    try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        let plan = MachineFileRemovalPlan(paths: paths, permanently: permanently)
+        let nativeTrash: MachineFileOperationExecution.Trash? =
+            session.isLocal && !permanently
+            ? { paths in
+                do {
+                    for path in paths {
+                        try FileManager.default.trashItem(
+                            at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                    }
+                    return .success(())
+                } catch {
+                    return .failure(error)
                 }
-            }
+            } : nil
+        let result = await MachineFileOperationExecution.remove(
+            plan, confirmed: true, trash: nativeTrash
+        ) { [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        switch result {
+        case .success:
             selection = []
             await load()
-            return
+        case let .failure(error):
+            errorMessage = error.localizedDescription
         }
-        let command =
-            permanently
-            ? FileOperations.deleteCommand(paths: paths)
-            : FileOperations.trashCommand(paths: paths)
-        selection = []
-        await run(command, reload: true)
     }
 
     func copyPaths() {
@@ -698,28 +719,31 @@ final class FinderModel {
 
     private func runDeepSearch(_ query: String, token: Int) async {
         let shallow = entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
-        guard !session.isLocal else {
-            let root = path
-            let deep = await localSearch(root, query)
-            guard token == searchToken else { return }
-            var seen = Set(shallow.map { FilePathKey.canonical($0.path) })
-            searchResults =
-                shallow + deep.filter { seen.insert(FilePathKey.canonical($0.path)).inserted }
-            return
+        let localAdapter: MachineFileOperationExecution.LocalSearch? =
+            session.isLocal
+            ? { [localSearch] root, query, limit in
+                let entries = await localSearch(root, query)
+                return .success(
+                    entries.prefix(limit).map {
+                        MachineFileSearchItem(path: $0.path, kind: $0.kind)
+                    })
+            } : nil
+        let result = await MachineFileOperationExecution.search(
+            path: path, query: query, localSearch: localAdapter
+        ) { [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
         }
-        let result = await session.runCommand(
-            FileOperations.searchCommand(path: path, query: query), timeout: 45)
-        guard token == searchToken, case let .success(output) = result else { return }
-        var seen = Set(shallow.map(\.path))
+        guard token == searchToken, case let .success(items) = result else { return }
+        var seen = Set(shallow.map { FilePathKey.canonical($0.path) })
         var combined = shallow
-        for line in output.split(separator: "\n") {
-            let full = String(line)
-            guard !full.isEmpty, seen.insert(full).inserted else { continue }
-            let isDirectory = entries.first { $0.path == full }?.isDirectory ?? false
+        for item in items {
+            let full = item.path
+            guard !full.isEmpty, seen.insert(FilePathKey.canonical(full)).inserted else { continue }
+            let kind = item.kind ?? entries.first { $0.path == full }?.kind ?? .file
             combined.append(
                 RemoteFileEntry(
                     name: (full as NSString).lastPathComponent, path: full,
-                    kind: isDirectory ? .directory : .file, sizeBytes: 0))
+                    kind: kind, sizeBytes: 0))
         }
         searchResults = combined
     }
