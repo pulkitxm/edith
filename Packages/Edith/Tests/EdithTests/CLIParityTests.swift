@@ -66,7 +66,8 @@ enum UIParity {
         UICapability("Clipboard panel", "click an entry to copy it", ["clipboard", "copy", "1"]),
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),
         UICapability("Clipboard panel", "unpin an entry", ["clipboard", "unpin", "1"]),
-        UICapability("Clipboard panel", "delete an entry", ["clipboard", "rm", "1"]),
+        UICapability(
+            "Clipboard panel", "delete an entry", ["clipboard", "rm", "1", "--yes"]),
         UICapability(
             "Clipboard panel", "clear the history", ["clipboard", "clear", "--yes"]),
         UICapability(
