@@ -345,7 +345,7 @@ import EdithCore
         #expect(report.state.issues.map(\.id).contains("backend.music"))
         #expect(
             report.state.issues.first { $0.id == "backend.music" }?.recoveryCommand
-                == "ed music rescan")
+                == "ed music library ~/Music")
     }
 
     private func temporaryDirectory() throws -> URL {

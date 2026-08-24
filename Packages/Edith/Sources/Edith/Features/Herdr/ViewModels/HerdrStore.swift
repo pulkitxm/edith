@@ -103,7 +103,7 @@ final class HerdrStore {
     func refresh() async {
         guard !refreshing else { return }
         refreshing = true
-        apply(await HerdrCollector.collect(.all))
+        apply(await HerdrSessionOperationExecution.list())
         refreshing = false
     }
 

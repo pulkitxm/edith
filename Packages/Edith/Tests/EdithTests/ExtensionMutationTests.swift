@@ -129,7 +129,7 @@ private struct ExtensionMutationWorld {
                     world.defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) as? Bool
                         == true)
             } else {
-                #expect(world.defaults.object(forKey: entry.defaultsKey) == nil)
+                #expect(world.defaults.object(forKey: entry.defaultsKey) as? Bool == false)
                 #expect(world.defaults.object(forKey: OnboardingFlow.seenKey(for: entry)) == nil)
             }
         }

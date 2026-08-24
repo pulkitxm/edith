@@ -80,7 +80,7 @@ public struct ExtensionLifecycleState: Codable, Equatable, Sendable {
     public static func preference(extensionID: String, enabled: Bool) -> Self {
         ExtensionLifecycleState(
             extensionID: extensionID, phase: enabled ? .enabled : .disabled,
-            runtimePhase: enabled ? .loading : .uninstalled,
+            runtimePhase: .loading,
             summary: enabled ? "Enabled; readiness has not been checked." : "Disabled.")
     }
 
@@ -252,14 +252,20 @@ public enum ExtensionLifecycleCatalog {
             ],
             prerequisites: [
                 instruction(
-                    "session", "Start Herdr", "Run at least one Herdr session locally or remotely.")
+                    "session", "Start Herdr",
+                    "Install Herdr and run at least one session locally or remotely.",
+                    "ed herdr ls --machine local")
             ],
             examples: ["ed extensions enable herdr", "ed herdr ls --json"],
             docs: [documentation("guide", "Herdr guide", "docs/cli/herdr/README.md")],
             recovery: [
                 instruction(
+                    "local", "Check this Mac",
+                    "Confirm the local Herdr installation and live sessions.",
+                    "ed herdr ls --machine local"),
+                instruction(
                     "machines", "Check remote machines", "Verify saved SSH machines are reachable.",
-                    "ed machines ls")
+                    "ed machines ls"),
             ],
             verification: [
                 instruction(
@@ -475,7 +481,8 @@ public enum ExtensionLifecycleCatalog {
             prerequisites: [
                 instruction(
                     "library", "Choose a music library",
-                    "Add supported audio files to Edith's music folder."),
+                    "Add supported audio files to Edith's music folder.",
+                    "ed music library ~/Music"),
                 instruction(
                     "download", "Install yt-dlp", "Install yt-dlp before using URL downloads.",
                     "ed tools install yt-dlp"),
@@ -484,8 +491,12 @@ public enum ExtensionLifecycleCatalog {
             docs: [documentation("guide", "Music guide", "docs/cli/music/README.md")],
             recovery: [
                 instruction(
+                    "library", "Choose another library",
+                    "Select an existing folder before rescanning.",
+                    "ed music library ~/Music"),
+                instruction(
                     "rescan", "Rescan the library", "Rebuild the library view after files change.",
-                    "ed music rescan")
+                    "ed music rescan"),
             ],
             verification: [
                 instruction(

@@ -16,6 +16,7 @@ import Testing
             + MusicFolderSelectionOperation.allCases.map(\.descriptor)
             + MusicTransportOperation.allCases.map(\.descriptor)
             + PresenterRuntimeOperation.allCases.map(\.descriptor)
+            + HerdrSessionOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
         #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
         #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
@@ -121,6 +122,18 @@ import Testing
         }
         #expect(received == query)
         #expect(events.map(\.id) == ["second"])
+    }
+
+    @Test func herdrListingUsesTheSharedCollectorBoundary() async {
+        let expected = [HerdrHostSnapshot.local(herdrPresent: true)]
+
+        let result = await HerdrSessionOperationExecution.list(.local) { scope in
+            guard case .local = scope else { return [] }
+            return [HerdrHostSnapshot.local(herdrPresent: true)]
+        }
+
+        #expect(result == expected)
+        #expect(HerdrSessionOperation.list.descriptor.cli == ["herdr", "ls"])
     }
 
     @Test func calendarPaginationStopsAtOneHundredTwentyDays() {

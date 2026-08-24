@@ -99,10 +99,14 @@ import Testing
         #expect(entry.defaultsKey == AppStorageKeys.Tabs.attentionEnabled)
         #expect(ExtensionDetailRoute(rawValue: entry.id) == .attention)
         #expect(pane.contains("case AppStorageKeys.Tabs.attentionEnabled: $attentionEnabled"))
+        #expect(pane.contains("var attentionEnabled = false"))
         #expect(pane.contains("case .attention: AttentionRows()"))
         #expect(pane.contains("private struct AttentionRows: View"))
         #expect(navigation.contains("case .attention: attentionEnabled"))
         #expect(helper.contains("AppStorageKeys.Tabs.attentionEnabled"))
+        #expect(
+            helper.contains(
+                "extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled)"))
     }
 
     @Test func everyExtensionSettingsSheetHasLifecycleContent() throws {
@@ -117,6 +121,10 @@ import Testing
         #expect(source.contains("if let lifecycle = entry.lifecycle"))
         #expect(source.contains("Text(entry.subtitle)"))
         #expect(source.contains("coordinator.lifecycleReport()"))
+        #expect(source.contains("ExtensionReadinessModel"))
+        #expect(source.contains("await readiness.refresh().value"))
+        #expect(source.contains(".onDisappear { readiness.cancel() }"))
+        #expect(!source.contains("Task { await refresh() }"))
         #expect(source.contains("report.state.phase.title"))
         #expect(source.contains("report.state.runtimePhase.title"))
         #expect(source.contains("ExtensionLifecycleState.loading(extensionID: entry.id)"))
@@ -140,6 +148,32 @@ import Testing
         let readiness = try #require(sheet.range(of: "ExtensionLifecycleRows("))
 
         #expect(controls.lowerBound < readiness.lowerBound)
+    }
+
+    @Test func recoveryControlsUseTheSameOperationsAsTheCLI() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let pane = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Settings/Views/ExtensionsPane.swift"), encoding: .utf8)
+        let machines = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Settings/Views/MachinesRows.swift"), encoding: .utf8)
+        let model = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Machines/ViewModels/MachinesModel.swift"), encoding: .utf8)
+
+        #expect(pane.contains("Button(\"Choose folder...\")"))
+        #expect(pane.contains("MusicFolderSelectionOperationExecution.select(url.path)"))
+        #expect(pane.contains("Button(\"Check sessions\")"))
+        #expect(pane.contains("HerdrSessionOperationExecution.list()"))
+        #expect(pane.contains("Button(\"Open setup guide\")"))
+        #expect(machines.contains("Button(\"Add machine...\")"))
+        #expect(machines.contains("model.add(machine, secrets: changes(secrets))"))
+        #expect(model.contains("MachineMutationOperationExecution.perform("))
     }
 
     @Test func everyExtensionMutationSurfaceUsesTheSharedCenter() throws {

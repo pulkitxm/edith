@@ -121,8 +121,8 @@ public enum OnboardingFlow {
     }
 
     public static func skip(defaults: UserDefaults = SharedDefaults.store) {
-        defaults.set(initialICloudBackup, forKey: iCloudBackupKey)
-        defaults.set(true, forKey: completionKey)
+        _ = ExtensionMutationCenter(environment: .local(defaults: defaults)).completeOnboarding(
+            selectedIDs: [], icloudBackup: initialICloudBackup)
     }
 
     private static func uniqueTools(_ tools: [CLIToolSpec]) -> [CLIToolSpec] {
