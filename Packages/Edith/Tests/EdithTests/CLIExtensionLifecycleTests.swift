@@ -6,7 +6,10 @@ import Testing
 
 @Suite struct CLIExtensionLifecycleTests {
     @Test func statusReportsAllExtensionsInRegistryOrder() async {
-        await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { world in
+            for entry in ExtensionRegistry.entries {
+                world.shared.set(false, forKey: entry.defaultsKey)
+            }
             let result = await CLIProbe.capture(["extensions", "status", "--json"])
             let rows = result.array as? [[String: Any]] ?? []
 

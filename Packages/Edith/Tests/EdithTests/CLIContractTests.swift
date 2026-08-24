@@ -762,7 +762,10 @@ enum JSONContract {
     }
 
     @Test func theExtensionListAndTheHumanTableAgreeOnWhatIsOn() async {
-        await CLIProbe.inWorld { _ in
+        await CLIProbe.inWorld { world in
+            for entry in ExtensionRegistry.entries {
+                world.shared.set(false, forKey: entry.defaultsKey)
+            }
             _ = await CLIProbe.capture(["extensions", "enable", "clipboard"])
             let json = await CLIProbe.capture(["extensions", "ls", "--json"])
             let table = await CLIProbe.capture(["extensions", "ls"])

@@ -43,7 +43,8 @@ public struct SettingDefinition: Equatable, Sendable {
 
 public enum ConfigCatalog {
     public static let groups = [
-        "appearance", "panel", "usage", "limits", "menubar", "alerts", "budget", "dashboard",
+        "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
+        "dashboard",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
@@ -52,7 +53,7 @@ public enum ConfigCatalog {
     ]
 
     public static let settings: [SettingDefinition] =
-        appearance + panel + usageAndLimits
+        appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
@@ -148,6 +149,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             Repo.pathKey, .string, group: "panel",
             summary: "Development repository root used for usage data and music."),
+    ]
+
+    private static let attention: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.attentionEnabled, .bool, group: "attention",
+            summary: "Attention extension: app and browser activity with focus sessions.",
+            fallback: .bool(true))
     ]
 
     private static let usageAndLimits: [SettingDefinition] = [

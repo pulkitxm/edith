@@ -39,6 +39,7 @@ public enum ExtensionDefaultsMigration {
     }
 
     private static let legacyDefaults: [String: Bool] = [
+        AppStorageKeys.Tabs.attentionEnabled: true,
         AppStorageKeys.Tabs.usageEnabled: true,
         AppStorageKeys.Tabs.systemEnabled: true,
         AppStorageKeys.Tabs.machinesEnabled: false,
