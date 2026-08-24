@@ -139,11 +139,15 @@ jobs:
     name: Build DMG
     needs: version
     runs-on: macos-26
+    outputs:
+      superseded: ${{ steps.release_build.outputs.superseded }}
     env:
       HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
+      REBUILD: ${{ inputs.rebuild }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
+      BUILT_SHA: ${{ needs.version.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -178,17 +182,32 @@ jobs:
           rm -f "$RUNNER_TEMP/cert.p12"
 
       - name: Build the app
+        id: release_build
         env:
           EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
-        run: ./build.sh --no-open --release
+        run: |
+          BUILD_STATUS=0
+          if [ -n "$REBUILD" ]; then
+            ./build.sh --no-open --release || BUILD_STATUS=$?
+          else
+            ./scripts/run-current-release-build.sh ./build.sh --no-open --release \
+              || BUILD_STATUS=$?
+          fi
+          if [ "$BUILD_STATUS" -eq 75 ]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          exit "$BUILD_STATUS"
 
       - name: Verify the bundle carries the release version
+        if: steps.release_build.outputs.superseded != 'true'
         run: |
           BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Edith.app/Contents/Info.plist)"
           test "$BUILT" = "$RELEASE_VERSION" \
             || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
       - name: Package the DMG
+        if: steps.release_build.outputs.superseded != 'true'
         run: |
           rm -rf dmg-root && mkdir dmg-root
           cp -R dist/Edith.app dmg-root/
@@ -197,7 +216,7 @@ jobs:
           rm -rf dmg-root
 
       - name: Notarize and staple
-        if: env.HAS_NOTARY == 'true'
+        if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
@@ -212,6 +231,7 @@ jobs:
           rm -f "$RUNNER_TEMP/notary-key.p8"
 
       - name: Generate the signed appcast
+        if: steps.release_build.outputs.superseded != 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -233,19 +253,22 @@ jobs:
             || { echo "release blocked: appcast is not signed" >&2; exit 1; }
 
       - name: Verify code signatures
+        if: steps.release_build.outputs.superseded != 'true'
         run: codesign --verify --deep --strict dist/Edith.app
 
       - name: Verify notarized disk image
-        if: env.HAS_NOTARY == 'true'
+        if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
         run: spctl -a -t open --context context:primary-signature Edith.dmg
 
       - name: Stage macOS release assets
+        if: steps.release_build.outputs.superseded != 'true'
         run: |
           mkdir release-macos
           cp Edith.dmg release-macos/
           cp dist/appcast/appcast.xml release-macos/
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.release_build.outputs.superseded != 'true'
         with:
           name: release-macos
           path: release-macos/*
@@ -253,6 +276,7 @@ jobs:
           retention-days: 1
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.release_build.outputs.superseded != 'true'
         with:
           name: release-plists
           path: Resources/*Info.plist
@@ -262,6 +286,7 @@ jobs:
   publish:
     name: Publish release
     needs: [version, dmg]
+    if: needs.dmg.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

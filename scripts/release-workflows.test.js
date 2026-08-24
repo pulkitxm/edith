@@ -67,9 +67,35 @@ test("release waits for and publishes the macOS assets", () => {
   expect(releaseWorkflow).toContain("gh release upload");
 });
 
+test("superseded release builds yield the lane before packaging", () => {
+  const dmgJob = releaseWorkflow.slice(
+    releaseWorkflow.indexOf("\n  dmg:"),
+    releaseWorkflow.indexOf("\n  publish:"),
+  );
+  expect(dmgJob).toContain(
+    "superseded: ${{ steps.release_build.outputs.superseded }}",
+  );
+  expect(dmgJob).toContain(
+    "./scripts/run-current-release-build.sh ./build.sh --no-open --release",
+  );
+  expect(dmgJob).toContain('if [ -n "$REBUILD" ]; then');
+  expect(dmgJob).toContain('if [ "$BUILD_STATUS" -eq 75 ]; then');
+  expect(dmgJob).toContain('echo "superseded=true" >> "$GITHUB_OUTPUT"');
+  expect(
+    dmgJob.match(
+      /if: steps\.release_build\.outputs\.superseded != 'true'/g,
+    )?.length,
+  ).toBe(9);
+  expect(releaseWorkflow).toContain(
+    "needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
+  );
+});
+
 test("macOS notarization is conditional on its optional credentials", () => {
   expect(releaseWorkflow).toContain("HAS_NOTARY:");
-  expect(releaseWorkflow).toContain("if: env.HAS_NOTARY == 'true'");
+  expect(releaseWorkflow).toContain(
+    "if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'",
+  );
   expect(releaseWorkflow).not.toContain("env.HAS_NOTARY != 'true'");
 });
 
@@ -86,7 +112,7 @@ test("the publisher uses a token that clears the ruleset", () => {
 test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain("permissions:\n  contents: read");
   expect(releaseWorkflow).toContain(
-    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
+    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    permissions:\n      contents: write",
   );
   expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);
