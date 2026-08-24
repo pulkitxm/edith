@@ -344,8 +344,10 @@ struct CompanionSyncCommand: AsyncParsableCommand {
         try await execute {
             switch connector {
             case "github":
-                let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                    try await client.syncGithub()
+                let outcome = try await CompanionSettingsOperationBridge.request(
+                    endpoint: endpoint
+                ) { operations in
+                    try await operations.syncGithub()
                 }
                 guard !json else {
                     CLIOut.json(
@@ -355,9 +357,7 @@ struct CompanionSyncCommand: AsyncParsableCommand {
                         ]))
                     return
                 }
-                CLIOut.out(
-                    "fetched \(outcome.eventsFetched) events, "
-                        + "\(outcome.observationsInserted) new observations")
+                CLIOut.out(CompanionSettingsOperationText.syncGithub(outcome))
             case "notion":
                 let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                     try await client.syncNotion(full: full)
@@ -586,7 +586,11 @@ struct CompanionSearchCommand: AsyncParsableCommand {
                 throw CLIFailure.usage("--limit must be 50 or less")
             }
             let hits = try await CompanionBridge.embeddingRequest(endpoint: endpoint) { client in
-                try await client.search(query: query, k: limit)
+                try await CompanionChatLibraryOperationExecution.search(
+                    query: query, limit: limit
+                ) { query, limit in
+                    try await client.search(query: query, k: limit)
+                }
             }
             guard !json else {
                 CLIOut.json(.array(hits.map(CompanionBridge.searchJSON)))
@@ -624,14 +628,15 @@ struct CompanionIndexCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.embeddingRequest(endpoint: endpoint) { client in
-                try await client.index()
+                try await CompanionChatLibraryOperationExecution.index {
+                    try await client.index()
+                }
             }
             guard !json else {
                 CLIOut.json(CompanionBridge.indexJSON(outcome))
                 return
             }
-            CLIOut.out(
-                "indexed \(outcome.episodesIndexed) episodes into \(outcome.chunksCreated) chunks")
+            CLIOut.out(CompanionChatLibraryOperationText.indexed(outcome))
         }
     }
 }
