@@ -110,6 +110,13 @@ stop, track, folder, seek, volume, shuffle and repeat semantics regardless of
 which surface sent it. Scripts can use the commands above noninteractively and
 add `--json` whenever they need stable structured output.
 
+The Music page and command line also use the same library content operations for
+listing and rescanning the library, making folders, moving tracks, renaming
+tracks or folders, and moving either kind of item to the Trash. The app confirms
+Trash actions in its sheets. `ed music rm` prints the exact path and track count
+without changing anything until `--yes` is present, in plain text or as one JSON
+document.
+
 ## Commands
 
 - [`ed music status`](./status.md)

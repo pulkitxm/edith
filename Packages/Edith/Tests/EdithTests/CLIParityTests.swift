@@ -317,7 +317,6 @@ enum UIParity {
             "Download sheet", "cancel running downloads", ["download", "cancel"]),
         UICapability(
             "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
-        UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
             "Permissions pane", "relaunch after granting", ["app", "relaunch"]),
         UICapability(
@@ -348,23 +347,8 @@ enum UIParity {
         UICapability("Notch music", "open the current player", ["music", "open-current"]),
         UICapability(
             "Notch music", "reveal the current track", ["music", "reveal-current"]),
-        UICapability("Music page", "browse the library", ["music", "ls"]),
         UICapability("Music page", "click a track to play it", ["music", "start", "song"]),
-        UICapability(
-            "Music page", "play a whole folder", ["music", "start", "--folder", "Chill"]),
         UICapability("Music footer", "drag the seek bar", ["music", "seek", "0.5"]),
-        UICapability(
-            "Music page", "choose the music folder",
-            ["config", "set", "musicFolderPath", "~/Music"]),
-        UICapability("Music page", "make a folder", ["music", "mkdir", "Chill"]),
-        UICapability("Music page", "move a track into a folder", ["music", "mv", "song", "Chill"]),
-        UICapability("Music page", "rename a track", ["music", "rename", "song", "New"]),
-        UICapability(
-            "Music page", "rename a folder", ["music", "rename", "--folder", "Chill", "Calm"]),
-        UICapability("Music page", "move a track to the Trash", ["music", "rm", "song", "--yes"]),
-        UICapability(
-            "Music page", "move a folder to the Trash",
-            ["music", "rm", "--folder", "Chill", "--yes"]),
         UICapability("Music footer", "toggle shuffle", ["music", "shuffle", "on"]),
         UICapability("Music footer", "toggle repeat", ["music", "repeat", "on"]),
         UICapability("Music page", "favourite a track", ["music", "favorite", "song"]),
@@ -730,8 +714,6 @@ enum UIParity {
         let expectedPlacementCounts: [[String]: Int] = [
             ["companion", "chat"]: 2,
             ["machines", "kill"]: 2,
-            ["music", "rename"]: 2,
-            ["music", "rm"]: 2,
             ["machines", "add"]: 2,
             ["machines", "edit"]: 4,
             ["machines", "docker", "start"]: 2,
@@ -742,6 +724,16 @@ enum UIParity {
         for (cli, count) in expectedPlacementCounts {
             #expect(operations[cli] == count, "\(cli) should have \(count) UI placements")
         }
+    }
+
+    @Test func everyMusicLibraryContentLeafDeclaresItsSharedOperation() {
+        let declared = Set(MusicLibraryContentOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["music", "ls"], ["music", "rescan"], ["music", "mkdir"],
+                    ["music", "mv"], ["music", "rename"], ["music", "rm"],
+                ])
     }
 
     @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {

@@ -169,7 +169,16 @@ public enum MusicLibraryContentOperationExecution {
         trackCount: (String) -> Int = TrackMeta.trackCount
     ) throws -> MusicLibraryRemovalPlan {
         let plan = removalPlan(target, trackCount: trackCount)
-        switch target {
+        return try remove(plan, trashTrack: trashTrack, trashFolder: trashFolder)
+    }
+
+    @discardableResult
+    public static func remove(
+        _ plan: MusicLibraryRemovalPlan,
+        trashTrack: (Track) throws -> Void = MusicLibrary.trash,
+        trashFolder: (MusicFolder) throws -> Void = MusicLibrary.trashFolder
+    ) throws -> MusicLibraryRemovalPlan {
+        switch plan.target {
         case let .track(track): try trashTrack(track)
         case let .folder(folder): try trashFolder(folder)
         }
