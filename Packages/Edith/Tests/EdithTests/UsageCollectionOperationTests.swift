@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct UsageCollectionOperationTests {
@@ -87,6 +88,15 @@ import Testing
         }
     }
 
+    @Test func machineMergePreservesBusyAsASuccessfulHandoff() async {
+        let completed = await UsageCollectionOperationExecution.mergeMachineChanges(
+            driver: .scripted(events: []))
+        let busy = await UsageCollectionOperationExecution.mergeMachineChanges(
+            driver: .scripted(events: [], busy: true))
+        #expect(completed == .completed)
+        #expect(busy == .alreadyRunning)
+    }
+
     @Test func machineSelectionUsesTheTypedEnableAndDisableOperations() {
         let store = defaults()
         let id = UUID()
@@ -144,5 +154,44 @@ import Testing
         #expect(
             !FileManager.default.fileExists(
                 atPath: UsageCollector.machineFile(id: id, in: directory).path))
+    }
+}
+
+@Suite struct UsageCollectionOperationCLITests {
+    @Test func machineEnableAndDisableKeepPlainJSONAndSelectionContracts() async {
+        await CLIProbe.inWorld { world in
+            let machine = Machine(name: "Builder", host: "10.0.0.9")
+            MachineRegistry.add(machine)
+
+            let enabled = await CLIProbe.capture([
+                "usage", "machines", "enable", "Builder", "--json",
+            ])
+            #expect(enabled.code == 0)
+            #expect(enabled.object?["counted"] as? Bool == true)
+            #expect(MachineUsageSelection.includes(machine.id, world.shared))
+
+            let disabled = await CLIProbe.capture([
+                "usage", "machines", "disable", "Builder",
+            ])
+            #expect(disabled.code == 0)
+            #expect(
+                disabled.stdoutLines == [
+                    "Builder is no longer collected; run `forget` to drop its numbers"
+                ])
+            #expect(!MachineUsageSelection.includes(machine.id, world.shared))
+        }
+    }
+
+    @Test func limitsRefreshStillUsesTheAppRequestAndUnavailableExitContract() async {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.answers { name in name == IPC.Name.limitsUpdated ? [:] : nil }
+
+            let result = await CLIProbe.capture(["usage", "limits", "--refresh", "--json"])
+
+            #expect(world.postedNames() == [IPC.Name.requestLimitsRefresh.rawValue])
+            #expect(result.code == 0 || result.code == ExitCodes.unavailable)
+            if result.code != 0 { #expect(result.stdout.isEmpty) }
+        }
     }
 }

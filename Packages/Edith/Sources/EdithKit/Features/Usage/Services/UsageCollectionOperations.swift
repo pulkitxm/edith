@@ -172,6 +172,12 @@ public struct UsageMachineCollectionOperationResult: Sendable {
     }
 }
 
+public enum UsageMachineMergeOperationResult: Equatable, Sendable {
+    case completed
+    case alreadyRunning
+    case failed(String)
+}
+
 public enum UsageCollectionOperationExecution {
     public typealias EventSink = @Sendable (UsageRefreshEvent) -> Void
     public typealias MachineCollector =
@@ -190,6 +196,8 @@ public enum UsageCollectionOperationExecution {
 
     public static func refresh(
         follow: Bool, driver: UsageRefreshOperationDriver,
+        onStart: () -> Void = {},
+        onFollow: () -> Void = {},
         onBusyAttach: () -> Void = {},
         onEvent: @escaping EventSink = { _ in }
     ) async throws -> UsageRefreshOperationResult {
@@ -197,16 +205,32 @@ public enum UsageCollectionOperationExecution {
             guard driver.isRunning() else {
                 throw UsageCollectionOperationError.noRefreshRunning
             }
+            onFollow()
             return UsageRefreshOperationResult(
                 refresh: try await driver.attach(onEvent), followed: true)
         }
         do {
+            onStart()
             return UsageRefreshOperationResult(
                 refresh: try await driver.start(onEvent), followed: false)
         } catch UsageRefreshFailure.busy {
             onBusyAttach()
             return UsageRefreshOperationResult(
                 refresh: try await driver.attach(onEvent), followed: true)
+        }
+    }
+
+    public static func mergeMachineChanges(
+        driver: UsageRefreshOperationDriver,
+        onEvent: @escaping EventSink = { _ in }
+    ) async -> UsageMachineMergeOperationResult {
+        do {
+            _ = try await driver.start(onEvent)
+            return .completed
+        } catch UsageRefreshFailure.busy {
+            return .alreadyRunning
+        } catch {
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -229,7 +253,7 @@ public enum UsageCollectionOperationExecution {
         store: UserDefaults = SharedDefaults.store,
         onEvent: @escaping EventSink = { _ in },
         afterChange: @escaping () -> Void = {
-            IPC.post(IPC.Name.requestUsageRefresh)
+            UsageCollectionOperationExecution.request(.refresh)
         },
         collect: @escaping MachineCollector = { input, onEvent in
             await MachineUsageRound.collect(
@@ -257,7 +281,7 @@ public enum UsageCollectionOperationExecution {
         store: UserDefaults = SharedDefaults.store,
         directory: URL = UsageCollector.machinesDirectory,
         afterDrop: () -> Void = {
-            IPC.post(IPC.Name.requestUsageRefresh)
+            UsageCollectionOperationExecution.request(.refresh)
         }
     ) -> Bool {
         let dropped = MachineUsageStore.forget(machineID: machineID, in: directory)
