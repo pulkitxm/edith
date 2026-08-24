@@ -75,6 +75,8 @@ public final class TypeAhead {
 
     @discardableResult
     func focusField(in window: NSWindow) -> Bool {
+        let inputTrace = PerformanceTrace.begin(.input, "main.typeAhead")
+        defer { PerformanceTrace.end(inputTrace) }
         entries.removeAll { $0.anchor == nil }
         guard let anchor = entries.last(where: { visible($0.anchor, in: window) })?.anchor,
             let field = editableField(under: anchor), window.makeFirstResponder(field)

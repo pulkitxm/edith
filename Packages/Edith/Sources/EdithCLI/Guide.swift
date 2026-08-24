@@ -373,7 +373,7 @@ public enum Guide {
         ed tools ls                     yt-dlp and the agent CLIs
         ed machines broadcast -- uptime one command, every machine
         ed apps ls                      what is running here
-        ed apps quit Safari | --all --yes
+        ed apps quit Safari --yes | --all --yes
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
@@ -401,9 +401,15 @@ public enum Guide {
 
         ## One-shot actions
 
-        `ed config set` flips switches. These are verbs the app performs once:
+        Inspect Edith itself, then ask it to perform a one-shot action:
 
         ```
+        ed app info                     installed identity, version and build
+        ed app diagnostics              live helper uptime and idle wakeups
+        ed app paths                    app data, logs, iCloud and music locations
+        ed app links                    repository and profile destinations
+        ed app open-path refresh-log    reveal the log, or open its folder
+        ed app open-link repository     open one listed URL
         ed app actions                  what can be asked for, and whether it can run
         ed app clean-keys               lock the keyboard so it can be wiped
         ed app test-notification

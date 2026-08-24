@@ -5,6 +5,9 @@ public enum UserOperationCatalog {
         MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + DockerLifecycleOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MachineMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -27,6 +30,9 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + MachineDockerPauseOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + AppInspectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + ExtensionMutationOperation.allCases.map {
@@ -65,6 +71,9 @@ public enum UserOperationCatalog {
         + PermissionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + RunningAppOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ColorPickerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -81,6 +90,9 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + CleanerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + UsageCollectionOperation.allCases.map {
@@ -211,6 +223,55 @@ private extension MachineControlOperation {
     }
 }
 
+private extension AppInspectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .info:
+            userInterface("About pane", "read the app version")
+        case .diagnostics:
+            userInterface(
+                "Developer panel", "read process uptime and idle wakeups")
+        case .paths:
+            commandLineOnly("The app opens named paths directly instead of listing the catalog.")
+        case .links:
+            commandLineOnly("The app opens named links directly instead of listing the catalog.")
+        case .openPath:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "iCloud settings", action: "open the app data folder",
+                    exampleArguments: ["app-data"]),
+                UserInterfaceActionPlacement(
+                    surface: "iCloud settings", action: "open the iCloud folder",
+                    exampleArguments: ["icloud"]),
+                UserInterfaceActionPlacement(
+                    surface: "Developer panel", action: "open the usage data folder",
+                    exampleArguments: ["data"]),
+                UserInterfaceActionPlacement(
+                    surface: "Developer panel", action: "reveal the refresh log",
+                    exampleArguments: ["refresh-log"]),
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "open the music folder",
+                    exampleArguments: ["music"]),
+            ])
+        case .openLink:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "About pane", action: "open the source repository",
+                    exampleArguments: ["repository"]),
+                UserInterfaceActionPlacement(
+                    surface: "Navigation sidebar", action: "open the creator profile",
+                    exampleArguments: ["creator"]),
+                UserInterfaceActionPlacement(
+                    surface: "About pane", action: "open a contributor profile",
+                    exampleArguments: ["contributor:octo"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension lifecycle sheet", action: "open an extension guide",
+                    exampleArguments: ["extension-doc:usage:guide"]),
+            ])
+        }
+    }
+}
+
 private extension MachineMutationOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
@@ -332,6 +393,72 @@ private extension MachineDockerPauseOperation {
             userInterface("Docker window", "pause a container", ["box", "api"])
         case .unpause:
             userInterface("Docker window", "unpause a container", ["box", "api"])
+        }
+    }
+}
+
+private extension DockerLifecycleOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .start:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Docker window", action: "start a container",
+                    exampleArguments: ["box", "api"]),
+                UserInterfaceActionPlacement(
+                    surface: "Docker group header",
+                    action: "start the stopped containers in the group",
+                    exampleArguments: ["box", "api", "db"]),
+            ])
+        case .stop:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Docker window", action: "stop a container",
+                    exampleArguments: ["box", "api"]),
+                UserInterfaceActionPlacement(
+                    surface: "Docker group header",
+                    action: "stop the running containers in the group",
+                    exampleArguments: ["box", "api", "db"]),
+            ])
+        case .restart:
+            userInterface("Docker window", "restart a container", ["box", "api"])
+        case .removeContainer:
+            userInterface(
+                "Docker window", "remove a container", ["box", "api", "--yes"])
+        case .removeImage:
+            userInterface(
+                "Docker window", "remove an image", ["box", "nginx", "--yes"])
+        case .removeVolume:
+            userInterface("Docker window", "remove a volume", ["box", "data"])
+        case .prune:
+            userInterface("Docker window", "prune unused objects", ["box", "images"])
+        }
+    }
+}
+
+private extension WorkspaceOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Workspace view", "list saved layouts")
+        case .split:
+            userInterface("Workspace pane menu", "split a pane", ["1", "box"])
+        case .close:
+            userInterface("Workspace pane menu", "close a pane", ["1"])
+        case .point:
+            userInterface("Workspace tab strip", "point a pane at another machine", ["1", "box"])
+        case .equalize:
+            userInterface("Workspace toolbar", "even out the panes")
+        case .create:
+            userInterface(
+                "Workspace toolbar", "apply a layout preset",
+                ["box", "--screen", "terminal"])
+        case .use:
+            userInterface("Workspace picker", "switch to another layout", ["a"])
+        case .rename:
+            userInterface("Workspace picker", "rename a layout", ["a", "b"])
+        case .remove:
+            userInterface("Workspace picker", "delete a layout", ["a"])
         }
     }
 }
@@ -589,6 +716,24 @@ private extension PermissionOperation {
         case .settings:
             userInterface(
                 "Permissions pane", "open the relevant System Settings pane", ["calendar"])
+        }
+    }
+}
+
+private extension RunningAppOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("System page", "inspect running applications")
+        case .quit:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "System page", action: "quit one app",
+                    exampleArguments: ["Safari", "--yes"]),
+                UserInterfaceActionPlacement(
+                    surface: "System page", action: "quit all apps",
+                    exampleArguments: ["--all", "--yes"]),
+            ])
         }
     }
 }

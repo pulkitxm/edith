@@ -48,6 +48,10 @@ public enum CLIEnvironment {
         NSWorkspace.shared.open($0)
     }
 
+    nonisolated(unsafe) public static var runningApps: @Sendable () -> [RunningAppSnapshot] = {
+        RunningAppOperationCenter.liveSnapshots()
+    }
+
     nonisolated(unsafe) public static var homeDirectory: URL =
         FileManager.default.homeDirectoryForCurrentUser
 
@@ -94,6 +98,15 @@ public enum CLIEnvironment {
         return FileManager.default.fileExists(atPath: standard.path) ? standard : nil
     }
 
+    nonisolated(unsafe) public static var appInspectionCenter: @Sendable () -> AppInspectionCenter =
+        {
+            AppInspectionCenter()
+        }
+
+    nonisolated(unsafe) public static var appContributors: @Sendable () -> [Contributor] = {
+        Contributors.cached()
+    }
+
     nonisolated(unsafe) public static var installedAppURL: @Sendable () -> URL? = {
         detectedInstalledAppURL()
     }
@@ -134,6 +147,7 @@ public enum CLIEnvironment {
             ).status()
         }
         openURL = { NSWorkspace.shared.open($0) }
+        runningApps = { RunningAppOperationCenter.liveSnapshots() }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }
@@ -143,6 +157,8 @@ public enum CLIEnvironment {
                 id, executableNamed: CLIEnvironment.executableNamed)
         }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        appInspectionCenter = { AppInspectionCenter() }
+        appContributors = { Contributors.cached() }
         installedAppURL = { detectedInstalledAppURL() }
         updateHistoryURL = { UpdateCheckLog.url }
         QuinjetCLIEnvironment.reset()

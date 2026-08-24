@@ -313,7 +313,11 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
     @Test func nativeSessionsHaveStablePlainAndJSONOutput() async throws {
         try await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
-            world.answers { _ in Self.sessionReply(.sessions) }
+            world.answers { _ in
+                Self.sessionReply(
+                    .sessions,
+                    requestID: world.posted.last?.info[QuinjetSessionIPC.requestIDKey] as? String)
+            }
 
             let plain = await CLIProbe.capture(["quinjet", "sessions"])
             let json = await CLIProbe.capture(["quinjet", "sessions", "--json"])
@@ -332,7 +336,11 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
     @Test func nativeFocusUsesBoundedAppIPCAndReturnsTheSelectedSession() async throws {
         await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
-            world.answers { _ in Self.sessionReply(.focus, selected: 2, affected: 2) }
+            world.answers { _ in
+                Self.sessionReply(
+                    .focus, selected: 2, affected: 2,
+                    requestID: world.posted.last?.info[QuinjetSessionIPC.requestIDKey] as? String)
+            }
 
             let result = await CLIProbe.capture(["quinjet", "focus", "2", "--json"])
 
@@ -349,7 +357,11 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
     @Test func nativeCreateUsesCorrelatedAppIPCAndReturnsTheNewPicker() async throws {
         await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
-            world.answers { _ in Self.sessionReply(.create, selected: 3, affected: 3, count: 3) }
+            world.answers { _ in
+                Self.sessionReply(
+                    .create, selected: 3, affected: 3, count: 3,
+                    requestID: world.posted.last?.info[QuinjetSessionIPC.requestIDKey] as? String)
+            }
 
             let plain = await CLIProbe.capture(["quinjet", "new"])
             let json = await CLIProbe.capture(["quinjet", "create", "--json"])
@@ -374,9 +386,12 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
                 let operation =
                     world.posted.last?.info[QuinjetSessionIPC.operationKey] as? String
                     ?? "sessions"
+                let requestID =
+                    world.posted.last?.info[QuinjetSessionIPC.requestIDKey] as? String
                 return operation == "close"
-                    ? Self.sessionReply(.close, selected: 1, affected: 2, count: 1)
-                    : Self.sessionReply(.sessions)
+                    ? Self.sessionReply(
+                        .close, selected: 1, affected: 2, count: 1, requestID: requestID)
+                    : Self.sessionReply(.sessions, requestID: requestID)
             }
 
             let preview = await CLIProbe.capture(["quinjet", "close", "2", "--json"])
@@ -400,7 +415,11 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
     @Test func nativeSwitchCarriesTheSessionAndWorktreePath() async {
         await CLIProbe.inWorld { world in
             CLIEnvironment.isMainAppRunning = { true }
-            world.answers { _ in Self.sessionReply(.switchWorktree, selected: 2, affected: 2) }
+            world.answers { _ in
+                Self.sessionReply(
+                    .switchWorktree, selected: 2, affected: 2,
+                    requestID: world.posted.last?.info[QuinjetSessionIPC.requestIDKey] as? String)
+            }
             let result = await CLIProbe.capture([
                 "quinjet", "switch", "2", "/work/edith-native", "--json",
             ])
@@ -424,17 +443,19 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
 
     private static func sessionReply(
         _ operation: QuinjetSessionOperation, selected: Int = 1, affected: Int? = nil,
-        count: Int = 2
+        count: Int = 2, requestID: String? = nil
     ) -> [AnyHashable: Any] {
         let sessions = (1...count).map { sessionState($0, selected: $0 == selected) }
         let result = QuinjetSessionResult(
             operation: operation, selectedSessionID: sessionID(selected),
             affectedSessionID: affected.map(sessionID), sessions: sessions)
         let data = try! JSONEncoder().encode(result)
-        return [
+        var payload: [AnyHashable: Any] = [
             QuinjetSessionIPC.okKey: true,
             QuinjetSessionIPC.payloadKey: String(decoding: data, as: UTF8.self),
         ]
+        if let requestID { payload[QuinjetSessionIPC.requestIDKey] = requestID }
+        return payload
     }
 
     private static func sessionState(_ index: Int, selected: Bool) -> QuinjetSessionState {

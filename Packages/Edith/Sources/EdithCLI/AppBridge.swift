@@ -103,7 +103,8 @@ public enum AppBridge {
     ) async -> [AnyHashable: Any]? {
         if let answer = CLIEnvironment.answer {
             trigger()
-            return answer(name)
+            guard let payload = answer(name), matching(payload) else { return nil }
+            return payload
         }
         let waiter = ReplyWaiter()
         let token = DistributedNotificationCenter.default().addObserver(

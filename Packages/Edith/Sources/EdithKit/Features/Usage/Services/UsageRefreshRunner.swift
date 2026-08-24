@@ -113,6 +113,8 @@ public enum UsageRefreshRunner {
         workingDirectory: URL = AppData.supportDir,
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in }
     ) async throws -> UsageRefreshResult {
+        let refreshTrace = PerformanceTrace.begin(.git, "usage.refresh")
+        defer { PerformanceTrace.end(refreshTrace) }
         guard let script = scriptURL() else { throw UsageRefreshFailure.scriptMissing }
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         guard let lock = UsageRefreshLock.acquire(at: lockURL(dataDir: dataDir)) else {

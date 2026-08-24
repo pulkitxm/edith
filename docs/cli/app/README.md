@@ -1,20 +1,16 @@
 # `ed app`
 
-`ed app` holds the one-shot verbs the Edith app performs. These are things the
-app does once when asked, rather than switches `ed config set` can flip: lock
-the keyboard for cleaning, send the test notification, open or quit the window,
-ask Sparkle to look for an update, reveal a screen, capture its windows, and
-relaunch after granting a permission.
+`ed app` inspects Edith itself and holds the one-shot verbs the app performs.
+It reports the installed identity, live diagnostics, folders, and external
+links alongside actions such as opening a window or checking for updates.
 
 Edith is two processes with two bundle ids: the menu bar helper,
-`com.pulkit.edith.statusbar`, and the main window, `com.pulkit.edith`. Each verb
-is a distributed notification addressed to whichever of the two owns the work,
-so each needs that process to be running and exits 4 naming the part that is
-missing. `clean-keys`, `test-notification` and `open` are answered by the menu
-bar helper. `quit`, `check-updates`, `reveal` and `snapshot` are answered by
-the main window, because the window and Sparkle both live there. `updates` and
-`clear-updates` touch a file, and `relaunch` terminates both bundle ids itself
-and launches the app bundle again, so all three work with Edith closed.
+`com.pulkit.edith.statusbar`, and the main window, `com.pulkit.edith`. Live
+process actions use distributed notifications addressed to the process that
+owns the work. `clean-keys`, `test-notification`, `open`, and `diagnostics` need
+the helper. `quit`, `check-updates`, `reveal`, and `snapshot` need the main
+window. Identity, paths, links, recorded updates, opening destinations, and
+relaunching work with Edith closed.
 
 Reach for this group when you want the app to do something now. Reach for
 `ed config` when you want to change what it does from now on.
@@ -27,6 +23,12 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 
 | Command | What it does |
 | --- | --- |
+| `ed app info` | Show the installed app name, version, build, bundle identity, and path. |
+| `ed app diagnostics` | Show the helper's process id, uptime, and idle wakeups. |
+| `ed app paths` | List the folders and files exposed by Edith. |
+| `ed app links` | List the repository, creator, extension guides, and cached contributor links. |
+| `ed app open-path <id>` | Open a folder or reveal the refresh log. |
+| `ed app open-link <id>` | Open one listed repository, guide, or profile link. |
 | `ed app actions` | List the seven one-shot actions, what each needs, and whether it can run right now. Aliased `ed app ls`, and what a bare `ed app` runs. |
 | `ed app clean-keys` | Ask the menu bar app to lock the keyboard so it can be wiped without typing. |
 | `ed app test-notification` | Ask the menu bar app to send the same test notification the settings pane sends. |
@@ -41,6 +43,12 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 
 ## Commands
 
+- [`ed app info`](./info.md)
+- [`ed app diagnostics`](./diagnostics.md)
+- [`ed app paths`](./paths.md)
+- [`ed app links`](./links.md)
+- [`ed app open-path`](./open-path.md)
+- [`ed app open-link`](./open-link.md)
 - [`ed app actions`](./actions.md)
 - [`ed app clean-keys`](./clean-keys.md)
 - [`ed app test-notification`](./test-notification.md)
@@ -60,13 +68,13 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 | 0 | The command did what it says, including a request that was sent but never confirmed, `check-updates --no-wait` with no answer, `updates` with an empty log, and `actions` when nothing is running. |
 | 1 | `relaunch` could not finish the work: Edith was still running after the force quit, or the launch itself threw. Also `snapshot` when no visible window rendered. |
 | 2 | The command line was wrong: an unknown flag, an unknown subcommand, or `--limit` at zero or below on `ed app updates`. |
-| 3 | `reveal` named a section or tab the window does not have; the error lists the valid names. |
-| 4 | The process the verb needs is not running: the menu bar helper for `clean-keys`, `test-notification` and `open`, the main window for `quit --yes`, `check-updates`, `reveal` and `snapshot`. Also `check-updates` when the app never answers within 60 seconds, and `relaunch --yes` when no `Edith.app` can be found. |
+| 3 | `reveal` named a section or tab the window does not have, or `open-link` named no listed link. |
+| 4 | A required process is not running, a reply did not arrive, `relaunch --yes` found no app, or macOS refused an exact path or link open action. |
 
-3 comes only from `reveal`, and 1 only from `relaunch` and `snapshot`. The action
-names are fixed rather than typed, so there is no name for you to get wrong:
-`ed app frobnicate` is parsed as a stray argument to the default `actions`
-subcommand and exits 2 rather than 3.
+3 comes only from `reveal` and `open-link`, and 1 only from `relaunch` and
+`snapshot`. The action names are fixed rather than typed, so there is no name
+for you to get wrong: `ed app frobnicate` is parsed as a stray argument to the
+default `actions` subcommand and exits 2 rather than 3.
 
 ## Notes and gotchas
 

@@ -1069,7 +1069,7 @@ struct MainWindowView: View {
                 Text("Made with ♥ by")
                     .foregroundStyle(.tertiary)
                 Button("Pulkit") {
-                    NSWorkspace.shared.open(URL(string: MainApp.creatorSiteURLString)!)
+                    _ = try? AppInspectionCenter().openLink("creator", contributors: [])
                 }
                 .buttonStyle(.plain)
                 .fontWeight(.semibold)

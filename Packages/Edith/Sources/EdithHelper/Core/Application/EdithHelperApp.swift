@@ -23,6 +23,8 @@ enum Logo {
 
 @MainActor
 func migratedServices() -> AppServices {
+    let launchTrace = PerformanceTrace.begin(.startup, "helper.services")
+    defer { PerformanceTrace.end(launchTrace) }
     let d = UserDefaults.standard
     if !d.bool(forKey: "migratedFromControlCenter"),
         let old = d.persistentDomain(forName: "com.pulkit.control-center")
@@ -45,6 +47,8 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.disableAutomaticTermination("Edith lives in the menu bar")
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
+        defer { PerformanceTrace.end(launchTrace) }
         PanelController.shared = PanelController(services: AppState.services)
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -62,7 +66,7 @@ struct EdithApp: App {
     @NSApplicationDelegateAdaptor(MenuBarAppDelegate.self) private var appDelegate
 
     init() {
-        _ = ProcessUptime.launchedAt
+        _ = AppProcessUptime.launchedAt
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
@@ -107,16 +111,24 @@ struct EdithApp: App {
                 services.system?.beginCleaning()
             }
         }
+        _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
+            IPC.post(
+                IPC.Name.appDiagnostics,
+                userInfo: AppDiagnosticsPayload.encode(AppInspectionCenter().diagnostics()))
+        }
         _ = IPC.observe(
             IPC.Name.requestQuitApps,
             info: { info in
-                let force = info["force"] as? Bool ?? false
-                if info["all"] as? Bool == true {
-                    RunningApps.quitEverythingElse(force: force)
-                    return
-                }
-                guard let pid = info["pid"] as? Int else { return }
-                RunningApps.quit(pid: pid_t(pid), force: force)
+                guard let requestID = info[RunningAppIPC.requestIDKey] as? String else { return }
+                let force = info[RunningAppIPC.forceKey] as? Bool ?? false
+                let pids = (info[RunningAppIPC.pidsKey] as? [Int] ?? []).map(pid_t.init)
+                let outcome = RunningAppOperationCenter().apply(pids: pids, force: force)
+                IPC.post(
+                    IPC.Name.quitAppsResult,
+                    userInfo: [
+                        RunningAppIPC.requestIDKey: requestID,
+                        RunningAppIPC.changedKey: outcome.changed,
+                    ])
             })
         _ = IPC.observe(IPC.Name.openPanel) {
             AppRuntimeCenter().perform(.open) { showPanel() }
@@ -194,7 +206,9 @@ struct EdithApp: App {
 
 private func dispatchGlobalHotKey(_ id: UInt32) {
     if let action = GlobalHotKey.actions[id] {
-        DispatchQueue.main.async(execute: action)
+        DispatchQueue.main.async {
+            PerformanceTrace.measure(.input, "helper.globalHotKey") { action() }
+        }
     }
 }
 
@@ -531,9 +545,7 @@ struct RootView: View {
                 Spacer()
                 if tab == "music", musicEnabled {
                     Button {
-                        try? FileManager.default.createDirectory(
-                            at: Repo.musicDir, withIntermediateDirectories: true)
-                        NSWorkspace.shared.open(Repo.musicDir)
+                        _ = try? AppInspectionCenter().openPath(.music)
                         dismissPanel()
                     } label: {
                         Image(systemName: "folder")
