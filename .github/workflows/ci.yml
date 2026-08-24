@@ -185,7 +185,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Fish
-        run: brew install fish
+        run: |
+          command -v fish >/dev/null 2>&1 || brew install fish
+          fish --version
       - name: Cache resolved packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -198,6 +200,8 @@ jobs:
       - name: Tests
         run: ./test.sh
         working-directory: Packages/Edith
+        env:
+          EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"
 
   companion:
     name: companion

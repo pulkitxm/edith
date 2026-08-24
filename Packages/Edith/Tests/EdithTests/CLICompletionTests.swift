@@ -252,6 +252,10 @@ import Testing
 }
 
 @Suite struct CLICompletionProcessTests {
+    static var fishIsRequired: Bool {
+        ProcessInfo.processInfo.environment["EDITH_REQUIRE_FISH_COMPLETION_TEST"] == "1"
+    }
+
     static var fishExecutable: URL? {
         let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
         return path.split(separator: ":")
@@ -294,6 +298,11 @@ import Testing
         #expect(result.code == 0)
         #expect(result.stdoutLines == ["--help"])
         #expect(result.stderr.isEmpty)
+    }
+
+    @Test func requiredFishCompletionDependencyIsAvailable() {
+        guard Self.fishIsRequired else { return }
+        #expect(Self.fishExecutable != nil)
     }
 
     @Test func bashAndZshScriptsInvokeTheRealCompletionEntry() throws {
