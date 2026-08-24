@@ -35,7 +35,7 @@ colorPicker  on     Utilities  Color Picker
 ```
 
 `--json` is a top-level array of one object per registry entry, in the same
-order, and every row carries the same thirteen keys whether or not they have
+order, and every row carries the same fourteen keys whether or not they have
 anything in them. A test asserts exactly that set of keys on every row. The
 first two rows:
 
@@ -54,6 +54,7 @@ first two rows:
     "optionalPermissions": [
       "notifications"
     ],
+    "optionalTools": [],
     "requiredCapabilities": [
       "usageCollection"
     ],
@@ -74,6 +75,7 @@ first two rows:
     "missingRequiredPermissions": [],
     "optionalCapabilities": [],
     "optionalPermissions": [],
+    "optionalTools": [],
     "requiredCapabilities": [
       "herdrSessions"
     ],
@@ -92,6 +94,9 @@ Edith's mirrored grant state does not say yes to, so it is the field to gate on
 rather than parsing prose. `requiredCapabilities` and `optionalCapabilities`
 come straight from the cross-platform registry. They describe implementation
 requirements, not grants, and are never filtered for the current Mac.
+`requiredTools` are core setup blockers. `optionalTools` enable additional
+workflows without making the extension uninstalled. Music reports `yt-dlp` in
+`optionalTools` because local playback works without URL import.
 
 ```
 ed extensions ls

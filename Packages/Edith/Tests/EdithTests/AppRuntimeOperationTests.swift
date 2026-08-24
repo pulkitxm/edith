@@ -12,6 +12,43 @@ import Testing
         #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
     }
 
+    @Test func everyOperationHasOneExactInterfaceExposure() {
+        let operationIDs = Set(AppRuntimeOperation.allCases.map(\.descriptor.id))
+        let registrations = UserOperationCatalog.registrations.filter {
+            operationIDs.contains($0.descriptor.id)
+        }
+        let actions = UserInterfaceActionCatalog.actions.filter {
+            operationIDs.contains($0.operation.id)
+        }
+        let expectedActions = [
+            ("app.clean-keys", "Menu bar", "lock the keyboard to clean it", []),
+            ("app.test-notification", "Settings", "send a test notification", []),
+            ("app.open", "Menu bar", "open the panel", []),
+            ("app.quit", "Menu bar", "quit Edith", ["--yes"]),
+            ("app.check-updates", "About pane", "check for updates", []),
+            ("app.update-history", "Update schedule sheet", "read the check history", []),
+            ("app.relaunch", "Permissions pane", "relaunch after granting", ["--yes"]),
+            (
+                "app.clear-updates", "Update schedule sheet", "clear the check history",
+                ["--yes"]
+            ),
+        ]
+        let actualActions = actions.map {
+            ($0.operation.id.rawValue, $0.surface, $0.action, $0.exampleArguments)
+        }
+
+        #expect(registrations.count == AppRuntimeOperation.allCases.count)
+        #expect(Set(registrations.map(\.descriptor.id)) == operationIDs)
+        #expect(actualActions.elementsEqual(expectedActions, by: ==))
+        #expect(
+            Set(UserOperationCatalog.commandLineOnly.map(\.descriptor.id))
+                .intersection(operationIDs)
+                == [
+                    AppRuntimeOperation.reveal.descriptor.id,
+                    AppRuntimeOperation.snapshot.descriptor.id,
+                ])
+    }
+
     @Test func onlyRemoteOperationsCarryNotifications() {
         for operation in AppRuntimeOperation.allCases {
             #expect((operation.notification != nil) == (operation.owner != .local))
@@ -137,6 +174,9 @@ import Testing
         let cli = try String(
             contentsOf: sources.deletingLastPathComponent().appendingPathComponent(
                 "EdithCLI/Commands/AppCommands.swift"), encoding: .utf8)
+        let updater = try String(
+            contentsOf: sources.deletingLastPathComponent().appendingPathComponent(
+                "Edith/Core/Application/UpdaterModel.swift"), encoding: .utf8)
 
         #expect(developer.contains("AppRuntimeCenter().relaunchCurrentApplication()"))
         #expect(system.contains("AppRuntimeCenter().relaunchCurrentApplication()"))
@@ -150,6 +190,8 @@ import Testing
         #expect(!system.contains("NSApp.terminate"))
         #expect(!menu.contains("NSApp.terminate"))
         #expect(!helper.contains("NSApp.terminate"))
+        #expect(updater.contains("checkHistory = AppRuntimeCenter().updateHistory(url: logURL)"))
+        #expect(!updater.contains("checkHistory = UpdateCheckLog.load"))
     }
 
     @Test func updateHistoryReadsAndClearsThroughTheSameCenter() throws {

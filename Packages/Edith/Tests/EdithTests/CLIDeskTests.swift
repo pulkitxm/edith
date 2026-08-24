@@ -300,7 +300,10 @@ import Testing
     @Test func removingAnEntryLeavesTheRest() async throws {
         try await CLIProbe.inWorld { world in
             try Self.seed(world, count: 3)
-            let removed = await CLIProbe.capture(["clipboard", "rm", "1", "--json"])
+            let removed = await CLIProbe.capture([
+                "clipboard", "rm", "1", "--yes", "--json",
+            ])
+            #expect(removed.object?["applied"] as? Bool == true)
             #expect(removed.object?["remaining"] as? Int == 2)
             let after = await CLIProbe.capture(["clipboard", "ls", "--json"])
             #expect(after.array?.count == 2)

@@ -49,6 +49,7 @@ and prints no note at all: the missing permissions are in
   ],
   "optionalCapabilities": [],
   "optionalPermissions": [],
+  "optionalTools": [],
   "requiredCapabilities": [
     "windowDimming"
   ],
@@ -77,11 +78,11 @@ error: no extension named clipbored
 hint: known ids: usage, herdr, quinjet, system, machines, companion, systemStats, micMute, lidAwake, music, calendar, notchShelf, clipboard, focusDim, presenter, colorPicker
 ```
 
-Enabling never asks for a permission and never installs a tool. `music` wants
-`yt-dlp`, `usage` wants `claude` and `codex`, and `quinjet` wants `quinjet`.
-`ed` reports them in
-`requiredTools` rather than fetching them; `ed tools ls` and
-`ed tools install <id>` are the verbs for that.
+Enabling never asks for a permission and never installs a tool. Agent Usage
+requires `claude` or `codex`, Quinjet requires `quinjet`, and Music optionally
+uses `yt-dlp` for URL import. `ed` reports the first two relationships in
+`requiredTools` and the Music relationship in `optionalTools`; `ed tools ls`
+and `ed tools install <id>` are the verbs for managing them.
 
 ## Where to go next
 

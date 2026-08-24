@@ -11,11 +11,14 @@ import Testing
     }
 
     @Test func toolRequirementsUsePortableIdentifiers() {
-        let toolsByExtension = Dictionary(
+        let requiredByExtension = Dictionary(
             uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.requiredToolIDs) })
+        let optionalByExtension = Dictionary(
+            uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.optionalToolIDs) })
 
-        #expect(toolsByExtension["usage"] == ["claude", "codex"])
-        #expect(toolsByExtension["music"] == ["yt-dlp"])
-        #expect(toolsByExtension["quinjet"] == ["quinjet"])
+        #expect(requiredByExtension["usage"] == ["claude", "codex"])
+        #expect(requiredByExtension["music"]?.isEmpty == true)
+        #expect(optionalByExtension["music"] == ["yt-dlp"])
+        #expect(requiredByExtension["quinjet"] == ["quinjet"])
     }
 }

@@ -96,7 +96,7 @@ not here cannot be set, and `import` skips it.
 
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
-| `tabUsageEnabled` | bool | `true` | shared | Agent Usage extension: Claude and Codex limits, stats and alerts. |
+| `tabUsageEnabled` | bool | `false` | shared | Agent Usage extension: Claude and Codex limits, stats and alerts. |
 | `usageMachines` | stringList | none | shared | Ids of the machines whose agent usage is collected over SSH. |
 
 ### `limits`
@@ -220,7 +220,7 @@ not here cannot be set, and `import` skips it.
 | `SUEnableAutomaticChecks` | bool | `true` | standard | Check for updates on a schedule. |
 | `SUScheduledCheckInterval` | number | `86400` | standard | Seconds between scheduled update checks. |
 | `SUAutomaticallyUpdate` | bool | `true` | standard | Download and install updates automatically. |
-| `tabSystemEnabled` | bool | `true` | shared | System extension: running apps, prevent sleep and the cleaning lock. |
+| `tabSystemEnabled` | bool | `false` | shared | System extension: running apps, prevent sleep and the cleaning lock. |
 | `preventSleep` | bool | `false` | shared | Keep the Mac awake (Keep Awake). |
 | `lidAwakeEnabled` | bool | `false` | shared | Enable the Lid Awake extension. |
 | `lidAwakeRestoreOnQuit` | bool | `true` | shared | Restore normal lid-close sleep when Edith quits. |

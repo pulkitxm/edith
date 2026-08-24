@@ -24,6 +24,26 @@ public enum ExtensionLifecyclePhase: String, CaseIterable, Codable, Sendable {
     }
 }
 
+public enum ExtensionRuntimePhase: String, CaseIterable, Codable, Sendable {
+    case installed
+    case uninstalled
+    case empty
+    case loading
+    case unsupported
+    case error
+
+    public var title: String {
+        switch self {
+        case .installed: "Installed"
+        case .uninstalled: "Uninstalled"
+        case .empty: "Empty"
+        case .loading: "Loading"
+        case .unsupported: "Unsupported"
+        case .error: "Error"
+        }
+    }
+}
+
 public struct ExtensionLifecycleIssue: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -41,15 +61,18 @@ public struct ExtensionLifecycleIssue: Identifiable, Codable, Equatable, Sendabl
 public struct ExtensionLifecycleState: Codable, Equatable, Sendable {
     public let extensionID: String
     public let phase: ExtensionLifecyclePhase
+    public let runtimePhase: ExtensionRuntimePhase
     public let summary: String
     public let issues: [ExtensionLifecycleIssue]
 
     public init(
-        extensionID: String, phase: ExtensionLifecyclePhase, summary: String,
+        extensionID: String, phase: ExtensionLifecyclePhase,
+        runtimePhase: ExtensionRuntimePhase = .installed, summary: String,
         issues: [ExtensionLifecycleIssue] = []
     ) {
         self.extensionID = extensionID
         self.phase = phase
+        self.runtimePhase = runtimePhase
         self.summary = summary
         self.issues = issues
     }
@@ -57,7 +80,14 @@ public struct ExtensionLifecycleState: Codable, Equatable, Sendable {
     public static func preference(extensionID: String, enabled: Bool) -> Self {
         ExtensionLifecycleState(
             extensionID: extensionID, phase: enabled ? .enabled : .disabled,
+            runtimePhase: enabled ? .loading : .uninstalled,
             summary: enabled ? "Enabled; readiness has not been checked." : "Disabled.")
+    }
+
+    public static func loading(extensionID: String) -> Self {
+        ExtensionLifecycleState(
+            extensionID: extensionID, phase: .checking, runtimePhase: .loading,
+            summary: "Checking readiness.")
     }
 }
 
@@ -72,16 +102,19 @@ public struct ExtensionLifecycleCheck: Identifiable, Codable, Equatable, Sendabl
     public let id: String
     public let title: String
     public let status: ExtensionLifecycleCheckStatus
+    public let runtimePhase: ExtensionRuntimePhase?
     public let detail: String
     public let recoveryCommand: String?
 
     public init(
-        id: String, title: String, status: ExtensionLifecycleCheckStatus, detail: String,
+        id: String, title: String, status: ExtensionLifecycleCheckStatus,
+        runtimePhase: ExtensionRuntimePhase? = nil, detail: String,
         recoveryCommand: String? = nil
     ) {
         self.id = id
         self.title = title
         self.status = status
+        self.runtimePhase = runtimePhase
         self.detail = detail
         self.recoveryCommand = recoveryCommand
     }

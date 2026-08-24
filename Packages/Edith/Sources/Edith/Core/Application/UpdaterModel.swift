@@ -50,7 +50,7 @@ final class UpdaterModel: NSObject,
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
-        checkHistory = UpdateCheckLog.load(from: logURL)
+        checkHistory = AppRuntimeCenter().updateHistory(url: logURL)
         guard startingUpdater else { return }
         let updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)

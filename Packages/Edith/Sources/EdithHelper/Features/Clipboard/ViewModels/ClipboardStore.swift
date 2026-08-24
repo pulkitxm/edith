@@ -225,7 +225,10 @@ final class ClipboardStore: FeatureModule {
     }
 
     func togglePin(_ id: String) {
-        mutateOnDisk { try ClipboardActions.togglePin(ids: [id]) }
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+        mutateOnDisk {
+            try ClipboardOperationExecution.perform(entry.pinned ? .unpin : .pin, entry: entry)
+        }
     }
 
     func clear(includingPinned: Bool = false) {
@@ -235,7 +238,10 @@ final class ClipboardStore: FeatureModule {
     }
 
     func delete(_ id: String) {
-        mutateOnDisk(scheduleBackup: false) { try ClipboardActions.delete(ids: [id]) }
+        guard let entry = entries.first(where: { $0.id == id }) else { return }
+        mutateOnDisk(scheduleBackup: false) {
+            try ClipboardOperationExecution.perform(.remove, entry: entry)
+        }
     }
 
     private func mutateOnDisk(
@@ -259,17 +265,21 @@ final class ClipboardStore: FeatureModule {
         let plain =
             forcePlainText
             || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
-        guard ClipboardRepository.copyToPasteboard(entry, asPlainText: plain) else { return }
+        let copiedAt = Date()
+        guard
+            let outcome = try? ClipboardOperationExecution.perform(
+                .copy, entry: entry, asPlainText: plain,
+                recordCopy: {
+                    ClipboardActions.markingCopied(id: $0, in: entries, at: copiedAt)
+                }),
+            outcome.changed > 0
+        else { return }
         lastChangeCount = NSPasteboard.general.changeCount
-        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-            var updated = entries
-            updated[index].lastCopiedAt = Date()
-            adopt(updated)
-            let id = entry.id
-            Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: id) }
-            SettingsBackup.shared.scheduleClipboardBackup()
-            postChanged()
-        }
+        adopt(outcome.entries)
+        let id = entry.id
+        Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: id, at: copiedAt) }
+        SettingsBackup.shared.scheduleClipboardBackup()
+        postChanged()
 
         let autoPaste =
             SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.autoPaste)

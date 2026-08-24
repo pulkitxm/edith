@@ -52,17 +52,20 @@ private struct ExtensionMutationWorld {
     func center(granted: [ExtensionPermission: Bool] = [:]) -> ExtensionMutationCenter {
         let defaults = ExtensionMutationDefaults(defaults)
         let availableTools = availableTools
-        let toolAvailable: @Sendable (String) -> Bool = { availableTools.contains($0) }
+        let toolPresent: @Sendable (String) -> Bool = { availableTools.contains($0) }
         let lifecycle = ExtensionLifecycleProbeEnvironment(
             isEnabled: { entry in
                 defaults.store.object(forKey: entry.defaultsKey) as? Bool ?? false
-            }, grantedPermissions: { granted }, toolAvailable: toolAvailable,
+            }, grantedPermissions: { granted },
+            toolReadiness: {
+                toolPresent($0) ? .installed(version: "test") : .uninstalled
+            },
             helperRunning: { true }, platformCapabilities: .macOS, machineCount: { 1 },
-            adapterReadiness: { _ in nil })
+            adapterReadiness: { _ in .ready("Ready.") })
         return ExtensionMutationCenter(
             environment: ExtensionMutationEnvironment(
                 defaults: defaults.store, announceChange: { recorder.announce() },
-                grantedPermissions: { granted }, toolAvailable: toolAvailable,
+                grantedPermissions: { granted }, toolPresent: toolPresent,
                 installTool: installTool, lifecycle: lifecycle))
     }
 
@@ -198,5 +201,61 @@ private struct ExtensionMutationWorld {
             #expect(UserOperationCatalog.descriptor(cli: descriptor.cli) == descriptor)
             #expect(descriptor.effect == .write)
         }
+    }
+
+    @Test func everyRegisteredExtensionHasAnExplicitDetailRoute() {
+        let registered = Set(ExtensionRegistry.entries.map(\.id))
+        let routed = Set(ExtensionDetailRoute.allCases.map(\.rawValue))
+
+        #expect(registered == routed)
+        for entry in ExtensionRegistry.entries {
+            #expect(ExtensionDetailRoute(rawValue: entry.id) != nil)
+        }
+    }
+
+    @MainActor @Test func everyDisabledModalCanEnableAndDisableThroughTheMutationCenter() {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let granted = Dictionary(
+            uniqueKeysWithValues: ExtensionPermission.allCases.map { ($0, true) })
+        let center = world.center(granted: granted)
+
+        for entry in ExtensionRegistry.entries {
+            let coordinator = ExtensionModalCoordinator(entry: entry, mutationCenter: center)
+            #expect(!coordinator.isEnabled)
+
+            guard case let .applied(enabled, _) = coordinator.setEnabled(true) else {
+                Issue.record("\(entry.id) should enable from its detail modal")
+                continue
+            }
+            #expect(enabled.enabled)
+            #expect(coordinator.isEnabled)
+
+            guard case let .applied(disabled, tools) = coordinator.setEnabled(false) else {
+                Issue.record("\(entry.id) should disable from its detail modal")
+                continue
+            }
+            #expect(!disabled.enabled)
+            #expect(tools.isEmpty)
+            #expect(!coordinator.isEnabled)
+        }
+        #expect(world.recorder.announcementCount == ExtensionRegistry.entries.count * 2)
+    }
+
+    @MainActor @Test func modalDefersPermissionBlockedEnablementWithoutChangingState() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "calendar" })
+        let coordinator = ExtensionModalCoordinator(
+            entry: entry, mutationCenter: world.center())
+
+        guard case let .needsPermissions(plan) = coordinator.setEnabled(true) else {
+            Issue.record("Calendar should present its permission flow")
+            return
+        }
+        #expect(plan.required == [.calendar])
+        #expect(!coordinator.isEnabled)
+        #expect(coordinator.enableAfterPermissions() == .needsPermissions(plan))
+        #expect(world.recorder.announcementCount == 0)
     }
 }

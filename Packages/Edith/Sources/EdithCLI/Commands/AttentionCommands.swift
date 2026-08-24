@@ -485,8 +485,9 @@ struct AttentionFocusStartCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let focus = try AttentionCLI.repository.startFocus(
-                name: name, duration: AttentionCLI.duration(duration))
+            let focus = try AttentionFocusOperationExecution.start(
+                name: name, duration: AttentionCLI.duration(duration),
+                repository: AttentionCLI.repository)
             if json {
                 CLIOut.json(
                     .object([
@@ -509,7 +510,8 @@ struct AttentionFocusStopCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let focus = try AttentionCLI.repository.endFocus()
+            let focus = try AttentionFocusOperationExecution.stop(
+                repository: AttentionCLI.repository)
             let elapsed = (focus.endedAt ?? Date()).timeIntervalSince(focus.startedAt)
             if json {
                 CLIOut.json(
