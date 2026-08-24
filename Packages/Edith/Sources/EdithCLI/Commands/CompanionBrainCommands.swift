@@ -235,13 +235,17 @@ struct CompanionCoreSetCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             _ = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.writeCore(section: section, content: content)
+                try await CompanionMindRuntimeOperationExecution.setCore(
+                    section: section, content: content
+                ) { section, content in
+                    try await client.writeCore(section: section, content: content)
+                }
             }
             guard !json else {
                 CLIOut.json(.object(["section": .string(section), "ok": .bool(true)]))
                 return
             }
-            CLIOut.out("rewrote \(section)")
+            CLIOut.out(CompanionMindRuntimeOperationText.coreSet(section))
         }
     }
 }
@@ -714,7 +718,9 @@ struct CompanionInquireNextCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.nextQuestion()
+                try await CompanionMindRuntimeOperationExecution.nextQuestion {
+                    try await client.nextQuestion()
+                }
             }
             guard let question = outcome.question else {
                 guard !json else {
