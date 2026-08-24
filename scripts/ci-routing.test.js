@@ -67,12 +67,42 @@ test("every change area covers its repository inputs", () => {
       "apps/companion/compose.mac.yaml",
       "apps/companion/compose.gpu.yaml",
     ],
+    release_artifact: [
+      "Packages/Edith/Package.swift",
+      "Packages/Edith/Package.resolved",
+      "Packages/Edith/Sources/Edith/App.swift",
+      "Packages/Edith/Sources/ed/EdithCLI.swift",
+      "Packages/Edith/Vendor/Highlighter/Package.swift",
+      "Resources/Info.plist",
+      "edth.xcodeproj/project.pbxproj",
+      "build.sh",
+    ],
   };
 
   for (const [area, paths] of Object.entries(cases)) {
     for (const path of paths) {
       expect(matchesArea(area, path), `${area}: ${path}`).toBeTrue();
     }
+  }
+});
+
+test("automatic releases ignore changes outside shipped artifacts", () => {
+  const paths = [
+    "Packages/Edith/Tests/EdithTests/CLIShapeTests.swift",
+    "Packages/Edith/test.sh",
+    ".github/workflows/ci.yml",
+    "scripts/run-current-release-build.sh",
+    "apps/companion/src/main.rs",
+    "apps/site/index.html",
+    "apps/promo-video/src/Promo.tsx",
+    "docs/cli/README.md",
+    "README.md",
+    "Makefile",
+    ".swift-format",
+  ];
+
+  for (const path of paths) {
+    expect(matchesArea("release_artifact", path), path).toBeFalse();
   }
 });
 

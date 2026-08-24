@@ -34,6 +34,12 @@ test("CI gates the reusable release only on relevant checks", () => {
   expect(releaseJob).toContain(
     "github.event_name == 'workflow_dispatch' && inputs.release",
   );
+  expect(releaseJob).toContain(
+    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.release_artifact == 'true')",
+  );
+  expect(releaseJob).toContain(
+    "|| (github.event_name == 'workflow_dispatch' && inputs.release))",
+  );
   expect(releaseJob).toContain("cut_release: true");
   expect(releaseJob).toContain("uses: ./.github/workflows/release.yml");
 });
