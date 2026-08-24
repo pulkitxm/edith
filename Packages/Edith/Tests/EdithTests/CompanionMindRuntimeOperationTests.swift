@@ -56,17 +56,17 @@ import Testing
         let core = await CompanionMindRuntimeOperationExecution.setCore(
             section: "values", content: "honest"
         ) { section, content in
-            CompanionCoreSection(
-                section: section, content: content, tokens: 1,
-                updatedAt: "now", updatedBy: "user")
+            #expect(section == "values")
+            #expect(content == "honest")
+            return CompanionWriteAck(ok: true, section: section)
         }
         let question = await CompanionMindRuntimeOperationExecution.nextQuestion {
             CompanionNextQuestion(question: nil, askedToday: 1, dailyBudget: 3)
         }
 
         #expect(nightly.runId == "run-7")
+        #expect(core.ok)
         #expect(core.section == "values")
-        #expect(core.content == "honest")
         #expect(question.askedToday == 1)
         #expect(question.dailyBudget == 3)
     }

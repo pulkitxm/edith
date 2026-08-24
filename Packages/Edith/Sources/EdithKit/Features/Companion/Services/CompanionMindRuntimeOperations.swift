@@ -115,8 +115,8 @@ public enum CompanionMindRuntimeOperationExecution {
 
     public static func setCore(
         section: String, content: String,
-        using execute: (String, String) async throws -> CompanionCoreSection
-    ) async rethrows -> CompanionCoreSection {
+        using execute: (String, String) async throws -> CompanionWriteAck
+    ) async rethrows -> CompanionWriteAck {
         try await execute(section, content)
     }
 
