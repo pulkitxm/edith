@@ -140,6 +140,20 @@ and `make wiki`.
 This repo is kept comment-free and CI enforces it. Run `bun run strip-comments`
 if one slips in. Write names and structure that do not need prose.
 
+### Adding a user-visible operation
+
+Add the domain operation and its `UserOperationDescriptor` before wiring a UI
+control. Register it in `UserOperationCatalog` with a UI placement and a
+parseable example invocation. If the operation is intentionally command-line
+only, give the registration a concrete reason instead. Add the parser command,
+its `CommandTree` leaf and its CLI reference page in the same change.
+
+Do not register focus, scrolling, folding, local filtering, modal visibility or
+mouse capture as operations. These are presentation-only state. New kinds of
+presentation-only state belong in `UserInterfaceActionCatalog.presentationOnly`
+with a reason. Run the `CLIParityTests` suite to verify parser and completion
+coverage before running the full Swift checks.
+
 ## Pull Requests
 
 A pull request description is one line that states what changed and why. Use

@@ -39,9 +39,13 @@ struct CompanionChatCommand: AsyncParsableCommand {
             var latencyMs = 0
             var chunksConsidered = 0
             do {
-                for try await event in client.chat(
-                    message: message, conversationId: conversation, persona: persona)
-                {
+                let events = CompanionChatLibraryOperationExecution.chat(
+                    message: message, conversationID: conversation, persona: persona
+                ) { message, conversationID, persona in
+                    client.chat(
+                        message: message, conversationId: conversationID, persona: persona)
+                }
+                for try await event in events {
                     switch event {
                     case let .meta(id, activeModel):
                         conversationId = id
@@ -119,7 +123,10 @@ struct CompanionConversationsCommand: AsyncParsableCommand {
             }
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let conversations = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.conversations(limit: limit)
+                try await CompanionChatLibraryOperationExecution.conversations(limit: limit) {
+                    limit in
+                    try await client.conversations(limit: limit)
+                }
             }
             guard !json else {
                 CLIOut.json(
@@ -155,7 +162,9 @@ struct CompanionConversationsCommand: AsyncParsableCommand {
 
     private func show(_ id: String) async throws {
         let detail = try await CompanionBridge.request(endpoint: endpoint) { client in
-            try await client.conversation(id: id)
+            try await CompanionChatLibraryOperationExecution.conversation(id: id) { id in
+                try await client.conversation(id: id)
+            }
         }
         guard !json else {
             CLIOut.json(
@@ -210,11 +219,13 @@ struct CompanionForgetCommand: AsyncParsableCommand {
                 json: json, fields: ["conversation": .string(id)])
             guard plan.shouldApply() else { return }
             let deletion = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.deleteConversation(id: id)
+                try await CompanionChatLibraryOperationExecution.forget(id: id) { id in
+                    try await client.deleteConversation(id: id)
+                }
             }
             plan.finish(
                 changed: deletion.deleted == id,
-                plain: "forgot conversation \(deletion.deleted)",
+                plain: CompanionChatLibraryOperationText.forgot(deletion),
                 fields: ["deleted": .string(deletion.deleted)])
         }
     }
@@ -242,7 +253,9 @@ struct CompanionEpisodeCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let episode = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.episodeDetail(id: id)
+                try await CompanionChatLibraryOperationExecution.episode(id: id) { id in
+                    try await client.episodeDetail(id: id)
+                }
             }
             if open {
                 let (data, contentType) = try await CompanionBridge.request(endpoint: endpoint) {
@@ -315,13 +328,15 @@ struct CompanionNightlyCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let started = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.nightlyRun()
+                try await CompanionMindRuntimeOperationExecution.nightly {
+                    try await client.nightlyRun()
+                }
             }
             guard !json else {
                 CLIOut.json(.object(["runId": .string(started.runId)]))
                 return
             }
-            CLIOut.out("pipeline finished, run \(started.runId); see `ed companion runs`")
+            CLIOut.out(CompanionMindRuntimeOperationText.nightly(started))
         }
     }
 }
@@ -409,18 +424,12 @@ struct CompanionReasonSetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            if let provider, !["anthropic", "openai", ""].contains(provider) {
-                throw CLIFailure.usage(
-                    "--provider must be anthropic or openai")
-            }
-            guard provider != nil || model != nil || url != nil || apiKey != nil else {
-                throw CLIFailure.usage(
-                    "nothing to change",
-                    hint: "pass at least one of --provider, --model, --url, --api-key")
-            }
-            let settings = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.updateReasonSettings(
-                    provider: provider, url: url, model: model, apiKey: apiKey)
+            let update = try CompanionSettingsOperationBridge.reasonUpdate(
+                provider: provider, url: url, model: model, apiKey: apiKey)
+            let settings = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.updateReason(update)
             }
             guard !json else {
                 CLIOut.json(reasonSettingsJSON(settings))
@@ -443,8 +452,10 @@ struct CompanionReasonTestCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.testReason()
+            let outcome = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.testReason()
             }
             guard !json else {
                 CLIOut.json(
@@ -455,7 +466,7 @@ struct CompanionReasonTestCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out("ok in \(outcome.latencyMs) ms  (\(outcome.model))")
+            CLIOut.out(CompanionSettingsOperationText.reasonTest(outcome))
         }
     }
 }

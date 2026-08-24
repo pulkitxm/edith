@@ -235,13 +235,17 @@ struct CompanionCoreSetCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             _ = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.writeCore(section: section, content: content)
+                try await CompanionMindRuntimeOperationExecution.setCore(
+                    section: section, content: content
+                ) { section, content in
+                    try await client.writeCore(section: section, content: content)
+                }
             }
             guard !json else {
                 CLIOut.json(.object(["section": .string(section), "ok": .bool(true)]))
                 return
             }
-            CLIOut.out("rewrote \(section)")
+            CLIOut.out(CompanionMindRuntimeOperationText.coreSet(section))
         }
     }
 }
@@ -714,7 +718,9 @@ struct CompanionInquireNextCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.nextQuestion()
+                try await CompanionMindRuntimeOperationExecution.nextQuestion {
+                    try await client.nextQuestion()
+                }
             }
             guard let question = outcome.question else {
                 guard !json else {
@@ -1541,12 +1547,12 @@ struct CompanionConnectorsSetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard github != nil || notion != nil else {
-                throw CLIFailure.usage(
-                    "nothing to set", hint: "pass --github or --notion, empty to clear")
-            }
-            let settings = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.updateConnectorSettings(github: github, notion: notion)
+            let update = try CompanionSettingsOperationBridge.connectorUpdate(
+                github: github, notion: notion)
+            let settings = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.updateConnectors(update)
             }
             guard !json else {
                 CLIOut.json(
@@ -1582,15 +1588,10 @@ struct CompanionConnectorsImportCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let url = URL(fileURLWithPath: path.expandingTilde())
-            let data: Data
-            do {
-                data = try Data(contentsOf: url)
-            } catch {
-                throw CLIFailure.usage(
-                    "could not read \(url.path)", hint: error.localizedDescription)
-            }
-            let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.importConnector(source: source, json: data)
+            let outcome = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.importConnector(source: source, from: url)
             }
             guard !json else {
                 CLIOut.json(
@@ -1602,10 +1603,7 @@ struct CompanionConnectorsImportCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out(
-                "read \(outcome.entriesRead) entries, stored "
-                    + "\(outcome.observationsInserted) new observations, skipped "
-                    + "\(outcome.skipped)")
+            CLIOut.out(CompanionSettingsOperationText.connectorImport(outcome))
         }
     }
 }
@@ -1784,8 +1782,11 @@ struct CompanionDbReindexCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
+    @Flag(name: .long, help: "Apply the previewed maintenance operation.")
+    var yes = false
+
     func run() async throws {
-        try await CompanionDbRunner.run(action: "reindex", endpoint: endpoint, json: json)
+        try await CompanionDbRunner.reindex(endpoint: endpoint, json: json, yes: yes)
     }
 }
 
@@ -1800,8 +1801,11 @@ struct CompanionDbRebuildCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
+    @Flag(name: .long, help: "Apply the previewed maintenance operation.")
+    var yes = false
+
     func run() async throws {
-        try await CompanionDbRunner.run(action: "rebuild-derived", endpoint: endpoint, json: json)
+        try await CompanionDbRunner.rebuildDerived(endpoint: endpoint, json: json, yes: yes)
     }
 }
 
@@ -1831,6 +1835,51 @@ enum CompanionDbRunner {
             } else {
                 CLIOut.out("\(action) done")
             }
+        }
+    }
+
+    static func reindex(endpoint: String?, json: Bool, yes: Bool) async throws {
+        try await execute {
+            let operation = CompanionSettingsOperation.dbReindex
+            let plan = CLIDestructivePlan(
+                action: operation.descriptor.summary, targets: operation.previewTargets,
+                confirmed: yes, json: json)
+            guard plan.shouldApply() else { return }
+            let result = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.reindex()
+            }
+            plan.finish(
+                changed: true, plain: CompanionSettingsOperationText.reindex(result),
+                fields: [
+                    "chunksDropped": .int(result.maintenance.chunksDropped ?? 0),
+                    "episodesIndexed": .int(result.indexing.episodesIndexed),
+                    "chunksCreated": .int(result.indexing.chunksCreated),
+                ])
+        }
+    }
+
+    static func rebuildDerived(endpoint: String?, json: Bool, yes: Bool) async throws {
+        try await execute {
+            let operation = CompanionSettingsOperation.dbRebuildDerived
+            let plan = CLIDestructivePlan(
+                action: operation.descriptor.summary, targets: operation.previewTargets,
+                confirmed: yes, json: json)
+            guard plan.shouldApply() else { return }
+            let outcome = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.rebuildDerived()
+            }
+            plan.finish(
+                changed: true, plain: CompanionSettingsOperationText.rebuildDerived(outcome),
+                fields: [
+                    "chunksDropped": .int(outcome.chunksDropped ?? 0),
+                    "beliefsRetired": .int(outcome.beliefsRetired ?? 0),
+                    "factsExpired": .int(outcome.factsExpired ?? 0),
+                    "episodesKept": .int(outcome.episodesKept ?? 0),
+                ])
         }
     }
 }

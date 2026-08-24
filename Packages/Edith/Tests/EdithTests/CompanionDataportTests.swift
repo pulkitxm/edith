@@ -44,11 +44,33 @@ import Testing
         #expect(result.stdout.isEmpty)
     }
 
-    @Test func wipeRefusesWithoutYes() async {
+    @Test func wipePreviewsWithoutYes() async {
         let result = await CLIProbe.run(["companion", "wipe"])
-        #expect(result.code == ExitCodes.usage)
-        #expect(result.stderr.contains("export"))
-        #expect(result.stdout.isEmpty)
+        #expect(result.code == ExitCodes.success)
+        #expect(result.stdout.contains("would Delete all companion memory"))
+        #expect(result.stdout.contains("all companion vault files"))
+        #expect(result.stderr.contains("nothing changed; pass --yes"))
+    }
+
+    @Test func wipeJSONPreviewIsStructuredAndDoesNotCallTheBackend() async throws {
+        let result = await CLIProbe.run(["companion", "wipe", "--json"])
+        let object = try #require(result.object)
+        #expect(result.code == ExitCodes.success)
+        #expect(object["applied"] as? Bool == false)
+        #expect(object["changed"] as? Bool == false)
+        #expect((object["targets"] as? [String])?.count == 2)
+        #expect(result.stderr.isEmpty)
+    }
+
+    @Test func derivedMaintenancePreviewsWithoutCallingTheBackend() async throws {
+        for command in ["reindex", "rebuild-derived"] {
+            let result = await CLIProbe.run(["companion", "db", command, "--json"])
+            let object = try #require(result.object)
+            #expect(result.code == ExitCodes.success)
+            #expect(object["applied"] as? Bool == false)
+            #expect(object["changed"] as? Bool == false)
+            #expect(!((object["targets"] as? [String]) ?? []).isEmpty)
+        }
     }
 
     @Test func importOfNothingIsNotFound() async {

@@ -69,7 +69,7 @@ import Testing
 
         #expect(source.contains("var quinjetEnabled = false"))
         #expect(source.contains("case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled"))
-        #expect(source.contains("case \"quinjet\": QuinjetRows()"))
+        #expect(source.contains("case .quinjet: QuinjetRows()"))
         #expect(source.contains("private struct QuinjetRows: View"))
         #expect(source.contains("CLIToolStatusSection(tools: [.quinjet]"))
         #expect(!source.contains("guard entry.id != \"calendar\""))
@@ -83,11 +83,13 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("ExtensionLifecycleRows(entry: entry)"))
+        #expect(source.contains("ExtensionLifecycleRows("))
         #expect(source.contains("if let lifecycle = entry.lifecycle"))
         #expect(source.contains("Text(entry.subtitle)"))
-        #expect(source.contains("ExtensionLifecycleProbe().report(for: entry)"))
+        #expect(source.contains("coordinator.lifecycleReport()"))
         #expect(source.contains("report.state.phase.title"))
+        #expect(source.contains("report.state.runtimePhase.title"))
+        #expect(source.contains("ExtensionLifecycleState.loading(extensionID: entry.id)"))
         #expect(source.contains("ForEach(report.checks)"))
     }
 

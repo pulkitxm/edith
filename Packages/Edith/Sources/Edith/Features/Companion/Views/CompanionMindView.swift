@@ -41,7 +41,12 @@ final class CompanionMindModel: CompanionRefreshable {
         savingCore = true
         defer { savingCore = false }
         do {
-            _ = try await client.writeCore(section: section, content: content)
+            let client = client
+            _ = try await CompanionMindRuntimeOperationExecution.setCore(
+                section: section, content: content
+            ) { section, content in
+                try await client.writeCore(section: section, content: content)
+            }
             await refresh()
         } catch {
             self.error = error.localizedDescription
@@ -53,7 +58,10 @@ final class CompanionMindModel: CompanionRefreshable {
         runningNightly = true
         defer { runningNightly = false }
         do {
-            _ = try await client.nightlyRun()
+            let client = client
+            _ = try await CompanionMindRuntimeOperationExecution.nightly {
+                try await client.nightlyRun()
+            }
             await refresh()
         } catch {
             self.error = error.localizedDescription
