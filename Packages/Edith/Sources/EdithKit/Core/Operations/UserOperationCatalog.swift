@@ -3,6 +3,9 @@ import EdithCore
 public enum UserOperationCatalog {
     public static let descriptors =
         MachineControlOperation.allCases.map(\.descriptor)
+        + MachineMutationOperation.allCases.map(\.descriptor)
+        + MachinePowerOperation.allCases.map(\.descriptor)
+        + MachineConnectionOperation.allCases.map(\.descriptor)
         + ExtensionMutationOperation.allCases.map(\.descriptor)
         + CalendarEventOperation.allCases.map(\.descriptor)
         + ShelfItemOperation.allCases.map(\.descriptor)
