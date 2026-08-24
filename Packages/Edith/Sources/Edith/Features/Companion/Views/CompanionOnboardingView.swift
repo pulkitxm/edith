@@ -106,11 +106,13 @@ final class CompanionSetupModel: Identifiable {
         stages = [:]
         defer { deploying = false }
         do {
-            let deployment = try await CompanionStackControl.deploy(
-                host: host, config: CompanionConfigStore.load(),
-                progress: { stage, detail in
-                    Task { @MainActor in self.advance(to: stage, detail: detail) }
-                })
+            let deployment = try await CompanionMindRuntimeOperationExecution.deploy {
+                try await CompanionStackControl.deploy(
+                    host: host, config: CompanionConfigStore.load(),
+                    progress: { stage, detail in
+                        Task { @MainActor in self.advance(to: stage, detail: detail) }
+                    })
+            }
             finishStages()
             deployed = deployment
         } catch {
