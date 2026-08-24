@@ -586,7 +586,11 @@ struct CompanionSearchCommand: AsyncParsableCommand {
                 throw CLIFailure.usage("--limit must be 50 or less")
             }
             let hits = try await CompanionBridge.embeddingRequest(endpoint: endpoint) { client in
-                try await client.search(query: query, k: limit)
+                try await CompanionChatLibraryOperationExecution.search(
+                    query: query, limit: limit
+                ) { query, limit in
+                    try await client.search(query: query, k: limit)
+                }
             }
             guard !json else {
                 CLIOut.json(.array(hits.map(CompanionBridge.searchJSON)))
@@ -624,14 +628,15 @@ struct CompanionIndexCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.embeddingRequest(endpoint: endpoint) { client in
-                try await client.index()
+                try await CompanionChatLibraryOperationExecution.index {
+                    try await client.index()
+                }
             }
             guard !json else {
                 CLIOut.json(CompanionBridge.indexJSON(outcome))
                 return
             }
-            CLIOut.out(
-                "indexed \(outcome.episodesIndexed) episodes into \(outcome.chunksCreated) chunks")
+            CLIOut.out(CompanionChatLibraryOperationText.indexed(outcome))
         }
     }
 }
