@@ -409,18 +409,12 @@ struct CompanionReasonSetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            if let provider, !["anthropic", "openai", ""].contains(provider) {
-                throw CLIFailure.usage(
-                    "--provider must be anthropic or openai")
-            }
-            guard provider != nil || model != nil || url != nil || apiKey != nil else {
-                throw CLIFailure.usage(
-                    "nothing to change",
-                    hint: "pass at least one of --provider, --model, --url, --api-key")
-            }
-            let settings = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.updateReasonSettings(
-                    provider: provider, url: url, model: model, apiKey: apiKey)
+            let update = try CompanionSettingsOperationBridge.reasonUpdate(
+                provider: provider, url: url, model: model, apiKey: apiKey)
+            let settings = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.updateReason(update)
             }
             guard !json else {
                 CLIOut.json(reasonSettingsJSON(settings))
@@ -443,8 +437,10 @@ struct CompanionReasonTestCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.testReason()
+            let outcome = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.testReason()
             }
             guard !json else {
                 CLIOut.json(
@@ -455,7 +451,7 @@ struct CompanionReasonTestCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out("ok in \(outcome.latencyMs) ms  (\(outcome.model))")
+            CLIOut.out(CompanionSettingsOperationText.reasonTest(outcome))
         }
     }
 }

@@ -344,8 +344,10 @@ struct CompanionSyncCommand: AsyncParsableCommand {
         try await execute {
             switch connector {
             case "github":
-                let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                    try await client.syncGithub()
+                let outcome = try await CompanionSettingsOperationBridge.request(
+                    endpoint: endpoint
+                ) { operations in
+                    try await operations.syncGithub()
                 }
                 guard !json else {
                     CLIOut.json(
@@ -355,9 +357,7 @@ struct CompanionSyncCommand: AsyncParsableCommand {
                         ]))
                     return
                 }
-                CLIOut.out(
-                    "fetched \(outcome.eventsFetched) events, "
-                        + "\(outcome.observationsInserted) new observations")
+                CLIOut.out(CompanionSettingsOperationText.syncGithub(outcome))
             case "notion":
                 let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                     try await client.syncNotion(full: full)
