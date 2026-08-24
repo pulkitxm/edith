@@ -264,6 +264,9 @@ final class MusicRemote {
         rescanGeneration &+= 1
         let generation = rescanGeneration
         let scanLibrary = scanLibrary
+        entriesTask?.cancel()
+        entriesTask = nil
+        entriesGeneration &+= 1
         folderCache.removeAll()
         invalidateSearchScope()
         refreshFavourites()

@@ -99,6 +99,26 @@ import Testing
         #expect(stopped.tracks.isEmpty)
     }
 
+    @Test func rescanRejectsAnOlderFolderListingBeforeTheScanFinishes() async {
+        let listing = MusicRemoteLoadFixture()
+        let scanning = MusicRemoteLoadFixture()
+        let remote = MusicRemote(
+            scanLibrary: { scanning.scan() }, listFolder: { listing.list($0) })
+        remote.navigate(to: "")
+        #expect(await listing.waitForFirstStart())
+
+        remote.rescan()
+        #expect(await scanning.waitForFirstStart())
+        listing.releaseFirst()
+        #expect(await listing.waitForFirstFinish())
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(remote.folderTracks.isEmpty)
+
+        scanning.releaseFirst()
+        #expect(await scanning.waitForFirstFinish())
+        #expect(await waitUntil { remote.folderTracks.map(\.relativePath) == ["/new.mp3"] })
+    }
+
     @Test func searchGenerationHandlesFolderAtoBtoA() async {
         let fixture = MusicRemoteLoadFixture()
         let remote = MusicRemote(searchFolder: { fixture.search($0) })
