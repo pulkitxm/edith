@@ -8,7 +8,10 @@ public enum PerformanceArea: String, CaseIterable, Codable, Sendable {
     case git
     case github
     case extensionDiscovery
+    case uiRendering
     case cache
+    case backgroundWorker
+    case generation
     case memory
     case mainThread
     case largeRepository

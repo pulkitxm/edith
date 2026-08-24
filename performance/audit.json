@@ -8,7 +8,10 @@
     "git",
     "github",
     "extensionDiscovery",
+    "uiRendering",
     "cache",
+    "backgroundWorker",
+    "generation",
     "memory",
     "mainThread",
     "largeRepository",
@@ -118,6 +121,23 @@
       ]
     },
     {
+      "area": "uiRendering",
+      "status": "protected",
+      "finding": "Clipboard history bounds its initial render population and extends it only as navigation reaches later rows.",
+      "measurement": "The initial visible population is capped at 80 rows, with navigation behavior exercised against a 500-item history.",
+      "regressionProperty": "Large clipboard histories do not create every row before it becomes visible.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithHelper/Features/Clipboard/Views/ClipboardPanelView.swift",
+          "contains": "static let pageSize = 80"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/ClipboardPanelNavigationTests.swift",
+          "contains": "commandDownFallsBackToTheRenderedPage"
+        }
+      ]
+    },
+    {
       "area": "cache",
       "status": "protected",
       "finding": "Contributor cache hit and miss decisions are visible, and one decode is reused across network fallback.",
@@ -131,6 +151,40 @@
         {
           "path": "Packages/Edith/Tests/EdithTests/ContributorsTests.swift",
           "contains": "#expect(fileManager.contentReads == 1)"
+        }
+      ]
+    },
+    {
+      "area": "backgroundWorker",
+      "status": "protected",
+      "finding": "Usage collection runs in a utility subprocess and terminates that subprocess when its task is canceled.",
+      "measurement": "The usage.refresh interval covers the worker lifetime and its structured event transcript.",
+      "regressionProperty": "The collector retains utility quality of service and task-cancellation handling.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "contains": "process.qualityOfService = .utility"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "contains": "withTaskCancellationHandler"
+        }
+      ]
+    },
+    {
+      "area": "generation",
+      "status": "protected",
+      "finding": "Local and remote project refreshes reject canceled or superseded responses before updating visible state.",
+      "measurement": "Deterministic concurrency tests finish project requests out of order and cancel an in-flight request.",
+      "regressionProperty": "Only the newest project refresh may update the corresponding UI state.",
+      "evidence": [
+        {
+          "path": "Packages/Edith/Sources/Edith/Features/Quinjet/ViewModels/QuinjetPageModel.swift",
+          "contains": "guard generation == projectRefreshGeneration else { return }"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/QuinjetClientTests.swift",
+          "contains": "newestLocalProjectRefreshWins"
         }
       ]
     },

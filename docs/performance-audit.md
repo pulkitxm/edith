@@ -1,9 +1,10 @@
 # Performance audit
 
 The checked audit lives in `performance/audit.json`. It covers startup, input,
-repository reads, Git work, GitHub requests, extension discovery, cache behavior,
-memory, main-thread work, large repositories, and slow networks. CI verifies that
-every area retains live source or test evidence.
+repository reads, Git work, GitHub requests, extension discovery, bounded UI rendering,
+cache behavior, background workers, generation safety, memory, main-thread work, large
+repositories, and slow networks. CI verifies that every area retains live source or test
+evidence.
 
 ## Current findings
 
@@ -15,7 +16,10 @@ every area retains live source or test evidence.
 | Git | Usage collection owns the repository and Git subprocess pipeline. | The asynchronous utility process has one end-to-end interval and structured phase events. |
 | GitHub | Contributor data uses a daily cache and failure fallback. | Cache and request intervals plus a one-read fallback test. |
 | Extension discovery | Readiness is requested on demand and aggregate reports run concurrently. | The settings readiness request is traced. |
+| UI rendering | Clipboard history renders at most 80 rows before extending its visible page. | Navigation tests use a 500-item history and stay within the rendered page. |
 | Cache | Contributor hit and miss decisions are visible. | Corrupt-cache fallback decodes once. |
+| Background workers | Usage collection runs as a utility process and handles task cancellation. | The complete worker lifetime is traced by `usage.refresh`. |
+| Generation safety | Local and remote project refreshes reject canceled or superseded results. | Deterministic concurrency tests complete requests out of order. |
 | Memory | Helper CPU, RSS, and optional idle wakeups have a machine-readable sampler. | Fixture tests lock schema, percentiles, and units. |
 | Main thread | Every runtime interval records its begin and end thread context. | A deterministic test checks the main-thread signal. |
 | Large repository | Dashboard JSON decoding is detached, but aggregation returns to the main actor. | Decode placement is checked and aggregation has its own interval. |

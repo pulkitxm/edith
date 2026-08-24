@@ -6,7 +6,8 @@ import Testing
         #expect(
             Set(PerformanceArea.allCases.map(\.rawValue)) == [
                 "startup", "input", "repository", "git", "github", "extensionDiscovery",
-                "cache", "memory", "mainThread", "largeRepository", "slowNetwork",
+                "uiRendering", "cache", "backgroundWorker", "generation", "memory",
+                "mainThread", "largeRepository", "slowNetwork",
             ])
     }
 
