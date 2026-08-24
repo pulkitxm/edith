@@ -7,12 +7,13 @@ path of something you already dropped there without opening the shelf at all.
 
 The shelf is a plain folder with an index beside it: the files sit flat in
 `~/Library/Application Support/Edith/Shelf`, and `.index.json` in that same
-folder records each one's id, name and when it landed. Nothing here talks to
-the app, so every verb works whether or not Edith is running, and the paths it
-prints are real paths any other tool can open.
+folder records each one's id, name, canvas position and when it landed. File,
+text, position and removal mutations work without Edith running. `share` asks
+the running menu bar helper to present its anchored macOS picker.
 
 Items are numbered from 1, newest first by the time they were added. That
-number is what `path` and `rm` take. It is `ed`'s own ordering: the notch lays
+number is what `path`, `update`, `rm`, `open`, `reveal` and `share` take. It is
+`ed`'s own ordering: the notch lays
 its tiles out on a canvas you can drag them around on, so the number here names
 a row in this listing rather than a position on screen.
 
@@ -24,11 +25,14 @@ a row in this listing rather than a position on screen.
 | `ed shelf ls` | Lists what is parked, newest first, with size and when it landed. |
 | `ed shelf path <n>` | Prints the full path of one item, which is what to pipe into another tool. |
 | `ed shelf add <file>` | Copies a file onto the shelf and leaves the original where it is. |
-| `ed shelf rm <n>` | Previews deleting one shelf copy; `--yes` applies it. |
+| `ed shelf add-text <text...>` | Writes text into a new shelf item. |
+| `ed shelf update <n> --x <number> --y <number>` | Sets one item's stored canvas position. |
+| `ed shelf rm <n...>` | Previews deleting selected shelf copies; `--yes` applies it. |
 | `ed shelf clear` | Previews emptying the shelf; `--yes` applies it. |
-| `ed shelf open <n>` | Opens one item in its default application. |
-| `ed shelf reveal <n>` | Reveals one item in Finder. |
-| `ed shelf share <n>` | Opens the notch shelf's macOS share picker for one item. |
+| `ed shelf purge [window]` | Previews removing items older than the configured or named window. |
+| `ed shelf open <n...>` | Opens selected items in their default applications. |
+| `ed shelf reveal <n...>` | Reveals selected items in Finder. |
+| `ed shelf share <n...>` | Opens the notch shelf's macOS share picker for selected items. |
 
 `ed shelf list` is the same command as `ed shelf ls`, and `ed shelf` with
 nothing after it runs `ls`, including its flags: `ed shelf --json` is
@@ -39,8 +43,11 @@ nothing after it runs `ls`, including its flags: `ed shelf --json` is
 - [`ed shelf ls`](./ls.md)
 - [`ed shelf path`](./path.md)
 - [`ed shelf add`](./add.md)
+- [`ed shelf add-text`](./add-text.md)
+- [`ed shelf update`](./update.md)
 - [`ed shelf rm`](./rm.md)
 - [`ed shelf clear`](./clear.md)
+- [`ed shelf purge`](./purge.md)
 - [`ed shelf open`](./open.md)
 - [`ed shelf reveal`](./reveal.md)
 - [`ed shelf share`](./share.md)
@@ -49,17 +56,17 @@ nothing after it runs `ls`, including its flags: `ed shelf --json` is
 
 | Code | When this group produces it |
 | --- | --- |
-| 0 | The listing, path, add, removal or clear succeeded. Also an empty shelf under `ls`, an already empty shelf under `clear`, and `--help` on the group or any verb. |
-| 1 | `add` could not copy the file: an unreadable source, a destination the filesystem refused, or no space. The hint is the system's own description. |
+| 0 | The read, mutation or action request succeeded. Also an empty shelf under `ls`, a preview, and `--help` on the group or any verb. |
+| 1 | A file or index mutation failed. The hint is the system's own description. |
 | 2 | The command line was wrong in ArgumentParser's own terms: an unknown flag, a missing `<index>` or `<file>`, an `<index>` that is not an integer, or an extra positional argument. |
-| 3 | `add` was given a path with nothing at it, or `path` or `rm` was given a number below 1 or above the number of items. |
-| 4 | `path` or `rm` was run on an empty shelf. |
+| 3 | `add` was given a path with nothing at it, or an item command was given a number below 1 or above the number of items. |
+| 4 | An item command was run on an empty shelf, or `share` could not reach an enabled running notch shelf. |
 
-Exit 4 here does not mean the app is missing. Nothing in this group talks to
-Edith, and the one thing that reports itself unavailable is an empty shelf,
-which is a state you fix with `ed shelf add` rather than by starting the app.
-`ls` treats the same empty shelf as success, so use `ls` when you are probing
-rather than acting.
+For local index operations, exit 4 means the shelf is empty. For `share`, it
+means the menu bar helper is not running, the Notch Shelf extension is off, the
+items disappeared before the helper handled them, or no shelf panel could
+present the picker. `ls` treats an empty shelf as success, so use it when
+probing state.
 
 ## Notes and gotchas
 
@@ -68,27 +75,20 @@ rather than acting.
   in that same folder, hidden by its leading dot. Because names are made
   unique against the folder, adding a file called `.index.json` lands as
   `.index 2.json` rather than clobbering the index.
-- A running Edith holds the index in memory. It reads `.index.json` once, when
-  the notch shelf starts, and writes the whole in-memory list back on every
-  change it makes. Nothing tells it that `ed` wrote the file, so a shelf
-  changed from the CLI while the app is open does not appear in the notch, and
-  the next drag or drag-out from the notch saves the app's older list over
-  yours. Files added by `ed` survive as orphans in the folder; items removed by
-  `ed` come back in the index with `"exists": false`, because their copies are
-  really gone. Quitting and reopening Edith, or running the CLI while it is
-  closed, avoids the whole question.
+- The CLI and notch helper use one mutation executor and broadcast each saved
+  snapshot. Changes made by `ed` appear in a running shelf, and the next UI
+  action starts from the same index instead of restoring a stale in-memory list.
 - `ls` sorts newest first every time, but the index file is written in whatever
   order the writer used. `add` appends, the way the app does. A confirmed `rm`
   filters the current index by the previewed id, preserving the stored order of
   everything else.
 - Each item can carry a `position` recorded by dragging its tile around the
-  notch canvas. `ed` never reads it, writes it or shows it, and it survives
-  `ed shelf rm` for the items that are left, because `rm` saves back the items
-  it decoded rather than rebuilding them.
-- `add` always reports `"index": 1`. The number is written into the document
-  rather than recomputed, and it is right because the item's `addedAt` is the
-  moment you ran the command, unless something on the shelf carries a
-  timestamp from the future.
+  notch canvas. `ls`, `path`, add results and action results return it as either
+  `{ "x": number, "y": number }` or `null`. `update` writes the same shared
+  field as a native canvas drag.
+- `add` and `add-text` report the new item's index from the snapshot that was
+  committed. The number therefore matches the next `ls` result even when an
+  existing item carries a timestamp from the future.
 - There is no `ed shelf get`, no `ed shelf copy` and no way to pull an item
   back out. `path` plus `cp` is the whole story, and the shelf's copy stays
   until you remove it.
@@ -96,12 +96,10 @@ rather than acting.
   `notchShelfEnabled` off, so you can park and read files even when the notch
   is not showing anything. Turn the surface on with
   `ed extensions enable notchShelf`.
-- Nothing here expires anything either. Items expire only when a running Edith
-  sweeps them, using `notchShelfKeepDuration`, whose values are `forever`,
-  `oneHour`, `oneDay`, `oneWeek` and `oneMonth`, defaulting to `forever` when
-  the setting is unset or unrecognised. The sweep happens when the shelf starts
-  and each time it expands, so a Mac whose Edith is closed keeps everything
-  regardless of the setting.
+- `purge` uses `notchShelfKeepDuration` unless you name `forever`, `oneHour`,
+  `oneDay`, `oneWeek` or `oneMonth`. It previews exact file paths by default
+  and removes them only with `--yes`. The running shelf uses the same expiry
+  executor when it starts and expands.
 - The rest of the notch's behaviour is settings rather than commands:
   `notchShelfOpenOnDrag`, `notchShelfOpenOnHover`, `notchShelfRequireOption`,
   `notchShelfRemoveAfterDragOut`, `notchShelfShowOnExternal`,
@@ -109,12 +107,12 @@ rather than acting.
 - The table flattens control characters out of a name, so a filename
   containing a newline or a tab prints on one line. `--json` carries the name
   exactly as it is on disk, which is what to match on.
-- `--help` works on the group and on all five verbs, prints on stdout and exits
+- `--help` works on the group and every verb, prints on stdout and exits
   0. `--version` is inherited from the root and works on any of them too,
   printing the CLI version.
-- Completion knows the group and reads the current shelf indices. `ed shelf <TAB>` offers the verbs, and
-  `ed shelf add <TAB>` completes file paths. The index slots of `path` and `rm`
-  offer the current item numbers.
+- Completion knows the group and reads the current shelf indices. `ed shelf <TAB>`
+  offers the verbs, `ed shelf add <TAB>` completes file paths, and every item
+  slot offers the current item numbers, including repeated grouped selections.
 
 ## Where to go next
 

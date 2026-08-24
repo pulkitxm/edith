@@ -241,6 +241,21 @@ import EdithCore
         }
     }
 
+    @Test func shelfAdapterRejectsRedirectedEmptyStorage() throws {
+        let container = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: container) }
+        let root = container.appendingPathComponent("Shelf")
+        let outside = container.appendingPathComponent("Outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: root, withDestinationURL: outside)
+
+        guard case .failed = ExtensionLiveAdapters.shelfReadiness(root: root) else {
+            Issue.record("redirected empty shelf storage did not fail")
+            return
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
+    }
+
     @Test func clipboardAdapterReportsEmptyReadyDegradedAndCorruptStorage() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
