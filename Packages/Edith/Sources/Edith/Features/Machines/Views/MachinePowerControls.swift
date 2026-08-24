@@ -38,7 +38,7 @@ struct MachinePowerControls: View {
     let model: MachinesModel
     let dark: Bool
 
-    @State private var confirmPower: String?
+    @State private var confirmPower: MachinePowerOperation?
     @State private var message: String?
     @State private var messageIsFailure = false
     @State private var messageToken = 0
@@ -55,13 +55,13 @@ struct MachinePowerControls: View {
             controls
         }
         .confirmationDialog(
-            confirmPower == "reboot" ? "Restart this machine?" : "Shut this machine down?",
+            confirmPower == .reboot ? "Restart this machine?" : "Shut this machine down?",
             isPresented: Binding(
                 get: { confirmPower != nil }, set: { if !$0 { confirmPower = nil } }),
             titleVisibility: .visible
         ) {
-            Button(confirmPower == "reboot" ? "Restart" : "Shut down", role: .destructive) {
-                runPower(confirmPower ?? "")
+            Button(confirmPower == .reboot ? "Restart" : "Shut down", role: .destructive) {
+                if let confirmPower { runPower(confirmPower) }
                 confirmPower = nil
             }
             Button("Cancel", role: .cancel) { confirmPower = nil }
@@ -82,13 +82,13 @@ struct MachinePowerControls: View {
                 symbol: "arrow.triangle.2.circlepath", tint: DashSkin.accent(dark),
                 help: "Restart this machine", enabled: session.state.isConnected, dark: dark
             ) {
-                confirmPower = "reboot"
+                confirmPower = .reboot
             }
             PowerIconButton(
                 symbol: "power", tint: DashSkin.danger, help: "Shut this machine down",
                 enabled: session.state.isConnected, dark: dark
             ) {
-                confirmPower = "poweroff"
+                confirmPower = .shutdown
             }
             PowerIconButton(
                 symbol: "bolt", tint: DashSkin.gold,
@@ -96,7 +96,7 @@ struct MachinePowerControls: View {
                     ?? "No wake address known yet",
                 enabled: wakeAddress != nil, dark: dark
             ) {
-                announce(model.wake(machine: session.machine), failure: false)
+                runPower(.wake)
             }
         }
         .padding(UIScale.pt(2))
@@ -138,26 +138,33 @@ struct MachinePowerControls: View {
         }
     }
 
-    private func runPower(_ action: String) {
+    private func runPower(_ operation: MachinePowerOperation) {
         Task {
-            let stdin = SudoPassword.stdin(machineID: session.machine.id)
-            let command =
-                action == "reboot"
-                ? PowerCommands.reboot(withSudoPassword: stdin != nil)
-                : PowerCommands.shutdown(withSudoPassword: stdin != nil)
-            let underway = action == "reboot" ? "Restarting…" : "Shutting down…"
-            switch await session.runCommand(command, stdin: stdin, timeout: 20) {
-            case .success:
-                announce(underway, failure: false)
-                session.stop()
+            let outcome = await MachinePowerOperationExecution.perform(
+                operation, machine: session.machine,
+                learnedMACAddress: session.facts.macAddress,
+                run: { command, stdin, timeout in
+                    await session.runCommand(command, stdin: stdin, timeout: timeout)
+                })
+            switch outcome {
+            case let .success(result):
+                report(result)
             case let .failure(error):
-                guard PowerOutcome.hostWentAway(error) else {
-                    announce(PowerOutcome.explain(error), failure: true)
-                    return
-                }
-                announce(underway, failure: false)
-                session.stop()
+                announce(PowerOutcome.explain(error), failure: true)
             }
+        }
+    }
+
+    private func report(_ result: MachinePowerResult) {
+        switch result.operation {
+        case .reboot:
+            announce("Restarting…", failure: false)
+            session.stop()
+        case .shutdown:
+            announce("Shutting down…", failure: false)
+            session.stop()
+        case .wake:
+            announce("Sent a wake packet to \(result.macAddress ?? "the machine").", failure: false)
         }
     }
 }
