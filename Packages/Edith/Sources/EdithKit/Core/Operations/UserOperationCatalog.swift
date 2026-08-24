@@ -210,11 +210,9 @@ private extension DockerLifecycleOperation {
             userInterface(
                 "Docker window", "remove an image", ["box", "nginx", "--yes"])
         case .removeVolume:
-            userInterface(
-                "Docker window", "remove a volume", ["box", "data", "--yes"])
+            userInterface("Docker window", "remove a volume", ["box", "data"])
         case .prune:
-            userInterface(
-                "Docker window", "prune unused objects", ["box", "images", "--yes"])
+            userInterface("Docker window", "prune unused objects", ["box", "images"])
         }
     }
 }

@@ -25,6 +25,54 @@ import Testing
         #expect(DockerLifecycleOperation(cliVerb: "pause") == nil)
     }
 
+    @Test func catalogCarriesTheNineExactDockerUIInvocations() {
+        let actual = Set(
+            UserInterfaceActionCatalog.actions
+                .filter { $0.operation.id.rawValue.hasPrefix("machines.docker.") }
+                .map { [$0.surface, $0.action] + $0.cli })
+
+        #expect(
+            actual
+                == [
+                    [
+                        "Docker window", "start a container", "machines", "docker", "start",
+                        "box", "api",
+                    ],
+                    [
+                        "Docker group header", "start the stopped containers in the group",
+                        "machines", "docker", "start", "box", "api", "db",
+                    ],
+                    [
+                        "Docker group header", "stop the running containers in the group",
+                        "machines", "docker", "stop", "box", "api", "db",
+                    ],
+                    [
+                        "Docker window", "stop a container", "machines", "docker", "stop", "box",
+                        "api",
+                    ],
+                    [
+                        "Docker window", "restart a container", "machines", "docker", "restart",
+                        "box", "api",
+                    ],
+                    [
+                        "Docker window", "remove a container", "machines", "docker", "rm", "box",
+                        "api", "--yes",
+                    ],
+                    [
+                        "Docker window", "remove an image", "machines", "docker", "rmi", "box",
+                        "nginx", "--yes",
+                    ],
+                    [
+                        "Docker window", "remove a volume", "machines", "docker", "volume-rm",
+                        "box", "data",
+                    ],
+                    [
+                        "Docker window", "prune unused objects", "machines", "docker", "prune",
+                        "box", "images",
+                    ],
+                ])
+    }
+
     @Test func containerOperationsUseOneQuotedCommandAndLifecycleTimeout() async throws {
         var request: (String, TimeInterval)?
         let result = await DockerLifecycleOperationExecution.perform(
