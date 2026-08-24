@@ -513,7 +513,6 @@ private extension CompanionChatLibraryOperation {
             })
     }
 }
-
 private extension CompanionMindRuntimeOperation {
     var interfaceExposure: UserOperationExposure {
         .userInterface(placements)
