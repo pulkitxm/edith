@@ -123,6 +123,12 @@ jobs:
       - name: Script tests
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-scripts
+      - name: CLI documentation tests
+        if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'
+        run: make ci-docs
+      - name: Embedded Companion runtime tests
+        if: needs.changes.outputs.companion_runtime == 'true' || needs.changes.outputs.workflows == 'true'
+        run: make ci-companion-runtime
       - name: Site is self-contained
         if: needs.changes.outputs.site == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-site
@@ -151,7 +157,10 @@ jobs:
   swift-build:
     name: swift-build
     needs: changes
-    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
+    if: >-
+      github.event_name != 'push'
+      && (needs.changes.outputs.swift == 'true'
+      || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -176,14 +185,16 @@ jobs:
     needs: changes
     if: >-
       needs.changes.outputs.swift == 'true'
-      || needs.changes.outputs.docs == 'true'
       || needs.changes.outputs.workflows == 'true'
-      || needs.changes.outputs.companion_runtime == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Install Fish
+        run: |
+          command -v fish >/dev/null 2>&1 || brew install fish
+          fish --version
       - name: Cache resolved packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -196,6 +207,8 @@ jobs:
       - name: Tests
         run: ./test.sh
         working-directory: Packages/Edith
+        env:
+          EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"
 
   companion:
     name: companion
@@ -255,12 +268,12 @@ jobs:
       && needs.checks.result == 'success'
       && !contains(needs.*.result, 'failure')
       && !contains(needs.*.result, 'cancelled')
+      && (github.event_name == 'push'
+      || ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.workflows != 'true')
+      || needs.swift-build.result == 'success'))
       && ((needs.changes.outputs.swift != 'true'
-      && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
-      && ((needs.changes.outputs.swift != 'true'
-      && needs.changes.outputs.docs != 'true'
-      && needs.changes.outputs.workflows != 'true'
-      && needs.changes.outputs.companion_runtime != 'true') || needs.swift-test.result == 'success')
+      && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
       && ((needs.changes.outputs.companion != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
       && ((github.event_name == 'push'

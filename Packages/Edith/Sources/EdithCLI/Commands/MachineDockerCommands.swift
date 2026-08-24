@@ -293,12 +293,35 @@ extension DockerLifecycleCommand {
                 : nil
             guard plan?.shouldApply() ?? true else { return }
             let runner = try await DockerBridge.runner(machine)
-            let result = try await runner.run(
-                DockerCommands.lifecycle(action, ids: containers), timeout: 120)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "docker \(action) failed on \(runner.machine.name)",
-                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+            if let operation = MachineDockerPauseOperation(rawValue: action) {
+                let outcome = await MachineDockerPauseOperationExecution.perform(
+                    operation, containerIDs: containers,
+                    using: { command, timeout in
+                        do {
+                            let result = try await runner.run(command, timeout: timeout)
+                            guard result.succeeded else {
+                                return .failure(
+                                    CLIFailure(
+                                        "docker \(action) failed on \(runner.machine.name)",
+                                        hint: result.stderrText.trimmingCharacters(
+                                            in: .whitespacesAndNewlines)))
+                            }
+                            return .success(result.stdoutText)
+                        } catch {
+                            return .failure(error)
+                        }
+                    })
+                if case let .failure(error) = outcome {
+                    throw error
+                }
+            } else {
+                let result = try await runner.run(
+                    DockerCommands.lifecycle(action, ids: containers), timeout: 120)
+                guard result.succeeded else {
+                    throw CLIFailure(
+                        "docker \(action) failed on \(runner.machine.name)",
+                        hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
             }
             if let plan {
                 plan.finish(
