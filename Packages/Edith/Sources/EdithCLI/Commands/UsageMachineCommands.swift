@@ -65,17 +65,20 @@ enum UsageMachineBridge {
         let driver = CLIEnvironment.usageRefresh
         progress.begin("folding it in")
         defer { progress.end() }
-        do {
-            _ = try await driver.start { event in
-                guard case let .phase(name, detail, seconds) = event else { return }
-                progress.step(name, detail, seconds: seconds)
-            }
+        let result = await UsageCollectionOperationExecution.mergeMachineChanges(
+            driver: driver
+        ) { event in
+            guard case let .phase(name, detail, seconds) = event else { return }
+            progress.step(name, detail, seconds: seconds)
+        }
+        switch result {
+        case .completed:
             return true
-        } catch UsageRefreshFailure.busy {
+        case .alreadyRunning:
             progress.note("a usage refresh is already running, it will pick this up")
             return true
-        } catch {
-            progress.note("could not fold it in: \(error.localizedDescription)")
+        case .failed(let detail):
+            progress.note("could not fold it in: \(detail)")
             return false
         }
     }
@@ -146,7 +149,7 @@ struct UsageMachinesCollectCommand: AsyncParsableCommand {
         try await execute {
             let seconds = TimeInterval(try ArgumentChecks.positive(timeout, "--timeout"))
             let machines = MachineDirectory.load()
-            let targets = try targets(in: machines)
+            let targets = try targets(in: machines, store: CLIEnvironment.sharedDefaults)
             let progress = CLIProgress.forCommand(json: json)
             progress.header("EDITH · collect usage · " + UsageRefreshPrinter.stamp(Date()))
             progress.begin("reaching \(targets.count == 1 ? targets[0].name : "the machines")")
@@ -161,22 +164,18 @@ struct UsageMachinesCollectCommand: AsyncParsableCommand {
                     break
                 }
             }
-            let round = await MachineUsageRound.collect(
-                targets, registry: machines, timeout: seconds, echoingTheCollector: verbose,
-                onEvent: sink)
+            let result = await UsageCollectionOperationExecution.collectMachines(
+                UsageMachineCollectionInput(
+                    targets: targets, registry: machines, dataDirectory: Repo.dataDir,
+                    timeout: seconds, verbose: verbose),
+                includeSuccessfulMachines: !once, store: CLIEnvironment.sharedDefaults,
+                onEvent: sink, afterChange: {})
+            let round = result.round
             progress.end()
             if round.skippedBecauseBusy {
                 throw CLIFailure.unavailable(
                     "another collection is already running",
                     hint: "wait for it to finish, then retry")
-            }
-            if !once {
-                for target in targets
-                where round.collected.contains(where: {
-                    $0.machineID == target.id
-                }) {
-                    MachineUsageSelection.include(target.id)
-                }
             }
             let merged = await Self.merge(round, progress: progress)
 
@@ -234,11 +233,11 @@ struct UsageMachinesCollectCommand: AsyncParsableCommand {
         ])
     }
 
-    private func targets(in machines: [Machine]) throws -> [Machine] {
+    private func targets(in machines: [Machine], store: UserDefaults) throws -> [Machine] {
         if let machine {
             return [try MachineResolver.machine(machine)]
         }
-        let chosen = MachineUsageSelection.included(in: machines)
+        let chosen = MachineUsageSelection.included(in: machines, store)
         guard !chosen.isEmpty else {
             throw CLIFailure.notFound(
                 "no machine is counted towards usage yet",
@@ -261,7 +260,8 @@ struct UsageMachinesEnableCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let found = try MachineResolver.machine(machine)
-            MachineUsageSelection.include(found.id)
+            UsageCollectionOperationExecution.setMachineCounted(
+                true, machineID: found.id, store: CLIEnvironment.sharedDefaults)
             guard !json else {
                 CLIOut.json(
                     .object(["machine": .string(found.name), "counted": .bool(true)]))
@@ -286,7 +286,8 @@ struct UsageMachinesDisableCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let found = try MachineResolver.machine(machine)
-            MachineUsageSelection.exclude(found.id)
+            UsageCollectionOperationExecution.setMachineCounted(
+                false, machineID: found.id, store: CLIEnvironment.sharedDefaults)
             guard !json else {
                 CLIOut.json(
                     .object(["machine": .string(found.name), "counted": .bool(false)]))
@@ -311,8 +312,8 @@ struct UsageMachinesForgetCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let id = try identify()
-            let dropped = MachineUsageStore.forget(machineID: id)
-            MachineUsageSelection.exclude(id)
+            let dropped = UsageCollectionOperationExecution.forgetMachine(
+                machineID: id, store: CLIEnvironment.sharedDefaults, afterDrop: {})
             let progress = CLIProgress.forCommand(json: json)
             let merging =
                 dropped ? await UsageMachineBridge.merge(progress: progress) : false
