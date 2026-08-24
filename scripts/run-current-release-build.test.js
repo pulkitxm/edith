@@ -1,10 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -125,7 +120,13 @@ async function waitForFile(path) {
 test("a current release build returns the command status", async () => {
   const fixture = createFixture();
   const marker = join(fixture.root, "completed");
-  const child = run(fixture, ["bash", "-c", 'printf complete > "$1"', "--", marker]);
+  const child = run(fixture, [
+    "bash",
+    "-c",
+    'printf complete > "$1"',
+    "--",
+    marker,
+  ]);
   processes.push(child);
 
   expect(await child.exited).toBe(0);
@@ -136,7 +137,13 @@ test("a stale release never starts its build", async () => {
   const fixture = createFixture();
   const marker = join(fixture.root, "unexpected");
   advanceMain(fixture);
-  const child = run(fixture, ["bash", "-c", 'printf started > "$1"', "--", marker]);
+  const child = run(fixture, [
+    "bash",
+    "-c",
+    'printf started > "$1"',
+    "--",
+    marker,
+  ]);
   processes.push(child);
 
   expect(await child.exited).toBe(75);

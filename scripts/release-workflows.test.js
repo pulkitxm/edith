@@ -72,9 +72,11 @@ test("superseded release builds yield the lane before packaging", () => {
     releaseWorkflow.indexOf("\n  dmg:"),
     releaseWorkflow.indexOf("\n  publish:"),
   );
-  expect(dmgJob).toContain(
-    "superseded: ${{ steps.release_build.outputs.superseded }}",
-  );
+  const supersededOutput = [
+    "$",
+    "{{ steps.release_build.outputs.superseded }}",
+  ].join("");
+  expect(dmgJob).toContain(`superseded: ${supersededOutput}`);
   expect(dmgJob).toContain(
     "./scripts/run-current-release-build.sh ./build.sh --no-open --release",
   );
@@ -82,9 +84,8 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(dmgJob).toContain('if [ "$BUILD_STATUS" -eq 75 ]; then');
   expect(dmgJob).toContain('echo "superseded=true" >> "$GITHUB_OUTPUT"');
   expect(
-    dmgJob.match(
-      /if: steps\.release_build\.outputs\.superseded != 'true'/g,
-    )?.length,
+    dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
+      ?.length,
   ).toBe(9);
   expect(releaseWorkflow).toContain(
     "needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
