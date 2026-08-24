@@ -34,8 +34,8 @@ release_superseded() {
   exit 75
 }
 
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+git config user.name "pukbot[bot]"
+git config user.email "320458784+pukbot[bot]@users.noreply.github.com"
 git fetch origin main --tags
 
 case "$MODE" in

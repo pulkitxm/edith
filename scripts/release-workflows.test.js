@@ -12,6 +12,10 @@ const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
 const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
+const workflowCall = releaseWorkflow.slice(
+  releaseWorkflow.indexOf("workflow_call:"),
+  releaseWorkflow.indexOf("workflow_dispatch:"),
+);
 
 test("CI gates the reusable release only on relevant checks", () => {
   expect(ciWorkflow).toContain(
@@ -57,6 +61,8 @@ test("the release is reusable and supports manual rebuilds", () => {
   );
   expect(releaseWorkflow).toContain("refs/tags/{0}");
   expect(releaseWorkflow).not.toContain('tags: ["v*"]');
+  expect(workflowCall).not.toContain("PUKBOT_PRIVATE_KEY");
+  expect(releaseJob).not.toContain("PUKBOT_PRIVATE_KEY");
 });
 
 test("automatic cuts and manual rebuilds cannot replace each other", () => {
@@ -120,16 +126,30 @@ test("macOS release accepts the configured development certificate", () => {
   expect(releaseWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
 });
 
-test("the publisher uses a token that clears the ruleset", () => {
-  const pushToken = ["$", "{{ secrets.RELEASE_PUSH_TOKEN }}"].join("");
-  expect(releaseWorkflow).toContain(`token: ${pushToken}`);
-  expect(releaseWorkflow).toContain("RELEASE_PUSH_TOKEN is required");
+test("the publisher uses the repository-scoped Pukbot token", () => {
+  const appToken = ["$", "{{ steps.app-token.outputs.token }}"].join("");
+  expect(releaseWorkflow).toContain(
+    "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+  );
+  expect(releaseWorkflow).toContain(
+    "repositories: |\n            edith\n            homebrew-tap",
+  );
+  expect(releaseWorkflow).toContain("permission-contents: write");
+  expect(releaseWorkflow).toContain(
+    "secrets[format('PUKBOT_{0}', 'PRIVATE_KEY')]",
+  );
+  expect(releaseWorkflow).toContain(
+    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    environment: pukbot-production",
+  );
+  expect(releaseWorkflow).toContain(`token: ${appToken}`);
+  expect(releaseWorkflow).not.toContain("RELEASE_PUSH_TOKEN");
+  expect(releaseWorkflow).not.toContain("TAP_PUSH_TOKEN");
 });
 
 test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain("permissions:\n  contents: read");
   expect(releaseWorkflow).toContain(
-    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    concurrency:\n      group: release-publication\n      cancel-in-progress: false\n    permissions:\n      contents: write",
+    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    environment: pukbot-production\n    concurrency:\n      group: release-publication\n      cancel-in-progress: false\n    permissions:\n      contents: read",
   );
   expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(3);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);

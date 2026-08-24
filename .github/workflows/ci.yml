@@ -283,7 +283,7 @@ jobs:
       && needs.changes.outputs.release_artifact == 'true')
       || (github.event_name == 'workflow_dispatch' && inputs.release))
     permissions:
-      contents: write
+      contents: read
     uses: ./.github/workflows/release.yml
     with:
       cut_release: true
@@ -291,8 +291,6 @@ jobs:
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-      RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
-      TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
       NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
       NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
       NOTARY_KEY: ${{ secrets.NOTARY_KEY }}

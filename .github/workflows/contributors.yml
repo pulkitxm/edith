@@ -16,13 +16,22 @@ jobs:
   refresh:
     name: Refresh contributors
     runs-on: ubuntu-latest
+    environment: pukbot-production
     permissions:
-      contents: write
+      contents: read
     steps:
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.PUKBOT_CLIENT_ID }}
+          private-key: ${{ secrets.PUKBOT_PRIVATE_KEY }}
+          owner: pulkitxm
+          repositories: edith
+          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: main
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           persist-credentials: true
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
@@ -38,8 +47,8 @@ jobs:
             echo "the contributor list is unchanged"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "pukbot[bot]"
+          git config user.email "320458784+pukbot[bot]@users.noreply.github.com"
           git add README.md
           git commit -m "Refresh the contributor list"
           git push origin HEAD:main
