@@ -6,13 +6,23 @@ public enum ExtensionAdapterReadiness: Equatable, Sendable {
     case ready(String)
     case degraded(String)
     case needsSetup(String)
+    case uninstalled(String)
+    case empty(String)
+    case loading(String)
+    case unsupported(String)
     case failed(String)
+}
+
+public enum ExtensionToolReadiness: Equatable, Sendable {
+    case installed(version: String)
+    case uninstalled
+    case error(String)
 }
 
 public struct ExtensionLifecycleProbeEnvironment: Sendable {
     public var isEnabled: @Sendable (ExtensionRegistryEntry) -> Bool
     public var grantedPermissions: @Sendable () -> [ExtensionPermission: Bool]
-    public var toolAvailable: @Sendable (String) -> Bool
+    public var toolReadiness: @Sendable (String) async -> ExtensionToolReadiness
     public var helperRunning: @Sendable () -> Bool
     public var platformCapabilities: PlatformCapabilities
     public var machineCount: @Sendable () -> Int
@@ -21,7 +31,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
     public init(
         isEnabled: @escaping @Sendable (ExtensionRegistryEntry) -> Bool,
         grantedPermissions: @escaping @Sendable () -> [ExtensionPermission: Bool],
-        toolAvailable: @escaping @Sendable (String) -> Bool,
+        toolReadiness: @escaping @Sendable (String) async -> ExtensionToolReadiness,
         helperRunning: @escaping @Sendable () -> Bool,
         platformCapabilities: PlatformCapabilities,
         machineCount: @escaping @Sendable () -> Int,
@@ -29,7 +39,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
     ) {
         self.isEnabled = isEnabled
         self.grantedPermissions = grantedPermissions
-        self.toolAvailable = toolAvailable
+        self.toolReadiness = toolReadiness
         self.helperRunning = helperRunning
         self.platformCapabilities = platformCapabilities
         self.machineCount = machineCount
@@ -38,15 +48,10 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
 
     public static let live = ExtensionLifecycleProbeEnvironment(
         isEnabled: { entry in
-            SharedDefaults.store.object(forKey: entry.defaultsKey) as? Bool ?? false
+            entry.isEnabled(in: SharedDefaults.store)
         },
         grantedPermissions: { PermissionOperationCenter.application.grantedPermissions() },
-        toolAvailable: { id in
-            guard let tool = ToolProvisioning.spec(id: id),
-                case let .executable(name, _) = tool.presenceStrategy
-            else { return false }
-            return CLIToolEnvironment.executable(named: name) != nil
-        },
+        toolReadiness: { await toolReadiness($0) },
         helperRunning: {
             !NSRunningApplication.runningApplications(
                 withBundleIdentifier: MainApp.statusBarBundleIdentifier
@@ -55,12 +60,32 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         platformCapabilities: .macOS,
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
-            return switch id {
+            switch id {
             case "companion": await companionReadiness()
             case "herdr": await herdrReadiness()
             default: nil
             }
         })
+
+    public static func toolReadiness(
+        _ id: String,
+        executableNamed: @escaping @Sendable (String) -> URL? = {
+            CLIToolEnvironment.executable(named: $0)
+        },
+        detectedVersion: @escaping @Sendable (CLIToolSpec) async -> String? = {
+            await ToolInstaller().detectedVersion(of: $0)
+        }
+    ) async -> ExtensionToolReadiness {
+        guard let tool = ToolProvisioning.spec(id: id),
+            case let .executable(name, _) = tool.presenceStrategy
+        else { return .error("No tool specification is registered for \(id).") }
+        guard let executable = executableNamed(name) else { return .uninstalled }
+        guard let version = await detectedVersion(tool) else {
+            return .error(
+                "Found \(tool.displayName) at \(executable.path), but its version probe failed.")
+        }
+        return .installed(version: version)
+    }
 
     private static func companionReadiness() async -> ExtensionAdapterReadiness {
         do {
@@ -93,11 +118,11 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
     static func herdrReadiness(_ hosts: [HerdrHostSnapshot]) -> ExtensionAdapterReadiness {
         let installed = hosts.filter(\.herdrPresent)
         guard !installed.isEmpty else {
-            return .needsSetup("Herdr is not installed on this Mac or a configured machine.")
+            return .uninstalled("Herdr is not installed on this Mac or a configured machine.")
         }
         let agents = installed.flatMap(\.agents)
         guard !agents.isEmpty else {
-            return .needsSetup("Herdr is installed, but no live sessions were found.")
+            return .empty("Herdr is installed, but no live sessions were found.")
         }
         let errors = hosts.compactMap(\.error)
         if !errors.isEmpty {
@@ -177,7 +202,7 @@ public struct ExtensionLifecycleProbe: Sendable {
         guard let policy = Self.policies[entry.id] else {
             return ExtensionLifecycleReport(
                 state: ExtensionLifecycleState(
-                    extensionID: entry.id, phase: .failed,
+                    extensionID: entry.id, phase: .failed, runtimePhase: .error,
                     summary: "No lifecycle adapter is registered.",
                     issues: [
                         ExtensionLifecycleIssue(
@@ -190,7 +215,8 @@ public struct ExtensionLifecycleProbe: Sendable {
         var checks = [check("enabled", "Extension enabled", .passed, "Enabled in shared settings.")]
         checks.append(platformCheck(entry))
         checks.append(contentsOf: permissionChecks(entry))
-        checks.append(contentsOf: toolChecks(entry, rule: policy.toolRule))
+        checks.append(contentsOf: await toolChecks(entry, rule: policy.toolRule))
+        checks.append(contentsOf: await optionalToolChecks(entry))
         if policy.requiresHelper { checks.append(helperCheck()) }
         if policy.requiresMachine { checks.append(machineCheck()) }
         if policy.adapter, let readiness = await environment.adapterReadiness(entry.id) {
@@ -224,7 +250,8 @@ public struct ExtensionLifecycleProbe: Sendable {
         case let .unavailable(capabilities):
             return check(
                 "platform", "Platform support", .failed,
-                "Required capabilities are unavailable: \(names(capabilities)).")
+                "Required capabilities are unavailable: \(names(capabilities)).", nil,
+                runtimePhase: .unsupported)
         }
     }
 
@@ -254,26 +281,78 @@ public struct ExtensionLifecycleProbe: Sendable {
 
     private func toolChecks(
         _ entry: ExtensionRegistryEntry, rule: ToolRule
-    ) -> [ExtensionLifecycleCheck] {
+    ) async -> [ExtensionLifecycleCheck] {
         guard !entry.requiredTools.isEmpty else { return [] }
-        let available = entry.requiredTools.filter { environment.toolAvailable($0.id) }
+        var readiness: [(CLIToolSpec, ExtensionToolReadiness)] = []
+        for tool in entry.requiredTools {
+            readiness.append((tool, await environment.toolReadiness(tool.id)))
+        }
         if rule == .any {
             let names = entry.requiredTools.map(\.displayName).joined(separator: " or ")
+            let installed = readiness.compactMap { tool, state -> String? in
+                guard case let .installed(version) = state else { return nil }
+                return "\(tool.displayName) \(version)"
+            }
+            let errors = readiness.compactMap { _, state -> String? in
+                guard case let .error(detail) = state else { return nil }
+                return detail
+            }
+            let runtimePhase: ExtensionRuntimePhase =
+                !installed.isEmpty ? .installed : errors.isEmpty ? .uninstalled : .error
             return [
                 check(
-                    "tool.provider", "Usage provider", available.isEmpty ? .failed : .passed,
-                    available.isEmpty
-                        ? "Install and authenticate \(names)."
-                        : "Available: \(available.map(\.displayName).joined(separator: ", ")).",
-                    available.isEmpty ? "ed tools ls" : nil)
+                    "tool.provider", "Usage provider", installed.isEmpty ? .failed : .passed,
+                    installed.isEmpty
+                        ? errors.first ?? "Install and authenticate \(names)."
+                        : "Ready: \(installed.joined(separator: ", ")).",
+                    installed.isEmpty ? "ed tools ls" : nil, runtimePhase: runtimePhase)
             ]
         }
-        return entry.requiredTools.map { tool in
-            let found = available.contains(tool)
-            return check(
-                "tool.\(tool.id)", "\(tool.displayName) tool", found ? .passed : .failed,
-                found ? "Found on Edith's PATH." : tool.why,
-                found ? nil : "ed tools install \(tool.id)")
+        return readiness.map { toolCheck($0.0, readiness: $0.1, required: true) }
+    }
+
+    private func optionalToolChecks(
+        _ entry: ExtensionRegistryEntry
+    ) async -> [ExtensionLifecycleCheck] {
+        var checks: [ExtensionLifecycleCheck] = []
+        for tool in entry.optionalTools {
+            checks.append(
+                toolCheck(
+                    tool, readiness: await environment.toolReadiness(tool.id), required: false)
+            )
+        }
+        return checks
+    }
+
+    private func toolCheck(
+        _ tool: CLIToolSpec, readiness: ExtensionToolReadiness, required: Bool
+    ) -> ExtensionLifecycleCheck {
+        let runtimePhase: ExtensionRuntimePhase?
+        if required {
+            runtimePhase =
+                switch readiness {
+                case .installed: .installed
+                case .uninstalled: .uninstalled
+                case .error: .error
+                }
+        } else {
+            runtimePhase = nil
+        }
+        return switch readiness {
+        case let .installed(version):
+            check(
+                "tool.\(tool.id)", "\(tool.displayName) tool", .passed,
+                "Installed and verified: \(version).", nil, runtimePhase: runtimePhase)
+        case .uninstalled:
+            check(
+                "tool.\(tool.id)", "\(tool.displayName) tool",
+                required ? .failed : .warning, tool.why, "ed tools install \(tool.id)",
+                runtimePhase: runtimePhase)
+        case let .error(detail):
+            check(
+                "tool.\(tool.id)", "\(tool.displayName) tool",
+                required ? .failed : .warning, detail, "ed tools install \(tool.id)",
+                runtimePhase: runtimePhase)
         }
     }
 
@@ -299,13 +378,36 @@ public struct ExtensionLifecycleProbe: Sendable {
     ) -> ExtensionLifecycleCheck {
         let recovery = entry.lifecycle?.recovery.first?.command
         return switch readiness {
-        case let .ready(detail): check("adapter.\(entry.id)", "Runtime adapter", .passed, detail)
+        case let .ready(detail):
+            check(
+                "adapter.\(entry.id)", "Runtime adapter", .passed, detail, nil,
+                runtimePhase: .installed)
         case let .degraded(detail):
-            check("adapter.\(entry.id)", "Runtime adapter", .warning, detail, recovery)
+            check(
+                "adapter.\(entry.id)", "Runtime adapter", .warning, detail, recovery,
+                runtimePhase: .installed)
         case let .needsSetup(detail):
             check("adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery)
+        case let .uninstalled(detail):
+            check(
+                "adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery,
+                runtimePhase: .uninstalled)
+        case let .empty(detail):
+            check(
+                "adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery,
+                runtimePhase: .empty)
+        case let .loading(detail):
+            check(
+                "adapter.\(entry.id)", "Runtime adapter", .skipped, detail, nil,
+                runtimePhase: .loading)
+        case let .unsupported(detail):
+            check(
+                "adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery,
+                runtimePhase: .unsupported)
         case let .failed(detail):
-            check("backend.\(entry.id)", "Runtime adapter", .failed, detail, recovery)
+            check(
+                "backend.\(entry.id)", "Runtime adapter", .failed, detail, recovery,
+                runtimePhase: .error)
         }
     }
 
@@ -314,10 +416,13 @@ public struct ExtensionLifecycleProbe: Sendable {
     ) -> ExtensionLifecycleReport {
         let problems = checks.filter { $0.status == .warning || $0.status == .failed }
         let phase: ExtensionLifecyclePhase
-        if checks.contains(where: { $0.id == "platform" && $0.status == .failed }) {
+        let runtimePhase = runtimePhase(checks)
+        if runtimePhase == .unsupported {
             phase = .unavailable
-        } else if checks.contains(where: { $0.id.hasPrefix("backend.") && $0.status == .failed }) {
+        } else if runtimePhase == .error {
             phase = .failed
+        } else if runtimePhase == .loading {
+            phase = .checking
         } else if checks.contains(where: { $0.status == .failed }) {
             phase = .needsSetup
         } else if checks.contains(where: { $0.status == .warning }) {
@@ -332,8 +437,19 @@ public struct ExtensionLifecycleProbe: Sendable {
         }
         return ExtensionLifecycleReport(
             state: ExtensionLifecycleState(
-                extensionID: entry.id, phase: phase, summary: summary(phase), issues: issues),
+                extensionID: entry.id, phase: phase, runtimePhase: runtimePhase,
+                summary: summary(phase), issues: issues),
             checks: checks)
+    }
+
+    private func runtimePhase(_ checks: [ExtensionLifecycleCheck]) -> ExtensionRuntimePhase {
+        let phases = Set(checks.compactMap(\.runtimePhase))
+        for phase in [
+            ExtensionRuntimePhase.unsupported, .error, .loading, .uninstalled, .empty,
+        ] where phases.contains(phase) {
+            return phase
+        }
+        return .installed
     }
 
     private func summary(_ phase: ExtensionLifecyclePhase) -> String {
@@ -349,10 +465,11 @@ public struct ExtensionLifecycleProbe: Sendable {
 
     private func check(
         _ id: String, _ title: String, _ status: ExtensionLifecycleCheckStatus, _ detail: String,
-        _ recovery: String? = nil
+        _ recovery: String? = nil, runtimePhase: ExtensionRuntimePhase? = nil
     ) -> ExtensionLifecycleCheck {
         ExtensionLifecycleCheck(
-            id: id, title: title, status: status, detail: detail, recoveryCommand: recovery)
+            id: id, title: title, status: status, runtimePhase: runtimePhase, detail: detail,
+            recoveryCommand: recovery)
     }
 
     private func names(_ capabilities: [PlatformCapability]) -> String {

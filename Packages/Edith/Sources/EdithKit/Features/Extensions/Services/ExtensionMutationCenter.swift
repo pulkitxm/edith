@@ -140,21 +140,21 @@ public struct ExtensionMutationEnvironment: @unchecked Sendable {
     public let defaults: UserDefaults
     public var announceChange: @Sendable () -> Void
     public var grantedPermissions: @Sendable () -> [ExtensionPermission: Bool]
-    public var toolAvailable: @Sendable (String) -> Bool
+    public var toolPresent: @Sendable (String) -> Bool
     public var installTool: InstallTool
     public var lifecycle: ExtensionLifecycleProbeEnvironment
 
     public init(
         defaults: UserDefaults, announceChange: @escaping @Sendable () -> Void,
         grantedPermissions: @escaping @Sendable () -> [ExtensionPermission: Bool],
-        toolAvailable: @escaping @Sendable (String) -> Bool,
+        toolPresent: @escaping @Sendable (String) -> Bool,
         installTool: @escaping InstallTool,
         lifecycle: ExtensionLifecycleProbeEnvironment
     ) {
         self.defaults = defaults
         self.announceChange = announceChange
         self.grantedPermissions = grantedPermissions
-        self.toolAvailable = toolAvailable
+        self.toolPresent = toolPresent
         self.installTool = installTool
         self.lifecycle = lifecycle
     }
@@ -169,7 +169,7 @@ public struct ExtensionMutationEnvironment: @unchecked Sendable {
                 environment: .status(defaults: defaultsBox.store)
             ).grantedPermissions()
         }
-        let toolAvailable: @Sendable (String) -> Bool = { id in
+        let toolPresent: @Sendable (String) -> Bool = { id in
             guard let tool = ToolProvisioning.spec(id: id),
                 case let .executable(name, _) = tool.presenceStrategy
             else { return false }
@@ -177,13 +177,15 @@ public struct ExtensionMutationEnvironment: @unchecked Sendable {
         }
         var lifecycle = ExtensionLifecycleProbeEnvironment.live
         lifecycle.isEnabled = { entry in
-            defaultsBox.store.object(forKey: entry.defaultsKey) as? Bool ?? false
+            entry.isEnabled(in: defaultsBox.store)
         }
         lifecycle.grantedPermissions = grantedPermissions
-        lifecycle.toolAvailable = toolAvailable
+        lifecycle.toolReadiness = { id in
+            await ExtensionLifecycleProbeEnvironment.toolReadiness(id)
+        }
         return ExtensionMutationEnvironment(
             defaults: defaults, announceChange: announceChange,
-            grantedPermissions: grantedPermissions, toolAvailable: toolAvailable,
+            grantedPermissions: grantedPermissions, toolPresent: toolPresent,
             installTool: { tool, log in try await ToolInstaller().install(tool, log: log) },
             lifecycle: lifecycle)
     }
@@ -227,7 +229,7 @@ public struct ExtensionMutationCenter: Sendable {
     }
 
     public func isEnabled(_ entry: ExtensionRegistryEntry) -> Bool {
-        environment.defaults.object(forKey: entry.defaultsKey) as? Bool ?? false
+        entry.isEnabled(in: environment.defaults)
     }
 
     public func setEnabled(
@@ -288,7 +290,7 @@ public struct ExtensionMutationCenter: Sendable {
     }
 
     public func missingTools(for entry: ExtensionRegistryEntry) -> [CLIToolSpec] {
-        entry.requiredTools.filter { !environment.toolAvailable($0.id) }
+        entry.requiredTools.filter { !environment.toolPresent($0.id) }
     }
 
     public func provision(
@@ -321,7 +323,7 @@ public struct ExtensionMutationCenter: Sendable {
     ) async -> ExtensionSetupResult {
         let wasEnabled = isEnabled(entry)
         var lifecycle = environment.lifecycle
-        let missing = entry.requiredTools.filter { !environment.toolAvailable($0.id) }
+        let missing = entry.requiredTools.filter { !environment.toolPresent($0.id) }
         let provisioning: ExtensionToolProvisionResult
         if dryRun {
             let original = lifecycle.isEnabled

@@ -6,10 +6,10 @@ Runs every readiness check for one extension without changing anything.
 ed extensions verify <id> [--json]
 ```
 
-The human form prints the lifecycle phase and summary followed by every check,
-its status and its detail. A failed check prints a recovery command when one is
-available. The JSON form contains `id`, `title`, `verified`, `state`, `checks`,
-and `remediation`.
+The human form prints the readiness phase, runtime phase, and summary followed
+by every check, its status and its detail. A failed check prints a recovery
+command when one is available. The JSON form contains `id`, `title`, `verified`,
+`state`, `checks`, and `remediation`.
 
 `verified` is true only when the extension is enabled and every required check
 passes. False is a valid report and exits 0. Unknown extension ids exit 3.
