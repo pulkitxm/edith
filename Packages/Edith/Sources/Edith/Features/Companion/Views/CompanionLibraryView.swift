@@ -50,7 +50,12 @@ final class CompanionLibraryModel: CompanionRefreshable {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             do {
-                let found = try await client.search(query: trimmed, k: 12)
+                let client = client
+                let found = try await CompanionChatLibraryOperationExecution.search(
+                    query: trimmed, limit: 12
+                ) { query, limit in
+                    try await client.search(query: query, k: limit)
+                }
                 guard !Task.isCancelled else { return }
                 hits = found
                 error = nil
@@ -71,7 +76,9 @@ final class CompanionLibraryModel: CompanionRefreshable {
         defer { loadingDetail = false }
         do {
             let client = client
-            detail = try await client.episodeDetail(id: id)
+            detail = try await CompanionChatLibraryOperationExecution.episode(id: id) { id in
+                try await client.episodeDetail(id: id)
+            }
             let kind = detail?.kind ?? ""
             if kind == "voice" {
                 signals = (try? await client.signals(episodeId: id)) ?? []
@@ -111,7 +118,10 @@ final class CompanionLibraryModel: CompanionRefreshable {
         indexing = true
         defer { indexing = false }
         do {
-            _ = try await client.index()
+            let client = client
+            _ = try await CompanionChatLibraryOperationExecution.index {
+                try await client.index()
+            }
             await refresh()
         } catch {
             self.error = error.localizedDescription
