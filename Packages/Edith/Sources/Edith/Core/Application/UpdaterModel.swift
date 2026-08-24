@@ -50,7 +50,7 @@ final class UpdaterModel: NSObject,
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
-        checkHistory = UpdateCheckLog.load(from: logURL)
+        checkHistory = AppRuntimeCenter().updateHistory(url: logURL)
         guard startingUpdater else { return }
         let updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
@@ -63,7 +63,7 @@ final class UpdaterModel: NSObject,
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
 
     func clearCheckHistory() {
-        UpdateCheckLog.clear(at: logURL)
+        _ = AppRuntimeCenter().clearUpdateHistory(url: logURL)
         checkHistory = []
     }
 
@@ -136,12 +136,16 @@ final class UpdaterModel: NSObject,
 
     func checkForUpdates() {
         guard updaterAvailable else { return }
-        updaterController?.checkForUpdates(nil)
+        AppRuntimeCenter().perform(.checkUpdates) {
+            updaterController?.checkForUpdates(nil)
+        }
     }
 
     func checkForUpdatesInBackground() {
         guard updaterAvailable, let updater, !updater.sessionInProgress else { return }
-        updater.checkForUpdatesInBackground()
+        AppRuntimeCenter().perform(.checkUpdates) {
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     func standardUserDriverWillHandleShowingUpdate(
