@@ -9,6 +9,7 @@ import Testing
         "ed apps quit",
         "ed cleaner clean",
         "ed clipboard clear",
+        "ed clipboard rm",
         "ed color clear",
         "ed companion erase",
         "ed companion forget",
@@ -85,11 +86,16 @@ import Testing
         let clipboard = try #require(
             try EdRoot.parseAsRoot(["clipboard", "clear", "--yes"])
                 as? ClipboardClearCommand)
+        let clipboardRemove = try #require(
+            try EdRoot.parseAsRoot(["clipboard", "rm", "1", "--yes"])
+                as? ClipboardRemoveCommand)
         let color = try #require(
             try EdRoot.parseAsRoot(["color", "clear", "--yes"])
                 as? ColorClearCommand)
         #expect(docker.yes && image.yes && kill.yes && stack.yes && forget.yes)
-        #expect(shelfRemove.yes && shelfClear.yes && clipboard.yes && color.yes)
+        #expect(
+            shelfRemove.yes && shelfClear.yes && clipboard.yes && clipboardRemove.yes
+                && color.yes)
     }
 
     @Test func clipboardPreviewPreservesIndexAndBlobsThenConfirmationRemovesOnlyTargets()
@@ -130,6 +136,32 @@ import Testing
             let remaining = ClipboardRepository.loadEntries()
             #expect(remaining.map(\.id) == entries.filter(\.pinned).map(\.id))
             #expect(Set(entries.map(\.id)).subtracting(remaining.map(\.id)) == targets)
+        }
+    }
+
+    @Test func clipboardRemovePreviewsTheExactEntryBeforeDeletingIt() async throws {
+        try await CLIProbe.inWorld { world in
+            try CLIClipboardTests.seed(world, count: 2)
+            let entries = ClipboardBridge.entries()
+            let target = entries[0]
+            let blob = ClipboardPaths.blobFile(sha256: target.sha256, ext: target.ext)
+            let before = try Data(contentsOf: ClipboardPaths.indexFile)
+
+            let preview = await CLIProbe.capture(["clipboard", "rm", "1", "--json"])
+            #expect(preview.object?["applied"] as? Bool == false)
+            #expect(preview.object?["changed"] as? Bool == false)
+            #expect(preview.object?["targets"] as? [String] == [target.id])
+            #expect(try Data(contentsOf: ClipboardPaths.indexFile) == before)
+            #expect(FileManager.default.fileExists(atPath: blob.path))
+
+            let applied = await CLIProbe.capture([
+                "clipboard", "rm", "1", "--yes", "--json",
+            ])
+            #expect(applied.object?["applied"] as? Bool == true)
+            #expect(applied.object?["changed"] as? Bool == true)
+            #expect(applied.object?["remaining"] as? Int == 1)
+            #expect(!ClipboardRepository.loadEntries().contains { $0.id == target.id })
+            #expect(!FileManager.default.fileExists(atPath: blob.path))
         }
     }
 
