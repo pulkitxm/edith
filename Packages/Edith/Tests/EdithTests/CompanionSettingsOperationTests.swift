@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct CompanionSettingsOperationTests {
@@ -84,6 +85,44 @@ import Testing
             #expect(path == "/does/not/exist")
         } catch {
             Issue.record("unexpected error \(error)")
+        }
+    }
+}
+
+@Suite struct CompanionSettingsOperationCLITests {
+    @Test func connectorSetUsesSharedValidation() async {
+        let result = await CLIProbe.run(["companion", "connectors", "set"])
+        #expect(result.code == ExitCodes.usage)
+        #expect(result.stderr.contains("at least one connector token"))
+        #expect(result.stdout.isEmpty)
+    }
+
+    @Test func connectorImportRejectsUnknownSourcesBeforeReading() async {
+        let result = await CLIProbe.run([
+            "companion", "connectors", "import", "github", "/does/not/exist",
+        ])
+        #expect(result.code == ExitCodes.usage)
+        #expect(result.stderr.contains("github is not supported"))
+        #expect(result.stdout.isEmpty)
+    }
+
+    @Test func reasonSetUsesSharedValidation() async {
+        let empty = await CLIProbe.run(["companion", "reason", "set"])
+        #expect(empty.code == ExitCodes.usage)
+        #expect(empty.stderr.contains("at least one reasoning setting"))
+
+        let provider = await CLIProbe.run([
+            "companion", "reason", "set", "--provider", "local",
+        ])
+        #expect(provider.code == ExitCodes.usage)
+        #expect(provider.stderr.contains("local is not supported"))
+    }
+
+    @Test func completionMetadataMarksDerivedMaintenanceAsPreviewed() {
+        for command in ["reindex", "rebuild-derived"] {
+            let node = CommandTree.node(at: ["companion", "db", command])
+            #expect(node?.destructivePolicy == .previewThenYes)
+            #expect(node?.options.contains("--yes") == true)
         }
     }
 }

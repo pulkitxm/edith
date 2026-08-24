@@ -24,10 +24,12 @@ struct CompanionExportCommand: AsyncParsableCommand {
             let target = URL(
                 fileURLWithPath: (directory as NSString).expandingTildeInPath, isDirectory: true)
             let include = includeMedia
-            let result = try await CompanionBridge.request(endpoint: endpoint) { client in
+            let result = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
                 do {
-                    return try await CompanionDataTransfer.export(
-                        client: client, into: target, includeMedia: include)
+                    return try await operations.exportData(
+                        into: target, includeMedia: include)
                 } catch let error as CompanionDataTransferError {
                     throw CLIFailure(error.errorDescription ?? "the export failed")
                 }
@@ -44,8 +46,7 @@ struct CompanionExportCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            let summary = counts.map { "\($0.value) \($0.key)" }.joined(separator: ", ")
-            CLIOut.out("exported \(summary) to \(result.directory)")
+            CLIOut.out(CompanionSettingsOperationText.exportData(result))
             if includeMedia {
                 CLIOut.out("media files saved: \(result.mediaSaved)")
                 if !result.mediaFailed.isEmpty {
@@ -79,9 +80,11 @@ struct CompanionImportCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let expanded = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-            let result = try await CompanionBridge.request(endpoint: endpoint) { client in
+            let result = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
                 do {
-                    return try await CompanionDataTransfer.restore(client: client, from: expanded)
+                    return try await operations.importData(from: expanded)
                 } catch let error as CompanionDataTransferError {
                     switch error {
                     case .missingBundle:
@@ -120,11 +123,7 @@ struct CompanionImportCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out(
-                "restored \(outcome.episodesInserted) episode(s), "
-                    + "\(outcome.observationsInserted) observation(s), "
-                    + "\(outcome.conversationsInserted) conversation(s), "
-                    + "\(outcome.beliefsInserted) belief(s)")
+            CLIOut.out(CompanionSettingsOperationText.importData(result))
             if outcome.episodesSkipped > 0 {
                 CLIOut.out("already there: \(outcome.episodesSkipped) episode(s)")
             }
@@ -207,34 +206,26 @@ struct CompanionWipeCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard yes else {
-                throw CLIFailure.usage(
-                    "wiping deletes the companion's entire memory and cannot be undone",
-                    hint: "run `ed companion export <dir>` first, then repeat with --yes")
+            let operation = CompanionSettingsOperation.wipe
+            let plan = CLIDestructivePlan(
+                action: operation.descriptor.summary, targets: operation.previewTargets,
+                confirmed: yes, json: json)
+            guard plan.shouldApply() else { return }
+            let outcome = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.wipe()
             }
-            let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
-                try await client.wipe(confirm: "everything")
-            }
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "episodesDropped": .int(outcome.episodesDropped),
-                        "sourcesDropped": .int(outcome.sourcesDropped),
-                        "observationsDropped": .int(outcome.observationsDropped),
-                        "conversationsDropped": .int(outcome.conversationsDropped),
-                        "beliefsDropped": .int(outcome.beliefsDropped),
-                        "vaultCleared": .bool(outcome.vaultCleared),
-                    ]))
-                return
-            }
-            CLIOut.out(
-                "wiped \(outcome.episodesDropped) episode(s), "
-                    + "\(outcome.observationsDropped) observation(s), "
-                    + "\(outcome.beliefsDropped) belief(s), "
-                    + "\(outcome.conversationsDropped) conversation(s)")
-            CLIOut.out(
-                outcome.vaultCleared
-                    ? "the vault is empty" : "some vault files would not delete")
+            plan.finish(
+                changed: true, plain: CompanionSettingsOperationText.wipe(outcome),
+                fields: [
+                    "episodesDropped": .int(outcome.episodesDropped),
+                    "sourcesDropped": .int(outcome.sourcesDropped),
+                    "observationsDropped": .int(outcome.observationsDropped),
+                    "conversationsDropped": .int(outcome.conversationsDropped),
+                    "beliefsDropped": .int(outcome.beliefsDropped),
+                    "vaultCleared": .bool(outcome.vaultCleared),
+                ])
         }
     }
 }
