@@ -157,7 +157,7 @@ mapping table in between.
 
 **0** is what falling off the end of a command means. Nothing calls `exit(0)`;
 the top level only calls `exit` from its `catch`, so a body that returns
-normally exits 0. `--help` on any command and `--version` on the root also exit
+normally exits 0. `--help` and the inherited `--version` on any command also exit
 0, and their text goes to stdout, because the argument parser signals them as a
 clean exit and the top-level reporter prints a clean exit's message on stdout
 rather than on stderr.
@@ -335,8 +335,9 @@ ed machines exec tuf -- ls -la /srv
 ed tuf ls -la /srv
 ```
 
-`--help` is generated for every command, prints to stdout and exits 0.
-`--version` exists on the root only.
+`-h` and `--help` are generated for every command, print to stdout and exit 0.
+`--version` is declared on the root, inherited by every nested command, and has
+the same stdout and exit 0 contract.
 
 ### Shared options
 
