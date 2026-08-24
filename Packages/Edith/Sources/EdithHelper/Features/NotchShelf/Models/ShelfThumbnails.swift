@@ -35,15 +35,16 @@ enum ShelfThumbnails {
 
     private static let maxEntries = 200
 
-    static func thumbnail(for url: URL) async -> NSImage? {
-        if let cached = cache.value(for: url.path) { return cached }
+    static func thumbnail(for url: URL, cacheKey: String? = nil) async -> NSImage? {
+        let key = cacheKey ?? url.path
+        if let cached = cache.value(for: key) { return cached }
         let request = QLThumbnailGenerator.Request(
             fileAt: url, size: CGSize(width: 76, height: 76),
             scale: NSScreen.main?.backingScaleFactor ?? 2, representationTypes: .thumbnail)
         let generated = try? await QLThumbnailGenerator.shared.generateBestRepresentation(
             for: request)
         guard let image = generated?.nsImage else { return nil }
-        cache.insert(image, for: url.path, maxEntries: maxEntries)
+        cache.insert(image, for: key, maxEntries: maxEntries)
         return image
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import EdithKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension View {
     func shelfPointer() -> some View {
@@ -268,6 +269,32 @@ struct NotchShelfContentView: View {
                                     stored: controller.livePositions[item.id] ?? item.position,
                                     index: index, in: geo.size))
                     }
+                }
+                if let error = controller.shelfOperationError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text(error)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button {
+                            controller.dismissShelfFailure()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .shelfPointer()
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(
+                        Color(red: 0.63, green: 0.18, blue: 0.16),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: geo.size.width, maxHeight: geo.size.height, alignment: .bottom)
                 }
             }
             .coordinateSpace(name: "shelfCanvas")
@@ -878,8 +905,7 @@ private struct ShelfItemView: View {
     var body: some View {
         VStack(spacing: 4) {
             Image(
-                nsImage: thumbnail
-                    ?? NSWorkspace.shared.icon(forFile: controller.fileURL(for: item).path)
+                nsImage: thumbnail ?? fallbackIcon
             )
             .resizable()
             .aspectRatio(contentMode: .fit)
@@ -912,8 +938,13 @@ private struct ShelfItemView: View {
             Button("Delete", role: .destructive) { controller.remove(item) }
         }
         .task(id: item.name) {
-            thumbnail = await ShelfThumbnails.thumbnail(for: controller.fileURL(for: item))
+            thumbnail = await controller.thumbnail(for: item)
         }
+    }
+
+    private var fallbackIcon: NSImage {
+        let ext = (item.name as NSString).pathExtension
+        return NSWorkspace.shared.icon(for: UTType(filenameExtension: ext) ?? .data)
     }
 
     private var moveOrDragOut: some Gesture {

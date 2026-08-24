@@ -1,27 +1,59 @@
 import EdithKit
 import Foundation
 
+enum ShelfActionSelectionError: LocalizedError {
+    case busy
+    case unreadable
+    case unavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .busy: return "a shelf share picker is already open"
+        case .unreadable: return "the shelf could not be read"
+        case .unavailable: return "the selected shelf items are not available"
+        }
+    }
+}
+
+struct ShelfStoreActionSelection {
+    let snapshot: ShelfPinnedSelection
+    let items: [ShelfItem]
+
+    func fileURLs() throws -> [URL] {
+        try snapshot.fileURLs(for: items.map(\.id))
+    }
+
+    func stagedFiles() throws -> ShelfStagedFiles {
+        try snapshot.stagedFiles(for: items.map(\.id))
+    }
+}
+
 @MainActor
 final class ShelfStore {
+    private struct PendingPromiseAdoption {
+        let id: UUID
+        let url: URL
+        let completion: (ShelfItem?) -> Void
+    }
+
     private(set) var items: [ShelfItem] = []
     private let root: URL
     private var changeObserver: NSObjectProtocol?
+    private var incomingDirectories: [UUID: ShelfIncomingDirectory] = [:]
+    private var retainedActionSelection: ShelfPinnedSelection?
+    private var pendingPromiseAdoptions: [PendingPromiseAdoption] = []
     var onExternalChange: (@MainActor () -> Void)?
 
     init(root: URL = ShelfIndex.root) {
         self.root = root
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        migrateLegacyIndex()
-        load()
-        migrateLegacyFolders()
+        _ = reload()
         changeObserver = IPC.observe(
             IPC.Name.shelfChanged,
             info: { [weak self] info in
                 guard info["sender"] as? String != Self.senderID else { return }
                 Task { @MainActor in
                     guard let self else { return }
-                    self.load()
-                    self.onExternalChange?()
+                    if self.reload() { self.onExternalChange?() }
                 }
             })
     }
@@ -32,113 +64,136 @@ final class ShelfStore {
 
     private static let senderID = "shelfStore-\(ProcessInfo.processInfo.processIdentifier)"
 
-    private var indexURL: URL { ShelfIndex.indexFile(in: root) }
-
-    private func migrateLegacyIndex() {
-        let legacy = root.appendingPathComponent("index.json")
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: indexURL.path) else {
-            return
+    @discardableResult
+    func reload() -> Bool {
+        guard retainedActionSelection == nil else { return false }
+        guard let selection = try? ShelfMutationExecution.pinnedSelection(root: root) else {
+            return false
         }
-        try? fm.moveItem(at: legacy, to: indexURL)
+        items = selection.items
+        return true
     }
 
-    private func migrateLegacyFolders() {
-        let fm = FileManager.default
-        var changed = false
-        for (index, item) in items.enumerated() {
-            let legacyDir = root.appendingPathComponent(item.id.uuidString)
-            let legacyFile = legacyDir.appendingPathComponent(item.name)
-            guard fm.fileExists(atPath: legacyFile.path) else { continue }
-            let name = uniqueName(item.name)
-            guard (try? fm.moveItem(at: legacyFile, to: root.appendingPathComponent(name))) != nil
-            else { continue }
-            try? fm.removeItem(at: legacyDir)
-            items[index] = ShelfItem(
-                id: item.id, name: name, addedAt: item.addedAt, position: item.position)
-            changed = true
+    func actionSelection(itemIDs: Set<UUID>) throws -> ShelfStoreActionSelection {
+        guard retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
+        let selection: ShelfPinnedSelection
+        do {
+            selection = try ShelfMutationExecution.pinnedSelection(root: root)
+        } catch {
+            throw ShelfActionSelectionError.unreadable
         }
-        if changed { save() }
+        items = selection.items
+        let members = items.filter { itemIDs.contains($0.id) }
+        guard members.count == itemIDs.count, !members.isEmpty else {
+            throw ShelfActionSelectionError.unavailable
+        }
+        do {
+            _ = try selection.fileURLs(for: members.map(\.id))
+        } catch {
+            throw ShelfActionSelectionError.unavailable
+        }
+        return ShelfStoreActionSelection(snapshot: selection, items: members)
     }
 
-    private func load() {
-        items = ShelfIndex.load(from: root)
+    func withActionSelection<T>(
+        itemIDs: Set<UUID>, perform: (ShelfStoreActionSelection) throws -> T
+    ) throws -> T {
+        try perform(actionSelection(itemIDs: itemIDs))
     }
 
-    private func save() {
-        ShelfIndex.save(items, to: root)
-        IPC.post(IPC.Name.shelfChanged, userInfo: ["sender": Self.senderID])
+    func retainActionSelection(_ selection: ShelfPinnedSelection) -> Bool {
+        guard retainedActionSelection == nil else { return false }
+        retainedActionSelection = selection
+        return true
+    }
+
+    func releaseActionSelection() {
+        retainedActionSelection = nil
+        let pending = pendingPromiseAdoptions
+        pendingPromiseAdoptions = []
+        for adoption in pending { finishPromiseAdoption(adoption) }
+    }
+
+    func cancelActionSelection() {
+        retainedActionSelection = nil
+        let pending = pendingPromiseAdoptions
+        pendingPromiseAdoptions = []
+        for adoption in pending { discardPromiseDestination(id: adoption.id) }
     }
 
     func fileURL(for item: ShelfItem) -> URL { root.appendingPathComponent(item.name) }
 
-    private func uniqueName(_ proposed: String) -> String {
-        let fm = FileManager.default
-        var name = proposed
-        var counter = 2
-        let base = (proposed as NSString).deletingPathExtension
-        let ext = (proposed as NSString).pathExtension
-        while fm.fileExists(atPath: root.appendingPathComponent(name).path) {
-            name = ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)"
-            counter += 1
-        }
-        return name
-    }
-
     @discardableResult
     func addCopy(of source: URL) -> ShelfItem? {
-        let name = uniqueName(source.lastPathComponent)
-        do {
-            try FileManager.default.copyItem(at: source, to: root.appendingPathComponent(name))
-        } catch {
-            return nil
-        }
-        let item = ShelfItem(id: UUID(), name: name, addedAt: Date())
-        items.append(item)
-        save()
-        return item
+        guard retainedActionSelection == nil else { return nil }
+        guard
+            let result = try? ShelfMutationExecution.addCopy(
+                of: source, root: root, sender: Self.senderID)
+        else { return nil }
+        items = result.items
+        return result.item
     }
 
     @discardableResult
     func addText(_ text: String) -> ShelfItem? {
-        let name = uniqueName("Dropped Text.txt")
-        do {
-            try text.write(
-                to: root.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        } catch {
-            return nil
-        }
-        let item = ShelfItem(id: UUID(), name: name, addedAt: Date())
-        items.append(item)
-        save()
-        return item
+        guard retainedActionSelection == nil else { return nil }
+        guard
+            let result = try? ShelfMutationExecution.addText(
+                text, root: root, sender: Self.senderID)
+        else { return nil }
+        items = result.items
+        return result.item
     }
 
     @discardableResult
     func adopt(fileAt url: URL, id: UUID) -> ShelfItem? {
-        let name = uniqueName(url.lastPathComponent)
+        guard retainedActionSelection == nil else { return nil }
+        guard let incoming = incomingDirectories[id] else { return nil }
         do {
-            try FileManager.default.moveItem(at: url, to: root.appendingPathComponent(name))
-        } catch {
+            let result = try ShelfMutationExecution.adopt(
+                fileAt: url, root: root, id: id, incoming: incoming, sender: Self.senderID)
             discardPromiseDestination(id: id)
+            items = result.items
+            return result.item
+        } catch {
             return nil
         }
-        discardPromiseDestination(id: id)
-        let item = ShelfItem(id: id, name: name, addedAt: Date())
-        items.append(item)
-        save()
-        return item
     }
 
-    func promiseDestination(id: UUID) -> URL {
-        let dir = root.appendingPathComponent(".incoming-\(id.uuidString)")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+    func adoptWhenAvailable(
+        fileAt url: URL, id: UUID, completion: @escaping (ShelfItem?) -> Void
+    ) {
+        guard incomingDirectories[id] != nil,
+            !pendingPromiseAdoptions.contains(where: { $0.id == id })
+        else {
+            completion(nil)
+            return
+        }
+        let adoption = PendingPromiseAdoption(id: id, url: url, completion: completion)
+        guard retainedActionSelection == nil else {
+            pendingPromiseAdoptions.append(adoption)
+            return
+        }
+        finishPromiseAdoption(adoption)
+    }
+
+    func promiseDestination(id: UUID) -> URL? {
+        guard retainedActionSelection == nil else { return nil }
+        guard let incoming = try? ShelfIncomingDirectory() else { return nil }
+        incomingDirectories[id] = incoming
+        return incoming.url
     }
 
     func discardPromiseDestination(id: UUID) {
-        try? FileManager.default.removeItem(
-            at: root.appendingPathComponent(".incoming-\(id.uuidString)"))
+        pendingPromiseAdoptions.removeAll { $0.id == id }
+        guard let incoming = incomingDirectories.removeValue(forKey: id) else { return }
+        try? incoming.discard()
+    }
+
+    private func finishPromiseAdoption(_ adoption: PendingPromiseAdoption) {
+        let item = adopt(fileAt: adoption.url, id: adoption.id)
+        if item == nil { discardPromiseDestination(id: adoption.id) }
+        adoption.completion(item)
     }
 
     func item(forFileURL url: URL) -> ShelfItem? {
@@ -146,28 +201,36 @@ final class ShelfStore {
         return items.first { fileURL(for: $0).standardizedFileURL.path == path }
     }
 
-    func setPosition(_ position: CGPoint, for item: ShelfItem) {
-        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        items[index].position = position
-        save()
+    func setPositions(_ positions: [UUID: CGPoint]) {
+        guard retainedActionSelection == nil else { return }
+        guard
+            let result = try? ShelfMutationExecution.updatePositions(
+                positions, root: root, sender: Self.senderID)
+        else { return }
+        items = result.items
     }
 
-    func remove(_ item: ShelfItem) {
-        try? FileManager.default.removeItem(at: fileURL(for: item))
-        items.removeAll { $0.id == item.id }
-        save()
+    func setPosition(_ position: CGPoint, for item: ShelfItem) {
+        setPositions([item.id: position])
+    }
+
+    func remove(_ item: ShelfItem) throws {
+        try remove([item])
+    }
+
+    func remove(_ members: [ShelfItem]) throws {
+        guard retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
+        let result = try ShelfMutationExecution.remove(
+            ids: Set(members.map(\.id)), root: root, sender: Self.senderID)
+        items = result.items
     }
 
     func purgeExpired(keep: ShelfKeepDuration, now: Date = Date()) {
-        let expired = items.filter {
-            ShelfExpiry.isExpired(addedAt: $0.addedAt, keep: keep, now: now)
-        }
-        guard !expired.isEmpty else { return }
-        for item in expired {
-            try? FileManager.default.removeItem(at: fileURL(for: item))
-        }
-        let expiredIDs = Set(expired.map(\.id))
-        items.removeAll { expiredIDs.contains($0.id) }
-        save()
+        guard retainedActionSelection == nil else { return }
+        guard
+            let result = try? ShelfMutationExecution.purgeExpired(
+                keep: keep, now: now, root: root, sender: Self.senderID)
+        else { return }
+        items = result.items
     }
 }
