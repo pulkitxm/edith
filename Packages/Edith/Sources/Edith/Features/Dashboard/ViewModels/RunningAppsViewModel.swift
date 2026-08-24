@@ -1,5 +1,4 @@
 import AppKit
-import Darwin
 import EdithKit
 import Observation
 
@@ -17,6 +16,44 @@ enum AppSortKey: String {
     case name, cpu, memory
 }
 
+enum RunningAppActionStatus: Equatable {
+    case planRejected(RunningAppResolutionError)
+    case planningFailed(String)
+    case rejected(name: String?, requested: Int, force: Bool)
+    case partial(changed: Int, requested: Int, force: Bool)
+    case accepted(name: String?, changed: Int, requested: Int, force: Bool)
+
+    var message: String {
+        switch self {
+        case .planRejected(.notFound(let query)):
+            return "\(query) is no longer running. Refresh the list and try again."
+        case .planRejected(.ambiguous(let query, let matches)):
+            return
+                "\(query) matches \(matches.joined(separator: ", ")). Choose one app and try again."
+        case .planRejected(.protected(let name)):
+            return "\(name) stays open because Edith protects essential apps."
+        case .planningFailed(let detail):
+            return "The quit request could not be prepared: \(detail)"
+        case .rejected(let name, let requested, let force):
+            if let name {
+                return
+                    "\(name) did not accept the \(force ? "force-quit" : "quit") request. Resolve any open dialogs and try again."
+            }
+            return
+                "None of the \(requested) apps accepted the \(force ? "force-quit" : "quit") request. Resolve open dialogs and try again."
+        case .partial(let changed, let requested, let force):
+            return
+                "\(changed) of \(requested) apps accepted the \(force ? "force-quit" : "quit") request. Resolve open dialogs in the remaining apps and retry."
+        case .accepted(let name, let changed, let requested, let force):
+            if requested == 0 { return "No quit-eligible apps are running." }
+            if let name {
+                return "\(name) accepted the \(force ? "force-quit" : "quit") request."
+            }
+            return "\(changed) apps accepted the \(force ? "force-quit" : "quit") request."
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class RunningAppsModel {
@@ -24,10 +61,22 @@ final class RunningAppsModel {
     private(set) var totalMemoryMB: Double = 0
     private(set) var sortKey: AppSortKey = .cpu
     private(set) var ascending = false
+    private(set) var actionStatus: RunningAppActionStatus?
 
-    private var lastCPU: [pid_t: (time: UInt64, at: Date)] = [:]
+    private var resourceBaseline: RunningAppResourceBaseline?
+    private let operations: RunningAppOperationCenter
 
-    init() {
+    var quitAllTargetCount: Int {
+        apps.filter { !RunningAppOperationCenter.protectedBundleIDs.contains($0.bundleID ?? "") }
+            .count
+    }
+
+    func canQuit(_ row: RunningAppRow) -> Bool {
+        !RunningAppOperationCenter.protectedBundleIDs.contains(row.bundleID ?? "")
+    }
+
+    init(operations: RunningAppOperationCenter = RunningAppOperationCenter()) {
+        self.operations = operations
         let d = SharedDefaults.store
         if let raw = d.string(forKey: "systemAppsSort"), let key = AppSortKey(rawValue: raw) {
             sortKey = key
@@ -66,77 +115,66 @@ final class RunningAppsModel {
     }
 
     func refresh() async {
-        struct AppSnapshot: Sendable {
-            let pid: pid_t
-            let name: String
-            let bundleID: String?
-        }
-        let running = NSWorkspace.shared.runningApplications.filter {
-            $0.activationPolicy == .regular
-        }
         var icons: [pid_t: NSImage] = [:]
-        var snapshots: [AppSnapshot] = []
-        for app in running where app.processIdentifier > 0 {
-            snapshots.append(
-                AppSnapshot(
-                    pid: app.processIdentifier, name: app.localizedName ?? "Unknown",
-                    bundleID: app.bundleIdentifier))
+        let snapshots = operations.list()
+        let operations = self.operations
+        for app in NSWorkspace.shared.runningApplications where app.processIdentifier > 0 {
             icons[app.processIdentifier] = app.icon
         }
-        let previous = lastCPU
+        let previous = resourceBaseline
         let now = Date()
         let measured = await Task.detached(priority: .utility) {
-            snapshots.map { snap in
-                (snap, Self.usage(pid: snap.pid))
-            }
+            let baseline = previous ?? operations.resourceBaseline(for: snapshots, at: now)
+            return operations.measureResources(for: snapshots, from: baseline, at: now)
         }.value
-        var rows: [RunningAppRow] = []
-        var seen = Set<pid_t>()
-        var memTotal = 0.0
-        var nextCPU: [pid_t: (time: UInt64, at: Date)] = [:]
-        for (snap, usage) in measured {
-            seen.insert(snap.pid)
-            var cpu = 0.0
-            if let prev = previous[snap.pid] {
-                let dt = now.timeIntervalSince(prev.at)
-                if dt > 0 { cpu = Double(usage.cpuNS &- prev.time) / (dt * 1e9) * 100 }
-            }
-            nextCPU[snap.pid] = (usage.cpuNS, now)
-            memTotal += usage.memMB
-            rows.append(
+        resourceBaseline = measured.baseline
+        totalMemoryMB = measured.apps.reduce(0) { $0 + $1.memoryMB }
+        apps = sorted(
+            measured.apps.map { app in
                 RunningAppRow(
-                    pid: snap.pid, name: snap.name, bundleID: snap.bundleID,
-                    icon: icons[snap.pid], cpuPercent: max(0, cpu), memoryMB: usage.memMB))
-        }
-        lastCPU = nextCPU.filter { seen.contains($0.key) }
-        totalMemoryMB = memTotal
-        apps = sorted(rows)
-    }
-
-    private nonisolated static let timebase: mach_timebase_info_data_t = {
-        var tb = mach_timebase_info_data_t()
-        mach_timebase_info(&tb)
-        return tb
-    }()
-
-    nonisolated static func usage(pid: pid_t) -> (cpuNS: UInt64, memMB: Double) {
-        var info = rusage_info_current()
-        let result = withUnsafeMutablePointer(to: &info) { pointer in
-            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
-                proc_pid_rusage(pid, RUSAGE_INFO_CURRENT, $0)
-            }
-        }
-        guard result == 0 else { return (0, 0) }
-        let ticks = info.ri_user_time &+ info.ri_system_time
-        let nanos = ticks &* UInt64(timebase.numer) / UInt64(timebase.denom)
-        return (nanos, Double(info.ri_phys_footprint) / 1_048_576)
+                    pid: app.pid, name: app.name, bundleID: app.bundleID,
+                    icon: icons[app.pid], cpuPercent: app.cpuPercent, memoryMB: app.memoryMB)
+            })
     }
 
     func quit(_ row: RunningAppRow, force: Bool = false) {
-        RunningApps.quit(pid: row.pid, force: force)
+        do {
+            let plan = try operations.plan(.pid(row.pid), force: force)
+            record(operations.apply(plan, confirmed: true), name: row.name)
+        } catch let error as RunningAppResolutionError {
+            actionStatus = .planRejected(error)
+        } catch {
+            actionStatus = .planningFailed(error.localizedDescription)
+        }
     }
 
     func quitAll(force: Bool = false) {
-        RunningApps.quitEverythingElse(force: force)
+        do {
+            let plan = try operations.plan(.all, force: force)
+            record(operations.apply(plan, confirmed: true), name: nil)
+        } catch let error as RunningAppResolutionError {
+            actionStatus = .planRejected(error)
+        } catch {
+            actionStatus = .planningFailed(error.localizedDescription)
+        }
+    }
+
+    func clearActionStatus() {
+        actionStatus = nil
+    }
+
+    private func record(_ outcome: RunningAppQuitOutcome, name: String?) {
+        let requested = outcome.plan.targets.count
+        if requested == 0 || outcome.changed == requested {
+            actionStatus = .accepted(
+                name: name, changed: outcome.changed, requested: requested,
+                force: outcome.plan.force)
+        } else if outcome.changed == 0 {
+            actionStatus = .rejected(
+                name: name, requested: requested, force: outcome.plan.force)
+        } else {
+            actionStatus = .partial(
+                changed: outcome.changed, requested: requested, force: outcome.plan.force)
+        }
     }
 }

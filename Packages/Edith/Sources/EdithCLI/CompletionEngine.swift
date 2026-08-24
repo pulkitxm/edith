@@ -47,7 +47,8 @@ public enum CompletionEngine {
         _ request: CompletionRequest, machines: [String], configKeys: [String],
         extensionIDs: [String], shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
-        usageSources: [String] = [], appLinks: [String] = ["repository", "creator"],
+        usageSources: [String] = [], runningApps: [String] = [],
+        appLinks: [String] = ["repository", "creator"],
         usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
@@ -90,8 +91,8 @@ public enum CompletionEngine {
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                         appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
-                        usageChatIDs: usageChatIDs, usageProjects: usageProjects,
-                        quinjetSessions: quinjetSessions), prefix))
+                        runningApps: runningApps, usageChatIDs: usageChatIDs,
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), prefix))
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
@@ -103,8 +104,9 @@ public enum CompletionEngine {
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                         appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
-                        usageChatIDs: usageChatIDs, usageProjects: usageProjects,
-                        quinjetSessions: quinjetSessions), valuePrefix)
+                        runningApps: runningApps, usageChatIDs: usageChatIDs,
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), valuePrefix
+                )
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
@@ -124,9 +126,10 @@ public enum CompletionEngine {
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                 appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
-                musicTracks: musicTracks,
-                calendarEvents: calendarEvents, usageChatIDs: usageChatIDs,
-                usageProjects: usageProjects, quinjetSessions: quinjetSessions)
+                musicTracks: musicTracks, calendarEvents: calendarEvents,
+                runningApps: runningApps, usageChatIDs: usageChatIDs,
+                usageProjects: usageProjects,
+                quinjetSessions: quinjetSessions)
             candidates += values
             if kind == .localPath { wantsFiles = true }
             if kind == .quinjetPath { wantsFiles = quinjetPathIsLocal(leading) }
@@ -140,8 +143,9 @@ public enum CompletionEngine {
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
         appLinks: [String] = ["repository", "creator"], previous: String?,
         shelfItems: [String] = [], musicTracks: [String] = [],
-        calendarEvents: [String] = [], usageChatIDs: [String] = [],
-        usageProjects: [String] = [], quinjetSessions: [String] = []
+        calendarEvents: [String] = [], runningApps: [String] = [],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
+        quinjetSessions: [String] = []
     ) -> [String] {
         switch kind {
         case .machine: return machines
@@ -166,6 +170,7 @@ public enum CompletionEngine {
         case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
         case .attentionEntity: return []
         case .appAction: return AppActions.all.map(\.name)
+        case .runningApp: return runningApps
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
         case .colorIndex:

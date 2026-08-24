@@ -390,6 +390,7 @@ struct CompleteCommand: AsyncParsableCommand {
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
             usageSources: usageDocument?.sources?.sorted() ?? [],
+            runningApps: RunningAppOperationCenter().completionValues(),
             appLinks: AppInspectionCLI.center.links(
                 contributors: AppInspectionCLI.contributors
             ).map(\.id), usageChatIDs: usageChatIDs, usageProjects: usageProjects,

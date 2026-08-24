@@ -1,34 +1,34 @@
 # `ed apps quit`
 
-Asks Edith to quit an app. Names one app, or passes `--all` to quit everything
-except Finder and Edith.
+Plans or applies a request to quit one running app, or every unprotected app.
+Finder, Edith, and Edith's menu bar helper are always protected.
 
 ```
-ed apps quit <app> [--force] [--json]
-ed apps quit --all [--yes] [--force] [--json]
+ed apps quit <app> [--force] [--yes] [--json]
+ed apps quit --all [--force] [--yes] [--json]
 ```
+
+Without `--yes`, both forms are previews. They resolve the exact targets, print
+the plan, change nothing, and do not require Edith to be running.
 
 ## Arguments
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<app>` | string, optional | none | App name, bundle id, or an unambiguous prefix of a name. Required unless `--all` is given, and refused when it is. |
+| `<app>` | running app name or bundle id | none | Select an exact name, exact bundle id, or unambiguous name prefix. Required unless `--all` is used. Running names and bundle ids complete dynamically. |
 
 ## Options
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--all` | flag | off | Quit everything except Finder, Edith and Edith's menu bar helper. Cannot be combined with an app name. |
-| `--force` | flag | off | Use `forceTerminate` instead of `terminate`, which kills the app outright rather than letting it save first. Applies to both forms. |
-| `--yes` | flag | off | Actually quit. Required with `--all`; without it the command counts the targets and touches nothing. Accepted and ignored for a single app. |
-| `--json` | flag | off | Emit JSON on stdout instead of the human line. |
-| `--help`, `-h` | flag | off | Print the help for this command on stdout and exit 0. |
-| `--version` | flag | off | Print the CLI version on stdout and exit 0. |
+| `--all` | flag | off | Select every app except Finder and both Edith processes. Cannot be combined with an app name. |
+| `--force` | flag | off | Plan or request `forceTerminate` instead of a normal quit. This can prevent an app from saving. |
+| `--yes` | flag | off | Apply the exact plan. Required for named targets and `--all`. |
+| `--json` | flag | off | Emit one JSON document on stdout. |
+| `--help`, `-h` | flag | off | Print help and exit 0. |
+| `--version` | flag | off | Print the CLI version and exit 0. |
 
-The checks run in a fixed order, and the order is worth knowing because it
-decides which failure you see first.
-
-Naming nothing at all is a failure rather than a no-op, and so is naming both:
+Naming neither a target nor `--all` exits 1. Combining both also exits 1:
 
 ```
 $ ed apps quit
@@ -39,143 +39,125 @@ $ ed apps quit --all Safari
 error: --all quits everything, so it takes no app name
 ```
 
-Both of those exit 1, not 2. They are checked inside the command rather than by
-the argument parser, which only sees a valid command line in each case: an
-optional positional that is absent, and an optional positional that is present.
+Resolution tries a case-insensitive exact name, a case-insensitive exact bundle
+id, then an unambiguous name prefix. Missing and ambiguous targets exit 3.
+Protected named targets exit 1 before any request is sent.
 
-Next comes the app check, before anything is resolved or counted. With Edith
-closed every form of this command exits 4 with the same message, including the
-`--all` dry run that would not have quit anything:
+## Preview and apply
+
+A named preview is one line on stdout:
+
+```
+$ ed apps quit Spotify
+would quit Spotify; pass --yes to apply
+```
+
+An all-app preview includes the exact names captured by the plan:
+
+```
+$ ed apps quit --all
+would quit 3 apps: Music, Safari, Spotify; pass --yes to apply
+```
+
+Previews work while Edith is closed. Applying needs the menu bar helper because
+confirmed execution stays in Edith's app-owned operation path:
+
+```
+$ ed apps quit Spotify --yes
+Edith accepted quit for 1 of 1 apps
+```
+
+If the helper is closed, only the confirmed form exits 4:
 
 ```
 error: quitting apps needs the Edith menu bar app to be running
 hint: start Edith, then retry
 ```
 
-Only then is the app name resolved, or the `--all` list counted.
-
-Resolution tries three things in order and stops at the first that works: an
-exact match on the localized name, an exact match on the bundle id, then a
-unique prefix of a name. All three are case-insensitive, and only the last is a
-prefix match, so a partial bundle id matches nothing. A prefix that matches
-several apps fails with the list rather than guessing, and a name that matches
-none says how to find the right one:
-
-```
-$ ed apps quit nosuchapp
-error: no running app called nosuchapp
-hint: run `ed apps ls` to see them
-```
-
-Both of those exit 3. Only apps `ed apps ls` shows are candidates, so a menu bar
-only app cannot be named here at all.
-
-`--all` counts its targets and, without `--yes`, reports the count and stops:
-
-```
-$ ed apps quit --all
-would quit 6 app(s)
-nothing was quit; pass --yes to go ahead
-```
-
-The count is the listed apps minus Finder, minus Edith, minus Edith's menu bar
-helper, which is not in the list to begin with. The first line is stdout and
-the second is stderr, so `ed apps quit --all | wc -l` sees one line. With
-`--yes` the request goes out, and the wording changes to the past tense of
-asking rather than of quitting:
-
-```
-$ ed apps quit --all --yes
-asked Edith to quit 6 app(s)
-```
-
-A single app reads the same way:
-
-```
-$ ed apps quit Spotify
-asked Edith to quit Spotify
-```
-
 ## `--json` shape
 
-Three shapes, one per form. `--all` without `--yes` reports what it counted and
-that it did nothing:
+Preview and apply use the same stable object. `applied` says whether execution
+was requested. `acknowledged` says whether Edith answered. `requested` is the
+exact target count and `changed` is how many termination requests macOS
+accepted. Neither count proves that every app has already closed.
 
 ```json
 {
-  "apps": 6,
-  "quit": false
+  "acknowledged": false,
+  "applied": false,
+  "changed": 0,
+  "force": false,
+  "operation": "apps.quit",
+  "requested": 1,
+  "targets": [
+    {
+      "active": false,
+      "bundleID": "com.spotify.client",
+      "name": "Spotify",
+      "pid": 18719
+    }
+  ]
 }
 ```
 
-`--all --yes` is the same object with `quit` flipped:
+With `--yes`, the same plan becomes:
 
 ```json
 {
-  "apps": 6,
-  "quit": true
+  "acknowledged": true,
+  "applied": true,
+  "changed": 1,
+  "force": false,
+  "operation": "apps.quit",
+  "requested": 1,
+  "targets": [
+    {
+      "active": false,
+      "bundleID": "com.spotify.client",
+      "name": "Spotify",
+      "pid": 18719
+    }
+  ]
 }
 ```
 
-Quitting one app emits that app's row, the same four keys `ed apps ls` uses,
-describing the app as it was at the moment the request was sent:
+## Behaviour notes
 
-```json
-{
-  "active": false,
-  "bundleID": "com.spotify.client",
-  "name": "Spotify",
-  "pid": 18719
-}
+The CLI and System page use the same EdithKit operation center for discovery,
+resolution, protected-app filtering, exact target planning, and execution. The
+System page's confirmation dialogs supply the confirmation that `--yes`
+supplies on the command line.
+
+Confirmed CLI execution sends the exact planned PIDs, force mode and a unique
+request id. The helper validates protected bundle ids again, calls `terminate()`
+or `forceTerminate()`, and replies with the matching request id and accepted
+count. A missing reply exits 4 instead of claiming success.
+
+An app with unsaved changes may show a save dialog and remain open after macOS
+accepts the termination request. Check the list again when a script needs to
+know whether the target closed:
+
+```
+ed apps quit Spotify --yes
+sleep 2
+ed apps ls --json | jq -r '.[].name'
 ```
 
-`apps` is the count of targets, not of apps that quit, and `quit` says whether
-the request was sent rather than whether anything closed. Neither form waits for
-an answer, so neither can tell you more than that. With `--json` the stderr note
-about `--yes` is not printed: the document is the whole output.
+`--force` skips normal termination and can lose unsaved work. It still requires
+`--yes`.
 
 ## Examples
 
 ```
 ed apps quit Spotify
-ed apps quit com.spotify.client --force
-ed apps quit --all
+ed apps quit Spotify --yes
+ed apps quit com.spotify.client --force --yes
+ed apps quit --all --json
 ed apps quit --all --yes --json
 ```
-
-## Behaviour notes
-
-This mutates nothing that `ed` owns. It writes no file and changes no setting.
-What it does is post one `com.pulkit.edith.requestQuitApps` distributed
-notification carrying either `all` and `force`, or `pid` and `force`, and then
-return. The menu bar helper observes that name and calls `terminate()` or
-`forceTerminate()` on the matching applications.
-
-It is fire and forget. `ed` does not wait for a reply, does not learn whether
-the app closed, and exits 0 as soon as the notification is posted. An app with
-unsaved changes puts up a save dialog and stays open; `ed` has already exited 0
-by then. If you need to know, list again and look:
-
-```
-ed apps quit Spotify
-sleep 2
-ed apps ls --json | jq -r '.[].name'
-```
-
-The helper refuses to quit `com.apple.finder`, `com.pulkit.edith` and
-`com.pulkit.edith.statusbar` whatever it is asked, and it recomputes the `--all`
-list itself at the moment it acts rather than trusting the count `ed` sent. That
-guard is the last word, not the first: `ed apps quit Finder` resolves cleanly,
-posts the request, prints `asked Edith to quit Finder` and exits 0, and then
-nothing happens. The same is true of `ed apps quit Edith`. Success here means
-the request was sent, and a protected app is the one case where a sent request
-is guaranteed to be dropped.
-
-`--force` maps to `forceTerminate`, which is the hard kill: no save prompt, no
-chance to flush anything to disk. `--yes` is only consulted on the `--all` path,
-so `ed apps quit Spotify --yes` is accepted and the flag does nothing.
 
 ## Where to go next
 
 - [`ed apps`](./README.md), the rest of this group
+- [`ed apps ls`](./ls.md), discovery and output fields
 - [All `ed` commands](../README.md)
