@@ -11,7 +11,7 @@ evidence.
 | Area | Finding | Guard |
 | --- | --- | --- |
 | Startup | The main window and helper panel precede deferred service setup. | Generation-owned startup phases yield between independent service groups and cancel on supersession or termination. |
-| Input | Type-ahead and global hotkeys are event driven on the main thread, and terminal focus follows the latest visible tab. | Stable input intervals plus a 10,000-transition stale-focus regression. |
+| Input | Type-ahead and global hotkeys are event driven, while terminal responders keep keyboard input local. | Stable intervals, 10,000 stale-focus transitions, and 100,000 type-ahead and media-key bypass checks. |
 | Repository | Dashboard reads skip unchanged files. | The full load path is traced and the modification-time early return is checked. |
 | Git | Usage collection owns the repository and Git subprocess pipeline. | The asynchronous utility process has one end-to-end interval and structured phase events. |
 | GitHub | Contributor data uses a daily cache and failure fallback. | Cache and request intervals plus a one-read fallback test. |
