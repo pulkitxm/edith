@@ -4,7 +4,8 @@
 here opens the shared SSH connection, runs one real docker command with
 `--format '{{json .}}'` where docker offers it, and turns the answer into stable
 fields, so a script never has to scrape a column layout. It is the same set of
-operations the app's Docker window performs, running the same commands.
+operations the app's Docker window performs. Pause and unpause share one
+execution path across both interfaces, including target validation and timeout.
 
 Nothing is installed on the far side and nothing is proxied through the Edith
 app: this is `/usr/bin/ssh` over the ControlMaster socket the app shares, so

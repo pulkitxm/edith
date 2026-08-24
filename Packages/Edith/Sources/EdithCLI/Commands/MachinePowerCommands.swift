@@ -242,33 +242,49 @@ struct MachinesServicesCommand: AsyncParsableCommand {
 }
 
 enum ServiceBridge {
-    static func apply(_ action: String, machine name: String, unit: String, json: Bool)
+    static func apply(
+        _ operation: MachineServiceOperation, machine name: String, unit: String, json: Bool
+    )
         async throws
     {
         try await execute {
             let runner = try await MachineResolver.runner(name)
             let stdin = SudoPassword.stdin(machineID: runner.machine.id)
-            let result = try await runner.run(
-                ServiceCommands.action(action, unit: unit, withSudoPassword: stdin != nil),
-                stdin: stdin, timeout: 60)
-            let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded, !PowerOutcome.needsPrivilege(detail) else {
-                throw CLIFailure(
-                    "could not \(action) \(unit) on \(runner.machine.name)"
-                        + (detail.isEmpty ? "" : ": \(detail)"),
-                    hint: SudoPassword.hint(forRefusal: detail))
+            let result = await MachineServiceOperationExecution.perform(
+                operation, unit: unit, sudoPassword: stdin,
+                using: { command, stdin, timeout in
+                    do {
+                        let output = try await runner.run(
+                            command, stdin: stdin, timeout: timeout)
+                        let detail = output.combinedText.trimmingCharacters(
+                            in: .whitespacesAndNewlines)
+                        guard output.succeeded, !PowerOutcome.needsPrivilege(detail) else {
+                            return .failure(
+                                CLIFailure(
+                                    "could not \(operation.rawValue) \(unit) on "
+                                        + runner.machine.name
+                                        + (detail.isEmpty ? "" : ": \(detail)"),
+                                    hint: SudoPassword.hint(forRefusal: detail)))
+                        }
+                        return .success(output.combinedText)
+                    } catch {
+                        return .failure(error)
+                    }
+                })
+            if case let .failure(error) = result {
+                throw error
             }
             guard !json else {
                 CLIOut.json(
                     .object([
                         "machine": .string(runner.machine.name),
                         "unit": .string(unit),
-                        "action": .string(action),
+                        "action": .string(operation.rawValue),
                         "applied": .bool(true),
                     ]))
                 return
             }
-            CLIOut.out("\(action)ed \(unit) on \(runner.machine.name)")
+            CLIOut.out("\(operation.rawValue)ed \(unit) on \(runner.machine.name)")
         }
     }
 }
@@ -287,7 +303,7 @@ struct MachinesServiceStartCommand: AsyncParsableCommand {
     var unit: String
 
     func run() async throws {
-        try await ServiceBridge.apply("start", machine: machine, unit: unit, json: json)
+        try await ServiceBridge.apply(.start, machine: machine, unit: unit, json: json)
     }
 }
 
@@ -305,7 +321,7 @@ struct MachinesServiceStopCommand: AsyncParsableCommand {
     var unit: String
 
     func run() async throws {
-        try await ServiceBridge.apply("stop", machine: machine, unit: unit, json: json)
+        try await ServiceBridge.apply(.stop, machine: machine, unit: unit, json: json)
     }
 }
 
@@ -323,7 +339,7 @@ struct MachinesServiceRestartCommand: AsyncParsableCommand {
     var unit: String
 
     func run() async throws {
-        try await ServiceBridge.apply("restart", machine: machine, unit: unit, json: json)
+        try await ServiceBridge.apply(.restart, machine: machine, unit: unit, json: json)
     }
 }
 
@@ -373,15 +389,32 @@ struct MachinesKillCommand: AsyncParsableCommand {
                 : nil
             guard plan?.shouldApply() ?? true else { return }
             let runner = try await MachineResolver.runner(machine)
-            let result = try await runner.run(
-                ProcessCommands.kill(pid: pid, signal: named), timeout: 30)
-            let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "could not signal \(pid) on \(runner.machine.name)"
-                        + (detail.isEmpty ? "" : ": \(detail)"))
+            let result = await MachineProcessOperationExecution.perform(
+                pid: pid, signal: named,
+                using: { command, timeout in
+                    do {
+                        let output = try await runner.run(command, timeout: timeout)
+                        let detail = output.combinedText.trimmingCharacters(
+                            in: .whitespacesAndNewlines)
+                        guard output.succeeded else {
+                            return .failure(
+                                CLIFailure(
+                                    "could not signal \(pid) on \(runner.machine.name)"
+                                        + (detail.isEmpty ? "" : ": \(detail)")))
+                        }
+                        return .success(output.combinedText)
+                    } catch {
+                        return .failure(error)
+                    }
+                })
+            let outcome: MachineProcessOperationResult
+            switch result {
+            case let .success(value):
+                outcome = value
+            case let .failure(error):
+                throw error
             }
-            let gone = ProcessCommands.hadAlreadyExited(detail)
+            let gone = outcome.alreadyExited
             if let plan {
                 plan.finish(
                     changed: !gone,

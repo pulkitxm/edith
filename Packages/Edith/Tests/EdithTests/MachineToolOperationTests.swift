@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct MachineToolOperationTests {
@@ -174,5 +175,53 @@ import Testing
         #expect(try result.get().operation == .unpause)
         #expect(request?.0 == DockerCommands.lifecycle("unpause", ids: ["api", "worker"]))
         #expect(request?.1 == 120)
+    }
+
+    @Test func everyToolDescriptorResolvesToAnExactCompletionLeaf() {
+        let descriptors =
+            MachineForwardOperation.allCases.map(\.descriptor)
+            + MachineSnippetOperation.allCases.map(\.descriptor)
+            + MachineServiceOperation.allCases.map(\.descriptor)
+            + MachineProcessOperation.allCases.map(\.descriptor)
+            + MachineDockerPauseOperation.allCases.map(\.descriptor)
+        for descriptor in descriptors {
+            var node = CommandTree.root
+            var walked: [String] = []
+            for segment in descriptor.cli {
+                guard let child = node.child(segment) else { break }
+                node = child
+                walked.append(segment)
+            }
+            #expect(walked == descriptor.cli)
+            #expect(node.children.isEmpty)
+        }
+    }
+
+    @Test func toolParsersExposeStableMachineAndJsonArguments() throws {
+        let forward = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "forwards", "add", "box", "--local", "8080", "--remote", "80",
+                "--json",
+            ]) as? MachinesForwardsAddCommand)
+        #expect(forward.machine == "box")
+        #expect(forward.local == 8080)
+        #expect(forward.remote == 80)
+        #expect(forward.json)
+
+        let service = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "services", "restart", "box", "nginx.service", "--json",
+            ]) as? MachinesServiceRestartCommand)
+        #expect(service.machine == "box")
+        #expect(service.unit == "nginx.service")
+        #expect(service.json)
+
+        let docker = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "docker", "pause", "box", "api", "worker", "--json",
+            ]) as? DockerPauseCommand)
+        #expect(docker.machine == "box")
+        #expect(docker.containers == ["api", "worker"])
+        #expect(docker.json)
     }
 }
