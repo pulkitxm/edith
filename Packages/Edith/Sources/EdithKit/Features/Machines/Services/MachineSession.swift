@@ -513,24 +513,30 @@ public final class MachineSession {
     public func setPlatformProfile(
         _ profile: String, duration: MachineProfileDuration
     ) async -> Result<String, Error> {
-        let stdin = SudoPassword.stdin(machineID: machine.id)
-        guard
-            let command = MachineThermalControls.setProfile(
-                profile, duration: duration, withSudoPassword: stdin != nil)
-        else {
-            return .failure(
-                SSHConnectionError.commandFailed(
-                    command: "platform profile", status: 1, stderr: "Invalid profile."))
-        }
         isApplyingPlatformProfile = true
         defer { isApplyingPlatformProfile = false }
-        let result = await runCommand(command, stdin: stdin, timeout: 30)
-        guard case let .success(output) = result else { return result }
+        let result = await MachineThermalOperationExecution.set(
+            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id
+        ) { [weak self] command, stdin, timeout in
+            guard let self else {
+                return .failure(
+                    SSHConnectionError.commandFailed(
+                        command: command, status: 1, stderr: "The machine session ended."))
+            }
+            return await runCommand(command, stdin: stdin, timeout: timeout)
+        }
+        let outcome: MachineThermalSetResult
+        switch result {
+        case let .success(value):
+            outcome = value
+        case let .failure(error):
+            return .failure(error)
+        }
         applyPlatformProfile(profile)
         platformProfileTask?.cancel()
         guard duration != .untilChanged else {
             platformProfileRevertsAt = nil
-            return .success(output)
+            return .success(outcome.output)
         }
         let revertsAt = Date().addingTimeInterval(TimeInterval(duration.rawValue))
         platformProfileRevertsAt = revertsAt
@@ -540,14 +546,20 @@ public final class MachineSession {
             platformProfileRevertsAt = nil
             await refreshPlatformProfile()
         }
-        return .success(output)
+        return .success(outcome.output)
     }
 
     public func refreshPlatformProfile() async {
-        let result = await runCommand(MachineThermalControls.statusCommand, timeout: 10)
-        guard case let .success(output) = result,
-            let profile = MachineThermalControls.parseStatus(output)
-        else { return }
+        let result = await MachineThermalOperationExecution.status(timeout: 10) {
+            [weak self] command, stdin, timeout in
+            guard let self else {
+                return .failure(
+                    SSHConnectionError.commandFailed(
+                        command: command, status: 1, stderr: "The machine session ended."))
+            }
+            return await runCommand(command, stdin: stdin, timeout: timeout)
+        }
+        guard case let .success(profile) = result else { return }
         var next = slow ?? MachineSlow()
         next.platformProfile = profile
         slow = next

@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+@testable import Edith
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct MachineSystemOperationTests {
@@ -162,5 +164,90 @@ import Testing
         #expect(
             throws: MachineBroadcastOperationError.emptyCommand,
             performing: { try MachineBroadcastOperationExecution.plan(command: "  ").get() })
+    }
+
+    @MainActor @Test func terminalBroadcastSendsTheSharedPlanToEveryTab() throws {
+        let model = TerminalTabsModel()
+        model.addTab(named: "One")
+        model.addTab(named: "Two")
+        var inputs: [String] = []
+
+        let result = model.sendBroadcast(" uptime ") { _, input in
+            inputs.append(input)
+        }
+
+        #expect(try result.get().command == "uptime")
+        #expect(inputs == ["uptime\n", "uptime\n"])
+    }
+
+    @Test func cliParsersPreserveEverySystemRouteArgument() throws {
+        let status = try #require(
+            try EdRoot.parseAsRoot(["machines", "thermal", "status", "box", "--json"])
+                as? MachinesThermalStatusCommand)
+        #expect(status.machine == "box")
+        #expect(status.json)
+
+        let set = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "thermal", "set", "box", "performance", "--minutes", "30",
+                "--json",
+            ]) as? MachinesThermalSetCommand)
+        #expect(set.machine == "box")
+        #expect(set.profile == "performance")
+        #expect(set.minutes == 30)
+        #expect(set.json)
+
+        let exec = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "exec", "--tty", "box", "docker exec -it api sh",
+            ]) as? MachinesExecCommand)
+        #expect(exec.machine == "box")
+        #expect(exec.tty)
+        #expect(exec.command == ["docker exec -it api sh"])
+
+        let mount = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "mount", "box", "/srv", "--at", "/tmp/Box", "--read-only",
+                "--json",
+            ]) as? MachinesMountCommand)
+        #expect(mount.machine == "box")
+        #expect(mount.path == "/srv")
+        #expect(mount.at == "/tmp/Box")
+        #expect(mount.readOnly)
+        #expect(mount.json)
+
+        let unmount = try #require(
+            try EdRoot.parseAsRoot(["machines", "unmount", "box", "--json"])
+                as? MachinesUnmountCommand)
+        #expect(unmount.machine == "box")
+        #expect(unmount.json)
+
+        let broadcast = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "broadcast", "--only", "box,tuf", "--json", "--", "uptime",
+            ]) as? MachinesBroadcastCommand)
+        #expect(broadcast.only == "box,tuf")
+        #expect(broadcast.json)
+        #expect(broadcast.command == ["uptime"])
+    }
+
+    @Test func everySystemDescriptorIsAnExactCompletionLeaf() {
+        let descriptors =
+            MachineThermalOperation.allCases.map(\.descriptor)
+            + MachineExecOperation.allCases.map(\.descriptor)
+            + MachineMountOperation.allCases.map(\.descriptor)
+            + MachineBroadcastOperation.allCases.map(\.descriptor)
+
+        for descriptor in descriptors {
+            var node = CommandTree.root
+            var walked: [String] = []
+            for segment in descriptor.cli {
+                guard let child = node.child(segment) else { break }
+                node = child
+                walked.append(segment)
+            }
+            #expect(walked == descriptor.cli)
+            #expect(node.children.isEmpty)
+        }
     }
 }

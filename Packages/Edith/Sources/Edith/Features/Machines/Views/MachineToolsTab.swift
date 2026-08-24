@@ -170,14 +170,15 @@ struct MachineToolsTab: View {
         mounting = true
         message = nil
         Task {
-            do {
-                let landed = try await MachineMounts.mount(
-                    machine: session.machine, remotePath: "/")
-                message = "Mounted at \(landed.mountPoint)."
-            } catch let failure as MachineMountError {
+            let result = await MachineMountOperationExecution.perform(
+                .mount, machine: session.machine)
+            switch result {
+            case let .success(outcome):
+                message = "Mounted at \(outcome.mount.mountPoint)."
+            case let .failure(failure as MachineMountError):
                 message = [failure.errorDescription, failure.hint]
                     .compactMap { $0 }.joined(separator: " ")
-            } catch {
+            case let .failure(error):
                 message = error.localizedDescription
             }
             await session.restoreMount()
@@ -189,10 +190,12 @@ struct MachineToolsTab: View {
         mounting = true
         message = nil
         Task {
-            do {
-                let released = try await MachineMounts.unmount(machine: session.machine)
-                message = "Unmounted \(released.mountPoint)."
-            } catch {
+            switch await MachineMountOperationExecution.perform(
+                .unmount, machine: session.machine)
+            {
+            case let .success(outcome):
+                message = "Unmounted \(outcome.mount.mountPoint)."
+            case let .failure(error):
                 message = error.localizedDescription
             }
             await session.restoreMount()

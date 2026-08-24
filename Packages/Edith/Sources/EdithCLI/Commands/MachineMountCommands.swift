@@ -4,6 +4,12 @@ import Foundation
 
 enum MountBridge {
     static func failure(_ error: Error, machine: Machine) -> CLIFailure {
+        if let operationError = error as? MachineMountOperationError,
+            case let .restoreFailed(record, message) = operationError
+        {
+            return CLIFailure(
+                "could not put \(machine.name) back at \(record.mountPoint)", hint: message)
+        }
         guard let mount = error as? MachineMountError else {
             return CLIFailure("\(machine.name): \(error.localizedDescription)")
         }
@@ -68,37 +74,21 @@ struct MachinesMountCommand: AsyncParsableCommand {
             let runner = try await MachineResolver.runner(machine)
             let remote = path.flatMap { $0.isEmpty ? nil : $0 } ?? "/"
             let destination = at.map { URL(fileURLWithPath: $0.expandingTilde()) }
-            if path == nil, at == nil {
-                switch await MachineMounts.restore(machine: runner.machine) {
-                case let .remounted(landed):
-                    guard !json else {
-                        CLIOut.json(MountBridge.report(landed, machine: runner.machine))
-                        return
-                    }
-                    CLIOut.out("remounted \(landed.source)  ->  \(landed.mountPoint)")
-                    return
-                case let .healthy(landed):
-                    throw MountBridge.failure(
-                        MachineMountError.alreadyMounted(landed.mountPoint),
-                        machine: runner.machine)
-                case let .failed(record, message):
-                    throw CLIFailure(
-                        "could not put \(runner.machine.name) back at \(record.mountPoint)",
-                        hint: message)
-                case .nothingToDo:
-                    break
-                }
-            }
-            do {
-                let mounted = try await MachineMounts.mount(
-                    machine: runner.machine, remotePath: remote, at: destination,
-                    readOnly: readOnly)
+            switch await MachineMountOperationExecution.perform(
+                .mount, machine: runner.machine, remotePath: remote,
+                mountPoint: destination, readOnly: readOnly,
+                restoreDefault: path == nil && at == nil)
+            {
+            case let .success(outcome):
                 guard !json else {
-                    CLIOut.json(MountBridge.report(mounted, machine: runner.machine))
+                    CLIOut.json(MountBridge.report(outcome.mount, machine: runner.machine))
                     return
                 }
-                CLIOut.out("\(mounted.source)  ->  \(mounted.mountPoint)")
-            } catch {
+                CLIOut.out(
+                    outcome.restored
+                        ? "remounted \(outcome.mount.source)  ->  \(outcome.mount.mountPoint)"
+                        : "\(outcome.mount.source)  ->  \(outcome.mount.mountPoint)")
+            case let .failure(error):
                 throw MountBridge.failure(error, machine: runner.machine)
             }
         }
@@ -119,14 +109,14 @@ struct MachinesUnmountCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let found = try MachineResolver.machine(machine)
-            do {
-                let released = try await MachineMounts.unmount(machine: found)
+            switch await MachineMountOperationExecution.perform(.unmount, machine: found) {
+            case let .success(outcome):
                 guard !json else {
-                    CLIOut.json(MountBridge.report(released, machine: found))
+                    CLIOut.json(MountBridge.report(outcome.mount, machine: found))
                     return
                 }
-                CLIOut.out("unmounted \(released.mountPoint)")
-            } catch {
+                CLIOut.out("unmounted \(outcome.mount.mountPoint)")
+            case let .failure(error):
                 throw MountBridge.failure(error, machine: found)
             }
         }

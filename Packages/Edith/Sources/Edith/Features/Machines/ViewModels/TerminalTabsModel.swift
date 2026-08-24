@@ -47,11 +47,19 @@ final class TerminalTabsModel {
         self.selected = tabs[next].id
     }
 
-    func send(_ text: String) {
-        let targets = broadcast ? tabs : tabs.filter { $0.id == selected }
-        for tab in targets {
-            tab.holder.terminalView.send(txt: text)
+    @discardableResult
+    func sendBroadcast(
+        _ command: String,
+        send: @MainActor (TerminalSessionHolder, String) -> Void = {
+            $0.terminalView.send(txt: $1)
         }
+    ) -> Result<MachineBroadcastPlan, Error> {
+        let result = MachineBroadcastOperationExecution.plan(command: command)
+        guard case let .success(plan) = result else { return result }
+        for tab in tabs {
+            send(tab.holder, plan.terminalInput)
+        }
+        return .success(plan)
     }
 
     func stopAll() {
@@ -183,12 +191,10 @@ struct TerminalTabsView: View {
             TextField("Send to every tab", text: $command)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
-                    model.send(command + "\n")
-                    command = ""
+                    if case .success = model.sendBroadcast(command) { command = "" }
                 }
             Button("Send") {
-                model.send(command + "\n")
-                command = ""
+                if case .success = model.sendBroadcast(command) { command = "" }
             }
             .pointerCursor()
         }

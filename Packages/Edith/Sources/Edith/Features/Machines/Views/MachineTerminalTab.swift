@@ -232,11 +232,11 @@ struct ContainerTerminalSheet: View {
     private func start() {
         guard launchEnabled else { return }
         guard let connection = session.connectionRef else { return }
-        let command = DockerCommands.execShell(containerID: container.id)
+        let launch = MachineExecOperationExecution.dockerShellLaunch(
+            containerID: container.id, connection: connection,
+            environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
         holder.start(
-            executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(remoteCommand: command),
-            environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
-                + connection.terminalEnvironment())
+            executable: launch.executable, arguments: launch.arguments,
+            environment: launch.environment)
     }
 }

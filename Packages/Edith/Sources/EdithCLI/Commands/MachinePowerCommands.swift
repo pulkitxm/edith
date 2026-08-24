@@ -468,11 +468,14 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            var words = command
-            if words.first == "--" { words.removeFirst() }
-            let line = words.joined(separator: " ")
-            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
+            let plan: MachineBroadcastPlan
+            switch MachineBroadcastOperationExecution.plan(words: command) {
+            case let .success(value):
+                plan = value
+            case .failure(MachineBroadcastOperationError.emptyCommand):
                 throw CLIFailure("give a command to run")
+            case let .failure(error):
+                throw error
             }
             let all = MachineRegistry.machines()
             guard !all.isEmpty else {
@@ -494,7 +497,7 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
                 var text = ""
                 do {
                     try await runner.connect()
-                    let result = try await runner.run(line, timeout: 120)
+                    let result = try await runner.run(plan.command, timeout: 120)
                     status = result.status
                     text = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 } catch {
