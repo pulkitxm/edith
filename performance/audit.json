@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-08-23",
+  "capturedAt": "2026-08-25",
   "structuralEnforcement": {
     "sourceRoots": [
       "Packages/Edith/Sources"
@@ -35,18 +35,22 @@
   "scenarios": [
     {
       "area": "startup",
-      "status": "instrumented",
-      "finding": "Main and helper launch perform synchronous setup before their initial window or panel is ready.",
-      "measurement": "Points of Interest intervals named main.launch, helper.services, and helper.panel.",
-      "regressionProperty": "Every launch boundary has a balanced runtime interval.",
+      "status": "protected",
+      "finding": "The main window and helper panel are created before deferred service setup begins.",
+      "measurement": "App Launch covers the main lifecycle, while Points of Interest intervals name helper.services and each helper.services.* phase.",
+      "regressionProperty": "Cold-start phases yield between independent groups, only the newest generation publishes, and cancellation prevents remaining phases.",
       "evidence": [
         {
           "path": "Packages/Edith/Sources/Edith/Core/Application/EdithApp.swift",
           "contains": "PerformanceTrace.begin(.startup, \"main.launch\")"
         },
         {
-          "path": "Packages/Edith/Sources/EdithHelper/Core/Application/EdithHelperApp.swift",
-          "contains": "PerformanceTrace.begin(.startup, \"helper.services\")"
+          "path": "Packages/Edith/Sources/EdithKit/Core/Performance/StartupCoordinator.swift",
+          "contains": "guard !Task.isCancelled, let self, generation == currentGeneration else { return }"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/StartupCoordinatorTests.swift",
+          "contains": "newestGenerationOwnsPublication"
         }
       ]
     },

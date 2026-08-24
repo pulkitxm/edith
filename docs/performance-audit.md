@@ -10,7 +10,7 @@ evidence.
 
 | Area | Finding | Guard |
 | --- | --- | --- |
-| Startup | Main and helper startup do synchronous setup before the first surface is ready. | Three Points of Interest intervals split main launch, helper services, and panel setup. |
+| Startup | The main window and helper panel precede deferred service setup. | Generation-owned startup phases yield between independent service groups and cancel on supersession or termination. |
 | Input | Type-ahead and global hotkeys are event driven on the main thread. | Stable input interval names and a thread-context test. |
 | Repository | Dashboard reads skip unchanged files. | The full load path is traced and the modification-time early return is checked. |
 | Git | Usage collection owns the repository and Git subprocess pipeline. | The asynchronous utility process has one end-to-end interval and structured phase events. |
@@ -45,6 +45,11 @@ Record launch and interaction intervals with the Points of Interest template:
 xcrun xctrace record --template "Points of Interest" --launch -- dist/Edith.app/Contents/MacOS/Edith
 ```
 
+Use the App Launch template for `applicationDidFinishLaunching` and initial-frame
+comparisons. Keep helper extension flags and isolated defaults identical across
+runs, and compare the `helper.services.*` intervals to find individual main-thread
+bursts.
+
 For large-repository comparisons, reuse the same `usage.json` and record
 `dashboard.load` and `dashboard.ingest`. For slow-network comparisons, apply the
 same Network Link Conditioner profile and record `contributors.fetch`.
@@ -64,5 +69,5 @@ require a path or symbol allowlist. New subprocess work should reuse a bounded r
 repeated UI work should own and cancel its task before applying only the latest result.
 
 Further refactors should follow captured regressions. The first candidates are
-shared extension-probe snapshots and moving dashboard aggregation off the main
-actor if their intervals show material cost.
+shared extension-probe snapshots and service-specific background preparation if
+their intervals show material cost.
