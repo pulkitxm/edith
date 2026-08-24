@@ -47,6 +47,33 @@ enum DockerBridge {
         default: return "docker reported an unknown state"
         }
     }
+
+    static func perform(
+        _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget,
+        runner: RemoteRunner, failure: String
+    ) async throws -> DockerLifecycleOperationResult {
+        let result = await DockerLifecycleOperationExecution.perform(
+            operation, target: target,
+            using: { command, timeout in
+                do {
+                    let output = try await runner.run(command, timeout: timeout)
+                    guard output.succeeded else {
+                        return .failure(
+                            CLIFailure(
+                                failure,
+                                hint: output.stderrText.trimmingCharacters(
+                                    in: .whitespacesAndNewlines)))
+                    }
+                    return .success(output.stdoutText)
+                } catch {
+                    return .failure(error)
+                }
+            })
+        switch result {
+        case let .success(output): return output
+        case let .failure(error): throw error
+        }
+    }
 }
 
 struct DockerPsCommand: AsyncParsableCommand {
@@ -272,6 +299,7 @@ protocol DockerLifecycleCommand: AsyncParsableCommand {
 extension DockerLifecycleCommand {
     static var isDestructive: Bool { false }
     var confirmed: Bool { true }
+    static var operation: DockerLifecycleOperation? { DockerLifecycleOperation(cliVerb: action) }
 
     func apply() async throws {
         try await execute {
@@ -293,12 +321,18 @@ extension DockerLifecycleCommand {
                 : nil
             guard plan?.shouldApply() ?? true else { return }
             let runner = try await DockerBridge.runner(machine)
-            let result = try await runner.run(
-                DockerCommands.lifecycle(action, ids: containers), timeout: 120)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "docker \(action) failed on \(runner.machine.name)",
-                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+            if let operation = Self.operation {
+                _ = try await DockerBridge.perform(
+                    operation, target: .containers(containers), runner: runner,
+                    failure: "docker \(action) failed on \(runner.machine.name)")
+            } else {
+                let result = try await runner.run(
+                    DockerCommands.lifecycle(action, ids: containers), timeout: 120)
+                guard result.succeeded else {
+                    throw CLIFailure(
+                        "docker \(action) failed on \(runner.machine.name)",
+                        hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
             }
             if let plan {
                 plan.finish(
@@ -459,13 +493,9 @@ struct DockerRemoveImageCommand: AsyncParsableCommand {
                 ])
             guard plan.shouldApply() else { return }
             let runner = try await DockerBridge.runner(machine)
-            let result = try await runner.run(
-                DockerCommands.removeImage(image, force: force), timeout: 120)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "docker rmi failed on \(runner.machine.name)",
-                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
+            _ = try await DockerBridge.perform(
+                .removeImage, target: .image(image, force: force), runner: runner,
+                failure: "docker rmi failed on \(runner.machine.name)")
             plan.finish(changed: true, plain: "removed image \(image)")
         }
     }
@@ -509,12 +539,9 @@ struct DockerRemoveVolumeCommand: AsyncParsableCommand {
                 CLIOut.note("nothing was removed; pass --yes to go ahead")
                 return
             }
-            let result = try await runner.run(DockerCommands.removeVolume(volume), timeout: 120)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "docker volume rm failed on \(runner.machine.name)",
-                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
+            _ = try await DockerBridge.perform(
+                .removeVolume, target: .volume(volume), runner: runner,
+                failure: "docker volume rm failed on \(runner.machine.name)")
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -539,7 +566,7 @@ struct DockerPruneCommand: AsyncParsableCommand {
             rather than folded into system.
             """)
 
-    static let targets = ["images", "volumes", "networks", "builder", "system"]
+    static let targets = DockerPruneTarget.allCases.map(\.rawValue)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -555,7 +582,7 @@ struct DockerPruneCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard Self.targets.contains(what) else {
+            guard let target = DockerPruneTarget(rawValue: what) else {
                 throw CLIFailure.notFound(
                     "docker cannot prune \(what)",
                     hint: "try: " + Self.targets.joined(separator: ", "))
@@ -576,12 +603,9 @@ struct DockerPruneCommand: AsyncParsableCommand {
                 CLIOut.note("pass --yes to do it")
                 return
             }
-            let result = try await runner.run(DockerCommands.prune(what), timeout: 300)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "docker prune \(what) failed on \(runner.machine.name)",
-                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
+            let result = try await DockerBridge.perform(
+                .prune, target: .prune(target), runner: runner,
+                failure: "docker prune \(what) failed on \(runner.machine.name)")
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -589,11 +613,11 @@ struct DockerPruneCommand: AsyncParsableCommand {
                         "target": .string(what),
                         "applied": .bool(true),
                         "output": .string(
-                            result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)),
+                            result.output.trimmingCharacters(in: .whitespacesAndNewlines)),
                     ]))
                 return
             }
-            CLIOut.raw(result.stdoutText)
+            CLIOut.raw(result.output)
         }
     }
 }

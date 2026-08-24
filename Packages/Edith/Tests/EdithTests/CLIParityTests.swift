@@ -404,32 +404,6 @@ enum UIParity {
             "Add machine sheet", "forget the stored sudo password",
             ["machines", "edit", "box", "--forget-sudo-password"]),
 
-        UICapability(
-            "Docker window", "start a container", ["machines", "docker", "start", "box", "api"]),
-        UICapability(
-            "Docker group header", "start the stopped containers in the group",
-            ["machines", "docker", "start", "box", "api", "db"]),
-        UICapability(
-            "Docker group header", "stop the running containers in the group",
-            ["machines", "docker", "stop", "box", "api", "db"]),
-        UICapability(
-            "Docker window", "stop a container", ["machines", "docker", "stop", "box", "api"]),
-        UICapability(
-            "Docker window", "restart a container",
-            ["machines", "docker", "restart", "box", "api"]),
-        UICapability(
-            "Docker window", "remove a container",
-            ["machines", "docker", "rm", "box", "api", "--yes"]),
-        UICapability(
-            "Docker window", "remove an image",
-            ["machines", "docker", "rmi", "box", "nginx", "--yes"]),
-        UICapability(
-            "Docker window", "remove a volume",
-            ["machines", "docker", "volume-rm", "box", "data"]),
-        UICapability(
-            "Docker window", "prune unused objects",
-            ["machines", "docker", "prune", "box", "images"]),
-
         UICapability("Download sheet", "start a download", ["download", "add", "https://x/y"]),
         UICapability("Download sheet", "retry a failed item", ["download", "retry", "--all"]),
         UICapability("Download sheet", "clear the history", ["download", "clear", "--yes"]),
@@ -734,8 +708,6 @@ enum UIParity {
             ["music", "rm"]: 2,
             ["machines", "add"]: 2,
             ["machines", "edit"]: 4,
-            ["machines", "docker", "start"]: 2,
-            ["machines", "docker", "stop"]: 2,
         ]
         let operations = Dictionary(
             uniqueKeysWithValues: UIParity.legacyOperations.map { ($0.cli, $0.placements.count) })
@@ -751,6 +723,21 @@ enum UIParity {
                 == [
                     ["extensions", "enable"], ["extensions", "disable"],
                     ["extensions", "setup"], ["tools", "install"],
+                ])
+    }
+
+    @Test func everyDockerLifecycleLeafDeclaresItsSharedOperation() {
+        let declared = Set(DockerLifecycleOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["machines", "docker", "start"],
+                    ["machines", "docker", "stop"],
+                    ["machines", "docker", "restart"],
+                    ["machines", "docker", "rm"],
+                    ["machines", "docker", "rmi"],
+                    ["machines", "docker", "volume-rm"],
+                    ["machines", "docker", "prune"],
                 ])
     }
 

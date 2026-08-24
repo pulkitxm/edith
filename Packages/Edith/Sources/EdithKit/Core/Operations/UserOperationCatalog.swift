@@ -5,6 +5,9 @@ public enum UserOperationCatalog {
         MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + DockerLifecycleOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -153,6 +156,47 @@ private extension MachineControlOperation {
             userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
+        }
+    }
+}
+
+private extension DockerLifecycleOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .start:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Docker window", action: "start a container",
+                    exampleArguments: ["box", "api"]),
+                UserInterfaceActionPlacement(
+                    surface: "Docker group header",
+                    action: "start the stopped containers in the group",
+                    exampleArguments: ["box", "api", "db"]),
+            ])
+        case .stop:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Docker window", action: "stop a container",
+                    exampleArguments: ["box", "api"]),
+                UserInterfaceActionPlacement(
+                    surface: "Docker group header",
+                    action: "stop the running containers in the group",
+                    exampleArguments: ["box", "api", "db"]),
+            ])
+        case .restart:
+            userInterface("Docker window", "restart a container", ["box", "api"])
+        case .removeContainer:
+            userInterface(
+                "Docker window", "remove a container", ["box", "api", "--yes"])
+        case .removeImage:
+            userInterface(
+                "Docker window", "remove an image", ["box", "nginx", "--yes"])
+        case .removeVolume:
+            userInterface(
+                "Docker window", "remove a volume", ["box", "data", "--yes"])
+        case .prune:
+            userInterface(
+                "Docker window", "prune unused objects", ["box", "images", "--yes"])
         }
     }
 }
