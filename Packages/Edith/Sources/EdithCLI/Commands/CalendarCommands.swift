@@ -14,33 +14,46 @@ struct CalendarCommand: AsyncParsableCommand {
             """,
         subcommands: [
             CalendarListCommand.self, CalendarOpenCommand.self, CalendarJoinCommand.self,
+            CalendarDirectionsCommand.self,
         ],
         defaultSubcommand: CalendarListCommand.self)
 }
 
 enum CalendarBridge {
-    static func events(timeout: TimeInterval = 4) async throws -> [CalendarEventPayload] {
-        try AppBridge.requireHelper("reading the calendar")
-        guard
-            let reply = await AppBridge.awaitReply(
-                IPC.Name.calendarEvents, timeout: timeout,
-                trigger: { AppBridge.post(IPC.Name.requestCalendarEvents) })
-        else {
-            throw AppBridge.silence(
-                "the calendar", extensionKey: AppStorageKeys.Tabs.calendarEnabled,
-                permission: "calendar")
-        }
-        switch reply[CalendarEventBridge.statusKey] as? String {
-        case "extensionOff":
-            throw CLIFailure.unavailable(
-                "the Calendar extension is off", hint: "run `ed extensions enable calendar`")
-        case "notAuthorized":
-            throw CLIFailure.unavailable(
-                "macOS has not granted Edith calendar access",
-                hint: "run `ed permissions request calendar`")
-        default:
-            let text = reply[CalendarEventBridge.payloadKey] as? String ?? "[]"
-            return CalendarEventBridge.decode(text)
+    static func events(
+        _ query: CalendarEventQuery = CalendarEventQuery(
+            days: CalendarEventQuery.initialDays),
+        timeout: TimeInterval = 4
+    ) async throws -> [CalendarEventPayload] {
+        try await CalendarEventOperationExecution.events(query) { query in
+            try AppBridge.requireHelper("reading the calendar")
+            guard
+                let reply = await AppBridge.awaitReply(
+                    IPC.Name.calendarEvents, timeout: timeout,
+                    trigger: {
+                        AppBridge.post(
+                            IPC.Name.requestCalendarEvents,
+                            userInfo: [
+                                CalendarEventBridge.queryKey: CalendarEventBridge.encode(query)
+                            ])
+                    })
+            else {
+                throw AppBridge.silence(
+                    "the calendar", extensionKey: AppStorageKeys.Tabs.calendarEnabled,
+                    permission: "calendar")
+            }
+            switch reply[CalendarEventBridge.statusKey] as? String {
+            case "extensionOff":
+                throw CLIFailure.unavailable(
+                    "the Calendar extension is off", hint: "run `ed extensions enable calendar`")
+            case "notAuthorized":
+                throw CLIFailure.unavailable(
+                    "macOS has not granted Edith calendar access",
+                    hint: "run `ed permissions request calendar`")
+            default:
+                let text = reply[CalendarEventBridge.payloadKey] as? String ?? "[]"
+                return CalendarEventBridge.decode(text)
+            }
         }
     }
 
@@ -71,14 +84,13 @@ struct CalendarListCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Option(help: "Only events starting within this many days.")
+    @Option(help: "Read from today through this many days, up to 120.")
     var days: Int = 7
 
     func run() async throws {
         try await execute {
-            let days = try ArgumentChecks.nonNegative(self.days, "--days")
-            let cutoff = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
-            let events = try await CalendarBridge.events().filter { $0.start <= cutoff }
+            let days = try CalendarCLI.days(self.days)
+            let events = try await CalendarBridge.events(CalendarEventQuery(days: days))
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -177,7 +189,10 @@ struct CalendarJoinCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let found = try CalendarBridge.event(event, in: await CalendarBridge.events())
+            let found = try CalendarBridge.event(
+                event,
+                in: await CalendarBridge.events(
+                    CalendarEventQuery(days: CalendarEventQuery.maximumDays)))
             guard let value = found.meetingURL, let url = URL(string: value) else {
                 throw CLIFailure.unavailable(
                     "\(found.title) has no meeting link",
@@ -195,5 +210,57 @@ struct CalendarJoinCommand: AsyncParsableCommand {
             }
             CLIOut.out("joining \(found.title)")
         }
+    }
+}
+
+struct CalendarDirectionsCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "directions", abstract: "Open directions to an event.", aliases: ["route"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Event ID or enough of its title to be unambiguous.")
+    var event: String
+
+    func run() async throws {
+        try await execute {
+            let found = try CalendarBridge.event(
+                event,
+                in: await CalendarBridge.events(
+                    CalendarEventQuery(days: CalendarEventQuery.maximumDays)))
+            guard
+                let result = await CalendarEventOperationExecution.directions(
+                    found, using: CLIEnvironment.openURL),
+                let location = found.location?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !location.isEmpty
+            else {
+                throw CLIFailure.unavailable(
+                    "\(found.title) has no location",
+                    hint: "run `ed calendar ls --json` and choose an event with location")
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "action": .string("directions"), "id": .string(found.id),
+                        "title": .string(found.title), "location": .string(location),
+                        "url": .string(result.url.absoluteString),
+                        "opened": .bool(result.opened),
+                    ]))
+                return
+            }
+            CLIOut.out("opening directions to \(TextTable.oneLine(location))")
+        }
+    }
+}
+
+enum CalendarCLI {
+    static func days(_ days: Int) throws -> Int {
+        let days = try ArgumentChecks.nonNegative(days, "--days")
+        guard days <= CalendarEventQuery.maximumDays else {
+            throw CLIFailure.usage(
+                "--days must be between 0 and \(CalendarEventQuery.maximumDays)")
+        }
+        return days
     }
 }

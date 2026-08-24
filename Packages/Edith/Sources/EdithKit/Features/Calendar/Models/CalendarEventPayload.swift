@@ -192,6 +192,7 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
 
 public enum CalendarEventBridge {
     public static let payloadKey = "events"
+    public static let queryKey = "query"
     public static let statusKey = "status"
 
     public static func encode(_ payloads: [CalendarEventPayload]) -> String {
@@ -208,5 +209,22 @@ public enum CalendarEventBridge {
             let payloads = try? decoder.decode([CalendarEventPayload].self, from: data)
         else { return [] }
         return payloads
+    }
+
+    public static func encode(_ query: CalendarEventQuery) -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(query) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    public static func decodeQuery(_ text: String?) -> CalendarEventQuery {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let text, let data = text.data(using: .utf8),
+            let query = try? decoder.decode(CalendarEventQuery.self, from: data)
+        else { return CalendarEventQuery(days: CalendarEventQuery.initialDays) }
+        let now = query.days == 0 ? query.end : query.start
+        return CalendarEventQuery(days: query.days, now: now)
     }
 }
