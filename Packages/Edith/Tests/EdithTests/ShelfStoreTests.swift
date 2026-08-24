@@ -46,6 +46,32 @@ import Testing
         #expect(try String(contentsOf: store.fileURL(for: item), encoding: .utf8) == "hello")
     }
 
+    @Test func copiesDirectoriesAndTheirSymbolicLinks() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-directory-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: source) }
+        try FileManager.default.createDirectory(
+            at: source.appendingPathComponent("Nested"), withIntermediateDirectories: true)
+        let file = source.appendingPathComponent("Nested/file.txt")
+        try "nested".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            atPath: source.appendingPathComponent("link.txt").path,
+            withDestinationPath: "Nested/file.txt")
+
+        let item = try #require(store.addCopy(of: source))
+        let copied = store.fileURL(for: item)
+
+        #expect(
+            try String(
+                contentsOf: copied.appendingPathComponent("Nested/file.txt"), encoding: .utf8)
+                == "nested")
+        #expect(
+            try FileManager.default.destinationOfSymbolicLink(
+                atPath: copied.appendingPathComponent("link.txt").path) == "Nested/file.txt")
+    }
+
     @Test func persistsIndexAcrossInstances() throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -71,7 +97,7 @@ import Testing
 
         let item = try #require(store.addCopy(of: source))
         let fileURL = store.fileURL(for: item)
-        store.remove(item)
+        try store.remove(item)
         #expect(store.items.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: fileURL.path))
     }
@@ -125,12 +151,12 @@ import Testing
         #expect(reopened.items.count == 1)
     }
 
-    @Test func setPositionPersistsAcrossInstances() throws {
+    @Test func setPositionsPersistsAcrossInstances() throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let item = try #require(store.addText("movable"))
-        store.setPosition(CGPoint(x: 120, y: 60), for: item)
+        store.setPositions([item.id: CGPoint(x: 120, y: 60)])
         let reopened = ShelfStore(root: dir)
         #expect(reopened.items.first?.position == CGPoint(x: 120, y: 60))
     }
@@ -148,6 +174,175 @@ import Testing
         store.purgeExpired(keep: .oneHour, now: Date().addingTimeInterval(4000))
         #expect(store.items.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    @Test func failedReloadKeepsTheLastKnownItems() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(store.addText("keep in memory"))
+        try Data("broken".utf8).write(to: ShelfIndex.indexFile(in: dir))
+
+        #expect(!store.reload())
+        #expect(store.items.map(\.id) == [item.id])
+        var performed = false
+        #expect(throws: ShelfActionSelectionError.self) {
+            _ = try store.withActionSelection(itemIDs: [item.id]) { _ in
+                performed = true
+            }
+        }
+        #expect(!performed)
+        #expect(throws: ShelfMutationError.self) {
+            try store.remove(item)
+        }
+        #expect(store.items.map(\.id) == [item.id])
+    }
+
+    @Test func failedPromiseAdoptionPreservesTheIncomingFile() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data("broken".utf8).write(to: ShelfIndex.indexFile(in: dir))
+        let id = UUID()
+        let incoming = try #require(store.promiseDestination(id: id))
+            .appendingPathComponent("Promised.txt")
+        try "recoverable".write(to: incoming, atomically: true, encoding: .utf8)
+
+        #expect(store.adopt(fileAt: incoming, id: id) == nil)
+        #expect(FileManager.default.fileExists(atPath: incoming.path))
+        #expect(try String(contentsOf: incoming, encoding: .utf8) == "recoverable")
+    }
+
+    @Test func successfulPromiseAdoptionPublishesBeforeRemovingTheIncomingFile() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = UUID()
+        let incoming = try #require(store.promiseDestination(id: id))
+            .appendingPathComponent("Promised.txt")
+        try "received".write(to: incoming, atomically: true, encoding: .utf8)
+
+        let item = try #require(store.adopt(fileAt: incoming, id: id))
+
+        #expect(!FileManager.default.fileExists(atPath: incoming.path))
+        #expect(try String(contentsOf: store.fileURL(for: item), encoding: .utf8) == "received")
+        #expect(try ShelfMutationExecution.snapshot(root: dir).items == [item])
+    }
+
+    @Test func activeSharePickerRejectsSecondIPCWithoutRelockingAndReleasesSelection() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try #require(store.addText("shared"))
+        var active: ShelfStoreActionSelection? = try store.actionSelection(itemIDs: [item.id])
+        #expect(store.retainActionSelection(try #require(active).snapshot))
+        active = nil
+        let contender = open(
+            dir.appendingPathComponent(".index.lock").path, O_RDWR | O_CLOEXEC)
+        defer {
+            if contender >= 0 { close(contender) }
+        }
+        #expect(contender >= 0)
+        #expect(flock(contender, LOCK_EX | LOCK_NB) == -1)
+        #expect(errno == EWOULDBLOCK)
+        let requestID = "second-share"
+        let payload = ShelfItemOperationExecution.payload(
+            .share, itemIDs: [item.id], requestID: requestID)
+        var performed = false
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        let rejected = try #require(
+            ShelfOperationRequestRouter.route(
+                payload, isSharing: true,
+                perform: { _, _ in
+                    performed = true
+                    return nil
+                }))
+
+        #expect(clock.now - started < .seconds(1))
+        #expect(!performed)
+        #expect(rejected.requestID == requestID)
+        #expect(rejected.operation == .share)
+        #expect(rejected.error == ShelfActionSelectionError.busy.localizedDescription)
+        #expect(!store.reload())
+        #expect(throws: ShelfActionSelectionError.self) {
+            try store.remove(item)
+        }
+
+        store.releaseActionSelection()
+        #expect(flock(contender, LOCK_EX | LOCK_NB) == 0)
+        #expect(flock(contender, LOCK_UN) == 0)
+        let completed = try #require(
+            ShelfOperationRequestRouter.route(
+                payload, isSharing: false,
+                perform: { _, itemIDs in
+                    performed = true
+                    do {
+                        return try store.withActionSelection(itemIDs: itemIDs) { selection in
+                            try selection.fileURLs().count == 1
+                                ? nil : "the selected shelf items are not available"
+                        }
+                    } catch {
+                        return error.localizedDescription
+                    }
+                }))
+
+        #expect(performed)
+        #expect(completed.requestID == requestID)
+        #expect(completed.error == nil)
+    }
+
+    @Test func promisedFileWaitsForPickerReleaseBeforeReportingSuccess() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let shared = try #require(store.addText("shared"))
+        let promiseID = UUID()
+        let incoming = try #require(store.promiseDestination(id: promiseID))
+        let promised = incoming.appendingPathComponent("Promised.txt")
+        try "promised".write(to: promised, atomically: true, encoding: .utf8)
+        var active: ShelfStoreActionSelection? = try store.actionSelection(itemIDs: [shared.id])
+        #expect(store.retainActionSelection(try #require(active).snapshot))
+        active = nil
+        var completionCount = 0
+        var hapticCount = 0
+        var adopted: ShelfItem?
+
+        store.adoptWhenAvailable(fileAt: promised, id: promiseID) { item in
+            completionCount += 1
+            adopted = item
+            if item != nil { hapticCount += 1 }
+        }
+
+        #expect(completionCount == 0)
+        #expect(hapticCount == 0)
+        #expect(FileManager.default.fileExists(atPath: promised.path))
+        store.releaseActionSelection()
+        let item = try #require(adopted)
+        #expect(completionCount == 1)
+        #expect(hapticCount == 1)
+        #expect(!FileManager.default.fileExists(atPath: incoming.path))
+        #expect(try String(contentsOf: store.fileURL(for: item), encoding: .utf8) == "promised")
+    }
+
+    @Test func cancelledPickerCleansQueuedPromiseWithoutReportingSuccess() throws {
+        let (store, dir) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let shared = try #require(store.addText("shared"))
+        let promiseID = UUID()
+        let incoming = try #require(store.promiseDestination(id: promiseID))
+        let promised = incoming.appendingPathComponent("Promised.txt")
+        try "promised".write(to: promised, atomically: true, encoding: .utf8)
+        var active: ShelfStoreActionSelection? = try store.actionSelection(itemIDs: [shared.id])
+        #expect(store.retainActionSelection(try #require(active).snapshot))
+        active = nil
+        var completionCount = 0
+
+        store.adoptWhenAvailable(fileAt: promised, id: promiseID) { _ in
+            completionCount += 1
+        }
+        store.cancelActionSelection()
+
+        #expect(completionCount == 0)
+        #expect(!FileManager.default.fileExists(atPath: incoming.path))
+        #expect(store.reload())
+        #expect(store.items.map(\.id) == [shared.id])
     }
 }
 
@@ -456,6 +651,156 @@ import Testing
                 atPath: outside.appendingPathComponent(".index.lock").path))
     }
 
+    @MainActor @Test func pinnedSelectionKeepsActionsOnTheOpenedShelfRoot() throws {
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-action-swap-\(UUID().uuidString)")
+        let root = container.appendingPathComponent("Shelf")
+        let pinned = container.appendingPathComponent("Pinned")
+        let outside = container.appendingPathComponent("Outside")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let item = try #require(
+            ShelfMutationExecution.addText("inside", root: root, sender: "test").item)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let victim = outside.appendingPathComponent(item.name)
+        try "outside".write(to: victim, atomically: true, encoding: .utf8)
+
+        let selection = try ShelfMutationExecution.pinnedSelection(
+            root: root,
+            afterOpeningRoot: {
+                try FileManager.default.moveItem(at: root, to: pinned)
+                try FileManager.default.createSymbolicLink(at: root, withDestinationURL: outside)
+            })
+        let urls = try selection.fileURLs(for: [item.id])
+        var opened: URL?
+
+        #expect(
+            ShelfItemOperationExecution.perform(
+                .open, urls: urls,
+                open: {
+                    opened = $0
+                    return true
+                }))
+        let openedURL = try #require(opened)
+        #expect(
+            openedURL.resolvingSymlinksInPath()
+                == pinned.appendingPathComponent(item.name).resolvingSymlinksInPath())
+        #expect(try String(contentsOf: openedURL, encoding: .utf8) == "inside")
+        #expect(try String(contentsOf: victim, encoding: .utf8) == "outside")
+    }
+
+    @MainActor @Test func stagedShareAndDragIgnoreAPostResolutionRootSwap() throws {
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-staged-action-\(UUID().uuidString)")
+        let root = container.appendingPathComponent("Shelf")
+        let pinned = container.appendingPathComponent("Pinned")
+        let outside = container.appendingPathComponent("Outside")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let item = try #require(
+            ShelfMutationExecution.addText("inside", root: root, sender: "test").item)
+        var selection: ShelfPinnedSelection? = try ShelfMutationExecution.pinnedSelection(
+            root: root)
+        var staged: ShelfStagedFiles? = try #require(selection).stagedFiles(for: [item.id])
+        let stagedURL = try #require(staged).urls[0]
+
+        selection = nil
+        try FileManager.default.moveItem(at: root, to: pinned)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try "outside".write(
+            to: outside.appendingPathComponent(item.name), atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: root, withDestinationURL: outside)
+
+        var shared = ""
+        #expect(
+            ShelfItemOperationExecution.perform(
+                .share, urls: try #require(staged).urls,
+                share: { urls in
+                    shared = (try? String(contentsOf: urls[0], encoding: .utf8)) ?? ""
+                    return true
+                }))
+        let dragged = try String(contentsOf: stagedURL, encoding: .utf8)
+
+        #expect(shared == "inside")
+        #expect(dragged == "inside")
+        #expect(
+            try String(contentsOf: root.appendingPathComponent(item.name), encoding: .utf8)
+                == "outside")
+        let stagingRoot = stagedURL.deletingLastPathComponent()
+        staged = nil
+        #expect(!FileManager.default.fileExists(atPath: stagingRoot.path))
+    }
+
+    @MainActor @Test func pinnedSelectionSerializesSameNameRemovalAndReuseThroughAction() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-action-reuse-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let item = try #require(
+            ShelfMutationExecution.addText("original", root: root, sender: "test").item)
+        var selection: ShelfPinnedSelection? = try ShelfMutationExecution.pinnedSelection(
+            root: root)
+        let urls = try #require(selection).fileURLs(for: [item.id])
+        let competingLock = open(
+            root.appendingPathComponent(".index.lock").path, O_RDWR | O_CLOEXEC)
+        defer {
+            if competingLock >= 0 { close(competingLock) }
+        }
+        #expect(competingLock >= 0)
+        #expect(flock(competingLock, LOCK_EX | LOCK_NB) == -1)
+        #expect(errno == EWOULDBLOCK)
+        let started = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            started.signal()
+            _ = try? ShelfMutationExecution.remove(
+                id: item.id, root: root, sender: "test")
+            _ = try? ShelfMutationExecution.addText(
+                "replacement", root: root, sender: "test")
+            finished.signal()
+        }
+        started.wait()
+        var opened = ""
+
+        #expect(
+            ShelfItemOperationExecution.perform(
+                .open, urls: urls,
+                open: {
+                    opened = (try? String(contentsOf: $0, encoding: .utf8)) ?? ""
+                    return true
+                }))
+        #expect(opened == "original")
+        selection = nil
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        let replacement = try #require(ShelfMutationExecution.snapshot(root: root).items.first)
+        #expect(replacement.id != item.id)
+        #expect(replacement.name == item.name)
+        #expect(
+            try String(
+                contentsOf: ShelfIndex.fileURL(for: replacement, in: root), encoding: .utf8)
+                == "replacement")
+    }
+
+    @MainActor @Test func filePromisesStageOutsideARedirectedShelfRoot() throws {
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-shelf-promise-root-\(UUID().uuidString)")
+        let root = container.appendingPathComponent("Shelf")
+        let outside = container.appendingPathComponent("Outside")
+        defer { try? FileManager.default.removeItem(at: container) }
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: root, withDestinationURL: outside)
+        let store = ShelfStore(root: root)
+        let id = UUID()
+        let destination = try #require(store.promiseDestination(id: id))
+        let promised = destination.appendingPathComponent("Promised.txt")
+        try "staged".write(to: promised, atomically: true, encoding: .utf8)
+
+        #expect(!destination.path.hasPrefix(outside.path + "/"))
+        #expect(store.adopt(fileAt: promised, id: id) == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
+        #expect(try String(contentsOf: promised, encoding: .utf8) == "staged")
+
+        store.discardPromiseDestination(id: id)
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
     @Test func promisedFileCleanupPreservesAReplacementDirectory() throws {
         let incoming = try ShelfIncomingDirectory()
         let original = incoming.url
@@ -705,6 +1050,36 @@ import Testing
         #expect(
             try String(
                 contentsOf: ShelfIndex.fileURL(for: late, in: root), encoding: .utf8) == "late")
+    }
+
+    @Test func catalogCarriesEveryExactShelfInvocation() {
+        let actual = Set(
+            UserInterfaceActionCatalog.actions
+                .filter { $0.operation.id.rawValue.hasPrefix("shelf.") }
+                .map { [$0.surface, $0.action] + $0.cli })
+        let expected: Set<[String]> = [
+            ["Notch shelf", "drop a file onto the shelf", "shelf", "add", "./file"],
+            ["Notch shelf", "drop text onto the shelf", "shelf", "add-text", "note"],
+            [
+                "Notch shelf", "move an item on the canvas", "shelf", "update", "1", "--x",
+                "120", "--y", "60",
+            ],
+            [
+                "Notch shelf", "take selected items off the shelf", "shelf", "rm", "1", "2",
+                "--yes",
+            ],
+            [
+                "Notch shelf", "remove expired items", "shelf", "purge", "oneDay", "--yes",
+            ],
+            ["Notch shelf", "open selected items", "shelf", "open", "1", "2"],
+            ["Notch shelf", "reveal selected items", "shelf", "reveal", "1", "2"],
+            ["Notch shelf", "share selected items", "shelf", "share", "1", "2"],
+        ]
+        #expect(actual == expected)
+        #expect(
+            UserOperationCatalog.commandLineOnly.contains {
+                $0.descriptor.id == ShelfMutationOperation.clear.descriptor.id
+            })
     }
 
     @Test func textAndFileMutationsShareOnePersistedSnapshot() throws {

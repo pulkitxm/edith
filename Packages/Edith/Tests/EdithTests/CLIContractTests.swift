@@ -102,6 +102,10 @@ enum JSONContract {
         JSONCase("ed music unfavorite", ["music", "unfavorite", "nothing-at-all", "--json"]),
         JSONCase("ed music reveal", ["music", "reveal", "nothing-at-all", "--json"]),
         JSONCase("ed music open", ["music", "open", "--json"], mutatesTheMachine: true),
+        JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed calendar join", ["calendar", "join", "nothing-at-all", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed presenter status", ["presenter", "status", "--json"]),
         JSONCase(
             "ed presenter start", ["presenter", "start", "--json"],
@@ -147,15 +151,15 @@ enum JSONContract {
         JSONCase("ed shelf reveal", ["shelf", "reveal", "999999", "--json"]),
         JSONCase("ed shelf share", ["shelf", "share", "999999", "--json"]),
         JSONCase("ed shelf add", ["shelf", "add", "/etc/hosts", "--json"]),
+        JSONCase(
+            "ed shelf add-text", ["shelf", "add-text", "note", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed shelf update", ["shelf", "update", "1", "--x", "20", "--y", "30", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed shelf rm", ["shelf", "rm", "1", "--json"]),
         JSONCase("ed shelf clear", ["shelf", "clear", "--json"]),
-        JSONCase("ed shelf open", ["shelf", "open", "1", "--json"], mutatesTheMachine: true),
-        JSONCase(
-            "ed shelf reveal", ["shelf", "reveal", "1", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed shelf share", ["shelf", "share", "1", "--json"],
-            mutatesTheMachine: true),
+        JSONCase("ed shelf purge", ["shelf", "purge", "oneDay", "--json"]),
         JSONCase("ed companion status", ["companion", "status", "--json"]),
         JSONCase("ed companion hosts", ["companion", "hosts", "--json"]),
         JSONCase(
