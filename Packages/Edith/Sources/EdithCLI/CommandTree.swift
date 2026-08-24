@@ -939,6 +939,9 @@ public enum CommandTree {
                         "docker", "Containers on a machine.",
                         children: [
                             CommandNode(
+                                "shell", "Open an interactive shell in a container.",
+                                arguments: [.machine, .container]),
+                            CommandNode(
                                 "ps", "List containers.", options: ["--json", "-a", "--all"],
                                 arguments: [.machine]),
                             CommandNode(

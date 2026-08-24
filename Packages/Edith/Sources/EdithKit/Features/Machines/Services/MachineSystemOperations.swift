@@ -103,7 +103,7 @@ public enum MachineExecOperation: String, CaseIterable, Equatable, Sendable {
         UserOperationDescriptor(
             id: UserOperationID(rawValue: "machines.exec.docker-shell"),
             summary: "Open an interactive shell in a Docker container.",
-            cli: ["machines", "exec"], effect: .interactive)
+            cli: ["machines", "docker", "shell"], effect: .interactive)
     }
 }
 

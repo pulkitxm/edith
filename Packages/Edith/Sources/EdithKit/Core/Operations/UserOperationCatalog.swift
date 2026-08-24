@@ -309,7 +309,7 @@ private extension MachineExecOperation {
     var interfaceExposure: UserOperationExposure {
         userInterface(
             "Docker window", "open a shell in a container",
-            ["--tty", "box", "docker exec -it api sh"])
+            ["box", "api"])
     }
 }
 

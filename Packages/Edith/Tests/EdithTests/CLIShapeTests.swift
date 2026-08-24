@@ -210,7 +210,8 @@ enum CommandCrawler {
         let exempt: Set<String> = [
             "ed", "ed guide", "ed schema", "ed completions", "ed completions zsh",
             "ed completions bash", "ed completions fish", "ed config export",
-            "ed machines exec", "ed machines docker logs", "ed machines docker inspect",
+            "ed machines exec", "ed machines docker shell", "ed machines docker logs",
+            "ed machines docker inspect",
             "ed machines files", "ed machines docker", "ed config", "ed extensions",
             "ed permissions", "ed usage", "ed system", "ed music", "ed calendar",
             "ed presenter", "ed herdr",

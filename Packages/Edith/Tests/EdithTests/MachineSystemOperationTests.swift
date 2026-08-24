@@ -25,7 +25,7 @@ import Testing
                 == [
                     ["machines", "thermal", "status"],
                     ["machines", "thermal", "set"],
-                    ["machines", "exec"],
+                    ["machines", "docker", "shell"],
                     ["machines", "mount"],
                     ["machines", "unmount"],
                     ["machines", "broadcast"],
@@ -107,6 +107,13 @@ import Testing
             MachineExecOperationExecution.interactiveCommand(
                 words: words, workingDirectory: nil)
                 == ShellQuote.command(words))
+
+        let parsed =
+            try? EdRoot.parseAsRoot([
+                "machines", "docker", "shell", "box", "api",
+            ]) as? DockerShellCommand
+        #expect(parsed?.machine == "box")
+        #expect(parsed?.container == "api")
     }
 
     @Test func mountAndUnmountChooseOneInjectedAdapter() async throws {
@@ -594,8 +601,8 @@ import Testing
                         "set", "box", "performance",
                     ],
                     [
-                        "Docker window", "open a shell in a container", "machines", "exec",
-                        "--tty", "box", "docker exec -it api sh",
+                        "Docker window", "open a shell in a container", "machines", "docker",
+                        "shell", "box", "api",
                     ],
                     [
                         "Machine tools", "mount the machine's disk on this Mac", "machines",
