@@ -123,6 +123,25 @@ import Testing
         #expect(source.contains("ForEach(report.checks)"))
     }
 
+    @Test func everyExtensionSheetShowsControlsBeforeDiagnosticDetail() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let sheetStart = try #require(source.range(of: "private struct ExtensionSettingsSheet"))
+        let sheetEnd = try #require(
+            source.range(
+                of: "private struct ExtensionLifecycleRows",
+                range: sheetStart.upperBound..<source.endIndex))
+        let sheet = source[sheetStart.lowerBound..<sheetEnd.lowerBound]
+        let controls = try #require(sheet.range(of: "ExtensionDetailRows(entry: entry)"))
+        let readiness = try #require(sheet.range(of: "ExtensionLifecycleRows("))
+
+        #expect(controls.lowerBound < readiness.lowerBound)
+    }
+
     @Test func everyExtensionMutationSurfaceUsesTheSharedCenter() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

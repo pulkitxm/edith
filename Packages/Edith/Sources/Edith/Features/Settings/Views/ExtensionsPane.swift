@@ -396,12 +396,12 @@ private struct ExtensionSettingsSheet: View {
                         .pointerCursor()
                     }
                 }
+                ExtensionDetailRows(entry: entry)
                 ExtensionLifecycleRows(
                     entry: entry, coordinator: coordinator, invalidation: invalidation)
                 ExtensionPermissionRows(entry: entry) {
                     invalidateReadiness()
                 }
-                ExtensionDetailRows(entry: entry)
             }
             .formStyle(.grouped)
             .navigationTitle(entry.title)
