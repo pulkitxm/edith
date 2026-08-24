@@ -3,12 +3,16 @@ import SwiftUI
 
 struct ToolProvisioningSheet: View {
     let entry: ExtensionRegistryEntry
+    var completed: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ToolProvisioningPanel(
             title: "Setting up \(entry.title)", tools: activeTools,
-            continueAction: { dismiss() }
+            continueAction: {
+                completed()
+                dismiss()
+            }
         )
         .frame(width: UIScale.pt(520))
     }

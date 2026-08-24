@@ -129,9 +129,12 @@ public struct ExtensionModalCoordinator: Sendable {
     }
 
     @MainActor public func enableAfterPermissions() -> ExtensionModalMutationOutcome {
-        let result = mutationCenter.setEnabled(
-            true, for: entry, markPermissionsSeen: true)
-        return .applied(result, missingRequiredTools: missingRequiredTools)
+        switch mutationCenter.enablePermissionAware(entry) {
+        case let .applied(result):
+            return .applied(result, missingRequiredTools: missingRequiredTools)
+        case let .needsPermissions(plan):
+            return .needsPermissions(plan)
+        }
     }
 
     @MainActor public var missingRequiredTools: [CLIToolSpec] {

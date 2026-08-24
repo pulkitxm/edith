@@ -255,6 +255,7 @@ private struct ExtensionMutationWorld {
         }
         #expect(plan.required == [.calendar])
         #expect(!coordinator.isEnabled)
+        #expect(coordinator.enableAfterPermissions() == .needsPermissions(plan))
         #expect(world.recorder.announcementCount == 0)
     }
 }
