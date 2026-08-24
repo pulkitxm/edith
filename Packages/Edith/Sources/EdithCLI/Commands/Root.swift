@@ -356,7 +356,8 @@ struct CompleteCommand: AsyncParsableCommand {
             musicTracks = []
         }
         let calendarEvents: [String]
-        if request.leading.starts(with: ["calendar", "join"]),
+        if request.leading.starts(with: ["calendar", "join"])
+            || request.leading.starts(with: ["calendar", "directions"]),
             let events = try? await CalendarBridge.events(timeout: 0.35)
         {
             calendarEvents = events.map(\.id)
