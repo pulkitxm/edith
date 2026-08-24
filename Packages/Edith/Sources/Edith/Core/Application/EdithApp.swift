@@ -10,6 +10,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var settingsObserver: NSObjectProtocol?
     private var settingsChangeDebounce: Timer?
     private var appStarted = false
+    private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchTrace = PerformanceTrace.begin(.startup, "main.launch")
@@ -21,7 +22,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         RetiredLicenseCleanup.run()
         FinderUndoBridge.start()
         startApp()
-        SectionWindowMenu.install()
     }
 
     private func startApp() {
@@ -33,12 +33,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         ExtensionDefaultsMigration.migrate()
         Repo.prepareStoredPaths()
         applyConfiguredActivationPolicy()
-        launchHelperIfNeeded()
-        let dashboard = DashboardModel.shared
-        dashboard.syncExtensionState()
-        if SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.usageEnabled) {
-            Task { await dashboard.load() }
-        }
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
@@ -54,6 +48,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 self?.scheduleSettingsChangedBroadcast()
             }
         }
+        postLaunch.start([
+            StartupPhase(name: "main.helper") { launchHelperIfNeeded() },
+            StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
+        ])
     }
 
     private func applyConfiguredActivationPolicy() {
@@ -93,6 +91,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         settingsChangeDebounce?.invalidate()
         settingsChangeDebounce = nil
+        postLaunch.cancel()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
