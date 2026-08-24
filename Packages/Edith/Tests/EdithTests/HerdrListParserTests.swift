@@ -196,6 +196,8 @@ import Testing
         #expect(HerdrKind.displayName(for: "gemini") == "Gemini")
         #expect(HerdrKind.displayName(for: "grok") == "Grok")
         #expect(HerdrKind.displayName(for: "cline") == "Cline")
+        #expect(HerdrKind.displayName(for: "fx") == "FX.sh")
+        #expect(HerdrKind.displayName(for: "fx.sh") == "FX.sh")
     }
 
     @Test func logoNamesPointAtKitResources() {
@@ -208,6 +210,7 @@ import Testing
         #expect(HerdrKind.logoName(for: "Gemini") == "gemini")
         #expect(HerdrKind.logoName(for: "Grok") == "grok")
         #expect(HerdrKind.logoName(for: "Cline") == "cline")
+        #expect(HerdrKind.logoName(for: "FX.sh") == "fx")
         #expect(HerdrKind.logoName(for: "Amp") == "amp")
         #expect(HerdrKind.logoName(for: "Devin") == "devin")
         #expect(HerdrKind.logoName(for: "Kimi") == "kimi")
@@ -218,9 +221,16 @@ import Testing
     @Test func kitBundleContainsTheAgentMarks() {
         for name in [
             "claude", "codex", "opencode", "cursor", "copilot", "pi", "gemini", "grok", "cline",
-            "amp", "antigravity", "devin", "kilo", "kimi", "kiro", "mastra", "qoder", "qwen",
+            "fx", "amp", "antigravity", "devin", "kilo", "kimi", "kiro", "mastra", "qoder",
+            "qwen",
         ] {
             #expect(ProviderLogo.image(named: name) != nil, "missing \(name).svg")
+        }
+    }
+
+    @Test func everyFilterHasAnAgentMark() {
+        for label in HerdrKind.filterLabels {
+            #expect(HerdrKind.logoName(for: label) != nil, "missing mark mapping for \(label)")
         }
     }
 
