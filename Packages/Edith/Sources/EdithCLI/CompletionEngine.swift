@@ -105,7 +105,8 @@ public enum CompletionEngine {
                         appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
                         runningApps: runningApps, usageChatIDs: usageChatIDs,
-                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), valuePrefix)
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), valuePrefix
+                )
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
