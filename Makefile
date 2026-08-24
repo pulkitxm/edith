@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
+.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
 
 ci:
 	bun install --frozen-lockfile
@@ -67,6 +67,12 @@ ci-scripts:
 ci-performance:
 	bun scripts/check-performance-audit.mjs
 	./scripts/bench-helper.sh --fixture scripts/fixtures/bench-helper.samples >/dev/null
+
+ci-docs:
+	bun test scripts/cli-docs.test.js scripts/sync-wiki.test.js
+
+ci-companion-runtime:
+	bun test scripts/companion-runtime.test.js
 
 ci-site:
 	test -f apps/site/index.html

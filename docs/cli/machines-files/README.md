@@ -134,6 +134,12 @@ stderr furniture rather than anything printed on stdout.
 without `--delete` changes nothing: trashing never asks, because the machine's
 trash can give the file back.
 
+The Files window and the CLI share the same `search`, `info`, `duplicate`,
+`undo`, `rename` and `rm` operation contracts. Their paths, timeouts and safety
+rules therefore stay aligned. Permanent removal previews without connecting and
+does not run until `--yes` is present. The window presents the equivalent
+confirmation before it asks the same operation executor to delete immediately.
+
 The remote trash is the freedesktop directory under the login home, whatever the
 machine's desktop environment would normally use. On a machine with no desktop
 at all the files still land in `~/.local/share/Trash/files`, which is a fine

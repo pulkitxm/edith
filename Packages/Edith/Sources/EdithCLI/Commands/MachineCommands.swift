@@ -344,6 +344,21 @@ struct MachinesServicesListCommand: AsyncParsableCommand {
     }
 }
 
+enum MachineConnectionBridge {
+    static func perform(
+        _ operation: MachineConnectionOperation, machine: Machine
+    ) async throws -> MachineConnectionResult {
+        let runner = RemoteRunner(machine: machine)
+        return try await MachineConnectionOperationExecution.perform(
+            operation,
+            connect: {
+                try await runner.connect()
+                return await runner.ssh.latencyMillis()
+            },
+            disconnect: { await runner.disconnect() })
+    }
+}
+
 struct MachinesConnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "connect", abstract: "Open the shared SSH connection to a machine.")
@@ -356,19 +371,20 @@ struct MachinesConnectCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let runner = try await MachineResolver.runner(machine)
-            let latency = await runner.ssh.latencyMillis()
+            let target = try MachineResolver.machine(machine)
+            let result = try await MachineConnectionBridge.perform(.connect, machine: target)
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "machine": .string(runner.machine.name),
-                        "connected": .bool(true),
-                        "latencyMillis": .optional(latency),
+                        "machine": .string(target.name),
+                        "connected": .bool(result.connected),
+                        "latencyMillis": .optional(result.latencyMillis),
                     ]))
                 return
             }
             CLIOut.out(
-                latency.map { String(format: "connected, %.0f ms", $0) } ?? "connected")
+                result.latencyMillis.map { String(format: "connected, %.0f ms", $0) }
+                    ?? "connected")
         }
     }
 }
@@ -385,11 +401,13 @@ struct MachinesDisconnectCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let found = try MachineResolver.machine(machine)
-            await RemoteRunner(machine: found).disconnect()
+            let target = try MachineResolver.machine(machine)
+            let result = try await MachineConnectionBridge.perform(.disconnect, machine: target)
             guard !json else {
                 CLIOut.json(
-                    .object(["machine": .string(found.name), "connected": .bool(false)]))
+                    .object([
+                        "machine": .string(target.name), "connected": .bool(result.connected),
+                    ]))
                 return
             }
             CLIOut.out("disconnected")

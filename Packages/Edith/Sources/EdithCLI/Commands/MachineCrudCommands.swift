@@ -129,13 +129,10 @@ struct MachinesAddCommand: AsyncParsableCommand {
                 auth: resolved,
                 source: alias.map { MachineSource.sshConfigAlias($0) } ?? .manual,
                 wakeMACAddress: mac)
-            MachineRegistry.add(machine)
-            if let secret {
-                MachineSecrets.set(
-                    secret, machineID: machine.id,
-                    kind: passwordStdin ? .password : .passphrase)
-            }
-            AppBridge.post(IPC.Name.machinesChanged)
+            MachineMutationOperationExecution.perform(
+                .add, machine: machine,
+                secrets: MachineSecretChanges(login: secret),
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
             guard !json else {
                 CLIOut.json(MachineDirectory.summary(machine))
                 return
@@ -224,19 +221,12 @@ struct MachinesEditCommand: AsyncParsableCommand {
             }
             if passwordStdin { target.auth = .password }
             if let mac { target.wakeMACAddress = mac.isEmpty ? nil : mac }
-            MachineRegistry.update(target)
-            if let secret {
-                MachineSecrets.set(
-                    secret, machineID: target.id,
-                    kind: passwordStdin ? .password : .passphrase)
-            }
-            if let sudoSecret {
-                MachineSecrets.set(sudoSecret, machineID: target.id, kind: .sudoPassword)
-            }
-            if forgetSudoPassword {
-                MachineSecrets.delete(machineID: target.id, kind: .sudoPassword)
-            }
-            AppBridge.post(IPC.Name.machinesChanged)
+            MachineMutationOperationExecution.perform(
+                .edit, machine: target,
+                secrets: MachineSecretChanges(
+                    login: secret, sudoPassword: sudoSecret,
+                    forgetSudoPassword: forgetSudoPassword),
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
             guard !json else {
                 CLIOut.json(MachineDirectory.summary(target))
                 return
@@ -265,35 +255,35 @@ struct MachinesRemoveCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let target = try MachineResolver.machine(machine)
-            let contents = MachineRegistry.load()
-            let forwards = MachineRegistry.forwards(machineID: target.id, in: contents.forwards)
-            let snippets = contents.snippets.filter { $0.machineID == target.id }
+            let preview = MachineMutationOperationExecution.removalPreview(target)
             guard yes else {
                 guard !json else {
                     CLIOut.json(
                         .object([
                             "machine": MachineDirectory.summary(target),
                             "removed": .bool(false),
-                            "forwards": .int(forwards.count),
-                            "snippets": .int(snippets.count),
+                            "forwards": .int(preview.forwardCount),
+                            "snippets": .int(preview.snippetCount),
                         ]))
                     return
                 }
                 CLIOut.out(
-                    "would remove \(target.name), \(forwards.count) forward(s) and "
-                        + "\(snippets.count) snippet(s)")
+                    "would remove \(target.name), \(preview.forwardCount) forward(s) and "
+                        + "\(preview.snippetCount) snippet(s)")
                 CLIOut.note("nothing was removed; pass --yes to go ahead")
                 return
             }
-            MachineRegistry.remove(id: target.id)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = MachineMutationOperationExecution.perform(
+                .remove, machine: target,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            let removal = result.removal ?? preview
             guard !json else {
                 CLIOut.json(
                     .object([
                         "machine": MachineDirectory.summary(target),
                         "removed": .bool(true),
-                        "forwards": .int(forwards.count),
-                        "snippets": .int(snippets.count),
+                        "forwards": .int(removal.forwardCount),
+                        "snippets": .int(removal.snippetCount),
                     ]))
                 return
             }
@@ -403,16 +393,19 @@ struct MachinesForwardsAddCommand: AsyncParsableCommand {
                 machineID: target.id, localPort: try MachineEditing.port(local),
                 remoteHost: remoteHost, remotePort: try MachineEditing.port(remote),
                 title: title)
-            let taken = MachineRegistry.forwards(
-                machineID: target.id, in: MachineRegistry.forwards()
-            ).contains { $0.localPort == forward.localPort }
-            guard !taken else {
+            let result = await MachineForwardOperationExecution.perform(
+                .add, forward: forward, existing: MachineRegistry.forwards(),
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error as MachineForwardOperationError) = result,
+                case .duplicateLocalPort = error
+            {
                 throw CLIFailure(
                     "\(target.name) already forwards local port \(forward.localPort)",
                     hint: "run `ed machines forwards ls \(target.name)` to see them")
             }
-            MachineRegistry.addForward(forward)
-            AppBridge.post(IPC.Name.machinesChanged)
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(ForwardBridge.json(forward, index: 0))
                 return
@@ -444,8 +437,12 @@ struct MachinesForwardsRemoveCommand: AsyncParsableCommand {
                     hint: "it has \(found.all.count), numbered from 1")
             }
             let forward = found.all[index - 1]
-            MachineRegistry.removeForward(id: forward.id)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = await MachineForwardOperationExecution.perform(
+                .remove, forward: forward,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -560,8 +557,12 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
             }
             let snippet = CommandSnippet(
                 machineID: shared ? nil : target.id, title: title, command: text)
-            MachineRegistry.addSnippet(snippet)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = MachineSnippetOperationExecution.perform(
+                .add, snippet: snippet,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(SnippetBridge.json(snippet, index: 0))
                 return
@@ -593,8 +594,12 @@ struct MachinesSnippetsRemoveCommand: AsyncParsableCommand {
                     hint: "it offers \(found.all.count), numbered from 1")
             }
             let snippet = found.all[index - 1]
-            MachineRegistry.removeSnippet(id: snippet.id)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = MachineSnippetOperationExecution.perform(
+                .remove, snippet: snippet,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -656,16 +661,33 @@ extension ForwardBridge {
             }
             let forward = found.all[index - 1]
             let runner = try await MachineResolver.runner(machine)
-            if active {
-                do {
-                    try await runner.ssh.addForward(forward)
-                } catch {
+            let operation: MachineForwardOperation = active ? .enable : .disable
+            let result = await MachineForwardOperationExecution.perform(
+                operation, forward: forward,
+                setActive: { candidate, shouldOpen in
+                    guard shouldOpen else {
+                        await runner.ssh.cancelForward(candidate)
+                        return nil
+                    }
+                    do {
+                        try await runner.ssh.addForward(candidate)
+                        return nil
+                    } catch {
+                        return error.localizedDescription
+                    }
+                })
+            if case let .failure(error as MachineForwardOperationError) = result {
+                switch error {
+                case let .liveActionFailed(detail) where active:
                     throw CLIFailure(
                         "could not open \(forward.forwardSpec) on \(found.machine.name)",
-                        hint: error.localizedDescription)
+                        hint: detail)
+                default:
+                    throw CLIFailure(error.localizedDescription)
                 }
-            } else {
-                await runner.ssh.cancelForward(forward)
+            }
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
             }
             guard !json else {
                 guard case var .object(fields) = ForwardBridge.json(forward, index: index)
