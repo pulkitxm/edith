@@ -99,10 +99,14 @@ import Testing
         #expect(entry.defaultsKey == AppStorageKeys.Tabs.attentionEnabled)
         #expect(ExtensionDetailRoute(rawValue: entry.id) == .attention)
         #expect(pane.contains("case AppStorageKeys.Tabs.attentionEnabled: $attentionEnabled"))
+        #expect(pane.contains("var attentionEnabled = false"))
         #expect(pane.contains("case .attention: AttentionRows()"))
         #expect(pane.contains("private struct AttentionRows: View"))
         #expect(navigation.contains("case .attention: attentionEnabled"))
         #expect(helper.contains("AppStorageKeys.Tabs.attentionEnabled"))
+        #expect(
+            helper.contains(
+                "extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled)"))
     }
 
     @Test func everyExtensionSettingsSheetHasLifecycleContent() throws {

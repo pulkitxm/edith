@@ -11,7 +11,7 @@ import SwiftUI
 
 struct ExtensionsPane: View {
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
-        var attentionEnabled = true
+        var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
@@ -868,7 +868,7 @@ private struct ExtensionDetailRows: View {
 
 private struct AttentionRows: View {
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
-        var enabled = true
+        var enabled = false
     @State private var model = AttentionPageModel()
 
     var body: some View {

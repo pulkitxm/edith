@@ -357,9 +357,10 @@ public struct ExtensionMutationCenter: Sendable {
         entries: [ExtensionRegistryEntry] = ExtensionRegistry.entries
     ) -> ExtensionOnboardingResult {
         let selected = entries.filter { selectedIDs.contains($0.id) }
-        for entry in selected {
+        for entry in entries {
             _ = setEnabled(
-                true, for: entry, markPermissionsSeen: true, announce: false)
+                selectedIDs.contains(entry.id), for: entry,
+                markPermissionsSeen: selectedIDs.contains(entry.id), announce: false)
         }
         environment.defaults.set(icloudBackup, forKey: OnboardingFlow.iCloudBackupKey)
         environment.defaults.set(true, forKey: OnboardingFlow.completionKey)

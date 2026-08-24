@@ -66,10 +66,9 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         for entry in ExtensionRegistry.entries {
-            let expected = entry.id == "attention"
             #expect(defaults.object(forKey: entry.defaultsKey) == nil)
-            #expect(entry.isEnabled(in: defaults) == expected)
-            #expect(ConfigCatalog.definition(for: entry.defaultsKey)?.fallback == .bool(expected))
+            #expect(!entry.isEnabled(in: defaults))
+            #expect(ConfigCatalog.definition(for: entry.defaultsKey)?.fallback == .bool(false))
         }
     }
 

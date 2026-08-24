@@ -283,7 +283,7 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
         var sidebarWidth = 230.0
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
-        var attentionEnabled = true
+        var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
