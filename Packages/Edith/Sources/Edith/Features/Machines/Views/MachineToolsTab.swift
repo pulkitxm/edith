@@ -18,6 +18,8 @@ struct MachineToolsTab: View {
     @State private var message: String?
     @State private var serviceFilter = ""
     @State private var mounting = false
+    @State private var pendingForwardRemoval: PortForward?
+    @State private var pendingSnippetRemoval: CommandSnippet?
 
     private var dark: Bool { scheme == .dark }
 
@@ -45,6 +47,38 @@ struct MachineToolsTab: View {
             guard connectionsEnabled else { return }
             await session.refreshServices()
             await session.restoreMount()
+        }
+        .confirmationDialog(
+            "Remove this port forward?",
+            isPresented: Binding(
+                get: { pendingForwardRemoval != nil },
+                set: { if !$0 { pendingForwardRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                guard let forward = pendingForwardRemoval else { return }
+                pendingForwardRemoval = nil
+                removeForward(forward)
+            }
+            Button("Cancel", role: .cancel) { pendingForwardRemoval = nil }
+        } message: {
+            Text(pendingForwardRemoval?.displayName ?? "")
+        }
+        .confirmationDialog(
+            "Remove this snippet?",
+            isPresented: Binding(
+                get: { pendingSnippetRemoval != nil },
+                set: { if !$0 { pendingSnippetRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                guard let snippet = pendingSnippetRemoval else { return }
+                pendingSnippetRemoval = nil
+                removeSnippet(snippet)
+            }
+            Button("Cancel", role: .cancel) { pendingSnippetRemoval = nil }
+        } message: {
+            Text(pendingSnippetRemoval?.title ?? "")
         }
     }
 
@@ -204,7 +238,7 @@ struct MachineToolsTab: View {
                         .controlSize(.mini)
                         .disabled(!session.state.isConnected)
                         Button {
-                            model.removeForward(forward)
+                            pendingForwardRemoval = forward
                         } label: {
                             Image(systemName: "trash")
                         }
@@ -253,7 +287,7 @@ struct MachineToolsTab: View {
                             .pointerCursor()
                             .font(.system(size: UIScale.pt(11)))
                         Button {
-                            model.removeSnippet(snippet)
+                            pendingSnippetRemoval = snippet
                         } label: {
                             Image(systemName: "trash")
                         }
@@ -337,34 +371,67 @@ struct MachineToolsTab: View {
         let forward = PortForward(
             machineID: session.machine.id, localPort: local,
             remoteHost: host.isEmpty ? "localhost" : host, remotePort: remote)
-        model.addForward(forward)
-        newForwardLocal = ""
-        newForwardRemote = ""
-        toggleForward(forward, on: true)
+        Task {
+            let result = await model.performForward(.add, forward: forward)
+            switch result {
+            case .success:
+                newForwardLocal = ""
+                newForwardRemote = ""
+                toggleForward(forward, on: true)
+            case let .failure(error):
+                message = error.localizedDescription
+            }
+        }
     }
 
     private func toggleForward(_ forward: PortForward, on: Bool) {
         Task {
-            if let failure = await session.setForward(forward, active: on) {
-                message = failure
-            } else {
+            let operation: MachineForwardOperation = on ? .enable : .disable
+            switch await model.performForward(operation, forward: forward) {
+            case .success:
                 message =
                     on
                     ? "localhost:\(forward.localPort) now reaches "
                         + "\(forward.remoteHost):\(forward.remotePort)."
                     : nil
+            case let .failure(error):
+                message = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeForward(_ forward: PortForward) {
+        Task {
+            switch await model.performForward(.remove, forward: forward) {
+            case .success:
+                message = "Removed \(forward.displayName)."
+            case let .failure(error):
+                message = error.localizedDescription
             }
         }
     }
 
     private func saveSnippet() {
-        model.addSnippet(
-            CommandSnippet(
-                machineID: session.machine.id,
-                title: snippetTitle.trimmingCharacters(in: .whitespaces),
-                command: snippetCommand.trimmingCharacters(in: .whitespaces)))
-        snippetTitle = ""
-        snippetCommand = ""
+        let snippet = CommandSnippet(
+            machineID: session.machine.id,
+            title: snippetTitle.trimmingCharacters(in: .whitespaces),
+            command: snippetCommand.trimmingCharacters(in: .whitespaces))
+        switch model.performSnippet(.add, snippet: snippet) {
+        case .success:
+            snippetTitle = ""
+            snippetCommand = ""
+        case let .failure(error):
+            message = error.localizedDescription
+        }
+    }
+
+    private func removeSnippet(_ snippet: CommandSnippet) {
+        switch model.performSnippet(.remove, snippet: snippet) {
+        case .success:
+            message = "Removed \(snippet.title)."
+        case let .failure(error):
+            message = error.localizedDescription
+        }
     }
 
     private func run(_ command: String) {
@@ -381,12 +448,15 @@ struct MachineToolsTab: View {
     }
 
     private func runService(_ action: String, unit: String) {
+        guard let operation = MachineServiceOperation(rawValue: action) else { return }
         Task {
             let machineID = session.machine.id
             let stdin = SudoPassword.stdin(machineID: machineID)
-            let result = await session.runCommand(
-                ServiceCommands.action(action, unit: unit, withSudoPassword: stdin != nil),
-                stdin: stdin, timeout: 60)
+            let result = await MachineServiceOperationExecution.perform(
+                operation, unit: unit, sudoPassword: stdin,
+                using: { command, stdin, timeout in
+                    await session.runCommand(command, stdin: stdin, timeout: timeout)
+                })
             if case let .failure(error) = result {
                 message = PowerOutcome.explain(error)
             } else {

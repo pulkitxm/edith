@@ -129,13 +129,14 @@ struct MachineProcessesTab: View {
         guard let process = pendingKill else { return }
         pendingKill = nil
         Task {
-            let result = await session.runCommand(
-                ProcessCommands.kill(pid: process.pid, signal: signal))
+            let result = await MachineProcessOperationExecution.perform(
+                pid: process.pid, signal: signal,
+                using: { command, timeout in
+                    await session.runCommand(command, timeout: timeout)
+                })
             switch result {
-            case let .success(output):
-                message =
-                    ProcessCommands.hadAlreadyExited(output)
-                    ? "\(process.name) had already exited." : nil
+            case let .success(outcome):
+                message = outcome.alreadyExited ? "\(process.name) had already exited." : nil
             case let .failure(error):
                 message = "Could not end \(process.name): \(error.localizedDescription)"
             }

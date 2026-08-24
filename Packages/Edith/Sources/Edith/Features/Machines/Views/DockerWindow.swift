@@ -217,7 +217,7 @@ struct DockerConsoleView: View {
                 session: session, container: container, dark: dark,
                 onBack: { selected = nil },
                 onAction: { action in
-                    perform(DockerCommands.lifecycle(action, id: container.id), on: container.id)
+                    performLifecycle(action, containerIDs: [container.id], on: container.id)
                 },
                 onShell: { terminalFor = container },
                 onRemove: { pendingRemoval = container },
@@ -280,8 +280,7 @@ struct DockerConsoleView: View {
                 session: session, query: query, dark: dark, busyIDs: busyIDs,
                 onOpen: { selected = $0 },
                 onAction: { container, action in
-                    perform(
-                        DockerCommands.lifecycle(action, id: container.id), on: container.id)
+                    performLifecycle(action, containerIDs: [container.id], on: container.id)
                 },
                 onShell: { terminalFor = $0 },
                 onRemove: { pendingRemoval = $0 },
@@ -352,6 +351,27 @@ struct DockerConsoleView: View {
             if case let .failure(failure) = result {
                 let detail = failure.localizedDescription
                 error = describing.map { "\($0): \(detail)" } ?? detail
+            }
+            await session.refreshImagesAndVolumes()
+        }
+    }
+
+    private func performLifecycle(
+        _ action: String, containerIDs: [String], on id: String
+    ) {
+        guard let operation = MachineDockerPauseOperation(rawValue: action) else {
+            perform(DockerCommands.lifecycle(action, ids: containerIDs), on: id)
+            return
+        }
+        busyIDs.insert(id)
+        error = nil
+        Task {
+            let result = await MachineDockerPauseOperationExecution.perform(
+                operation, containerIDs: containerIDs,
+                using: { command, _ in await session.runDocker(command) })
+            busyIDs.remove(id)
+            if case let .failure(failure) = result {
+                error = failure.localizedDescription
             }
             await session.refreshImagesAndVolumes()
         }
