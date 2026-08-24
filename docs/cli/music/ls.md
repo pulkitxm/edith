@@ -65,8 +65,9 @@ Beta Tune   beta-tune.mp3
 ```
 
 An empty folder prints `nothing here` on stderr and nothing on stdout. A folder
-that does not exist exits 3; with no music folder configured at all, this and
-every other library command exit 4 and say where to set one.
+that does not exist exits 3; with no confirmed music folder configured at all,
+this and every other library content command exit 4 and point to
+`ed music library ~/Music`.
 
 ## Where to go next
 

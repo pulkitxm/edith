@@ -5,13 +5,13 @@ import Foundation
 enum LibraryBridge {
     static func requireFolder() throws {
         guard
-            let path = CLIEnvironment.sharedDefaults.string(forKey: Repo.musicFolderPathKey),
-            !path.isEmpty
+            Repo.selectedMusicDirectory(
+                defaults: CLIEnvironment.sharedDefaults,
+                homeDirectory: CLIEnvironment.homeDirectory) != nil
         else {
             throw CLIFailure.unavailable(
                 "no music folder is set",
-                hint: "choose one in Edith under Music, or run `ed config set musicFolderPath "
-                    + "~/Music`")
+                hint: "choose one in Edith under Music, or run `ed music library ~/Music`")
         }
     }
 
@@ -74,6 +74,43 @@ enum LibraryBridge {
             "title": .string(track.title),
             "file": .string(track.url.lastPathComponent),
         ])
+    }
+}
+
+struct MusicLibraryFolderCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "library", abstract: "Choose the folder Edith uses as its music library.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Folder to use. A leading tilde expands to your home folder.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            let result: MusicFolderSelectionResult
+            do {
+                result = try MusicFolderSelectionOperationExecution.select(
+                    path, defaults: CLIEnvironment.sharedDefaults,
+                    homeDirectory: CLIEnvironment.homeDirectory,
+                    announce: { AppBridge.post(IPC.Name.musicFolderChanged) })
+            } catch let error as MusicFolderSelectionError {
+                throw CLIFailure.notFound(error.localizedDescription)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "path": .string(result.path), "changed": .bool(result.changed),
+                        "external": .bool(result.confirmsExternalStorage),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                result.changed
+                    ? "music library set to \(result.path)"
+                    : "music library already uses \(result.path)")
+        }
     }
 }
 

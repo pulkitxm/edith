@@ -185,6 +185,13 @@ import Testing
             Self.plan(["ed", "tools", "install", ""], 3).candidates.contains("quinjet"))
     }
 
+    @Test func musicLibrarySelectionCompletesFilesystemPaths() {
+        let result = Self.plan(["ed", "music", "library", ""], 3)
+
+        #expect(result.wantsFiles)
+        #expect(!ConfigCatalog.keys.contains(Repo.musicFolderPathKey))
+    }
+
     @Test func downloadCancellationAcceptsTheSameHistoryIndexAsOtherRecordActions() {
         let download = CommandTree.root.child("download")
         #expect(download?.child("cancel")?.arguments == [.historyIndex])

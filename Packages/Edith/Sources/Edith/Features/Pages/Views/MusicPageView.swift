@@ -100,6 +100,7 @@ final class MusicRemote {
     private(set) var duration: TimeInterval = 0
     private(set) var restorePending = SharedDefaults.store.integer(
         forKey: "restorePending.music")
+    private(set) var libraryError: String?
 
     private var elapsedBase: TimeInterval = 0
     private var elapsedTimestamp: TimeInterval = 0
@@ -447,6 +448,19 @@ final class MusicRemote {
     func toggleLoop() { send(.repeat(!looping)) }
     func toggleShuffle() { send(.shuffle(!shuffling)) }
 
+    func chooseLibrary(_ url: URL) {
+        do {
+            _ = try MusicFolderSelectionOperationExecution.select(url.path)
+            rescan()
+        } catch {
+            libraryError = error.localizedDescription
+        }
+    }
+
+    func dismissLibraryError() {
+        libraryError = nil
+    }
+
     func delete(_ track: Track) {
         guard
             (try? MusicLibraryContentOperationExecution.remove(.track(track))) != nil
@@ -687,6 +701,16 @@ struct MusicPage: View {
             }
         } message: { track in
             Text("\"\(track.title)\" will be moved to the Trash.")
+        }
+        .alert(
+            "Music library error",
+            isPresented: Binding(
+                get: { remote.libraryError != nil },
+                set: { if !$0 { remote.dismissLibraryError() } })
+        ) {
+            Button("OK") { remote.dismissLibraryError() }
+        } message: {
+            Text(remote.libraryError ?? "The music library operation failed.")
         }
         .onChange(of: search) { if !search.isEmpty { remote.loadSearchScope() } }
         .onChange(of: remote.folderPath) { if !search.isEmpty { remote.loadSearchScope() } }
@@ -1001,9 +1025,7 @@ struct MusicPage: View {
         panel.prompt = "Choose"
         panel.message = "Choose your music folder"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        Repo.setMusicDirectory(url)
-        remote.rescan()
-        IPC.post(IPC.Name.musicFolderChanged)
+        remote.chooseLibrary(url)
     }
 
 }
