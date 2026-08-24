@@ -77,4 +77,16 @@ import Testing
         let bridge = DashboardRefreshBridge(logURL: url)
         #expect(bridge.log == "tail line\n")
     }
+
+    @Test func refreshRequestUsesTheInjectedOperationPath() throws {
+        let url = try tempLog("")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        var requested = false
+        let bridge = DashboardRefreshBridge(
+            logURL: url, requestUsageRefresh: { requested = true })
+
+        bridge.requestRefresh()
+
+        #expect(requested)
+    }
 }

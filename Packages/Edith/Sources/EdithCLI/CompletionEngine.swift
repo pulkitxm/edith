@@ -49,6 +49,7 @@ public enum CompletionEngine {
         calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
         usageSources: [String] = [], runningApps: [String] = [],
         appLinks: [String] = ["repository", "creator"],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
         let leading = ArgumentRewriting.completionOrder(request.leading)
@@ -90,7 +91,8 @@ public enum CompletionEngine {
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                         appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
-                        runningApps: runningApps, quinjetSessions: quinjetSessions), prefix))
+                        runningApps: runningApps, usageChatIDs: usageChatIDs,
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), prefix))
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
@@ -102,7 +104,8 @@ public enum CompletionEngine {
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                         appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
-                        runningApps: runningApps, quinjetSessions: quinjetSessions), valuePrefix)
+                        runningApps: runningApps, usageChatIDs: usageChatIDs,
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), valuePrefix)
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
@@ -123,7 +126,9 @@ public enum CompletionEngine {
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
                 appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                 musicTracks: musicTracks, calendarEvents: calendarEvents,
-                runningApps: runningApps, quinjetSessions: quinjetSessions)
+                runningApps: runningApps, usageChatIDs: usageChatIDs,
+                usageProjects: usageProjects,
+                quinjetSessions: quinjetSessions)
             candidates += values
             if kind == .localPath { wantsFiles = true }
             if kind == .quinjetPath { wantsFiles = quinjetPathIsLocal(leading) }
@@ -138,6 +143,7 @@ public enum CompletionEngine {
         appLinks: [String] = ["repository", "creator"], previous: String?,
         shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], runningApps: [String] = [],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> [String] {
         switch kind {
@@ -182,6 +188,8 @@ public enum CompletionEngine {
         case .musicTrack: return musicTracks
         case .calendarEvent: return calendarEvents
         case .tool: return toolIDs
+        case .usageChat: return usageChatIDs
+        case .usageProject: return usageProjects
         case .usageSource: return usageSources
         case .localPath, .remotePath, .container, .composeProject, .historyIndex, .free:
             return []
