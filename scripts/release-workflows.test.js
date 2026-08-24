@@ -61,7 +61,7 @@ test("the release is reusable and supports manual rebuilds", () => {
   );
   expect(releaseWorkflow).toContain("refs/tags/{0}");
   expect(releaseWorkflow).not.toContain('tags: ["v*"]');
-  expect(workflowCall).not.toContain("PUKBOT_PRIVATE_KEY");
+  expect(workflowCall).toContain("PUKBOT_PRIVATE_KEY:\n        required: false");
   expect(releaseJob).not.toContain("PUKBOT_PRIVATE_KEY");
 });
 
@@ -128,6 +128,7 @@ test("macOS release accepts the configured development certificate", () => {
 
 test("the publisher uses the repository-scoped Pukbot token", () => {
   const appToken = ["$", "{{ steps.app-token.outputs.token }}"].join("");
+  const privateKey = ["$", "{{ secrets.PUKBOT_PRIVATE_KEY }}"].join("");
   expect(releaseWorkflow).toContain(
     "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
   );
@@ -135,9 +136,8 @@ test("the publisher uses the repository-scoped Pukbot token", () => {
     "repositories: |\n            edith\n            homebrew-tap",
   );
   expect(releaseWorkflow).toContain("permission-contents: write");
-  expect(releaseWorkflow).toContain(
-    "secrets[format('PUKBOT_{0}', 'PRIVATE_KEY')]",
-  );
+  expect(releaseWorkflow).toContain(`private-key: ${privateKey}`);
+  expect(releaseWorkflow).not.toContain("secrets[format(");
   expect(releaseWorkflow).toContain(
     "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    environment: pukbot-production",
   );
