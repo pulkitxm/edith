@@ -165,7 +165,7 @@ final class WorkspaceModel {
                 if pane.selected == tabID { pane.selected = pane.tabs.first?.id ?? pane.selected }
             }
         }
-        if shouldClosePane { apply { $0.closePane(paneID) } }
+        if shouldClosePane { closePane(paneID) }
     }
 }
 

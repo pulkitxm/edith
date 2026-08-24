@@ -30,6 +30,60 @@ import Testing
                 of: Set(descriptors.map(\.id))))
     }
 
+    @Test func catalogCarriesTheNineExactWorkspaceUIInvocations() {
+        let expected: [WorkspaceOperation: (String, String, [String])] = [
+            .list: (
+                "Workspace view", "list saved layouts", ["machines", "workspace", "ls"]
+            ),
+            .split: (
+                "Workspace pane menu", "split a pane",
+                ["machines", "workspace", "split", "1", "box"]
+            ),
+            .close: (
+                "Workspace pane menu", "close a pane",
+                ["machines", "workspace", "close", "1"]
+            ),
+            .point: (
+                "Workspace tab strip", "point a pane at another machine",
+                ["machines", "workspace", "point", "1", "box"]
+            ),
+            .equalize: (
+                "Workspace toolbar", "even out the panes",
+                ["machines", "workspace", "equalize"]
+            ),
+            .create: (
+                "Workspace toolbar", "apply a layout preset",
+                ["machines", "workspace", "new", "box", "--screen", "terminal"]
+            ),
+            .use: (
+                "Workspace picker", "switch to another layout",
+                ["machines", "workspace", "use", "a"]
+            ),
+            .rename: (
+                "Workspace picker", "rename a layout",
+                ["machines", "workspace", "rename", "a", "b"]
+            ),
+            .remove: (
+                "Workspace picker", "delete a layout",
+                ["machines", "workspace", "rm", "a"]
+            ),
+        ]
+        #expect(expected.count == WorkspaceOperation.allCases.count)
+        for operation in WorkspaceOperation.allCases {
+            let action = UserInterfaceActionCatalog.actions.first {
+                $0.operation.id == operation.descriptor.id
+            }
+            let placement = expected[operation]
+            #expect(action?.surface == placement?.0)
+            #expect(action?.action == placement?.1)
+            #expect(action?.cli == placement?.2)
+        }
+        #expect(WorkspaceOperation.close.descriptor.effect == .destructive)
+        #expect(WorkspaceOperation.remove.descriptor.effect == .destructive)
+        #expect(!WorkspaceOperation.close.descriptor.requiresPreview)
+        #expect(!WorkspaceOperation.remove.descriptor.requiresPreview)
+    }
+
     @Test func wholeWorkspaceOperationsPreserveSavedLayouts() throws {
         let first = WorkspaceLayout.single(machineID: firstMachine)
         var second = WorkspaceLayout.single(machineID: secondMachine)
@@ -193,6 +247,22 @@ import Testing
         #expect(model.layout.paneCount == 1)
         model.closePane(model.layout.root.panes[0].id)
         #expect(model.operationError?.contains("one pane left") == true)
+    }
+
+    @Test func closingTheOnlyTabInAPaneUsesTheSharedCloseOperation() throws {
+        let (model, file) = model()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let pane = try #require(model.layout.root.panes.first)
+        let tab = try #require(pane.tabs.first)
+        model.splitPane(
+            pane.id, side: .right,
+            target: PaneTarget(machineID: UUID(), screen: .terminal))
+
+        model.closeTab(tab.id, in: pane.id)
+
+        #expect(model.layout.paneCount == 1)
+        #expect(model.store.current?.paneCount == 1)
+        #expect(model.operationError == nil)
     }
 }
 
