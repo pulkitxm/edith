@@ -53,6 +53,9 @@ public enum UserOperationCatalog {
         + PresenterRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + UsageProjectOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -496,6 +499,28 @@ private extension PresenterRuntimeOperation {
             userInterface("Presenter controls", "start manual mode")
         case .stop:
             userInterface("Presenter controls", "stop manual mode")
+        }
+    }
+}
+
+private extension UsageProjectOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Dashboard repository drilldown", "list repository usage")
+        case .show:
+            userInterface(
+                "Dashboard repository drilldown", "show one repository and its folders",
+                ["edith"])
+        case .openRepository:
+            userInterface(
+                "Dashboard repository drilldown", "open a repository", ["edith"])
+        case .copyRepositoryLink:
+            userInterface(
+                "Dashboard repository drilldown", "copy a repository link", ["edith"])
+        case .copyChatID:
+            userInterface(
+                "Dashboard repository drilldown", "copy a chat identifier", ["abc"])
         }
     }
 }
