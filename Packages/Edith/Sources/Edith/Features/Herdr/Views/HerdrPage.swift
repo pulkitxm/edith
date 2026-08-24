@@ -405,7 +405,18 @@ struct HerdrPage: View {
             ScrollView {
                 LazyVStack(spacing: UIScale.pt(2)) {
                     ForEach(listedAgents) { agent in
-                        agentRow(agent)
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            agentRow(agent)
+                            if store.selectedTab == agent.id {
+                                HerdrAgentViewToggle(
+                                    selection: store.view(for: agent.id), compactStyle: true
+                                ) { option in
+                                    store.open(agent, showing: option)
+                                }
+                                .padding(.horizontal, UIScale.pt(8))
+                                .padding(.bottom, UIScale.pt(4))
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, UIScale.pt(6))

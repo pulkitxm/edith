@@ -1,4 +1,5 @@
 import EdithKit
+import Foundation
 import Testing
 
 @testable import Edith
@@ -64,11 +65,13 @@ import Testing
         store.tabs = [
             HerdrOpenTab(
                 agent: agent("Claude Code", pane: "a"), machine: nil,
-                holder: TerminalSessionHolder()),
+                holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()),
             HerdrOpenTab(
-                agent: agent("Codex", pane: "b"), machine: nil, holder: TerminalSessionHolder()),
+                agent: agent("Codex", pane: "b"), machine: nil, holder: TerminalSessionHolder(),
+                quinjet: HerdrQuinjetSession()),
             HerdrOpenTab(
-                agent: agent("OpenCode", pane: "c"), machine: nil, holder: TerminalSessionHolder()),
+                agent: agent("OpenCode", pane: "c"), machine: nil, holder: TerminalSessionHolder(),
+                quinjet: HerdrQuinjetSession()),
         ]
         store.selectedTab = store.tabs[2].id
         return store
@@ -98,6 +101,72 @@ import Testing
         ])
         #expect(store.hosts.first?.agents.map(\.id) == [updated.id])
         #expect(store.tabs.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
+    }
+
+    @Test func openingADiffRemembersItForThatAgent() {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.open(claude, showing: .diff)
+        store.open(codex)
+        #expect(store.view(for: claude.id) == .diff)
+        #expect(store.view(for: codex.id) == .agent)
+        #expect(HerdrAgentViews.view(for: claude.id, defaults) == .diff)
+    }
+
+    @Test func reopeningAnAgentRestoresItsLastView() {
+        let defaults = Self.scratchDefaults()
+        let first = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        first.open(claude, showing: .diff)
+        first.close(claude.id)
+
+        let second = HerdrStore(defaults: defaults)
+        second.open(claude)
+        #expect(second.view(for: claude.id) == .diff)
+        #expect(second.tabs.first?.view == .diff)
+    }
+
+    @Test func switchingBackToTheAgentSticks() {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        store.open(claude, showing: .diff)
+        store.setView(.agent, for: claude.id)
+        #expect(store.tabs.first?.view == .agent)
+        #expect(HerdrAgentViews.view(for: claude.id, defaults) == .agent)
+    }
+
+    @Test func openingAnAlreadyOpenAgentSwitchesItsView() {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        store.open(claude)
+        store.open(agent("Codex", pane: "b"))
+        store.open(claude, showing: .diff)
+        #expect(store.tabs.count == 2)
+        #expect(store.selectedTab == claude.id)
+        #expect(store.view(for: claude.id) == .diff)
+    }
+
+    @Test func viewSurvivesUnrelatedTabChurn() {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.open(claude, showing: .diff)
+        store.open(codex)
+        store.close(codex.id)
+        #expect(store.view(for: claude.id) == .diff)
+        #expect(store.tabs.first?.view == .diff)
+    }
+
+    private static func scratchDefaults() -> UserDefaults {
+        let suite = "HerdrStoreTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
     }
 
     private func agent(_ kind: String, pane: String) -> HerdrAgent {
