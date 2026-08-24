@@ -32,6 +32,9 @@ public enum UserOperationCatalog {
         + MachineDockerPauseOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + AppInspectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -210,6 +213,55 @@ private extension MachineControlOperation {
             userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
+        }
+    }
+}
+
+private extension AppInspectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .info:
+            userInterface("About pane", "read the app version")
+        case .diagnostics:
+            userInterface(
+                "Developer panel", "read process uptime and idle wakeups")
+        case .paths:
+            commandLineOnly("The app opens named paths directly instead of listing the catalog.")
+        case .links:
+            commandLineOnly("The app opens named links directly instead of listing the catalog.")
+        case .openPath:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "iCloud settings", action: "open the app data folder",
+                    exampleArguments: ["app-data"]),
+                UserInterfaceActionPlacement(
+                    surface: "iCloud settings", action: "open the iCloud folder",
+                    exampleArguments: ["icloud"]),
+                UserInterfaceActionPlacement(
+                    surface: "Developer panel", action: "open the usage data folder",
+                    exampleArguments: ["data"]),
+                UserInterfaceActionPlacement(
+                    surface: "Developer panel", action: "reveal the refresh log",
+                    exampleArguments: ["refresh-log"]),
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "open the music folder",
+                    exampleArguments: ["music"]),
+            ])
+        case .openLink:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "About pane", action: "open the source repository",
+                    exampleArguments: ["repository"]),
+                UserInterfaceActionPlacement(
+                    surface: "Navigation sidebar", action: "open the creator profile",
+                    exampleArguments: ["creator"]),
+                UserInterfaceActionPlacement(
+                    surface: "About pane", action: "open a contributor profile",
+                    exampleArguments: ["contributor:octo"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension lifecycle sheet", action: "open an extension guide",
+                    exampleArguments: ["extension-doc:usage:guide"]),
+            ])
         }
     }
 }

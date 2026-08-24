@@ -38,7 +38,7 @@ enum UIParity {
         "uninstall", "refresh", "request", "play", "pause", "stop", "toggle", "next",
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
-        "check-updates", "collect", "forget", "mount", "unmount",
+        "check-updates", "collect", "forget", "mount", "unmount", "open-path", "open-link",
         "favorite", "unfavorite", "close",
     ]
 
