@@ -18,20 +18,15 @@ ed apps ls [--json]
 There is nothing else. `ls` has no search, no limit and no sort option: it
 prints every app it can see, in one order, every time.
 
-The table is three columns, and the rows are sorted by name with a
+The table is five columns, and the rows are sorted by name with a
 case-insensitive, locale-aware comparison:
 
 ```
 $ ed apps ls
-NAME        PID    BUNDLE
-Dia         40466  company.thebrowser.dia
-Edith       57385  com.pulkit.edith
-Finder      612    com.apple.finder
-Notion      60983  notion.id
-Spotify     18719  com.spotify.client
-WhatsApp    9226   net.whatsapp.WhatsApp
-Wispr Flow  77028  com.electron.wispr-flow
-Zed         49161  dev.zed.Zed
+NAME     PID    CPU   MEMORY    BUNDLE
+Dia      40466  1.2%  342.5 MB  company.thebrowser.dia
+Finder   612    0.4%  198.8 MB  com.apple.finder
+Spotify  18719  0.0%  284.2 MB  com.spotify.client
 ```
 
 The list is `NSWorkspace`'s running applications filtered to the ones whose
@@ -53,18 +48,24 @@ is a real document trimmed to three of the eight entries:
   {
     "active": true,
     "bundleID": "company.thebrowser.dia",
+    "cpuPercent": 1.2,
+    "memoryMB": 342.5,
     "name": "Dia",
     "pid": 40466
   },
   {
     "active": false,
     "bundleID": "com.apple.finder",
+    "cpuPercent": 0.4,
+    "memoryMB": 198.8,
     "name": "Finder",
     "pid": 612
   },
   {
     "active": false,
     "bundleID": "dev.zed.Zed",
+    "cpuPercent": 0,
+    "memoryMB": 121.6,
     "name": "Zed",
     "pid": 49161
   }
@@ -74,8 +75,8 @@ is a real document trimmed to three of the eight entries:
 What the fields mean:
 
 - `name` is the app's localized name, the same string the Dock and the Finder
-  show. An app that reports no name gets `""` rather than `null`, so the key is
-  always a string.
+  show. An app that reports no name gets `"Unknown"`, so the key is always a
+  string.
 - `bundleID` is the bundle identifier, and it is `null` rather than missing when
   the process has none. It is the only nullable field here.
 - `pid` is the process id as an integer, which is what the helper is handed when
@@ -83,11 +84,14 @@ What the fields mean:
 - `active` is true for the frontmost app and false for every other, so exactly
   one entry is true while any app is focused and none is while focus sits with
   something the list does not cover.
-- The `BUNDLE` column of the table is `bundleID`, printed as an empty cell where
-  the JSON says `null`. The table has no column for `active`.
+- `cpuPercent` is the process CPU consumed across a 100 millisecond sample.
+  Values can exceed 100 on a process using more than one core.
+- `memoryMB` is the physical footprint in mebibytes at the end of the sample.
+- The `BUNDLE` column is `bundleID`, printed as an empty cell where JSON says
+  `null`. The table has no column for `active`.
 
-Object keys are sorted, so `active`, `bundleID`, `name` and `pid` always come in
-that order. The array itself keeps the name order, not a sorted-key order.
+Object keys are sorted, so `active`, `bundleID`, `cpuPercent`, `memoryMB`, `name`
+and `pid` always come in that order. The array keeps the name order.
 
 ## Examples
 
@@ -100,9 +104,9 @@ ed apps ls --json | jq -r '.[] | "\(.pid) \(.name)"'
 
 ## Behaviour notes
 
-Nothing is mutated and nothing is written. Neither the Edith app nor the menu
-bar helper has to be running, no macOS permission is involved, and no
-subprocess is launched, so this never exits 4 and never blocks.
+Nothing is mutated and nothing is written. Neither Edith process has to be
+running, no macOS permission is involved, and no subprocess is launched. The
+command takes one short local resource sample and never exits 4.
 
 Every cell is flattened before it is printed: newlines, carriage returns and
 tabs become spaces, and other control characters are dropped, so a hostile app
@@ -111,11 +115,10 @@ characters, which means a name carrying an invisible mark such as a
 left-to-right override still occupies a column of width the eye does not see,
 and its row can look a character out of line.
 
-`ed apps ls` and the app's Running apps card read the same process list but
-present it differently. The card measures CPU and memory per process and sorts
-by CPU descending by default; `ed` measures neither and always sorts by name.
-For per-process CPU on this Mac use `ed system stats --processes <n>`, which
-covers every process rather than only the ones with a Dock icon.
+`ed apps ls` and the app's Running apps card use the same EdithKit discovery and
+resource measurement operations. The card keeps sampling and sorts by CPU
+descending by default. The command takes one sample and sorts by name. For all
+processes, including those without a Dock icon, use `ed system stats --processes <n>`.
 
 ## Where to go next
 

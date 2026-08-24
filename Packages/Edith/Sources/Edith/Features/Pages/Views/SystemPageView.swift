@@ -15,6 +15,9 @@ struct SystemPage: View {
             header
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    if let status = model.actionStatus {
+                        actionStatus(status)
+                    }
                     summary
                     SkinCard(title: "Running apps", dark: dark) {
                         appList
@@ -61,13 +64,52 @@ struct SystemPage: View {
                 .confirmationDialog(
                     "Quit all apps?", isPresented: $confirmQuitAll, titleVisibility: .visible
                 ) {
-                    Button("Quit \(max(0, model.apps.count - 1)) apps", role: .destructive) {
+                    Button("Quit \(model.quitAllTargetCount) apps", role: .destructive) {
                         model.quitAll()
                     }
                 } message: {
                     Text("Finder and Edith stay open. Apps with unsaved changes will ask first.")
                 }
             })
+    }
+
+    private func actionStatus(_ status: RunningAppActionStatus) -> some View {
+        let presentation = actionStatusPresentation(status)
+        return HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(9)) {
+            Image(systemName: presentation.symbol)
+            Text(status.message)
+                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                model.clearActionStatus()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .pointerCursor()
+            .help("Dismiss")
+        }
+        .foregroundStyle(presentation.color)
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(10))
+        .background(
+            presentation.color.opacity(dark ? 0.16 : 0.1),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func actionStatusPresentation(
+        _ status: RunningAppActionStatus
+    ) -> (symbol: String, color: Color) {
+        switch status {
+        case .accepted:
+            ("checkmark.circle.fill", .green)
+        case .partial:
+            ("exclamationmark.triangle.fill", .orange)
+        case .planRejected, .planningFailed, .rejected:
+            ("xmark.octagon.fill", .red)
+        }
     }
 
     private var summary: some View {
@@ -139,7 +181,9 @@ struct SystemPage: View {
                 .padding(.vertical, UIScale.pt(24))
             }
             ForEach(model.apps) { app in
-                SystemAppRow(app: app, dark: dark) { pendingQuit = app }
+                SystemAppRow(app: app, dark: dark, canQuit: model.canQuit(app)) {
+                    pendingQuit = app
+                }
                 if app.id != model.apps.last?.id {
                     Divider().opacity(0.3)
                 }
@@ -160,6 +204,7 @@ struct SystemPage: View {
 private struct SystemAppRow: View {
     let app: RunningAppRow
     let dark: Bool
+    let canQuit: Bool
     let onQuit: () -> Void
     @State private var hovering = false
 
@@ -187,7 +232,8 @@ private struct SystemAppRow: View {
             }
             .buttonStyle(.plain)
             .pointerCursor()
-            .help("Quit \(app.name)")
+            .disabled(!canQuit)
+            .help(canQuit ? "Quit \(app.name)" : "\(app.name) stays open")
         }
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(7))
