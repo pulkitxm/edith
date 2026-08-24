@@ -152,6 +152,14 @@ test("Swift tests build their CLI fixture in one package graph", () => {
   expect(testTarget).toContain('"Highlighter", "ed"');
 });
 
+test("Swift tests have a bounded hosted runtime", () => {
+  const swiftTest = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  swift-test:"),
+    ciWorkflow.indexOf("\n  companion:"),
+  );
+  expect(swiftTest).toContain("timeout-minutes: 15");
+});
+
 test("targeted publishing workflows watch every deployment input", () => {
   expect(pushPaths(pagesWorkflow)).toEqual([
     "apps/site/**",
