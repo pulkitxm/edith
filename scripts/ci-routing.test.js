@@ -74,14 +74,30 @@ test("every change area covers its repository inputs", () => {
   }
 });
 
-test("embedded companion runtime changes run Swift tests", () => {
+test("embedded companion runtime changes run their focused guard", () => {
   const swiftTest = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain(
+  expect(swiftTest).not.toContain(
     "needs.changes.outputs.companion_runtime == 'true'",
   );
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.companion_runtime == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
+  expect(ciWorkflow).toContain("run: make ci-companion-runtime");
+});
+
+test("documentation changes run focused documentation tests", () => {
+  const swiftTest = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  swift-test:"),
+    ciWorkflow.indexOf("\n  companion:"),
+  );
+  expect(swiftTest).not.toContain("needs.changes.outputs.docs == 'true'");
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
+  expect(ciWorkflow).toContain("run: make ci-docs");
 });
 
 test("targeted publishing workflows watch every deployment input", () => {

@@ -30,7 +30,7 @@ test("CI gates the reusable release only on relevant checks", () => {
   expect(releaseJob).toContain(
     "needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success'",
   );
-  expect(releaseJob).toContain("needs.changes.outputs.docs != 'true'");
+  expect(releaseJob).not.toContain("needs.changes.outputs.docs != 'true'");
   expect(releaseJob).toContain("|| needs.swift-test.result == 'success'");
   expect(releaseJob).toContain(
     "github.event_name == 'workflow_dispatch' && inputs.release",
