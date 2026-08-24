@@ -90,7 +90,9 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 let answered = await AppBridge.awaitReply(
                     IPC.Name.limitsUpdated, timeout: 20
                 ) {
-                    AppBridge.post(IPC.Name.requestLimitsRefresh)
+                    UsageCollectionOperationExecution.request(.limitsRefresh) {
+                        AppBridge.post($0)
+                    }
                 }
                 guard answered != nil else {
                     throw AppBridge.silence(
@@ -385,31 +387,26 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                     force: forceMachines, progress: progress, sink: sink)
             }
             do {
-                var followed = follow
-                let result: UsageRefreshResult
-                if follow {
-                    guard driver.isRunning() else {
-                        throw CLIFailure.unavailable(
-                            "no usage refresh is running", hint: "drop --follow to start one")
-                    }
-                    progress.begin("following")
-                    result = try await driver.attach(sink)
-                } else {
-                    progress.begin("starting")
-                    do {
-                        result = try await driver.start(sink)
-                    } catch UsageRefreshFailure.busy {
-                        followed = true
+                let execution = try await UsageCollectionOperationExecution.refresh(
+                    follow: follow, driver: driver,
+                    onStart: { progress.begin("starting") },
+                    onFollow: { progress.begin("following") },
+                    onBusyAttach: {
                         progress.note("a refresh is already running, attaching to it")
-                        result = try await driver.attach(sink)
-                    }
-                }
+                    },
+                    onEvent: sink)
                 progress.end()
                 guard !json else {
-                    CLIOut.json(Self.payload(result: result, followed: followed))
+                    CLIOut.json(
+                        Self.payload(
+                            result: execution.refresh, followed: execution.followed))
                     return
                 }
                 CLIOut.out("usage refreshed")
+            } catch let failure as UsageCollectionOperationError {
+                progress.end()
+                throw CLIFailure.unavailable(
+                    failure.localizedDescription, hint: failure.hint)
             } catch let failure as UsageRefreshFailure {
                 progress.end()
                 progress.failure(failure.description)
@@ -425,10 +422,20 @@ struct UsageRefreshCommand: AsyncParsableCommand {
         force: Bool, progress: CLIProgress,
         sink: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws {
-        let due = MachineUsageRound.due(force: force)
+        let registry = MachineRegistry.machines()
+        let due = MachineUsageRound.due(
+            MachineUsageSelection.included(in: registry, CLIEnvironment.sharedDefaults),
+            force: force,
+            collectedAt: { MachineUsageStore.summary(machineID: $0)?.collectedAt })
         guard !due.isEmpty else { return }
         progress.begin(due.count == 1 ? "reaching \(due[0].name)" : "reaching the machines")
-        let round = await MachineUsageRound.collect(due, onEvent: sink)
+        let result = await UsageCollectionOperationExecution.collectMachines(
+            UsageMachineCollectionInput(
+                targets: due, registry: registry, dataDirectory: Repo.dataDir,
+                timeout: MachineUsageCollector.defaultTimeout, verbose: false),
+            includeSuccessfulMachines: false, store: CLIEnvironment.sharedDefaults,
+            onEvent: sink, afterChange: {})
+        let round = result.round
         progress.end()
         if force, let failure = forcedMachineCollectionFailure(round) { throw failure }
         if round.skippedBecauseBusy {

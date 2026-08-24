@@ -96,18 +96,13 @@ struct UsageMachineRows: View {
     }
 
     private func toggle(_ machine: Machine) {
-        if counted.contains(machine.id) {
-            MachineUsageSelection.exclude(machine.id)
-        } else {
-            MachineUsageSelection.include(machine.id)
-        }
+        UsageCollectionOperationExecution.setMachineCounted(
+            !counted.contains(machine.id), machineID: machine.id)
         reload()
     }
 
     private func forget(_ machine: Machine) {
-        let dropped = MachineUsageStore.forget(machineID: machine.id)
-        MachineUsageSelection.exclude(machine.id)
-        if dropped { IPC.post(IPC.Name.requestUsageRefresh) }
+        UsageCollectionOperationExecution.forgetMachine(machineID: machine.id)
         reload()
     }
 
@@ -115,19 +110,24 @@ struct UsageMachineRows: View {
         guard collecting == nil else { return }
         let targets = MachineUsageSelection.included(in: machines)
         guard !targets.isEmpty else { return }
+        let registry = machines
         status = "reaching \(targets.count == 1 ? targets[0].name : "the machines")…"
         collecting = Task {
-            let round = await MachineUsageRound.collect(targets) { event in
-                guard let line = MachineUsageRows.spoken(event) else { return }
-                Task { @MainActor in status = line }
-            }
+            let result = await UsageCollectionOperationExecution.collectMachines(
+                UsageMachineCollectionInput(
+                    targets: targets, registry: registry, dataDirectory: Repo.dataDir,
+                    timeout: MachineUsageCollector.defaultTimeout, verbose: false),
+                includeSuccessfulMachines: false,
+                onEvent: { event in
+                    guard let line = MachineUsageRows.spoken(event) else { return }
+                    Task { @MainActor in status = line }
+                })
+            let round = result.round
             await MainActor.run {
                 reload()
                 status = MachineUsageRows.outcome(round)
                 collecting = nil
             }
-            guard round.changedAnything else { return }
-            IPC.post(IPC.Name.requestUsageRefresh)
         }
     }
 
