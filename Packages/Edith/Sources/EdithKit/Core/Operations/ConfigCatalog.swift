@@ -154,7 +154,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.usageEnabled, .bool, group: "usage",
             summary: "Agent Usage extension: Claude and Codex limits, stats and alerts.",
-            fallback: .bool(true)),
+            fallback: .bool(false)),
         SettingDefinition(
             "usageMachines", .stringList, group: "usage",
             summary: "Ids of the machines whose agent usage is collected over SSH."),
@@ -446,7 +446,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.systemEnabled, .bool, group: "system",
             summary: "System extension: running apps, prevent sleep and the cleaning lock.",
-            fallback: .bool(true)),
+            fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),

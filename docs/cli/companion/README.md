@@ -15,6 +15,11 @@ saved by the app, the localhost port saved by `ed companion deploy`, then
 `http://127.0.0.1:4820`. An invalid saved or supplied URL falls back to the
 deployed localhost port, or to port 4820 when there is no deployment record.
 
+Chat, conversation history, deletion, memory search, episode reading, and
+indexing use the same typed operations in the app and CLI. Deleting a
+conversation requires confirmation in the app and a preview followed by
+`--yes` in the CLI.
+
 For the machinery behind these commands, start at
 [how the companion works](./concepts.md), the overview, then go deep:
 [memory](./concepts-memory.md), [ingestion](./concepts-ingestion.md),
