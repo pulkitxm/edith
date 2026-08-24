@@ -102,11 +102,11 @@ import Testing
             MachineExecOperationExecution.interactiveCommand(
                 words: [command], workingDirectory: "/srv")
                 == MachineWorkingDirectory.prefixed(command, directory: "/srv"))
-        let words = ["printf", "%s", "hello world", "$(touch /tmp/never)"]
+        let words = ["echo", "a;pwd"]
         #expect(
             MachineExecOperationExecution.interactiveCommand(
                 words: words, workingDirectory: nil)
-                == ShellQuote.command(words))
+                == "echo a;pwd")
 
         let parsed =
             try? EdRoot.parseAsRoot([

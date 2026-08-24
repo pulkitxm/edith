@@ -54,8 +54,8 @@ tell you which side produced one. When a script needs to know, look at stderr:
   contract. `ed machines exec`, the shorthand, `ed machines docker logs` and
   `ed machines docker compose logs` are the only commands that do it.
 - `--tty` is the counterpart of the app's Machine terminal pane, and of the
-  Docker window's shell button, which is `ed machines exec --tty <machine>
-  'docker exec -it <container> sh'`.
+  Docker window's shell button, which is
+  `ed machines docker shell <machine> <container>`.
 - The plain path gives the remote process no terminal at all. Anything that
   checks `isatty` will disable colour and progress bars, which is usually what
   you want from a script and never what you want from `top`.

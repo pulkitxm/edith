@@ -138,7 +138,7 @@ public enum MachineExecOperationExecution {
         words: [String], workingDirectory: String?
     ) -> String? {
         guard !words.isEmpty else { return nil }
-        let command = words.count == 1 ? words[0] : ShellQuote.command(words)
+        let command = words.joined(separator: " ")
         return MachineWorkingDirectory.prefixed(
             command, directory: workingDirectory)
     }
