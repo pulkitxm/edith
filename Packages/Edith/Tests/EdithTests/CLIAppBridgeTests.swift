@@ -99,13 +99,15 @@ private final class SendableCounter: @unchecked Sendable {
     }
 
     @Test func appReplyTimeoutUsesOneTrigger() async {
-        let counter = SendableCounter()
-        let reply = await AppBridge.awaitReply(
-            Notification.Name("test.reply.\(UUID().uuidString)"), timeout: 0.01
-        ) {
-            counter.increment()
+        await CLIProbe.inWorld { _ in
+            let counter = SendableCounter()
+            let reply = await AppBridge.awaitReply(
+                Notification.Name("test.reply.\(UUID().uuidString)"), timeout: 0.01
+            ) {
+                counter.increment()
+            }
+            #expect(reply == nil)
+            #expect(counter.read() == 1)
         }
-        #expect(reply == nil)
-        #expect(counter.read() == 1)
     }
 }
