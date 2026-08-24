@@ -167,7 +167,7 @@ public enum CompletionEngine {
                     prefix))
         }
         var candidates = node.name == "ed" && !helpRoute ? [CommandTree.help.name] : []
-        candidates += node.children.map(\.name)
+        candidates += node.children.flatMap(\.names)
         if node.name == "ed" {
             if !helpRoute { candidates += machines }
         }

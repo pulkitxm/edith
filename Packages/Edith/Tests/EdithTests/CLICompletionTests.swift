@@ -37,6 +37,22 @@ import Testing
         #expect(result.candidates == ["machines"])
     }
 
+    @Test func everyCommandAliasCompletesAtEveryDepth() {
+        var missing: [String] = []
+        Self.checkAliases(node: CommandTree.root, words: ["ed"], missing: &missing)
+        #expect(missing.isEmpty, "completion never offers these aliases: \(missing)")
+    }
+
+    static func checkAliases(node: CommandNode, words: [String], missing: inout [String]) {
+        let candidates = Self.plan(words + [""], words.count).candidates
+        for child in node.children {
+            for alias in child.aliases where !candidates.contains(alias) {
+                missing.append((words + [alias]).joined(separator: " "))
+            }
+            checkAliases(node: child, words: words + [child.name], missing: &missing)
+        }
+    }
+
     @Test func namingAMachineFirstHandsOverToRemoteCompletion() {
         let result = Self.plan(["ed", "tuf", "doc"], 2)
         #expect(result.remoteMachine == "tuf")
@@ -113,7 +129,9 @@ import Testing
 
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
-        #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])
+        #expect(
+            commands.candidates
+                == ["status", "on", "start", "off", "stop", "battery", "restore-on-quit"])
         let flags = Self.plan(["ed", "lid-awake", "on", "--u"], 3)
         #expect(flags.candidates == ["--until-lid-reopens"])
     }
@@ -123,8 +141,8 @@ import Testing
         #expect(
             commands.candidates
                 == [
-                    "projects", "worktrees", "open", "launch", "status", "sessions",
-                    "new", "focus", "close", "restart", "switch",
+                    "projects", "worktrees", "open", "launch", "status", "sessions", "list",
+                    "ls", "new", "create", "focus", "select", "close", "restart", "switch",
                 ])
         let appearance = Self.plan(["ed", "quinjet", "launch", "--a"], 3)
         #expect(appearance.candidates == ["--appearance"])
@@ -443,6 +461,24 @@ import Testing
         ShellCompletionScenario(
             words: ["ed", "extensions", "verify", ""],
             expected: Set(ExtensionRegistry.entries.map(\.id)), requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "music", "fav"], expected: ["favorite", "favourite"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "machines", "worksp"], expected: ["workspace", "workspaces"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "machines", "workspace", "ev"], expected: ["even"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "clipboard", "copy", "1", "--p"], expected: ["--plain"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "extensions", "verify", "clipboard", "--j"], expected: ["--json"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "machines", "docker", "compose", "pull", "--v"],
+            expected: ["--version"], requiresExactMatch: true),
     ]
 
     static let bashAndZshCompletionInvocations = [
