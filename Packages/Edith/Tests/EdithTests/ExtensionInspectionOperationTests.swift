@@ -95,6 +95,46 @@ import Testing
         }
     }
 
+    @Test func modalControlsHaveExactSharedOperationPlacements() {
+        let expected: [(String, String, [String])] = [
+            ("Extension settings", "turn the extension on", ["extensions", "enable", "clipboard"]),
+            (
+                "Extension settings", "turn the extension off",
+                ["extensions", "disable", "clipboard"]
+            ),
+            (
+                "Extension permission sheet", "enable after required permissions are granted",
+                ["extensions", "enable", "clipboard"]
+            ),
+            (
+                "Extension settings", "change an extension preference",
+                ["config", "set", "musicCrossfadeEnabled", "true"]
+            ),
+            (
+                "Extension settings", "raise a macOS permission prompt",
+                ["permissions", "request", "calendar"]
+            ),
+            (
+                "Extension permission sheet", "open the relevant System Settings pane",
+                ["permissions", "settings", "calendar"]
+            ),
+            (
+                "Extension settings", "open an extension guide",
+                ["app", "open-link", "extension-doc:usage:guide"]
+            ),
+            ("Extension settings", "open the music folder", ["music", "open"]),
+            ("Extension settings", "send a test notification", ["app", "test-notification"]),
+            ("Extension settings", "lock the keyboard to clean it", ["app", "clean-keys"]),
+        ]
+
+        for (surface, action, cli) in expected {
+            #expect(
+                UserInterfaceActionCatalog.actions.filter {
+                    $0.surface == surface && $0.action == action && $0.cli == cli
+                }.count == 1)
+        }
+    }
+
     private func center(entries: [ExtensionRegistryEntry]) -> ExtensionInspectionCenter {
         let environment = ExtensionLifecycleProbeEnvironment(
             isEnabled: { _ in false }, grantedPermissions: { [:] },

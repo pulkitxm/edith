@@ -45,6 +45,10 @@ displayed failure and recovery guidance maps to `doctor`. The UI and CLI share
 the same registry lookup, enabled-state read, lifecycle probe, and registry
 ordering.
 
+The modal's enable switch, permission buttons, extension preferences, setup
+links, test actions, and feature-specific open actions also use the same typed
+operations as their command-line equivalents.
+
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
