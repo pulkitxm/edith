@@ -364,6 +364,9 @@ public enum CommandTree {
                     CommandNode(
                         "join", "Join an event's meeting.", options: common,
                         arguments: [.calendarEvent]),
+                    CommandNode(
+                        "directions", "Open directions to an event.", aliases: ["route"],
+                        options: common, arguments: [.calendarEvent]),
                 ]),
             CommandNode(
                 "presenter", "Manual presenter mode at runtime.",
