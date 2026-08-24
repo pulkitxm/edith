@@ -24,7 +24,7 @@ public enum MusicKeyCommand {
     public static func handle(
         keyCode: UInt16, modifiers: NSEvent.ModifierFlags, active: Bool, _ handlers: Handlers
     ) -> Bool {
-        guard active, !isEditingText() else { return false }
+        guard active, !isReceivingTextInput(NSApp.keyWindow?.firstResponder) else { return false }
         guard modifiers.intersection([.command, .option, .control]).isEmpty else {
             return false
         }
@@ -39,8 +39,9 @@ public enum MusicKeyCommand {
         return true
     }
 
-    private static func isEditingText() -> Bool {
-        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+    static func isReceivingTextInput(_ responder: NSResponder?) -> Bool {
+        guard let responder else { return false }
+        if responder is DirectKeyboardInputResponder { return true }
         if let text = responder as? NSTextView { return text.isFieldEditor || text.isEditable }
         return responder is NSTextField
     }

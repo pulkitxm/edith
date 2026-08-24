@@ -1,5 +1,7 @@
 import AppKit
 
+public protocol DirectKeyboardInputResponder: AnyObject {}
+
 @MainActor
 public enum InputFocus {
     private static var monitor: Any?
@@ -10,7 +12,9 @@ public enum InputFocus {
             guard let window = event.window else { return event }
             guard let editor = editingTextView(in: window) else {
                 if event.type == .keyDown,
-                    isTypeAheadKey(characters: event.characters, modifiers: event.modifierFlags)
+                    shouldStartTypeAhead(
+                        characters: event.characters, modifiers: event.modifierFlags,
+                        responder: window.firstResponder)
                 {
                     TypeAhead.shared.focusField(in: window)
                 }
@@ -37,6 +41,13 @@ public enum InputFocus {
             let letter = characters?.first, characters?.count == 1
         else { return false }
         return letter.isASCII && letter.isLetter
+    }
+
+    static func shouldStartTypeAhead(
+        characters: String?, modifiers: NSEvent.ModifierFlags, responder: NSResponder?
+    ) -> Bool {
+        !(responder is DirectKeyboardInputResponder)
+            && isTypeAheadKey(characters: characters, modifiers: modifiers)
     }
 
     private static func editingTextView(in window: NSWindow) -> NSTextView? {

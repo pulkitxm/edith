@@ -1,5 +1,6 @@
 import AppKit
 @testable import Edith
+@testable import EdithKit
 import Testing
 
 @Suite(.serialized) @MainActor struct TerminalPresentationTests {
@@ -72,5 +73,28 @@ import Testing
             TerminalLaunchPolicy.shouldStart(
                 active: true, launchEnabled: true, started: false, isLocal: true,
                 connected: false))
+    }
+
+    @Test func terminalResponderBypassesTypeAheadAndMediaShortcuts() {
+        let responder = TerminalSessionHolder().terminalView
+        let clock = ContinuousClock()
+        var typeAheadStarts = 0
+        var textInputMatches = 0
+        let elapsed = clock.measure {
+            for _ in 0..<100_000 {
+                if InputFocus.shouldStartTypeAhead(
+                    characters: "x", modifiers: [], responder: responder)
+                {
+                    typeAheadStarts += 1
+                }
+                if MusicKeyCommand.isReceivingTextInput(responder) {
+                    textInputMatches += 1
+                }
+            }
+        }
+
+        #expect(typeAheadStarts == 0)
+        #expect(textInputMatches == 100_000)
+        #expect(elapsed < .seconds(1))
     }
 }

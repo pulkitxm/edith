@@ -113,7 +113,7 @@ final class TerminalSessionHolder {
     }
 }
 
-final class EdithTerminalView: LocalProcessTerminalView {
+final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResponder {
     private(set) var renderingActive = true
     private(set) var deferredDisplayPasses = 0
     private(set) var reactivationDisplayPasses = 0
