@@ -95,7 +95,7 @@ What `__complete` offers, in the order it decides:
 - If the first word after `ed` names a configured machine and is not a command,
   the whole thing is handed to that machine. See below.
 - If the word being completed starts with `-`, the candidates are that command's
-  options plus `--json` and `--help`.
+  options plus inherited `--help` and `--version`.
 - Otherwise the candidates are the subcommand names at that point, plus every
   configured machine name at the top level, plus the values for whichever
   positional slot the cursor is in.

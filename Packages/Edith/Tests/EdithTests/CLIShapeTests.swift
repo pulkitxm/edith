@@ -57,8 +57,19 @@ enum CommandCrawler {
     }
 
     static func optionNames(of command: ParsableCommand.Type) -> Set<String> {
-        Set(matches(in: help(command), pattern: "--[a-zA-Z][a-zA-Z0-9-]*"))
+        Set(
+            help(command).split(separator: "\n").compactMap { line in
+                guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { return nil }
+                guard
+                    let option = line.split(whereSeparator: \.isWhitespace).first(where: {
+                        $0.hasPrefix("--")
+                    })
+                else { return nil }
+                return String(option.prefix { $0 != "<" })
+            })
     }
+
+    static var inheritedOptionNames: Set<String> { optionNames(of: EdRoot.self) }
 
     static func matches(in text: String, pattern: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
@@ -285,6 +296,13 @@ enum CommandCrawler {
         #expect(wrong.isEmpty, "completion offers flags the parser rejects: \(wrong)")
     }
 
+    @Test func everyParserOptionIsOfferedByTheTreeOrInherited() {
+        var missing: [String] = []
+        checkParserOptions(
+            node: CommandTree.root, command: EdRoot.self, path: ["ed"], missing: &missing)
+        #expect(missing.isEmpty, "the parser accepts flags completion never offers: \(missing)")
+    }
+
     @Test func everyTypedOptionIsAlsoAdvertisedAndAccepted() {
         var wrong: [String] = []
         checkTyped(node: CommandTree.root, command: EdRoot.self, path: ["ed"], wrong: &wrong)
@@ -294,7 +312,10 @@ enum CommandCrawler {
     private func checkTyped(
         node: CommandNode, command: ParsableCommand.Type, path: [String], wrong: inout [String]
     ) {
-        let real = CommandCrawler.optionNames(of: command)
+        var real = CommandCrawler.optionNames(of: command)
+        if let fallback = command.configuration.defaultSubcommand {
+            real.formUnion(CommandCrawler.optionNames(of: fallback))
+        }
         for option in node.optionValues.keys
         where !node.options.contains(option) || !real.contains(option) {
             wrong.append((path + [option]).joined(separator: " "))
@@ -312,7 +333,11 @@ enum CommandCrawler {
     private func check(
         node: CommandNode, command: ParsableCommand.Type, path: [String], wrong: inout [String]
     ) {
-        let real = CommandCrawler.optionNames(of: command).union(["--help"])
+        var real = CommandCrawler.optionNames(of: command).union(
+            CommandCrawler.inheritedOptionNames)
+        if let fallback = command.configuration.defaultSubcommand {
+            real.formUnion(CommandCrawler.optionNames(of: fallback))
+        }
         for option in node.options where !real.contains(option) {
             wrong.append((path + [option]).joined(separator: " "))
         }
@@ -323,6 +348,26 @@ enum CommandCrawler {
                 })
             else { continue }
             check(node: child, command: match, path: path + [child.name], wrong: &wrong)
+        }
+    }
+
+    private func checkParserOptions(
+        node: CommandNode, command: ParsableCommand.Type, path: [String], missing: inout [String]
+    ) {
+        let offered = Set(node.options + CommandTree.inherited)
+        let required = CommandCrawler.optionNames(of: command).union(
+            CommandCrawler.inheritedOptionNames)
+        for option in required where !offered.contains(option) {
+            missing.append((path + [option]).joined(separator: " "))
+        }
+        for child in node.children {
+            guard
+                let match = command.configuration.subcommands.first(where: {
+                    CommandCrawler.name(of: $0) == child.name
+                })
+            else { continue }
+            checkParserOptions(
+                node: child, command: match, path: path + [child.name], missing: &missing)
         }
     }
 

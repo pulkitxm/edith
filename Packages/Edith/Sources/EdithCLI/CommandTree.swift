@@ -81,7 +81,7 @@ public struct CommandNode: Equatable, Sendable {
 }
 
 public enum CommandTree {
-    public static let inherited = ["--help"]
+    public static let inherited = ["--help", "--version"]
     public static let common = ["--json"] + inherited
     public static let playback = ["--json", "--help", "--player"]
     public static let playbackValues: [String: ArgumentKind] = ["--player": .musicPlayer]
@@ -688,7 +688,7 @@ public enum CommandTree {
                         "add", "Add a machine to Edith's list.",
                         options: [
                             "--json", "--help", "--host", "--port", "--user", "--key",
-                            "--alias", "--mac",
+                            "--alias", "--mac", "--password-stdin", "--key-passphrase-stdin",
                         ],
                         arguments: [.free]),
                     CommandNode(
@@ -696,7 +696,7 @@ public enum CommandTree {
                         options: [
                             "--json", "--help", "--name", "--host", "--port", "--user",
                             "--key", "--agent", "--mac", "--sudo-password-stdin",
-                            "--forget-sudo-password",
+                            "--forget-sudo-password", "--password-stdin", "--key-passphrase-stdin",
                         ],
                         arguments: [.machine]),
                     CommandNode(
@@ -856,6 +856,7 @@ public enum CommandTree {
                         arguments: [.machine]),
                     CommandNode(
                         "exec", "Run a command on a machine.", aliases: ["run"],
+                        options: ["--tty"],
                         arguments: [.machine, .free]),
                     CommandNode(
                         "files", "Browse and transfer files.",

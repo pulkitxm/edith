@@ -349,6 +349,28 @@ import Testing
         #expect(result.stderr.isEmpty)
     }
 
+    @Test func everyParserOptionCompletesOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let cases = [
+            (["ed", "extensions", "verify", "clipboard", "--v"], ["--version"]),
+            (["ed", "machines", "add", "box", "--password"], ["--password-stdin"]),
+            (["ed", "machines", "add", "box", "--key-p"], ["--key-passphrase-stdin"]),
+            (["ed", "machines", "edit", "box", "--password"], ["--password-stdin"]),
+            (["ed", "machines", "edit", "box", "--key-p"], ["--key-passphrase-stdin"]),
+            (["ed", "machines", "exec", "--t"], ["--tty"]),
+        ]
+
+        for (words, expected) in cases {
+            let result = try CLIProcessProbe.run(
+                ["__complete", "--index", String(words.count - 1), "--"] + words,
+                currentDirectory: outside)
+            #expect(result.code == 0)
+            #expect(result.stdoutLines == expected)
+            #expect(result.stderr.isEmpty)
+        }
+    }
+
     @Test func appInspectionCompletionWorksOutsideARepository() throws {
         let outside = try Self.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: outside) }
