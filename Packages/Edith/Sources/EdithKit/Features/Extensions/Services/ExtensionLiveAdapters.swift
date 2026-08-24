@@ -64,8 +64,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "usage", "quinjet", "system", "machines", "systemStats", "micMute", "lidAwake",
-        "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
+        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
         "colorPicker",
     ]
 
@@ -90,6 +90,7 @@ public enum ExtensionLiveAdapters {
         }
     ) async -> ExtensionAdapterReadiness? {
         switch id {
+        case "attention": attentionReadiness()
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
@@ -107,6 +108,19 @@ public enum ExtensionLiveAdapters {
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func attentionReadiness(
+        settings: AttentionSettings = AttentionRepository().loadSettings()
+    ) -> ExtensionAdapterReadiness {
+        let configured =
+            settings.isEnabled
+            && (settings.trackingEnabled || settings.browserTrackingEnabled)
+        return ExtensionAdapterFacts(
+            configured: configured,
+            readyDetail: "Attention tracking is configured for the selected sources.",
+            setupDetail: "Turn on application tracking, browser tracking, or both."
+        ).readiness
     }
 
     static func usageReadiness(
