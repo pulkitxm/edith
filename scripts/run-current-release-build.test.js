@@ -133,6 +133,14 @@ test("a current release build returns the command status", async () => {
   expect(readFileSync(marker, "utf8")).toBe("complete");
 });
 
+test("a current release build keeps command failures fatal", async () => {
+  const fixture = createFixture();
+  const child = run(fixture, ["bash", "-c", "exit 23"]);
+  processes.push(child);
+
+  expect(await child.exited).toBe(23);
+});
+
 test("a stale release never starts its build", async () => {
   const fixture = createFixture();
   const marker = join(fixture.root, "unexpected");
