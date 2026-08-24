@@ -61,7 +61,9 @@ test("the release is reusable and supports manual rebuilds", () => {
   );
   expect(releaseWorkflow).toContain("refs/tags/{0}");
   expect(releaseWorkflow).not.toContain('tags: ["v*"]');
-  expect(workflowCall).toContain("PUKBOT_PRIVATE_KEY:\n        required: false");
+  expect(workflowCall).toContain(
+    "PUKBOT_PRIVATE_KEY:\n        required: false",
+  );
   expect(releaseJob).not.toContain("PUKBOT_PRIVATE_KEY");
 });
 
