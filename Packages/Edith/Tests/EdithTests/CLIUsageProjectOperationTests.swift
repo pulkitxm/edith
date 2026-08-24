@@ -41,6 +41,21 @@ import Testing
         #expect(fields["performed"] == .bool(true))
     }
 
+    @Test func operationErrorsKeepStableExitClasses() {
+        #expect(UsageProjectOperationError.emptyChatID.cliFailure.kind == .usage)
+        #expect(
+            UsageProjectOperationError.projectNotFound("missing").cliFailure.kind == .notFound)
+        #expect(
+            UsageProjectOperationError.projectAmbiguous("shared", ["one", "two"])
+                .cliFailure.kind == .notFound)
+        #expect(
+            UsageProjectOperationError.repositoryLinkUnavailable("local").cliFailure.kind
+                == .unavailable)
+        #expect(
+            UsageProjectOperationError.actionFailed("copy the chat identifier").cliFailure.kind
+                == .unavailable)
+    }
+
     @Test func defaultGroupStillSelectsTheListCommand() throws {
         let root = try EdRoot.parseAsRoot(["usage", "projects", "--limit", "25"])
         let list = try #require(root as? UsageProjectsListCommand)

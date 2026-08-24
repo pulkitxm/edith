@@ -36,6 +36,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case container
     case tool
     case usageChat
+    case usageProject
     case usageSource
     case free
 }
@@ -248,15 +249,18 @@ public enum CommandTree {
                             CommandNode(
                                 "show", "Show one repository and its usage hierarchy.",
                                 options: ["--json", "--range"],
-                                optionValues: ["--range": .usageRange], arguments: [.free]),
+                                optionValues: ["--range": .usageRange],
+                                arguments: [.usageProject]),
                             CommandNode(
                                 "open", "Open a usage repository in the browser.",
                                 options: ["--json", "--range"],
-                                optionValues: ["--range": .usageRange], arguments: [.free]),
+                                optionValues: ["--range": .usageRange],
+                                arguments: [.usageProject]),
                             CommandNode(
                                 "copy-link", "Copy a usage repository link.",
                                 options: ["--json", "--range"],
-                                optionValues: ["--range": .usageRange], arguments: [.free]),
+                                optionValues: ["--range": .usageRange],
+                                arguments: [.usageProject]),
                             CommandNode(
                                 "copy-chat", "Copy a usage chat identifier.",
                                 options: common, arguments: [.usageChat]),

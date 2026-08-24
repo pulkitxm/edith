@@ -378,6 +378,11 @@ struct CompleteCommand: AsyncParsableCommand {
         let usageChatIDs =
             request.leading.starts(with: ["usage", "projects", "copy-chat"])
             ? UsageAnalysis.chatIDs(usageDocument?.daily ?? []) : []
+        let usageProjects =
+            request.leading.starts(with: ["usage", "projects", "show"])
+                || request.leading.starts(with: ["usage", "projects", "open"])
+                || request.leading.starts(with: ["usage", "projects", "copy-link"])
+            ? UsageAnalysis.projectSelectors(usageDocument?.daily ?? []) : []
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
@@ -385,6 +390,7 @@ struct CompleteCommand: AsyncParsableCommand {
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
             usageSources: usageDocument?.sources?.sorted() ?? [], usageChatIDs: usageChatIDs,
+            usageProjects: usageProjects,
             quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(

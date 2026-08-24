@@ -241,6 +241,28 @@ import Testing
         #expect(UsageAnalysis.chatIDs(parsed.daily) == ["alpha", "beta", "work"])
     }
 
+    @Test func projectSelectorsIncludeOnlyUnambiguousVisibleNames() throws {
+        let document = """
+            {"daily": [{"period": "2026-08-07", "bySource": {"cli": [
+              {"modelName": "opus", "inputTokens": 30, "cost": 3}
+            ]}, "projects": [
+              {"repositoryID": "github.com/one/shared", "repositoryName": "shared",
+               "bySource": {"cli": {"tokens": 10, "cost": 1}}},
+              {"repositoryID": "github.com/two/shared", "repositoryName": "Shared",
+               "bySource": {"cli": {"tokens": 10, "cost": 1}}},
+              {"repositoryID": "github.com/acme/edith", "repositoryName": "edith",
+               "bySource": {"cli": {"tokens": 10, "cost": 1}}}
+            ]}]}
+            """
+        let parsed = try JSONDecoder().decode(UsageDocument.self, from: Data(document.utf8))
+        #expect(
+            UsageAnalysis.projectSelectors(parsed.daily)
+                == [
+                    "edith", "github.com/acme/edith", "github.com/one/shared",
+                    "github.com/two/shared",
+                ])
+    }
+
     @Test func sameRepositoryAcrossMachinesHasDistinctFolders() throws {
         let document = """
             {

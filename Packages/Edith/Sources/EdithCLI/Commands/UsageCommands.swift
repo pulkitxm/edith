@@ -283,9 +283,7 @@ struct UsageProjectsRange: ParsableArguments {
             }
             return (summary, target)
         } catch let error as UsageProjectOperationError {
-            throw CLIFailure.notFound(
-                error.localizedDescription,
-                hint: "run `ed usage projects list` to see repository names and identities")
+            throw error.cliFailure
         }
     }
 }
@@ -427,7 +425,7 @@ struct UsageProjectsOpenCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let (_, target) = try window.resolve(repository)
-            let result = try await MainActor.run {
+            let result = try await performUsageProjectAction {
                 try UsageProjectOperationExecution.openRepository(target)
             }
             render(result, json: json, message: "opened \(target.repositoryName)")
@@ -451,7 +449,7 @@ struct UsageProjectsCopyLinkCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let (_, target) = try window.resolve(repository)
-            let result = try await MainActor.run {
+            let result = try await performUsageProjectAction {
                 try UsageProjectOperationExecution.copyRepositoryLink(target)
             }
             render(result, json: json, message: "copied \(result.value)")
@@ -471,7 +469,7 @@ struct UsageProjectsCopyChatCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let result = try await MainActor.run {
+            let result = try await performUsageProjectAction {
                 try UsageProjectOperationExecution.copyChatID(chatID)
             }
             render(result, json: json, message: "copied \(result.value)")
@@ -493,6 +491,31 @@ private func render(_ result: UsageProjectOperationResult, json: Bool, message: 
         return
     }
     CLIOut.out(message)
+}
+
+private func performUsageProjectAction(
+    _ action: @escaping @MainActor () throws -> UsageProjectOperationResult
+) async throws -> UsageProjectOperationResult {
+    do {
+        return try await MainActor.run { try action() }
+    } catch let error as UsageProjectOperationError {
+        throw error.cliFailure
+    }
+}
+
+extension UsageProjectOperationError {
+    var cliFailure: CLIFailure {
+        switch self {
+        case .emptyQuery, .emptyChatID:
+            .usage(localizedDescription)
+        case .projectNotFound, .projectAmbiguous:
+            .notFound(
+                localizedDescription,
+                hint: "run `ed usage projects list` to see repository names and identities")
+        case .repositoryLinkUnavailable, .invalidRepositoryLink, .actionFailed:
+            .unavailable(localizedDescription)
+        }
+    }
 }
 
 extension UsageProjectOperationResult {

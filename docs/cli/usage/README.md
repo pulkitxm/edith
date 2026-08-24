@@ -64,9 +64,9 @@ closed.
 | --- | --- |
 | 0 | The command printed its report, or the refresh finished. Also a read that legitimately found nothing to show |
 | 1 | `usage.json` exists but will not decode: `could not read <path>: <reason>` |
-| 2 | `--limit 0` or a negative limit on `ed usage projects list`, plus the usual parse failures, an unknown flag, a missing value, or `--source` passed to this group |
+| 2 | `--limit 0` or a negative limit on `ed usage projects list`, an empty chat identifier, plus the usual parse failures, an unknown flag, a missing value, or `--source` passed to this group |
 | 3 | `--range` is not `today`, `week`, `month` or `all`, a repository cannot be found uniquely, or a `--source` id or `--machine` is unknown |
-| 4 | No `usage.json` at all; no rate limit history at all; a usage refresh whose pipeline failed, or `--follow` with nothing running; or Edith not running, or not answering, for `ed usage limits --refresh` |
+| 4 | No `usage.json` at all; no rate limit history at all; a repository link or platform action is unavailable; a usage refresh whose pipeline failed, or `--follow` with nothing running; or Edith not running, or not answering, for `ed usage limits --refresh` |
 
 ## Notes and gotchas
 

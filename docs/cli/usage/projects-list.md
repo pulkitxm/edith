@@ -13,7 +13,8 @@ ed usage projects list [--range <range>] [--limit <n>] [--json]
 The plain table includes repository name, cost and tokens. JSON is a top-level
 array ordered by cost descending. Each object has exactly `repositoryID`,
 `repositoryName`, `repositoryURL`, `cost`, `tokens` and `folders`. Folder objects
-have `folderName`, `path`, `machineName`, `machineID`, `cost` and `tokens`.
+also contain direct `chats` and nested `worktrees`, including each chat identifier,
+title, source, path, cost, tokens and last activity timestamp.
 
 Folders with the same GitHub remote share a repository across machines.
 Repositories with the same visible name remain separate. Usage without reliable

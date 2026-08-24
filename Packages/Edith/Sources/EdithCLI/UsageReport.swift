@@ -414,6 +414,19 @@ public enum UsageAnalysis {
         }
     }
 
+    public static func projectSelectors(_ days: [UsageDay]) -> [String] {
+        let projects = byProject(days)
+        let projectsByName = Dictionary(grouping: projects) { $0.repositoryName.lowercased() }
+        let values = projects.flatMap { project in
+            var selectors = [project.repositoryID]
+            if projectsByName[project.repositoryName.lowercased()]?.count == 1 {
+                selectors.append(project.repositoryName)
+            }
+            return selectors
+        }
+        return Array(Set(values)).sorted()
+    }
+
     private static func addProjectsBySource(
         _ projects: [UsageProject], day: UsageDay,
         to repositories: inout [String: UsageRepositoryAccumulator]
