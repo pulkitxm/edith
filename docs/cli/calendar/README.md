@@ -18,6 +18,7 @@ was.
 | `ed calendar ls` | Upcoming events from the running app, as a table or as JSON |
 | `ed calendar open` | Opens the Calendar application |
 | `ed calendar join <event>` | Opens the meeting link for an event ID or unambiguous title |
+| `ed calendar directions <event>` | Opens the event location in Maps |
 
 `ed calendar list` is an alias for `ed calendar ls`.
 
@@ -26,31 +27,30 @@ was.
 - [`ed calendar ls`](./ls.md)
 - [`ed calendar open`](./open.md)
 - [`ed calendar join`](./join.md)
+- [`ed calendar directions`](./directions.md)
 
 ## Exit codes
 
 | Code | When |
 | --- | --- |
 | 0 | Events were printed, including the case where the window holds none |
-| 2 | `--days` was negative (written as `--days=-1`), `--days` was given no value or a value that is not an integer, or the command line carried an unknown flag |
+| 2 | `--days` was outside 0 through 120, had no value or was not an integer, or the command line carried an unknown flag |
+| 3 | `join` or `directions` could not find one unambiguous event |
 | 4 | The menu bar app is not running, the Calendar extension is off, macOS has not granted calendar access, or the app did not answer within 4 seconds |
-
-Exit 3 has no producer here; `ed calendar` names nothing that can be missing.
 
 ## Notes and gotchas
 
-- The app decides the window, not `ed`. The store loads from midnight today
-  through 14 days ahead, and `ed` filters that list down to `--days`. Asking for
-  more than the app has loaded returns what it has rather than failing, so
-  `ed calendar ls --days 30` usually shows the same 14 days as `--days 14`.
-- The only thing that widens the app's window is scrolling to the bottom of a
-  calendar list in the UI, which loads another 14 days at a time up to 120. `ed`
-  cannot ask for more, and the window resets to 14 days whenever the app or the
-  extension restarts.
-- Because the window starts at midnight rather than now, events that already
-  started today are included. `--days 0` therefore means "everything from today
-  that has already started", not "today's schedule", and it is usually the wrong
-  flag to reach for.
+- The request carries its exact date window to the app. `--days` accepts 0 through
+  120, matching the UI's upper bound. A larger value exits 2 before the app is
+  contacted.
+- The UI starts at 14 days and scrolling to the bottom adds 14 days at a time. The
+  last page adds 8 days and stops at 120. A CLI read does not change the UI's
+  current page.
+- Every window starts at midnight today. A positive value ends at midnight that
+  many days later. `--days 0` ends at the moment the command starts, so it includes
+  events from earlier today.
+- `join` and `directions` search the full 120-day window. An ID returned by
+  `ed calendar ls --days 120 --json` can therefore be used by either action.
 - Ordering is fixed: all-day events first, then everything else by start time
   ascending. The JSON array uses the same order as the table.
 - Duplicates are collapsed before they are sent. Two events with the same title,
@@ -67,9 +67,8 @@ Exit 3 has no producer here; `ed calendar` names nothing that can be missing.
 - Times are transported and printed as two different things. `--json` gives
   ISO 8601 in UTC; the table renders in the local time zone with localised day
   and month names, so the two can look like different days near midnight.
-- Filtering happens in `ed`, after the whole list has arrived, so a small
-  `--days` does not make the request cheaper. The cost is one round trip either
-  way.
+- Filtering, sorting and deduplication use the same typed operation as the UI.
+  The app reads only the requested window, and the cost is one round trip.
 - The extension switch is a setting like any other:
   `ed config set tabCalendarEnabled true` and `ed extensions enable calendar`
   write the same key. Enabling the extension without the macOS grant leaves

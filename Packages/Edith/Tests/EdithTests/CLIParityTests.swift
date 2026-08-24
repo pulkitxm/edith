@@ -101,6 +101,9 @@ enum UIParity {
 
         UICapability("Calendar page", "open Calendar", ["calendar", "open"]),
         UICapability("Calendar agenda", "join a meeting", ["calendar", "join", "event"]),
+        UICapability(
+            "Calendar agenda", "open directions to a location",
+            ["calendar", "directions", "event"]),
 
         UICapability("Presenter controls", "start manual mode", ["presenter", "start"]),
         UICapability("Presenter controls", "stop manual mode", ["presenter", "stop"]),
