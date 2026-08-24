@@ -39,7 +39,7 @@ public enum HerdrAgentStatus: String, CaseIterable, Codable, Sendable, Equatable
 public enum HerdrKind {
     public static let filterLabels = [
         "Claude Code", "Codex", "OpenCode", "Cursor Agent", "Copilot CLI", "Pi", "Gemini", "Grok",
-        "Cline",
+        "Cline", "FX.sh",
     ]
 
     public static func displayName(for raw: String) -> String {
@@ -64,6 +64,8 @@ public enum HerdrKind {
             return "Grok"
         case "cline":
             return "Cline"
+        case "fx", "fx.sh", "fx-sh":
+            return "FX.sh"
         case "devin", "devin-cli":
             return "Devin"
         case "agy", "antigravity", "antigravity-cli":
@@ -106,6 +108,7 @@ public enum HerdrKind {
         case "Gemini": "gemini"
         case "Grok": "grok"
         case "Cline": "cline"
+        case "FX.sh": "fx"
         case "Amp": "amp"
         case "Antigravity": "antigravity"
         case "Devin": "devin"
