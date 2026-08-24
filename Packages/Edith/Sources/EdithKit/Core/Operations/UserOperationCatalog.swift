@@ -1,30 +1,96 @@
 import EdithCore
 
 public enum UserOperationCatalog {
-    public static let descriptors =
-        MachineControlOperation.allCases.map(\.descriptor)
-        + MachineMutationOperation.allCases.map(\.descriptor)
-        + MachinePowerOperation.allCases.map(\.descriptor)
-        + MachineConnectionOperation.allCases.map(\.descriptor)
-        + MachineForwardOperation.allCases.map(\.descriptor)
-        + MachineSnippetOperation.allCases.map(\.descriptor)
-        + MachineServiceOperation.allCases.map(\.descriptor)
-        + MachineProcessOperation.allCases.map(\.descriptor)
-        + MachineDockerPauseOperation.allCases.map(\.descriptor)
-        + ExtensionMutationOperation.allCases.map(\.descriptor)
-        + CalendarEventOperation.allCases.map(\.descriptor)
-        + ShelfItemOperation.allCases.map(\.descriptor)
-        + DownloadOperation.allCases.map(\.descriptor)
-        + MusicLibraryOperation.allCases.map(\.descriptor)
-        + MusicTransportOperation.allCases.map(\.descriptor)
-        + MusicCurrentOperation.allCases.map(\.descriptor)
-        + PresenterRuntimeOperation.allCases.map(\.descriptor)
-        + ConfigurationOperation.allCases.map(\.descriptor)
-        + PermissionOperation.allCases.map(\.descriptor)
-        + ColorPickerOperation.allCases.map(\.descriptor)
-        + ColorSwatchOperation.allCases.map(\.descriptor)
-        + QuinjetOperation.allCases.map(\.descriptor)
-        + QuinjetSessionOperation.allCases.map(\.descriptor)
+    public static let registrations =
+        MachineControlOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineMutationOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachinePowerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineConnectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineForwardOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineSnippetOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineServiceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineProcessOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineDockerPauseOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ExtensionMutationOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + CalendarEventOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ShelfItemOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + DownloadOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MusicLibraryOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MusicTransportOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MusicCurrentOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + PresenterRuntimeOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ConfigurationOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + PermissionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ColorPickerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ColorSwatchOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + QuinjetOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + QuinjetSessionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+
+    public static let descriptors = registrations.map(\.descriptor)
+
+    public static let userInterfaceActions: [RegisteredUserInterfaceAction] =
+        registrations.flatMap { registration -> [RegisteredUserInterfaceAction] in
+            switch registration.exposure {
+            case let .userInterface(placements):
+                placements.map {
+                    RegisteredUserInterfaceAction(
+                        operation: registration.descriptor, placement: $0)
+                }
+            case .commandLineOnly:
+                []
+            }
+        }
+
+    public static let commandLineOnly = registrations.filter {
+        if case .commandLineOnly = $0.exposure { return true }
+        return false
+    }
 
     public static func descriptor(id: UserOperationID) -> UserOperationDescriptor? {
         descriptors.first { $0.id == id }
@@ -32,5 +98,451 @@ public enum UserOperationCatalog {
 
     public static func descriptor(cli: [String]) -> UserOperationDescriptor? {
         descriptors.first { $0.cli == cli }
+    }
+}
+
+public enum UserInterfaceActionCatalog {
+    public static let actions = UserOperationCatalog.userInterfaceActions
+
+    public static let presentationOnly = [
+        UserInterfacePresentationState(
+            surface: "Any scroll view", state: "scroll position",
+            reason: "Scrolling changes only the current presentation and has no domain effect."),
+        UserInterfacePresentationState(
+            surface: "Navigation", state: "focus and selection",
+            reason: "Focus and selection choose what the current window presents."),
+        UserInterfacePresentationState(
+            surface: "Disclosure groups", state: "folding",
+            reason: "Folding changes visibility without reading or mutating domain state."),
+        UserInterfacePresentationState(
+            surface: "Search fields", state: "local filtering",
+            reason: "Local filtering changes the visible collection without changing its data."),
+        UserInterfacePresentationState(
+            surface: "Sheets and popovers", state: "modal visibility",
+            reason: "Opening or closing presentation chrome has no underlying operation."),
+        UserInterfacePresentationState(
+            surface: "Machine terminal", state: "mouse capture",
+            reason: "Mouse capture controls input delivery within the current terminal view."),
+        UserInterfacePresentationState(
+            surface: "Clipboard panel", state: "history search filtering",
+            reason: "Searching filters the entries already loaded into the clipboard panel."),
+        UserInterfacePresentationState(
+            surface: "Machine terminal", state: "terminal keyboard delivery",
+            reason:
+                "Typing sends input through the active terminal view without a discrete action."),
+        UserInterfacePresentationState(
+            surface: "Machine tab bar", state: "Files window visibility",
+            reason: "Opening the Files window changes the visible application presentation."),
+        UserInterfacePresentationState(
+            surface: "Dashboard machines chip", state: "single-machine chart filter",
+            reason:
+                "Selecting one machine filters the usage charts already loaded in the dashboard."),
+        UserInterfacePresentationState(
+            surface: "Dashboard machines chip", state: "local-machine chart filter",
+            reason: "Selecting local usage filters the charts without changing collected usage."),
+    ]
+}
+
+private func userInterface(
+    _ surface: String, _ action: String, _ exampleArguments: [String] = []
+) -> UserOperationExposure {
+    .userInterface([
+        UserInterfaceActionPlacement(
+            surface: surface, action: action, exampleArguments: exampleArguments)
+    ])
+}
+
+private func commandLineOnly(_ reason: String) -> UserOperationExposure {
+    .commandLineOnly(reason: reason)
+}
+
+private extension MachineControlOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Machine controls", "inspect available live controls", ["box"])
+        case .brightness:
+            userInterface("Machine controls", "set display brightness", ["box", "50"])
+        case .volume:
+            userInterface("Machine controls", "set output volume", ["box", "40"])
+        case .mute:
+            userInterface("Machine controls", "mute system audio", ["box", "on"])
+        case .wifi:
+            userInterface("Machine controls", "turn Wi-Fi off", ["box", "off", "--yes"])
+        case .bluetooth:
+            userInterface("Machine controls", "turn Bluetooth on", ["box", "on"])
+        case .airplane:
+            userInterface("Machine controls", "turn airplane mode on", ["box", "on", "--yes"])
+        case .doNotDisturb:
+            userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
+        case .keyboardLight:
+            userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
+        }
+    }
+}
+
+private extension MachineMutationOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Machines", action: "add a machine",
+                    exampleArguments: ["box", "--host", "h"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "store a login password",
+                    exampleArguments: ["box", "--host", "h", "--password-stdin"]),
+            ])
+        case .edit:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Machines", action: "edit a machine", exampleArguments: ["box"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "store a key passphrase",
+                    exampleArguments: ["box", "--key-passphrase-stdin"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "store a sudo password",
+                    exampleArguments: ["box", "--sudo-password-stdin"]),
+                UserInterfaceActionPlacement(
+                    surface: "Add machine sheet", action: "forget the stored sudo password",
+                    exampleArguments: ["box", "--forget-sudo-password"]),
+            ])
+        case .remove:
+            userInterface("Machines", "delete a machine", ["box"])
+        }
+    }
+}
+
+private extension MachinePowerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .reboot:
+            userInterface("Machine header", "restart the machine", ["box", "--yes"])
+        case .shutdown:
+            userInterface("Machine header", "shut the machine down", ["box", "--yes"])
+        case .wake:
+            userInterface("Machine header", "wake the machine", ["box"])
+        }
+    }
+}
+
+private extension MachineConnectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .connect:
+            userInterface("Machines", "open the shared connection", ["box"])
+        case .disconnect:
+            userInterface("Machines", "close the shared connection", ["box"])
+        }
+    }
+}
+
+private extension MachineForwardOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Machine tools", "save a port forward",
+                ["box", "--local", "8080", "--remote", "80"])
+        case .remove:
+            userInterface("Machine tools", "delete a port forward", ["box", "1"])
+        case .enable:
+            userInterface("Machine tools", "switch a port forward on", ["box", "1"])
+        case .disable:
+            userInterface("Machine tools", "switch a port forward off", ["box", "1"])
+        }
+    }
+}
+
+private extension MachineSnippetOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Machine tools", "save a snippet", ["box", "logs", "journalctl"])
+        case .remove:
+            userInterface("Machine tools", "delete a snippet", ["box", "1"])
+        }
+    }
+}
+
+private extension MachineServiceOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .start:
+            userInterface(
+                "Machine tools", "start a systemd unit", ["box", "nginx.service"])
+        case .stop:
+            userInterface(
+                "Machine tools", "stop a systemd unit", ["box", "nginx.service"])
+        case .restart:
+            userInterface(
+                "Machine tools", "restart a systemd unit", ["box", "nginx.service"])
+        }
+    }
+}
+
+private extension MachineProcessOperation {
+    var interfaceExposure: UserOperationExposure {
+        .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Machine processes", action: "end a process with SIGTERM",
+                exampleArguments: ["box", "42"]),
+            UserInterfaceActionPlacement(
+                surface: "Machine processes", action: "force kill a process",
+                exampleArguments: ["box", "42", "--signal", "KILL", "--yes"]),
+        ])
+    }
+}
+
+private extension MachineDockerPauseOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .pause:
+            userInterface("Docker window", "pause a container", ["box", "api"])
+        case .unpause:
+            userInterface("Docker window", "unpause a container", ["box", "api"])
+        }
+    }
+}
+
+private extension ExtensionMutationOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .enable:
+            userInterface("Extensions pane", "turn an extension on", ["clipboard"])
+        case .disable:
+            userInterface("Extensions pane", "turn an extension off", ["clipboard"])
+        case .setup:
+            userInterface("Extension setup", "prepare an extension for use", ["clipboard"])
+        case .provisionTool:
+            userInterface("Extension setup", "install a required CLI tool", ["yt-dlp"])
+        }
+    }
+}
+
+private extension CalendarEventOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Calendar agenda", "list upcoming events")
+        case .open:
+            userInterface("Calendar page", "open Calendar")
+        case .join:
+            userInterface("Calendar agenda", "join a meeting", ["event"])
+        case .directions:
+            userInterface("Calendar agenda", "open directions to a location", ["event"])
+        }
+    }
+}
+
+private extension ShelfItemOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .open:
+            userInterface("Notch shelf", "open an item", ["1"])
+        case .reveal:
+            userInterface("Notch shelf", "reveal an item", ["1"])
+        case .share:
+            userInterface("Notch shelf", "share an item", ["1"])
+        }
+    }
+}
+
+private extension DownloadOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Download sheet", "list the download queue")
+        case .status:
+            userInterface("Download sheet", "summarize download lifecycle states")
+        case .enqueue:
+            userInterface("Download sheet", "start a download", ["https://x/y"])
+        case .cancel:
+            userInterface("Download sheet", "cancel running downloads")
+        case .retry:
+            userInterface("Download sheet", "retry failed items", ["--all"])
+        case .remove:
+            userInterface("Download sheet", "remove one item", ["1", "--yes"])
+        case .clear:
+            userInterface("Download sheet", "clear the history", ["--yes"])
+        case .reveal:
+            userInterface("Download sheet", "reveal a completed result", ["1"])
+        case .open:
+            userInterface("Download sheet", "open a completed result", ["1"])
+        case .tool:
+            userInterface("Download sheet", "update yt-dlp", ["--update"])
+        }
+    }
+}
+
+private extension MusicLibraryOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .favorite:
+            userInterface("Music page", "favourite a track", ["song"])
+        case .unfavorite:
+            userInterface("Music page", "unfavourite a track", ["song"])
+        case .reveal:
+            userInterface("Music page", "reveal a track", ["song"])
+        case .open:
+            userInterface("Music page", "open the library")
+        }
+    }
+}
+
+private extension MusicTransportOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .play:
+            userInterface("Music player", "play")
+        case .pause:
+            userInterface("Music player", "pause")
+        case .stop:
+            userInterface("Music player", "stop")
+        case .toggle:
+            userInterface("Music player", "play or pause with one key")
+        case .next:
+            userInterface("Music player", "skip forward")
+        case .previous:
+            userInterface("Music player", "skip back")
+        case .start:
+            userInterface("Music page", "click a track to play it", ["song"])
+        case .seek:
+            userInterface("Music footer", "drag the seek bar", ["0.5"])
+        case .volume:
+            userInterface("Music player", "change the volume", ["0.5"])
+        case .shuffle:
+            userInterface("Music footer", "toggle shuffle", ["on"])
+        case .repeat:
+            userInterface("Music footer", "toggle repeat", ["on"])
+        case .status:
+            userInterface("Music player", "inspect playback state")
+        }
+    }
+}
+
+private extension MusicCurrentOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .openCurrent:
+            userInterface("Notch music", "open the current player")
+        case .revealCurrent:
+            userInterface("Notch music", "reveal the current track")
+        }
+    }
+}
+
+private extension PresenterRuntimeOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Presenter controls", "inspect presenter state")
+        case .start:
+            userInterface("Presenter controls", "start manual mode")
+        case .stop:
+            userInterface("Presenter controls", "stop manual mode")
+        }
+    }
+}
+
+private extension ConfigurationOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            commandLineOnly(
+                "Settings panes read their known values instead of listing the catalog.")
+        case .get:
+            userInterface("Settings", "read a preference", ["theme"])
+        case .set:
+            userInterface("Settings", "change a preference", ["theme", "dim"])
+        case .unset:
+            userInterface("Settings", "restore a preference default", ["theme"])
+        case .describe:
+            commandLineOnly("Settings panes provide their own labels and do not open CLI metadata.")
+        case .export:
+            commandLineOnly("The app syncs settings through iCloud instead of exporting JSON.")
+        case .import:
+            commandLineOnly("The app restores settings through iCloud instead of importing JSON.")
+        }
+    }
+}
+
+private extension PermissionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Permissions pane", "inspect permission state")
+        case .request:
+            userInterface("Permissions pane", "raise a macOS permission prompt", ["calendar"])
+        case .refresh:
+            userInterface("Permissions pane", "re-read the real permission state")
+        case .settings:
+            userInterface(
+                "Permissions pane", "open the relevant System Settings pane", ["calendar"])
+        }
+    }
+}
+
+private extension ColorPickerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .pick:
+            userInterface("Colour picker", "open the system loupe")
+        }
+    }
+}
+
+private extension ColorSwatchOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .copy:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Color Picker menu", action: "copy a recent colour",
+                    exampleArguments: ["1"]),
+                UserInterfaceActionPlacement(
+                    surface: "Color Picker settings", action: "copy a swatch in one format",
+                    exampleArguments: ["1", "--format", "hex"]),
+            ])
+        }
+    }
+}
+
+private extension QuinjetOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .projects:
+            userInterface("Quinjet page", "list recent review projects")
+        case .worktrees:
+            userInterface("Quinjet project picker", "list project worktrees", ["/tmp/project"])
+        case .open:
+            userInterface(
+                "Quinjet project picker", "prepare a review launch", ["/tmp/project"])
+        case .launch:
+            userInterface("Quinjet project picker", "launch a review session", ["/tmp/project"])
+        }
+    }
+}
+
+private extension QuinjetSessionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Quinjet workspace", "inspect the active review session")
+        case .sessions:
+            userInterface("Quinjet tab bar", "list open native review sessions")
+        case .create:
+            userInterface("Quinjet tab bar", "create a native review session")
+        case .focus:
+            userInterface("Quinjet tab bar", "select and focus a review session", ["1"])
+        case .close:
+            userInterface("Quinjet tab bar", "close a review session", ["1", "--yes"])
+        case .restart:
+            userInterface("Quinjet workspace", "restart the active review", ["1"])
+        case .switchWorktree:
+            userInterface(
+                "Quinjet worktree picker", "switch an open session", ["1", "/tmp/worktree"])
+        }
     }
 }
