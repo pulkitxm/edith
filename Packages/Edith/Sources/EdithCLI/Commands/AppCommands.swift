@@ -21,31 +21,22 @@ struct AppCommand: AsyncParsableCommand {
 }
 
 struct AppAction: Sendable {
-    let name: String
-    let summary: String
-    let needsMainApp: Bool
+    let operation: AppRuntimeOperation
+
+    var name: String { operation.descriptor.cli.last ?? operation.rawValue }
+    var summary: String { operation.descriptor.summary }
+    var needsMainApp: Bool { operation.owner == .mainApp }
 }
 
 enum AppActions {
-    static let all: [AppAction] = [
-        AppAction(
-            name: "clean-keys", summary: "Lock the keyboard so it can be wiped.",
-            needsMainApp: false),
-        AppAction(
-            name: "test-notification", summary: "Send a test notification.",
-            needsMainApp: false),
-        AppAction(name: "open", summary: "Open the Edith panel.", needsMainApp: false),
-        AppAction(name: "quit", summary: "Quit the Edith main window.", needsMainApp: true),
-        AppAction(
-            name: "check-updates", summary: "Ask Sparkle to check for an update now.",
-            needsMainApp: true),
-        AppAction(
-            name: "reveal", summary: "Show a section of the main window.",
-            needsMainApp: true),
-        AppAction(
-            name: "snapshot", summary: "Capture the open windows as PNG files.",
-            needsMainApp: true),
-    ]
+    static let all = [
+        AppRuntimeOperation.cleanKeys, .testNotification, .open, .quit, .checkUpdates,
+        .reveal, .snapshot,
+    ].map(AppAction.init)
+
+    static var runtime: AppRuntimeCenter {
+        AppRuntimeCenter(post: { AppBridge.post($0, userInfo: $1) })
+    }
 
     static func require(_ action: AppAction) throws {
         guard action.needsMainApp else {
@@ -55,9 +46,9 @@ enum AppActions {
         try AppBridge.requireMainApp(action.name)
     }
 
-    static func fire(_ action: AppAction, _ name: Notification.Name, json: Bool) async throws {
+    static func fire(_ action: AppAction, json: Bool) async throws {
         try require(action)
-        AppBridge.post(name)
+        runtime.request(action.operation)
         guard !json else {
             CLIOut.json(.object(["action": .string(action.name), "requested": .bool(true)]))
             return
@@ -124,7 +115,7 @@ struct AppCleanKeysCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             try await AppActions.fire(
-                AppActions.named("clean-keys"), IPC.Name.requestKeyboardClean, json: json)
+                AppActions.named("clean-keys"), json: json)
         }
     }
 }
@@ -140,8 +131,7 @@ struct AppTestNotificationCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             try await AppActions.fire(
-                AppActions.named("test-notification"), IPC.Name.requestTestNotification,
-                json: json)
+                AppActions.named("test-notification"), json: json)
         }
     }
 }
@@ -156,7 +146,7 @@ struct AppOpenCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             try await AppActions.fire(
-                AppActions.named("open"), IPC.Name.openPanel, json: json)
+                AppActions.named("open"), json: json)
         }
     }
 }
@@ -169,10 +159,20 @@ struct AppQuitCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually quit it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            try await AppActions.fire(
-                AppActions.named("quit"), IPC.Name.quitMainApp, json: json)
+            let action = try AppActions.named("quit")
+            let plan = CLIDestructivePlan(
+                action: "quit", targets: [AppBridge.mainBundleID], confirmed: yes, json: json,
+                fields: ["requested": .bool(false)])
+            guard plan.shouldApply() else { return }
+            try AppActions.require(action)
+            AppActions.runtime.request(action.operation)
+            plan.finish(
+                changed: true, plain: "quit requested", fields: ["requested": .bool(true)])
         }
     }
 }
@@ -195,7 +195,7 @@ struct AppCheckUpdatesCommand: AsyncParsableCommand {
             let reply = await AppBridge.awaitReply(
                 IPC.Name.updateCheckFinished, timeout: noWait ? 0.1 : 60
             ) {
-                AppBridge.post(IPC.Name.requestUpdateCheck)
+                AppActions.runtime.request(.checkUpdates)
             }
             guard let reply else {
                 guard noWait else {
@@ -237,7 +237,7 @@ struct AppUpdatesCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
-            let records = Array(UpdateCheckLog.load().prefix(limit))
+            let records = AppActions.runtime.updateHistory(limit: limit)
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -276,38 +276,47 @@ struct AppRelaunchCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually relaunch it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            guard let bundle = CLIEnvironment.installedAppURL() else {
+            let bundle = CLIEnvironment.installedAppURL()
+            let plan = CLIDestructivePlan(
+                action: "relaunch Edith", targets: [bundle?.path ?? "Edith.app"], confirmed: yes,
+                json: json,
+                fields: ["path": .optional(bundle?.path), "relaunched": .bool(false)])
+            guard plan.shouldApply() else { return }
+            guard let bundle else {
                 throw CLIFailure.unavailable(
                     "Edith is not installed where ed can find it",
                     hint: "it looks in /Applications and alongside this binary")
             }
-            let progress = CLIProgress.forCommand(json: json)
-            AppBridge.post(IPC.Name.quitMainApp)
-            progress.begin("waiting for Edith to quit")
-            let stopped = await EdithProcesses.quitAll(within: 8)
-            progress.end()
-            guard stopped else {
-                throw CLIFailure(
-                    "Edith did not quit, so it was not relaunched",
-                    hint: "quit it from the menu bar, then run `ed app relaunch` again")
-            }
-            progress.begin("starting Edith")
-            do {
-                try await EdithProcesses.launch(bundle)
-            } catch {
+            try await AppActions.runtime.perform(.relaunch) {
+                let progress = CLIProgress.forCommand(json: json)
+                AppActions.runtime.request(.quit)
+                progress.begin("waiting for Edith to quit")
+                let stopped = await EdithProcesses.quitAll(within: 8)
                 progress.end()
-                throw CLIFailure(
-                    "could not start Edith: \(error.localizedDescription)",
-                    hint: "open \(bundle.path) from Finder")
+                guard stopped else {
+                    throw CLIFailure(
+                        "Edith did not quit, so it was not relaunched",
+                        hint: "quit it from the menu bar, then run `ed app relaunch --yes` again")
+                }
+                progress.begin("starting Edith")
+                do {
+                    try await EdithProcesses.launch(bundle)
+                } catch {
+                    progress.end()
+                    throw CLIFailure(
+                        "could not start Edith: \(error.localizedDescription)",
+                        hint: "open \(bundle.path) from Finder")
+                }
+                progress.end()
+                plan.finish(
+                    changed: true, plain: "relaunched Edith",
+                    fields: ["relaunched": .bool(true), "path": .string(bundle.path)])
             }
-            progress.end()
-            guard !json else {
-                CLIOut.json(.object(["relaunched": .bool(true), "path": .string(bundle.path)]))
-                return
-            }
-            CLIOut.out("relaunched Edith")
         }
     }
 }
@@ -319,15 +328,21 @@ struct AppClearUpdateHistoryCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually clear it. Without this nothing is touched.")
+    var yes = false
+
     func run() async throws {
         try await execute {
-            let before = UpdateCheckLog.load().count
-            UpdateCheckLog.clear()
-            guard !json else {
-                CLIOut.json(.object(["removed": .int(before)]))
-                return
-            }
-            CLIOut.out("cleared \(before) check(s)")
+            let url = CLIEnvironment.updateHistoryURL()
+            let before = AppActions.runtime.updateHistory(url: url).count
+            let plan = CLIDestructivePlan(
+                action: "clear update history", targets: [url.path], confirmed: yes, json: json,
+                fields: ["removed": .int(before)])
+            guard plan.shouldApply() else { return }
+            let removed = AppActions.runtime.clearUpdateHistory(url: url)
+            plan.finish(
+                changed: removed > 0, plain: "cleared \(removed) check(s)",
+                fields: ["removed": .int(removed)])
         }
     }
 }
@@ -370,7 +385,7 @@ struct AppRevealCommand: AsyncParsableCommand {
                 payload = [:]
             }
             let reply = await AppBridge.awaitReply(IPC.Name.revealResult, timeout: 10) {
-                AppBridge.post(IPC.Name.requestReveal, userInfo: payload)
+                AppActions.runtime.request(.reveal, userInfo: payload)
             }
             guard let reply else {
                 throw AppBridge.silence("the reveal")
@@ -420,7 +435,7 @@ struct AppSnapshotCommand: AsyncParsableCommand {
                 payload = [:]
             }
             let reply = await AppBridge.awaitReply(IPC.Name.windowSnapshotResult, timeout: 15) {
-                AppBridge.post(IPC.Name.requestWindowSnapshot, userInfo: payload)
+                AppActions.runtime.request(.snapshot, userInfo: payload)
             }
             guard let reply else {
                 throw AppBridge.silence("the snapshot")

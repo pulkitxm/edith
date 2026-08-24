@@ -39,7 +39,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         showInitialWindow()
         quitObserver = IPC.observe(IPC.Name.quitMainApp) {
-            NSApp.terminate(nil)
+            AppRuntimeCenter().perform(.quit) { NSApp.terminate(nil) }
         }
         CLIWindowBridge.install()
         settingsObserver = NotificationCenter.default.addObserver(
