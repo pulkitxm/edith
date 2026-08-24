@@ -15,6 +15,10 @@ relaunching work with Edith closed.
 Reach for this group when you want the app to do something now. Reach for
 `ed config` when you want to change what it does from now on.
 
+`quit`, `relaunch`, and `clear-updates` are safe previews by default. They print
+what they would affect and change nothing until `--yes` is present. Their JSON
+output always includes `action`, `targets`, `applied`, and `changed`.
+
 ## At a glance
 
 | Command | What it does |
@@ -29,11 +33,11 @@ Reach for this group when you want the app to do something now. Reach for
 | `ed app clean-keys` | Ask the menu bar app to lock the keyboard so it can be wiped without typing. |
 | `ed app test-notification` | Ask the menu bar app to send the same test notification the settings pane sends. |
 | `ed app open` | Ask the menu bar app to open Edith's main window. |
-| `ed app quit` | Quit the main window, leaving the menu bar running. |
+| `ed app quit` | Preview quitting the main window, or apply it with `--yes`. |
 | `ed app check-updates` | Ask Sparkle to check for an update now, and report what it found. |
 | `ed app updates` | Print the update checks Edith has already made, newest first. |
-| `ed app relaunch` | Quit Edith and start it again, which is what a new permission needs. |
-| `ed app clear-updates` | Delete the record of past update checks. |
+| `ed app relaunch` | Preview restarting Edith, or apply it with `--yes`. |
+| `ed app clear-updates` | Preview deleting update history, or apply it with `--yes`. |
 | `ed app reveal` | Show a section of the main window, and optionally a tab inside it. |
 | `ed app snapshot` | Capture the app's open windows as PNG files, no screen recording involved. |
 
@@ -65,7 +69,7 @@ Reach for this group when you want the app to do something now. Reach for
 | 1 | `relaunch` could not finish the work: Edith was still running after the force quit, or the launch itself threw. Also `snapshot` when no visible window rendered. |
 | 2 | The command line was wrong: an unknown flag, an unknown subcommand, or `--limit` at zero or below on `ed app updates`. |
 | 3 | `reveal` named a section or tab the window does not have, or `open-link` named no listed link. |
-| 4 | A needed process is not running, a reply did not arrive, `relaunch` found no app, or macOS refused an open action. |
+| 4 | A required process is not running, a reply did not arrive, `relaunch --yes` found no app, or macOS refused an open action. |
 
 3 comes only from `reveal` and `open-link`, and 1 only from `relaunch` and
 `snapshot`. The action names are fixed rather than typed, so there is no name
@@ -83,12 +87,13 @@ itself.
 
 "Running" means a process with that bundle id is registered with the window
 server, which is what `NSRunningApplication` reports. An app in the middle of
-launching reads as not running. `ed app relaunch` waits for the main app to
+launching reads as not running. `ed app relaunch --yes` waits for the main app to
 register before it returns, but the helper is started by the main app after
-that, so `ed app relaunch && ed app clean-keys` still races the helper's launch.
+that, so `ed app relaunch --yes && ed app clean-keys` still races the helper's
+launch.
 
-Four of the seven actions are fire and forget: `ed` posts and returns without
-waiting for confirmation, so exit 0 means the notification was sent.
+Four of the seven actions are fire and forget when applied: `ed` posts and
+returns without waiting for confirmation, so exit 0 means the notification was sent.
 `check-updates`, `reveal` and `snapshot` wait for a reply, and only they can
 fail on silence. `ed app actions` is the way to check first rather than reading
 exit codes after. `relaunch` is not one of the seven and is neither fire and
@@ -123,15 +128,15 @@ history list is held in memory and is not told the file went, so it keeps
 showing the old rows until the next check is recorded, at which point it
 rewrites itself from the now-empty file and shows that one check.
 
-`ed app quit` leaves the menu bar helper alive. `ed app relaunch` is the one verb
-here that takes the helper down, and it does that by terminating the process
-itself rather than asking Edith to; `RunningApps` still protects both Edith
-bundle ids from every quit path it drives, `ed apps quit --all` included.
+`ed app quit --yes` leaves the menu bar helper alive. `ed app relaunch --yes` is
+the one verb here that takes the helper down, and it does that by terminating the
+process itself rather than asking Edith to; `RunningApps` still protects both
+Edith bundle ids from every quit path it drives, `ed apps quit --all` included.
 
 ## Where to go next
 
 - [`ed permissions`](../permissions/README.md) for the grants that make `ed app
-  relaunch` worth running.
+  relaunch --yes` worth running.
 - [`ed extensions`](../extensions/README.md) for the `system` and `usage` switches that
   decide whether `clean-keys` and `test-notification` do anything.
 - [`ed apps`](../apps/README.md) for quitting other applications, which is a different

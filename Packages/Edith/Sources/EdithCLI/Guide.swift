@@ -409,7 +409,11 @@ public enum Guide {
         ed app open                     open Edith's panel
         ed app check-updates            ask Sparkle to look now
         ed app updates                  the checks already made
-        ed app quit                     quit the main window, leave the menu bar
+        ed app quit                     preview quitting the main window
+        ed app quit --yes               apply it, leaving the menu bar running
+        ed app relaunch                 preview restarting both processes
+        ed app relaunch --yes           apply the restart after a permission grant
+        ed app clear-updates            preview clearing the update history
         ed app reveal companion --tab chat  show a section, and a tab inside it
         ed app snapshot                 the open windows as PNGs, no screen recording
         ```

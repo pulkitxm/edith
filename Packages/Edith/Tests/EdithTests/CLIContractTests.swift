@@ -59,9 +59,9 @@ enum JSONContract {
         JSONCase("ed app quit", ["app", "quit", "--json"]),
         JSONCase("ed app check-updates", ["app", "check-updates", "--json"]),
         JSONCase("ed app updates", ["app", "updates", "--json"]),
-        JSONCase("ed app relaunch", ["app", "relaunch", "--json"], mutatesTheMachine: true),
+        JSONCase("ed app relaunch", ["app", "relaunch", "--json"]),
         JSONCase(
-            "ed app clear-updates", ["app", "clear-updates", "--json"], mutatesTheMachine: true),
+            "ed app clear-updates", ["app", "clear-updates", "--json"]),
         JSONCase("ed app reveal", ["app", "reveal", "companion", "--json"]),
         JSONCase("ed app snapshot", ["app", "snapshot", "--json"]),
         JSONCase("ed clipboard ls", ["clipboard", "ls", "--json"]),

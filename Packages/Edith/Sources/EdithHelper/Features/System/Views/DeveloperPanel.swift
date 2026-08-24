@@ -32,7 +32,7 @@ struct DeveloperPanel: View {
                     .disabled(refreshing || services.usage == nil)
                     Button("Data folder") { _ = try? inspection.openPath(.data) }
                     Button("Refresh log") { _ = try? inspection.openPath(.refreshLog) }
-                    Button("Relaunch") { relaunch() }
+                    Button("Relaunch") { AppRuntimeCenter().relaunchCurrentApplication() }
                 }
                 .buttonStyle(.link)
                 .font(.system(size: 10))
@@ -71,9 +71,4 @@ struct DeveloperPanel: View {
         saveRepoPath()
     }
 
-    private func relaunch() {
-        NSWorkspace.shared.openApplication(
-            at: Bundle.main.bundleURL, configuration: NSWorkspace.OpenConfiguration())
-        NSApp.terminate(nil)
-    }
 }

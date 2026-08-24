@@ -131,7 +131,6 @@ public struct ExtensionLifecycleReport: Codable, Equatable, Sendable {
 
     public var verified: Bool { state.phase == .ready }
 }
-
 public struct ExtensionLifecycleInstruction: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -196,7 +195,7 @@ public enum ExtensionLifecycleCatalog {
             prerequisites: [
                 instruction(
                     "provider", "Sign in to an agent CLI",
-                    "Install and authenticate the agent CLIs you use.",
+                    "Install and authenticate Claude Code, Codex, or both.",
                     "ed tools ls --json")
             ],
             examples: ["ed extensions enable usage", "ed usage limits --json"],

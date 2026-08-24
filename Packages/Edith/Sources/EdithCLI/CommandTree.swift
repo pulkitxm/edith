@@ -153,17 +153,24 @@ public enum CommandTree {
                     CommandNode(
                         "test-notification", "Send a test notification.", options: common),
                     CommandNode("open", "Open Edith's panel.", options: common),
-                    CommandNode("quit", "Quit the Edith main window.", options: common),
+                    CommandNode(
+                        "quit", "Quit the Edith main window.",
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "check-updates", "Check for an update now.",
                         options: ["--json", "--help", "--no-wait"]),
                     CommandNode(
                         "updates", "The update checks already made.",
                         options: ["--json", "--help", "--limit"]),
-                    CommandNode("relaunch", "Quit Edith and start it again.", options: common),
+                    CommandNode(
+                        "relaunch", "Quit Edith and start it again.",
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear-updates", "Forget the record of past update checks.",
-                        options: common),
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "reveal", "Show a section of the main window.",
                         options: ["--json", "--help", "--tab"]),

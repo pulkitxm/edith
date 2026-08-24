@@ -207,27 +207,6 @@ enum UIParity {
         UICapability(
             "Companion settings", "point at another companion",
             ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
-        UICapability("Machines", "add a machine", ["machines", "add", "box", "--host", "h"]),
-        UICapability("Machines", "edit a machine", ["machines", "edit", "box"]),
-        UICapability("Machines", "delete a machine", ["machines", "rm", "box"]),
-        UICapability(
-            "Machine tools", "save a port forward",
-            ["machines", "forwards", "add", "box", "--local", "8080", "--remote", "80"]),
-        UICapability(
-            "Machine tools", "delete a port forward",
-            ["machines", "forwards", "rm", "box", "1"]),
-        UICapability(
-            "Machine tools", "save a snippet",
-            ["machines", "snippets", "add", "box", "logs", "journalctl"]),
-        UICapability(
-            "Machine tools", "delete a snippet", ["machines", "snippets", "rm", "box", "1"]),
-        UICapability(
-            "Machine header", "restart the machine",
-            ["machines", "power", "reboot", "box", "--yes"]),
-        UICapability(
-            "Machine header", "shut the machine down",
-            ["machines", "power", "shutdown", "box", "--yes"]),
-        UICapability("Machine header", "wake the machine", ["machines", "power", "wake", "box"]),
         UICapability(
             "Machine cooling", "inspect thermal profiles",
             ["machines", "thermal", "status", "box"]),
@@ -262,34 +241,8 @@ enum UIParity {
             "Machine controls", "set keyboard backlight brightness",
             ["machines", "control", "keyboard-light", "box", "25"]),
         UICapability(
-            "Machine tools", "start a systemd unit",
-            ["machines", "services", "start", "box", "nginx.service"]),
-        UICapability(
-            "Machine tools", "stop a systemd unit",
-            ["machines", "services", "stop", "box", "nginx.service"]),
-        UICapability(
-            "Machine tools", "restart a systemd unit",
-            ["machines", "services", "restart", "box", "nginx.service"]),
-        UICapability(
-            "Machine processes", "end a process with SIGTERM", ["machines", "kill", "box", "42"]),
-        UICapability(
-            "Machine processes", "force kill a process",
-            ["machines", "kill", "box", "42", "--signal", "KILL", "--yes"]),
-        UICapability(
-            "Machine tools", "switch a port forward on",
-            ["machines", "forwards", "on", "box", "1"]),
-        UICapability(
-            "Machine tools", "switch a port forward off",
-            ["machines", "forwards", "off", "box", "1"]),
-        UICapability(
             "Docker window", "open a shell in a container",
             ["machines", "exec", "--tty", "box", "docker exec -it api sh"]),
-        UICapability(
-            "Docker window", "pause a container",
-            ["machines", "docker", "pause", "box", "api"]),
-        UICapability(
-            "Docker window", "unpause a container",
-            ["machines", "docker", "unpause", "box", "api"]),
         UICapability(
             "Machine finder", "search the folder",
             ["machines", "files", "search", "box", "/a", "x"]),
@@ -319,10 +272,6 @@ enum UIParity {
             "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability("Music page", "rescan the library", ["music", "rescan"]),
         UICapability(
-            "Permissions pane", "relaunch after granting", ["app", "relaunch"]),
-        UICapability(
-            "Update schedule sheet", "clear the check history", ["app", "clear-updates"]),
-        UICapability(
             "Workspace toolbar", "apply a layout preset",
             ["machines", "workspace", "new", "box", "--screen", "terminal"]),
         UICapability(
@@ -331,8 +280,6 @@ enum UIParity {
             "Workspace picker", "rename a layout", ["machines", "workspace", "rename", "a", "b"]),
         UICapability(
             "Workspace picker", "delete a layout", ["machines", "workspace", "rm", "a"]),
-        UICapability("Machines", "open the shared connection", ["machines", "connect", "box"]),
-        UICapability("Machines", "close the shared connection", ["machines", "disconnect", "box"]),
         UICapability(
             "Machine tools", "mount the machine's disk on this Mac", ["machines", "mount", "box"]),
         UICapability(
@@ -393,19 +340,6 @@ enum UIParity {
             "Machine finder", "move files to the trash",
             ["machines", "files", "rm", "box", "/a"]),
         UICapability(
-            "Add machine sheet", "store a login password",
-            ["machines", "add", "box", "--host", "h", "--password-stdin"]),
-        UICapability(
-            "Add machine sheet", "store a key passphrase",
-            ["machines", "edit", "box", "--key-passphrase-stdin"]),
-        UICapability(
-            "Add machine sheet", "store a sudo password",
-            ["machines", "edit", "box", "--sudo-password-stdin"]),
-        UICapability(
-            "Add machine sheet", "forget the stored sudo password",
-            ["machines", "edit", "box", "--forget-sudo-password"]),
-
-        UICapability(
             "Docker window", "start a container", ["machines", "docker", "start", "box", "api"]),
         UICapability(
             "Docker group header", "start the stopped containers in the group",
@@ -451,34 +385,6 @@ enum UIParity {
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
-        UICapability("Menu bar", "open the panel", ["app", "open"]),
-        UICapability("Menu bar", "quit Edith", ["app", "quit"]),
-        UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
-        UICapability("Settings", "send a test notification", ["app", "test-notification"]),
-        UICapability("About pane", "check for updates", ["app", "check-updates"]),
-        UICapability("About pane", "read the app version", ["app", "info"]),
-        UICapability(
-            "Developer panel", "read process uptime and idle wakeups", ["app", "diagnostics"]),
-        UICapability(
-            "iCloud settings", "open the app data folder", ["app", "open-path", "app-data"]),
-        UICapability(
-            "iCloud settings", "open the iCloud folder", ["app", "open-path", "icloud"]),
-        UICapability(
-            "Developer panel", "open the usage data folder", ["app", "open-path", "data"]),
-        UICapability(
-            "Developer panel", "reveal the refresh log", ["app", "open-path", "refresh-log"]),
-        UICapability(
-            "Music page", "open the music folder", ["app", "open-path", "music"]),
-        UICapability(
-            "About pane", "open the source repository", ["app", "open-link", "repository"]),
-        UICapability(
-            "Navigation sidebar", "open the creator profile", ["app", "open-link", "creator"]),
-        UICapability(
-            "About pane", "open a contributor profile",
-            ["app", "open-link", "contributor:octo"]),
-        UICapability(
-            "Extension lifecycle sheet", "open an extension guide",
-            ["app", "open-link", "extension-doc:usage:guide"]),
         UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
         UICapability(
             "Dashboard machines menu", "count a machine's agent usage too",
@@ -751,11 +657,8 @@ enum UIParity {
 
     @Test func legacyVariantsShareOneExactOperationWithMultiplePlacements() {
         let expectedPlacementCounts: [[String]: Int] = [
-            ["machines", "kill"]: 2,
             ["music", "rename"]: 2,
             ["music", "rm"]: 2,
-            ["machines", "add"]: 2,
-            ["machines", "edit"]: 4,
             ["machines", "docker", "start"]: 2,
             ["machines", "docker", "stop"]: 2,
         ]

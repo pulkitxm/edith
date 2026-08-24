@@ -38,14 +38,12 @@ struct MachinesPage: View {
         .background(DashSkin.paper(dark))
         .sheet(isPresented: $addSheetPresented) {
             AddMachineSheet { machine, secrets in
-                model.add(machine)
-                store(secrets, for: machine)
+                model.add(machine, secrets: changes(secrets))
             }
         }
         .sheet(item: $editingMachine) { machine in
             AddMachineSheet(editing: machine) { updated, secrets in
-                model.update(updated)
-                store(secrets, for: updated)
+                model.update(updated, secrets: changes(secrets))
             }
         }
         .confirmationDialog(
@@ -190,17 +188,10 @@ struct MachinesPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func store(_ secrets: AddMachineSheet.Secrets, for machine: Machine) {
-        if let login = secrets.login {
-            let kind: MachineSecretKind = machine.auth == .password ? .password : .passphrase
-            MachineSecrets.set(login, machineID: machine.id, kind: kind)
-        }
-        if let sudo = secrets.sudo {
-            MachineSecrets.set(sudo, machineID: machine.id, kind: .sudoPassword)
-        }
-        if secrets.forgetSudo {
-            MachineSecrets.delete(machineID: machine.id, kind: .sudoPassword)
-        }
+    private func changes(_ secrets: AddMachineSheet.Secrets) -> MachineSecretChanges {
+        MachineSecretChanges(
+            login: secrets.login, sudoPassword: secrets.sudo,
+            forgetSudoPassword: secrets.forgetSudo)
     }
 }
 
@@ -248,9 +239,9 @@ private struct MachineChip: View {
             if !isLocal {
                 Divider()
                 Button("Edit…", action: onEdit)
-                Button(session.state == .disconnected ? "Connect" : "Disconnect") {
-                    session.state == .disconnected ? session.start() : session.stop()
-                }
+                Button(
+                    session.state == .disconnected ? "Connect" : "Disconnect",
+                    action: toggleConnection)
                 Divider()
                 Button("Remove", role: .destructive, action: onRemove)
                 if machine.sshClipboardEnabled {
@@ -268,6 +259,20 @@ private struct MachineChip: View {
         case .configuring: return DashSkin.gold
         case .failed: return DashSkin.danger
         case .disabled: return DashSkin.inkFaint(dark)
+        }
+    }
+
+    private func toggleConnection() {
+        let operation: MachineConnectionOperation =
+            session.state == .disconnected ? .connect : .disconnect
+        Task {
+            _ = await MachineConnectionOperationExecution.perform(
+                operation,
+                connect: {
+                    session.start()
+                    return nil
+                },
+                disconnect: { session.stop() })
         }
     }
 }
