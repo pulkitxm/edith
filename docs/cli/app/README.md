@@ -69,7 +69,7 @@ output always includes `action`, `targets`, `applied`, and `changed`.
 | 1 | `relaunch` could not finish the work: Edith was still running after the force quit, or the launch itself threw. Also `snapshot` when no visible window rendered. |
 | 2 | The command line was wrong: an unknown flag, an unknown subcommand, or `--limit` at zero or below on `ed app updates`. |
 | 3 | `reveal` named a section or tab the window does not have, or `open-link` named no listed link. |
-| 4 | A required process is not running, a reply did not arrive, `relaunch --yes` found no app, or macOS refused an open action. |
+| 4 | A required process is not running, a reply did not arrive, `relaunch --yes` found no app, or macOS refused an exact path or link open action. |
 
 3 comes only from `reveal` and `open-link`, and 1 only from `relaunch` and
 `snapshot`. The action names are fixed rather than typed, so there is no name
