@@ -67,6 +67,25 @@ import Testing
         }
     }
 
+    @Test func clipboardCopyCanDeferTheIndexWriteForResponsiveUIActivation() async throws {
+        try await CLIProbe.inWorld { world in
+            try CLIClipboardTests.seed(world, count: 1)
+            let entry = try #require(ClipboardRepository.loadEntries().first)
+            let before = try Data(contentsOf: ClipboardPaths.indexFile)
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+            let copiedAt = entry.lastCopiedAt.addingTimeInterval(60)
+
+            let outcome = try ClipboardOperationExecution.perform(
+                .copy, entry: entry, pasteboard: pasteboard,
+                recordCopy: {
+                    ClipboardActions.markingCopied(
+                        id: $0, in: [entry], at: copiedAt)
+                })
+            #expect(outcome.entries.first?.lastCopiedAt == copiedAt)
+            #expect(try Data(contentsOf: ClipboardPaths.indexFile) == before)
+        }
+    }
+
     @Test func focusExecutorNormalizesNamesAndCompletesTheSameSession() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

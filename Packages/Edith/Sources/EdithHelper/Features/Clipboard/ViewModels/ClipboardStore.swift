@@ -265,13 +265,19 @@ final class ClipboardStore: FeatureModule {
         let plain =
             forcePlainText
             || SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.pastePlainText)
+        let copiedAt = Date()
         guard
             let outcome = try? ClipboardOperationExecution.perform(
-                .copy, entry: entry, asPlainText: plain),
+                .copy, entry: entry, asPlainText: plain,
+                recordCopy: {
+                    ClipboardActions.markingCopied(id: $0, in: entries, at: copiedAt)
+                }),
             outcome.changed > 0
         else { return }
         lastChangeCount = NSPasteboard.general.changeCount
         adopt(outcome.entries)
+        let id = entry.id
+        Self.diskQueue.async { _ = try? ClipboardActions.markCopied(id: id, at: copiedAt) }
         SettingsBackup.shared.scheduleClipboardBackup()
         postChanged()
 

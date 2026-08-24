@@ -58,18 +58,20 @@ public enum ClipboardOperationExecution {
     @discardableResult
     public static func perform(
         _ operation: ClipboardOperation, entry: ClipboardEntry? = nil,
-        asPlainText: Bool = false, pasteboard: NSPasteboard = .general
+        asPlainText: Bool = false, pasteboard: NSPasteboard = .general,
+        recordCopy: (String) throws -> ClipboardActions.Outcome = {
+            try ClipboardActions.markCopied(id: $0)
+        }
     ) throws -> ClipboardActions.Outcome {
         guard let entry else { throw ClipboardOperationError.entryRequired }
         switch operation {
         case .stats: throw ClipboardOperationError.entryRequired
         case .copy:
-            do {
-                return try ClipboardActions.copy(
+            guard
+                ClipboardRepository.copyToPasteboard(
                     entry, asPlainText: asPlainText, pasteboard: pasteboard)
-            } catch ClipboardActionError.blobMissing {
-                throw ClipboardOperationError.blobMissing
-            }
+            else { throw ClipboardOperationError.blobMissing }
+            return try recordCopy(entry.id)
         case .pin: return try ClipboardActions.setPinned(true, ids: [entry.id])
         case .unpin: return try ClipboardActions.setPinned(false, ids: [entry.id])
         case .remove: return try ClipboardActions.delete(ids: [entry.id])
