@@ -87,6 +87,23 @@ test("awaited detached work keeps blocking input outside the actor", () => {
   expect(rules).not.toContain("unowned-detached-task");
 });
 
+test("detached operation arguments do not absorb a later actor scope", () => {
+  const source = `
+    @MainActor
+    final class Model {
+      func calculate(operation: @escaping @Sendable () -> Int) async {
+        value = await Task.detached(priority: .utility, operation: operation).value
+        let data = try? Data(contentsOf: URL(fileURLWithPath: "/tmp/data"))
+      }
+    }
+  `;
+
+  const rules = findPerformanceViolations(source).map(({ rule }) => rule);
+
+  expect(rules).not.toContain("unowned-detached-task");
+  expect(rules).toContain("main-actor-blocking-io");
+});
+
 test("fire-and-forget detached work needs ownership and cancellation", () => {
   const unsafe = `
     func start() {
@@ -135,6 +152,27 @@ test("task-group fan-out requires a fixed set or rolling bound", () => {
   expect(
     findPerformanceViolations(bounded).map(({ rule }) => rule),
   ).not.toContain("unbounded-task-group");
+});
+
+test("a neighboring bounded group cannot excuse unbounded fan-out", () => {
+  const source = `
+    await withTaskGroup(of: Item.self) { group in
+      let initialCount = min(remoteLimit, first.count)
+      for item in first.prefix(initialCount) {
+        group.addTask { await load(item) }
+      }
+      while let result = await group.next() { consume(result) }
+    }
+    await withTaskGroup(of: Item.self) { group in
+      for item in second {
+        group.addTask { await load(item) }
+      }
+    }
+  `;
+
+  expect(findPerformanceViolations(source).map(({ rule }) => rule)).toContain(
+    "unbounded-task-group",
+  );
 });
 
 test("replacement tasks guard state publication after suspension", () => {
@@ -206,6 +244,20 @@ test("source-like text in strings does not trigger structural rules", () => {
   `;
 
   expect(findPerformanceViolations(source)).toEqual([]);
+});
+
+test("Unicode before a violation preserves its source location", () => {
+  const source = `
+    let glyph = "🎛️"
+    let process = Process()
+  `;
+
+  const process = findPerformanceViolations(source).find(
+    ({ rule }) => rule === "raw-process-launch",
+  );
+
+  expect(process?.line).toBe(3);
+  expect(process?.source).toBe("let process = Process()");
 });
 
 test("the change ratchet permits existing debt and rejects an added occurrence", () => {

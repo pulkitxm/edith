@@ -25,7 +25,7 @@ const normalizeLine = (source, index) => {
 const lineNumber = (source, index) => source.slice(0, index).split("\n").length;
 
 const maskSwift = (source) => {
-  const chars = [...source];
+  const chars = source.split("");
   let index = 0;
   let blockDepth = 0;
   let quote = null;
@@ -106,6 +106,16 @@ const closingBrace = (source, opening) => {
   return source.length - 1;
 };
 
+const closingDelimiter = (source, opening, left, right) => {
+  let depth = 0;
+  for (let index = opening; index < source.length; index += 1) {
+    if (source[index] === left) depth += 1;
+    if (source[index] === right) depth -= 1;
+    if (depth === 0) return index;
+  }
+  return source.length - 1;
+};
+
 const declarationRanges = (masked, prefix) => {
   const ranges = [];
   const declaration = new RegExp(
@@ -145,6 +155,28 @@ const closureRange = (masked, index, limit = 800) => {
   return [opening, closingBrace(masked, opening)];
 };
 
+const detachedExpression = (masked, index) => {
+  let cursor = index + "Task.detached".length;
+  while (/\s/.test(masked[cursor])) cursor += 1;
+  if (masked[cursor] === "{") {
+    const end = closingBrace(masked, cursor);
+    return { closure: [cursor, end], end };
+  }
+  if (masked[cursor] !== "(") return { closure: null, end: cursor };
+  const closing = closingDelimiter(masked, cursor, "(", ")");
+  const opening = masked.indexOf("{", cursor);
+  const inlineClosure = opening >= 0 && opening < closing;
+  let after = closing + 1;
+  while (/\s/.test(masked[after])) after += 1;
+  if (inlineClosure)
+    return { closure: [opening, closingBrace(masked, opening)], end: closing };
+  if (masked[after] === "{") {
+    const end = closingBrace(masked, after);
+    return { closure: [after, end], end };
+  }
+  return { closure: null, end: closing };
+};
+
 const addViolation = (violations, rule, path, source, index) => {
   violations.push({
     rule,
@@ -163,21 +195,15 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   const detachedRanges = [];
 
   for (const match of masked.matchAll(/\bTask\.detached\b/g)) {
-    const range = closureRange(masked, match.index);
-    if (range) detachedRanges.push(range);
-    const context = masked.slice(
-      Math.max(0, match.index - 100),
-      match.index + 900,
-    );
+    const expression = detachedExpression(masked, match.index);
+    if (expression.closure) detachedRanges.push(expression.closure);
     const assignment = masked
-      .slice(
-        Math.max(0, masked.lastIndexOf("\n", match.index - 1) + 1),
-        match.index,
-      )
+      .slice(Math.max(0, match.index - 160), match.index)
       .match(/(?:let|var)?\s*([A-Za-z_]\w*)\s*=\s*(?:try\s+)?(?:await\s+)?$/);
-    const awaited = /(?:try\s+)?await\s+Task\.detached[\s\S]*?\.value\b/.test(
-      context,
-    );
+    const awaited =
+      /(?:try\s+)?await\s*$/.test(
+        masked.slice(Math.max(0, match.index - 40), match.index),
+      ) && /^\s*\.value\b/.test(masked.slice(expression.end + 1));
     const returned = /return\s+(?:try\s+)?(?:await\s+)?$/.test(
       masked.slice(Math.max(0, match.index - 40), match.index),
     );
@@ -267,6 +293,11 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   }
 
   const loopRanges = [];
+  const taskGroupRanges = [];
+  for (const match of masked.matchAll(/\bwith(?:Throwing)?TaskGroup\b/g)) {
+    const range = closureRange(masked, match.index);
+    if (range) taskGroupRanges.push(range);
+  }
   for (const match of masked.matchAll(/\bfor\b[^{}]{0,500}\{/g)) {
     const opening = masked.indexOf("{", match.index);
     loopRanges.push([opening, closingBrace(masked, opening), match.index]);
@@ -274,10 +305,13 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   for (const [opening, end, start] of loopRanges) {
     const body = masked.slice(opening, end);
     if (!/\bgroup\.addTask\s*[({]/.test(body)) continue;
-    const context = masked.slice(
-      Math.max(0, start - 1_500),
-      Math.min(masked.length, end + 1_500),
-    );
+    const taskGroup = enclosingRange(taskGroupRanges, start);
+    const context = taskGroup
+      ? masked.slice(taskGroup[0], taskGroup[1])
+      : masked.slice(
+          Math.max(0, start - 1_500),
+          Math.min(masked.length, end + 1_500),
+        );
     const fixedRange =
       /\bfor\b[^\n{]*\b(?:allCases|supportedShells|0\s*\.\.<\s*\d+)/.test(
         masked.slice(start, opening),
@@ -303,13 +337,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const [opening, end] = range;
     const body = masked.slice(opening + 1, end);
     if (!/\bawait\b/.test(body)) continue;
-    const ownerRange = enclosingRange(
-      declarationRanges(
-        masked,
-        "(?:public|package|internal|private|fileprivate|open|static|mutating|nonmutating)*",
-      ),
-      match.index,
-    );
+    const ownerRange = enclosingRange(functionRanges, match.index);
     const owner = ownerRange
       ? masked.slice(ownerRange[0], match.index)
       : masked.slice(Math.max(0, match.index - 2_000), match.index);
