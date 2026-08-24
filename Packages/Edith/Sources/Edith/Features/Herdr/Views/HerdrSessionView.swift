@@ -18,7 +18,15 @@ struct HerdrSessionView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            sessionPane
+            ZStack {
+                sessionPane
+                    .opacity(tab.view == .agent ? 1 : 0)
+                    .allowsHitTesting(tab.view == .agent)
+                diffPane
+                    .opacity(tab.view == .diff ? 1 : 0)
+                    .allowsHitTesting(tab.view == .diff)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             if store.detailOpen {
                 Divider().opacity(0.35)
                 sidebar
@@ -26,6 +34,11 @@ struct HerdrSessionView: View {
             }
         }
         .task(id: tab.id) { await startIfNeeded() }
+        .task(id: diffRequest) { await prepareDiffIfNeeded() }
+    }
+
+    private var diffRequest: String {
+        "\(tab.id)|\(tab.view.rawValue)|\(dark)"
     }
 
     private var sessionPane: some View {
@@ -45,6 +58,86 @@ struct HerdrSessionView: View {
         .presenterCover(hideAgents, dark: dark)
     }
 
+    private var diffPane: some View {
+        let palette = TerminalPalette.quinjet(
+            theme: diffConfiguration.theme, appearance: diffConfiguration.appearance)
+        return ZStack {
+            Color(nsColor: palette.background)
+            TerminalPane(holder: tab.quinjet.holder, palette: palette)
+                .id(tab.quinjet.holder.generation)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(tab.quinjet.live ? 1 : 0)
+            if let error = tab.quinjet.errorMessage {
+                diffPlaceholder(
+                    title: "Quinjet could not open this diff", detail: error, palette: palette)
+            } else if tab.quinjet.preparing {
+                ProgressView()
+            } else if !launchEnabled {
+                diffPlaceholder(
+                    title: "Terminals are paused",
+                    detail: "Enable terminal launching to load the Quinjet diff.",
+                    palette: palette)
+            } else if let message = tab.quinjet.holder.exitMessage {
+                diffPlaceholder(title: message, detail: nil, palette: palette)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .presenterCover(hideAgents, dark: dark)
+    }
+
+    private func diffPlaceholder(title: String, detail: String?, palette: TerminalPalette)
+        -> some View
+    {
+        VStack(spacing: UIScale.pt(10)) {
+            Text(title)
+                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .foregroundStyle(Color(nsColor: palette.foreground))
+                .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            Button("Retry") {
+                Task { await prepareDiff(restarting: true) }
+            }
+            .buttonStyle(QuinjetToolbarButtonStyle())
+            .pointerCursor()
+        }
+        .padding(UIScale.pt(28))
+        .frame(maxWidth: UIScale.pt(420))
+    }
+
+    private var diffConfiguration: QuinjetLaunchConfiguration {
+        store.quinjetConfiguration(appearance: dark ? .dark : .light)
+    }
+
+    private func prepareDiffIfNeeded() async {
+        guard tab.view == .diff else { return }
+        await prepareDiff(restarting: false)
+    }
+
+    private func prepareDiff(restarting: Bool) async {
+        let configuration = diffConfiguration
+        let remote: QuinjetRemote?
+        do {
+            remote = try await store.quinjetRemote(for: tab)
+        } catch {
+            tab.quinjet.errorMessage = error.localizedDescription
+            return
+        }
+        if restarting {
+            await tab.quinjet.restart(
+                directory: agent.cwd, remote: remote, configuration: configuration,
+                launchEnabled: launchEnabled)
+        } else {
+            await tab.quinjet.prepare(
+                directory: agent.cwd, remote: remote, configuration: configuration,
+                launchEnabled: launchEnabled)
+        }
+    }
+
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
@@ -52,6 +145,7 @@ struct HerdrSessionView: View {
                     .font(DashSkin.serif(20))
                     .foregroundStyle(hideAgents ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
                     .padding(.trailing, UIScale.pt(36))
+                viewSection
                 kindRow
                 metaRow("Status", agent.status.title)
                 metaRow("Machine", agent.machineName)
@@ -86,6 +180,24 @@ struct HerdrSessionView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(DashSkin.paper(dark))
+    }
+
+    private var viewSection: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            Text("View")
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            HerdrAgentViewToggle(selection: tab.view) { option in
+                store.setView(option, for: tab.id)
+            }
+            if tab.view == .diff, let branch = tab.quinjet.branch {
+                Text(branch)
+                    .font(DashSkin.mono(10))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
     }
 
     private var kindRow: some View {
