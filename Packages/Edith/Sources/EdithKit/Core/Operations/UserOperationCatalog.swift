@@ -65,6 +65,18 @@ public enum UserOperationCatalog {
         + ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + CompanionSettingsOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + ClipboardOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + AttentionFocusOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + CleanerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + QuinjetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -504,6 +516,93 @@ private extension ColorSwatchOperation {
                 UserInterfaceActionPlacement(
                     surface: "Color Picker settings", action: "copy a swatch in one format",
                     exampleArguments: ["1", "--format", "hex"]),
+            ])
+        }
+    }
+}
+
+private extension CompanionSettingsOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .syncGithub:
+            userInterface("Companion", "sync github activity", ["github"])
+        case .exportData:
+            userInterface(
+                "Companion settings", "export the memory as a bundle", ["/tmp/backup"])
+        case .importData:
+            userInterface(
+                "Companion settings", "restore a memory bundle", ["/tmp/backup"])
+        case .wipe:
+            userInterface("Companion settings", "wipe the whole memory", ["--yes"])
+        case .dbReindex:
+            userInterface(
+                "Companion settings", "drop and rebuild the search index", ["--yes"])
+        case .dbRebuildDerived:
+            userInterface(
+                "Companion settings", "rebuild everything derived", ["--yes"])
+        case .connectorsSet:
+            userInterface(
+                "Companion settings", "store a github or notion token",
+                ["--github", "gho_x"])
+        case .connectorsImport:
+            userInterface(
+                "Companion settings", "import a calendar, music or youtube export",
+                ["music", "./export.json"])
+        case .reasonSet:
+            userInterface(
+                "Companion settings", "change the reasoner or its api key",
+                ["--provider", "anthropic", "--api-key", "sk-x"])
+        case .reasonTest:
+            userInterface("Companion settings", "test the reasoner")
+        }
+    }
+}
+
+private extension ClipboardOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .stats:
+            userInterface(
+                "Clipboard settings", "see how many entries and how big")
+        case .copy:
+            userInterface("Clipboard panel", "click an entry to copy it", ["1"])
+        case .pin:
+            userInterface("Clipboard panel", "pin an entry", ["1"])
+        case .unpin:
+            userInterface("Clipboard panel", "unpin an entry", ["1"])
+        case .remove:
+            userInterface("Clipboard panel", "delete an entry", ["1", "--yes"])
+        }
+    }
+}
+
+private extension AttentionFocusOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .start:
+            userInterface(
+                "Attention focus card", "start a focus session",
+                ["--for", "25m", "--name", "Focus"])
+        case .stop:
+            userInterface("Attention focus card", "finish a focus session")
+        }
+    }
+}
+
+private extension CleanerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .scan:
+            userInterface(
+                "Cleaner drive picker", "sweep a folder for project junk",
+                ["--root", "~/code"])
+        case .clean:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Cleaner card", action: "reclaim the scanned caches"),
+                UserInterfaceActionPlacement(
+                    surface: "Cleaner card", action: "clean one category",
+                    exampleArguments: ["--category", "npm", "--yes"]),
             ])
         }
     }

@@ -43,6 +43,10 @@ final class CompanionSettingsModel {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
 
+    private var operations: CompanionSettingsOperationExecution {
+        CompanionSettingsOperationExecution(client: client)
+    }
+
     func load() async {
         do {
             let settings = try await client.reasonSettings()
@@ -67,9 +71,10 @@ final class CompanionSettingsModel {
         savingTokens = true
         defer { savingTokens = false }
         do {
-            connectors = try await client.updateConnectorSettings(
+            let update = try CompanionConnectorTokenUpdate(
                 github: github.isEmpty ? nil : github,
                 notion: notion.isEmpty ? nil : notion)
+            connectors = try await operations.updateConnectors(update)
             githubToken = ""
             notionToken = ""
             connectorStatus = "Saved on the companion."
@@ -85,9 +90,10 @@ final class CompanionSettingsModel {
         savingTokens = true
         defer { savingTokens = false }
         do {
-            connectors = try await client.updateConnectorSettings(
+            let update = try CompanionConnectorTokenUpdate(
                 github: which == "github" ? "" : nil,
                 notion: which == "notion" ? "" : nil)
+            connectors = try await operations.updateConnectors(update)
             connectorStatus = "Cleared."
             connectorStatusIsError = false
         } catch {
@@ -101,10 +107,8 @@ final class CompanionSettingsModel {
         importing = true
         defer { importing = false }
         do {
-            let data = try Data(contentsOf: url)
-            let outcome = try await client.importConnector(source: source, json: data)
-            connectorStatus =
-                "\(source): read \(outcome.entriesRead), stored \(outcome.observationsInserted)"
+            let outcome = try await operations.importConnector(source: source, from: url)
+            connectorStatus = CompanionSettingsOperationText.connectorImport(outcome)
             connectorStatusIsError = false
         } catch {
             connectorStatus = error.localizedDescription
@@ -132,10 +136,8 @@ final class CompanionSettingsModel {
         syncingGithub = true
         defer { syncingGithub = false }
         do {
-            let outcome = try await client.syncGithub()
-            connectorStatus =
-                "GitHub: \(outcome.eventsFetched) events, "
-                + "\(outcome.observationsInserted) new observations"
+            let outcome = try await operations.syncGithub()
+            connectorStatus = CompanionSettingsOperationText.syncGithub(outcome)
             connectorStatusIsError = false
         } catch {
             connectorStatus = error.localizedDescription
@@ -157,11 +159,12 @@ final class CompanionSettingsModel {
         defer { saving = false }
         do {
             let trimmedKey = apiKey.trimmingCharacters(in: .whitespaces)
-            let settings = try await client.updateReasonSettings(
+            let update = try CompanionReasonConfigurationUpdate(
                 provider: provider,
                 url: url.trimmingCharacters(in: .whitespaces),
                 model: model.trimmingCharacters(in: .whitespaces),
                 apiKey: trimmedKey.isEmpty ? nil : trimmedKey)
+            let settings = try await operations.updateReason(update)
             apply(settings)
             apiKey = ""
             testResult = nil
@@ -179,9 +182,9 @@ final class CompanionSettingsModel {
         testResult = nil
         defer { testing = false }
         do {
-            let outcome = try await client.testReason()
+            let outcome = try await operations.testReason()
             testPassed = outcome.ok
-            testResult = "ok · \(outcome.latencyMs) ms"
+            testResult = CompanionSettingsOperationText.reasonTest(outcome)
             reasonerStatus = nil
         } catch {
             testPassed = false
@@ -194,14 +197,8 @@ final class CompanionSettingsModel {
         exporting = true
         defer { exporting = false }
         do {
-            let result = try await CompanionDataTransfer.export(
-                client: client, into: directory, includeMedia: true)
-            let episodes = result.counts["episodes"] ?? 0
-            let conversations = result.counts["conversations"] ?? 0
-            dataStatus =
-                "Exported \(episodes) episodes and \(conversations) conversations "
-                + "to \(result.directory)"
-                + (result.mediaSaved > 0 ? ", media included" : "")
+            let result = try await operations.exportData(into: directory, includeMedia: true)
+            dataStatus = CompanionSettingsOperationText.exportData(result)
             dataStatusIsError = false
         } catch {
             dataStatus = error.localizedDescription
@@ -214,11 +211,8 @@ final class CompanionSettingsModel {
         restoring = true
         defer { restoring = false }
         do {
-            let result = try await CompanionDataTransfer.restore(client: client, from: path)
-            var parts = [
-                "Restored \(result.outcome.episodesInserted) episodes and "
-                    + "\(result.outcome.conversationsInserted) conversations"
-            ]
+            let result = try await operations.importData(from: path)
+            var parts = [CompanionSettingsOperationText.importData(result)]
             if result.outcome.episodesSkipped > 0 {
                 parts.append("\(result.outcome.episodesSkipped) already there")
             }
@@ -238,10 +232,9 @@ final class CompanionSettingsModel {
         reindexing = true
         defer { reindexing = false }
         do {
-            let outcome = try await client.db("reindex")
-            dangerStatus = "Dropped \(outcome.chunksDropped ?? 0) chunks; re-embedding now."
+            let result = try await operations.reindex()
+            dangerStatus = CompanionSettingsOperationText.reindex(result)
             dangerStatusIsError = false
-            _ = try? await client.index()
         } catch {
             dangerStatus = error.localizedDescription
             dangerStatusIsError = true
@@ -253,11 +246,8 @@ final class CompanionSettingsModel {
         rebuilding = true
         defer { rebuilding = false }
         do {
-            let outcome = try await client.db("rebuild-derived")
-            dangerStatus =
-                "Dropped \(outcome.chunksDropped ?? 0) chunks, retired "
-                + "\(outcome.beliefsRetired ?? 0) beliefs, kept "
-                + "\(outcome.episodesKept ?? 0) episodes."
+            let outcome = try await operations.rebuildDerived()
+            dangerStatus = CompanionSettingsOperationText.rebuildDerived(outcome)
             dangerStatusIsError = false
         } catch {
             dangerStatus = error.localizedDescription
@@ -270,11 +260,8 @@ final class CompanionSettingsModel {
         wiping = true
         defer { wiping = false }
         do {
-            let outcome = try await client.wipe(confirm: "everything")
-            dangerStatus =
-                "Wiped \(outcome.episodesDropped) episodes, "
-                + "\(outcome.observationsDropped) observations, "
-                + "\(outcome.conversationsDropped) conversations."
+            let outcome = try await operations.wipe()
+            dangerStatus = CompanionSettingsOperationText.wipe(outcome)
             dangerStatusIsError = false
         } catch {
             dangerStatus = error.localizedDescription
@@ -294,7 +281,7 @@ struct CompanionSettingsScreen: View {
     @Environment(\.companionGeneration) private var generation
     @State private var endpointDraft = ""
     @State private var endpointLoaded = false
-    @State private var confirmingWipe = false
+    @State private var destructiveOperation: CompanionSettingsOperation?
     @FocusState private var endpointFocused: Bool
 
     private var dark: Bool { scheme == .dark }
@@ -341,18 +328,8 @@ struct CompanionSettingsScreen: View {
             endpointDraft = endpoint
             endpointLoaded = true
         }
-        .sheet(isPresented: $confirmingWipe) {
-            CompanionConfirmSheet(
-                title: "Wipe the companion?",
-                message:
-                    "Every episode, observation, belief and conversation is deleted, along "
-                    + "with the files behind them. The stack keeps running and its settings "
-                    + "survive, but the memory is gone. Export first if any of it matters.",
-                phrase: "WIPE",
-                actionTitle: "Wipe everything"
-            ) {
-                Task { await model.wipeEverything() }
-            }
+        .sheet(item: $destructiveOperation) { operation in
+            destructiveConfirmation(operation)
         }
     }
 
@@ -676,9 +653,9 @@ struct CompanionSettingsScreen: View {
                     consequence:
                         "Drops the search index and embeds every episode again. Slow, "
                         + "harmless, and the fix after changing the embedding model.",
-                    buttonTitle: "Reindex", busy: model.reindexing
+                    buttonTitle: "Reindex…", busy: model.reindexing
                 ) {
-                    Task { await model.reindex() }
+                    destructiveOperation = .dbReindex
                 }
                 Divider().opacity(0.3)
                 CompanionDangerRow(
@@ -686,9 +663,9 @@ struct CompanionSettingsScreen: View {
                     consequence:
                         "Retires every belief and fact and drops the index. Episodes and "
                         + "conversations survive; the nightly runs rebuild the rest.",
-                    buttonTitle: "Rebuild", busy: model.rebuilding
+                    buttonTitle: "Rebuild…", busy: model.rebuilding
                 ) {
-                    Task { await model.rebuildDerived() }
+                    destructiveOperation = .dbRebuildDerived
                 }
                 Divider().opacity(0.3)
                 CompanionDangerRow(
@@ -698,7 +675,7 @@ struct CompanionSettingsScreen: View {
                         + "the files behind them. The stack and its settings survive.",
                     buttonTitle: "Wipe…", busy: model.wiping
                 ) {
-                    confirmingWipe = true
+                    destructiveOperation = .wipe
                 }
                 if let status = model.dangerStatus {
                     CompanionStatusLine(
@@ -711,6 +688,45 @@ struct CompanionSettingsScreen: View {
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(16))
                 .strokeBorder(DashSkin.danger.opacity(0.35), lineWidth: UIScale.pt(1))
+        }
+    }
+
+    @ViewBuilder
+    private func destructiveConfirmation(_ operation: CompanionSettingsOperation) -> some View {
+        switch operation {
+        case .dbReindex:
+            CompanionConfirmSheet(
+                title: "Reindex every episode?",
+                message:
+                    "The current search chunks are deleted before every episode is embedded "
+                    + "again. Search is incomplete until the operation finishes.",
+                phrase: "REINDEX", actionTitle: "Reindex"
+            ) {
+                Task { await model.reindex() }
+            }
+        case .dbRebuildDerived:
+            CompanionConfirmSheet(
+                title: "Rebuild derived memory?",
+                message:
+                    "Search chunks are deleted, every belief is retired, and open facts are "
+                    + "expired. Episodes and conversations survive.",
+                phrase: "REBUILD", actionTitle: "Rebuild"
+            ) {
+                Task { await model.rebuildDerived() }
+            }
+        case .wipe:
+            CompanionConfirmSheet(
+                title: "Wipe the companion?",
+                message:
+                    "Every episode, observation, belief and conversation is deleted, along "
+                    + "with the files behind them. The stack keeps running and its settings "
+                    + "survive, but the memory is gone. Export first if any of it matters.",
+                phrase: "WIPE", actionTitle: "Wipe everything"
+            ) {
+                Task { await model.wipeEverything() }
+            }
+        default:
+            EmptyView()
         }
     }
 

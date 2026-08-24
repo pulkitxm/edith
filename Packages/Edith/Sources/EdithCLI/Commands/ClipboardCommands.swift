@@ -69,7 +69,8 @@ enum ClipboardBridge {
     ) async throws {
         try await execute {
             let found = try ClipboardBridge.entry(at: index)
-            let outcome = try ClipboardActions.setPinned(pinned, ids: [found.entry.id])
+            let operation: ClipboardOperation = pinned ? .pin : .unpin
+            let outcome = try ClipboardOperationExecution.perform(operation, entry: found.entry)
             AppBridge.post(IPC.Name.clipboardChanged)
             let verb = pinned ? "pinned" : "unpinned"
             guard !json else {
@@ -166,7 +167,7 @@ struct ClipboardStatsCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let stats = ClipboardActions.stats()
+            let stats = ClipboardOperationExecution.stats()
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -288,10 +289,10 @@ struct ClipboardCopyCommand: AsyncParsableCommand {
         try await execute {
             let found = try ClipboardBridge.entry(at: index)
             do {
-                try ClipboardActions.copy(
-                    found.entry, asPlainText: plain,
+                try ClipboardOperationExecution.perform(
+                    .copy, entry: found.entry, asPlainText: plain,
                     pasteboard: CLIEnvironment.clipboardPasteboard)
-            } catch ClipboardActionError.blobMissing {
+            } catch ClipboardOperationError.blobMissing {
                 throw CLIFailure.notFound("the stored copy of that entry is gone")
             }
             AppBridge.post(IPC.Name.clipboardChanged)
@@ -311,22 +312,32 @@ struct ClipboardRemoveCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(help: "Actually remove it. Without this nothing is touched.")
+    var yes = false
+
     @Argument(help: "The entry number, counting from 1.")
     var index: Int
 
     func run() async throws {
         try await execute {
             let found = try ClipboardBridge.entry(at: index)
-            let outcome = try ClipboardActions.delete(ids: [found.entry.id])
+            let plan = CLIDestructivePlan(
+                action: "remove clipboard entry", targets: [found.entry.id], confirmed: yes,
+                json: json,
+                fields: [
+                    "index": .int(index),
+                    "id": .string(found.entry.id),
+                    "preview": .optional(found.entry.preview),
+                ])
+            guard plan.shouldApply() else { return }
+            let outcome = try ClipboardOperationExecution.perform(.remove, entry: found.entry)
             AppBridge.post(IPC.Name.clipboardChanged)
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "removed": .int(index), "remaining": .int(outcome.entries.count),
-                    ]))
-                return
-            }
-            CLIOut.out("removed entry \(index), \(outcome.entries.count) left")
+            plan.finish(
+                changed: outcome.changed > 0,
+                plain: "removed entry \(index), \(outcome.entries.count) left",
+                fields: [
+                    "removed": .int(index), "remaining": .int(outcome.entries.count),
+                ])
         }
     }
 }
