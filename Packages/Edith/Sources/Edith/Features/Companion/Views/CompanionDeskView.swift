@@ -50,7 +50,10 @@ final class CompanionDeskModel: CompanionRefreshable {
         busy = true
         defer { busy = false }
         do {
-            let outcome = try await client.nextQuestion()
+            let client = client
+            let outcome = try await CompanionMindRuntimeOperationExecution.nextQuestion {
+                try await client.nextQuestion()
+            }
             question = outcome.question
             if let asked = outcome.askedToday, let total = outcome.dailyBudget {
                 budget = (asked, total)
