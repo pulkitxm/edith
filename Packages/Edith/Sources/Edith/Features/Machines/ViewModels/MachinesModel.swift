@@ -66,17 +66,23 @@ final class MachinesModel {
         ensureSelection()
     }
 
-    func add(_ machine: Machine) {
-        store.add(machine)
+    func add(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
+        MachineMutationOperationExecution.perform(
+            .add, machine: machine, secrets: secrets,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
+        store.reload()
         selection = machine.id
         let session = session(for: machine.id)
         session.start()
         reconcileSSHClipboard(machine, connection: session.connectionRef)
     }
 
-    func update(_ machine: Machine) {
+    func update(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
         let previous = store.machine(id: machine.id)
-        store.update(machine)
+        MachineMutationOperationExecution.perform(
+            .edit, machine: machine, secrets: secrets,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
+        store.reload()
         if let session = sessions[machine.id] {
             session.stop()
             sessions[machine.id] = nil
@@ -88,15 +94,29 @@ final class MachinesModel {
     }
 
     func remove(id: UUID) {
-        let machine = store.machine(id: id)
+        guard let machine = store.machine(id: id) else { return }
         sessions[id]?.stop()
         sessions[id] = nil
-        store.remove(id: id)
-        if var machine {
-            machine.sshClipboardEnabled = false
-            reconcileSSHClipboard(machine, replacing: machine)
-        }
+        MachineMutationOperationExecution.perform(
+            .remove, machine: machine,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
+        store.reload()
+        var disabled = machine
+        disabled.sshClipboardEnabled = false
+        reconcileSSHClipboard(disabled, replacing: disabled)
         ensureSelection()
+    }
+
+    func performConnection(_ operation: MachineConnectionOperation, for session: MachineSession) {
+        Task {
+            _ = await MachineConnectionOperationExecution.perform(
+                operation,
+                connect: {
+                    session.start()
+                    return nil
+                },
+                disconnect: { session.stop() })
+        }
     }
 
     func startSelected() {
@@ -201,14 +221,6 @@ final class MachinesModel {
         }
     }
 
-    func wake(machine: Machine) -> String {
-        guard let mac = machine.wakeMACAddress,
-            let packet = WakeOnLAN.magicPacket(macAddress: mac)
-        else {
-            return "No MAC address stored for this machine yet."
-        }
-        return MagicPacket.send(packet) ?? "Sent a wake packet to \(mac)."
-    }
 }
 
 enum SSHClipboardSyncState: Equatable {

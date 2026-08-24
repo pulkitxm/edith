@@ -207,9 +207,6 @@ enum UIParity {
         UICapability(
             "Companion settings", "point at another companion",
             ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
-        UICapability("Machines", "add a machine", ["machines", "add", "box", "--host", "h"]),
-        UICapability("Machines", "edit a machine", ["machines", "edit", "box"]),
-        UICapability("Machines", "delete a machine", ["machines", "rm", "box"]),
         UICapability(
             "Machine tools", "save a port forward",
             ["machines", "forwards", "add", "box", "--local", "8080", "--remote", "80"]),
@@ -221,13 +218,6 @@ enum UIParity {
             ["machines", "snippets", "add", "box", "logs", "journalctl"]),
         UICapability(
             "Machine tools", "delete a snippet", ["machines", "snippets", "rm", "box", "1"]),
-        UICapability(
-            "Machine header", "restart the machine",
-            ["machines", "power", "reboot", "box", "--yes"]),
-        UICapability(
-            "Machine header", "shut the machine down",
-            ["machines", "power", "shutdown", "box", "--yes"]),
-        UICapability("Machine header", "wake the machine", ["machines", "power", "wake", "box"]),
         UICapability(
             "Machine cooling", "inspect thermal profiles",
             ["machines", "thermal", "status", "box"]),
@@ -331,8 +321,6 @@ enum UIParity {
             "Workspace picker", "rename a layout", ["machines", "workspace", "rename", "a", "b"]),
         UICapability(
             "Workspace picker", "delete a layout", ["machines", "workspace", "rm", "a"]),
-        UICapability("Machines", "open the shared connection", ["machines", "connect", "box"]),
-        UICapability("Machines", "close the shared connection", ["machines", "disconnect", "box"]),
         UICapability(
             "Machine tools", "mount the machine's disk on this Mac", ["machines", "mount", "box"]),
         UICapability(
@@ -392,19 +380,6 @@ enum UIParity {
         UICapability(
             "Machine finder", "move files to the trash",
             ["machines", "files", "rm", "box", "/a"]),
-        UICapability(
-            "Add machine sheet", "store a login password",
-            ["machines", "add", "box", "--host", "h", "--password-stdin"]),
-        UICapability(
-            "Add machine sheet", "store a key passphrase",
-            ["machines", "edit", "box", "--key-passphrase-stdin"]),
-        UICapability(
-            "Add machine sheet", "store a sudo password",
-            ["machines", "edit", "box", "--sudo-password-stdin"]),
-        UICapability(
-            "Add machine sheet", "forget the stored sudo password",
-            ["machines", "edit", "box", "--forget-sudo-password"]),
-
         UICapability(
             "Docker window", "start a container", ["machines", "docker", "start", "box", "api"]),
         UICapability(
@@ -731,8 +706,6 @@ enum UIParity {
             ["machines", "kill"]: 2,
             ["music", "rename"]: 2,
             ["music", "rm"]: 2,
-            ["machines", "add"]: 2,
-            ["machines", "edit"]: 4,
             ["machines", "docker", "start"]: 2,
             ["machines", "docker", "stop"]: 2,
         ]
