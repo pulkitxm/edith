@@ -76,6 +76,41 @@ import Testing
         #expect(!fixture.defaults.bool(forKey: Repo.musicFolderStaleKey))
     }
 
+    @Test func symlinkedExternalSelectionIsResolvedAndConfirmed() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let link = fixture.home.appendingPathComponent("ExternalMusic")
+        try FileManager.default.createSymbolicLink(
+            at: link, withDestinationURL: URL(fileURLWithPath: "/Volumes"))
+
+        let result = try MusicFolderSelectionOperationExecution.select(
+            link.path, defaults: fixture.defaults, homeDirectory: fixture.home,
+            invalidate: {}, announce: {})
+
+        #expect(result.path == "/Volumes")
+        #expect(result.confirmsExternalStorage)
+        #expect(fixture.defaults.string(forKey: Repo.musicFolderPathKey) == "/Volumes")
+        #expect(
+            Repo.selectedMusicDirectory(
+                defaults: fixture.defaults, homeDirectory: fixture.home)?.path == "/Volumes")
+    }
+
+    @Test func rawSymlinkToExternalStorageDoesNotBypassConfirmation() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let link = fixture.home.appendingPathComponent("RestoredMusic")
+        try FileManager.default.createSymbolicLink(
+            at: link, withDestinationURL: URL(fileURLWithPath: "/Volumes"))
+        fixture.defaults.set(link.path, forKey: Repo.musicFolderPathKey)
+
+        #expect(
+            Repo.selectedMusicDirectory(
+                defaults: fixture.defaults, homeDirectory: fixture.home) == nil)
+        Repo.prepareStoredPaths(defaults: fixture.defaults, homeDirectory: fixture.home)
+        #expect(fixture.defaults.string(forKey: Repo.musicFolderPathKey) == nil)
+        #expect(fixture.defaults.bool(forKey: Repo.musicFolderStaleKey))
+    }
+
     @Test func selectionRejectsMissingPathsAndFilesWithoutChangingState() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

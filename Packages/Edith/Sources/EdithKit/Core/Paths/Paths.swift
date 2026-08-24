@@ -11,8 +11,9 @@ public enum RestoredPathValidation {
         for path: String,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> RestoredPathVerdict {
-        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
-        let homePath = homeDirectory.standardizedFileURL.path
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL
+            .resolvingSymlinksInPath().path
+        let homePath = homeDirectory.standardizedFileURL.resolvingSymlinksInPath().path
         if standardizedPath == homePath || standardizedPath.hasPrefix(homePath + "/") {
             return .keep
         }
@@ -120,7 +121,7 @@ public enum Repo {
         if RestoredPathValidation.verdict(for: path, homeDirectory: homeDirectory) == .keep
             || defaults.string(forKey: confirmationKey) == path
         {
-            return URL(fileURLWithPath: path).standardizedFileURL
+            return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
         }
         return nil
     }
@@ -148,7 +149,8 @@ public enum Repo {
             defaults.removeObject(forKey: confirmationKey)
             return
         }
-        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL
+            .resolvingSymlinksInPath().path
         defaults.set(standardizedPath, forKey: key)
         if RestoredPathValidation.verdict(
             for: standardizedPath, homeDirectory: homeDirectory) == .drop

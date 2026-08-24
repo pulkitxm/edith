@@ -80,6 +80,6 @@ public enum MusicFolderSelectionOperationExecution {
             expanded = path
         }
         return URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
+            .resolvingSymlinksInPath()
     }
-
 }

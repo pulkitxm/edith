@@ -25,16 +25,18 @@ ed music library ~/Music
 ed music library "/Volumes/Media/Music" --json
 ```
 
-The path is expanded and standardized before it is saved. It must already
-exist and be a directory. Selecting a folder clears any stale-library warning,
-invalidates cached track metadata, and posts `musicFolderChanged` so a running
-Edith window immediately reads the same library. Selecting the current folder
-still refreshes live consumers and reports `changed` as `false`.
+The path is expanded, standardized, and resolved through symlinks before it is
+saved. It must already exist and be a directory. Selecting a folder clears any
+stale-library warning, invalidates cached track metadata, and posts
+`musicFolderChanged` so a running Edith window immediately reads the same
+library. Selecting the current folder still refreshes live consumers and reports
+`changed` as `false`.
 
-Folders on `/Volumes` are recorded with the external-path confirmation used by
-the Music page. That confirmation prevents a restored but unconfirmed path from
-silently sending later commands to Edith's fallback music directory. The raw
-`musicFolderPath` preference is intentionally not writable through `ed config`.
+Folders on `/Volumes`, including home-directory symlinks that resolve there, are
+recorded with the external-path confirmation used by the Music page. That
+confirmation prevents a restored but unconfirmed path from silently sending
+later commands to Edith's fallback music directory. The raw `musicFolderPath`
+preference is intentionally not writable through `ed config`.
 
 A missing path or a path that is a file exits 3 without changing the saved
 folder, invalidating caches, or notifying the app.

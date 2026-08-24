@@ -163,6 +163,51 @@ import Testing
         }
     }
 
+    @Test func lookupsAndMutationsStayInsideTheLibraryRoot() throws {
+        let fixture = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-music-boundary-\(UUID().uuidString)", isDirectory: true)
+        let library = fixture.appendingPathComponent("Library", isDirectory: true)
+        let outside = fixture.appendingPathComponent("Outside", isDirectory: true)
+        let song = outside.appendingPathComponent("song.mp3")
+        let inside = library.appendingPathComponent("inside.mp3")
+        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try Data("outside".utf8).write(to: song)
+        try Data("inside".utf8).write(to: inside)
+        try FileManager.default.createSymbolicLink(
+            at: library.appendingPathComponent("Linked"), withDestinationURL: outside)
+        defer { try? FileManager.default.removeItem(at: fixture) }
+
+        #expect(throws: MusicLibraryError.self) {
+            _ = try MusicLibrary.track(at: "", root: library)
+        }
+        #expect(throws: MusicLibraryError.self) {
+            _ = try MusicLibrary.track(at: "../Outside/song.mp3", root: library)
+        }
+        #expect(throws: MusicLibraryError.self) {
+            _ = try MusicLibrary.track(at: "Linked/song.mp3", root: library)
+        }
+        #expect(throws: MusicLibraryError.self) {
+            _ = try MusicLibrary.folder(at: "../Outside", root: library)
+        }
+        #expect(throws: MusicLibraryError.noSuchTrack("Folder.mp3")) {
+            let directory = library.appendingPathComponent("Folder.mp3", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            _ = try MusicLibrary.track(at: "Folder.mp3", root: library)
+        }
+        #expect(throws: MusicLibraryError.self) {
+            try MusicLibrary.trash(
+                Track(url: song, relativePath: "../Outside/song.mp3"), root: library)
+        }
+        #expect(throws: MusicLibraryError.self) {
+            _ = try MusicLibrary.relocate(
+                from: inside, to: outside.appendingPathComponent("moved.mp3"), root: library)
+        }
+        #expect(FileManager.default.fileExists(atPath: song.path))
+        #expect(FileManager.default.fileExists(atPath: inside.path))
+    }
+
     private func track(_ path: String) -> Track {
         Track(url: root.appendingPathComponent(path), relativePath: path)
     }
