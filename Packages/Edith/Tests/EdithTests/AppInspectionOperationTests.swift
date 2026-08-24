@@ -137,6 +137,16 @@ import Testing
         #expect(capture.opened == [AppData.cloudDir, Repo.musicDir])
     }
 
+    @Test func folderPreparationFailuresNameTheExactTarget() {
+        let center = AppInspectionCenter(
+            exists: { _ in false },
+            createDirectory: { _ in throw CocoaError(.fileWriteNoPermission) })
+
+        #expect(throws: AppInspectionError.couldNotPrepare(AppData.cloudDir.path)) {
+            try center.openPath(.icloud)
+        }
+    }
+
     @Test func openingLinksIsTypedAndReportsFailures() throws {
         final class Capture {
             var opened: [URL] = []
@@ -174,5 +184,24 @@ import Testing
             AppDiagnosticsPayload.decode(AppDiagnosticsPayload.encode(snapshot)))
 
         #expect(decoded == snapshot)
+    }
+
+    @Test func diagnosticPayloadRejectsUnsafeNumbers() {
+        let snapshot = AppDiagnosticsSnapshot(
+            info: AppInfoSnapshot(
+                name: "Edith", version: "1.2", build: "34", bundleID: "com.pulkit.edith",
+                bundlePath: "/Applications/Edith.app",
+                repositoryURL: AppInspectionCenter.repositoryURL,
+                creatorURL: AppInspectionCenter.creatorURL),
+            processID: 9, uptimeSeconds: 120, idleWakeups: 7)
+        var payload = AppDiagnosticsPayload.encode(snapshot)
+        payload["pid"] = Int(Int32.max) + 1
+
+        #expect(AppDiagnosticsPayload.decode(payload) == nil)
+
+        payload = AppDiagnosticsPayload.encode(snapshot)
+        payload["uptimeSeconds"] = -1
+
+        #expect(AppDiagnosticsPayload.decode(payload) == nil)
     }
 }

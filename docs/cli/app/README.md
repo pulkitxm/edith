@@ -67,10 +67,10 @@ Reach for this group when you want the app to do something now. Reach for
 | 3 | `reveal` named a section or tab the window does not have, or `open-link` named no listed link. |
 | 4 | A needed process is not running, a reply did not arrive, `relaunch` found no app, or macOS refused an open action. |
 
-3 comes only from `reveal`, and 1 only from `relaunch` and `snapshot`. The action
-names are fixed rather than typed, so there is no name for you to get wrong:
-`ed app frobnicate` is parsed as a stray argument to the default `actions`
-subcommand and exits 2 rather than 3.
+3 comes only from `reveal` and `open-link`, and 1 only from `relaunch` and
+`snapshot`. The action names are fixed rather than typed, so there is no name
+for you to get wrong: `ed app frobnicate` is parsed as a stray argument to the
+default `actions` subcommand and exits 2 rather than 3.
 
 ## Notes and gotchas
 

@@ -103,6 +103,7 @@ public struct AppOpenResult: Equatable, Sendable {
 
 public enum AppInspectionError: Error, Equatable, Sendable {
     case unknownLink(String)
+    case couldNotPrepare(String)
     case couldNotOpen(String)
 }
 
@@ -249,7 +250,11 @@ public struct AppInspectionCenter {
     public func openPath(_ id: AppPathID) throws -> AppOpenResult {
         let entry = paths().first { $0.id == id }!
         if [.icloud, .music].contains(id), !entry.exists {
-            try createDirectory(entry.url)
+            do {
+                try createDirectory(entry.url)
+            } catch {
+                throw AppInspectionError.couldNotPrepare(entry.url.path)
+            }
         }
         if id == .refreshLog, entry.exists {
             reveal([entry.url])
@@ -307,8 +312,10 @@ public enum AppDiagnosticsPayload {
             let build = payload["build"] as? String,
             let bundlePath = payload["bundlePath"] as? String,
             let pid = payload["pid"] as? Int,
+            let processID = Int32(exactly: pid),
             let uptimeSeconds = payload["uptimeSeconds"] as? Int,
-            let idleWakeups = payload["idleWakeups"] as? Int
+            let idleWakeups = payload["idleWakeups"] as? Int,
+            uptimeSeconds >= 0, idleWakeups >= 0
         else { return nil }
         let bundleID = (payload["bundleID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let info = AppInfoSnapshot(
@@ -316,7 +323,7 @@ public enum AppDiagnosticsPayload {
             bundlePath: bundlePath, repositoryURL: AppInspectionCenter.repositoryURL,
             creatorURL: AppInspectionCenter.creatorURL)
         return AppDiagnosticsSnapshot(
-            info: info, processID: Int32(pid), uptimeSeconds: uptimeSeconds,
+            info: info, processID: processID, uptimeSeconds: uptimeSeconds,
             idleWakeups: idleWakeups)
     }
 }

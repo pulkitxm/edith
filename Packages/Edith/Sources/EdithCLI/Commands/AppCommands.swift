@@ -82,6 +82,8 @@ enum AppInspectionCLI {
             return .notFound(
                 "no app link named \(id)",
                 hint: "run `ed app links` to list valid link names")
+        case let .couldNotPrepare(path):
+            return .unavailable("could not prepare \(path) for opening")
         case let .couldNotOpen(target):
             return .unavailable("macOS could not open \(target)")
         }

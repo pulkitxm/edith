@@ -159,6 +159,32 @@ import Testing
         #expect(result.stdout.isEmpty)
         #expect(result.stderr.contains("ed app links"))
     }
+
+    @Test func destinationFailuresAreUnavailableAndLeaveJSONStdoutEmpty() async {
+        let open = await CLIProbe.runInWorld(
+            ["app", "open-link", "repository", "--json"]
+        ) { _ in
+            CLIEnvironment.appInspectionCenter = {
+                AppInspectionCenter(open: { _ in false })
+            }
+        }
+        let prepare = await CLIProbe.runInWorld(
+            ["app", "open-path", "icloud", "--json"]
+        ) { _ in
+            CLIEnvironment.appInspectionCenter = {
+                AppInspectionCenter(
+                    exists: { _ in false },
+                    createDirectory: { _ in throw CocoaError(.fileWriteNoPermission) })
+            }
+        }
+
+        #expect(open.code == ExitCodes.unavailable)
+        #expect(open.stdout.isEmpty)
+        #expect(open.stderr.contains("macOS could not open"))
+        #expect(prepare.code == ExitCodes.unavailable)
+        #expect(prepare.stdout.isEmpty)
+        #expect(prepare.stderr.contains(AppData.cloudDir.path))
+    }
 }
 
 @Suite struct CLIAppInspectionProcessTests {
