@@ -22,20 +22,21 @@ import Testing
         "ed companion wipe",
         "ed download clear",
         "ed download rm",
-        "ed machines control airplane",
-        "ed machines control wifi",
         "ed machines docker prune",
         "ed machines docker rm",
         "ed machines docker rmi",
         "ed machines docker volume-rm",
         "ed machines files rm",
         "ed machines kill",
+        "ed machines control airplane",
+        "ed machines control wifi",
         "ed machines power reboot",
         "ed machines power shutdown",
         "ed machines rm",
         "ed music rm",
         "ed quinjet close",
         "ed shelf clear",
+        "ed shelf purge",
         "ed shelf rm",
     ]
 
@@ -94,6 +95,9 @@ import Testing
         let shelfClear = try #require(
             try EdRoot.parseAsRoot(["shelf", "clear", "--yes"])
                 as? ShelfClearCommand)
+        let shelfPurge = try #require(
+            try EdRoot.parseAsRoot(["shelf", "purge", "oneDay", "--yes"])
+                as? ShelfPurgeCommand)
         let clipboard = try #require(
             try EdRoot.parseAsRoot(["clipboard", "clear", "--yes"])
                 as? ClipboardClearCommand)
@@ -114,8 +118,8 @@ import Testing
             docker.yes && image.yes && kill.yes && stack.yes && forget.yes && reindex.yes
                 && rebuild.yes)
         #expect(
-            shelfRemove.yes && shelfClear.yes && clipboard.yes && clipboardRemove.yes
-                && color.yes)
+            shelfRemove.yes && shelfClear.yes && shelfPurge.yes && clipboard.yes
+                && clipboardRemove.yes && color.yes)
         #expect(appQuit.yes && appRelaunch.yes && appClear.yes)
     }
 
@@ -234,7 +238,7 @@ import Testing
     @Test func shelfPreviewPreservesBytesThenConfirmationRemovesOnlyNamedItem() async throws {
         try await CLIProbe.inWorld { world in
             try CLIShelfTests.seed(world, names: ["one.txt", "two.txt"])
-            let items = ShelfBridge.items()
+            let items = try ShelfBridge.items()
             let beforeIndex = try Data(contentsOf: ShelfIndex.indexFile())
             let beforeFiles = try Dictionary(
                 uniqueKeysWithValues: items.map {

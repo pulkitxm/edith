@@ -9,6 +9,7 @@ import Testing
         let descriptors =
             CalendarEventOperation.allCases.map(\.descriptor)
             + ShelfItemOperation.allCases.map(\.descriptor)
+            + ShelfMutationOperation.allCases.map(\.descriptor)
             + DownloadOperation.allCases.map(\.descriptor)
             + MusicLibraryOperation.allCases.map(\.descriptor)
             + MusicLibraryContentOperation.allCases.map(\.descriptor)
@@ -20,10 +21,14 @@ import Testing
         #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
         #expect(
             Set(descriptors.filter(\.requiresPreview).map(\.id)) == [
+                ShelfMutationOperation.remove.descriptor.id,
+                ShelfMutationOperation.clear.descriptor.id,
+                ShelfMutationOperation.purge.descriptor.id,
                 DownloadOperation.remove.descriptor.id,
                 DownloadOperation.clear.descriptor.id,
                 MusicLibraryContentOperation.remove.descriptor.id,
             ])
+        #expect(!ShelfMutationOperation.update.descriptor.requiresPreview)
     }
 
     @MainActor
@@ -61,12 +66,38 @@ import Testing
             ShelfItemOperationExecution.perform(
                 .reveal, urls: [first, second], reveal: { revealed = $0 }))
         #expect(revealed == [first, second])
+        var opened: [URL] = []
+        #expect(
+            !ShelfItemOperationExecution.perform(
+                .open, urls: [first, second],
+                open: {
+                    opened.append($0)
+                    return $0 != first
+                }))
+        #expect(opened == [first, second])
         let id = UUID()
         let decoded = try #require(
             ShelfItemOperationExecution.request(
-                ShelfItemOperationExecution.payload(.share, itemIDs: [id])))
+                ShelfItemOperationExecution.payload(
+                    .share, itemIDs: [id], requestID: "shelf-request")))
         #expect(decoded.operation == .share)
         #expect(decoded.itemIDs == [id])
+        #expect(decoded.requestID == "shelf-request")
+        let result = ShelfItemOperationExecution.resultPayload(
+            requestID: "shelf-request", ok: false, error: "no panel")
+        #expect(result[ShelfItemOperationExecution.requestIDKey] as? String == "shelf-request")
+        #expect(result[ShelfItemOperationExecution.okKey] as? Bool == false)
+        #expect(result[ShelfItemOperationExecution.errorKey] as? String == "no panel")
+        #expect(
+            ShelfItemOperationExecution.request([
+                "operation": "share", "itemIDs": [id.uuidString, "invalid"],
+                "requestID": "shelf-request",
+            ]) == nil)
+        #expect(
+            ShelfItemOperationExecution.request([
+                "operation": "share", "itemIDs": [id.uuidString, id.uuidString],
+                "requestID": "shelf-request",
+            ]) == nil)
     }
 
     @Test func calendarReadUsesTheSharedBoundedQuery() async throws {
@@ -187,6 +218,14 @@ import Testing
             CompletionRequest(words: ["ed", "calendar", "directions", "e"], index: 3),
             machines: [], configKeys: [], extensionIDs: [], calendarEvents: ["event-1"])
         #expect(shelf.candidates == ["1", "2"])
+        let shelfKeep = CompletionEngine.plan(
+            CompletionRequest(words: ["ed", "shelf", "purge", "one"], index: 3), machines: [],
+            configKeys: [], extensionIDs: [])
+        #expect(shelfKeep.candidates == ["oneHour", "oneDay", "oneWeek", "oneMonth"])
+        let groupedShelf = CompletionEngine.plan(
+            CompletionRequest(words: ["ed", "shelf", "share", "1", ""], index: 4), machines: [],
+            configKeys: [], extensionIDs: [], shelfItems: ["1", "2"])
+        #expect(groupedShelf.candidates == ["1", "2"])
         #expect(music.candidates == ["Focus/song.mp3"])
         #expect(calendar.candidates == ["event-1"])
         #expect(directions.candidates == ["event-1"])

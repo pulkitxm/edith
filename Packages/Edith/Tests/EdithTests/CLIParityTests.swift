@@ -39,7 +39,7 @@ enum UIParity {
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
         "check-updates", "collect", "forget", "mount", "unmount", "open-path", "open-link",
-        "favorite", "unfavorite", "close",
+        "favorite", "unfavorite", "add-text", "update", "purge", "close",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -103,14 +103,6 @@ enum UIParity {
             "Attention focus card", "finish a focus session", ["attention", "focus", "stop"]),
 
         UICapability("Colour picker", "open the system loupe", ["color", "pick"]),
-
-        UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
-        UICapability(
-            "Notch shelf", "take an item off the shelf", ["shelf", "rm", "1", "--yes"]),
-        UICapability("Notch shelf", "empty the shelf", ["shelf", "clear", "--yes"]),
-        UICapability("Notch shelf", "open an item", ["shelf", "open", "1"]),
-        UICapability("Notch shelf", "reveal an item", ["shelf", "reveal", "1"]),
-        UICapability("Notch shelf", "share an item", ["shelf", "share", "1"]),
 
         UICapability("Calendar page", "open Calendar", ["calendar", "open"]),
         UICapability("Calendar agenda", "join a meeting", ["calendar", "join", "event"]),
@@ -611,11 +603,16 @@ enum UIParity {
 
     @Test func everyMutatingCommandIsClaimedByAUIAction() {
         let claimed = Set(UIParity.capabilities.map { Self.commandPath($0.cli) })
+        let commandLineOnly = Set(
+            UserOperationCatalog.commandLineOnly.map {
+                (["ed"] + $0.descriptor.cli).joined(separator: " ")
+            })
         var orphans: [String] = []
         for walk in Self.leaves {
             let verb = walk.path.last ?? ""
             guard UIParity.mutatingVerbs.contains(verb) else { continue }
             guard UIParity.notReachableFromTheUI[walk.label] == nil else { continue }
+            guard !commandLineOnly.contains(walk.label) else { continue }
             guard !claimed.contains(walk.label) else { continue }
             orphans.append(walk.label)
         }
