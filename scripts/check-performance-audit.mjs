@@ -373,8 +373,13 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
         containsIndex(nonisolatedRanges, index)
       )
         continue;
+      const prefix = masked.slice(Math.max(range[0], index - 200), index);
       const window = masked.slice(index, Math.min(range[1], index + 500));
-      if ([...window.matchAll(projection)].length > 1) {
+      const unboundedSort =
+        match[0] === ".sorted" &&
+        !/\.prefix\s*\([^)]*\)\s*$/.test(prefix) &&
+        !/\.(?:allCases|supportedShells)\s*$/.test(prefix);
+      if (unboundedSort || [...window.matchAll(projection)].length > 1) {
         addViolation(
           violations,
           "main-actor-projection-chain",
@@ -490,9 +495,26 @@ export function validatePerformanceChanges(
       const previous = previousCounts.get(rule) ?? 0;
       const next = currentCounts.get(rule) ?? 0;
       if (next <= previous) continue;
+      const remainingPrevious = new Map();
+      for (const violation of findPerformanceViolations(
+        baseSource,
+        basePath ?? currentPath,
+      )) {
+        if (violation.rule !== rule) continue;
+        remainingPrevious.set(
+          violation.source,
+          (remainingPrevious.get(violation.source) ?? 0) + 1,
+        );
+      }
       const examples = current
         .filter((violation) => violation.rule === rule)
-        .slice(previous);
+        .filter((violation) => {
+          const remaining = remainingPrevious.get(violation.source) ?? 0;
+          if (remaining === 0) return true;
+          remainingPrevious.set(violation.source, remaining - 1);
+          return false;
+        })
+        .slice(0, next - previous);
       for (const violation of examples) {
         failures.push(
           `${violation.path}:${violation.line}: ${rule}: ${violation.source || "unsafe structural form"}`,

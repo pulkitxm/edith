@@ -237,6 +237,32 @@ test("main-actor projection chains are rejected without flagging one bounded pro
   ).not.toContain("main-actor-projection-chain");
 });
 
+test("main-actor sorting requires an explicit input bound", () => {
+  const unsafe = `
+    @MainActor
+    final class Model {
+      func project(_ rows: [Row]) {
+        visible = rows.sorted { $0.name < $1.name }
+      }
+    }
+  `;
+  const bounded = `
+    @MainActor
+    final class Model {
+      func project(_ rows: [Row]) {
+        visible = rows.prefix(80).sorted { $0.name < $1.name }
+      }
+    }
+  `;
+
+  expect(findPerformanceViolations(unsafe).map(({ rule }) => rule)).toContain(
+    "main-actor-projection-chain",
+  );
+  expect(
+    findPerformanceViolations(bounded).map(({ rule }) => rule),
+  ).not.toContain("main-actor-projection-chain");
+});
+
 test("source-like text in strings does not trigger structural rules", () => {
   const source = `
     let shell = "Task.detached { Process().waitUntilExit() }"
