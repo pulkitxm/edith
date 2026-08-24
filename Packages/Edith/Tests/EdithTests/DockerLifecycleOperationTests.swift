@@ -26,9 +26,10 @@ import Testing
     }
 
     @Test func catalogCarriesTheNineExactDockerUIInvocations() {
+        let operationIDs = Set(DockerLifecycleOperation.allCases.map { $0.descriptor.id })
         let actual = Set(
             UserInterfaceActionCatalog.actions
-                .filter { $0.operation.id.rawValue.hasPrefix("machines.docker.") }
+                .filter { operationIDs.contains($0.operation.id) }
                 .map { [$0.surface, $0.action] + $0.cli })
 
         #expect(

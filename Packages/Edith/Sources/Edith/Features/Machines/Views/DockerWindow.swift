@@ -436,12 +436,28 @@ struct DockerConsoleView: View {
     private func performContainerAction(
         _ action: String, ids: [String], on id: String, describing: String? = nil
     ) {
-        guard let operation = DockerLifecycleOperation(cliVerb: action) else {
+        if let operation = DockerLifecycleOperation(cliVerb: action) {
+            perform(operation, target: .containers(ids), on: id, describing: describing)
+            return
+        }
+        guard let operation = MachineDockerPauseOperation(rawValue: action) else {
             performCommand(
                 DockerCommands.lifecycle(action, ids: ids), on: id, describing: describing)
             return
         }
-        perform(operation, target: .containers(ids), on: id, describing: describing)
+        busyIDs.insert(id)
+        error = nil
+        Task {
+            let result = await MachineDockerPauseOperationExecution.perform(
+                operation, containerIDs: ids,
+                using: { command, _ in await session.runDocker(command) })
+            busyIDs.remove(id)
+            if case let .failure(failure) = result {
+                let detail = failure.localizedDescription
+                error = describing.map { "\($0): \(detail)" } ?? detail
+            }
+            await session.refreshImagesAndVolumes()
+        }
     }
 
     private func performCommand(_ command: String, on id: String, describing: String? = nil) {
@@ -457,6 +473,7 @@ struct DockerConsoleView: View {
             await session.refreshImagesAndVolumes()
         }
     }
+
 }
 
 struct DockerRow: Identifiable {

@@ -21,5 +21,4 @@ if [[ -d "$FW/Testing.framework" ]]; then
          -Xlinker -rpath -Xlinker "$FW"
          -Xlinker -rpath -Xlinker "$LIB")
 fi
-swift build ${FLAGS[@]+"${FLAGS[@]}"} --product ed
 exec swift test ${FLAGS[@]+"${FLAGS[@]}"} "$@"
