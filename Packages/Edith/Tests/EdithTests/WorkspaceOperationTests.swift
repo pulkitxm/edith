@@ -195,3 +195,50 @@ import Testing
         #expect(model.operationError?.contains("one pane left") == true)
     }
 }
+
+@Suite struct WorkspaceOperationCLITests {
+    @Test func everyWorkspaceCommandUsesTheSharedStoreContract() async {
+        await CLIProbe.inWorld { world in
+            MachineRegistry.add(Machine(name: "box", host: "box.example"))
+
+            let empty = await CLIProbe.capture(["machines", "workspace", "ls", "--json"])
+            #expect(empty.code == 0)
+            #expect(empty.array?.isEmpty == true)
+
+            let invocations = [
+                ["machines", "workspace", "new", "box", "--name", "Alpha", "--json"],
+                [
+                    "machines", "workspace", "split", "1", "box", "--side", "right",
+                    "--screen", "terminal", "--json",
+                ],
+                [
+                    "machines", "workspace", "point", "1", "box", "--screen", "files",
+                    "--json",
+                ],
+                ["machines", "workspace", "equalize", "--json"],
+                ["machines", "workspace", "close", "2", "--json"],
+                ["machines", "workspace", "rename", "Alpha", "Beta", "--json"],
+                ["machines", "workspace", "new", "box", "--name", "Other", "--json"],
+                ["machines", "workspace", "use", "Beta", "--json"],
+                ["machines", "workspace", "rm", "Other", "--json"],
+            ]
+            for invocation in invocations {
+                let run = await CLIProbe.capture(invocation)
+                #expect(run.code == 0, "\(invocation) failed: \(run.stderr)")
+                #expect(run.object != nil, "\(invocation) did not return a JSON object")
+            }
+
+            let store = WorkspaceStore.load()
+            #expect(store.layouts.map(\.name) == ["Beta"])
+            #expect(store.current?.name == "Beta")
+            #expect(world.postedNames().count { $0 == IPC.Name.machinesChanged.rawValue } == 9)
+
+            let lastPane = await CLIProbe.capture([
+                "machines", "workspace", "close", "1",
+            ])
+            #expect(lastPane.code == 1)
+            #expect(lastPane.stdout.isEmpty)
+            #expect(lastPane.stderr.contains("one pane left"))
+        }
+    }
+}

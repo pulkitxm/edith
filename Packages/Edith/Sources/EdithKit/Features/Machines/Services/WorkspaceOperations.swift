@@ -206,7 +206,7 @@ public enum WorkspaceOperationExecution {
                 throw WorkspaceOperationError(.notFound, "the workspace pane no longer exists")
             }
             layout.split(paneID: paneID, side: side, target: target)
-            try replace(layout, in: &store)
+            try replacePaneLayout(layout, in: &store)
             return result(.split, store: store, layout: layout, changed: true)
         case let .close(workspaceID, paneID):
             var layout = try workspace(id: workspaceID, in: store)
@@ -219,7 +219,7 @@ public enum WorkspaceOperationExecution {
                 throw WorkspaceOperationError(.notFound, "the workspace pane no longer exists")
             }
             layout.closePane(paneID)
-            try replace(layout, in: &store)
+            try replacePaneLayout(layout, in: &store)
             return result(.close, store: store, layout: layout, changed: true)
         case let .point(workspaceID, paneID, targets):
             var layout = try workspace(id: workspaceID, in: store)
@@ -241,7 +241,7 @@ public enum WorkspaceOperationExecution {
                     node.tabs[index].target = target.target
                 }
             }
-            try replace(layout, in: &store)
+            try replacePaneLayout(layout, in: &store)
             return result(.point, store: store, layout: layout, changed: true)
         case let .equalize(workspaceID, splitID):
             var layout = try workspace(id: workspaceID, in: store)
@@ -257,7 +257,7 @@ public enum WorkspaceOperationExecution {
             } else {
                 layout.root.equalize()
             }
-            try replace(layout, in: &store)
+            try replacePaneLayout(layout, in: &store)
             return result(.equalize, store: store, layout: layout, changed: true)
         }
     }
@@ -267,6 +267,13 @@ public enum WorkspaceOperationExecution {
             throw WorkspaceOperationError(.notFound, "the workspace no longer exists")
         }
         store.layouts[index] = layout
+    }
+
+    private static func replacePaneLayout(
+        _ layout: WorkspaceLayout, in store: inout WorkspaceStore
+    ) throws {
+        try replace(layout, in: &store)
+        if store.currentID == nil { store.currentID = layout.id }
     }
 
     private static func result(
