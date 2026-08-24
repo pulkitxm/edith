@@ -849,7 +849,7 @@ struct MainWindowView: View {
                 help: "Lock the keyboard so you can wipe it"
             ) {
                 keyboardCleanTrigger += 1
-                IPC.post(IPC.Name.requestKeyboardClean)
+                AppRuntimeCenter().request(.cleanKeys)
             },
             quickActionTile(
                 icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",

@@ -548,7 +548,7 @@ private struct QuickActionsCard: View {
                         icon: "keyboard", title: "Clean keys",
                         sub: "Lock the keyboard to wipe it", active: false
                     ) {
-                        IPC.post(IPC.Name.requestKeyboardClean)
+                        AppRuntimeCenter().request(.cleanKeys)
                     }
                     tile(
                         icon: preventSleep ? "moon.zzz.fill" : "moon.zzz", title: "Keep awake",

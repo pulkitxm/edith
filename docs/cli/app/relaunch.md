@@ -4,42 +4,53 @@ Quits both Edith processes and starts the app again, which is what a new
 permission grant needs before it takes effect.
 
 ```
-ed app relaunch [--json]
+ed app relaunch [--yes] [--json]
 ```
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
+| `--yes` | flag | off | Quit and relaunch Edith. Without it, print the plan only. |
 | `--json` | flag | off | Emit JSON on stdout. |
 
-`--json` shape:
+Without `--yes`, `--json` describes the safe preview:
 
 ```json
 {
+  "action": "relaunch Edith",
+  "applied": false,
+  "changed": false,
   "path": "/Applications/Edith.app",
-  "relaunched": true
+  "relaunched": false,
+  "targets": ["/Applications/Edith.app"]
 }
 ```
+
+With `--yes`, `applied`, `changed`, and `relaunched` are `true`.
 
 Examples:
 
 ```
 ed app relaunch
-ed app relaunch --json
+ed app relaunch --yes
+ed app relaunch --yes --json
 ```
 
-Without `--json` it prints `relaunched Edith`, and only once the quit and the
-launch have both happened. While it works it paints two transient spinner lines
-on stderr, `waiting for Edith to quit` and then `starting Edith`; they are
-skipped with `--json` and whenever stderr is not a terminal, so stdout stays one
-document. This is the Permissions pane's relaunch button as a command, with a
-longer reach: the button restarts the menu bar helper it lives in, while `ed`
-takes both processes down. macOS hands a process its TCC answers when it starts,
-so a grant you have just given is invisible until the app runs again.
+Without `--yes` it prints the bundle it would relaunch and leaves both processes
+untouched. With `--yes` and without `--json` it prints `relaunched Edith`, and
+only once the quit and the launch have both happened. While it works it paints
+two transient spinner lines on stderr, `waiting for Edith to quit` and then
+`starting Edith`; they are skipped with `--json` and whenever stderr is not a
+terminal, so stdout stays one document. This is the Permissions pane's relaunch
+button as a command, with a longer reach: the button restarts the menu bar helper
+it lives in, while `ed` takes both processes down. macOS hands a process its TCC
+answers when it starts, so a grant you have just given is invisible until the
+app runs again.
 
-It needs no running process, but it does need to find the app, which it checks
-before it quits anything. When neither the bundle this binary sits inside nor
-`/Applications/Edith.app` exists, it exits 4 with `Edith is not installed where
-ed can find it`, hint `it looks in /Applications and alongside this binary`.
+The preview needs no running process. Applying the plan needs to find the app,
+which it checks before it quits anything. When neither the bundle this binary
+sits inside nor `/Applications/Edith.app` exists, `--yes` exits 4 with `Edith is
+not installed where ed can find it`, hint `it looks in /Applications and
+alongside this binary`.
 
 The order is: post the quit request, then terminate every process carrying
 either bundle id, wait up to 8 seconds for them to go, force quit whatever is

@@ -271,10 +271,6 @@ enum UIParity {
         UICapability(
             "Download queue row", "cancel one active download", ["download", "cancel", "1"]),
         UICapability(
-            "Permissions pane", "relaunch after granting", ["app", "relaunch"]),
-        UICapability(
-            "Update schedule sheet", "clear the check history", ["app", "clear-updates"]),
-        UICapability(
             "Workspace toolbar", "apply a layout preset",
             ["machines", "workspace", "new", "box", "--screen", "terminal"]),
         UICapability(
@@ -370,11 +366,6 @@ enum UIParity {
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
-        UICapability("Menu bar", "open the panel", ["app", "open"]),
-        UICapability("Menu bar", "quit Edith", ["app", "quit"]),
-        UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
-        UICapability("Settings", "send a test notification", ["app", "test-notification"]),
-        UICapability("About pane", "check for updates", ["app", "check-updates"]),
         UICapability(
             "Herdr board", "list live sessions on this Mac and SSH machines", ["herdr", "ls"]),
         UICapability(
