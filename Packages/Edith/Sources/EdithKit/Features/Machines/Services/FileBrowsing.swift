@@ -165,6 +165,22 @@ public enum FileOperations {
         "rm -rf " + paths.map(ShellQuote.quote).joined(separator: " ")
     }
 
+    public static func duplicateCommand(path: String, destination: String? = nil) -> String {
+        let source = ShellQuote.quote(path)
+        if let destination {
+            let target = ShellQuote.quote(destination)
+            return "cp -a \(source) \(target) && printf '%s' \(target)"
+        }
+        return """
+            src=\(source); dir=$(dirname "$src"); base=$(basename "$src")
+            stem="${base%.*}"; ext=""
+            case "$base" in *.*) ext=".${base##*.}";; esac
+            target="$dir/$stem copy$ext"; n=2
+            while [ -e "$target" ]; do target="$dir/$stem copy $n$ext"; n=$((n+1)); done
+            cp -a "$src" "$target" && printf '%s' "$target"
+            """
+    }
+
     public static func copyCommand(paths: [String], toDirectory directory: String) -> String {
         "cp -a " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
             + ShellQuote.quote(directory)
