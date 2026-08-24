@@ -84,6 +84,10 @@ public enum AppStorageKeys {
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
 
+    public enum Herdr {
+        public static let agentViews = "herdrAgentViews"
+    }
+
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
         public static let codexEnabled = "codexLimitsEnabled"
