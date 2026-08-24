@@ -74,11 +74,8 @@ public enum CompanionStackControl {
         log: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws -> CompanionDeployment {
         let tier = host.tier ?? .cpu
-        let deployment = CompanionDeployment(
-            machineID: host.isLocal ? nil : host.id,
-            machineName: host.name,
-            tier: tier.rawValue,
-            localPort: config.apiPort)
+        let deployment = CompanionMindRuntimeOperationExecution.deployment(
+            host: host, localPort: config.apiPort)
         try await CompanionInstaller.install(
             deployment: deployment, config: config, secrets: CompanionSecrets.all(),
             progress: progress, log: log)
@@ -119,26 +116,28 @@ public enum CompanionStackControl {
 
     @MainActor
     public static func up(_ deployment: CompanionDeployment) async throws -> String {
-        try await run(
-            CompanionStackCommands.up(
-                directory: deployment.directory, tier: deployment.resolvedTier, build: false),
-            on: deployment, timeout: 1800)
+        try await CompanionMindRuntimeOperationExecution.start(
+            deployment, build: false
+        ) { command, deployment, timeout in
+            try await run(command, on: deployment, timeout: timeout)
+        }
     }
 
     @MainActor
     public static func down(_ deployment: CompanionDeployment) async throws -> String {
-        try await run(
-            CompanionStackCommands.down(
-                directory: deployment.directory, tier: deployment.resolvedTier, keepData: true),
-            on: deployment, timeout: 300)
+        try await CompanionMindRuntimeOperationExecution.stop(
+            deployment, wipe: false
+        ) { command, deployment, timeout in
+            try await run(command, on: deployment, timeout: timeout)
+        }
     }
 
     @MainActor
     public static func restart(_ deployment: CompanionDeployment) async throws -> String {
-        try await run(
-            CompanionStackCommands.restart(
-                directory: deployment.directory, tier: deployment.resolvedTier),
-            on: deployment, timeout: 600)
+        try await CompanionMindRuntimeOperationExecution.restart(deployment) {
+            command, deployment, timeout in
+            try await run(command, on: deployment, timeout: timeout)
+        }
     }
 
     @MainActor
