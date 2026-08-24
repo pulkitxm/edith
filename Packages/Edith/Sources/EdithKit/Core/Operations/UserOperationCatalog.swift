@@ -50,6 +50,9 @@ public enum UserOperationCatalog {
         + MusicLibraryContentOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MusicFolderSelectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MusicTransportOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -579,14 +582,7 @@ private extension ConfigurationOperation {
         case .get:
             userInterface("Settings", "read a preference", ["theme"])
         case .set:
-            .userInterface([
-                UserInterfaceActionPlacement(
-                    surface: "Settings", action: "change a preference",
-                    exampleArguments: ["theme", "dim"]),
-                UserInterfaceActionPlacement(
-                    surface: "Music page", action: "choose the music folder",
-                    exampleArguments: ["musicFolderPath", "~/Music"]),
-            ])
+            userInterface("Settings", "change a preference", ["theme", "dim"])
         case .unset:
             userInterface("Settings", "restore a preference default", ["theme"])
         case .describe:
@@ -596,6 +592,12 @@ private extension ConfigurationOperation {
         case .import:
             commandLineOnly("The app restores settings through iCloud instead of importing JSON.")
         }
+    }
+}
+
+private extension MusicFolderSelectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface("Music page", "choose the music folder", ["~/Music"])
     }
 }
 

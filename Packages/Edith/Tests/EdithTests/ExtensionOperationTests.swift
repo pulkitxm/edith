@@ -12,6 +12,7 @@ import Testing
             + DownloadOperation.allCases.map(\.descriptor)
             + MusicLibraryOperation.allCases.map(\.descriptor)
             + MusicLibraryContentOperation.allCases.map(\.descriptor)
+            + MusicFolderSelectionOperation.allCases.map(\.descriptor)
             + MusicTransportOperation.allCases.map(\.descriptor)
             + PresenterRuntimeOperation.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)

@@ -55,7 +55,9 @@ public enum Repo {
     private static let repoPathConfirmationKey = "repoPathExternalConfirmation"
 
     public static var devRoot: URL? {
-        confirmedPath(forKey: pathKey, confirmationKey: repoPathConfirmationKey)
+        confirmedPath(
+            forKey: pathKey, confirmationKey: repoPathConfirmationKey,
+            defaults: SharedDefaults.store)
     }
 
     public static var dataDir: URL {
@@ -65,33 +67,58 @@ public enum Repo {
     public static var usageJSON: URL { dataDir.appendingPathComponent("usage.json") }
     public static var limitsJSONL: URL { dataDir.appendingPathComponent("limits-history.jsonl") }
     public static var musicDir: URL {
-        confirmedPath(forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey)
+        selectedMusicDirectory()
             ?? devRoot?.appendingPathComponent("local/music")
             ?? AppData.supportDir.appendingPathComponent("music")
     }
 
-    public static func prepareStoredPaths() {
+    public static func selectedMusicDirectory(
+        defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL? {
+        confirmedPath(
+            forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey,
+            defaults: defaults, homeDirectory: homeDirectory)
+    }
+
+    public static func prepareStoredPaths(
+        defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) {
         validateStoredPath(
-            forKey: pathKey, confirmationKey: repoPathConfirmationKey, marksMusicStale: true)
+            forKey: pathKey, confirmationKey: repoPathConfirmationKey, marksMusicStale: true,
+            defaults: defaults, homeDirectory: homeDirectory)
         validateStoredPath(
             forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey,
-            marksMusicStale: true)
+            marksMusicStale: true, defaults: defaults, homeDirectory: homeDirectory)
     }
 
-    public static func setDevRootPath(_ path: String?) {
-        setConfirmedPath(path, forKey: pathKey, confirmationKey: repoPathConfirmationKey)
-    }
-
-    public static func setMusicDirectory(_ url: URL) {
+    public static func setDevRootPath(
+        _ path: String?, defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) {
         setConfirmedPath(
-            url.path, forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey)
-        SharedDefaults.store.set(false, forKey: musicFolderStaleKey)
+            path, forKey: pathKey, confirmationKey: repoPathConfirmationKey,
+            defaults: defaults, homeDirectory: homeDirectory)
     }
 
-    private static func confirmedPath(forKey key: String, confirmationKey: String) -> URL? {
-        guard let path = SharedDefaults.store.string(forKey: key), !path.isEmpty else { return nil }
-        if RestoredPathValidation.verdict(for: path) == .keep
-            || SharedDefaults.store.string(forKey: confirmationKey) == path
+    public static func setMusicDirectory(
+        _ url: URL, defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) {
+        setConfirmedPath(
+            url.path, forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey,
+            defaults: defaults, homeDirectory: homeDirectory)
+        defaults.set(false, forKey: musicFolderStaleKey)
+    }
+
+    private static func confirmedPath(
+        forKey key: String, confirmationKey: String, defaults: UserDefaults,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL? {
+        guard let path = defaults.string(forKey: key), !path.isEmpty else { return nil }
+        if RestoredPathValidation.verdict(for: path, homeDirectory: homeDirectory) == .keep
+            || defaults.string(forKey: confirmationKey) == path
         {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
@@ -99,32 +126,36 @@ public enum Repo {
     }
 
     private static func validateStoredPath(
-        forKey key: String, confirmationKey: String, marksMusicStale: Bool
+        forKey key: String, confirmationKey: String, marksMusicStale: Bool,
+        defaults: UserDefaults, homeDirectory: URL
     ) {
-        guard let path = SharedDefaults.store.string(forKey: key), !path.isEmpty,
-            RestoredPathValidation.verdict(for: path) == .drop,
-            SharedDefaults.store.string(forKey: confirmationKey) != path
+        guard let path = defaults.string(forKey: key), !path.isEmpty,
+            RestoredPathValidation.verdict(for: path, homeDirectory: homeDirectory) == .drop,
+            defaults.string(forKey: confirmationKey) != path
         else { return }
-        SharedDefaults.store.removeObject(forKey: key)
+        defaults.removeObject(forKey: key)
         if marksMusicStale {
-            SharedDefaults.store.set(true, forKey: musicFolderStaleKey)
+            defaults.set(true, forKey: musicFolderStaleKey)
         }
     }
 
     private static func setConfirmedPath(
-        _ path: String?, forKey key: String, confirmationKey: String
+        _ path: String?, forKey key: String, confirmationKey: String,
+        defaults: UserDefaults, homeDirectory: URL
     ) {
         guard let path, !path.isEmpty else {
-            SharedDefaults.store.removeObject(forKey: key)
-            SharedDefaults.store.removeObject(forKey: confirmationKey)
+            defaults.removeObject(forKey: key)
+            defaults.removeObject(forKey: confirmationKey)
             return
         }
         let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
-        SharedDefaults.store.set(standardizedPath, forKey: key)
-        if RestoredPathValidation.verdict(for: standardizedPath) == .drop {
-            SharedDefaults.store.set(standardizedPath, forKey: confirmationKey)
+        defaults.set(standardizedPath, forKey: key)
+        if RestoredPathValidation.verdict(
+            for: standardizedPath, homeDirectory: homeDirectory) == .drop
+        {
+            defaults.set(standardizedPath, forKey: confirmationKey)
         } else {
-            SharedDefaults.store.removeObject(forKey: confirmationKey)
+            defaults.removeObject(forKey: confirmationKey)
         }
     }
 }

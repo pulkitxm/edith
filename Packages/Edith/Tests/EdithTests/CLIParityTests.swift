@@ -645,6 +645,10 @@ enum UIParity {
                 ])
     }
 
+    @Test func musicFolderSelectionDeclaresItsDedicatedSharedOperation() {
+        #expect(MusicFolderSelectionOperation.select.descriptor.cli == ["music", "library"])
+    }
+
     @Test func everyExtensionMutationLeafDeclaresItsSharedOperation() {
         let declared = Set(ExtensionMutationOperation.allCases.map(\.descriptor.cli))
         #expect(

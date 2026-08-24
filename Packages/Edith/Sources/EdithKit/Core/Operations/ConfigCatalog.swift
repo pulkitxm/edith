@@ -532,9 +532,6 @@ public enum ConfigCatalog {
             summary: "Show the library as a grid.",
             fallback: .bool(false)),
         SettingDefinition(
-            Repo.musicFolderPathKey, .string, group: "music",
-            summary: "Folder the music library plays from."),
-        SettingDefinition(
             AppStorageKeys.Music.shuffling, .bool, group: "music",
             summary: "Play the folder in a random order.",
             fallback: .bool(false), scope: .standard),
