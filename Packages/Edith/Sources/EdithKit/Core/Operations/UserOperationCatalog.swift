@@ -5,6 +5,18 @@ public enum UserOperationCatalog {
         MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MachineThermalOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineExecOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineMountOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MachineBroadcastOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MachineMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -208,6 +220,44 @@ private extension MachineControlOperation {
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
         }
+    }
+}
+
+private extension MachineThermalOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Machine cooling", "inspect thermal profiles", ["box"])
+        case .set:
+            userInterface(
+                "Machine cooling", "switch thermal profiles", ["box", "performance"])
+        }
+    }
+}
+
+private extension MachineExecOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface(
+            "Docker window", "open a shell in a container",
+            ["--tty", "box", "docker exec -it api sh"])
+    }
+}
+
+private extension MachineMountOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .mount:
+            userInterface("Machine tools", "mount the machine's disk on this Mac", ["box"])
+        case .unmount:
+            userInterface("Machine tools", "unmount the machine's disk", ["box"])
+        }
+    }
+}
+
+private extension MachineBroadcastOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface(
+            "Terminal broadcast bar", "send one line to every pane", ["--", "uptime"])
     }
 }
 

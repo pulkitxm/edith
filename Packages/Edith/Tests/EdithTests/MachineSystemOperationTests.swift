@@ -30,6 +30,7 @@ import Testing
                 ])
         #expect(MachineThermalOperation.status.descriptor.effect == .read)
         #expect(MachineExecOperation.dockerShell.descriptor.effect == .interactive)
+        #expect(descriptors.allSatisfy(UserOperationCatalog.descriptors.contains))
     }
 
     @Test func thermalStatusUsesTheSharedCommandAndParser() async throws {
@@ -249,5 +250,48 @@ import Testing
             #expect(walked == descriptor.cli)
             #expect(node.children.isEmpty)
         }
+    }
+
+    @Test func productionUIPlacementsExactlyCoverTheSixSystemRoutes() {
+        let descriptors =
+            MachineThermalOperation.allCases.map(\.descriptor)
+            + MachineExecOperation.allCases.map(\.descriptor)
+            + MachineMountOperation.allCases.map(\.descriptor)
+            + MachineBroadcastOperation.allCases.map(\.descriptor)
+        let ids = Set(descriptors.map(\.id))
+        let placements = UserOperationCatalog.userInterfaceActions.filter {
+            ids.contains($0.operation.id)
+        }
+
+        #expect(
+            placements.map {
+                [$0.surface, $0.action] + $0.cli
+            }
+                == [
+                    [
+                        "Machine cooling", "inspect thermal profiles", "machines", "thermal",
+                        "status", "box",
+                    ],
+                    [
+                        "Machine cooling", "switch thermal profiles", "machines", "thermal",
+                        "set", "box", "performance",
+                    ],
+                    [
+                        "Docker window", "open a shell in a container", "machines", "exec",
+                        "--tty", "box", "docker exec -it api sh",
+                    ],
+                    [
+                        "Machine tools", "mount the machine's disk on this Mac", "machines",
+                        "mount", "box",
+                    ],
+                    [
+                        "Machine tools", "unmount the machine's disk", "machines", "unmount",
+                        "box",
+                    ],
+                    [
+                        "Terminal broadcast bar", "send one line to every pane", "machines",
+                        "broadcast", "--", "uptime",
+                    ],
+                ])
     }
 }

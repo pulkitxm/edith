@@ -208,12 +208,6 @@ enum UIParity {
             "Companion settings", "point at another companion",
             ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
         UICapability(
-            "Machine cooling", "inspect thermal profiles",
-            ["machines", "thermal", "status", "box"]),
-        UICapability(
-            "Machine cooling", "switch thermal profiles",
-            ["machines", "thermal", "set", "box", "performance"]),
-        UICapability(
             "Machine controls", "inspect available live controls",
             ["machines", "control", "status", "box"]),
         UICapability(
@@ -240,9 +234,6 @@ enum UIParity {
         UICapability(
             "Machine controls", "set keyboard backlight brightness",
             ["machines", "control", "keyboard-light", "box", "25"]),
-        UICapability(
-            "Docker window", "open a shell in a container",
-            ["machines", "exec", "--tty", "box", "docker exec -it api sh"]),
         UICapability(
             "Machine finder", "search the folder",
             ["machines", "files", "search", "box", "/a", "x"]),
@@ -280,11 +271,6 @@ enum UIParity {
             "Workspace picker", "rename a layout", ["machines", "workspace", "rename", "a", "b"]),
         UICapability(
             "Workspace picker", "delete a layout", ["machines", "workspace", "rm", "a"]),
-        UICapability(
-            "Machine tools", "mount the machine's disk on this Mac", ["machines", "mount", "box"]),
-        UICapability(
-            "Machine tools", "unmount the machine's disk", ["machines", "unmount", "box"]),
-
         UICapability("Music player", "play", ["music", "play"]),
         UICapability("Music player", "pause", ["music", "pause"]),
         UICapability("Music player", "stop", ["music", "stop"]),
@@ -376,9 +362,6 @@ enum UIParity {
 
         UICapability(
             "Extension sheet", "install a required CLI tool", ["tools", "install", "yt-dlp"]),
-        UICapability(
-            "Terminal broadcast bar", "send one line to every pane",
-            ["machines", "broadcast", "--", "uptime"]),
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
