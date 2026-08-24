@@ -27,9 +27,8 @@ test("CI gates the reusable release only on relevant checks", () => {
   expect(releaseJob).toContain("needs.checks.result == 'success'");
   expect(releaseJob).toContain("!contains(needs.*.result, 'failure')");
   expect(releaseJob).toContain("!contains(needs.*.result, 'cancelled')");
-  expect(releaseJob).toContain(
-    "needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success'",
-  );
+  expect(releaseJob).toContain("&& (github.event_name == 'push'");
+  expect(releaseJob).toContain("|| needs.swift-build.result == 'success'))");
   expect(releaseJob).not.toContain("needs.changes.outputs.docs != 'true'");
   expect(releaseJob).toContain("|| needs.swift-test.result == 'success'");
   expect(releaseJob).toContain(

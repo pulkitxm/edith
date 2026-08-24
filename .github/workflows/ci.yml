@@ -157,7 +157,10 @@ jobs:
   swift-build:
     name: swift-build
     needs: changes
-    if: needs.changes.outputs.swift == 'true' || needs.changes.outputs.workflows == 'true'
+    if: >-
+      github.event_name != 'push'
+      && (needs.changes.outputs.swift == 'true'
+      || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -265,8 +268,10 @@ jobs:
       && needs.checks.result == 'success'
       && !contains(needs.*.result, 'failure')
       && !contains(needs.*.result, 'cancelled')
-      && ((needs.changes.outputs.swift != 'true'
-      && needs.changes.outputs.workflows != 'true') || needs.swift-build.result == 'success')
+      && (github.event_name == 'push'
+      || ((needs.changes.outputs.swift != 'true'
+      && needs.changes.outputs.workflows != 'true')
+      || needs.swift-build.result == 'success'))
       && ((needs.changes.outputs.swift != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
       && ((needs.changes.outputs.companion != 'true'

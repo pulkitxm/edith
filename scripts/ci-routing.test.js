@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const packageManifest = readFileSync("Packages/Edith/Package.swift", "utf8");
+const swiftTestScript = readFileSync("Packages/Edith/test.sh", "utf8");
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
 
@@ -98,6 +100,26 @@ test("documentation changes run focused documentation tests", () => {
     "needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'",
   );
   expect(ciWorkflow).toContain("run: make ci-docs");
+});
+
+test("main releases skip the redundant debug app build", () => {
+  const swiftBuild = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  swift-build:"),
+    ciWorkflow.indexOf("\n  swift-test:"),
+  );
+  expect(swiftBuild).toContain("github.event_name != 'push'");
+  const release = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
+  expect(release).toContain("&& (github.event_name == 'push'");
+  expect(release).toContain("|| needs.swift-build.result == 'success'))");
+});
+
+test("Swift tests build their CLI fixture in one package graph", () => {
+  expect(swiftTestScript).not.toMatch(/^swift build/gm);
+  expect(swiftTestScript.match(/^exec swift test/gm)?.length).toBe(1);
+  const testTarget = packageManifest.slice(
+    packageManifest.indexOf('name: "EdithTests"'),
+  );
+  expect(testTarget).toContain('"Highlighter", "ed"');
 });
 
 test("targeted publishing workflows watch every deployment input", () => {
