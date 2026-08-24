@@ -1,5 +1,6 @@
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct CompanionChatLibraryOperationTests {
@@ -34,6 +35,35 @@ import Testing
         #expect(
             operation.placements.map(\.action)
                 == ["send a chat message", "continue a conversation"])
+    }
+
+    @Test func everyPlacementMatchesTheAuditedInventoryExactly() {
+        let placements = CompanionChatLibraryOperation.allCases.flatMap { operation in
+            operation.placements.map { placement in
+                [placement.surface, placement.action]
+                    + operation.descriptor.cli + placement.exampleArguments
+            }
+        }
+        #expect(
+            placements
+                == [
+                    [
+                        "Companion chat", "send a chat message", "companion", "chat",
+                        "how was my week",
+                    ],
+                    [
+                        "Companion chat", "continue a conversation", "companion", "chat",
+                        "and then", "--conversation", "abc",
+                    ],
+                    ["Companion chat", "list past conversations", "companion", "conversations"],
+                    [
+                        "Companion chat", "delete a conversation", "companion", "forget", "abc",
+                        "--yes",
+                    ],
+                    ["Companion library", "search the memory", "companion", "search", "warden"],
+                    ["Companion library", "read a full episode", "companion", "episode", "abc"],
+                    ["Companion library", "index pending episodes", "companion", "index"],
+                ])
     }
 
     @Test func libraryPlacementsDoNotClaimTheMediaOpenVariant() {
@@ -151,5 +181,33 @@ import Testing
             CompanionChatLibraryOperationText.indexed(
                 CompanionIndexOutcome(episodesIndexed: 3, chunksCreated: 8))
                 == "indexed 3 episodes into 8 chunks")
+    }
+
+    @Test func completionTreeHasEverySharedOperationAsAnExactLeaf() throws {
+        for operation in CompanionChatLibraryOperation.allCases {
+            let node = try #require(CommandTree.node(at: operation.descriptor.cli))
+            #expect(node.children.isEmpty)
+        }
+        let forget = try #require(CommandTree.node(at: ["companion", "forget"]))
+        #expect(forget.destructivePolicy == .previewThenYes)
+        #expect(forget.options.contains("--yes"))
+    }
+
+    @Test func forgetPlainAndJSONPreviewsDoNotContactTheBackend() async {
+        let plain = await CLIProbe.run(["companion", "forget", "conversation-1"])
+        #expect(plain.code == ExitCodes.success)
+        #expect(plain.stdout == "would forget companion conversation: conversation-1\n")
+        #expect(plain.stderr.contains("nothing changed"))
+
+        let json = await CLIProbe.run([
+            "companion", "forget", "conversation-1", "--json",
+        ])
+        #expect(json.code == ExitCodes.success)
+        #expect(json.stderr.isEmpty)
+        #expect(json.object?["action"] as? String == "forget companion conversation")
+        #expect(json.object?["applied"] as? Bool == false)
+        #expect(json.object?["changed"] as? Bool == false)
+        #expect(json.object?["conversation"] as? String == "conversation-1")
+        #expect(json.object?["targets"] as? [String] == ["conversation-1"])
     }
 }
