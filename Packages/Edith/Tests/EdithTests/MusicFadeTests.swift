@@ -1,6 +1,7 @@
-import EdithKit
 import Foundation
 import Testing
+
+@testable import EdithKit
 
 @Suite struct MusicFadeTests {
     private func defaults(_ values: [String: Any]) -> UserDefaults {
@@ -71,7 +72,7 @@ import Testing
             let destination = root.appendingPathComponent("Chill/alpha-song.mp3")
             try? FileManager.default.createDirectory(
                 at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            _ = try MusicLibrary.relocate(from: source, to: destination)
+            _ = try MusicLibrary.relocate(from: source, to: destination, root: root)
             #expect(FileManager.default.fileExists(atPath: destination.path))
             #expect(!FileManager.default.fileExists(atPath: source.path))
         }
@@ -82,7 +83,7 @@ import Testing
             let source = makeFile("alpha-song.mp3", in: root)
             let destination = makeFile("Chill/alpha-song.mp3", in: root)
             #expect(throws: MusicLibraryError.self) {
-                _ = try MusicLibrary.relocate(from: source, to: destination)
+                _ = try MusicLibrary.relocate(from: source, to: destination, root: root)
             }
             #expect(FileManager.default.fileExists(atPath: source.path))
         }
@@ -92,7 +93,7 @@ import Testing
         inTemp { root in
             let source = makeFile("alpha-song.mp3", in: root)
             #expect(throws: MusicLibraryError.self) {
-                _ = try MusicLibrary.relocate(from: source, to: source)
+                _ = try MusicLibrary.relocate(from: source, to: source, root: root)
             }
             #expect(FileManager.default.fileExists(atPath: source.path))
         }
