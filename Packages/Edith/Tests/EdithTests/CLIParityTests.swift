@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithCLI
+@testable import EdithCore
 @testable import EdithKit
 
 struct UICapability {
@@ -16,7 +17,18 @@ struct UICapability {
         self.cli = cli
     }
 
+    init(_ registered: RegisteredUserInterfaceAction) {
+        surface = registered.surface
+        action = registered.action
+        cli = registered.cli
+    }
+
     var label: String { (["ed"] + cli).joined(separator: " ") }
+}
+
+struct LegacyUserInterfaceOperation {
+    let cli: [String]
+    var placements: [UICapability]
 }
 
 enum UIParity {
@@ -35,6 +47,12 @@ enum UIParity {
         "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
         "ed completions install": "shell completion has no UI at all",
         "ed config import": "the app restores from iCloud rather than from a JSON file",
+        "ed clipboard clear": "the clipboard panel no longer offers a clear-history action",
+        "ed color clear": "the colour picker no longer offers a clear-history action",
+        "ed companion machines add":
+            "the companion setup no longer adds deployment machines from the app",
+        "ed machines files open":
+            "the Files window is presentation state rather than a domain operation",
         "ed machines docker compose up":
             "the Docker window groups by project but never runs compose",
         "ed machines docker compose down":
@@ -45,7 +63,7 @@ enum UIParity {
             "the Docker window never pulls images, for a project or otherwise",
     ]
 
-    static let capabilities: [UICapability] = [
+    static let auditedCapabilities: [UICapability] = [
         UICapability(
             "Settings", "change any preference the panes write", ["config", "set", "theme", "dim"]),
         UICapability(
@@ -69,10 +87,6 @@ enum UIParity {
         UICapability(
             "Clipboard panel", "delete an entry", ["clipboard", "rm", "1", "--yes"]),
         UICapability(
-            "Clipboard panel", "clear the history", ["clipboard", "clear", "--yes"]),
-        UICapability(
-            "Clipboard panel", "search the history", ["clipboard", "ls", "--search", "x"]),
-        UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
         UICapability("Color Picker menu", "copy a recent colour", ["color", "copy", "1"]),
         UICapability(
@@ -88,8 +102,6 @@ enum UIParity {
         UICapability(
             "Attention focus card", "finish a focus session", ["attention", "focus", "stop"]),
 
-        UICapability(
-            "Colour picker", "forget the picked colours", ["color", "clear", "--yes"]),
         UICapability("Colour picker", "open the system loupe", ["color", "pick"]),
 
         UICapability("Notch shelf", "drop a file onto the shelf", ["shelf", "add", "./file"]),
@@ -118,7 +130,6 @@ enum UIParity {
             ["cleaner", "clean", "--category", "npm", "--yes"]),
 
         UICapability("Companion", "sync github activity", ["companion", "sync", "github"]),
-        UICapability("Companion", "ask about your life", ["companion", "ask", "how is warden"]),
         UICapability(
             "Companion settings", "export the memory as a bundle",
             ["companion", "export", "/tmp/backup"]),
@@ -171,17 +182,11 @@ enum UIParity {
             "Companion desk", "show the question it wants to ask today",
             ["companion", "inquire", "next"]),
         UICapability(
-            "Companion setup", "add a machine the stack could run on",
-            ["companion", "machines", "add", "gpu-box"]),
-        UICapability(
             "Companion settings", "store a github or notion token",
             ["companion", "connectors", "set", "--github", "gho_x"]),
         UICapability(
             "Companion settings", "import a calendar, music or youtube export",
             ["companion", "connectors", "import", "music", "./export.json"]),
-        UICapability(
-            "Companion mind", "retire a belief that is wrong",
-            ["companion", "correct", "abc", "--retire"]),
         UICapability(
             "Companion settings", "change the reasoner or its api key",
             ["companion", "reason", "set", "--provider", "anthropic", "--api-key", "sk-x"]),
@@ -277,9 +282,6 @@ enum UIParity {
             "Machine tools", "switch a port forward off",
             ["machines", "forwards", "off", "box", "1"]),
         UICapability(
-            "Machine terminal", "type into an interactive shell",
-            ["machines", "exec", "--tty", "box", "top"]),
-        UICapability(
             "Docker window", "open a shell in a container",
             ["machines", "exec", "--tty", "box", "docker exec -it api sh"]),
         UICapability(
@@ -300,9 +302,6 @@ enum UIParity {
         UICapability(
             "Machine finder", "undo the last move or rename",
             ["machines", "files", "undo", "box"]),
-        UICapability(
-            "Machine tab bar", "open the Files window",
-            ["machines", "files", "open", "box", "/var/log"]),
         UICapability("Workspace view", "list saved layouts", ["machines", "workspace", "ls"]),
         UICapability(
             "Workspace pane menu", "split a pane",
@@ -471,12 +470,6 @@ enum UIParity {
             "Dashboard machines menu", "drop what a machine already gave",
             ["usage", "machines", "forget", "box"]),
         UICapability(
-            "Dashboard machines chip", "show one machine's agents only",
-            ["usage", "summary", "--machine", "box"]),
-        UICapability(
-            "Dashboard machines chip", "take a machine out of the charts",
-            ["usage", "summary", "--machine", "local"]),
-        UICapability(
             "Herdr board", "list live sessions on this Mac and SSH machines", ["herdr", "ls"]),
         UICapability(
             "Herdr session tab", "copy the attach command for a pane",
@@ -529,6 +522,46 @@ enum UIParity {
             "Quinjet cmux workspace", "show the external review",
             ["quinjet", "focus", "1"]),
     ]
+
+    static func operationCLI(for invocation: [String]) -> [String] {
+        var node = CommandTree.root
+        var operation: [String] = []
+        for argument in invocation where !argument.hasPrefix("-") {
+            guard let child = node.child(argument) else { break }
+            node = child
+            operation.append(argument)
+            if node.children.isEmpty { break }
+        }
+        return operation
+    }
+
+    static func isCovered(
+        _ capability: UICapability, by actions: [RegisteredUserInterfaceAction]
+    ) -> Bool {
+        let operation = operationCLI(for: capability.cli)
+        return actions.contains {
+            $0.operation.cli == operation && $0.surface == capability.surface
+                && $0.cli == capability.cli
+        }
+    }
+
+    static let legacyCapabilities = auditedCapabilities.filter {
+        !isCovered($0, by: UserInterfaceActionCatalog.actions)
+    }
+
+    static let legacyOperations = legacyCapabilities.reduce(
+        into: [LegacyUserInterfaceOperation]()
+    ) { operations, capability in
+        let cli = operationCLI(for: capability.cli)
+        if let index = operations.firstIndex(where: { $0.cli == cli }) {
+            operations[index].placements.append(capability)
+        } else {
+            operations.append(LegacyUserInterfaceOperation(cli: cli, placements: [capability]))
+        }
+    }
+
+    static let capabilities =
+        UserInterfaceActionCatalog.actions.map(UICapability.init) + legacyCapabilities
 }
 
 @Suite struct CLIParityTests {
@@ -570,6 +603,8 @@ enum UIParity {
 
     @Test func everyMappedCommandIsAlsoInTheCompletionTree() {
         for capability in UIParity.capabilities {
+            let expected = Self.commandPath(capability.cli).split(separator: " ").dropFirst().map(
+                String.init)
             var node = CommandTree.root
             var walked: [String] = []
             for word in capability.cli where !word.hasPrefix("-") {
@@ -578,8 +613,9 @@ enum UIParity {
                 walked.append(word)
             }
             #expect(
-                !walked.isEmpty,
-                "`\(capability.label)` is missing from CommandTree, so it will not complete")
+                walked == expected,
+                "`\(capability.label)` does not reach its exact CommandTree route")
+            #expect(node.children.isEmpty, "`\(capability.label)` does not complete to a leaf")
         }
     }
 
@@ -596,6 +632,115 @@ enum UIParity {
             }
             #expect(walked == descriptor.cli, "\(label) is incomplete in CommandTree")
             #expect(node.children.isEmpty, "\(label) resolves to a command group, not a leaf")
+        }
+    }
+
+    @Test func productionRegistryClassifiesEverySharedOperationExactlyOnce() {
+        let registrations = UserOperationCatalog.registrations
+        let descriptors = registrations.map(\.descriptor)
+        #expect(descriptors == UserOperationCatalog.descriptors)
+        #expect(Set(descriptors.map(\.id)).count == descriptors.count)
+        #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+
+        let actionIDs = UserInterfaceActionCatalog.actions.map(\.operation.id)
+        let commandLineOnlyIDs = UserOperationCatalog.commandLineOnly.map(\.descriptor.id)
+        #expect(Set(actionIDs).isDisjoint(with: commandLineOnlyIDs))
+        #expect(Set(actionIDs + commandLineOnlyIDs) == Set(descriptors.map(\.id)))
+    }
+
+    @Test func productionUIActionsCarryARegisteredOperationAndCompleteInvocation() {
+        for action in UserInterfaceActionCatalog.actions {
+            #expect(UserOperationCatalog.descriptor(id: action.operation.id) == action.operation)
+            #expect(UserOperationCatalog.descriptor(cli: action.operation.cli) == action.operation)
+            #expect(!action.surface.isEmpty)
+            #expect(action.action.count > 3)
+            #expect(action.cli.starts(with: action.operation.cli))
+            #expect(action.cli.count >= action.operation.cli.count)
+        }
+    }
+
+    @Test func commandLineOnlyOperationsExplainWhyTheyHaveNoUIAction() {
+        for registration in UserOperationCatalog.commandLineOnly {
+            guard case let .commandLineOnly(reason) = registration.exposure else {
+                Issue.record("\(registration.descriptor.id.rawValue) is not command-line only")
+                continue
+            }
+            #expect(reason.count > 20)
+        }
+    }
+
+    @Test func presentationOnlyStateIsExplicitAndHasNoOperationRoute() {
+        let states = UserInterfaceActionCatalog.presentationOnly
+        #expect(!states.isEmpty)
+        #expect(Set(states.map(\.state)).count == states.count)
+        for state in states {
+            #expect(!state.surface.isEmpty)
+            #expect(!state.state.isEmpty)
+            #expect(state.reason.count > 20)
+        }
+    }
+
+    @Test func legacyInventoryContainsOnlyOperationsAwaitingSharedDescriptors() {
+        for capability in UIParity.legacyCapabilities {
+            #expect(
+                !UIParity.isCovered(capability, by: UserInterfaceActionCatalog.actions),
+                "\(capability.label) is duplicated after joining the production registry")
+        }
+        #expect(Set(UIParity.legacyOperations.map(\.cli)).count == UIParity.legacyOperations.count)
+        #expect(
+            UIParity.legacyOperations.flatMap(\.placements).count
+                == UIParity.legacyCapabilities.count)
+        for operation in UIParity.legacyOperations {
+            #expect(!operation.placements.isEmpty)
+            #expect(
+                operation.placements.allSatisfy {
+                    UIParity.operationCLI(for: $0.cli) == operation.cli
+                })
+        }
+        #expect(
+            UIParity.capabilities.count
+                == UserInterfaceActionCatalog.actions.count + UIParity.legacyCapabilities.count)
+    }
+
+    @Test func exactPlacementCoverageKeepsPlainCompanionEpisodeVisible() {
+        let descriptor = UserOperationDescriptor(
+            id: UserOperationID(rawValue: "companion.episode.media-open"),
+            summary: "Open a companion episode.", cli: ["companion", "episode"],
+            effect: .interactive)
+        let action = RegisteredUserInterfaceAction(
+            operation: descriptor,
+            placement: UserInterfaceActionPlacement(
+                surface: "Companion library", action: "open an episode with the default app",
+                exampleArguments: ["abc", "--open"]))
+        let plain = UICapability(
+            "Companion library", "read a full episode", ["companion", "episode", "abc"])
+        let mediaOpen = UICapability(
+            "Companion library", "open an episode with the default app",
+            ["companion", "episode", "abc", "--open"])
+
+        #expect(plain.cli.starts(with: action.operation.cli))
+        #expect(!UIParity.isCovered(plain, by: [action]))
+        #expect(UIParity.isCovered(mediaOpen, by: [action]))
+        #expect(
+            !UIParity.isCovered(
+                UICapability("Companion detail", mediaOpen.action, mediaOpen.cli), by: [action]))
+    }
+
+    @Test func legacyVariantsShareOneExactOperationWithMultiplePlacements() {
+        let expectedPlacementCounts: [[String]: Int] = [
+            ["companion", "chat"]: 2,
+            ["machines", "kill"]: 2,
+            ["music", "rename"]: 2,
+            ["music", "rm"]: 2,
+            ["machines", "add"]: 2,
+            ["machines", "edit"]: 4,
+            ["machines", "docker", "start"]: 2,
+            ["machines", "docker", "stop"]: 2,
+        ]
+        let operations = Dictionary(
+            uniqueKeysWithValues: UIParity.legacyOperations.map { ($0.cli, $0.placements.count) })
+        for (cli, count) in expectedPlacementCounts {
+            #expect(operations[cli] == count, "\(cli) should have \(count) UI placements")
         }
     }
 
