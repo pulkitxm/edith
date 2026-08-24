@@ -7,11 +7,11 @@
     "render": "remotion render Main out/edith-promo.mp4"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.512",
-    "@remotion/transitions": "4.0.512",
+    "@remotion/cli": "4.0.515",
+    "@remotion/transitions": "4.0.515",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "remotion": "4.0.512"
+    "remotion": "4.0.515"
   },
   "devDependencies": {
     "@types/react": "19.2.18",
