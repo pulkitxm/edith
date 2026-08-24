@@ -66,17 +66,23 @@ final class MachinesModel {
         ensureSelection()
     }
 
-    func add(_ machine: Machine) {
-        store.add(machine)
+    func add(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
+        MachineMutationOperationExecution.perform(
+            .add, machine: machine, secrets: secrets,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
+        store.reload()
         selection = machine.id
         let session = session(for: machine.id)
         session.start()
         reconcileSSHClipboard(machine, connection: session.connectionRef)
     }
 
-    func update(_ machine: Machine) {
+    func update(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
         let previous = store.machine(id: machine.id)
-        store.update(machine)
+        MachineMutationOperationExecution.perform(
+            .edit, machine: machine, secrets: secrets,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
+        store.reload()
         if let session = sessions[machine.id] {
             session.stop()
             sessions[machine.id] = nil
@@ -88,15 +94,29 @@ final class MachinesModel {
     }
 
     func remove(id: UUID) {
-        let machine = store.machine(id: id)
+        guard let machine = store.machine(id: id) else { return }
         sessions[id]?.stop()
         sessions[id] = nil
-        store.remove(id: id)
-        if var machine {
-            machine.sshClipboardEnabled = false
-            reconcileSSHClipboard(machine, replacing: machine)
-        }
+        MachineMutationOperationExecution.perform(
+            .remove, machine: machine,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
+        store.reload()
+        var disabled = machine
+        disabled.sshClipboardEnabled = false
+        reconcileSSHClipboard(disabled, replacing: disabled)
         ensureSelection()
+    }
+
+    func performConnection(_ operation: MachineConnectionOperation, for session: MachineSession) {
+        Task {
+            _ = await MachineConnectionOperationExecution.perform(
+                operation,
+                connect: {
+                    session.start()
+                    return nil
+                },
+                disconnect: { session.stop() })
+        }
     }
 
     func startSelected() {
@@ -112,21 +132,32 @@ final class MachinesModel {
         sessions = [:]
     }
 
-    func addForward(_ forward: PortForward) {
-        store.addForward(forward)
+    func performForward(
+        _ operation: MachineForwardOperation, forward: PortForward
+    ) async -> Result<MachineForwardOperationResult, Error> {
+        let session = session(for: forward.machineID)
+        let needsLiveAction =
+            operation == .enable || operation == .disable
+            || (operation == .remove && session.activeForwards.contains(forward.id))
+        let setActive: MachineForwardOperationExecution.SetActive? =
+            needsLiveAction
+            ? { candidate, active in await session.setForward(candidate, active: active) }
+            : nil
+        return await MachineForwardOperationExecution.perform(
+            operation, forward: forward, existing: store.forwards,
+            persistAdd: { self.store.addForward($0) },
+            persistRemove: { self.store.removeForward(id: $0) }, setActive: setActive,
+            notify: { IPC.post(IPC.Name.machinesChanged) })
     }
 
-    func removeForward(_ forward: PortForward) {
-        Task { await session(for: forward.machineID).setForward(forward, active: false) }
-        store.removeForward(id: forward.id)
-    }
-
-    func addSnippet(_ snippet: CommandSnippet) {
-        store.addSnippet(snippet)
-    }
-
-    func removeSnippet(_ snippet: CommandSnippet) {
-        store.removeSnippet(id: snippet.id)
+    func performSnippet(
+        _ operation: MachineSnippetOperation, snippet: CommandSnippet
+    ) -> Result<MachineSnippetOperationResult, Error> {
+        MachineSnippetOperationExecution.perform(
+            operation, snippet: snippet,
+            persistAdd: { store.addSnippet($0) },
+            persistRemove: { store.removeSnippet(id: $0) },
+            notify: { IPC.post(IPC.Name.machinesChanged) })
     }
 
     func snapshot(for id: UUID) -> MachineSnapshot {
@@ -201,14 +232,6 @@ final class MachinesModel {
         }
     }
 
-    func wake(machine: Machine) -> String {
-        guard let mac = machine.wakeMACAddress,
-            let packet = WakeOnLAN.magicPacket(macAddress: mac)
-        else {
-            return "No MAC address stored for this machine yet."
-        }
-        return MagicPacket.send(packet) ?? "Sent a wake packet to \(mac)."
-    }
 }
 
 enum SSHClipboardSyncState: Equatable {
