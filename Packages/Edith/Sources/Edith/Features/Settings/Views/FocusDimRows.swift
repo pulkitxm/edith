@@ -16,7 +16,7 @@ struct FocusDimRows: View {
 
     var body: some View {
         Section {
-            Toggle("Dim now", isOn: $active)
+            Toggle("Dim now", isOn: $active.configured(FocusDimState.activeKey))
                 .pointerCursor()
             Text(
                 "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
