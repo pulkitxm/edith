@@ -21,6 +21,7 @@ system query failure produces `failed` with runtime phase `error`.
 
 | Extension | Live installation and configuration checks | Content or runtime check | Recovery and verification |
 | --- | --- | --- | --- |
+| Attention | tracking is enabled with at least one selected source | application or browser tracking is configured | `ed attention summary --json`; `ed extensions verify attention` |
 | Agent Usage | bundled collector plus at least one verified provider executable | refresh lock and decoded `usage.json` daily samples | `ed usage refresh`; `ed usage --json` |
 | Herdr | Herdr presence on this Mac or a configured machine | collected sessions and per-host errors | `ed herdr ls --json`; `ed extensions verify herdr` |
 | Quinjet | verified Quinjet executable, terminal and theme values, and cmux when selected | terminal integration can be resolved | `ed tools install quinjet`; `ed config set quinjetTerminal embedded` |

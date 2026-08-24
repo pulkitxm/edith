@@ -41,4 +41,22 @@ import Testing
         defer { SharedDefaults.store.removeObject(forKey: probe) }
         #expect(AppServices.preferenceOnByDefault(probe))
     }
+
+    @Test func attentionRuntimeRequiresTheExtensionAndATrackingSource() {
+        #expect(
+            !AppServices.attentionEnabled(
+                extensionEnabled: false,
+                settings: AttentionSettings(isEnabled: true, trackingEnabled: true)))
+        #expect(
+            !AppServices.attentionEnabled(
+                extensionEnabled: true, settings: AttentionSettings(isEnabled: true)))
+        #expect(
+            AppServices.attentionEnabled(
+                extensionEnabled: true,
+                settings: AttentionSettings(isEnabled: true, trackingEnabled: true)))
+        #expect(
+            AppServices.attentionEnabled(
+                extensionEnabled: true,
+                settings: AttentionSettings(isEnabled: true, browserTrackingEnabled: true)))
+    }
 }

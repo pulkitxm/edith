@@ -221,6 +221,7 @@ private struct ExtensionMutationWorld {
         let center = world.center(granted: granted)
 
         for entry in ExtensionRegistry.entries {
+            world.defaults.set(false, forKey: entry.defaultsKey)
             let coordinator = ExtensionModalCoordinator(entry: entry, mutationCenter: center)
             #expect(!coordinator.isEnabled)
 

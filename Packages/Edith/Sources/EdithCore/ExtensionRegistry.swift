@@ -85,6 +85,11 @@ public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
 public enum ExtensionRegistry {
     public static let entries: [ExtensionRegistryEntry] = [
         ExtensionRegistryEntry(
+            id: "attention", title: "Attention",
+            subtitle: "Understand where your time goes and protect focused work.",
+            symbolName: "hourglass", group: .utilities, featured: true,
+            defaultsKey: "tabAttentionEnabled", requiredCapabilities: [.runningApplications]),
+        ExtensionRegistryEntry(
             id: "usage", title: "Agent Usage",
             subtitle: "Claude and Codex limits, usage stats, and alerts.",
             symbolName: "chart.bar.fill", group: .agent, featured: true,

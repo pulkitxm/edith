@@ -23,6 +23,13 @@ final class AppServices {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
     }
 
+    static func attentionEnabled(
+        extensionEnabled: Bool, settings: AttentionSettings
+    ) -> Bool {
+        extensionEnabled && settings.isEnabled
+            && (settings.trackingEnabled || settings.browserTrackingEnabled)
+    }
+
     static func extensionEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? false
     }
@@ -168,9 +175,9 @@ final class AppServices {
         }
 
         let attentionSettings = AttentionRepository().loadSettings()
-        let attentionOn =
-            attentionSettings.isEnabled
-            && (attentionSettings.trackingEnabled || attentionSettings.browserTrackingEnabled)
+        let attentionOn = Self.attentionEnabled(
+            extensionEnabled: Self.preferenceOnByDefault(AppStorageKeys.Tabs.attentionEnabled),
+            settings: attentionSettings)
         if attentionOn, attention == nil { attention = AttentionTrackingService() }
         if attentionOn { attention?.sync(attentionSettings) }
         if !attentionOn, let service = attention {

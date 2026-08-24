@@ -75,6 +75,36 @@ import Testing
         #expect(!source.contains("guard entry.id != \"calendar\""))
     }
 
+    @Test func attentionMarketplaceSearchBindingAndSettingsAreReachable() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let pane = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Features/Settings/Views/ExtensionsPane.swift"), encoding: .utf8)
+        let navigation = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Edith/Core/Navigation/MainNavigationView.swift"), encoding: .utf8)
+        let helper = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "EdithHelper/Core/Application/AppServices.swift"), encoding: .utf8)
+
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "attention" })
+        #expect(
+            ExtensionMarketplaceFilter.filter(
+                entries: ExtensionRegistry.entries, query: "attention", category: .all
+            ).map(\.id) == ["attention"])
+        #expect(entry.defaultsKey == AppStorageKeys.Tabs.attentionEnabled)
+        #expect(ExtensionDetailRoute(rawValue: entry.id) == .attention)
+        #expect(pane.contains("case AppStorageKeys.Tabs.attentionEnabled: $attentionEnabled"))
+        #expect(pane.contains("case .attention: AttentionRows()"))
+        #expect(pane.contains("private struct AttentionRows: View"))
+        #expect(navigation.contains("case .attention: attentionEnabled"))
+        #expect(helper.contains("AppStorageKeys.Tabs.attentionEnabled"))
+    }
+
     @Test func everyExtensionSettingsSheetHasLifecycleContent() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
