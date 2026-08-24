@@ -524,12 +524,25 @@ private struct ExtensionLifecycleRows: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
     let invalidation: Int
-    @State private var report: ExtensionLifecycleReport?
+    @State private var readiness: ExtensionReadinessModel
+
+    init(
+        entry: ExtensionRegistryEntry, coordinator: ExtensionModalCoordinator,
+        invalidation: Int
+    ) {
+        self.entry = entry
+        self.coordinator = coordinator
+        self.invalidation = invalidation
+        _readiness = State(
+            initialValue: ExtensionReadinessModel {
+                await coordinator.lifecycleReport()
+            })
+    }
 
     var body: some View {
         Group {
             Section("Readiness") {
-                if let report {
+                if let report = readiness.report {
                     LabeledContent("State") {
                         Label(
                             report.state.phase.title,
@@ -550,7 +563,7 @@ private struct ExtensionLifecycleRows: View {
                         checkRow(check)
                     }
                     Button("Check again") {
-                        Task { await refresh() }
+                        readiness.refresh()
                     }
                     .pointerCursor()
                 } else {
@@ -605,13 +618,12 @@ private struct ExtensionLifecycleRows: View {
                 }
             }
         }
-        .task(id: "\(entry.id):\(invalidation)") { await refresh() }
-    }
-
-    @MainActor private func refresh() async {
-        let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
-        defer { PerformanceTrace.end(discoveryTrace) }
-        report = await coordinator.lifecycleReport()
+        .task(id: "\(entry.id):\(invalidation)") {
+            let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
+            defer { PerformanceTrace.end(discoveryTrace) }
+            await readiness.refresh().value
+        }
+        .onDisappear { readiness.cancel() }
     }
 
     private func checkRow(_ check: ExtensionLifecycleCheck) -> some View {
