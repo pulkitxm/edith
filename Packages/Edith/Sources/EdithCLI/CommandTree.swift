@@ -464,8 +464,8 @@ public enum CommandTree {
                         "unpin", "Let one entry age out again.", options: common,
                         arguments: [.historyIndex]),
                     CommandNode(
-                        "rm", "Forget one entry.", options: ["--json"],
-                        arguments: [.historyIndex]),
+                        "rm", "Forget one entry.", options: ["--json", "--help", "--yes"],
+                        arguments: [.historyIndex], destructivePolicy: .previewThenYes),
                     CommandNode(
                         "clear", "Forget the whole history.",
                         options: ["--json", "--help", "--keep-pinned", "--yes"],
@@ -569,7 +569,7 @@ public enum CommandTree {
                         options: common),
                     CommandNode(
                         "clean", "Move the scanned caches to the Trash.",
-                        options: ["--json", "--help", "--category", "--yes"],
+                        options: ["--json", "--help", "--category", "--root", "--yes"],
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
