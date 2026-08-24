@@ -18,22 +18,12 @@ extension EnvironmentValues {
 @MainActor
 @Observable
 final class TerminalSessionHolder {
-    private(set) var terminalView: LocalProcessTerminalView
+    private(set) var terminalView = LocalProcessTerminalView(frame: .zero)
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
 
-    private let makeTerminalView: @MainActor () -> LocalProcessTerminalView
     private var delegateBox: TerminalProcessDelegate?
-
-    init(
-        makeTerminalView: @escaping @MainActor () -> LocalProcessTerminalView = {
-            LocalProcessTerminalView(frame: .zero)
-        }
-    ) {
-        self.makeTerminalView = makeTerminalView
-        terminalView = makeTerminalView()
-    }
 
     func start(
         executable: String, arguments: [String], environment: [String],
@@ -60,7 +50,7 @@ final class TerminalSessionHolder {
     func reset() {
         terminalView.terminal.resetToInitialState()
         if started { terminalView.terminate() }
-        terminalView = makeTerminalView()
+        terminalView = LocalProcessTerminalView(frame: .zero)
         generation += 1
         started = false
         exitMessage = nil

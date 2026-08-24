@@ -2,7 +2,6 @@ import Foundation
 import Testing
 
 @testable import EdithKit
-@testable import Edith
 
 @Suite struct HerdrListParserTests {
     @Test func unwrapsTheEnvelopeAndReadsBlockedWorkingPanes() {
@@ -258,95 +257,6 @@ import Testing
         #expect(
             HerdrAttachCommand.line(for: agent)
                 == "ssh -tt tuf-wired -- herdr --session default agent attach w3:p1N")
-    }
-
-    @Test func observerUsesAnIndependentViewport() {
-        #expect(
-            HerdrAttachCommand.observerArguments(
-                session: "default", pane: "w3:p1N", columns: 132, rows: 41)
-                == [
-                    "--session", "default", "terminal", "session", "observe", "w3:p1N",
-                    "--cols", "132", "--rows", "41",
-                ])
-    }
-
-    @Test func observerPreloadsRecentScrollback() {
-        #expect(
-            HerdrAttachCommand.observerHistoryArguments(session: "default", pane: "w3:p1N")
-                == [
-                    "--session", "default", "pane", "read", "w3:p1N",
-                    "--source", "recent", "--lines", "500", "--format", "ansi",
-                ])
-        #expect(
-            HerdrAttachCommand.observerLine(
-                session: "default", pane: "w3:p1N", columns: 132, rows: 41)
-                == "export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\"; herdr --session default pane read w3:p1N --source recent --lines 500 --format ansi; printf '\\n'; exec herdr --session default terminal session observe w3:p1N --cols 132 --rows 41"
-        )
-    }
-}
-
-@Suite struct HerdrObserverStreamDecoderTests {
-    @Test func decodesFragmentedTerminalFrames() {
-        let bytes = Data("\u{1B}[2Jready".utf8)
-        let encoded = bytes.base64EncodedString()
-        let line = Data("{\"type\":\"terminal.frame\",\"bytes\":\"\(encoded)\"}\r\n".utf8)
-        let split = line.index(line.startIndex, offsetBy: 17)
-        let first = Array(line[..<split])[...]
-        let second = Array(line[split...])[...]
-        var decoder = HerdrObserverStreamDecoder()
-
-        #expect(decoder.append(first).isEmpty)
-        let output = decoder.append(second)
-        #expect(output == [.frame(bytes)])
-    }
-
-    @Test func forwardsProcessErrors() {
-        let input = Array("herdr: session unavailable\r\n".utf8)[...]
-        let expected = HerdrObserverOutput.text(Data("herdr: session unavailable\r\n".utf8))
-        var decoder = HerdrObserverStreamDecoder()
-
-        #expect(decoder.append(input) == [expected])
-    }
-
-    @MainActor @Test func preloadedHistoryCreatesScrollableRows() {
-        let view = HerdrObserverTerminalView(frame: .zero)
-        let history = (0..<40).map { "history \($0)" }.joined(separator: "\n") + "\n"
-        let frame = Data("\u{1B}[2J\u{1B}[Hlive".utf8)
-        let encoded = frame.base64EncodedString()
-        let input = Data(
-            (history + "{\"type\":\"terminal.frame\",\"bytes\":\"\(encoded)\"}\n").utf8)
-
-        view.dataReceived(slice: Array(input)[...])
-        let bottom = view.scrollPosition
-        view.scrollUp(lines: 1)
-
-        #expect(view.canScroll)
-        #expect(bottom == 1)
-        #expect(view.scrollPosition < bottom)
-    }
-
-    @Test func observerFramesPauseAwayFromTheBottom() {
-        var gate = HerdrObserverFrameGate()
-        let first = Data("first".utf8)
-        let second = Data("second".utf8)
-        let third = Data("third".utf8)
-
-        #expect(gate.receive(first) == first)
-        #expect(gate.scroll(position: 0.5, canScroll: true) == nil)
-        #expect(gate.receive(second) == nil)
-        #expect(gate.receive(third) == nil)
-        #expect(gate.scroll(position: 1, canScroll: true) == third)
-    }
-
-    @Test func observerFramesContinueWithoutScrollback() {
-        var gate = HerdrObserverFrameGate()
-        let pending = Data("pending".utf8)
-        let current = Data("current".utf8)
-
-        #expect(gate.scroll(position: 0, canScroll: true) == nil)
-        #expect(gate.receive(pending) == nil)
-        #expect(gate.scroll(position: 0, canScroll: false) == pending)
-        #expect(gate.receive(current) == current)
     }
 }
 
