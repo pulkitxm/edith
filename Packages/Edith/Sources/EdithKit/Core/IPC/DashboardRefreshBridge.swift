@@ -9,10 +9,17 @@ public final class DashboardRefreshBridge {
 
     @ObservationIgnored private nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
     private let logURL: URL
+    private let requestUsageRefresh: () -> Void
     @ObservationIgnored private nonisolated(unsafe) var tailTimer: Timer?
 
-    public init(logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log")) {
+    public init(
+        logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log"),
+        requestUsageRefresh: @escaping () -> Void = {
+            UsageCollectionOperationExecution.request(.refresh)
+        }
+    ) {
         self.logURL = logURL
+        self.requestUsageRefresh = requestUsageRefresh
         tokens.append(
             IPC.observe(IPC.Name.usageRefreshStarted) { [weak self] in
                 self?.beginTail()
@@ -30,7 +37,7 @@ public final class DashboardRefreshBridge {
     }
 
     public func requestRefresh() {
-        IPC.post(IPC.Name.requestUsageRefresh)
+        requestUsageRefresh()
     }
 
     private func beginTail() {

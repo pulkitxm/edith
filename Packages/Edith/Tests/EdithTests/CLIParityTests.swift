@@ -383,9 +383,6 @@ enum UIParity {
         UICapability(
             "Terminal broadcast bar", "send one line to every pane",
             ["machines", "broadcast", "--", "uptime"]),
-        UICapability(
-            "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
-
         UICapability("System page", "quit one app", ["apps", "quit", "Safari"]),
         UICapability("System page", "quit all apps", ["apps", "quit", "--all", "--yes"]),
 
@@ -394,19 +391,6 @@ enum UIParity {
         UICapability("Menu bar", "lock the keyboard to clean it", ["app", "clean-keys"]),
         UICapability("Settings", "send a test notification", ["app", "test-notification"]),
         UICapability("About pane", "check for updates", ["app", "check-updates"]),
-        UICapability("Dashboard", "re-collect agent usage", ["usage", "refresh"]),
-        UICapability(
-            "Dashboard machines menu", "count a machine's agent usage too",
-            ["usage", "machines", "enable", "box"]),
-        UICapability(
-            "Dashboard machines menu", "stop counting a machine",
-            ["usage", "machines", "disable", "box"]),
-        UICapability(
-            "Dashboard machines menu", "collect from the machines now",
-            ["usage", "machines", "collect"]),
-        UICapability(
-            "Dashboard machines menu", "drop what a machine already gave",
-            ["usage", "machines", "forget", "box"]),
         UICapability(
             "Herdr board", "list live sessions on this Mac and SSH machines", ["herdr", "ls"]),
         UICapability(
