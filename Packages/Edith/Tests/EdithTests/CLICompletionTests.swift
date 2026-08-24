@@ -25,6 +25,7 @@ import Testing
     @Test func theTopLevelOffersCommandsAndMachines() {
         let result = Self.plan(["ed", ""], 1)
         #expect(result.candidates.contains("config"))
+        #expect(result.candidates.contains("help"))
         #expect(result.candidates.contains("lid-awake"))
         #expect(result.candidates.contains("machines"))
         #expect(result.candidates.contains("tuf"))
@@ -177,6 +178,33 @@ import Testing
         #expect(result.candidates == ["--json"])
     }
 
+    @Test func defaultSubcommandOptionsAndValuesCompleteOnBareGroups() {
+        #expect(Self.plan(["ed", "config", "--c"], 2).candidates == ["--changed"])
+        #expect(Self.plan(["ed", "completions", "--s"], 2).candidates == ["--shell"])
+        #expect(Self.plan(["ed", "clipboard", "--s"], 2).candidates == ["--search"])
+        #expect(Self.plan(["ed", "color", "--f"], 2).candidates == ["--format"])
+        #expect(
+            Self.plan(["ed", "color", "--format", ""], 3).candidates
+                == ColorCopyFormat.allCases.map(\.rawValue))
+    }
+
+    @Test func shortOptionsAndSynthesizedHelpComplete() {
+        #expect(Self.plan(["ed", "music", "status", "-h"], 3).candidates == ["-h"])
+        #expect(Self.plan(["ed", "system", "stats", "-f"], 3).candidates == ["-f"])
+        #expect(Self.plan(["ed", "machines", "files", "ls", "-a"], 4).candidates == ["-a"])
+        #expect(Self.plan(["ed", "h"], 1).candidates == ["help", "herdr"])
+        #expect(Self.plan(["ed", "help", "ext"], 2).candidates == ["extensions"])
+        #expect(Self.plan(["ed", "help", "extensions", "st"], 3).candidates == ["status"])
+        #expect(Self.plan(["ed", "help", "config", "--j"], 3).candidates.isEmpty)
+    }
+
+    @Test func machineShorthandFlagsCompleteAgainstTheLocalShowRoute() {
+        let result = Self.plan(["ed", "tuf", "--j"], 2)
+        #expect(result.candidates == ["--json"])
+        #expect(result.remoteMachine == nil)
+        #expect(Self.plan(["ed", "tuf", "upt"], 2).remoteMachine == "tuf")
+    }
+
     @Test func completionNeverAddsGlobalsTheParserRejects() {
         for words in [["ed", "--j"], ["ed", "guide", "--j"], ["ed", "schema", "--j"]] {
             #expect(Self.plan(words, words.count - 1).candidates.isEmpty)
@@ -323,6 +351,14 @@ import Testing
             words: ["ed", "extensions", "verify", "clipboard", "--v"],
             expected: ["--version"], requiresExactMatch: true),
         ShellCompletionScenario(
+            words: ["ed", "config", "--c"], expected: ["--changed"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "system", "stats", "-f"], expected: ["-f"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "h"], expected: ["help", "herdr"], requiresExactMatch: true),
+        ShellCompletionScenario(
             words: ["ed", "music", "status", "--player", ""],
             expected: Set(MusicPlayer.allCases.map(\.rawValue)), requiresExactMatch: true),
         ShellCompletionScenario(
@@ -394,6 +430,12 @@ import Testing
             (["ed", "machines", "edit", "box", "--password"], ["--password-stdin"]),
             (["ed", "machines", "edit", "box", "--key-p"], ["--key-passphrase-stdin"]),
             (["ed", "machines", "exec", "--t"], ["--tty"]),
+            (["ed", "config", "--c"], ["--changed"]),
+            (["ed", "completions", "--s"], ["--shell"]),
+            (["ed", "clipboard", "--s"], ["--search"]),
+            (["ed", "system", "stats", "-f"], ["-f"]),
+            (["ed", "machines", "files", "ls", "-a"], ["-a"]),
+            (["ed", "h"], ["help", "herdr"]),
         ]
 
         for (words, expected) in cases {

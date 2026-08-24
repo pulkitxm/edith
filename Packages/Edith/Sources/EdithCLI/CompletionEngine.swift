@@ -1,3 +1,4 @@
+import ArgumentParser
 import EdithKit
 import Foundation
 
@@ -52,14 +53,24 @@ public enum CompletionEngine {
         usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
-        let leading = ArgumentRewriting.completionOrder(request.leading)
+        var leading = ArgumentRewriting.completionOrder(request.leading)
         let prefix = request.current
+        let helpRoute = leading.first == CommandTree.help.name
+        if helpRoute { leading.removeFirst() }
         if let first = leading.first, CommandTree.root.child(first) == nil,
             machines.contains(where: { $0.lowercased() == first.lowercased() })
         {
-            return CompletionResult(remoteMachine: first)
+            let localShow =
+                prefix.hasPrefix("-")
+                && leading.dropFirst().allSatisfy { $0.hasPrefix("-") }
+            if localShow {
+                leading = ["machines", "show", first] + leading.dropFirst()
+            } else if !helpRoute {
+                return CompletionResult(remoteMachine: first)
+            }
         }
         var node = CommandTree.root
+        var command: ParsableCommand.Type = EdRoot.self
         var positionals: [String] = []
         var expectedValue: ArgumentKind?
         for word in leading {
@@ -69,15 +80,16 @@ public enum CompletionEngine {
             }
             if let separator = word.firstIndex(of: "=") {
                 let option = String(word[..<separator])
-                if node.optionValues[option] != nil { continue }
+                if effectiveOptionValues(node: node, command: command)[option] != nil { continue }
             }
-            if let kind = node.optionValues[word] {
+            if let kind = effectiveOptionValues(node: node, command: command)[word] {
                 expectedValue = kind
                 continue
             }
             if word.hasPrefix("-") { continue }
             if let next = node.child(word) {
                 node = next
+                if let nextCommand = parserChild(word, in: command) { command = nextCommand }
                 positionals = []
                 continue
             }
@@ -96,7 +108,7 @@ public enum CompletionEngine {
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
-            if let kind = node.optionValues[option] {
+            if let kind = effectiveOptionValues(node: node, command: command)[option] {
                 let valuePrefix = String(prefix[prefix.index(after: separator)...])
                 let candidates = filtered(
                     values(
@@ -112,16 +124,21 @@ public enum CompletionEngine {
         }
         if prefix.hasPrefix("-") {
             return CompletionResult(
-                candidates: filtered(node.options + CommandTree.inherited, prefix))
+                candidates: filtered(
+                    helpRoute
+                        ? CommandTree.inherited : effectiveOptions(node: node, command: command),
+                    prefix))
         }
-        var candidates = node.children.map(\.name)
+        var candidates = node.name == "ed" && !helpRoute ? [CommandTree.help.name] : []
+        candidates += node.children.map(\.name)
         if node.name == "ed" {
-            candidates += machines
+            if !helpRoute { candidates += machines }
         }
         var wantsFiles = false
         let slot = positionals.count
-        if slot < node.arguments.count {
-            let kind = node.arguments[slot]
+        let arguments = helpRoute ? [] : effectiveArguments(node: node, command: command)
+        if slot < arguments.count {
+            let kind = arguments[slot]
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
@@ -203,6 +220,45 @@ public enum CompletionEngine {
             guard value.hasPrefix(prefix), seen.insert(value).inserted else { return false }
             return true
         }
+    }
+
+    private static func parserChild(_ name: String, in command: ParsableCommand.Type)
+        -> ParsableCommand.Type?
+    {
+        command.configuration.subcommands.first {
+            $0.configuration.commandName == name || $0.configuration.aliases.contains(name)
+        }
+    }
+
+    private static func defaultNode(node: CommandNode, command: ParsableCommand.Type)
+        -> CommandNode?
+    {
+        guard let fallback = command.configuration.defaultSubcommand,
+            let name = fallback.configuration.commandName
+        else { return nil }
+        return node.child(name)
+    }
+
+    private static func effectiveOptions(node: CommandNode, command: ParsableCommand.Type)
+        -> [String]
+    {
+        node.options + (defaultNode(node: node, command: command)?.options ?? [])
+            + CommandTree.inherited
+    }
+
+    private static func effectiveOptionValues(
+        node: CommandNode, command: ParsableCommand.Type
+    ) -> [String: ArgumentKind] {
+        var values = defaultNode(node: node, command: command)?.optionValues ?? [:]
+        values.merge(node.optionValues) { _, nodeValue in nodeValue }
+        return values
+    }
+
+    private static func effectiveArguments(node: CommandNode, command: ParsableCommand.Type)
+        -> [ArgumentKind]
+    {
+        node.arguments.isEmpty
+            ? defaultNode(node: node, command: command)?.arguments ?? [] : node.arguments
     }
 
     private static func quinjetPathIsLocal(_ words: [String]) -> Bool {

@@ -58,14 +58,16 @@ enum CommandCrawler {
 
     static func optionNames(of command: ParsableCommand.Type) -> Set<String> {
         Set(
-            help(command).split(separator: "\n").compactMap { line in
-                guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { return nil }
-                guard
-                    let option = line.split(whereSeparator: \.isWhitespace).first(where: {
-                        $0.hasPrefix("--")
-                    })
-                else { return nil }
-                return String(option.prefix { $0 != "<" })
+            help(command).split(separator: "\n").flatMap { line -> [String] in
+                guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { return [] }
+                let declaration = line.dropFirst(2)
+                    .split(separator: " ", omittingEmptySubsequences: false)
+                    .prefix { !$0.isEmpty }
+                return declaration.compactMap { token in
+                    guard token.hasPrefix("-") else { return nil }
+                    let option = token.prefix { $0 != "," && $0 != "<" }
+                    return option.count > 1 ? String(option) : nil
+                }
             })
     }
 
@@ -354,9 +356,12 @@ enum CommandCrawler {
     private func checkParserOptions(
         node: CommandNode, command: ParsableCommand.Type, path: [String], missing: inout [String]
     ) {
-        let offered = Set(node.options + CommandTree.inherited)
-        let required = CommandCrawler.optionNames(of: command).union(
+        let fallback = command.configuration.defaultSubcommand
+        let fallbackNode = fallback.flatMap { node.child(CommandCrawler.name(of: $0)) }
+        let offered = Set(node.options + (fallbackNode?.options ?? []) + CommandTree.inherited)
+        var required = CommandCrawler.optionNames(of: command).union(
             CommandCrawler.inheritedOptionNames)
+        if let fallback { required.formUnion(CommandCrawler.optionNames(of: fallback)) }
         for option in required where !offered.contains(option) {
             missing.append((path + [option]).joined(separator: " "))
         }
