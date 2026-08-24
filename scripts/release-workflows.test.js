@@ -12,12 +12,8 @@ const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
 const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
-const workflowCall = releaseWorkflow.slice(
-  releaseWorkflow.indexOf("workflow_call:"),
-  releaseWorkflow.indexOf("workflow_dispatch:"),
-);
 
-test("CI gates the reusable release only on relevant checks", () => {
+test("CI gates and dispatches the release only on relevant checks", () => {
   expect(ciWorkflow).toContain(
     "needs: [changes, checks, swift-build, swift-test, companion]",
   );
@@ -44,26 +40,32 @@ test("CI gates the reusable release only on relevant checks", () => {
   expect(releaseJob).toContain(
     "|| (github.event_name == 'workflow_dispatch' && inputs.release))",
   );
-  expect(releaseJob).toContain("cut_release: true");
-  expect(releaseJob).toContain("uses: ./.github/workflows/release.yml");
+  expect(releaseJob).toContain("actions: write");
+  expect(releaseJob).toContain("gh workflow run release.yml");
+  expect(releaseJob).toContain("--field cut_release=true");
+  expect(releaseJob).toContain('--field source_sha="$RELEASE_SHA"');
+  expect(releaseJob).not.toContain("uses: ./.github/workflows/release.yml");
 });
 
-test("the release is reusable and supports manual rebuilds", () => {
-  expect(releaseWorkflow).toContain("workflow_call:");
+test("the standalone release supports gated cuts and manual rebuilds", () => {
+  expect(releaseWorkflow).not.toContain("workflow_call:");
   expect(releaseWorkflow).toContain("workflow_dispatch:");
   expect(releaseWorkflow).toContain("inputs.rebuild");
+  expect(releaseWorkflow).toContain("inputs.source_sha");
   expect(releaseWorkflow).toContain("cut_release:");
   expect(releaseWorkflow).toContain("CUT_RELEASE:");
+  expect(releaseWorkflow).toContain("SOURCE_SHA:");
   expect(releaseWorkflow).toContain("new releases must pass through CI");
+  expect(releaseWorkflow).toContain("CI must provide the approved commit");
+  expect(releaseWorkflow).toContain(
+    "checkout does not match the approved commit",
+  );
   expect(releaseWorkflow).toContain("run the workflow from main");
   expect(releaseWorkflow).toContain(
     "Current release tag to rebuild and re-upload.",
   );
   expect(releaseWorkflow).toContain("refs/tags/{0}");
   expect(releaseWorkflow).not.toContain('tags: ["v*"]');
-  expect(workflowCall).toContain(
-    "PUKBOT_PRIVATE_KEY:\n        required: false",
-  );
   expect(releaseJob).not.toContain("PUKBOT_PRIVATE_KEY");
 });
 
