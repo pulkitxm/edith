@@ -10,10 +10,14 @@ enum CLIWindowBridge {
     static func install() {
         guard revealObserver == nil else { return }
         revealObserver = IPC.observe(IPC.Name.requestReveal) { info in
-            MainActor.assumeIsolated { reveal(info) }
+            MainActor.assumeIsolated {
+                AppRuntimeCenter().perform(.reveal) { reveal(info) }
+            }
         }
         snapshotObserver = IPC.observe(IPC.Name.requestWindowSnapshot) { info in
-            MainActor.assumeIsolated { snapshot(info) }
+            MainActor.assumeIsolated {
+                AppRuntimeCenter().perform(.snapshot) { snapshot(info) }
+            }
         }
         QuinjetSessionBridge.shared.install()
     }

@@ -45,8 +45,7 @@ private final class StatusMenuHandler: NSObject {
 
     @objc func quit() {
         MainActor.assumeIsolated {
-            IPC.post(IPC.Name.quitMainApp)
-            NSApp.terminate(nil)
+            AppRuntimeCenter().quitCompletely()
         }
     }
 }

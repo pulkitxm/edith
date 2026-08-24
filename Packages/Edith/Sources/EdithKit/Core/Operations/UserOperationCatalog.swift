@@ -32,6 +32,9 @@ public enum UserOperationCatalog {
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + AppRuntimeOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + CalendarEventOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -374,6 +377,35 @@ private extension ExtensionMutationOperation {
             userInterface("Extension setup", "prepare an extension for use", ["clipboard"])
         case .provisionTool:
             userInterface("Extension setup", "install a required CLI tool", ["yt-dlp"])
+        }
+    }
+}
+
+private extension AppRuntimeOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .cleanKeys:
+            userInterface("Menu bar", "lock the keyboard to clean it")
+        case .testNotification:
+            userInterface("Settings", "send a test notification")
+        case .open:
+            userInterface("Menu bar", "open the panel")
+        case .quit:
+            userInterface("Menu bar", "quit Edith", ["--yes"])
+        case .checkUpdates:
+            userInterface("About pane", "check for updates")
+        case .updateHistory:
+            userInterface("Update schedule sheet", "read the check history")
+        case .relaunch:
+            userInterface("Permissions pane", "relaunch after granting", ["--yes"])
+        case .clearUpdateHistory:
+            userInterface("Update schedule sheet", "clear the check history", ["--yes"])
+        case .reveal:
+            commandLineOnly(
+                "The running app reveals its own sections only when another process asks it to.")
+        case .snapshot:
+            commandLineOnly(
+                "Window snapshots are an external automation surface rather than an in-app action.")
         }
     }
 }

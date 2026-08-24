@@ -124,7 +124,8 @@ import Testing
             #expect(
                 (result.object?["state"] as? [String: Any])?["phase"] as? String == "needsSetup")
             #expect(
-                (result.object?["remediation"] as? [String])?.contains("ed app relaunch") == true)
+                (result.object?["remediation"] as? [String])?.contains("ed app relaunch --yes")
+                    == true)
         }
     }
 
