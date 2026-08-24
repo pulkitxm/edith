@@ -107,7 +107,9 @@ struct EdithApp: App {
             UpdateNotifier.notify(version: version)
         }
         _ = IPC.observe(IPC.Name.requestKeyboardClean) {
-            services.system?.beginCleaning()
+            AppRuntimeCenter().perform(.cleanKeys) {
+                services.system?.beginCleaning()
+            }
         }
         _ = IPC.observe(
             IPC.Name.requestQuitApps,
@@ -121,7 +123,7 @@ struct EdithApp: App {
                 RunningApps.quit(pid: pid_t(pid), force: force)
             })
         _ = IPC.observe(IPC.Name.openPanel) {
-            showPanel()
+            AppRuntimeCenter().perform(.open) { showPanel() }
         }
         _ = IPC.observe(IPC.Name.presenterPauseAuto) {
             services.presenter?.pauseUntilShareEnds()
@@ -169,7 +171,9 @@ struct EdithApp: App {
                 }
             })
         _ = IPC.observe(IPC.Name.requestTestNotification) {
-            Task { _ = await services.usage?.notifier.sendTest() }
+            AppRuntimeCenter().perform(.testNotification) {
+                _ = Task<Void, Never> { _ = await services.usage?.notifier.sendTest() }
+            }
         }
         PermissionsModel.shared.startIPCBridge()
         PermissionsModel.shared.refresh()
@@ -610,8 +614,7 @@ struct RootView: View {
                 Menu {
                     Button("Close Panel") { dismissPanel() }
                     Button("Quit Edith Completely", role: .destructive) {
-                        IPC.post(IPC.Name.quitMainApp)
-                        NSApp.terminate(nil)
+                        AppRuntimeCenter().quitCompletely()
                     }
                 } label: {
                     Image(systemName: "power")

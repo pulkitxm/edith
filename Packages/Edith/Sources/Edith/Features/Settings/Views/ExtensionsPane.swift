@@ -1468,7 +1468,7 @@ private struct UsageRows: View {
 
             HStack {
                 Button("Send test notification") {
-                    IPC.post(IPC.Name.requestTestNotification)
+                    AppRuntimeCenter().request(.testNotification)
                     testSent = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { testSent = false }
                 }
@@ -1681,7 +1681,7 @@ private struct SystemRows: View {
                         .settingsCaption()
                 }
                 Button("Clean now") {
-                    IPC.post(IPC.Name.requestKeyboardClean)
+                    AppRuntimeCenter().request(.cleanKeys)
                     cleaningStarted = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                         cleaningStarted = false
