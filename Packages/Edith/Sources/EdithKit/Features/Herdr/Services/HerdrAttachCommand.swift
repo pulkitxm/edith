@@ -20,23 +20,4 @@ public enum HerdrAttachCommand {
     public static func arguments(session: String, pane: String) -> [String] {
         ["--session", session, "agent", "attach", pane]
     }
-
-    public static func observerLine(session: String, pane: String, columns: Int, rows: Int)
-        -> String
-    {
-        let command = ShellQuote.command(
-            ["herdr"]
-                + observerArguments(
-                    session: session, pane: pane, columns: columns, rows: rows))
-        return "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(command)"
-    }
-
-    public static func observerArguments(
-        session: String, pane: String, columns: Int, rows: Int
-    ) -> [String] {
-        [
-            "--session", session, "terminal", "session", "observe", pane,
-            "--cols", String(columns), "--rows", String(rows),
-        ]
-    }
 }
