@@ -25,7 +25,8 @@ ed guide | less
 
 `ed guide claude` prints a section you can paste into any repository's
 `CLAUDE.md` so an agent working there knows `ed` exists, knows every read
-command takes `--json`, and knows the exit codes are worth gating on.
+command takes `--json`, knows the exit codes are worth gating on, and can inspect,
+set up, verify, and recover all seventeen extensions noninteractively.
 
 Any topic other than `claude` exits 3 and says what the two options are:
 

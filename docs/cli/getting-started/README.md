@@ -23,6 +23,7 @@ be running.
 | --- | --- |
 | `ed install` | Link `ed`, `edh` and `edith` into a directory on `PATH` |
 | `ed uninstall` | Remove those three links again, and nothing else |
+| `ed help <command>` | Show the same detailed help reached through `<command> --help` |
 | `ed guide` | Print the built-in manual, written for agents and humans alike |
 | `ed guide claude` | Print a `CLAUDE.md` snippet that makes another repo `ed`-aware |
 | `ed schema` | Print the JSON Schema for the configuration document |
@@ -95,7 +96,8 @@ What `__complete` offers, in the order it decides:
 - If the first word after `ed` names a configured machine and is not a command,
   the whole thing is handed to that machine. See below.
 - If the word being completed starts with `-`, the candidates are that command's
-  options plus `--json` and `--help`.
+  long and short options, including options accepted through a default
+  subcommand, plus inherited `-h`, `--help` and `--version`.
 - Otherwise the candidates are the subcommand names at that point, plus every
   configured machine name at the top level, plus the values for whichever
   positional slot the cursor is in.
@@ -136,8 +138,8 @@ $ echo $?
 One caveat worth knowing: the tree `__complete` walks is a hand-maintained
 mirror of the command surface rather than something derived from the parser. A
 new flag completes only once it has been added there too. Tests compare every
-advertised command, alias, flag and typed option with the parser, so completion
-does not offer a spelling the command would reject.
+parser command, alias, long and short option, default-subcommand option and typed
+value with the tree in both directions.
 
 ## The machine shorthand
 

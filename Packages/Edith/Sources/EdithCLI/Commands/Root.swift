@@ -399,7 +399,9 @@ struct CompleteCommand: AsyncParsableCommand {
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)
         {
-            for candidate in await RemoteCompletion.candidates(machine: machine, request: request) {
+            for candidate in await RemoteCompletion.candidates(
+                machine: machine, request: result.remoteRequest ?? request)
+            {
                 CLIOut.out(candidate)
             }
             return

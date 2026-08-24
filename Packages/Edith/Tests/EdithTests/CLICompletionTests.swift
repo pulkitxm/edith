@@ -25,6 +25,7 @@ import Testing
     @Test func theTopLevelOffersCommandsAndMachines() {
         let result = Self.plan(["ed", ""], 1)
         #expect(result.candidates.contains("config"))
+        #expect(result.candidates.contains("help"))
         #expect(result.candidates.contains("lid-awake"))
         #expect(result.candidates.contains("machines"))
         #expect(result.candidates.contains("tuf"))
@@ -177,6 +178,96 @@ import Testing
         #expect(result.candidates == ["--json"])
     }
 
+    @Test func defaultSubcommandOptionsAndValuesCompleteOnBareGroups() {
+        #expect(Self.plan(["ed", "config", "--c"], 2).candidates == ["--changed"])
+        #expect(Self.plan(["ed", "completions", "--s"], 2).candidates == ["--shell"])
+        #expect(Self.plan(["ed", "clipboard", "--s"], 2).candidates == ["--search"])
+        #expect(Self.plan(["ed", "color", "--f"], 2).candidates == ["--format"])
+        #expect(
+            Self.plan(["ed", "color", "--format", ""], 3).candidates
+                == ColorCopyFormat.allCases.map(\.rawValue))
+    }
+
+    @Test func defaultSubcommandSyntaxCommitsCompletionToThatRoute() {
+        for words in [
+            ["ed", "config", "--changed", ""],
+            ["ed", "config", "--group", "general", ""],
+            ["ed", "config", "prevent", ""],
+            ["ed", "download", "--limit", "1", ""],
+            ["ed", "extensions", "--json", ""],
+            ["ed", "music", "--player", "spotify", ""],
+            ["ed", "system", "--follow", ""],
+        ] {
+            let result = Self.plan(words, words.count - 1)
+            #expect(result.candidates.isEmpty, "\(words) offered \(result.candidates)")
+        }
+    }
+
+    @Test func passthroughRoutesNeverOfferLocalOptions() {
+        for words in [
+            ["ed", "machines", "broadcast", "--", "--v"],
+            ["ed", "machines", "snippets", "add", "tuf", "title", "--v"],
+            ["ed", "config", "get", "--", "--v"],
+            ["ed", "config", "ls", "--group", "--", "--v"],
+        ] {
+            let result = Self.plan(words, words.count - 1)
+            #expect(result.candidates.isEmpty, "\(words) offered \(result.candidates)")
+            #expect(result.remoteMachine == nil)
+        }
+    }
+
+    @Test func explicitExecHandsItsCapturedCommandToRemoteCompletion() throws {
+        let first = Self.plan(["ed", "machines", "exec", "tuf", "--v"], 4)
+        let nested = Self.plan(["ed", "machines", "exec", "tuf", "uptime", "--v"], 5)
+        let separated = Self.plan(
+            ["ed", "machines", "exec", "tuf", "--", "uptime", "--v"], 6)
+
+        #expect(first.candidates.isEmpty)
+        #expect(first.remoteMachine == "tuf")
+        #expect(first.remoteRequest?.words == ["ed", "tuf", "--v"])
+        #expect(first.remoteRequest?.index == 2)
+        #expect(nested.remoteMachine == "tuf")
+        #expect(nested.remoteRequest?.words == ["ed", "tuf", "uptime", "--v"])
+        #expect(separated.remoteMachine == "tuf")
+        #expect(separated.remoteRequest?.words == ["ed", "tuf", "uptime", "--v"])
+    }
+
+    @Test func freeOptionValuesDoNotConsumePositionalCompletionSlots() {
+        let words = [
+            "ed", "companion", "connectors", "import", "--endpoint",
+            "http://localhost:8000", "calendar", "",
+        ]
+        #expect(Self.plan(words, 7).wantsFiles)
+
+        let assignment = [
+            "ed", "companion", "connectors", "import",
+            "--endpoint=http://localhost:8000", "calendar", "",
+        ]
+        #expect(Self.plan(assignment, 6).wantsFiles)
+
+        let value = Self.plan(
+            ["ed", "companion", "connectors", "import", "--endpoint", "http"], 5)
+        #expect(value.candidates.isEmpty)
+        #expect(!value.wantsFiles)
+    }
+
+    @Test func shortOptionsAndSynthesizedHelpComplete() {
+        #expect(Self.plan(["ed", "music", "status", "-h"], 3).candidates == ["-h"])
+        #expect(Self.plan(["ed", "system", "stats", "-f"], 3).candidates == ["-f"])
+        #expect(Self.plan(["ed", "machines", "files", "ls", "-a"], 4).candidates == ["-a"])
+        #expect(Self.plan(["ed", "h"], 1).candidates == ["help", "herdr"])
+        #expect(Self.plan(["ed", "help", "ext"], 2).candidates == ["extensions"])
+        #expect(Self.plan(["ed", "help", "extensions", "st"], 3).candidates == ["status"])
+        #expect(Self.plan(["ed", "help", "config", "--j"], 3).candidates.isEmpty)
+    }
+
+    @Test func machineShorthandFlagsCompleteAgainstTheLocalShowRoute() {
+        let result = Self.plan(["ed", "tuf", "--j"], 2)
+        #expect(result.candidates == ["--json"])
+        #expect(result.remoteMachine == nil)
+        #expect(Self.plan(["ed", "tuf", "upt"], 2).remoteMachine == "tuf")
+    }
+
     @Test func completionNeverAddsGlobalsTheParserRejects() {
         for words in [["ed", "--j"], ["ed", "guide", "--j"], ["ed", "schema", "--j"]] {
             #expect(Self.plan(words, words.count - 1).candidates.isEmpty)
@@ -220,7 +311,7 @@ import Testing
         let player = Self.plan(["ed", "music", "status", "--player=sp"], 3)
         #expect(player.candidates == ["--player=spotify"])
         let nested = Self.plan(
-            ["ed", "music", "--player", "spotify", "status", "--player", ""], 6)
+            ["ed", "music", "--player", "spotify", "--player", ""], 5)
         #expect(nested.candidates == MusicPlayer.allCases.map(\.rawValue))
     }
 
@@ -301,6 +392,49 @@ import Testing
 }
 
 @Suite struct CLICompletionProcessTests {
+    struct ShellCompletionScenario: Sendable {
+        let words: [String]
+        let expected: Set<String>
+        let requiresExactMatch: Bool
+    }
+
+    struct ShellCompletionInvocation: Sendable {
+        let shell: CompletionScripts.Shell
+        let scenario: ShellCompletionScenario
+    }
+
+    static let shellCompletionScenarios = [
+        ShellCompletionScenario(
+            words: ["ed", "machines", "docker", ""], expected: ["ps", "logs"],
+            requiresExactMatch: false),
+        ShellCompletionScenario(
+            words: ["ed", "music", "status", "--h"], expected: ["--help"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "extensions", "verify", "clipboard", "--v"],
+            expected: ["--version"], requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "config", "--c"], expected: ["--changed"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "system", "stats", "-f"], expected: ["-f"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "h"], expected: ["help", "herdr"], requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "music", "status", "--player", ""],
+            expected: Set(MusicPlayer.allCases.map(\.rawValue)), requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "extensions", "verify", ""],
+            expected: Set(ExtensionRegistry.entries.map(\.id)), requiresExactMatch: true),
+    ]
+
+    static let bashAndZshCompletionInvocations = [
+        CompletionScripts.Shell.bash, .zsh,
+    ].flatMap { shell in
+        shellCompletionScenarios.map { ShellCompletionInvocation(shell: shell, scenario: $0) }
+    }
+
     static var fishIsRequired: Bool {
         ProcessInfo.processInfo.environment["EDITH_REQUIRE_FISH_COMPLETION_TEST"] == "1"
     }
@@ -337,6 +471,28 @@ import Testing
         #expect(typed.stderr.isEmpty)
     }
 
+    @Test func packagedCompletionRejectsSiblingAndLocalPassthroughSuggestions() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let routes = [
+            ["ed", "config", "--changed", ""],
+            ["ed", "download", "--limit", "1", ""],
+            ["ed", "extensions", "--json", ""],
+            ["ed", "system", "--follow", ""],
+            ["ed", "machines", "exec", "not-configured", "--v"],
+            ["ed", "machines", "broadcast", "--", "--v"],
+            ["ed", "config", "get", "--", "--v"],
+        ]
+        for words in routes {
+            let result = try CLIProcessProbe.run(
+                ["__complete", "--index", String(words.count - 1), "--"] + words,
+                currentDirectory: outside)
+            #expect(result.code == 0, "\(words) exited \(result.code)")
+            #expect(result.stdout.isEmpty, "\(words) offered \(result.stdoutLines)")
+            #expect(result.stderr.isEmpty, "\(words) reported \(result.stderr)")
+        }
+    }
+
     @Test func inheritedHelpCompletesOutsideARepository() throws {
         let outside = try Self.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: outside) }
@@ -347,6 +503,34 @@ import Testing
         #expect(result.code == 0)
         #expect(result.stdoutLines == ["--help"])
         #expect(result.stderr.isEmpty)
+    }
+
+    @Test func everyParserOptionCompletesOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let cases = [
+            (["ed", "extensions", "verify", "clipboard", "--v"], ["--version"]),
+            (["ed", "machines", "add", "box", "--password"], ["--password-stdin"]),
+            (["ed", "machines", "add", "box", "--key-p"], ["--key-passphrase-stdin"]),
+            (["ed", "machines", "edit", "box", "--password"], ["--password-stdin"]),
+            (["ed", "machines", "edit", "box", "--key-p"], ["--key-passphrase-stdin"]),
+            (["ed", "machines", "exec", "--t"], ["--tty"]),
+            (["ed", "config", "--c"], ["--changed"]),
+            (["ed", "completions", "--s"], ["--shell"]),
+            (["ed", "clipboard", "--s"], ["--search"]),
+            (["ed", "system", "stats", "-f"], ["-f"]),
+            (["ed", "machines", "files", "ls", "-a"], ["-a"]),
+            (["ed", "h"], ["help", "herdr"]),
+        ]
+
+        for (words, expected) in cases {
+            let result = try CLIProcessProbe.run(
+                ["__complete", "--index", String(words.count - 1), "--"] + words,
+                currentDirectory: outside)
+            #expect(result.code == 0)
+            #expect(result.stdoutLines == expected)
+            #expect(result.stderr.isEmpty)
+        }
     }
 
     @Test func appInspectionCompletionWorksOutsideARepository() throws {
@@ -366,77 +550,115 @@ import Testing
         #expect(Self.fishExecutable != nil)
     }
 
-    @Test func bashAndZshScriptsInvokeTheRealCompletionEntry() throws {
+    @Test(arguments: bashAndZshCompletionInvocations)
+    func bashAndZshScriptsCompleteTheFullMatrix(invocation: ShellCompletionInvocation) throws {
         let outside = try Self.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: outside) }
-        let bashScript = outside.appendingPathComponent("ed.bash")
-        let zshScript = outside.appendingPathComponent("_ed")
-        try CompletionScripts.script(for: .bash, tool: CLIProcessProbe.binary.path)
-            .write(to: bashScript, atomically: true, encoding: .utf8)
-        try CompletionScripts.script(for: .zsh, tool: CLIProcessProbe.binary.path)
-            .write(to: zshScript, atomically: true, encoding: .utf8)
-
-        let bash = try CLIProcessProbe.run(
-            [
-                "-c",
-                "source \"$1\"; COMP_WORDS=(ed music status --player \"\"); "
-                    + "COMP_CWORD=4; _ed_complete; printf '%s\\n' \"${COMPREPLY[@]}\"",
-                "completion-test", bashScript.path,
-            ], executable: URL(fileURLWithPath: "/bin/bash"), currentDirectory: outside)
-        let zsh = try CLIProcessProbe.run(
-            [
-                "-c",
-                "compdef() { :; }; compadd() { print -l -- \"$@\"; }; source \"$1\"; "
-                    + "words=(ed music status --player ''); CURRENT=5; _ed_complete",
-                "completion-test", zshScript.path,
-            ], executable: URL(fileURLWithPath: "/bin/zsh"), currentDirectory: outside)
-
-        #expect(bash.code == 0)
-        #expect(Set(bash.stdoutLines) == Set(MusicPlayer.allCases.map(\.rawValue)))
-        #expect(zsh.code == 0)
-        #expect(Set(zsh.stdoutLines).isSuperset(of: Set(MusicPlayer.allCases.map(\.rawValue))))
+        let script = try Self.installCompletionScript(for: invocation.shell, outside: outside)
+        let result = try Self.shellCompletion(
+            invocation.scenario, shell: invocation.shell, script: script, outside: outside)
+        Self.expect(result, matches: invocation.scenario)
     }
 
-    @Test(.enabled(if: fishExecutable != nil))
-    func fishLoadsTheInstalledScriptAndCompletesRealCommandLines() throws {
+    @Test func bashPreservesMetacharacterCandidatesFromTheProductionShim() throws {
         let outside = try Self.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: outside) }
-        let directory = CompletionScripts.defaultDirectory(for: .fish, home: outside)
-        let script = directory.appendingPathComponent(CompletionScripts.Shell.fish.scriptName)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try CompletionScripts.script(for: .fish, tool: CLIProcessProbe.binary.path)
+        let fake = outside.appendingPathComponent("completion-source")
+        try """
+        #!/bin/bash
+        printf '%s\\n' 'track * [mix].mp3'
+        """.write(to: fake, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: fake.path)
+        try Data().write(to: outside.appendingPathComponent("track album m.mp3"))
+        let script = CompletionScripts.defaultDirectory(for: .bash, home: outside)
+            .appendingPathComponent(CompletionScripts.Shell.bash.scriptName)
+        try FileManager.default.createDirectory(
+            at: script.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try CompletionScripts.script(for: .bash, tool: fake.path)
             .write(to: script, atomically: true, encoding: .utf8)
 
-        var environment = ProcessInfo.processInfo.environment
-        environment["HOME"] = outside.path
-        environment["XDG_CONFIG_HOME"] = outside.appendingPathComponent(".config").path
-        environment["PATH"] =
-            CLIProcessProbe.binary.deletingLastPathComponent().path + ":"
-            + (environment["PATH"] ?? "")
-        let nested = try Self.fishCompletion(
-            "ed machines docker ", script: script, outside: outside, environment: environment)
-        let inherited = try Self.fishCompletion(
-            "ed music status --h", script: script, outside: outside, environment: environment)
+        let scenario = ShellCompletionScenario(
+            words: ["ed", "track"], expected: ["track * [mix].mp3"],
+            requiresExactMatch: true)
+        let result = try Self.shellCompletion(
+            scenario, shell: .bash, script: script, outside: outside)
+
+        Self.expect(result, matches: scenario)
+    }
+
+    @Test(.enabled(if: fishExecutable != nil), arguments: shellCompletionScenarios)
+    func fishCompletesTheFullMatrix(scenario: ShellCompletionScenario) throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let script = try Self.installCompletionScript(for: .fish, outside: outside)
+        let result = try Self.shellCompletion(
+            scenario, shell: .fish, script: script, outside: outside)
 
         #expect(
             script.path == outside.appendingPathComponent(".config/fish/completions/ed.fish").path)
-        #expect(nested.code == 0)
-        #expect(nested.stderr.isEmpty)
-        #expect(nested.stdoutLines.contains("ps"))
-        #expect(nested.stdoutLines.contains("logs"))
-        #expect(inherited.code == 0)
-        #expect(inherited.stderr.isEmpty)
-        #expect(inherited.stdoutLines == ["--help"])
+        Self.expect(result, matches: scenario)
     }
 
-    static func fishCompletion(
-        _ commandLine: String, script: URL, outside: URL, environment: [String: String]
+    static func installCompletionScript(for shell: CompletionScripts.Shell, outside: URL) throws
+        -> URL
+    {
+        let directory = CompletionScripts.defaultDirectory(for: shell, home: outside)
+        let script = directory.appendingPathComponent(shell.scriptName)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try CompletionScripts.script(for: shell, tool: CLIProcessProbe.binary.path)
+            .write(to: script, atomically: true, encoding: .utf8)
+        return script
+    }
+
+    static func shellCompletion(
+        _ scenario: ShellCompletionScenario, shell: CompletionScripts.Shell, script: URL,
+        outside: URL
     ) throws -> CLIRun {
-        try CLIProcessProbe.run(
-            [
-                "--private", "-c", "source \"$argv[1]\"; complete -C \"$argv[2]\"",
-                script.path, commandLine,
-            ], executable: fishExecutable, currentDirectory: outside, environment: environment)
+        let words = scenario.words.map(ShellQuote.quote).joined(separator: " ")
+        switch shell {
+        case .bash:
+            return try CLIProcessProbe.run(
+                [
+                    "-c",
+                    "source \"$1\"; COMP_WORDS=(\(words)); "
+                        + "COMP_CWORD=\(scenario.words.count - 1); _ed_complete; "
+                        + "printf '%s\\n' \"${COMPREPLY[@]}\"",
+                    "completion-test", script.path,
+                ], executable: URL(fileURLWithPath: "/bin/bash"), currentDirectory: outside)
+        case .zsh:
+            return try CLIProcessProbe.run(
+                [
+                    "-c",
+                    "compdef() { :; }; compadd() { shift; print -l -- \"$@\"; }; "
+                        + "source \"$1\"; words=(\(words)); CURRENT=\(scenario.words.count); "
+                        + "_ed_complete",
+                    "completion-test", script.path,
+                ], executable: URL(fileURLWithPath: "/bin/zsh"), currentDirectory: outside)
+        case .fish:
+            var environment = ProcessInfo.processInfo.environment
+            environment["HOME"] = outside.path
+            environment["XDG_CONFIG_HOME"] = outside.appendingPathComponent(".config").path
+            environment["PATH"] =
+                CLIProcessProbe.binary.deletingLastPathComponent().path + ":"
+                + (environment["PATH"] ?? "")
+            return try CLIProcessProbe.run(
+                [
+                    "--private", "-c", "source \"$argv[1]\"; complete -C \"$argv[2]\"",
+                    script.path, scenario.words.joined(separator: " "),
+                ], executable: fishExecutable, currentDirectory: outside, environment: environment)
+        }
+    }
+
+    static func expect(_ result: CLIRun, matches scenario: ShellCompletionScenario) {
+        let actual = Set(result.stdoutLines)
+        #expect(result.code == 0)
+        #expect(result.stderr.isEmpty)
+        if scenario.requiresExactMatch {
+            #expect(actual == scenario.expected)
+        } else {
+            #expect(actual.isSuperset(of: scenario.expected))
+        }
     }
 
     @Test func everyShellGenerationCarriesAliasesAndTheAbsoluteEntryPath() {
