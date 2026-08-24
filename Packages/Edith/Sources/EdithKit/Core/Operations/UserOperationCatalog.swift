@@ -18,6 +18,7 @@ public enum UserOperationCatalog {
         + QuinjetOperation.allCases.map(\.descriptor)
         + QuinjetSessionOperation.allCases.map(\.descriptor)
         + CompanionSettingsOperation.allCases.map(\.descriptor)
+        + CompanionChatLibraryOperation.allCases.map(\.descriptor)
 
     public static func descriptor(id: UserOperationID) -> UserOperationDescriptor? {
         descriptors.first { $0.id == id }
