@@ -141,10 +141,10 @@ enum UIParity {
             ["companion", "wipe", "--yes"]),
         UICapability(
             "Companion settings", "drop and rebuild the search index",
-            ["companion", "db", "reindex"]),
+            ["companion", "db", "reindex", "--yes"]),
         UICapability(
             "Companion settings", "rebuild everything derived",
-            ["companion", "db", "rebuild-derived"]),
+            ["companion", "db", "rebuild-derived", "--yes"]),
         UICapability(
             "Companion", "ingest dropped files", ["companion", "ingest", "/tmp/notes"]),
         UICapability(
@@ -702,7 +702,6 @@ enum UIParity {
 
     @Test func legacyVariantsShareOneExactOperationWithMultiplePlacements() {
         let expectedPlacementCounts: [[String]: Int] = [
-            ["companion", "chat"]: 2,
             ["machines", "kill"]: 2,
             ["music", "rename"]: 2,
             ["music", "rm"]: 2,
