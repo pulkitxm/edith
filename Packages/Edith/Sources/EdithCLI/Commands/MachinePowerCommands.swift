@@ -468,11 +468,14 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            var words = command
-            if words.first == "--" { words.removeFirst() }
-            let line = words.joined(separator: " ")
-            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
+            let plan: MachineBroadcastPlan
+            switch MachineBroadcastOperationExecution.plan(words: command) {
+            case let .success(value):
+                plan = value
+            case .failure(MachineBroadcastOperationError.emptyCommand):
                 throw CLIFailure("give a command to run")
+            case let .failure(error):
+                throw error
             }
             let all = MachineRegistry.machines()
             guard !all.isEmpty else {
@@ -494,7 +497,7 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
                 var text = ""
                 do {
                     try await runner.connect()
-                    let result = try await runner.run(line, timeout: 120)
+                    let result = try await runner.run(plan.command, timeout: 120)
                     status = result.status
                     text = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 } catch {
@@ -516,6 +519,123 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
             if json { CLIOut.json(.array(rows)) }
             guard failed else { return }
             throw ExitCode(ExitCodes.failure)
+        }
+    }
+}
+
+struct MachinesTerminalCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "terminal",
+        abstract: "Act on terminal tabs that are open in the Edith app.",
+        subcommands: [MachinesTerminalBroadcastCommand.self])
+}
+
+enum MachineTerminalBroadcastCLI {
+    static func machine(_ query: String) throws -> Machine {
+        if UsageMachineFilter.isLocal(query) { return .local }
+        let machines = [Machine.local] + MachineDirectory.load().filter { $0.id != Machine.localID }
+        return try MachineDirectory.resolve(query, in: machines)
+    }
+
+    static func send(
+        _ plan: MachineBroadcastPlan, to machine: Machine, timeout: TimeInterval = 5
+    ) async throws -> Int {
+        try Task.checkCancellation()
+        try AppBridge.requireMainApp("broadcasting to open machine terminals")
+        let requestID = UUID().uuidString
+        let payload: [String: Any] = [
+            MachineTerminalBroadcastIPC.requestIDKey: requestID,
+            MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
+            MachineTerminalBroadcastIPC.commandKey: plan.command,
+        ]
+        try Task.checkCancellation()
+        guard
+            let reply = await AppBridge.awaitReply(
+                IPC.Name.machineTerminalBroadcastResult, timeout: timeout,
+                matching: {
+                    $0[MachineTerminalBroadcastIPC.requestIDKey] as? String == requestID
+                },
+                trigger: {
+                    AppBridge.post(
+                        IPC.Name.requestMachineTerminalBroadcast, userInfo: payload)
+                })
+        else {
+            throw AppBridge.silence("the terminal broadcast")
+        }
+        guard reply[MachineTerminalBroadcastIPC.requestIDKey] as? String == requestID else {
+            throw CLIFailure("Edith returned an unrelated terminal broadcast result")
+        }
+        guard reply[MachineTerminalBroadcastIPC.okKey] as? Bool == true else {
+            let detail =
+                reply[MachineTerminalBroadcastIPC.errorKey] as? String
+                ?? "the terminal broadcast failed"
+            if reply[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                == MachineTerminalBroadcastIPC.noOpenTabsCode
+            {
+                throw CLIFailure.notFound(
+                    detail,
+                    hint: "open a terminal tab for \(machine.name) in Edith, then retry")
+            }
+            if reply[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                == MachineTerminalBroadcastIPC.noLiveTabsCode
+            {
+                throw CLIFailure.notFound(
+                    detail,
+                    hint: "start a terminal tab for \(machine.name) in Edith, then retry")
+            }
+            throw CLIFailure(detail)
+        }
+        guard let count = reply[MachineTerminalBroadcastIPC.tabCountKey] as? Int, count > 0 else {
+            throw CLIFailure("Edith returned an invalid terminal broadcast result")
+        }
+        return count
+    }
+}
+
+struct MachinesTerminalBroadcastCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "broadcast",
+        abstract: "Send one line to every open terminal tab for one machine.",
+        discussion: """
+            This uses the terminal sessions already open in the Edith main app. Use
+            `ed machines broadcast` to run a separate SSH command across the configured fleet.
+            Put `--` before a command that contains flags.
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(parsing: .remaining, help: "The line to send to every open terminal tab.")
+    var command: [String]
+
+    func run() async throws {
+        try await execute {
+            let target = try MachineTerminalBroadcastCLI.machine(machine)
+            let plan: MachineBroadcastPlan
+            switch MachineBroadcastOperationExecution.plan(words: command) {
+            case let .success(value):
+                plan = value
+            case .failure(MachineBroadcastOperationError.emptyCommand):
+                throw CLIFailure.usage("give a command to broadcast to the open tabs")
+            case let .failure(error):
+                throw error
+            }
+            let tabCount = try await MachineTerminalBroadcastCLI.send(plan, to: target)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(target.name),
+                        "machineID": .string(target.id.uuidString),
+                        "command": .string(plan.command),
+                        "tabs": .int(tabCount),
+                    ]))
+                return
+            }
+            let noun = tabCount == 1 ? "tab" : "tabs"
+            CLIOut.out("sent to \(tabCount) open \(noun) on \(target.name): \(plan.command)")
         }
     }
 }

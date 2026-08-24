@@ -12,14 +12,26 @@ struct MachinesThermalCommand: AsyncParsableCommand {
 
 enum MachineThermalBridge {
     static func status(runner: RemoteRunner) async throws -> MachinePlatformProfile {
-        let result = try await runner.run(MachineThermalControls.statusCommand, timeout: 15)
-        guard result.succeeded,
-            let profile = MachineThermalControls.parseStatus(result.stdoutText)
-        else {
+        let result = await MachineThermalOperationExecution.status { command, _, timeout in
+            do {
+                let output = try await runner.run(command, timeout: timeout)
+                guard output.succeeded else {
+                    return .failure(MachineThermalOperationError.unavailable)
+                }
+                return .success(output.stdoutText)
+            } catch {
+                return .failure(error)
+            }
+        }
+        switch result {
+        case let .success(profile):
+            return profile
+        case .failure(MachineThermalOperationError.unavailable):
             throw CLIFailure.unavailable(
                 "\(runner.machine.name) does not expose Linux platform profiles")
+        case let .failure(error):
+            throw error
         }
-        return profile
     }
 }
 
@@ -89,20 +101,34 @@ struct MachinesThermalSetCommand: AsyncParsableCommand {
                     "\(runner.machine.name) has no thermal profile named \(profile)",
                     hint: "profiles: " + available.choices.joined(separator: ", "))
             }
-            let stdin = SudoPassword.stdin(machineID: runner.machine.id)
-            guard
-                let command = MachineThermalControls.setProfile(
-                    profile, durationSeconds: minutes * 60, withSudoPassword: stdin != nil)
-            else {
-                throw CLIFailure("could not build a safe profile command")
+            let result = await MachineThermalOperationExecution.set(
+                profile: profile, durationSeconds: minutes * 60,
+                machineID: runner.machine.id
+            ) { command, stdin, timeout in
+                do {
+                    let output = try await runner.run(
+                        command, stdin: stdin, timeout: timeout)
+                    let detail = output.combinedText.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    guard output.succeeded else {
+                        return .failure(
+                            CLIFailure(
+                                "could not switch \(runner.machine.name) to \(profile)"
+                                    + (detail.isEmpty ? "" : ": \(detail)"),
+                                hint: SudoPassword.hint(forRefusal: detail)))
+                    }
+                    return .success(output.stdoutText)
+                } catch {
+                    return .failure(error)
+                }
             }
-            let result = try await runner.run(command, stdin: stdin, timeout: 30)
-            let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "could not switch \(runner.machine.name) to \(profile)"
-                        + (detail.isEmpty ? "" : ": \(detail)"),
-                    hint: SudoPassword.hint(forRefusal: detail))
+            switch result {
+            case .success:
+                break
+            case .failure(MachineThermalOperationError.invalidProfile(_)):
+                throw CLIFailure("could not build a safe profile command")
+            case let .failure(error):
+                throw error
             }
             guard !json else {
                 CLIOut.json(

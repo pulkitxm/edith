@@ -28,6 +28,7 @@ struct MachinesCommand: AsyncParsableCommand {
             MachinesServicesCommand.self, MachinesPowerCommand.self, MachinesThermalCommand.self,
             MachinesControlCommand.self,
             MachinesKillCommand.self, MachinesBroadcastCommand.self,
+            MachinesTerminalCommand.self,
             MachinesWorkspaceCommand.self,
             MachinesConnectCommand.self,
             MachinesDisconnectCommand.self,
@@ -260,9 +261,9 @@ struct MachinesExecCommand: AsyncParsableCommand {
             let runner = try await MachineResolver.runner(machine)
             if tty {
                 let stored = MachineWorkingDirectory.load(machineID: runner.machine.id)
-                let line = words.joined(separator: " ")
-                let prefixed = MachineWorkingDirectory.prefixed(line, directory: stored)
-                throw ExitCode(runner.interactive(words.isEmpty ? nil : prefixed))
+                let command = MachineExecOperationExecution.interactiveCommand(
+                    words: words, workingDirectory: stored)
+                throw ExitCode(runner.interactive(command))
             }
             let stored = MachineWorkingDirectory.load(machineID: runner.machine.id)
             guard !MachineWorkingDirectory.isChangeDirectory(words) else {

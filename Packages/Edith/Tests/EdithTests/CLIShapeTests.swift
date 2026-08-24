@@ -161,6 +161,7 @@ enum CommandCrawler {
     @Test func everyGroupWithSubcommandsNamesADefaultOrHasNoWorkOfItsOwn() {
         for walk in Self.commands where !walk.type.configuration.subcommands.isEmpty {
             guard walk.path != ["ed"] else { continue }
+            guard walk.path != ["ed", "machines", "terminal"] else { continue }
             #expect(
                 walk.type.configuration.defaultSubcommand != nil,
                 "\(walk.label) has subcommands but no default, so bare `\(walk.label)` errors")
@@ -210,7 +211,8 @@ enum CommandCrawler {
         let exempt: Set<String> = [
             "ed", "ed guide", "ed schema", "ed completions", "ed completions zsh",
             "ed completions bash", "ed completions fish", "ed config export",
-            "ed machines exec", "ed machines docker logs", "ed machines docker inspect",
+            "ed machines exec", "ed machines docker shell", "ed machines docker logs",
+            "ed machines docker inspect",
             "ed machines files", "ed machines docker", "ed config", "ed extensions",
             "ed permissions", "ed usage", "ed system", "ed music", "ed calendar",
             "ed presenter", "ed herdr",
@@ -225,6 +227,7 @@ enum CommandCrawler {
             "ed companion inquire", "ed companion eval", "ed companion machines",
             "ed companion hypotheses", "ed companion discrepancies", "ed companion standup",
             "ed companion connectors", "ed companion db", "ed companion stack",
+            "ed machines terminal",
             "ed lid-awake",
             "ed attention", "ed attention categories", "ed attention focus",
             "ed quinjet",

@@ -2,6 +2,7 @@ import Foundation
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
+    case machineOrLocal
     case appAction
     case runningApp
     case appPath
@@ -866,6 +867,14 @@ public enum CommandTree {
                         "broadcast", "Run one command on every machine.",
                         options: ["--json", "--help", "--only"], arguments: [.free]),
                     CommandNode(
+                        "terminal", "Act on terminal tabs that are open in the Edith app.",
+                        children: [
+                            CommandNode(
+                                "broadcast",
+                                "Send one line to every open terminal tab for one machine.",
+                                options: common, arguments: [.machineOrLocal, .free])
+                        ]),
+                    CommandNode(
                         "kill", "End a process on a machine.",
                         options: ["--json", "--help", "--signal", "--yes"],
                         arguments: [.machine, .historyIndex],
@@ -930,6 +939,9 @@ public enum CommandTree {
                     CommandNode(
                         "docker", "Containers on a machine.",
                         children: [
+                            CommandNode(
+                                "shell", "Open an interactive shell in a container.",
+                                arguments: [.machine, .container]),
                             CommandNode(
                                 "ps", "List containers.", options: ["--json", "-a", "--all"],
                                 arguments: [.machine]),

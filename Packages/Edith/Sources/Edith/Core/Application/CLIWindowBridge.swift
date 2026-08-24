@@ -20,6 +20,7 @@ enum CLIWindowBridge {
             }
         }
         QuinjetSessionBridge.shared.install()
+        MachineTerminalBroadcastBridge.install()
     }
 
     private static func fail(_ message: String) {

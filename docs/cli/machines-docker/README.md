@@ -23,6 +23,7 @@ being the usual example.
 
 | Command | What it does |
 | --- | --- |
+| `ed machines docker shell` | Opens the same interactive container shell as the Docker window. |
 | `ed machines docker ps` | Lists containers merged with live CPU and memory. Runs when you name no subcommand. |
 | `ed machines docker images` | Lists images with their size and whether they are dangling. |
 | `ed machines docker volumes` | Lists volumes with their driver and mountpoint. |
@@ -70,6 +71,7 @@ and exit 0.
 
 ## Commands
 
+- [`ed machines docker shell`](./shell.md)
 - [`ed machines docker ps`](./ps.md)
 - [`ed machines docker images`](./images.md)
 - [`ed machines docker volumes`](./volumes.md)
@@ -102,7 +104,7 @@ and exit 0.
 | 2 | `--tail` was negative, or the command line was wrong in the ordinary way: an unknown flag, a missing `<machine>` or `<container>`, a `--tail` that is not a number. |
 | 3 | The machine name matched nothing or matched several; `<what>` was not one of the five prune targets; `<project>` was not in `compose ls`; `inspect` got a zero status and no output. |
 | 4 | The machine could not be reached, docker on it is not usable (not installed, the daemon down, or this user cannot talk to the socket), or `ssh` itself could not be launched for a non-streaming command. |
-| other | `logs` and `compose logs` propagate the remote process's own exit code verbatim, so anything docker returns reaches you unchanged. |
+| other | `shell`, `logs` and `compose logs` propagate the remote process's own exit code verbatim, so anything docker or SSH returns reaches you unchanged. |
 
 The docker availability failures all read the same way, with the specific reason
 as the hint:
@@ -130,9 +132,9 @@ something unrecognisable, `docker reported an unknown state`.
   buildx ls`, `ed tuf docker exec -it api sh`.
 - `ed machines docker <machine>` with no verb is `ps`, and
   `ed machines docker compose <machine>` with no verb is `compose ls`.
-- There is no `ed machines docker exec`. The Docker window's shell button is
-  `ed machines exec --tty <machine> 'docker exec -it <container> sh'`, and
-  `--tty` is what makes an interactive shell work at all.
+- `ed machines docker shell <machine> <container>` is the Docker window's shell
+  button. Both use the same quoted container target and choose `bash` when it is
+  available inside the container, falling back to `sh`.
 - Every verb, including both dry runs, starts by running
   `docker version --format '{{json .}}'` on the machine with a 25 second ceiling
   and refusing to go on unless the daemon answered. That is the one round trip
@@ -146,12 +148,12 @@ something unrecognisable, `docker reported an unknown state`.
   `images`, `volumes` and `df`, 30 for `networks`, `inspect` and `compose ls`,
   120 for every container lifecycle verb and for `rmi` and `volume-rm`, 300 for
   `prune` and for `compose up`, `down` and `restart`, 900 for `compose pull`.
-  `logs` and `compose logs` have none. A command that outruns its ceiling has
+  `shell`, `logs` and `compose logs` have none. A command that outruns its ceiling has
   its `ssh` sent `SIGTERM`, then `SIGKILL` two seconds later, and surfaces as
   exit 1 while the work carries on unsupervised on the machine.
 - `--json` output is one document per invocation, keys sorted, two space indent.
   Nothing on this page streams JSON, and nothing here takes `--json --follow`.
-- Three verbs have no `--json` at all: `logs`, `inspect` and `compose logs`.
+- Four verbs have no `--json` at all: `shell`, `logs`, `inspect` and `compose logs`.
   `inspect` does not need one, since its output is already docker's JSON.
 - The container id you pass is never resolved by `ed`. Names, short ids and full
   ids all go to docker as typed, so docker's own matching rules apply, including
@@ -159,7 +161,7 @@ something unrecognisable, `docker reported an unknown state`.
 - `ps --json` drops two fields it collects. Network rx and tx bytes are parsed
   out of `docker stats` and never reach the document; only CPU and memory do.
 - Volume sizes are never reported by `volumes`. Use `df`.
-- The Docker window and parsed CLI share start, stop, restart, container removal,
+- The Docker window and parsed CLI share shell, start, stop, restart, container removal,
   image removal, volume removal and prune operations. The four compose lifecycle
   verbs remain CLI-only because the window groups containers by compose project
   but never runs compose for a whole project.

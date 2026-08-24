@@ -205,12 +205,6 @@ enum UIParity {
             "Companion backend", "choose the machine that runs the companion",
             ["companion", "deploy"]),
         UICapability(
-            "Machine cooling", "inspect thermal profiles",
-            ["machines", "thermal", "status", "box"]),
-        UICapability(
-            "Machine cooling", "switch thermal profiles",
-            ["machines", "thermal", "set", "box", "performance"]),
-        UICapability(
             "Machine controls", "inspect available live controls",
             ["machines", "control", "status", "box"]),
         UICapability(
@@ -238,9 +232,6 @@ enum UIParity {
             "Machine controls", "set keyboard backlight brightness",
             ["machines", "control", "keyboard-light", "box", "25"]),
         UICapability(
-            "Docker window", "open a shell in a container",
-            ["machines", "exec", "--tty", "box", "docker exec -it api sh"]),
-        UICapability(
             "Machine finder", "search the folder",
             ["machines", "files", "search", "box", "/a", "x"]),
         UICapability(
@@ -252,13 +243,6 @@ enum UIParity {
         UICapability(
             "Machine finder", "undo the last move or rename",
             ["machines", "files", "undo", "box"]),
-        UICapability("Machines", "open the shared connection", ["machines", "connect", "box"]),
-        UICapability("Machines", "close the shared connection", ["machines", "disconnect", "box"]),
-        UICapability(
-            "Machine tools", "mount the machine's disk on this Mac", ["machines", "mount", "box"]),
-        UICapability(
-            "Machine tools", "unmount the machine's disk", ["machines", "unmount", "box"]),
-
         UICapability("Music player", "play", ["music", "play"]),
         UICapability("Music player", "pause", ["music", "pause"]),
         UICapability("Music player", "stop", ["music", "stop"]),
@@ -307,9 +291,6 @@ enum UIParity {
             "Download sheet", "reveal a completed result", ["download", "reveal", "1"]),
         UICapability("Download sheet", "update yt-dlp", ["download", "tool", "--update"]),
 
-        UICapability(
-            "Terminal broadcast bar", "send one line to every pane",
-            ["machines", "broadcast", "--", "uptime"]),
         UICapability(
             "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
         UICapability(

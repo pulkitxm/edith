@@ -204,9 +204,9 @@ import Testing
 
     @Test func everyArgumentKindEitherOffersValuesOrDefersToTheShell() {
         let kinds: [ArgumentKind] = [
-            .machine, .configKey, .configValue, .extensionID, .permission, .shell, .group,
-            .usageRange, .localPath, .remotePath, .container, .appAction, .cleanerCategory,
-            .colorFormat, .pruneTarget, .composeProject, .historyIndex, .free,
+            .machine, .machineOrLocal, .configKey, .configValue, .extensionID, .permission,
+            .shell, .group, .usageRange, .localPath, .remotePath, .container, .appAction,
+            .cleanerCategory, .colorFormat, .pruneTarget, .composeProject, .historyIndex, .free,
             .shelfItem, .musicTrack, .calendarEvent,
         ]
         for kind in kinds {

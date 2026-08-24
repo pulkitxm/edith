@@ -38,6 +38,10 @@ public enum IPC {
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
         public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
         public static let machinesChanged = Notification.Name("com.pulkit.edith.machinesChanged")
+        public static let requestMachineTerminalBroadcast = Notification.Name(
+            "com.pulkit.edith.requestMachineTerminalBroadcast")
+        public static let machineTerminalBroadcastResult = Notification.Name(
+            "com.pulkit.edith.machineTerminalBroadcastResult")
         public static let downloadQueueChanged = Notification.Name(
             "com.pulkit.edith.downloadQueueChanged")
         public static let requestQuitApps = Notification.Name(

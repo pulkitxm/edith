@@ -12,8 +12,9 @@ struct MachinesDockerCommand: AsyncParsableCommand {
             `ed tuf docker buildx ls`.
             """,
         subcommands: [
-            DockerPsCommand.self, DockerImagesCommand.self, DockerVolumesCommand.self,
-            DockerNetworksCommand.self, DockerDiskUsageCommand.self, DockerLogsCommand.self,
+            DockerPsCommand.self, DockerShellCommand.self, DockerImagesCommand.self,
+            DockerVolumesCommand.self, DockerNetworksCommand.self, DockerDiskUsageCommand.self,
+            DockerLogsCommand.self,
             DockerInspectCommand.self, DockerStartCommand.self, DockerStopCommand.self,
             DockerRestartCommand.self, DockerRemoveCommand.self,
             DockerPauseCommand.self, DockerUnpauseCommand.self,
@@ -22,6 +23,28 @@ struct MachinesDockerCommand: AsyncParsableCommand {
             DockerComposeCommand.self,
         ],
         defaultSubcommand: DockerPsCommand.self)
+}
+
+struct DockerShellCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "shell", abstract: "Open an interactive shell in a container.")
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Container name or id.")
+    var container: String
+
+    func run() async throws {
+        try await execute {
+            try Task.checkCancellation()
+            let runner = try await DockerBridge.runner(machine)
+            try Task.checkCancellation()
+            let command = MachineExecOperationExecution.dockerShellCommand(
+                containerID: container)
+            throw ExitCode(runner.interactive(command))
+        }
+    }
 }
 
 enum DockerBridge {
