@@ -393,16 +393,19 @@ struct MachinesForwardsAddCommand: AsyncParsableCommand {
                 machineID: target.id, localPort: try MachineEditing.port(local),
                 remoteHost: remoteHost, remotePort: try MachineEditing.port(remote),
                 title: title)
-            let taken = MachineRegistry.forwards(
-                machineID: target.id, in: MachineRegistry.forwards()
-            ).contains { $0.localPort == forward.localPort }
-            guard !taken else {
+            let result = await MachineForwardOperationExecution.perform(
+                .add, forward: forward, existing: MachineRegistry.forwards(),
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error as MachineForwardOperationError) = result,
+                case .duplicateLocalPort = error
+            {
                 throw CLIFailure(
                     "\(target.name) already forwards local port \(forward.localPort)",
                     hint: "run `ed machines forwards ls \(target.name)` to see them")
             }
-            MachineRegistry.addForward(forward)
-            AppBridge.post(IPC.Name.machinesChanged)
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(ForwardBridge.json(forward, index: 0))
                 return
@@ -434,8 +437,12 @@ struct MachinesForwardsRemoveCommand: AsyncParsableCommand {
                     hint: "it has \(found.all.count), numbered from 1")
             }
             let forward = found.all[index - 1]
-            MachineRegistry.removeForward(id: forward.id)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = await MachineForwardOperationExecution.perform(
+                .remove, forward: forward,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -550,8 +557,12 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
             }
             let snippet = CommandSnippet(
                 machineID: shared ? nil : target.id, title: title, command: text)
-            MachineRegistry.addSnippet(snippet)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = MachineSnippetOperationExecution.perform(
+                .add, snippet: snippet,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(SnippetBridge.json(snippet, index: 0))
                 return
@@ -583,8 +594,12 @@ struct MachinesSnippetsRemoveCommand: AsyncParsableCommand {
                     hint: "it offers \(found.all.count), numbered from 1")
             }
             let snippet = found.all[index - 1]
-            MachineRegistry.removeSnippet(id: snippet.id)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = MachineSnippetOperationExecution.perform(
+                .remove, snippet: snippet,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
+            }
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -646,16 +661,33 @@ extension ForwardBridge {
             }
             let forward = found.all[index - 1]
             let runner = try await MachineResolver.runner(machine)
-            if active {
-                do {
-                    try await runner.ssh.addForward(forward)
-                } catch {
+            let operation: MachineForwardOperation = active ? .enable : .disable
+            let result = await MachineForwardOperationExecution.perform(
+                operation, forward: forward,
+                setActive: { candidate, shouldOpen in
+                    guard shouldOpen else {
+                        await runner.ssh.cancelForward(candidate)
+                        return nil
+                    }
+                    do {
+                        try await runner.ssh.addForward(candidate)
+                        return nil
+                    } catch {
+                        return error.localizedDescription
+                    }
+                })
+            if case let .failure(error as MachineForwardOperationError) = result {
+                switch error {
+                case let .liveActionFailed(detail) where active:
                     throw CLIFailure(
                         "could not open \(forward.forwardSpec) on \(found.machine.name)",
-                        hint: error.localizedDescription)
+                        hint: detail)
+                default:
+                    throw CLIFailure(error.localizedDescription)
                 }
-            } else {
-                await runner.ssh.cancelForward(forward)
+            }
+            if case let .failure(error) = result {
+                throw CLIFailure(error.localizedDescription)
             }
             guard !json else {
                 guard case var .object(fields) = ForwardBridge.json(forward, index: index)

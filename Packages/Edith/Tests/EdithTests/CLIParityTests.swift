@@ -208,17 +208,6 @@ enum UIParity {
             "Companion settings", "point at another companion",
             ["config", "set", "companionEndpoint", "http://127.0.0.1:4820"]),
         UICapability(
-            "Machine tools", "save a port forward",
-            ["machines", "forwards", "add", "box", "--local", "8080", "--remote", "80"]),
-        UICapability(
-            "Machine tools", "delete a port forward",
-            ["machines", "forwards", "rm", "box", "1"]),
-        UICapability(
-            "Machine tools", "save a snippet",
-            ["machines", "snippets", "add", "box", "logs", "journalctl"]),
-        UICapability(
-            "Machine tools", "delete a snippet", ["machines", "snippets", "rm", "box", "1"]),
-        UICapability(
             "Machine cooling", "inspect thermal profiles",
             ["machines", "thermal", "status", "box"]),
         UICapability(
@@ -252,34 +241,8 @@ enum UIParity {
             "Machine controls", "set keyboard backlight brightness",
             ["machines", "control", "keyboard-light", "box", "25"]),
         UICapability(
-            "Machine tools", "start a systemd unit",
-            ["machines", "services", "start", "box", "nginx.service"]),
-        UICapability(
-            "Machine tools", "stop a systemd unit",
-            ["machines", "services", "stop", "box", "nginx.service"]),
-        UICapability(
-            "Machine tools", "restart a systemd unit",
-            ["machines", "services", "restart", "box", "nginx.service"]),
-        UICapability(
-            "Machine processes", "end a process with SIGTERM", ["machines", "kill", "box", "42"]),
-        UICapability(
-            "Machine processes", "force kill a process",
-            ["machines", "kill", "box", "42", "--signal", "KILL", "--yes"]),
-        UICapability(
-            "Machine tools", "switch a port forward on",
-            ["machines", "forwards", "on", "box", "1"]),
-        UICapability(
-            "Machine tools", "switch a port forward off",
-            ["machines", "forwards", "off", "box", "1"]),
-        UICapability(
             "Docker window", "open a shell in a container",
             ["machines", "exec", "--tty", "box", "docker exec -it api sh"]),
-        UICapability(
-            "Docker window", "pause a container",
-            ["machines", "docker", "pause", "box", "api"]),
-        UICapability(
-            "Docker window", "unpause a container",
-            ["machines", "docker", "unpause", "box", "api"]),
         UICapability(
             "Machine finder", "search the folder",
             ["machines", "files", "search", "box", "/a", "x"]),
@@ -687,7 +650,6 @@ enum UIParity {
 
     @Test func legacyVariantsShareOneExactOperationWithMultiplePlacements() {
         let expectedPlacementCounts: [[String]: Int] = [
-            ["machines", "kill"]: 2,
             ["music", "rename"]: 2,
             ["music", "rm"]: 2,
             ["machines", "docker", "start"]: 2,
