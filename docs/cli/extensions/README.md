@@ -157,6 +157,12 @@ An optional workflow can make readiness `degraded` without changing runtime
 from `installed`. Music without `yt-dlp` is the canonical example: local
 playback remains installed, while URL import has an actionable warning.
 
+Every enabled extension also runs a live adapter. The adapter validates its
+real storage, operating system service, executable, configuration, or backend
+instead of treating a running helper as proof that the feature works. See
+[extension runtime detection](./runtime-detection.md) for the full matrix and
+agent recovery workflow.
+
 ## Exit codes
 
 | Code | When |
@@ -218,5 +224,7 @@ for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
 - [`ed config`](../config/README.md) for the settings an extension exposes once it is on
 - [`ed tools`](../tools/README.md) for the command line tools named by
   `requiredTools` and `optionalTools`
+- [Extension runtime detection](./runtime-detection.md) for every live probe and
+  recovery path
 - [Quinjet setup](https://github.com/pulkitxm/edith/blob/main/docs/quinjet.md) for terminal, theme, install and verification details
 - [All `ed` commands](../README.md)

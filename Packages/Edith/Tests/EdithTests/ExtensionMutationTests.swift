@@ -61,7 +61,7 @@ private struct ExtensionMutationWorld {
                 toolPresent($0) ? .installed(version: "test") : .uninstalled
             },
             helperRunning: { true }, platformCapabilities: .macOS, machineCount: { 1 },
-            adapterReadiness: { _ in nil })
+            adapterReadiness: { _ in .ready("Ready.") })
         return ExtensionMutationCenter(
             environment: ExtensionMutationEnvironment(
                 defaults: defaults.store, announceChange: { recorder.announce() },
