@@ -63,11 +63,22 @@ final class CleanerModel {
     }
 
     var reclaimableTotal: Int64 { categories.reduce(0) { $0 + $1.sizeBytes } }
-    var selectedTotal: Int64 { categories.reduce(0) { $0 + $1.selectedBytes } }
+    var selectedTotal: Int64 {
+        CleanerOperationExecution.selectedItems(in: categories).reduce(0) { $0 + $1.sizeBytes }
+    }
 
     var totalItemCount: Int { categories.reduce(0) { $0 + $1.items.count } }
     var selectedItemCount: Int {
-        categories.reduce(0) { $0 + $1.items.filter(\.selected).count }
+        CleanerOperationExecution.selectedItems(in: categories).count
+    }
+
+    func selectedTotal(categoryID: String) -> Int64 {
+        CleanerOperationExecution.selectedItems(in: categories, categoryID: categoryID)
+            .reduce(0) { $0 + $1.sizeBytes }
+    }
+
+    func selectedItemCount(categoryID: String) -> Int {
+        CleanerOperationExecution.selectedItems(in: categories, categoryID: categoryID).count
     }
 
     var overallSelection: JunkSelection {
@@ -153,36 +164,25 @@ final class CleanerModel {
             let choices = overrides
             let categoryChoices = categoryDefaults
             let home = FileManager.default.homeDirectoryForCurrentUser
-            for entry in JunkCatalog.entries {
-                if token.cancelled { break }
-                log("Scanning \(entry.name)…")
-                let found = await Task.detached {
-                    JunkScanner.scanCategory(entry, home: home, isCancelled: { token.cancelled })
-                }.value
-                if token.cancelled { break }
-                if let category = found {
-                    categories.append(
-                        Self.applyChoices(category, items: choices, categories: categoryChoices))
-                    log("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
-                }
-            }
             var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
             roots += customFolders.filter { isDriveSelected($0) }.map { URL(fileURLWithPath: $0) }
-            if !roots.isEmpty, !token.cancelled {
-                let projects = await Task.detached {
-                    JunkScanner.scanProjectJunk(roots: roots, isCancelled: { token.cancelled }) {
-                        line in
-                        Task { @MainActor in CleanerModel.shared.log(line) }
-                    }
-                }.value
-                if !token.cancelled {
-                    for category in projects {
-                        categories.append(
-                            Self.applyChoices(
-                                category, items: choices, categories: categoryChoices))
-                        log(
-                            "  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
-                    }
+            let result = await Task.detached {
+                CleanerOperationExecution.scan(
+                    entries: JunkCatalog.entries, roots: roots, home: home,
+                    isCancelled: { token.cancelled },
+                    progress: { note in
+                        Task { @MainActor in
+                            CleanerModel.shared.log(
+                                note.hasPrefix("Scanning ") ? note : "Scanning \(note)…")
+                        }
+                    })
+            }.value
+            if !token.cancelled {
+                categories = result.categories.map {
+                    Self.applyChoices($0, items: choices, categories: categoryChoices)
+                }
+                for category in categories {
+                    log("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
                 }
             }
             if token.cancelled {
@@ -273,13 +273,16 @@ final class CleanerModel {
         if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
     }
 
-    func clean() {
-        let items = categories.flatMap { $0.items.filter(\.selected) }
+    func clean(categoryID: String? = nil) {
+        let items = CleanerOperationExecution.selectedItems(
+            in: categories, categoryID: categoryID)
         guard !items.isEmpty else { return }
         scanning = true
         Task {
-            let reclaimed = await Task.detached { JunkScanner.clean(items) }.value
-            lastReclaimed = reclaimed
+            let result = await Task.detached {
+                CleanerOperationExecution.clean(items)
+            }.value
+            lastReclaimed = result.reclaimedBytes
             scanning = false
             scan()
         }
@@ -661,6 +664,7 @@ private struct CleanerCategoryRow: View {
     let dark: Bool
     @State private var itemFilter = ""
     @State private var headerHover = false
+    @State private var confirmClean = false
 
     private var isExpanded: Bool { model.expanded.contains(category.id) }
 
@@ -699,6 +703,10 @@ private struct CleanerCategoryRow: View {
                         .font(.system(size: UIScale.pt(12), design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(72), alignment: .trailing)
+                    Button("Clean") { confirmClean = true }
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .buttonStyle(.plain).pointerCursor()
+                        .disabled(model.selectedItemCount(categoryID: category.id) == 0)
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { model.toggleExpand(category.id) }
@@ -725,6 +733,20 @@ private struct CleanerCategoryRow: View {
                 .padding(.bottom, UIScale.pt(4))
             }
             Divider().opacity(0.3)
+        }
+        .confirmationDialog(
+            "Clean \(JunkScanner.format(model.selectedTotal(categoryID: category.id)))?",
+            isPresented: $confirmClean, titleVisibility: .visible
+        ) {
+            Button(
+                "Move \(model.selectedItemCount(categoryID: category.id)) items to Trash",
+                role: .destructive
+            ) {
+                model.clean(categoryID: category.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Items go to the Trash, so you can restore them until you empty it.")
         }
     }
 

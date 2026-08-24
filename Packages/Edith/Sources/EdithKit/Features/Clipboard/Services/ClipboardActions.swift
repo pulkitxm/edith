@@ -112,10 +112,21 @@ public enum ClipboardActions {
     @discardableResult
     public static func markCopied(id: String, at moment: Date = Date()) throws -> Outcome {
         try mutate { entries in
-            guard let index = entries.firstIndex(where: { $0.id == id }) else { return 0 }
-            entries[index].lastCopiedAt = moment
-            return 1
+            let outcome = markingCopied(id: id, in: entries, at: moment)
+            entries = outcome.entries
+            return outcome.changed
         }
+    }
+
+    public static func markingCopied(
+        id: String, in entries: [ClipboardEntry], at moment: Date = Date()
+    ) -> Outcome {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else {
+            return Outcome(entries: entries, changed: 0)
+        }
+        var updated = entries
+        updated[index].lastCopiedAt = moment
+        return Outcome(entries: updated, changed: 1)
     }
 
     @discardableResult
