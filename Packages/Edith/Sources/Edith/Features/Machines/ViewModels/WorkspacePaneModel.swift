@@ -189,11 +189,13 @@ struct WorkspacePaneView: View {
         let available = PaneScreen.available(
             isLocal: machines.isLocal(machineID),
             hasDocker: machines.session(for: machineID).docker.isInstalled)
-        for tab in pane.tabs {
+        let targets = pane.tabs.map { tab in
             let screen = available.contains(tab.target.screen) ? tab.target.screen : .overview
-            model.retargetPane(
-                pane.id, tabID: tab.id,
-                to: PaneTarget(machineID: machineID, screen: screen))
+            return WorkspaceTabRetarget(
+                tabID: tab.id, target: PaneTarget(machineID: machineID, screen: screen))
+        }
+        model.retargetPane(pane.id, to: targets)
+        for tab in pane.tabs {
             PaneViewStore.shared.release(tabID: tab.id)
         }
     }
@@ -256,7 +258,7 @@ struct WorkspacePaneView: View {
                 Divider()
                 Button("Close Pane") {
                     let orphans = pane.tabs.map(\.id)
-                    model.apply { $0.closePane(pane.id) }
+                    model.closePane(pane.id)
                     for id in orphans { PaneViewStore.shared.release(tabID: id) }
                 }
                 .disabled(model.layout.paneCount < 2)
@@ -275,7 +277,7 @@ struct WorkspacePaneView: View {
 
     private func split(_ side: InsertSide) {
         guard let target = selectedTab?.target else { return }
-        model.apply { $0.split(paneID: pane.id, side: side, target: target) }
+        model.splitPane(pane.id, side: side, target: target)
     }
 
     private func tabChip(_ tab: PaneTab) -> some View {
@@ -351,7 +353,7 @@ struct WorkspacePaneView: View {
             PaneViewStore.shared.release(tabID: tab.id)
         } else if model.layout.paneCount > 1 {
             let orphans = pane.tabs.map(\.id)
-            model.apply { $0.closePane(pane.id) }
+            model.closePane(pane.id)
             for id in orphans { PaneViewStore.shared.release(tabID: id) }
         }
     }
