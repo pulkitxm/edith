@@ -28,7 +28,7 @@ test("benchmark text output carries the reviewable summary", async () => {
       .text();
 
   expect(output.trim()).toBe(
-    "fixture | samples 5 | cpu median 0.300% p95 1.500% peak 1.500% | rss median 110.000 MB p95 140.000 MB peak 140.000 MB",
+    "fixture | samples 5 | cpu median 0.300% p95 1.500% peak 1.500% | rss median 110.000 MB p95 140.000 MB peak 140.000 MB | idle wakeups median 3.000",
   );
 });
 

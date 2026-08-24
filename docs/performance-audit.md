@@ -16,7 +16,7 @@ every area retains live source or test evidence.
 | GitHub | Contributor data uses a daily cache and failure fallback. | Cache and request intervals plus a one-read fallback test. |
 | Extension discovery | Readiness is requested on demand and aggregate reports run concurrently. | The settings readiness request is traced. |
 | Cache | Contributor hit and miss decisions are visible. | Corrupt-cache fallback decodes once. |
-| Memory | Helper CPU, RSS, and optional wakeups have a machine-readable sampler. | Fixture tests lock schema, percentiles, and units. |
+| Memory | Helper CPU, RSS, and optional idle wakeups have a machine-readable sampler. | Fixture tests lock schema, percentiles, and units. |
 | Main thread | Every runtime interval records its begin and end thread context. | A deterministic test checks the main-thread signal. |
 | Large repository | Dashboard JSON decoding is detached, but aggregation returns to the main actor. | Decode placement is checked and aggregation has its own interval. |
 | Slow network | GitHub contributor requests stop after ten seconds and retain cached output. | Timeout source evidence and a local failing-network test. |

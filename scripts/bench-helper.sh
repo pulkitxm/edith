@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 PROCESS="EdithHelper"
 SAMPLE_COUNT=30
@@ -76,6 +77,14 @@ else
     append_sample "$cpu" "$rss"
     if ((index + 1 < SAMPLE_COUNT)); then sleep "$INTERVAL"; fi
   done
+  if top_output="$(
+    top -l 2 -s 1 -stats pid,idlew -pid "$PID_VALUE" 2>/dev/null
+  )"; then
+    wake="$(
+      awk -v pid="$PID_VALUE" '$1 == pid { value = $2 } END { print value }' <<< "$top_output"
+    )"
+    if [[ "$wake" =~ ^[0-9]+([.][0-9]+)?$ ]]; then wake_samples+=("$wake"); fi
+  fi
 fi
 
 [[ "${#cpu_samples[@]}" -gt 0 ]] || fail "no samples collected" 1
@@ -127,9 +136,9 @@ escaped_process="${PROCESS//\\/\\\\}"
 escaped_process="${escaped_process//\"/\\\"}"
 
 if [[ "$OUTPUT" == "text" ]]; then
-  printf '%s | samples %s | cpu median %.3f%% p95 %.3f%% peak %.3f%% | rss median %.3f MB p95 %.3f MB peak %.3f MB\n' \
+  printf '%s | samples %s | cpu median %.3f%% p95 %.3f%% peak %.3f%% | rss median %.3f MB p95 %.3f MB peak %.3f MB | idle wakeups median %s\n' \
     "$LABEL" "${#cpu_samples[@]}" "$cpu_median" "$cpu_p95" "$cpu_peak" \
-    "$rss_median" "$rss_p95" "$rss_peak"
+    "$rss_median" "$rss_p95" "$rss_peak" "$wake_median"
 else
   printf '{"schemaVersion":1,"label":"%s","process":"%s","pid":%s,"samples":%s,' \
     "$escaped_label" "$escaped_process" "$PID_VALUE" "${#cpu_samples[@]}"
