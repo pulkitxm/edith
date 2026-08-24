@@ -293,6 +293,7 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: >-
           gh workflow run release.yml
+          --repo "$GITHUB_REPOSITORY"
           --ref main
           --field cut_release=true
           --field source_sha="$RELEASE_SHA"

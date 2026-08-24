@@ -42,6 +42,7 @@ test("CI gates and dispatches the release only on relevant checks", () => {
   );
   expect(releaseJob).toContain("actions: write");
   expect(releaseJob).toContain("gh workflow run release.yml");
+  expect(releaseJob).toContain('--repo "$GITHUB_REPOSITORY"');
   expect(releaseJob).toContain("--field cut_release=true");
   expect(releaseJob).toContain('--field source_sha="$RELEASE_SHA"');
   expect(releaseJob).not.toContain("uses: ./.github/workflows/release.yml");
