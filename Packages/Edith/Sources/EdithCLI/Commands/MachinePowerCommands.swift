@@ -65,73 +65,84 @@ struct MachinesPowerStatusCommand: AsyncParsableCommand {
 
 enum PowerBridge {
     static func apply(
-        _ action: String, machine name: String, json: Bool, yes: Bool
+        _ operation: MachinePowerOperation, machine name: String, json: Bool, yes: Bool
     ) async throws {
         try await execute {
             let target = try MachineResolver.machine(name)
-            let stdin = SudoPassword.stdin(machineID: target.id)
-            let command =
-                action == "reboot"
-                ? PowerCommands.reboot(withSudoPassword: stdin != nil)
-                : PowerCommands.shutdown(withSudoPassword: stdin != nil)
+            let request = MachinePowerOperationExecution.command(
+                for: operation, machineID: target.id)
+            let command = request?.command ?? ""
             guard yes else {
                 guard !json else {
                     CLIOut.json(
                         .object([
                             "machine": .string(target.name),
-                            "action": .string(action),
+                            "action": .string(operation.rawValue),
                             "applied": .bool(false),
                             "command": .string(command),
                         ]))
                     return
                 }
                 CLIOut.out(
-                    action == "reboot"
+                    operation == .reboot
                         ? "would restart \(target.name)" : "would shut \(target.name) down")
                 CLIOut.note("nothing was done; pass --yes to go ahead")
                 return
             }
             let runner = try await MachineResolver.runner(name)
-            let outcome: Result<SSHExecResult, Error>
-            do {
-                outcome = .success(try await runner.ssh.run(command, stdin: stdin, timeout: 20))
-            } catch {
-                outcome = .failure(error)
-            }
+            let outcome = await MachinePowerOperationExecution.perform(
+                operation, machine: target,
+                sudoPassword: { _ in request?.stdin },
+                run: { command, stdin, timeout in
+                    do {
+                        let result = try await runner.ssh.run(
+                            command, stdin: stdin, timeout: timeout)
+                        guard result.succeeded else {
+                            return .failure(
+                                SSHConnectionError.commandFailed(
+                                    command: command, status: result.status,
+                                    stderr: result.combinedText))
+                        }
+                        return .success(result.combinedText)
+                    } catch {
+                        return .failure(error)
+                    }
+                })
             switch outcome {
-            case let .success(result) where result.succeeded:
-                try report(action, machine: target.name, json: json)
-            case let .success(result):
-                throw refusal(action, machine: target.name, detail: result.combinedText)
+            case .success:
+                try report(operation, machine: target.name, json: json)
             case let .failure(error):
-                guard PowerOutcome.hostWentAway(error) else {
-                    throw refusal(
-                        action, machine: target.name, detail: PowerOutcome.explain(error))
-                }
-                try report(action, machine: target.name, json: json)
+                throw refusal(
+                    operation, machine: target.name, detail: PowerOutcome.explain(error))
             }
         }
     }
 
-    static func refusal(_ action: String, machine: String, detail: String) -> CLIFailure {
+    static func refusal(
+        _ operation: MachinePowerOperation, machine: String, detail: String
+    ) -> CLIFailure {
         let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = trimmed.isEmpty ? "\(machine) refused to \(action)" : trimmed
+        let message = trimmed.isEmpty ? "\(machine) refused to \(operation.rawValue)" : trimmed
         return CLIFailure(
-            "\(machine) did not \(action): \(message)",
+            "\(machine) did not \(operation.rawValue): \(message)",
             hint: SudoPassword.hint(forRefusal: trimmed))
     }
 
-    static func report(_ action: String, machine: String, json: Bool) throws {
+    static func report(
+        _ operation: MachinePowerOperation, machine: String, json: Bool
+    ) throws {
         guard !json else {
             CLIOut.json(
                 .object([
                     "machine": .string(machine),
-                    "action": .string(action),
+                    "action": .string(operation.rawValue),
                     "applied": .bool(true),
                 ]))
             return
         }
-        CLIOut.out(action == "reboot" ? "\(machine) is restarting" : "\(machine) is shutting down")
+        CLIOut.out(
+            operation == .reboot
+                ? "\(machine) is restarting" : "\(machine) is shutting down")
     }
 }
 
@@ -149,7 +160,7 @@ struct MachinesRebootCommand: AsyncParsableCommand {
     var machine: String
 
     func run() async throws {
-        try await PowerBridge.apply("reboot", machine: machine, json: json, yes: yes)
+        try await PowerBridge.apply(.reboot, machine: machine, json: json, yes: yes)
     }
 }
 
@@ -167,7 +178,7 @@ struct MachinesShutdownCommand: AsyncParsableCommand {
     var machine: String
 
     func run() async throws {
-        try await PowerBridge.apply("shutdown", machine: machine, json: json, yes: yes)
+        try await PowerBridge.apply(.shutdown, machine: machine, json: json, yes: yes)
     }
 }
 
@@ -185,19 +196,25 @@ struct MachinesWakeCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let target = try MachineResolver.machine(machine)
-            guard let mac = target.wakeMACAddress else {
+            let outcome = await MachinePowerOperationExecution.perform(
+                .wake, machine: target)
+            let result: MachinePowerResult
+            switch outcome {
+            case let .success(value):
+                result = value
+            case let .failure(error as MachinePowerOperationError):
+                guard case .missingWakeAddress = error else {
+                    throw CLIFailure(error.localizedDescription)
+                }
                 throw CLIFailure.unavailable(
                     "no MAC address is stored for \(target.name)",
                     hint:
                         "open the machine in Edith while it is up so it can learn one, or set it "
                         + "with `ed machines edit \(target.name) --mac <address>`")
+            case let .failure(error):
+                throw CLIFailure(error.localizedDescription)
             }
-            guard let packet = WakeOnLAN.magicPacket(macAddress: mac) else {
-                throw CLIFailure("\(mac) is not a MAC address")
-            }
-            if let failure = MagicPacket.send(packet) {
-                throw CLIFailure(failure)
-            }
+            let mac = result.macAddress ?? ""
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -225,33 +242,49 @@ struct MachinesServicesCommand: AsyncParsableCommand {
 }
 
 enum ServiceBridge {
-    static func apply(_ action: String, machine name: String, unit: String, json: Bool)
+    static func apply(
+        _ operation: MachineServiceOperation, machine name: String, unit: String, json: Bool
+    )
         async throws
     {
         try await execute {
             let runner = try await MachineResolver.runner(name)
             let stdin = SudoPassword.stdin(machineID: runner.machine.id)
-            let result = try await runner.run(
-                ServiceCommands.action(action, unit: unit, withSudoPassword: stdin != nil),
-                stdin: stdin, timeout: 60)
-            let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded, !PowerOutcome.needsPrivilege(detail) else {
-                throw CLIFailure(
-                    "could not \(action) \(unit) on \(runner.machine.name)"
-                        + (detail.isEmpty ? "" : ": \(detail)"),
-                    hint: SudoPassword.hint(forRefusal: detail))
+            let result = await MachineServiceOperationExecution.perform(
+                operation, unit: unit, sudoPassword: stdin,
+                using: { command, stdin, timeout in
+                    do {
+                        let output = try await runner.run(
+                            command, stdin: stdin, timeout: timeout)
+                        let detail = output.combinedText.trimmingCharacters(
+                            in: .whitespacesAndNewlines)
+                        guard output.succeeded, !PowerOutcome.needsPrivilege(detail) else {
+                            return .failure(
+                                CLIFailure(
+                                    "could not \(operation.rawValue) \(unit) on "
+                                        + runner.machine.name
+                                        + (detail.isEmpty ? "" : ": \(detail)"),
+                                    hint: SudoPassword.hint(forRefusal: detail)))
+                        }
+                        return .success(output.combinedText)
+                    } catch {
+                        return .failure(error)
+                    }
+                })
+            if case let .failure(error) = result {
+                throw error
             }
             guard !json else {
                 CLIOut.json(
                     .object([
                         "machine": .string(runner.machine.name),
                         "unit": .string(unit),
-                        "action": .string(action),
+                        "action": .string(operation.rawValue),
                         "applied": .bool(true),
                     ]))
                 return
             }
-            CLIOut.out("\(action)ed \(unit) on \(runner.machine.name)")
+            CLIOut.out("\(operation.rawValue)ed \(unit) on \(runner.machine.name)")
         }
     }
 }
@@ -270,7 +303,7 @@ struct MachinesServiceStartCommand: AsyncParsableCommand {
     var unit: String
 
     func run() async throws {
-        try await ServiceBridge.apply("start", machine: machine, unit: unit, json: json)
+        try await ServiceBridge.apply(.start, machine: machine, unit: unit, json: json)
     }
 }
 
@@ -288,7 +321,7 @@ struct MachinesServiceStopCommand: AsyncParsableCommand {
     var unit: String
 
     func run() async throws {
-        try await ServiceBridge.apply("stop", machine: machine, unit: unit, json: json)
+        try await ServiceBridge.apply(.stop, machine: machine, unit: unit, json: json)
     }
 }
 
@@ -306,7 +339,7 @@ struct MachinesServiceRestartCommand: AsyncParsableCommand {
     var unit: String
 
     func run() async throws {
-        try await ServiceBridge.apply("restart", machine: machine, unit: unit, json: json)
+        try await ServiceBridge.apply(.restart, machine: machine, unit: unit, json: json)
     }
 }
 
@@ -356,15 +389,32 @@ struct MachinesKillCommand: AsyncParsableCommand {
                 : nil
             guard plan?.shouldApply() ?? true else { return }
             let runner = try await MachineResolver.runner(machine)
-            let result = try await runner.run(
-                ProcessCommands.kill(pid: pid, signal: named), timeout: 30)
-            let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard result.succeeded else {
-                throw CLIFailure(
-                    "could not signal \(pid) on \(runner.machine.name)"
-                        + (detail.isEmpty ? "" : ": \(detail)"))
+            let result = await MachineProcessOperationExecution.perform(
+                pid: pid, signal: named,
+                using: { command, timeout in
+                    do {
+                        let output = try await runner.run(command, timeout: timeout)
+                        let detail = output.combinedText.trimmingCharacters(
+                            in: .whitespacesAndNewlines)
+                        guard output.succeeded else {
+                            return .failure(
+                                CLIFailure(
+                                    "could not signal \(pid) on \(runner.machine.name)"
+                                        + (detail.isEmpty ? "" : ": \(detail)")))
+                        }
+                        return .success(output.combinedText)
+                    } catch {
+                        return .failure(error)
+                    }
+                })
+            let outcome: MachineProcessOperationResult
+            switch result {
+            case let .success(value):
+                outcome = value
+            case let .failure(error):
+                throw error
             }
-            let gone = ProcessCommands.hadAlreadyExited(detail)
+            let gone = outcome.alreadyExited
             if let plan {
                 plan.finish(
                     changed: !gone,

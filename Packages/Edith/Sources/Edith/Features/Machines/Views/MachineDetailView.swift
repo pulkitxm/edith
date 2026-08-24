@@ -111,7 +111,7 @@ struct MachineDetailView: View {
     @ViewBuilder
     private func screen(_ item: MachineTab) -> some View {
         switch item {
-        case .overview: MachineOverviewTab(session: session)
+        case .overview: MachineOverviewTab(session: session, model: model)
         case .processes: MachineProcessesTab(session: session)
         case .docker: DockerConsoleView(session: session)
         case .terminal: TerminalTabsView(session: session)
