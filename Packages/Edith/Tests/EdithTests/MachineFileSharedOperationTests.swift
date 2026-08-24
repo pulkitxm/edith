@@ -36,7 +36,10 @@ import Testing
         #expect(Set(descriptors.map(\.cli)).count == 6)
         #expect(MachineFileOperation.remove.descriptor.effect == .destructive)
         #expect(MachineFileOperation.remove.descriptor.requiresPreview)
-        #expect(UserOperationCatalog.descriptors.suffix(6) == descriptors[...])
+        let descriptorIDs = Set(descriptors.map(\.id))
+        #expect(
+            UserOperationCatalog.descriptors.filter { descriptorIDs.contains($0.id) }
+                == descriptors)
     }
 
     @Test func searchBuildsTheSharedCommandAndParsesPaths() async throws {
