@@ -80,7 +80,19 @@ public enum Guide {
         ed extensions enable machines
         ed extensions disable notchShelf
         ed extensions info clipboard
+        ed extensions status --json
+        ed extensions setup quinjet --dry-run --json
+        ed extensions setup quinjet --install-tools
+        ed extensions verify quinjet --json
+        ed extensions doctor --json
         ```
+
+        For automation, begin with `status --json` or `doctor --json`. An unhealthy
+        extension is still a successful report, so read `verified`, `state.phase`,
+        `state.runtimePhase`, `checks`, and `remediation`. `setup --dry-run` previews
+        enablement and every remaining requirement. Rerun without it to apply the
+        setup, adding `--install-tools` when the plan calls for command-line tools,
+        then use `verify` to check the live adapter again.
 
         Lid Awake has runtime verbs because changing the system power state is not
         the same as writing a preference:
@@ -473,6 +485,13 @@ public enum Guide {
           reach every setting the UI exposes, and the running app picks changes up
           live. `ed schema` is the JSON Schema for the whole config document.
         - `ed extensions ls` and `ed extensions enable|disable <id>` toggle features.
+          Before relying on one, run `ed extensions status <id> --json` and read
+          `verified`, `state.phase`, `state.runtimePhase`, `checks`, and `remediation`.
+          An unhealthy readiness report still exits 0, so gate on `verified`.
+        - `ed extensions setup <id> --dry-run --json` previews noninteractive setup.
+          Rerun without `--dry-run`, add `--install-tools` when required, then run
+          `ed extensions verify <id> --json`. `ed extensions doctor --json` reports
+          recovery steps across every extension.
         - `ed machines ls --json` lists configured machines. `ed <machine> <command>`
           runs a command there over the app's shared SSH ControlMaster, preserving the
           exit code and both streams: `ed tuf docker ps`, `ed tuf systemctl status`.
