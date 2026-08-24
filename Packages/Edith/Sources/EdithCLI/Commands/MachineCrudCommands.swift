@@ -129,13 +129,10 @@ struct MachinesAddCommand: AsyncParsableCommand {
                 auth: resolved,
                 source: alias.map { MachineSource.sshConfigAlias($0) } ?? .manual,
                 wakeMACAddress: mac)
-            MachineRegistry.add(machine)
-            if let secret {
-                MachineSecrets.set(
-                    secret, machineID: machine.id,
-                    kind: passwordStdin ? .password : .passphrase)
-            }
-            AppBridge.post(IPC.Name.machinesChanged)
+            MachineMutationOperationExecution.perform(
+                .add, machine: machine,
+                secrets: MachineSecretChanges(login: secret),
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
             guard !json else {
                 CLIOut.json(MachineDirectory.summary(machine))
                 return
@@ -224,19 +221,12 @@ struct MachinesEditCommand: AsyncParsableCommand {
             }
             if passwordStdin { target.auth = .password }
             if let mac { target.wakeMACAddress = mac.isEmpty ? nil : mac }
-            MachineRegistry.update(target)
-            if let secret {
-                MachineSecrets.set(
-                    secret, machineID: target.id,
-                    kind: passwordStdin ? .password : .passphrase)
-            }
-            if let sudoSecret {
-                MachineSecrets.set(sudoSecret, machineID: target.id, kind: .sudoPassword)
-            }
-            if forgetSudoPassword {
-                MachineSecrets.delete(machineID: target.id, kind: .sudoPassword)
-            }
-            AppBridge.post(IPC.Name.machinesChanged)
+            MachineMutationOperationExecution.perform(
+                .edit, machine: target,
+                secrets: MachineSecretChanges(
+                    login: secret, sudoPassword: sudoSecret,
+                    forgetSudoPassword: forgetSudoPassword),
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
             guard !json else {
                 CLIOut.json(MachineDirectory.summary(target))
                 return
@@ -265,35 +255,35 @@ struct MachinesRemoveCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let target = try MachineResolver.machine(machine)
-            let contents = MachineRegistry.load()
-            let forwards = MachineRegistry.forwards(machineID: target.id, in: contents.forwards)
-            let snippets = contents.snippets.filter { $0.machineID == target.id }
+            let preview = MachineMutationOperationExecution.removalPreview(target)
             guard yes else {
                 guard !json else {
                     CLIOut.json(
                         .object([
                             "machine": MachineDirectory.summary(target),
                             "removed": .bool(false),
-                            "forwards": .int(forwards.count),
-                            "snippets": .int(snippets.count),
+                            "forwards": .int(preview.forwardCount),
+                            "snippets": .int(preview.snippetCount),
                         ]))
                     return
                 }
                 CLIOut.out(
-                    "would remove \(target.name), \(forwards.count) forward(s) and "
-                        + "\(snippets.count) snippet(s)")
+                    "would remove \(target.name), \(preview.forwardCount) forward(s) and "
+                        + "\(preview.snippetCount) snippet(s)")
                 CLIOut.note("nothing was removed; pass --yes to go ahead")
                 return
             }
-            MachineRegistry.remove(id: target.id)
-            AppBridge.post(IPC.Name.machinesChanged)
+            let result = MachineMutationOperationExecution.perform(
+                .remove, machine: target,
+                notify: { AppBridge.post(IPC.Name.machinesChanged) })
+            let removal = result.removal ?? preview
             guard !json else {
                 CLIOut.json(
                     .object([
                         "machine": MachineDirectory.summary(target),
                         "removed": .bool(true),
-                        "forwards": .int(forwards.count),
-                        "snippets": .int(snippets.count),
+                        "forwards": .int(removal.forwardCount),
+                        "snippets": .int(removal.snippetCount),
                     ]))
                 return
             }
